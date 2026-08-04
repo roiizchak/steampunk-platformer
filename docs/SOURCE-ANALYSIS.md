@@ -169,6 +169,31 @@ Two consequences:
 Per **4.15**, that frame-pick step lives in the tracked generator and must rebuild byte-identical —
 not in a notebook, and not by hand.
 
+### `image-to-video` vs `reference-to-video`, in full
+
+| | `image-to-video` | `reference-to-video` |
+|---|---|---|
+| **Price** | **$0.01 / second**, quoted | **`0.00` "compute seconds"** ⚠️ unquotable |
+| Image inputs | one `image_url` | up to **7** `reference_image_urls`, tagged `<IMAGE_0>`, `<IMAGE_1>`, … in the prompt |
+| `resolution` | 480p / 720p / **1080p** | 480p / 720p only |
+| `aspect_ratio` | ✗ — inherits from the input image | ✓ `16:9, 4:3, 3:2, 1:1, 2:3, 3:4, 9:16` |
+| `duration` | 1–15 s, default 6 | 1–15 s, default 8 |
+| Output | 24 fps, ~25 frames/s | **24 fps**, 192 frames @ 8 s — identical |
+| Released | 2026-05-31 | **2026-07-29** (updated 2026-08-01) |
+
+**Why the price is unquotable:** `reference-to-video` is a brand-new endpoint, so compute-metered
+billing is not yet in the pricing table. That explains the `0.00` — it does not make it safe. Vault
+**4.9** stands: budget from the invoice, not the estimate.
+
+**Decision:** default to **`image-to-video` at 1080p**, where cost is known and resolution is highest.
+Losing `aspect_ratio` costs nothing — inheriting aspect from a 1:1 anchor is exactly what a character
+sprite wants. Losing 1080p on the reference variant also costs little at pixel-art target sizes.
+
+**Escalate to `reference-to-video` only if** character identity drifts between separately-generated
+animations (open question 3). Its 7-image reference array is the real lever for that, and nothing
+else on fal offers it at this price class. **If we escalate: run exactly ONE 1-second probe, then
+check the invoice before any batch.** That is vault **4.9** applied literally.
+
 ### Resulting cost model for one character
 
 | Step | Endpoint | Cost |
