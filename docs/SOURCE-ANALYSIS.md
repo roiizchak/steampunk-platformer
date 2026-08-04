@@ -137,12 +137,37 @@ He paid **7.2¢ per clip** using Grok Imagine directly.
 
 | Endpoint | Price | Inputs | Verdict |
 |---|---|---|---|
-| `xai/grok-imagine-video/v1.5/image-to-video` | **$0.01 / second** | `image_url`, `prompt`, `duration`, `resolution` 480p/720p/1080p | **Use this.** A 1-second clip is **1¢**. |
+| `xai/grok-imagine-video/v1.5/image-to-video` | **$0.01 / second** | `image_url`, `prompt`, `duration` (**min 1, max 15**), `resolution` 480p/720p/1080p | **Use this.** A 1-second clip is **1¢**. |
 | `xai/grok-imagine-video/v1.5/reference-to-video` | **`0.00` "compute seconds"** ⚠️ | `reference_image_urls[]` with `<IMAGE_0>` prompt tags, `aspect_ratio`, `duration` 8, 480p/720p | Better character consistency, but **cost is unquotable** |
 
 ⚠️ **`0.00` is not free.** It is the pricing API declining to quote a compute-metered endpoint —
 exactly vault **4.9**: *the CLI's own cost preflight under-reported by ~6× (quoted 0.2/job, billed
 ~1.5)*. **Do not run `reference-to-video` without a single deliberate probe and an invoice check.**
+
+### Frame math, from the endpoint's own output schema
+
+The `image-to-video` output example pins the numbers, so this needed no spend to answer:
+
+```json
+{ "duration": 6.041667, "fps": 24, "num_frames": 145, "width": 1280, "height": 720 }
+```
+
+**24 fps**, `num_frames ≈ duration × 24 + 1`. Therefore **a 1-second clip yields ~25 frames for 1¢.**
+
+Two consequences:
+
+1. **Always generate at 1080p.** Price is metered on `duration`, not `resolution` — `$0.01/second`
+   regardless. 1080p is free relative to 480p and gives far more headroom to downscale into pixel-art
+   sprite dimensions.
+2. **~25 frames for an 8–10 frame cycle is ~3× oversampling, and that is the point.** We get to
+   *choose* which frames to keep and where the cycle phase lands, rather than accepting the model's
+   spacing. This is the direct countermeasure to vault **4.7**: *"cyclic motions run too few cycles
+   and 8 samples land at the same phase."* Combined with **4.22** (`fps = renderFrames × TICK_HZ /
+   simTicks`), the resample step becomes: generate 25 → pick N where N is what the sim's active
+   window needs → align the contact frame → budget wind-up at `startup − 1` ticks.
+
+Per **4.15**, that frame-pick step lives in the tracked generator and must rebuild byte-identical —
+not in a notebook, and not by hand.
 
 ### Resulting cost model for one character
 
@@ -218,7 +243,9 @@ Directly reusable as *method*, to be re-verified as *fact*:
    Measured numbers become the contract, never the labels. (A2c, 3.2)
 3. **Does `grok-imagine-video` preserve character identity** well enough across separate 1-second
    clips, or is `reference-to-video` required — and if so, what does it actually cost?
-4. **What frame rate and frame count** does a 1 s Grok clip yield, and does resampling to the sim's
-   tick budget survive it? (4.22)
+4. ~~What frame rate and frame count does a 1 s Grok clip yield?~~ **ANSWERED at Gate 4, $0** —
+   24 fps, ~25 frames per second of clip, from the endpoint's own output schema. `duration` accepts
+   1–15 s. Price is duration-metered so **1080p is free**. Remaining sub-question: does resampling
+   25 → N survive contact-frame alignment in practice? Only a real clip answers that. (4.22)
 5. **Tileset grid-exactness** — can post-processing reliably hit the Phase 3 cell size given only
    `aspect_ratio` + `resolution`? This is the one place A2c could bite.
