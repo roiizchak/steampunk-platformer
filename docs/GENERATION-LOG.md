@@ -1,0 +1,117 @@
+# GENERATION-LOG.md
+
+Every fal.ai generation. Model, prompt intent, seed, cost, output path, kept or discarded.
+
+**Running total: 21 generations · $1.68**
+
+All via `genmedia` v0.7.0 → `fal-ai/nano-banana-2`, `seed 20260804`, `aspect_ratio 16:9`,
+`resolution 2K`, `output_format png`. **$0.08 flat per image.**
+Every output measured at **2752×1536, RGB, no alpha channel**.
+
+Prompts are not duplicated per row — the locked template is in [STYLE.md](STYLE.md) §4, and each
+round below records only what changed from the previous round.
+
+---
+
+## Gate 5 — style probe
+
+### Round 1 — sub-flavour exploration · 4 gens · $0.32
+
+Shared composition and colour-rule block, fixed seed; **only the SETTING block varied**, so flavour was
+the single variable *(vault 4.10)*.
+
+| # | Output | Intent | Verdict |
+|---|---|---|---|
+| 1 | `01-clockpunk.png` | clockwork tower, brass/ivory/verdigris | discarded — direction not chosen |
+| 2 | `02-victorian.png` | soot factory street at dusk | **direction chosen from this** |
+| 3 | `03-dieselpunk.png` | iron foundry, olive/rust/gunmetal | discarded |
+| 4 | `04-airship.png` | airship deck above cloud sea | discarded |
+
+**Round defect, my error:** the prompt banned `UI overlays, health bars` and asked for `chunky visible
+pixels, limited palette, flat shading` while the locked direction is 96–128px HD pixel art. Result: no
+HUD and under-detailed characters. Both were prompt faults, not model faults.
+
+### Round 2 — add HUD, raise detail · 4 gens · $0.32 · *(cum. $0.64)*
+
+Rendering block **replaced**, not appended — "chunky/limited/flat" removed entirely rather than adding
+"more detail" on top *(vault 4.3, never contradict your own prompt)*. Ban on numbers lifted so the
+counter could render.
+
+| # | Output | Verdict |
+|---|---|---|
+| 5–8 | `r2-01-clockpunk` · `r2-02-victorian` · `r2-03-dieselpunk` · `r2-04-airship` | all discarded as finals; **round succeeded** |
+
+Detail (edge energy) rose across the board: 9.45→12.02, 7.08→8.88, 6.18→11.47, 7.73→12.98.
+
+**Instrument defect found and fixed:** zone-separation numbers appeared to collapse. Cause was my
+metric, not the art — the new HUD is dark and saturated and sat inside the sampled "background" band.
+Re-sampled with the HUD region excluded, separation had held steady. *(vault C2 — before trusting a
+metric, ask what would make it go red)*
+
+### Round 3 — Victorian separation mechanisms · 4 gens · $0.32 · *(cum. $0.96)*
+
+Direction locked to Victorian. Each variant tested a **different mechanism** for foreground/background
+separation, aimed at the one flagged risk: brick platforms against brick walls.
+
+| # | Output | Mechanism | Strongest signal | Verdict |
+|---|---|---|---|---|
+| 9 | `r3-A-material.png` | brass-capped platforms | *none measurable* — local edge cue | **kept (combined)** |
+| 10 | `r3-B-value.png` | background crushed to black | bg value 0.085 | discarded — background carries no information |
+| 11 | `r3-C-atmosphere.png` | aerial smog haze | val gap −0.365, detail 12.44 | discarded — reads too light for "soot-stained" |
+| 12 | `r3-D-temperature.png` | cool bg / warm fg | **hue gap 110.8°** | **kept (combined)** |
+
+**Second instrument defect:** the metric scored A worst, but A separates by *hue and local edge*, and
+the metric only measured saturation and value. Added a circular-hue metric, which then revealed D's
+110.8°. A remains unscoreable by any global metric and needs eyeball verification.
+*(vault 4.19 — every metric here is direction-blind; an unmeasured defect class sits between two
+passing gates)*
+
+### Round 4 — combine A + D · 2 gens · $0.16 · *(cum. $1.12)*
+
+Tested whether the combined recipe is level-type independent.
+
+| # | Output | Result |
+|---|---|---|
+| 13 | `r4-exterior.png` | ✅ sat +0.017, val −0.172, hue 49.3° |
+| 14 | `r4-interior.png` | ✅ sat +0.024, val −0.081, hue **111.1°** |
+
+Both hold via different balances of the same mechanisms — when hue separation weakens outdoors, value
+separation compensates. Recipe confirmed level-type independent.
+
+### Rounds 5–9 — HUD and scale correction · 7 gens · $0.56 · *(cum. $1.68)*
+
+Two defects chased: an **unrequested second health bar**, and **character scale**.
+
+| # | Output | Change | Result |
+|---|---|---|---|
+| 15–16 | `r5-exterior` · `r5-interior` | explicit negation of a second bar; scale "36 percent" | ❌ second bar persists (empty trough); scale overshot to ~40–43% |
+| 17 | `r6-positive-hud` | positively describe solid brass beneath the bar | ❌ **worse** — second bar returned fully filled |
+| 18–19 | `r7-gauge-ext` · `r7-gauge-int` | HUD → circular pressure gauge; scale → countable ratio `2.5` | ✅ second bar **gone**; ❌ scale overshot other way to ~25% |
+| 20 | `r8-calibrated` | scale ratio `1.5` | ✅ ~42%; ❌ gauge reads as a meter, not a health bar |
+| 21 | **`r9-bar-smaller`** | horizontal bar + **geometric height constraint**; ratio `1.8` | ✅✅ **APPROVED — single bar, ~31%** |
+
+**Two reusable findings, both now in [STYLE.md](STYLE.md) §6:**
+
+1. **Negation does not remove a structural element from this model** — it weakens it and leaves a hole
+   the model refills. What worked was constraining the geometry so the element has nowhere to exist.
+2. **Percentages are ignored for scale; countable ratios are obeyed with a constant offset.** Measured
+   transfer function: **stated ratio × ~1.6 = actual screen-heights.** *(vault 4.4)*
+
+---
+
+## Cost summary
+
+| Round | Gens | Cost | Cumulative |
+|---|---|---|---|
+| 1 sub-flavour | 4 | $0.32 | $0.32 |
+| 2 HUD + detail | 4 | $0.32 | $0.64 |
+| 3 separation mechanisms | 4 | $0.32 | $0.96 |
+| 4 combined A+D | 2 | $0.16 | $1.12 |
+| 5–9 HUD + scale correction | 7 | $0.56 | **$1.68** |
+
+**Kept as approved anchor:** `assets/style-probe/r9-bar-smaller.png` (1 of 21).
+Everything else is retained as evidence — none deleted.
+
+⚠️ **These costs are the quoted rate ($0.08/image), not an invoice.** The last project's CLI preflight
+under-reported by ~6× *(vault 4.9)*. **Reconcile against the real fal.ai invoice before trusting any
+projection built on this number.**
