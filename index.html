@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Steampunk Platformer</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #12100e;
+      }
+      /*
+        The parent needs computed dimensions or ScaleManager centering silently misbehaves.
+        Deliberately no rule targets `canvas`: the ScaleManager owns canvas.style
+        (width/height/margin/image-rendering). A second writer here is the exact mechanism
+        behind vault 1.5's "CSS silently contradicted the engine on every phone".
+      */
+      #game {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
