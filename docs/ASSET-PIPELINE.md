@@ -60,6 +60,11 @@ the join key between the catalog, the bounds config and the loader.
 ## 2. Generate
 
 Per [STYLE.md](STYLE.md). Always through `genmedia`, never curl.
+**Full input/output schema, price, and every known gotcha for this and every other endpoint:
+[FAL-MODELS.md](FAL-MODELS.md).**
+
+🔴 **`image_url` fields take a URL, not a path.** Our anchor is a local PNG, so every animation call
+is two steps: `genmedia upload ./anchor.png` → CDN URL → pass that. *(FAL-MODELS §0)*
 
 ```bash
 genmedia run fal-ai/nano-banana-pro \
@@ -157,10 +162,9 @@ on an opaque rectangle. **Re-measure at gate 0; drop this step only on evidence,
 - 🔴 **Keep-largest-component is safe for held and idle poses and MUST NOT be applied to jump, air or
   attack states**, where the key's anti-aliasing gap legitimately splits off a fist or a foot. *(4.13)*
 
-`fal-ai/bria/background/remove` is the fallback where chroma keying fails.
-**Price: quote it with `genmedia pricing fal-ai/bria/background/remove` at the time of use.** The
-$0.018 figure carried in earlier drafts is from a Gate 3 catalog read and has never been reconciled
-against an invoice — treat it as indicative only. *(4.9)*
+`fal-ai/bria/background/remove` is the fallback where chroma keying fails. **$0.018 per generation**
+— source: `genmedia pricing fal-ai/bria/background/remove` → `0.018 / generations / USD`, read
+2026-08-05. Quoted rate, not an invoice. Full schema: [FAL-MODELS.md](FAL-MODELS.md) §5.
 
 ---
 

@@ -59,6 +59,9 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
 - **No source file exceeds 400 lines** without a written one-line justification in `QA-LOG.md`.
 - **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
 - **All art via `genmedia`**, following [STYLE.md](STYLE.md). Zero tutorial assets, zero stock assets.
+- **Before any phase that generates, re-read [FAL-MODELS.md](FAL-MODELS.md)** — every endpoint's
+  schema, price and gotchas — **and re-run `genmedia schema` on the endpoints it names.** A schema in
+  a document is a snapshot; upstream endpoints change under us.
 - **Every generation logged** to [GENERATION-LOG.md](GENERATION-LOG.md): model, prompt, seed, cost,
   path, kept/discarded.
 - **STOP and ask** before: any new dependency, deleting any file, any fal batch over 5 generations,
@@ -184,6 +187,7 @@ docs/
   PRD.md                      this file — the spine
   prd/                        one document per phase
   reviews/                    Codex review outputs, one pair per phase
+  FAL-MODELS.md               every fal endpoint: schema, price, gotchas
   STYLE.md  ASSET-PIPELINE.md  LESSONS-APPLIED.md  SOURCE-ANALYSIS.md
   GENERATION-LOG.md  QA-LOG.md
 ```

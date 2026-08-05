@@ -18,7 +18,8 @@ active windows — and both are defined in `src/sim/combat.ts`, which is built h
 then generate art against those frozen numbers.** Generating first would author a flat fps, which is
 vault **4.22** — *every light attack had 0.43 s of art over a 0.25 s move, so the strike was never
 drawn.* All of [ASSET-PIPELINE.md](../ASSET-PIPELINE.md) and [STYLE.md](../STYLE.md) apply to that
-art unchanged, including the per-generation log entry with its request id.
+art unchanged, including the per-generation log entry with its request id. Endpoint schemas and
+prices: [FAL-MODELS.md](../FAL-MODELS.md) §1–§5.
 
 ### 2. Required skills
 `physics-arcade` · `groups-and-containers` · `events-system` · `animations` · `data-manager`

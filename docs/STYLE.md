@@ -46,6 +46,10 @@ recording — they do **not** agree for Seedance 2 (SOURCE-ANALYSIS §6b). **Nei
 
 ### Full input schema — `fal-ai/nano-banana-pro`
 
+Reproduced here because this is the locked recipe. **The complete reference for this and every other
+endpoint — output schemas, prices with sources, and every known gotcha — is
+[FAL-MODELS.md](FAL-MODELS.md).**
+
 Read from `genmedia schema` on 2026-08-05. The `/edit` endpoint is identical plus a **required**
 `image_urls: string[]`, and its `aspect_ratio` defaults to `auto` instead of `1:1`.
 

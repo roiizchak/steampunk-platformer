@@ -32,6 +32,10 @@ The image model changed to `fal-ai/nano-banana-pro` and the animation model to
 over** — not the returned pixel dimensions, not the absent alpha channel, not the frame rate, not the
 price. See [SOURCE-ANALYSIS.md](../SOURCE-ANALYSIS.md) §6.
 
+**Required reading before the first generation:** [FAL-MODELS.md](../FAL-MODELS.md) §1–§5 — the full
+schemas, prices and gotchas for `nano-banana-pro`, `nano-banana-pro/edit`, both Seedance 2 endpoints
+and Bria. Re-run `genmedia schema` on each; the documented snapshot is dated 2026-08-05.
+
 ### 2. Required skills
 `loading-assets` · `animations` · `sprites-and-images` · `render-textures` · `fal-gamedev` ·
 `fal-prompting` · `model-routing` · `genmedia-workflow` · `character-design`

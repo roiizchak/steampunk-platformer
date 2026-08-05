@@ -21,9 +21,30 @@ frame summed to +3.9 dBFS · **7.5** a WebAudio getter is not a readback; never 
 `volume`, keep your own flag; unsubscribe the exact unlock handler and **remove** long-running tracks ·
 **2.5** emit audio cues from inside the tick that produced them
 
-> Note: `bytedance/seedance-2.0/*` can emit synchronised audio via `generate_audio`, but it is video
-> audio, not a game cue set. Route audio through a text-to-audio endpoint chosen with
-> `fal-models-catalog`, and apply **7.2** — one probe on one cue before any batch.
+### 3b. Endpoints — chosen at Gate 7, full detail in [FAL-MODELS.md](../FAL-MODELS.md) §6–§7
+
+| Use | Endpoint | Price |
+|---|---|---|
+| SFX (jump, land, attack, hit, pickup, death) | `fal-ai/stable-audio-3/small/sfx/text-to-audio` | **$0.0206 / audio, flat** |
+| Music bed | `fal-ai/stable-audio-3/small/music/text-to-audio` | **$0.0217 / audio, flat** |
+
+Four properties of these endpoints bear directly on the vault items above:
+
+- ✅ **Price is flat per generation, not per second** — so `duration` is free. **Generate long and trim
+  locally** rather than asking for a 0.4 s cue. Directly serves 7.1's trim rule.
+- 🔴 **Use `output_format: wav`.** 7.3 requires a 32-bit float decode; do not measure a lossy mp3.
+  `bitrate` is ignored for wav.
+- ✅ **`negative_prompt` exists** — the direct countermeasure to 7.1. Ask for the *physical event* in
+  `prompt`, and put the qualities that produced literal silence into `negative_prompt`.
+- ⚠️ **Leave `enable_prompt_expansion: false`** — it rewrites the prompt with an LLM, so the recorded
+  prompt is not the prompt that ran. The output echoes back a `prompt` field; that is how you detect
+  it. And ⚠️ **`guidance_scale` is accepted and ignored** on this distilled checkpoint — sweep it once
+  and confirm nothing moves rather than trusting it *(A6)*.
+
+> Note: `bytedance/seedance-2.0/*` can emit synchronised audio via `generate_audio`, but that is video
+> audio, not a game cue set. It stays `false`.
+
+Still apply **7.2**: one probe on one cue before any batch.
 
 ### 4. Codex plan review
 **Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
