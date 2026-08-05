@@ -1,0 +1,19 @@
+// COMMITTED FIXTURE — not real source, and deliberately not a .ts file so tsc and vitest
+// never compile it. `tests/unit/sim-boundary.test.ts` points its scanner here and asserts the
+// scanner REJECTS this content.
+//
+// Vault C2: a gate that cannot go red is decoration. With src/sim/ nearly empty in Phase 1, the
+// scanner would pass vacuously; this file is the thing that proves it can fail. Every violation
+// the scanner knows how to detect appears below exactly once.
+
+import Phaser from 'phaser';
+
+export function everythingWrong() {
+  const now = Date.now();
+  const stamp = new Date();
+  const roll = Math.random();
+  const t = performance.now();
+  const w = window.innerWidth;
+  const d = document.body;
+  return { Phaser, now, stamp, roll, t, w, d };
+}

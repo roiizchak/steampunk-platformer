@@ -16,7 +16,7 @@ simulation and imports *nothing* from Phaser — no `Date.now`, no `Math.random`
 observe sim state and draw it. This is the single most load-bearing decision in the document: it is
 what makes the game unit-testable at all, and it comes directly from the vault as a blocker.
 
-**Tech stack:** Phaser 4.2.1 · TypeScript · Vite · vitest · @playwright/test · Tiled · fal.ai via `genmedia`.
+**Tech stack:** Phaser 4.2.1 · TypeScript 7 · Vite 8 · vitest · @playwright/test · Tiled · fal.ai via `genmedia`.
 
 ---
 
@@ -98,12 +98,30 @@ the one this project has actually exercised — the Gate 7 documentation review
 | `--resume` | continue the existing thread. Use for review 2, which benefits from having seen the plan |
 | `--model`, `--effort` | leave unset unless there is a reason |
 
-⚠️ **Operational note, learned at Gate 7:** the first invocation failed with
-`CreateProcessAsUserW failed: Access is denied` — Codex's own Windows sandbox failing to spawn — and
-reported that it had read **zero** files. **It said so rather than inventing findings, which is the
-correct behaviour and is exactly what to check for.** A retry succeeded. If a review returns a
-grounding complaint, re-run it; **do not accept a review that could not read the repository, and
-never record its silence as a pass.**
+⚠️ **Operational note — root-caused in Phase 1. Read this before running either review.**
+
+Invocations fail with `CreateProcessAsUserW failed: 5 (Access is denied)` and report having read
+**zero** files. Codex says so rather than inventing findings, which is the correct behaviour and is
+exactly what to check for.
+
+**This was first seen at Gate 7 and recorded here as "a retry succeeded". That was luck, not a fix.**
+Phase 1 hit it twice in a row and diagnosed it: Codex's sandbox spawns its shell with a restricted
+token, and the configured shell resolves to
+`%LOCALAPPDATA%\Microsoft\WindowsApps\pwsh.exe` — a **Microsoft Store execution alias**, a zero-byte
+reparse point that a restricted token cannot launch. There is no standalone PowerShell 7 on this
+machine to fall back to. **It is permanent. Re-running does not fix it.**
+
+**The fix — put this in every review prompt, both reviews, every phase:**
+
+> On this machine your sandboxed shell cannot spawn any process (`CreateProcessAsUserW failed: 5`).
+> Do NOT use the shell tool. Use the `node_repl` MCP tool with `fs.readFileSync` / `fs.readdirSync`
+> for all file access. If that also fails, say so plainly and do not invent findings.
+
+Verified: with that instruction Codex read every named file — including one outside the repository —
+and returned grounded findings with correct file-and-line citations.
+
+**Still binding:** do not accept a review that could not read the repository, and never record its
+silence as a pass.
 
 ### Review 1 — the plan, before any code
 
@@ -236,5 +254,18 @@ from `dist/` — and Phase 10 verifies its absence.
 
 ```ts
 { sceneKey: string; tick: number; player: { x, y, vx, vy, state } | null;
-  score: number; health: number; levelId: string | null }
+  score: number; health: number; levelId: string | null;
+  ready: boolean; bootError: string | null }
 ```
+
+**`ready` and `bootError` were added in Phase 1**, which is the phase this document says fixes the
+surface. Codex reviewed the original seven fields against Phases 5, 6 and 8, ruled both additions
+necessary and no others justified. They exist because there is deliberately no loader timeout
+*(vault 1.4)*: without them a successful boot, a refused boot and an infinite hang are
+indistinguishable — all three sit in the Boot scene — so the phase's own QA gate could not fail.
+`ready` is the positive terminal condition every e2e spec waits on instead of sleeping; `bootError`
+is the negative one. See [reviews/phase-01-plan.md](reviews/phase-01-plan.md) F1/F6/F12.
+
+The surface is **read-only and live**: installed with `Object.defineProperty(window, '__game', { get })`
+and no setter, each read returning a frozen copy of current state. Not an object assigned once, which
+would go stale and let a spec asserting `tick === 0` pass forever.

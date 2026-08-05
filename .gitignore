@@ -3,3 +3,5 @@ dist/
 .vite/
 *.local
 .deepeval/
+test-results/
+playwright-report/
