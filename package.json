@@ -9,15 +9,16 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
-  },
-  "dependencies": {
-    "phaser": "4.2.1"
+    "test:e2e": "playwright test",
+    "test:sim-isolated": "npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "typescript": "^7.0.2",
     "vite": "^8.2.0",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
   }
 }

@@ -152,9 +152,9 @@ false-green C12 warns about.
 | 1.4 | Canvas mounts at 1920×1080; `sceneKey === 'Boot'`; `ready === true`; `bootError === null`; zero console errors | ✅ |
 | 1.5 | Genuine 404 blocks boot; corrupt 200 blocks; missing catalog blocks; clean run still boots | ✅ 4 e2e cases |
 | 1.6 | Filtering asserted at runtime with a comment explaining the inverted constants; `?breakFilter=1` proves the assertion fires | ✅ |
-| 1.7 | No source file > 400 lines | ✅ largest is `BootScene.ts` at 264 |
-| 1.8 | Diff reviewed | see below |
-| 1.9 | Adversarial pass | see below |
+| 1.7 | No source file > 400 lines | ✅ largest is `BootScene.ts` at 362 |
+| 1.8 | Diff reviewed | ✅ `voltagent-qa-sec:code-reviewer` — 12 findings, triaged below |
+| 1.9 | Adversarial pass | ✅ separate brief — 15 findings, triaged below |
 | 1.10 | Codex **plan** review ran; every finding applied or recorded | ✅ `docs/reviews/phase-01-plan.md` — 11 applied, 1 rejected with a reason |
 | 1.11 | Codex **implementation** review ran on the diff | see `docs/reviews/phase-01-impl.md` |
 
@@ -165,6 +165,83 @@ filtering refusal. Refusal text is legible on the canvas, not only in `bootError
 **Servers killed by port before reporting done** *(vault C13)*. `playwright.config.ts` launches
 `node ./node_modules/vite/bin/vite.js` directly, never `npm run dev`, because on Windows the package
 script is a shell wrapper and killing the wrapper orphans the real process.
+
+### Criteria 1.8 and 1.9 — the two review briefs, and what they found
+
+**A7 held again, on its first real test.** The standard correctness review (1.8) measured every
+refusal path in a live browser and concluded: *"No path was found where boot succeeds with a missing
+or unusable asset."* The adversarial review (1.9), running the separate *how could this be wrong?*
+brief, then found **three** such paths. Had only the first review run, all three would have shipped —
+which is exactly the 8/8-PASS-then-three-defects pattern A7 records. **Both briefs are worth their
+cost; the second is where the blockers came from.**
+
+Both reviews independently verified the Phaser-internals comments against
+`node_modules/phaser/dist/phaser.esm.js` and found all of them accurate — so the C9 risk was in the
+*loader-signal* claims, not the engine claims.
+
+#### The three ways boot could succeed with an asset missing (adversarial HIGH 3)
+
+All three route through the same root cause: **`LoaderPlugin.addFile` silently skips any key already
+present in the TextureManager** — no warning, no error — after which an existence check passes for a
+file that was never fetched.
+
+1. **A catalog key colliding with a Phaser built-in.** `__DEFAULT`, `__MISSING`, `__WHITE` and
+   `__NORMAL` are registered at boot as real **32×32** textures. Existence passes, dimensions pass,
+   file never requested.
+2. **A duplicate key in the catalog.** The second entry is never loaded; the loop checked the same
+   key twice and passed both times.
+3. **⚠️ Any second entry into Boot** — `scene.restart()`, or Phase 2+ returning to Boot. Textures
+   from the first boot are still in the game-global manager, so nothing is re-requested and **the
+   entire gate becomes a no-op**. This is the apparatus all nine later phases inherit, and it would
+   have silently weakened the moment a second scene existed.
+
+**Fixed by:** a `describeCatalogProblem()` shape validator that rejects reserved keys, duplicate keys,
+non-object entries, and empty key/url; plus `queueCatalog()` dropping each expected key from the
+TextureManager before loading, so a texture present at verification time really was fetched during
+*this* boot. Five new e2e cases cover them.
+
+#### Other findings applied
+
+| # | Finding | Sev | Disposition |
+|---|---|---|---|
+| R1 | Three comments and one test claimed the `loaderror` listener fires for the missing catalog. It does not — Vite answers the missing `.json` with 200 + HTML, so `JSON.parse` fails at the *process* stage, silently, exactly like an image. The file contradicted its own measurement table. | **High** | **Applied.** Comments and the test name corrected to describe what was measured. The listener is kept and now honestly labelled defence-in-depth for a real static host's 404, not a uniquely necessary signal. |
+| R2 | Sim boundary enforced only one directory deep. `src/sim/index.ts` already imports `../game/constants`, so a `Date.now()` one hop out would evade the scan, import-evaluation *and* the Phaser-uninstalled run. | **High** | **Applied.** The scanner now walks the **transitive source closure** from the sim entry point. Proven with a mutation: `Date.now()` added to `src/game/constants.ts` turns it red. |
+| R3 | Five scanner evasions: lazy `await import('phaser')`; bracket access `Date['now']`; bare `document` without a trailing dot; `globalThis`; and non-`.ts` extensions. | **High** | **Applied.** All five rules added or widened, plus a `describe('the scanner itself')` block that proves each evasion is caught. |
+| R4 | `stripComments` truncated at `//` inside string literals, so `const u = 'https://x'; const r = Math.random();` hid a real violation. Block-comment removal also shifted every reported line number. | **High** | **Applied.** Replaced with a small state machine that blanks comments and strings **while preserving line structure**. Rules now declare which view they see, because the `'phaser'` specifier and `Date['now']` *are* strings. Three regression tests cover it. |
+| R5 | A malformed catalog entry (`{"images":[null]}`) threw inside the `filecomplete` handler, which propagates through the loader so `complete` never fires — boot **hangs** at `ready=false, bootError=null`. The one state the gate cannot distinguish from a slow boot, produced by exactly the input class the gate exists to police. | **High** | **Applied.** Queueing is wrapped; any throw becomes a refusal. e2e case added. |
+| R6 | `updateDebugState` was not DEV-guarded, so the debug state machine shipped to production even though `window.__game` did not — a Phase 10 grep for `__game` would have passed while the internals remained. | Medium | **Applied.** Guarded. Verified: `dist/` contains zero occurrences of `__game`, `bootError`, `breakAsset`, `breakFilter` **and** `updateDebugState`. |
+| R7 | The "live and read-only" test read `ready` twice, both after boot — a once-assigned stale snapshot passes identically, which is the exact regression the getter exists to prevent. | Medium | **Applied.** Split into a genuine liveness test (value before boot vs after) and a read-only test covering field write, whole-property assignment **and** `defineProperty` redefinition. |
+| R8 | `window.__game` was `configurable: true`, so the QA oracle could be replaced wholesale via `defineProperty` even though assignment was blocked. | Low | **Applied.** `configurable: false`, asserted. |
+| R9 | Both 1.5 refusal tests asserted only "some non-empty bootError", so they stayed green if the wrong detector fired. | Medium | **Applied.** Each now asserts its distinguishing substring — `load error` for the 404, `not registered` **and** `not.toContain('load error')` for the corrupt 200. |
+| R10 | `applyBreakAsset` rewrote **every** catalog entry despite a docstring saying "one" — harmless with one asset, wrong from Phase 2 on, and it retires the "one bad asset among many still blocks boot" case. | Medium | **Applied.** Scoped to `index === 0`. |
+| R11 | `?breakAsset=404` produced a corrupt 200, not a 404, and no test used it. | Low | **Applied — removed.** The e2e suite forces a real 404 via route interception; the misnamed knob is gone rather than kept and documented. |
+| R12 | Fault injection (`applyBreakFilter`) was called from inside `assertFilteringPinned`, so an `assert*` function mutated what it inspected. | Low | **Applied.** Moved to `create()` before the assertion. |
+| R13 | Two hand-maintained `image-rendering` accept-lists; the e2e copy omitted `-moz-crisp-edges` and `optimizeSpeed`, a latent Firefox false red. | Low | **Applied.** Single exported `CRISP_IMAGE_RENDERING`, imported by both. |
+| R14 | No npm script ran criterion 1.3, so `npm test` alone could never go red for a transitive Phaser import. | Medium | **Applied.** `npm run test:sim-isolated`. *(Note: the `;` separator does not work in npm scripts on Windows cmd — it leaked `--save-exact` into vitest's argv. Uses `&&`; a failing run therefore leaves Phaser uninstalled, which is loud and intended.)* |
+| R15 | The zero-dimensions branch is unreachable in 4.2.1 — a failed decode leaves the key *unregistered* — but the comment asserted it as measured fact. | Low | **Applied.** Comment now says "defensive, not observed"; the branch is kept as cheap insurance against a future loader change. |
+| R16 | `src/sim/index.ts` hardcoded `/60` instead of the `TICK_HZ` it exports four lines above. | Low | **Applied.** |
+| R17 | QA-LOG recorded `BootScene.ts` at 264 lines; it was 294. | Low | **Applied.** Line counts re-measured after every change; current largest is 362. |
+| R18 | Duplicate near-identical clause in `bootError` when the catalog parses but lists no images. | Low | **Applied.** Deduplicated in `create()`. |
+| R19 | The "filtering is pinned on a clean boot" e2e test would pass even if `assertFilteringPinned()` were deleted — it observes Phaser's own `setCrisp` output. | Low | **Rejected as stated, kept deliberately.** It is not redundant: it fails if the *config* regresses (`pixelArt: false` means `setCrisp` is never called). The assertion itself is covered by `?breakFilter=1`. Coverage naming, not a hole — the reviewer said as much. |
+| R20 | No e2e runs against a production build. | Medium | **Rejected for this phase.** Structurally impossible here: the harness reads a dev-only global by design *(vault 1.6)*. **Phase 10 owns it**, and this is recorded as its obligation. |
+| R21 | The catalog carries no size or hash, so a *replaced* or wrong-sized asset boots clean. | Medium | **Rejected for this phase, recorded.** Content verification is a real gap but belongs with the asset pipeline in **Phase 4**, which is where generated assets and their recorded dimensions first exist. Vault 1.3 requires blocking *missing* and *corrupt*, both of which are covered. |
+
+**Applied: 18. Rejected with a reason: 3.**
+
+#### Additional mutation evidence, after the fixes
+
+| # | Mutation applied | Result | Restored |
+|---|---|---|---|
+| 6 | `Date.now()` added to `src/game/constants.ts` — one hop OUTSIDE `src/sim/` | closure scan red, naming `../../src/game/constants.ts` | ✅ verified absent |
+| 7 | reserved-key and duplicate-key checks both replaced with `if (false)` | exactly the 2 corresponding e2e tests red; the other 10 stayed green | ✅ verified absent |
+
+Mutation 6 is the proof that R2's fix is real rather than cosmetic. Mutation 7 confirms the new
+catalog cases fail for their own reasons, not incidentally.
+
+Two of the scanner's own new regression tests **failed on first run** and caught genuine bugs in the
+rewritten scanner (blanking string literals had also blanked the `'phaser'` import specifier and
+`Date['now']`, silently disabling three rules). Recorded because it is the clearest evidence in this
+phase that a test which cannot fail is worth nothing: the rules looked correct and were dead.
 
 ### What was rejected, and why *(vault C10 — silence reads as skipping)*
 

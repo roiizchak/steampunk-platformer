@@ -2,9 +2,11 @@
  * The `window.__game` debug seam.
  *
  * Vault 1.6 — decide per seam, up front, which side of the build gate it lives on:
- * this one is DEV ONLY. The `import.meta.env.DEV` guard is statically replaced with `false`
- * by Vite in a production build, so the whole branch is tree-shaken out of `dist/`.
- * Phase 10 owns verifying its absence.
+ * this one is DEV ONLY. `import.meta.env.DEV` is statically replaced with `false` by Vite in a
+ * production build, so both the installer body and `updateDebugState`'s body fold away and the
+ * seam never reaches `dist/`. Both are guarded, not just the installer: guarding only the
+ * installer would leave the state machine in the bundle while the global was gone.
+ * Phase 10 owns verifying the absence.
  *
  * The surface is fixed here because every later phase's e2e spec is written against it.
  * Changing it later invalidates those specs.
@@ -54,8 +56,18 @@ const state: GameDebugView = {
   bootError: null,
 };
 
-/** Mutate the debug view. The only supported write path. */
+/**
+ * Mutate the debug view. The only supported write path.
+ *
+ * Guarded on DEV like the installer, so in a production build the body folds away and the
+ * call sites become no-ops that Rollup can drop. Without this guard the debug state machine
+ * would ship even though `window.__game` did not — and a Phase 10 grep for `__game` would
+ * pass while the seam's internals were still in the bundle.
+ */
 export function updateDebugState(patch: Partial<GameDebugView>): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
   Object.assign(state, patch);
 }
 
@@ -77,7 +89,10 @@ export function installDebugGlobals(): void {
   }
 
   Object.defineProperty(window, '__game', {
-    configurable: true,
+    // Not configurable: with `configurable: true` the whole QA oracle can be replaced via
+    // another defineProperty, which assignment alone does not permit. Installed exactly once,
+    // so nothing legitimate needs to redefine it.
+    configurable: false,
     enumerable: true,
     get(): GameDebugView {
       return Object.freeze({

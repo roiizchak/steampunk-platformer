@@ -13,9 +13,11 @@
  * Phase 2 fills this in: tick.ts, player.ts, input.ts, rng.ts, types.ts.
  */
 
+import { TICK_HZ } from '../game/constants';
+
 export { TICK_HZ, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT } from '../game/constants';
 
 /** Convert an integer tick count to whole milliseconds. Ticks are the unit; ms is for display. */
 export function ticksToMs(ticks: number): number {
-  return Math.round((ticks * 1000) / 60);
+  return Math.round((ticks * 1000) / TICK_HZ);
 }

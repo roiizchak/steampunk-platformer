@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
+import { CRISP_IMAGE_RENDERING, PHASER_RESERVED_TEXTURE_KEYS } from '../game/constants';
 
 /** One entry in `public/assets/index.json`. */
 interface CatalogEntry {
@@ -14,21 +15,48 @@ interface AssetCatalog {
 const CATALOG_KEY = 'asset-catalog';
 
 /**
- * `CanvasInterpolation.setCrisp()` assigns each of these to `canvas.style['image-rendering']`
- * in order; the browser keeps the last one it recognises, so the winning value differs by
- * engine (Chromium lands on `pixelated`, Firefox on `-moz-crisp-edges`). Asserting one exact
- * string would be a false red on a correct setup in another browser, so membership is the
- * assertion. Read off phaser.esm.js, not assumed.
+ * Validate the catalog's SHAPE before anything is queued. Returns a description of the first
+ * problem, or `null` if it is usable.
+ *
+ * Every rule here exists because the corresponding malformed catalog would otherwise produce a
+ * clean boot with assets missing, or a hang:
+ *   - not an object / no images / empty list -> zero expectations satisfy themselves trivially
+ *   - a null or non-object entry             -> throws while queueing, which hangs boot
+ *   - a duplicate key                        -> the loader skips the second, existence still passes
+ *   - a Phaser-reserved key                  -> resolves to a real built-in 32x32 texture
  */
-const CRISP_IMAGE_RENDERING = [
-  'optimizeSpeed',
-  '-moz-crisp-edges',
-  '-o-crisp-edges',
-  '-webkit-optimize-contrast',
-  'optimize-contrast',
-  'crisp-edges',
-  'pixelated',
-];
+export function describeCatalogProblem(catalog: AssetCatalog | undefined): string | null {
+  if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.images)) {
+    return 'assets/index.json missing or malformed';
+  }
+
+  if (catalog.images.length === 0) {
+    return 'assets/index.json lists no images';
+  }
+
+  const seen = new Set<string>();
+
+  for (const entry of catalog.images) {
+    if (!entry || typeof entry !== 'object') {
+      return 'contains a non-object entry';
+    }
+    if (typeof entry.key !== 'string' || entry.key === '') {
+      return 'contains an entry with a missing or empty key';
+    }
+    if (typeof entry.url !== 'string' || entry.url === '') {
+      return `entry "${entry.key}" has a missing or empty url`;
+    }
+    if (PHASER_RESERVED_TEXTURE_KEYS.includes(entry.key)) {
+      return `entry "${entry.key}" uses a key Phaser reserves; its file would never be fetched`;
+    }
+    if (seen.has(entry.key)) {
+      return `duplicate key "${entry.key}"; the second entry would never be fetched`;
+    }
+    seen.add(entry.key);
+  }
+
+  return null;
+}
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -63,9 +91,11 @@ export class BootScene extends Phaser.Scene {
   }
 
   preload(): void {
-    // One of three independent signals; each catches a case the others miss. Measured, not
-    // assumed — see the table on findUnusableTextures(). This one fires on a genuine HTTP
-    // 404 and stays silent on a corrupt 200.
+    // Defence in depth, NOT a uniquely necessary signal — measured. Against a real static host
+    // this fires for a genuine HTTP 404. Against Vite's dev server it essentially never fires,
+    // because Vite answers a missing file with 200 + SPA-fallback HTML rather than a 404, so
+    // the failure lands at the decode stage instead. Every case it catches is also caught by
+    // verifyExpectedTextures(); it is kept for the message, which names the URL.
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       this.loadFailures.push(`${file.key} (load error: ${file.url})`);
     });
@@ -74,18 +104,40 @@ export class BootScene extends Phaser.Scene {
     // added mid-load are picked up by the running loader, so `complete` still waits for them.
     this.load.json(CATALOG_KEY, this.applyBreakCatalog('assets/index.json'));
 
-    this.load.once(`filecomplete-json-${CATALOG_KEY}`, (_key: string, _type: string, data: unknown) => {
-      const catalog = data as AssetCatalog | undefined;
+    this.load.once(
+      `filecomplete-json-${CATALOG_KEY}`,
+      (_key: string, _type: string, data: unknown) => {
+        // Anything thrown in here propagates through EventEmitter.emit into the loader's
+        // processing path, so `complete` never fires, `create()` never runs, and the game
+        // hangs at ready=false/bootError=null — the indistinguishable third state this whole
+        // design exists to avoid. A malformed entry must become a REFUSAL, never a hang.
+        try {
+          this.queueCatalog(data as AssetCatalog | undefined);
+        } catch (error) {
+          this.loadFailures.push(`${CATALOG_KEY} (threw while queueing: ${String(error)})`);
+        }
+      },
+    );
+  }
 
-      if (!catalog || !Array.isArray(catalog.images) || catalog.images.length === 0) {
-        this.loadFailures.push(`${CATALOG_KEY} (assets/index.json is malformed or lists no images)`);
-        return;
+  private queueCatalog(catalog: AssetCatalog | undefined): void {
+    const problem = describeCatalogProblem(catalog);
+    if (problem || !catalog) {
+      this.loadFailures.push(`${CATALOG_KEY} (${problem})`);
+      return;
+    }
+
+    for (const [index, entry] of catalog.images.entries()) {
+      // A key already in the TextureManager makes `addFile` silently skip the entry — no
+      // warning, no error — after which an existence check passes for a file that was never
+      // fetched. That is how a scene restart, or Phase 2+ re-entering Boot, would turn this
+      // whole gate into a no-op. Dropping the key first forces an honest re-load every time.
+      if (this.textures.exists(entry.key)) {
+        this.textures.remove(entry.key);
       }
 
-      for (const entry of catalog.images) {
-        this.load.image(entry.key, this.applyBreakAsset(entry));
-      }
-    });
+      this.load.image(entry.key, this.applyBreakAsset(entry, index));
+    }
   }
 
   create(): void {
@@ -96,13 +148,20 @@ export class BootScene extends Phaser.Scene {
     const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
     const problems = [...this.loadFailures];
 
-    // Verified HERE, not only in the filecomplete callback. Zero expected assets must never be
-    // mistaken for zero failures — an empty expectation trivially satisfies itself.
-    if (!catalog || !Array.isArray(catalog.images) || catalog.images.length === 0) {
-      problems.push(`${CATALOG_KEY} (assets/index.json missing, malformed, or lists no images)`);
+    // Re-validated HERE, not only in the filecomplete callback, because a callback that never
+    // fires cannot report anything — which is how "the catalog 404'd, so nothing was queued,
+    // so nothing failed" reads as a clean boot. Deduplicated against what queueCatalog already
+    // reported so one bad catalog does not produce two near-identical clauses.
+    const catalogProblem = describeCatalogProblem(catalog);
+    if (catalogProblem && !problems.some((p) => p.includes(catalogProblem))) {
+      problems.push(`${CATALOG_KEY} (${catalogProblem})`);
     }
 
-    problems.push(...this.findUnusableTextures(catalog));
+    problems.push(...this.verifyExpectedTextures(catalog));
+
+    // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
+    // mutates the thing it inspects is a trap for the next editor.
+    this.applyBreakFilter();
 
     const filteringProblem = this.assertFilteringPinned();
     if (filteringProblem) {
@@ -126,17 +185,19 @@ export class BootScene extends Phaser.Scene {
   }
 
   /**
-   * The broadest of the three refusal signals, and the only one that catches a corrupt 200.
+   * THE load-bearing refusal check. Every failure mode below is caught here; the other two
+   * signals are defence in depth.
    *
    * Vault 1.3 demands that a 404 AND a corrupt 200 both block boot. Which mechanism actually
-   * fires was MEASURED against Phaser 4.2.1 in a browser, not reasoned about — the results
-   * are not what the obvious design assumes:
+   * fires was MEASURED against Phaser 4.2.1 in a browser rather than reasoned about, and the
+   * results are not what the obvious design assumes:
    *
-   *   failure mode                    | 'loaderror' | this check | catalog check in create()
-   *   --------------------------------|-------------|------------|--------------------------
-   *   genuine HTTP 404                 | fires       | catches    | -
-   *   corrupt 200 (HTML sent as PNG)   | SILENT      | catches    | -
-   *   catalog missing                  | SILENT      | -          | catches
+   *   failure mode                   | 'loaderror' | this check | catalog shape check
+   *   -------------------------------|-------------|------------|--------------------
+   *   genuine HTTP 404                | fires       | catches    | -
+   *   corrupt 200 (HTML sent as PNG)  | SILENT      | catches    | -
+   *   catalog missing / malformed     | SILENT      | -          | catches
+   *   duplicate or reserved key       | SILENT      | -          | catches
    *
    * Why `loaderror` goes silent on a corrupt 200: an image whose bytes will not decode fails
    * during the PROCESS stage, not the LOAD stage. `File.onProcessError()` does exactly three
@@ -147,13 +208,17 @@ export class BootScene extends Phaser.Scene {
    *
    * So Phaser drops an undecodable image silently. That is vault 1.3's own sentence — "a
    * silent fallback for a missing input is the bug" — sitting inside the loader. Hence this
-   * check verifies the OUTCOME (is there a usable texture?) instead of trusting a signal.
+   * check verifies the OUTCOME instead of trusting any completion signal.
    *
-   * Existence alone is not enough: a corrupt 200 can leave a key registered with zero
-   * dimensions, so the pixel size is what gets asserted.
+   * ⚠️ Existence in the TextureManager is NOT proof this boot loaded anything: the manager is
+   * game-global and survives a scene restart, and `LoaderPlugin.addFile` silently skips a key
+   * that already exists. `queueCatalog()` therefore drops each expected key before loading, so
+   * a texture present here really was fetched during THIS boot.
    */
-  private findUnusableTextures(catalog: AssetCatalog | undefined): string[] {
-    if (!catalog || !Array.isArray(catalog.images)) {
+  private verifyExpectedTextures(catalog: AssetCatalog | undefined): string[] {
+    if (describeCatalogProblem(catalog) || !catalog) {
+      // The catalog is already being reported as the problem; per-entry checks against a
+      // malformed list would only add noise.
       return [];
     }
 
@@ -165,9 +230,13 @@ export class BootScene extends Phaser.Scene {
         continue;
       }
 
+      // Defensive, and deliberately not claimed as observed: in 4.2.1 a failed decode leaves
+      // the key UNREGISTERED, so the branch above is what fires for a corrupt 200 and this one
+      // has not been seen to trigger. Kept because "registered but unusable" is cheap to check
+      // and is the shape a future loader change would most likely take.
       const source = this.textures.get(entry.key).source[0];
       if (!source || source.width === 0 || source.height === 0) {
-        problems.push(`${entry.key} (texture registered but has zero dimensions — corrupt 200?)`);
+        problems.push(`${entry.key} (texture registered but has zero dimensions)`);
       }
     }
 
@@ -208,10 +277,8 @@ export class BootScene extends Phaser.Scene {
     // The CSS half. Phaser calls CanvasInterpolation.setCrisp() when antialias is false, but
     // the vault records a CSS property silently contradicting the engine-side decision on
     // every phone — so the rendered result is checked, not the intent.
-    this.applyBreakFilter();
-
     const rendering = this.game.canvas.style.getPropertyValue('image-rendering');
-    if (!CRISP_IMAGE_RENDERING.includes(rendering)) {
+    if (!CRISP_IMAGE_RENDERING.includes(rendering as (typeof CRISP_IMAGE_RENDERING)[number])) {
       return `filtering not pinned: canvas image-rendering is "${rendering}", expected one of ${CRISP_IMAGE_RENDERING.join(', ')}`;
     }
 
@@ -237,34 +304,35 @@ export class BootScene extends Phaser.Scene {
   }
 
   /**
-   * DEV ONLY. `?breakAsset=404` and `?breakAsset=corrupt` point one catalog entry at a
-   * missing file / a committed non-image, so the refusal path is a repeatable regression
-   * instead of a hand ritual someone has to remember to perform (vault C2: a gate that
-   * cannot go red is decoration).
+   * DEV ONLY. `?breakAsset=corrupt` points the FIRST catalog entry at a committed non-image,
+   * so the refusal path is a repeatable regression rather than a hand ritual someone has to
+   * remember to perform (vault C2: a gate that cannot go red is decoration).
+   *
+   * Scoped to `index === 0` deliberately. Breaking every entry would retire the more
+   * interesting case the moment Phase 2 adds a second asset — "one bad asset among many still
+   * blocks boot" — and would make the refusal message untraceable to a specific entry.
+   *
+   * There is no `?breakAsset=404` knob: Vite's dev server answers a missing file with 200 +
+   * SPA-fallback HTML, so pointing at a nonexistent path exercises the corrupt-200 path, not
+   * the 404 path. The e2e suite forces a real 404 with Playwright route interception instead.
    */
-  private applyBreakAsset(entry: CatalogEntry): string {
-    if (!import.meta.env.DEV) {
+  private applyBreakAsset(entry: CatalogEntry, index: number): string {
+    if (!import.meta.env.DEV || index !== 0) {
       return entry.url;
     }
 
-    const mode = new URLSearchParams(window.location.search).get('breakAsset');
-
-    if (mode === '404') {
-      return 'assets/this-file-does-not-exist.png';
-    }
-    if (mode === 'corrupt') {
-      return 'assets/corrupt-fixture.png';
-    }
-
-    return entry.url;
+    return new URLSearchParams(window.location.search).get('breakAsset') === 'corrupt'
+      ? 'assets/corrupt-fixture.png'
+      : entry.url;
   }
 
   /**
    * DEV ONLY. `?breakAsset=catalog` points the catalog itself at a missing file.
    *
-   * Worth its own case because the catalog is JSON loaded over XHR, which DOES fail at the
-   * load stage and so DOES fire `loaderror` — unlike the image path. It is the committed proof
-   * that the `loaderror` listener is a live supplementary signal rather than dead code.
+   * Note this does NOT exercise the `loaderror` listener, despite the catalog being JSON over
+   * XHR: Vite answers the missing file with 200 + HTML, so the XHR succeeds and `JSON.parse`
+   * fails at the process stage — silently, exactly like an image. The refusal comes from the
+   * catalog shape check. Measured; an earlier comment here claimed the opposite.
    */
   private applyBreakCatalog(url: string): string {
     if (!import.meta.env.DEV) {

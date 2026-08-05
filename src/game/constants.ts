@@ -22,3 +22,28 @@ export const GAME_HEIGHT = 1080;
  * only RNG game logic is allowed to use.
  */
 export const PHASER_RNG_SEED = '20260804';
+
+/**
+ * The values Phaser's `CanvasInterpolation.setCrisp()` assigns to `image-rendering`, in the
+ * order it assigns them. The browser keeps the last one it recognises, so the winning value is
+ * engine-dependent (Chromium: `pixelated`; Firefox: `-moz-crisp-edges`).
+ *
+ * Shared by the runtime assertion and the e2e spec ON PURPOSE. Two hand-maintained copies drift,
+ * and the drift shows up as a browser-specific false red rather than as a real failure.
+ */
+export const CRISP_IMAGE_RENDERING = [
+  'optimizeSpeed',
+  '-moz-crisp-edges',
+  '-o-crisp-edges',
+  '-webkit-optimize-contrast',
+  'optimize-contrast',
+  'crisp-edges',
+  'pixelated',
+] as const;
+
+/**
+ * Texture keys Phaser's TextureManager registers at boot. They are real 32x32 textures, so a
+ * catalog entry using one of these names would pass an existence-and-dimensions check while its
+ * file was never fetched at all — the loader silently skips any key that already exists.
+ */
+export const PHASER_RESERVED_TEXTURE_KEYS = ['__DEFAULT', '__MISSING', '__WHITE', '__NORMAL'];

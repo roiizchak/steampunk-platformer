@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { CRISP_IMAGE_RENDERING } from '../../src/game/constants';
 
 /**
  * Phase 1 QA criteria 1.4, 1.5 and 1.6.
@@ -109,24 +110,67 @@ test.describe('Phase 1 — Boot', () => {
     expect(errors).toEqual([]);
   });
 
-  test('1.4 window.__game is live and read-only, not a stale snapshot', async ({ page }) => {
+  test('1.4 window.__game is LIVE — a value read before boot updates after it', async ({ page }) => {
+    // Reading `ready` twice after boot proves nothing: a once-assigned stale snapshot returns
+    // `true` both times. Liveness only shows up across a state CHANGE, so this captures the
+    // value before boot finishes and compares it with the value after.
+    await page.goto('/', { waitUntil: 'commit' });
+
+    const early = await page.evaluate(() => {
+      // May be undefined if the bundle has not run yet; that is a distinct, acceptable state.
+      return window.__game ? window.__game.ready : null;
+    });
+
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+    const late = await readGame(page);
+
+    expect(late.ready).toBe(true);
+    // Either the seam was not installed yet (null), or it was installed and reported not-ready.
+    // What must NOT happen is an early read of `true`, which would mean the value never moved.
+    expect(early).not.toBe(true);
+  });
+
+  test('1.4 window.__game is read-only — neither writable nor redefinable', async ({ page }) => {
     await page.goto('/');
     await waitForTerminalState(page, REFUSAL_TIMEOUT);
 
     const result = await page.evaluate(() => {
       const before = window.__game!.ready;
-      // Attempting to write must not take effect: the property is a getter with no setter,
-      // and each read returns a frozen copy.
+
+      // 1. Writing a field on the returned object: it is frozen, so this must not stick.
       try {
         (window.__game as unknown as { ready: boolean }).ready = false;
       } catch {
-        /* strict-mode TypeError is also an acceptable outcome */
+        /* a strict-mode TypeError is an equally acceptable outcome */
       }
-      return { before, after: window.__game!.ready };
+      const afterFieldWrite = window.__game!.ready;
+
+      // 2. Assigning the whole property: the descriptor has a getter and no setter.
+      try {
+        (window as unknown as { __game: unknown }).__game = { ready: false, bootError: 'faked' };
+      } catch {
+        /* likewise */
+      }
+      const afterAssign = window.__game!.ready;
+
+      // 3. Redefining the property: this is what `configurable: false` exists to stop, and it
+      //    is the one route that would let a test replace the QA oracle wholesale.
+      let redefineThrew = false;
+      try {
+        Object.defineProperty(window, '__game', { value: { ready: false, bootError: null } });
+      } catch {
+        redefineThrew = true;
+      }
+      const afterRedefine = window.__game!.ready;
+
+      return { before, afterFieldWrite, afterAssign, afterRedefine, redefineThrew };
     });
 
     expect(result.before).toBe(true);
-    expect(result.after).toBe(true);
+    expect(result.afterFieldWrite).toBe(true);
+    expect(result.afterAssign).toBe(true);
+    expect(result.afterRedefine).toBe(true);
+    expect(result.redefineThrew).toBe(true);
   });
 
   test('1.5 a genuine 404 on a texture blocks boot', async ({ page }) => {
@@ -146,7 +190,11 @@ test.describe('Phase 1 — Boot', () => {
     const game = await readGame(page);
 
     expect(typeof game.bootError).toBe('string');
-    expect(game.bootError).not.toBe('');
+    // Asserts the SPECIFIC signal, not merely "some refusal happened". Without this the test
+    // stays green when an unrelated refusal (a filtering regression, a malformed catalog)
+    // fires instead, while still claiming the 404 path is covered.
+    expect(game.bootError).toContain('load error');
+    expect(game.bootError).toContain('placeholder-tile');
     expect(game.ready).toBe(false);
     // It refused rather than routing onward.
     expect(game.sceneKey).toBe('Boot');
@@ -161,16 +209,20 @@ test.describe('Phase 1 — Boot', () => {
     const game = await readGame(page);
 
     expect(typeof game.bootError).toBe('string');
-    expect(game.bootError).not.toBe('');
+    // The distinguishing signal: no transport error, so `loaderror` stays silent and the
+    // texture verification is what catches it. Asserting the message keeps the two 1.5 cases
+    // from collapsing into "something refused".
+    expect(game.bootError).toContain('placeholder-tile');
+    expect(game.bootError).toContain('not registered');
+    expect(game.bootError).not.toContain('load error');
     expect(game.ready).toBe(false);
   });
 
-
-  test('1.5 a missing asset catalog blocks boot via the loaderror path', async ({ page }) => {
-    // The catalog is JSON over XHR, which fails at the LOAD stage and so does fire `loaderror`.
-    // Images fail at the PROCESS stage, which fires nothing at all in Phaser 4.2.1. This case
-    // is what keeps the `loaderror` listener honest — without it, that listener would be dead
-    // code carrying a comment claiming otherwise (vault C9).
+  test('1.5 a missing asset catalog blocks boot', async ({ page }) => {
+    // Note this does NOT exercise `loaderror`: Vite answers the missing .json with 200 + HTML,
+    // so the XHR succeeds and JSON.parse fails at the process stage — silently, exactly like an
+    // image. The catalog shape check in create() is what refuses. Measured; an earlier version
+    // of this test was named for the loaderror path and asserted a mechanism that never ran.
     await page.goto('/?breakAsset=catalog');
     await waitForTerminalState(page, REFUSAL_TIMEOUT);
 
@@ -178,6 +230,84 @@ test.describe('Phase 1 — Boot', () => {
 
     expect(typeof game.bootError).toBe('string');
     expect(game.bootError).toContain('asset-catalog');
+    expect(game.bootError).toContain('missing or malformed');
+    expect(game.ready).toBe(false);
+  });
+
+  test('1.5 zero expected assets is not mistaken for zero failures', async ({ page }) => {
+    // An empty expectation satisfies itself trivially. This is the shape of the real defect
+    // found during Phase 1: a catalog that failed to load queued nothing, so nothing failed,
+    // so boot succeeded with no assets at all.
+    await page.route('**/assets/index.json', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{"images":[]}' }),
+    );
+
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+
+    const game = await readGame(page);
+    expect(game.bootError).toContain('lists no images');
+    expect(game.ready).toBe(false);
+  });
+
+  test('1.5 a duplicate catalog key blocks boot', async ({ page }) => {
+    // Phaser's addFile silently skips a key that already exists, so the second entry is never
+    // fetched while an existence check passes for both.
+    await page.route('**/assets/index.json', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          images: [
+            { key: 'dup', url: 'assets/placeholder-tile.png' },
+            { key: 'dup', url: 'assets/never-fetched.png' },
+          ],
+        }),
+      }),
+    );
+
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+
+    const game = await readGame(page);
+    expect(game.bootError).toContain('duplicate key');
+    expect(game.ready).toBe(false);
+  });
+
+  test('1.5 a Phaser-reserved texture key blocks boot', async ({ page }) => {
+    // __DEFAULT/__MISSING/__WHITE/__NORMAL are real 32x32 textures registered at boot. A
+    // catalog entry using one would never be fetched, yet would pass both existence and
+    // non-zero-dimension checks — a clean boot with the asset entirely absent.
+    await page.route('**/assets/index.json', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ images: [{ key: '__MISSING', url: 'assets/placeholder-tile.png' }] }),
+      }),
+    );
+
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+
+    const game = await readGame(page);
+    expect(game.bootError).toContain('reserves');
+    expect(game.ready).toBe(false);
+  });
+
+  test('1.5 a malformed catalog entry refuses rather than hanging', async ({ page }) => {
+    // `entry.key` on a null entry throws inside the filecomplete handler; unhandled, that
+    // propagates through the loader, `complete` never fires, create() never runs, and the game
+    // sits at ready=false/bootError=null forever. A hang is the one state the QA gate cannot
+    // distinguish from a slow boot, so malformed input must become a refusal.
+    await page.route('**/assets/index.json', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '{"images":[null]}' }),
+    );
+
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+
+    const game = await readGame(page);
+    expect(typeof game.bootError).toBe('string');
     expect(game.ready).toBe(false);
   });
 
@@ -204,9 +334,10 @@ test.describe('Phase 1 — Boot', () => {
       .evaluate((el) => getComputedStyle(el).imageRendering);
 
     // Phaser's setCrisp() tries a list of values and the browser keeps the last it recognises,
-    // so the winning string is engine-dependent. Chromium lands on 'pixelated'.
-    expect(['pixelated', 'crisp-edges', 'optimize-contrast', '-webkit-optimize-contrast']).toContain(
-      render,
-    );
+    // so the winning string is engine-dependent (Chromium: 'pixelated'; Firefox:
+    // '-moz-crisp-edges'). The list is IMPORTED, not retyped: a second hand-maintained copy
+    // here previously omitted '-moz-crisp-edges' and 'optimizeSpeed', which would have been a
+    // false red on Firefox the day a second browser project was added.
+    expect([...CRISP_IMAGE_RENDERING]).toContain(render);
   });
 });

@@ -15,5 +15,6 @@ export function everythingWrong() {
   const t = performance.now();
   const w = window.innerWidth;
   const d = document.body;
-  return { Phaser, now, stamp, roll, t, w, d };
+  const g = globalThis;
+  return { Phaser, now, stamp, roll, t, w, d, g };
 }
