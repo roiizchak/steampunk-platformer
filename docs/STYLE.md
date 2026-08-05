@@ -18,25 +18,78 @@ standable without thinking about it.
 
 ## 2. Model and parameters — exact
 
+**Changed at Gate 7 (2026-08-05) by user decision: `nano-banana-2` → `nano-banana-pro`.**
+Reason given: substantially more input control. See §2b for what changed and what that costs.
+
 | Field | Value |
 |---|---|
-| Endpoint | **`fal-ai/nano-banana-2`** (Gemini 3.1 Flash Image) |
-| Edit endpoint | `fal-ai/nano-banana-2/edit` (same price, adds `image_urls`) |
+| Endpoint | **`fal-ai/nano-banana-pro`** (Gemini 3 Pro Image) |
+| Alias | `fal-ai/gemini-3-pro-image-preview` — same model, same price |
+| Edit endpoint | `fal-ai/nano-banana-pro/edit` (same price, adds required `image_urls`) |
 | `seed` | **`20260804`** — see §3 |
 | `aspect_ratio` | `16:9` for scenes and backgrounds |
 | `resolution` | `2K` |
 | `output_format` | `png` |
-| Cost | **$0.08 per image, flat** — not per megapixel, so 4K costs the same as 0.5K |
+| `num_images` | `1` |
+| `limit_generations` | `true` (default) — ignores any "make N images" phrasing inside the prompt |
+| `enable_web_search` | `false` — leave off; it makes output depend on the live web, which is unreproducible |
+| `safety_tolerance` | `4` (default) |
+| `system_prompt` | empty — see §2b before using it |
+| Cost | **$0.15 per image at 1K and 2K. 4K is charged at 2× = $0.30.** |
 
-**Measured, not assumed** — verified across all 21 generations:
+### Full input schema — `fal-ai/nano-banana-pro`
 
-- **`16:9` at `2K` returns `2752 × 1536`, ratio `1.7917`, NOT 1.7778.**
-  The job record returns `width: null, height: null`, so the CLI does not tell you this. **Measure the
-  downloaded file.** Never derive an engine constant from the aspect label. *(vault 3.2 / 4.11 — this
-  reproduced the vault's number exactly, from a different service)*
-- **Output is `mode=RGB` with no alpha channel at all.** Not "RGBA with alpha 255" — genuinely absent.
-  **Chroma-key background removal is therefore mandatory** for every cut-out asset; it is not optional
-  work we might skip. *(vault A2 / 4.12 — resolves that open question)*
+Read from `genmedia schema` on 2026-08-05. The `/edit` endpoint is identical plus a **required**
+`image_urls: string[]`, and its `aspect_ratio` defaults to `auto` instead of `1:1`.
+
+| Field | Type | Default | Values / notes |
+|---|---|---|---|
+| `prompt` | string | — | **required** |
+| `image_urls` | string[] | — | **required on `/edit` only** |
+| `aspect_ratio` | string\|null | `1:1` | `auto, 21:9, 16:9, 3:2, 4:3, 5:4, 1:1, 4:5, 3:4, 2:3, 9:16` |
+| `resolution` | string | `1K` | `1K, 2K, 4K` |
+| `output_format` | string | `png` | `jpeg, png, webp` |
+| `seed` | integer\|null | — | reproducibility, not control |
+| `num_images` | integer | `1` | min 1, **max 4** |
+| `limit_generations` | boolean | `true` | forces one generation per prompting round |
+| `system_prompt` | string | `""` | sent as Gemini's system instruction |
+| `enable_web_search` | boolean | `false` | lets the model pull live web context |
+| `safety_tolerance` | string | `"4"` | `"1"`–`"6"`; 1 strictest |
+| `sync_mode` | boolean | `false` | returns a data URI; **result is then absent from request history** |
+
+**There is still no explicit `width`/`height`.** Grid-exactness happens in post, exactly as before.
+
+### 2b. What the swap changed — and the two things it invalidates
+
+**Gained** (none of these existed on `nano-banana-2`): `system_prompt`, `num_images` up to 4,
+`enable_web_search`, `safety_tolerance`, `limit_generations`.
+
+**Lost:** the extreme banner ratios `4:1, 1:4, 8:1, 1:8` are **not** in `nano-banana-pro`'s enum.
+`nano-banana-2` had them. If a parallax strip needs 8:1, it must be composed from 21:9 tiles or
+generated on the old endpoint. Also lost: the `0.5K` resolution tier.
+
+**Cost is no longer flat.** `nano-banana-2` charged $0.08 regardless of resolution, which is why
+"generate at 4K and downscale" was free. On `nano-banana-pro`, 4K costs **double**. At our locked
+`2K`, an image goes **$0.08 → $0.15, a 1.88× increase**.
+
+🔴 **Two measured facts in this document were measured on `nano-banana-2` and DO NOT carry over.
+They must be re-measured on the first `nano-banana-pro` generation, before any batch:**
+
+1. **Returned pixel dimensions at `16:9` / `2K`.** `nano-banana-2` returned `2752 × 1536`
+   (ratio `1.7917`, not `1.7778`). `nano-banana-pro` is a different model and may not.
+   *(vault 4.11 — read dimensions from the file, never from the aspect label)*
+2. **Whether the output carries an alpha channel.** `nano-banana-2` returned `mode=RGB` with none,
+   which is the entire reason chroma keying is mandatory. Re-read the alpha channel directly — never
+   test `mode == "RGBA"`. *(vault 4.12)*
+
+Until both are re-measured, **treat the chroma apparatus as still mandatory** (the safe direction) and
+**treat no pixel dimension as known**. Recording an assumed number here would be precisely the
+mistake vault 4.11 exists to prevent.
+
+⚠️ **The anchor image `r9-bar-smaller.png` was generated by `nano-banana-2`.** It remains the visual
+target. The §4 prompt template, the §4 `[SCALE_RATIO]` calibration and the §5 separation measurements
+were all tuned against that model's behaviour and are **hypotheses on `nano-banana-pro` until
+re-probed**. The re-probe is Phase 4a's first job and is scoped in §7 gate 0.
 
 ---
 
@@ -167,7 +220,22 @@ credits last time)*
 
 ## 7. Verification gates for generated art
 
-Run on every batch, before the asset is accepted:
+**Gate 0 — the model-swap re-probe. Runs ONCE, before anything else, and blocks every other gate.**
+
+One generation on `fal-ai/nano-banana-pro` with the §4 template unchanged, seed `20260804`,
+`16:9`, `2K`, `png`. Cost: **$0.15**. It answers four questions that the swap reopened:
+
+| # | Question | Method | Was, on nano-banana-2 |
+|---|---|---|---|
+| 0.1 | Actual returned pixel dimensions | read the file *(4.11)* | `2752 × 1536`, ratio `1.7917` |
+| 0.2 | Alpha channel present? | read the channel, never `mode ==` *(4.12)* | absent — `mode=RGB` |
+| 0.3 | Does the §4 template still produce **one** health bar? | look | yes, via the geometry constraint |
+| 0.4 | Does `[SCALE_RATIO] = one and four fifths` still land at ~31%? | measure | yes, transfer ×1.6 |
+
+Any of 0.3 / 0.4 failing means re-running §6's technique ladder against the new model — **not**
+tweaking the wording and hoping. Record the result in GENERATION-LOG.md as Gate 7 round 1.
+
+Then, on every batch, before the asset is accepted:
 
 1. **Dimensions read from the file**, never from the aspect label. *(4.11)*
 2. **Alpha channel read directly** — never `mode == "RGBA"`. Expect none; key by chroma. *(4.12/4.13)*
@@ -191,8 +259,10 @@ Run on every batch, before the asset is accepted:
   downscale and slice deterministically.
 - **Palette ramp** — the two-zone rule is locked; an explicit colour ramp is not. Extract one from the
   anchor image if Phase 4 needs quantisation.
-- **Animation recipe** — `xai/grok-imagine-video/v1.5/image-to-video`, $0.01/s, 24fps, ~25 frames per
-  1s clip, 1080p free. Not yet tested. See [SOURCE-ANALYSIS.md](SOURCE-ANALYSIS.md) §6.
+- **Animation recipe** — **`bytedance/seedance-2.0/image-to-video`** (changed at Gate 7 from Grok
+  Imagine, by user decision). Not yet tested, and its price is contested by a factor of ~22 between
+  two sources. **Minimum clip is 4 seconds, not 1.** Read
+  [SOURCE-ANALYSIS.md](SOURCE-ANALYSIS.md) §6 in full before spending anything on it.
 - **Enemy health bars** — required. A small, basic bar floating above each enemy, distinct from the
   player's ornate portrait-and-bar assembly. Constraints inherited from this document: it must obey the
   warm-foreground rule so it never reads as background, and it must stay legible at true sprite size

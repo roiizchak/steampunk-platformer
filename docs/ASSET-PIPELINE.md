@@ -57,19 +57,26 @@ the join key between the catalog, the bounds config and the loader.
 Per [STYLE.md](STYLE.md). Always through `genmedia`, never curl.
 
 ```bash
-genmedia run fal-ai/nano-banana-2 \
+genmedia run fal-ai/nano-banana-pro \
   --prompt "<STYLE.md template with slots filled>" \
   --seed <recorded> --aspect_ratio "1:1" --resolution "2K" \
-  --output_format png \
+  --output_format png --num_images 1 \
   --download "./_generated/<slug>/{request_id}.{ext}" --json
 ```
+
+**$0.15 per image at 1K/2K; 4K is billed at 2×.** Unlike `nano-banana-2`, the price is **not** flat,
+so "generate at 4K and downscale" is no longer free. Stay at `2K` unless a specific asset earns the
+doubling. Do not set `enable_web_search` — it makes the output depend on the live web and destroys
+reproducibility. See [STYLE.md](STYLE.md) §2 for the full input schema.
 
 **Rules that cost real money to learn:**
 
 - **Save the exact prompt and job record beside the output.** Redirect **stdout only** — merging stderr
   corrupts the JSON — and write the record only *after* the call succeeds. *(vault 4.17)*
-- **Read `width`/`height` from the downloaded file, never from the aspect label.** `16:9 @ 2K` returns
-  `2752×1536` = `1.7917`, not `1.7778`. The job record returns `width: null`. *(4.11)*
+- **Read `width`/`height` from the downloaded file, never from the aspect label.** On `nano-banana-2`,
+  `16:9 @ 2K` returned `2752×1536` = `1.7917`, not `1.7778`, and the job record returned `width: null`.
+  🔴 **That was a different model. `nano-banana-pro`'s returned dimensions are unmeasured** — treat no
+  dimension as known until the Gate 0 probe reads one off disk. *(4.11)*
 - **Never contradict your own prompt.** A self-contradicting clause cost 12 credits last time. *(4.3)*
 - **When output is wrong, change the reference, not the wording.** *(4.1)* And when this model refuses
   to drop an element, **constrain its geometry** rather than negating it. *(STYLE.md §6)*
@@ -78,20 +85,43 @@ genmedia run fal-ai/nano-banana-2 \
 
 ### Animation: video → frames
 
-Cheaper and smoother than generating each pose. *(SOURCE-ANALYSIS §6)*
+Smoother than generating each pose, and the source material says it looks better.
+**Read [SOURCE-ANALYSIS.md](SOURCE-ANALYSIS.md) §6 before running this — the cost is contested.**
 
 ```bash
-genmedia run xai/grok-imagine-video/v1.5/image-to-video \
-  --image_url "<anchor url>" --prompt "<motion, naming the cycle count>" \
-  --duration 1 --resolution 1080p --download "./_generated/<slug>/<action>.mp4" --json
+genmedia run bytedance/seedance-2.0/image-to-video \
+  --image_url "<anchor url>" \
+  --end_image_url "<anchor url>" \
+  --prompt "<motion, naming the exact cycle count>" \
+  --duration 4 --resolution 720p --aspect_ratio "1:1" \
+  --generate_audio false --download "./_generated/<slug>/<action>.mp4" --json
 ```
 
-`$0.01/second` · **24 fps** · ~**25 frames** per 1 s clip · **1080p costs the same as 480p** because
-price is metered on duration. 25 frames for an 8–10 frame cycle is ~3× oversampling — that headroom is
-the point: **we choose the frames and the phase**, rather than accepting the model's spacing. *(4.7)*
+Every flag above is deliberate:
 
-⚠️ `reference-to-video` accepts 7 reference images and is the lever for cross-clip identity, but its
-price is **unquotable** (`0.00 compute seconds`). One probe, then check the invoice, before any batch.
+- **`--duration 4`** — the minimum. Seedance 2 cannot generate a shorter clip.
+- **`--end_image_url` = the same anchor** — makes the clip a **true loop**, which is what idle, walk
+  and run cycles need. Omit it for one-shot actions (attack, hurt, death), where the end pose differs.
+- **`--resolution 720p`** — the only value the schema and the model-API reference agree on. Higher
+  tiers are advertised by one and not the other, and **price is no longer resolution-free**, so the old
+  "always generate at 1080p" rule is withdrawn.
+- **`--generate_audio false`** — it defaults to `true`; we want frames.
+
+🔴 **Two things you do NOT know here and must measure:**
+
+1. **The real fps and frame count.** Seedance 2's output is `{video, seed}` — no `fps`, no
+   `num_frames`. `ffprobe` the downloaded clip and record what it actually says. *(4.11)*
+2. **The real price.** `genmedia pricing` says `$0.014/unit`; the model-API reference says
+   `$0.3034/second`. **One 4 s probe, then read the invoice line, then present the number and stop.**
+   *(4.9)*
+
+⚠️ ~97 frames of a 4-second clip is *four seconds of motion*, not four times the detail. **Name the
+cycle count in the prompt** — "takes exactly six full strides during the clip" — or the oversampling
+buys nothing. *(4.7, and it now costs 4× more to get wrong than under a 1-second clip.)*
+
+`reference-to-video` accepts up to **9** `image_urls` (referenced as `@Image1`, `@Image2`, …), plus up
+to 3 `video_urls` and `audio_urls`, total files ≤ 12. It is the lever for cross-clip character
+identity. Same rule: one probe, one invoice check, then decide.
 
 ---
 
