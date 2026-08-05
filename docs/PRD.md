@@ -22,18 +22,18 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 
 ## The phases
 
-| # | Phase | Document | Gates on |
-|---|---|---|---|
-| 1 | Boot | [phase-01-boot.md](prd/phase-01-boot.md) | — |
-| 2 | Player controller + Character Playground | [phase-02-player.md](prd/phase-02-player.md) | 1 |
-| 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 |
-| 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) |
-| 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) |
-| 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 |
-| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 |
-| 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 |
-| 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 |
-| 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything |
+| # | Phase | Document | Gates on | Status |
+|---|---|---|---|---|
+| 1 | Boot | [phase-01-boot.md](prd/phase-01-boot.md) | — | ✅ **done** 2026-08-05 |
+| 2 | Player controller + Character Playground | [phase-02-player.md](prd/phase-02-player.md) | 1 | — |
+| 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 | — |
+| 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | — |
+| 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | — |
+| 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | — |
+| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | — |
+| 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
+| 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — |
+| 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything | — |
 
 ### Phase dependency notes
 
