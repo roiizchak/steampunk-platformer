@@ -7,6 +7,15 @@
 ### 1. Goal and scope
 Production build, dev seams stripped, licensing split, full regression. Ship it.
 
+🔴 **OPEN — needs a user decision before this phase can start.** Vault items 10.4 and 10.5 require a
+**rollback command** and a **CSP header configuration**, and both are properties of a hosting target
+that **no document in this repository names**. "Ship it" currently has no destination.
+
+Until a target is chosen, criteria 10.6 and the rollback half of 10.4 are **unrunnable, and an
+unrunnable criterion means this phase is reported failing** (Global Constraints). The question to
+settle: is the deliverable a hosted playable URL, or a `dist/` folder handed over? If hosted — which
+provider, and what is its rollback command? Answer it before Phase 9 ends, not here.
+
 ### 2. Required skills
 `game-setup-and-config` · `scale-and-responsive` · `superpowers:verification-before-completion`
 
@@ -43,7 +52,7 @@ from all nine earlier phases — which warning was recorded-but-not-fixed and is
 | 10.3 | Build-target and minifier defaults recorded with reversal instructions | doc *(10.1)* | — |
 | 10.4 | Bundle size change explained via raw-vs-gzip ratio | *(10.2)* | qa-expert |
 | 10.5 | Build config typechecked as its own program | *(10.3)* | code-reviewer |
-| 10.6 | CSP verified against the **production** header config locally | *(10.5)* | qa-expert |
+| 10.6 | CSP verified against the **production** header config locally. **Blocked until a hosting target is chosen — see §1** | *(10.5)* | qa-expert |
 | 10.7 | `git log --all -p` clean of secrets | command *(10.6)* | qa-expert |
 | 10.8 | Licences split: code vs generated assets | doc *(10.6)* | — |
 | 10.9 | Asset rebuild from a fresh clone is byte-identical | *(10.9/4.15)* | qa-expert |

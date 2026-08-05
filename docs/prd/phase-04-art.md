@@ -13,6 +13,19 @@ anchor, active frames, saved config.
 > *"Art is not an asset yet. It becomes an asset when the game can trust its catalog entry, bounds,
 > anchor, active frames, and saved config."* — adopted verbatim as this phase's acceptance test.
 
+🔴 **Scope boundary, corrected after the Gate 7 Codex review.** This phase produces **only the
+animations whose sim timings already exist**: `idle`, `walk`, `run`, `jump`. It does **not** produce
+`attack`, `hurt` or `death`.
+
+The reason is that gates 4.7 and 4.8 derive `fps = renderFrames × TICK_HZ / simTicks` and align the
+contact frame to the **active window** — and `simTicks`, `startup` and the active windows for combat
+are defined in `src/sim/combat.ts`, which is a **Phase 5** deliverable. Generating attack art here
+would mean either authoring a flat fps (vault **4.22**, blocker: *the strike was never drawn*) or
+inventing timings that Phase 5 then changes, forcing a re-generation. **Attack, hurt and death sheets
+move to Phase 5**, where the windows they must align to exist and where the enemies they belong to
+are specified. That also restores *grey-box before art* for combat, which this phase was quietly
+violating.
+
 🔴 **Phase 4a now begins with the Gate 0 model-swap re-probe** ([STYLE.md](../STYLE.md) §7 gate 0).
 The image model changed to `fal-ai/nano-banana-pro` and the animation model to
 `bytedance/seedance-2.0/image-to-video` on 2026-08-05. **Nothing measured on the old models carries
@@ -63,12 +76,19 @@ time. Ask Codex in particular:
 keying thresholds) · `tools/gen/gates.ts` + fixtures · `public/assets/index.json` ·
 `public/assets/config/character-bounds.json` · `src/scenes/GymScene.ts` ·
 `tests/unit/asset-catalog.test.ts` · `tests/unit/chroma-gate.test.ts` · `tests/e2e/phase-04-assets.spec.ts` ·
-GENERATION-LOG.md updated · STYLE.md §2b re-measured and its 🔴 markers cleared
+GENERATION-LOG.md updated **with request ids** · STYLE.md §2b re-measured and its 🔴 markers cleared ·
+**STYLE.md §8 CHARACTER ANCHOR block written and locked** · **`docs/ASSET-MANIFEST.md`** — the agreed
+list of every character, enemy and animation, so Phase 5 and Phase 6 are not surprised by a missing
+sheet · `public/assets/index.json` **schema extended to cover non-character assets** (HUD sheets and
+audio cues land in Phases 6 and 7 and need catalog entries too)
 
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 4.0 | **Gate 0 re-probe run on `nano-banana-pro`**: dimensions, alpha, single health bar, scale ratio | STYLE.md §7 gate 0 | qa-expert |
+| 4.0 | **Gate 0 re-probe run on `nano-banana-pro`**: dimensions, alpha, single health bar, scale ratio, **seed determinism** | STYLE.md §7 gate 0 | qa-expert |
+| 4.0b | **CHARACTER ANCHOR chosen and written into STYLE.md as an immutable block** before any sheet is generated | STYLE.md §8 | — |
+| 4.0c | **Asset manifest published**: every character and enemy slug, and every animation each one needs, agreed before spend | doc | — |
+| 4.0d | Phase 3's **published camera zoom and viewport** read from ASSET-PIPELINE.md — "true sprite size" is meaningless without them | doc | — |
 | 4.1 | **4a hero asset readable at true sprite size** before batch spend | downscale + look *(4.24)* | play |
 | 4.2 | Batch estimate presented and approved before 4b | STOP | — |
 | 4.2b | **One 4 s Seedance 2 probe run and reconciled against the actual invoice line** before any animation batch | invoice *(4.9)* | qa-expert |
@@ -77,8 +97,8 @@ GENERATION-LOG.md updated · STYLE.md §2b re-measured and its 🔴 markers clea
 | 4.4 | Alpha channel read directly; chroma keying applied where absent | script *(4.12)* | qa-expert |
 | 4.5 | Chroma gate self-tests on fixtures **before** judging real art | fixtures *(4.21)* | qa-expert |
 | 4.6 | Keep-largest-component **not** applied to jump/air/attack states | code review *(4.13)* | code-reviewer |
-| 4.7 | Every animation's fps derived as `renderFrames × TICK_HZ / simTicks` | unit *(4.22)* | qa-expert |
-| 4.8 | Contact frame lands inside the active window on **every** attack sheet | measured *(4.22)* | qa-expert |
+| 4.7 | Every animation's fps derived as `renderFrames × TICK_HZ / simTicks` from **Phase 2's** movement timings | unit *(4.22)* | qa-expert |
+| 4.8 | ~~Contact frame lands inside the active window~~ — **moved to Phase 5** with the attack sheets | — | — |
 | 4.9 | Loop flag verified per clip; held states meet a motion floor | measured *(4.23)* | qa-expert |
 | 4.10 | Box-vs-art audit: frame-diff method, INDETERMINATE allowed, no guesses | *(4.18)* | qa-expert |
 | 4.11 | Rebuild from a clean clone produces **byte-identical** PNGs | *(4.15)* | qa-expert |

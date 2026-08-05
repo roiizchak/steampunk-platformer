@@ -41,8 +41,9 @@ number found now is free; found in Phase 4 it is a re-generation.
 | 3.2 | Player cannot pass through a solid tile horizontally | e2e | e2e |
 | 3.3 | **Every** `.tmj` in `levels/` loads and passes a schema + collision-layer check | unit over shipped data *(3.1)* | qa-expert |
 | 3.4 | Camera follows within bounds; never shows outside the map | e2e | e2e |
-| 3.5 | World width derived from measured pixels; a test pins the number | unit *(3.2)* | qa-expert |
-| 3.6 | **Grid cell size published in ASSET-PIPELINE.md** | doc review | — |
+| 3.5 | World width derived from the **shipped `.tmj`'s own `width × tilewidth`**, measured not assumed; a test pins the number. *(There is no background art in this phase — 3.2's "measured background pixels" rule binds Phase 4, when real art exists.)* | unit *(3.2)* | qa-expert |
+| 3.6 | **Grid cell size published in ASSET-PIPELINE.md** — replacing the PROPOSED marker | doc review | — |
+| 3.6b | **Camera zoom and viewport size published in ASSET-PIPELINE.md.** Phase 4's "readable at true sprite size" gate has no true size without them | doc review | — |
 | 3.7 | Element Editor shows and edits a collision strip; the edit persists | hands-on | play |
 | 3.8 | No file > 400 lines; diff reviewed; adversarial pass | code-reviewer ×2 | code-reviewer |
 | 3.9 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-03-plan.md` | — |

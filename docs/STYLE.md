@@ -37,6 +37,13 @@ Reason given: substantially more input control. See §2b for what changed and wh
 | `system_prompt` | empty — see §2b before using it |
 | Cost | **$0.15 per image at 1K and 2K. 4K is charged at 2× = $0.30.** |
 
+**Price source, both read 2026-08-05:** `genmedia pricing fal-ai/nano-banana-pro` → `0.15 / images
+USD`; and the fal model-API reference,
+`fal.ai/docs/model-api-reference/image-generation-api/nano-banana-pro` → *"Cost per Image $0.15 …
+4K outputs will be charged at double the standard rate."* The two agree, which is itself worth
+recording — they do **not** agree for Seedance 2 (SOURCE-ANALYSIS §6b). **Neither is an invoice.**
+*(4.9)*
+
 ### Full input schema — `fal-ai/nano-banana-pro`
 
 Read from `genmedia schema` on 2026-08-05. The `/edit` endpoint is identical plus a **required**
@@ -101,14 +108,23 @@ so the prompt is the only variable *(vault 4.10 — expect exactly one number to
 **For production batches**, vary the seed per asset and **record it in GENERATION-LOG.md**. A seed you
 did not write down is a result you cannot reproduce *(vault 4.15)*.
 
-Note the limit honestly: nano-banana-2's seed gives *reproducibility*, not *control*. Identity
-consistency across assets comes from the reference image, not the seed *(vault 4.1)*.
+Note the limit honestly: on this model family the seed gives *reproducibility*, not *control*.
+Identity consistency across assets comes from the reference image, not the seed *(vault 4.1)*.
+`nano-banana-pro`'s seed accepts an integer or null; **its determinism is untested** — if two
+identical calls at the same seed return different images, the whole A/B method in this section is
+void, so make that the first thing gate 0 notices.
 
 ---
 
 ## 4. Prompt template
 
 Slots in `[BRACKETS]`. Everything else is verbatim and must not be reworded casually.
+
+> ⛔ **Scope of every claim in §4 and §5: `nano-banana-2`.** Every "verified", "calibrated" and
+> "measured" word below is a true statement about the **retired** model. On `nano-banana-pro` they are
+> **hypotheses with good priors** until §7 gate 0 re-probes them. Read them as *"this is what worked
+> and why"*, not as *"this is what will happen"*. The prompt text itself carries over unchanged — it
+> is the **numbers and the verdicts** that do not.
 
 ```text
 A single frame of richly detailed pixel-art gameplay from a 2D side-scrolling platformer,
@@ -154,14 +170,18 @@ copper, brass and amber lamplight, saturated and high contrast. Warmth alone tel
 what is reachable.
 ```
 
-**Verified `[SETTING]` values** — both hold the recipe, confirming it is level-type independent:
+**`[SETTING]` values verified on `nano-banana-2`** — both held the recipe there, confirming it was
+level-type independent on that model:
 
 - `a soot-stained Victorian factory street at dusk, seen from the iron walkways above the road, with gas lamps, copper pipework and chimney stacks`
 - `the interior of a vast Victorian boiler house, with riveted pressure vessels, flywheels, gantries, copper pipework and hanging lamps`
 
-### `[SCALE_RATIO]` — calibrated, do not guess
+### `[SCALE_RATIO]` — calibrated on `nano-banana-2`, do not guess
 
-The model renders about **1.6× more vertical world than the stated ratio.** Measured over three attempts:
+`nano-banana-2` rendered about **1.6× more vertical world than the stated ratio.** Measured over three
+attempts. **The ×1.6 transfer function is a property of that model and must be re-derived on
+`nano-banana-pro`** — gate 0.4. What certainly carries over is the *method*: name a countable ratio,
+measure what you get, solve for the constant.
 
 | stated | actual screen-heights | character fills |
 |---|---|---|
@@ -187,8 +207,8 @@ Non-negotiable. They are why the art is readable, and they are independently mea
 2. **TEMPERATURE (global):** background entirely cool blue-grey and desaturated; foreground warm
    copper/brass/amber, saturated, high contrast.
 
-They are deliberately redundant. Measured on the two approved settings, when one weakens the other
-carries it:
+They are deliberately redundant. Measured **on `nano-banana-2`** across the two approved settings —
+when one weakened, the other carried it:
 
 | setting | sat gap | val gap | hue gap |
 |---|---|---|---|

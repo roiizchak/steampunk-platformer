@@ -42,10 +42,11 @@ read state back from the WebAudio API rather than from our own flag?** *(7.5.)*
 | # | Criterion | Method | Owner |
 |---|---|---|---|
 | 7.1 | Every cue plays at its event; no unloaded-sound errors | e2e | e2e |
-| 7.2 | Worst-case simultaneous cue stack measured ≤ −1.0 dBFS | float decode *(7.3/7.4)* | qa-expert |
+| 7.2 | Worst-case simultaneous cue stack measured ≤ −1.0 dBFS. **The ceiling is chosen from what is correct — standard digital headroom below 0 dBFS clipping — not fitted to what our files happen to do.** What is *measured* is our stack against it. *(9.2)* | float decode *(7.3/7.4)* | qa-expert |
 | 7.3 | No cue is silent — measured floor, not listened-to | float decode *(7.1)* | qa-expert |
 | 7.4 | Mute/volume persist across reload; asserted on **our** flag, not the getter | unit *(7.5)* | qa-expert |
 | 7.5 | Scene round-trip does not accumulate tracks | repeat transitions, count *(7.5)* | qa-expert |
+| 7.5b | Every audio cue has a **catalog entry in `index.json`**, and every generation a **request id** in GENERATION-LOG.md | audit *(4.15/4.17)* | — |
 | 7.6 | Cues emitted from the producing tick, not a state comparison | code review *(2.5)* | code-reviewer |
 | 7.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | code-reviewer ×2 + perf | — |
 | 7.8 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-07-plan.md` | — |

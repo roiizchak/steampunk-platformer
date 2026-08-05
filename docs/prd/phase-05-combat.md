@@ -9,6 +9,17 @@ Two contrasting enemies — a **static turret** with a visible detection radius,
 scavenger** that chases. Hazards. Player attack, damage, knockback, i-frames. **Enemy health bars.**
 Plus enemy behaviour tuning in the Gym. Grey-box behaviour first, art second.
 
+🔴 **This phase now also owns the combat art**, moved here from Phase 4 by the Gate 7 Codex review:
+the player's `attack` / `hurt` / `death` sheets and all enemy sheets. They cannot be generated in
+Phase 4 because their frame rate is derived from `simTicks` and their contact frames are aligned to
+active windows — and both are defined in `src/sim/combat.ts`, which is built here.
+
+**Order within this phase is therefore strict: grey-box the combat sim and freeze its timings FIRST,
+then generate art against those frozen numbers.** Generating first would author a flat fps, which is
+vault **4.22** — *every light attack had 0.43 s of art over a 0.25 s move, so the strike was never
+drawn.* All of [ASSET-PIPELINE.md](../ASSET-PIPELINE.md) and [STYLE.md](../STYLE.md) apply to that
+art unchanged, including the per-generation log entry with its request id.
+
 ### 2. Required skills
 `physics-arcade` · `groups-and-containers` · `events-system` · `animations` · `data-manager`
 
@@ -46,6 +57,10 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 | 5.2 | Scavenger patrols, detects, chases; each speed independently tunable | unit + sweep | qa-expert |
 | 5.3 | Enemy decisions commit to **episodes**, not per-tick rolls | code review *(5.1)* | code-reviewer |
 | 5.4 | Enemy walk animation advances past frame 0 during patrol | e2e/observed *(5.1)* | play |
+| 5.4b | **Combat sim timings frozen and recorded BEFORE any combat art is generated** | doc + STOP *(4.22)* | — |
+| 5.4c | **Contact frame lands inside the active window on every attack sheet** *(moved from Phase 4)* | measured *(4.22)* | qa-expert |
+| 5.4d | Every combat sheet's fps derived as `renderFrames × TICK_HZ / simTicks`, never authored | unit *(4.22)* | qa-expert |
+| 5.4e | Every combat generation logged with its **request id** and reconciled cost | GENERATION-LOG.md | — |
 | 5.5 | Attack registers **only** on active frames; wind-up and recovery do not | unit *(4.22)* | qa-expert |
 | 5.6 | i-frames span their full window — fixture longer than the window | unit *(2.7)* | qa-expert |
 | 5.7 | **Enemy health bar never renders empty above 0 HP** | unit *(6.4)* | qa-expert |

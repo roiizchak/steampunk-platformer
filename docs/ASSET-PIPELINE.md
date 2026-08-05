@@ -22,8 +22,13 @@ into a fixed cell*, while Tiled **requires** a fixed grid. Both are right about 
 | **Object atlas** | props, pickups, lanterns, crates, signs, large set dressing | **variable frame sizes**, padded, chroma-backed, JSON metadata | object layer |
 | **Sprite sheet** | character and enemy animations | fixed cell **per animation**, not globally | not in Tiled — loaded by key |
 
-**Grid cell size: `32 × 32` px.** Published by Phase 3; Phase 4 art must hit it. Character target is
+**Grid cell size: `32 × 32` px — PROPOSED, not yet published.** Phase 3 publishes the *binding* value
+by writing it back into this line, and only then may Phase 4 spend against it. Character target is
 **96–128 px tall = 3–4 tiles.**
+
+Phase 3 must also publish, in this file, the **camera zoom and viewport size** it settles on. Without
+those, "readable at true sprite size" (Phase 4 gate 4.1) has no true size to test at — a 128 px
+sprite at 1× and at 2× zoom are different readability problems.
 
 ---
 
@@ -100,8 +105,10 @@ genmedia run bytedance/seedance-2.0/image-to-video \
 Every flag above is deliberate:
 
 - **`--duration 4`** — the minimum. Seedance 2 cannot generate a shorter clip.
-- **`--end_image_url` = the same anchor** — makes the clip a **true loop**, which is what idle, walk
-  and run cycles need. Omit it for one-shot actions (attack, hurt, death), where the end pose differs.
+- **`--end_image_url` = the same anchor** — *intended* to close the clip into a **true loop**, which is
+  what idle, walk and run cycles need. **Unverified: the input exists, its loop quality does not yet.**
+  Phase 4 gate 4.9 is what decides whether it works. Omit it for one-shot actions (attack, hurt,
+  death), where the end pose differs.
 - **`--resolution 720p`** — the only value the schema and the model-API reference agree on. Higher
   tiers are advertised by one and not the other, and **price is no longer resolution-free**, so the old
   "always generate at 1080p" rule is withdrawn.
@@ -115,9 +122,14 @@ Every flag above is deliberate:
    `$0.3034/second`. **One 4 s probe, then read the invoice line, then present the number and stop.**
    *(4.9)*
 
-⚠️ ~97 frames of a 4-second clip is *four seconds of motion*, not four times the detail. **Name the
-cycle count in the prompt** — "takes exactly six full strides during the clip" — or the oversampling
-buys nothing. *(4.7, and it now costs 4× more to get wrong than under a 1-second clip.)*
+⚠️ A 4-second clip is *four seconds of motion*, not four times the detail. **Name the cycle count in
+the prompt** — "takes exactly six full strides during the clip" — or the oversampling buys nothing.
+*(4.7, and it now costs 4× more to get wrong than under a 1-second clip.)*
+
+**Do not compute a frame count from an assumed frame rate here.** Grok published 24 fps in its output
+schema; Seedance 2 publishes nothing. Until step 1 below has `ffprobe`d a real clip, the frame count
+of a 4-second Seedance clip is **unknown**, and any number written down before then is a label, not a
+measurement. *(4.11)*
 
 `reference-to-video` accepts up to **9** `image_urls` (referenced as `@Image1`, `@Image2`, …), plus up
 to 3 `video_urls` and `audio_urls`, total files ≤ 12. It is the lever for cross-clip character
@@ -127,8 +139,13 @@ identity. Same rule: one probe, one invoice check, then decide.
 
 ## 3. Background removal
 
-**Measured fact: nano-banana-2 returns `mode=RGB` with no alpha channel at all.** Not "RGBA with alpha
-255" — genuinely absent. Chroma keying is **mandatory**, not optional.
+**Chroma keying is mandatory until proven otherwise, and that is a deliberate default.**
+
+The measurement behind it — `mode=RGB`, alpha genuinely absent, not "RGBA with alpha 255" — was taken
+on **`nano-banana-2`**, which is no longer our model. `nano-banana-pro` is unmeasured (STYLE.md gate
+0.2). We keep the apparatus mandatory because the two failure directions are not symmetric: keying an
+image that already has alpha wastes a step, while assuming alpha that is not there ships every sprite
+on an opaque rectangle. **Re-measure at gate 0; drop this step only on evidence, never on hope.**
 
 - **Never test `mode == "RGBA"`. Read the alpha channel.** *(4.12)*
 - **Key by L1 colour distance with a tolerance, never equality.** Ask for `#FF00FF` and you get
@@ -140,7 +157,10 @@ identity. Same rule: one probe, one invoice check, then decide.
 - 🔴 **Keep-largest-component is safe for held and idle poses and MUST NOT be applied to jump, air or
   attack states**, where the key's anti-aliasing gap legitimately splits off a fist or a foot. *(4.13)*
 
-`fal-ai/bria/background/remove` ($0.018) is the fallback where chroma keying fails.
+`fal-ai/bria/background/remove` is the fallback where chroma keying fails.
+**Price: quote it with `genmedia pricing fal-ai/bria/background/remove` at the time of use.** The
+$0.018 figure carried in earlier drafts is from a Gate 3 catalog read and has never been reconciled
+against an invoice — treat it as indicative only. *(4.9)*
 
 ---
 

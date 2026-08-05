@@ -45,7 +45,8 @@ that is true rather than on what is drawn?** *(6.4.)*
 | 6.3 | Second camera built from live game size; resize does not crop the HUD | resize test *(6.2)* | qa-expert |
 | 6.4 | Health bar never draws full while health < max | unit *(6.4)* | qa-expert |
 | 6.5 | HUD legible at minimum supported resolution | screenshot | play |
-| 6.6 | Text contrast ≥ 4.5:1 | measured | ui-ux-tester |
+| 6.6 | Text contrast ≥ 4.5:1 — **WCAG 2.2 SC 1.4.3 (Contrast Minimum), Level AA**, normal-size text | measured | ui-ux-tester |
+| 6.6b | HUD sheet has a **catalog entry in `index.json`** under the Phase 4 non-character schema | audit | — |
 | 6.7 | Canvas not double-centred; no stray margin offset | inspect *(6.6)* | qa-expert |
 | 6.8 | HUD sheet chroma-keyed cleanly; fill mask region correct | inspect | play |
 | 6.9 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | code-reviewer ×2 + perf | — |
