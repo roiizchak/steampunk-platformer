@@ -24,9 +24,13 @@ filtering **once** and assert it (Phaser's scale-mode constants are reversed: li
 mutations applied — this repo already emits CRLF warnings
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-01-plan.md`. Every finding applied, or recorded in `QA-LOG.md` with a
-reason *(C11)*.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save the report verbatim to `docs/reviews/phase-01-plan.md`, then append the triage. Every finding
+applied, or recorded with a reason *(C11)*. Review 2 later uses `--wait --resume`.
+
+**This is the protocol's first run on a plan.** If the review returns a grounding complaint instead of
+findings, re-run it — a review that could not read the repository is not a pass.
 
 Ask Codex in particular: **is the `window.__game` surface below sufficient for every later phase's
 e2e spec, or will Phase 5/6/8 need a field that is not there?** Changing this surface later

@@ -22,8 +22,9 @@ numbers, not just the identifier · **3.4** publish the grid cell size before Ph
 **A3** the vault has **zero** tilemap coverage — this phase generates new lessons, so keep notes
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-03-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-03-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **this phase publishes the 32px grid cell size that Phase 4 spends money
 against — what else does Phase 4 need published here that this plan does not publish?** A missing

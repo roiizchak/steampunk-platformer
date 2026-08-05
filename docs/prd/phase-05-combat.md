@@ -38,8 +38,9 @@ global changes as uniform deltas · **5.11** check that waste is waste before re
 gate the enemy health bar on what is **drawn** — an enemy at 2/100 must not render as empty
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-05-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-05-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **combat timing is expressed against Phase 2's tick contract — does this plan
 restate any timing predicate that Phase 2 already defines?** *(5.3: two definitions of one concept is

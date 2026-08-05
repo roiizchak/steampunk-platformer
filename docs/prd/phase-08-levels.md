@@ -18,8 +18,9 @@ absolute-stat comparisons are suspect · **8.4** anchor prop scale to a human fi
 normalisation preserves neither · **5.7** report the spread, not the headline
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-08-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-08-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **what makes a level unwinnable that this plan's validation would not
 catch?** A schema check passes on a level whose only route is a jump one pixel too high. And:

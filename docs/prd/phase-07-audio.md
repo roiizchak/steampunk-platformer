@@ -47,8 +47,9 @@ Four properties of these endpoints bear directly on the vault items above:
 Still apply **7.2**: one probe on one cue before any batch.
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-07-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-07-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **which of these audio criteria is verified by listening rather than by
 measurement?** *(7.1: a cue that sounds fine can be −37.9 dBFS of nothing.)* And: **does any assertion

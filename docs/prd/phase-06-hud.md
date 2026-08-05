@@ -24,8 +24,9 @@ before the parent comparison · **STYLE.md §6** constrain HUD geometry rather t
 elements
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-06-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-06-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **the HUD sheet is generated art — does this plan re-run the STYLE.md §7
 verification gates on it, or does it assume the recipe transfers from the scene mockups?** The HUD in

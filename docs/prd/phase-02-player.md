@@ -26,8 +26,9 @@ jump apex with the **discrete** integrator, not `v²/2g` — that error was 7.4p
 Playground knob and confirm the number moves
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-02-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-02-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **the tick step order in `tick.ts` is the contract Phase 5's combat timing is
 expressed against — which ordering decision here will be expensive to reverse then?** And: **which of

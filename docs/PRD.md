@@ -82,57 +82,92 @@ entire point: it cannot inherit the assumption that made the mistake. This is th
 dedicated QA pass once returned 8/8 PASS on a diff an adversarial review then found three real
 defects in.
 
-**Codex CLI:** `codex-cli 0.146.0` at `~/AppData/Local/Programs/OpenAI/Codex/bin/codex`.
+### How to run it: `/codex:rescue`
+
+**Both reviews are run through the `codex:rescue` skill, never by calling the `codex` binary
+directly.** The skill routes to the `codex:codex-rescue` subagent, which is the supported path and
+the one this project has actually exercised — the Gate 7 documentation review
+([reviews/gate-07-docs.md](reviews/gate-07-docs.md)) was produced this way.
+
+**Flags that matter:**
+
+| Flag | Use |
+|---|---|
+| `--wait` | run in the foreground. **Always use this for a review** — the gate blocks on the result |
+| `--fresh` | start a new Codex thread. **Use for review 1 of every phase**, so the reviewer carries no assumption from the last one |
+| `--resume` | continue the existing thread. Use for review 2, which benefits from having seen the plan |
+| `--model`, `--effort` | leave unset unless there is a reason |
+
+⚠️ **Operational note, learned at Gate 7:** the first invocation failed with
+`CreateProcessAsUserW failed: Access is denied` — Codex's own Windows sandbox failing to spawn — and
+reported that it had read **zero** files. **It said so rather than inventing findings, which is the
+correct behaviour and is exactly what to check for.** A retry succeeded. If a review returns a
+grounding complaint, re-run it; **do not accept a review that could not read the repository, and
+never record its silence as a pass.**
 
 ### Review 1 — the plan, before any code
 
 Runs after vault-in and skill invocation, **before the first line of implementation.**
 
-```bash
-codex exec -s read-only --output-last-message ./docs/reviews/phase-NN-plan.md "$(cat <<'EOF'
-Review the plan in docs/prd/phase-NN-<name>.md against this repository.
-
-Context you must read first: docs/PRD.md (global constraints), docs/LESSONS-APPLIED.md
-(the vault items this phase cites), docs/QA-LOG.md (what earlier phases actually found).
+```
+/codex:rescue --wait --fresh Review the plan in docs/prd/phase-NN-<name>.md against this
+repository. Read first: docs/PRD.md (global constraints), docs/FAL-MODELS.md (if this phase
+generates), docs/LESSONS-APPLIED.md (the vault items this phase cites), docs/QA-LOG.md (what
+earlier phases actually found), and docs/reviews/ (what earlier phases were warned about).
 
 Answer these, and only these:
 1. Which deliverables in this phase's section 5 are NOT actually required by its section 1 goal?
 2. Which acceptance criteria in its section 6 could pass while the feature is still broken?
 3. Which cited vault item does the plan claim to satisfy but does not?
-4. What does this phase depend on that is not listed as a dependency?
+4. What does this phase depend on that no earlier phase actually produces?
 5. What is the single most likely way this phase ships something subtly wrong?
 
-Do not write code. Do not propose a redesign. Cite file and line for every claim.
-EOF
-)"
+Do not write code. Do not modify any files. Do not propose a redesign. Cite file and line for
+every claim. Rank by severity. State plainly what you could not check.
 ```
 
-**Handling the output:** every finding is either **applied**, or **recorded in `QA-LOG.md` with a
-one-line reason for rejecting it**. Silently ignoring a finding is not permitted — *(vault C11:
-record what you didn't fix)*. If Codex and this PRD disagree on a **locked** decision, the PRD wins
-and the disagreement is recorded; if they disagree on anything else, ask.
+Question 4 is the one that pays. At Gate 7 it found a Phase 4 gate that depended on data Phase 5
+produces — a defect no consistency check would surface, because both documents were internally
+correct.
 
 ### Review 2 — the implementation, in the QA gate
 
 Runs on the phase's diff, after the phase's own tests are green and before it is reported done. It is
 a numbered criterion in every phase's QA gate and carries the same weight as a failing test.
 
-```bash
-codex exec review --base main --output-last-message ./docs/reviews/phase-NN-impl.md "$(cat <<'EOF'
-Review this diff against docs/prd/phase-NN-<name>.md and docs/PRD.md.
+```
+/codex:rescue --wait --resume Review the diff of this phase against docs/prd/phase-NN-<name>.md
+and docs/PRD.md. Compare against main.
 
 Check specifically:
 - Does src/sim/ import anything from Phaser, Date.now, Math.random, or the DOM? (blocker)
 - Is any duration expressed as a float of seconds rather than an integer tick count? (blocker)
+- Is any animation fps authored rather than derived as renderFrames x TICK_HZ / simTicks? (blocker)
 - Does any file exceed 400 lines without a justification in docs/QA-LOG.md?
-- For each acceptance criterion in the phase's QA gate: does the code actually satisfy it,
-  or only appear to?
-- Which test would still pass if its assertion were deleted?
+- For each acceptance criterion in the phase's QA gate: does the code actually satisfy it, or
+  only appear to?
+- Which test would still pass if the behaviour it names were deleted?
 
-Cite file and line for every finding. Rank by severity. State plainly what you could not check.
-EOF
-)"
+Do not modify any files. Cite file and line for every finding. Rank by severity. State plainly
+what you could not check.
 ```
+
+### Recording the result
+
+`/codex:rescue` returns its report into the conversation; **it does not write the file.** Save the
+report verbatim to `docs/reviews/phase-NN-plan.md` or `phase-NN-impl.md`, then append the triage —
+one line per finding, **applied** or **rejected with a reason**. The Gate 7 review file is the
+template.
+
+**Handling findings:** every one is either **applied**, or **recorded with a one-line reason for
+rejecting it**. Silently ignoring a finding is not permitted — *(vault C11: record what you didn't
+fix)*. If Codex and this PRD disagree on a **locked** decision, the PRD wins and the disagreement is
+recorded; if they disagree on anything else, ask.
+
+**Preserve the reviewer's own "could not check" section.** A gate's blind spots are part of its
+result *(vault 9.3)*, and Codex has real ones — it has no network access, so it cannot verify any
+fal.ai price, schema or licence claim. Those are verified separately via `genmedia`, which makes the
+two passes complementary rather than redundant. Say which is which.
 
 **A phase is not done until review 2 has run and every finding is applied or recorded.**
 The two reviews are distinct: review 1 asks *"is this the right thing to build?"*, review 2 asks

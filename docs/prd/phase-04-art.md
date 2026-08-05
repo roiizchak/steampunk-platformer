@@ -61,9 +61,14 @@ the sim: `fps = renderFrames × TICK_HZ / simTicks`; align contact frame; budget
 the POT/mipmap constraint on Phaser 4 · **A4** the Gym's save endpoint is an authorization decision
 
 ### 4. Codex plan review
-**Runs now, before any code and before any spend.** Command and handling rules:
-[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-04-plan.md`.
+**Runs now, before any code and before any spend.** Invoke **`/codex:rescue --wait --fresh`** with the
+review-1 prompt from [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol),
+naming this file. Save verbatim to `docs/reviews/phase-04-plan.md`, then append the triage.
+Review 2 uses `--wait --resume`.
+
+⚠️ **Codex has no network access.** It cannot verify a single fal.ai price, schema or licence claim in
+this phase — those are verified separately through `genmedia`. Ask it about *internal* consistency and
+*ordering*, which is where it is strong, and record the split rather than implying it checked prices.
 
 This is the phase where a plan review is worth the most, because its mistakes cost money rather than
 time. Ask Codex in particular:

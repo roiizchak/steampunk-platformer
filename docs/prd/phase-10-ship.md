@@ -32,8 +32,12 @@ dev build** · **10.7** anything a human will watch needs a second driver; disab
 optimisation on Windows · **10.9** reproducible asset rebuild verified from a fresh clone
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-10-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-10-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
+
+This is the **twentieth** run of the protocol. Give it `docs/reviews/` in full and ask it to read
+across phases, not just this one — the cross-phase question is the only one it has never been asked.
 
 Ask Codex in particular: **enumerate every dev-only seam in this repository and state, for each,
 whether criterion 10.2 would actually catch it in `dist/`.** Grepping for `__game` does not catch a

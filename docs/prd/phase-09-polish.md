@@ -21,8 +21,9 @@ what a gate does not cover; prefer an honest recorded number to a gate that cann
 that cannot distinguish "fast" from "not drawing anything"
 
 ### 4. Codex plan review
-**Runs now, before any code.** Command and handling rules: [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
-Output → `docs/reviews/phase-09-plan.md`.
+**Runs now, before any code.** Invoke **`/codex:rescue --wait --fresh`** with the review-1 prompt from
+[PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol), naming this file.
+Save verbatim to `docs/reviews/phase-09-plan.md`, then append the triage. Review 2 uses `--wait --resume`.
 
 Ask Codex in particular: **which piece of game state in this plan is sequenced off a tween completion
 rather than off the tick?** *(9.1, blocker — a fully green suite once shipped invisible menu cards.)*
