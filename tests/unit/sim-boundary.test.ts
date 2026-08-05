@@ -65,16 +65,18 @@ const FORBIDDEN: Rule[] = [
   // of which executes only when called, so neither import-evaluation nor the uninstalled run
   // would ever reach it.
   {
+    // Trailing `[/'"]` so a subpath import — `import('phaser/types/...')` — is caught too.
     name: 'Phaser import',
-    pattern: /\b(?:from|import|require)\s*\(?\s*['"]phaser['"]/,
+    pattern: /\b(?:from|import|require)\s*\(?\s*['"]phaser(?:['"]|\/)/,
     view: 'code+strings',
   },
-  // Bracket access (`Date['now']`) evades a plain `Date.now` match, so the separator is
-  // `\s*[.[]` rather than a literal dot — which means these rules must see strings.
-  { name: 'Date.now', pattern: /\bDate\s*[.[]\s*['"]?now\b/, view: 'code+strings' },
-  { name: 'new Date', pattern: /\bnew\s+Date\b/, view: 'code' },
+  // `Date` as a BARE identifier. Narrower rules miss `Date()` called without `new`, and miss
+  // aliasing (`const clock = Date; clock.now()`), which defeats any member-access pattern.
+  { name: 'Date', pattern: /\bDate\b/, view: 'code' },
   { name: 'Math.random', pattern: /\bMath\s*[.[]\s*['"]?random\b/, view: 'code+strings' },
   { name: 'performance.now', pattern: /\bperformance\s*[.[]\s*['"]?now\b/, view: 'code+strings' },
+  // crypto.getRandomValues is a clock-free RNG the other rules do not name at all.
+  { name: 'crypto', pattern: /\bcrypto\b/, view: 'code' },
   // Bare identifiers, not `window.` — `const d = document;` then `d.body` on the next line
   // evades any rule that requires the trailing accessor.
   { name: 'window', pattern: /\bwindow\b/, view: 'code' },
@@ -100,6 +102,21 @@ interface Violation {
  * Strings are blanked as well as comments so a URL or message containing `document` or
  * `Math.random` is not reported as a violation.
  */
+/** Index of the `}` closing a `${` interpolation that starts at `from`, brace-depth aware. */
+function findInterpolationEnd(source: string, from: number): number {
+  let depth = 1;
+  let i = from;
+
+  while (i < source.length && depth > 0) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') depth -= 1;
+    if (depth === 0) break;
+    i += 1;
+  }
+
+  return i;
+}
+
 function blank(source: string, blankStrings: boolean): string {
   let out = '';
   let i = 0;
@@ -130,6 +147,16 @@ function blank(source: string, blankStrings: boolean): string {
       }
       out += ch;
       i += 1;
+      continue;
+    }
+
+    // `${...}` inside a template literal is CODE, not string content. Blanking it would hide
+    // `` `${new Date()}` `` from every rule. Hand the interior back to code mode; the closing
+    // brace returns to the template.
+    if (mode === 'template' && ch === '$' && next === '{') {
+      const end = findInterpolationEnd(source, i + 2);
+      out += '  ' + source.slice(i + 2, end);
+      i = end;
       continue;
     }
 
@@ -197,18 +224,39 @@ function resolveImport(fromKey: string, specifier: string): string | null {
   }
 
   const base = stack.join('/');
-  const candidates = [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}/index.ts`];
+  // Must cover every extension the glob admits, plus directory-index forms — otherwise an
+  // import the closure cannot resolve is silently dropped and its file goes unscanned.
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.mts', '.cts'];
+  const candidates = [
+    base,
+    ...extensions.map((ext) => `${base}${ext}`),
+    ...extensions.map((ext) => `${base}/index${ext}`),
+  ];
 
   return candidates.find((c) => c in ALL_SOURCES) ?? null;
 }
 
 /**
- * Every project source file reachable from the sim entry point by following relative imports.
- * This is what makes the rule apply to the whole sim, not just to one directory.
+ * The set of files the boundary rule applies to: the UNION of
+ *   (a) every file under `src/sim/`, reachable from the barrel or not, and
+ *   (b) every project file transitively imported from the sim entry point.
+ *
+ * Both halves are load-bearing and each covers the other's blind spot:
+ *   - closure alone misses an ORPHAN — `src/sim/scratch.ts` that nothing imports yet could
+ *     hold `Date.now()` and stay invisible until the day something imports it;
+ *   - directory alone misses a HELPER one hop out, which is the hole this whole rewrite
+ *     started from, since `src/sim/index.ts` already imports `../game/constants`.
  */
 function simClosure(): Record<string, string> {
   const closure: Record<string, string> = {};
   const queue = [SIM_ENTRY];
+
+  // (a) everything in the sim directory, whether or not anything imports it.
+  for (const key of Object.keys(ALL_SOURCES)) {
+    if (key.includes('/src/sim/')) {
+      queue.push(key);
+    }
+  }
 
   while (queue.length > 0) {
     const key = queue.pop()!;
@@ -320,8 +368,15 @@ describe('sim boundary (vault 1.1)', () => {
       const cases: Record<string, string> = {
         'bracket.ts': "const n = Date['now']();",
         'lazy.ts': "async function f() { const P = await import('phaser'); return P; }",
-        'bare.ts': 'const d = document;\nconst b = d.body;',
+        'subpath.ts': "async function f() { return import('phaser/dist/phaser.esm.js'); }",
+        'bare-dom.ts': 'const d = document;\nconst b = d.body;',
         'global.ts': 'const r = globalThis.Math.random();',
+        // `Date()` without `new`, and aliasing, both defeat any member-access pattern.
+        'no-new.ts': 'const s = Date();',
+        'alias.ts': 'const clock = Date;\nconst n = clock.now();',
+        'crypto.ts': 'const b = crypto.getRandomValues(new Uint8Array(4));',
+        // Interpolation is code inside a string; blanking the template hides it entirely.
+        'template.ts': 'const s = `stamped ${new Date().toISOString()}`;',
       };
 
       for (const [name, source] of Object.entries(cases)) {

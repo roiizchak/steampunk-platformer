@@ -1,62 +1,12 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
-import { CRISP_IMAGE_RENDERING, PHASER_RESERVED_TEXTURE_KEYS } from '../game/constants';
-
-/** One entry in `public/assets/index.json`. */
-interface CatalogEntry {
-  key: string;
-  url: string;
-}
-
-interface AssetCatalog {
-  images: CatalogEntry[];
-}
-
-const CATALOG_KEY = 'asset-catalog';
-
-/**
- * Validate the catalog's SHAPE before anything is queued. Returns a description of the first
- * problem, or `null` if it is usable.
- *
- * Every rule here exists because the corresponding malformed catalog would otherwise produce a
- * clean boot with assets missing, or a hang:
- *   - not an object / no images / empty list -> zero expectations satisfy themselves trivially
- *   - a null or non-object entry             -> throws while queueing, which hangs boot
- *   - a duplicate key                        -> the loader skips the second, existence still passes
- *   - a Phaser-reserved key                  -> resolves to a real built-in 32x32 texture
- */
-export function describeCatalogProblem(catalog: AssetCatalog | undefined): string | null {
-  if (!catalog || typeof catalog !== 'object' || !Array.isArray(catalog.images)) {
-    return 'assets/index.json missing or malformed';
-  }
-
-  if (catalog.images.length === 0) {
-    return 'assets/index.json lists no images';
-  }
-
-  const seen = new Set<string>();
-
-  for (const entry of catalog.images) {
-    if (!entry || typeof entry !== 'object') {
-      return 'contains a non-object entry';
-    }
-    if (typeof entry.key !== 'string' || entry.key === '') {
-      return 'contains an entry with a missing or empty key';
-    }
-    if (typeof entry.url !== 'string' || entry.url === '') {
-      return `entry "${entry.key}" has a missing or empty url`;
-    }
-    if (PHASER_RESERVED_TEXTURE_KEYS.includes(entry.key)) {
-      return `entry "${entry.key}" uses a key Phaser reserves; its file would never be fetched`;
-    }
-    if (seen.has(entry.key)) {
-      return `duplicate key "${entry.key}"; the second entry would never be fetched`;
-    }
-    seen.add(entry.key);
-  }
-
-  return null;
-}
+import { CRISP_IMAGE_RENDERING } from '../game/constants';
+import {
+  CATALOG_KEY,
+  describeCatalogProblem,
+  type AssetCatalog,
+  type CatalogEntry,
+} from '../game/assetCatalog';
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -99,6 +49,15 @@ export class BootScene extends Phaser.Scene {
     this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
       this.loadFailures.push(`${file.key} (load error: ${file.url})`);
     });
+
+    // The catalog is cached game-globally too, and `File.hasCacheConflict()` is just
+    // `this.cache.exists(this.key)` — so on a restart the JSON would be skipped, the
+    // filecomplete callback below would never fire, and NOTHING would be re-fetched or
+    // re-verified while create() happily validated the stale cache against stale textures.
+    // Same class of bug as the texture cache, one level up. Drop it first.
+    if (this.cache.json.exists(CATALOG_KEY)) {
+      this.cache.json.remove(CATALOG_KEY);
+    }
 
     // Load the catalog, then queue everything it names from the completion callback. Files
     // added mid-load are picked up by the running loader, so `complete` still waits for them.
@@ -163,7 +122,7 @@ export class BootScene extends Phaser.Scene {
     // mutates the thing it inspects is a trap for the next editor.
     this.applyBreakFilter();
 
-    const filteringProblem = this.assertFilteringPinned();
+    const filteringProblem = this.assertFilteringPinned(catalog);
     if (filteringProblem) {
       problems.push(filteringProblem);
     }
@@ -234,7 +193,19 @@ export class BootScene extends Phaser.Scene {
       // the key UNREGISTERED, so the branch above is what fires for a corrupt 200 and this one
       // has not been seen to trigger. Kept because "registered but unusable" is cheap to check
       // and is the shape a future loader change would most likely take.
-      const source = this.textures.get(entry.key).source[0];
+      const texture = this.textures.get(entry.key);
+
+      // Set the filtering decision on the texture rather than relying on it being derived.
+      // It is NOT derived: TextureSource.scaleMode is hardcoded to DEFAULT (=LINEAR=0), and
+      // the Canvas renderer draws with `ctx.imageSmoothingEnabled = !frame.source.scaleMode`
+      // — so under a Canvas fallback, !0 === true and every pixel-art texture is SMOOTHED,
+      // no matter what `pixelArt: true` set. WebGL happens to be safe because its branch is
+      // `scaleMode === LINEAR && config.antialias`, but relying on that leaves the fallback
+      // renderer silently wrong. Setting NEAREST fixes both, and makes the assertion below
+      // meaningful instead of tautological.
+      texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+
+      const source = texture.source[0];
       if (!source || source.width === 0 || source.height === 0) {
         problems.push(`${entry.key} (texture registered but has zero dimensions)`);
       }
@@ -249,22 +220,44 @@ export class BootScene extends Phaser.Scene {
    * ⚠️ The obvious assertion is wrong, and this comment exists so nobody "fixes" it back.
    *
    * Phaser's filter constants are inverted from intuition: in `Phaser.ScaleModes`,
-   * LINEAR = 0 (and is also DEFAULT) while NEAREST = 1. But `TextureSource.scaleMode` is
-   * hardcoded to `ScaleModes.DEFAULT` (= 0 = LINEAR) at construction and is NEVER derived
-   * from `pixelArt`. Asserting `texture.source[0].scaleMode === NEAREST` therefore FAILS on a
-   * correctly configured pixel-art game. Verified against node_modules/phaser/dist/phaser.esm.js.
+   * LINEAR = 0 (and is also DEFAULT) while NEAREST = 1. And `TextureSource.scaleMode` is
+   * hardcoded to `ScaleModes.DEFAULT` (= 0 = LINEAR) at construction — it is NEVER derived
+   * from `pixelArt`. Verified against node_modules/phaser/dist/phaser.esm.js.
    *
-   * What actually selects the sampling mode is this line in the WebGL renderer:
-   *     if (scaleMode === CONST.ScaleModes.LINEAR && this.config.antialias) { ...gl.LINEAR... }
-   * The GL filters default to NEAREST and are only upgraded to LINEAR when antialias is on.
-   * So `config.antialias === false` IS the pinned decision, and that is what we assert.
+   * That means `pixelArt: true` alone does NOT give nearest-neighbour on every renderer:
+   *   - WebGL is fine by accident. Its branch is
+   *       `if (scaleMode === ScaleModes.LINEAR && this.config.antialias) { ...gl.LINEAR... }`
+   *     so with antialias false the GL filters stay at their NEAREST default.
+   *   - CANVAS IS NOT. It draws with `ctx.imageSmoothingEnabled = !frame.source.scaleMode`,
+   *     and `!0 === true`, so every texture is smoothed. `Phaser.AUTO` can fall back to
+   *     Canvas, so this is reachable in production.
+   *
+   * The fix is to stop relying on derivation: verifyExpectedTextures() calls
+   * `setFilter(NEAREST)` on each loaded texture, which makes both renderers correct. Both
+   * halves are then asserted — the per-texture scaleMode (renderer-independent) and
+   * `config.antialias` (the config-level decision that must not drift back).
    *
    * Note there are two unrelated things named "scale mode" in Phaser: `Phaser.ScaleModes`
    * (texture filtering, asserted here) and `Phaser.Scale.ScaleModes` (canvas fitting, set in
    * config.ts). Conflating them is the trap this comment is for.
    */
-  private assertFilteringPinned(): string | null {
+  private assertFilteringPinned(catalog: AssetCatalog | undefined): string | null {
     const config = this.game.config;
+
+    // Every loaded texture must actually carry NEAREST. This is the renderer-independent
+    // check: it is what the Canvas path reads, and it would catch a future Phaser version
+    // that stopped honouring `antialias` on the WebGL path.
+    if (catalog && !describeCatalogProblem(catalog)) {
+      for (const entry of catalog.images) {
+        if (!this.textures.exists(entry.key)) {
+          continue; // already reported as a missing texture
+        }
+        const scaleMode = this.textures.get(entry.key).source[0]?.scaleMode;
+        if (scaleMode !== Phaser.Textures.FilterMode.NEAREST) {
+          return `filtering not pinned: texture "${entry.key}" has scaleMode ${String(scaleMode)}, expected NEAREST (${Phaser.Textures.FilterMode.NEAREST})`;
+        }
+      }
+    }
 
     if (config.antialias !== false) {
       return `filtering not pinned: config.antialias is ${String(config.antialias)}, expected false`;

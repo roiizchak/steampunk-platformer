@@ -10,11 +10,11 @@ import Phaser from 'phaser';
 
 export function everythingWrong() {
   const now = Date.now();
-  const stamp = new Date();
   const roll = Math.random();
   const t = performance.now();
   const w = window.innerWidth;
   const d = document.body;
   const g = globalThis;
-  return { Phaser, now, stamp, roll, t, w, d, g };
+  const c = crypto.getRandomValues(new Uint8Array(4));
+  return { Phaser, now, roll, t, w, d, g, c };
 }

@@ -42,8 +42,9 @@ export const CRISP_IMAGE_RENDERING = [
 ] as const;
 
 /**
- * Texture keys Phaser's TextureManager registers at boot. They are real 32x32 textures, so a
- * catalog entry using one of these names would pass an existence-and-dimensions check while its
- * file was never fetched at all — the loader silently skips any key that already exists.
+ * Texture keys Phaser's TextureManager registers at boot. They are real textures with non-zero
+ * dimensions (`__DEFAULT`, `__MISSING` and `__WHITE` are 32x32; `__NORMAL` is 1x1), so a catalog
+ * entry using one of these names would pass an existence-and-dimensions check while its file was
+ * never fetched at all — the loader silently skips any key that already exists.
  */
 export const PHASER_RESERVED_TEXTURE_KEYS = ['__DEFAULT', '__MISSING', '__WHITE', '__NORMAL'];

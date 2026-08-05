@@ -21,7 +21,10 @@ export default defineConfig({
     // then keeps serving stale content after an asset rebuild.
     command: `node ./node_modules/vite/bin/vite.js --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: true,
+    // false, deliberately. Reusing whatever already answers on this port is how vault C13's
+    // stale-server failure happens — "serves stale art after an asset rebuild", presenting as
+    // "the sprite didn't update". Costs a few seconds per run; buys knowing what was tested.
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

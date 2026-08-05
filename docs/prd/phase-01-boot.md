@@ -46,8 +46,13 @@ to get wrong.
 `window.__game` surface, fixed now because every later e2e spec depends on it:
 ```ts
 { sceneKey: string; tick: number; player: { x, y, vx, vy, state } | null;
-  score: number; health: number; levelId: string | null }
+  score: number; health: number; levelId: string | null;
+  ready: boolean; bootError: string | null }
 ```
+**`ready` and `bootError` were added during this phase**, on the Codex plan review's finding that
+without them a successful boot, a refused boot and an infinite hang are indistinguishable — all three
+sit in the Boot scene — so this phase's own QA gate could not fail. See
+[PRD.md](../PRD.md#the-windowgame-surface) and [reviews/phase-01-plan.md](../reviews/phase-01-plan.md).
 
 ### 6. QA gate
 | # | Criterion | Method | Owner |

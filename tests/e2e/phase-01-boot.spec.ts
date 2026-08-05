@@ -311,6 +311,38 @@ test.describe('Phase 1 — Boot', () => {
     expect(game.ready).toBe(false);
   });
 
+  test('1.5 the gate still works on a scene RESTART, not just a fresh page', async ({ page }) => {
+    // The nastiest hole found in this phase, and the one three reviews took to surface.
+    // Phaser's TextureManager and JSON cache are game-global and survive a scene restart, and
+    // `LoaderPlugin.addFile` silently skips any key already cached. So on the second entry to
+    // Boot nothing is re-fetched, and the gate validates stale cache against stale cache —
+    // reporting success no matter what is actually on the server. Phase 2+ returns to Boot,
+    // so this is the apparatus all nine later phases inherit.
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+    expect((await readGame(page)).ready).toBe(true);
+
+    // Now break the asset and restart the scene WITHOUT reloading the page, so every cache
+    // stays warm. A gate that only re-validates cached state would still say ready.
+    await page.route('**/assets/placeholder-tile.png', (route) =>
+      route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not Found' }),
+    );
+
+    await page.evaluate(() => {
+      const g = (window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } })
+        .__phaserGame;
+      (g.scene.getScene('Boot') as { scene: { restart(): void } }).scene.restart();
+    });
+
+    await page.waitForFunction(() => window.__game?.bootError !== null, undefined, {
+      timeout: REFUSAL_TIMEOUT,
+    });
+
+    const game = await readGame(page);
+    expect(game.ready).toBe(false);
+    expect(game.bootError).toContain('placeholder-tile');
+  });
+
   test('1.6 a CSS override of the pinned filtering blocks boot', async ({ page }) => {
     // Reproduces the vault's recorded failure: a CSS property silently contradicting the
     // engine-side filtering decision. Proves the runtime assertion actually runs rather than

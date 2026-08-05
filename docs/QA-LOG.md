@@ -107,13 +107,26 @@ real 404 through Playwright route interception.
 
 **4. Which signal fires for which failure — the reason all three checks exist.**
 
-| Failure mode | `loaderror` | texture check | catalog check |
+| Failure mode | `loaderror` | texture verification | catalog shape check |
 |---|---|---|---|
 | genuine HTTP 404 | fires | catches | — |
 | corrupt 200 (HTML served as PNG) | **silent** | catches | — |
-| catalog missing | **silent** | — | catches |
+| catalog missing / malformed | **silent** | — | catches |
+| duplicate or Phaser-reserved key | **silent** | — | catches |
 
-No check is redundant, and none is dead code; each was confirmed firing in a browser.
+**Corrected after review.** An earlier version of this section claimed "no check is redundant, and
+none is dead code". That was wrong on both counts and both reviews caught it:
+
+- `loaderror` fires for **exactly one** mode — a genuine HTTP 404 — and the texture verification
+  catches that one too. There is no failure it alone detects, so it is **defence in depth, not an
+  independent signal**. It is kept for its message (it names the URL) and because a real static host,
+  unlike Vite's dev server, does return 404s. Deleting it would leave every test green.
+- The claim rested on the `?breakAsset=catalog` case, which was believed to exercise it. Measured, it
+  does not: Vite answers the missing `.json` with 200 + HTML, so the XHR succeeds and `JSON.parse`
+  fails at the process stage — silently, exactly like an image. Three comments and one test name
+  asserted the opposite and have been corrected *(vault C9)*.
+
+The load-bearing checks are the **texture verification** and the **catalog shape check**.
 
 **5. A missing catalog originally booted clean.** Found while testing measurement 3: if
 `assets/index.json` fails, no images are queued, so "nothing failed" — and boot succeeded with zero
@@ -156,7 +169,10 @@ false-green C12 warns about.
 | 1.8 | Diff reviewed | ✅ `voltagent-qa-sec:code-reviewer` — 12 findings, triaged below |
 | 1.9 | Adversarial pass | ✅ separate brief — 15 findings, triaged below |
 | 1.10 | Codex **plan** review ran; every finding applied or recorded | ✅ `docs/reviews/phase-01-plan.md` — 11 applied, 1 rejected with a reason |
-| 1.11 | Codex **implementation** review ran on the diff | see `docs/reviews/phase-01-impl.md` |
+| 1.11 | Codex **implementation** review ran on the diff; every finding applied or recorded | ✅ `docs/reviews/phase-01-impl.md` — 8 findings (2 blockers), **all 8 applied, 0 rejected** |
+
+*(Criteria 1.5 and 1.6 were assessed **Fail** by the implementation review and were genuinely
+failing at that point. Both now pass, each with its own mutation evidence — see below.)*
 
 **Looked at in a browser, not only tested** *(vault C4)*: all four states screenshotted and viewed —
 clean boot (letterboxed, centered, correct colour, "Boot OK"), 404 refusal, corrupt-200 refusal,
@@ -186,7 +202,8 @@ present in the TextureManager** — no warning, no error — after which an exis
 file that was never fetched.
 
 1. **A catalog key colliding with a Phaser built-in.** `__DEFAULT`, `__MISSING`, `__WHITE` and
-   `__NORMAL` are registered at boot as real **32×32** textures. Existence passes, dimensions pass,
+   `__NORMAL` are registered at boot as real textures with non-zero dimensions (`__NORMAL` is 1×1, the
+   rest 32×32). Existence passes, dimensions pass,
    file never requested.
 2. **A duplicate key in the catalog.** The second entry is never loaded; the loop checked the same
    key twice and passed both times.
@@ -243,6 +260,53 @@ rewritten scanner (blanking string literals had also blanked the `'phaser'` impo
 `Date['now']`, silently disabling three rules). Recorded because it is the clearest evidence in this
 phase that a test which cannot fail is worth nothing: the rules looked correct and were dead.
 
+### Criterion 1.11 — the Codex implementation review
+
+Full report and triage: [`reviews/phase-01-impl.md`](reviews/phase-01-impl.md).
+**8 findings, 2 of them blockers. All 8 applied, none rejected.**
+
+**Two blockers survived the correctness review AND the adversarial review.** Both are the same shape
+the vault keeps naming: *a check that verifies the config rather than the outcome, and so passes while
+the outcome is wrong.*
+
+1. **The restart path.** Three prior passes all reasoned about a *fresh page load*. Phaser's JSON
+   cache is game-global just like the TextureManager, and `File.hasCacheConflict()` is literally
+   `this.cache.exists(this.key)` — so on a second entry to Boot the catalog load is skipped, the
+   `filecomplete` callback never fires, neither cache is cleared, and `create()` validates stale cache
+   against stale cache. **Phase 2 onwards re-enters Boot**, so the entire refuse-to-route apparatus
+   this phase exists to build would have become a silent no-op, with nothing in the QA gate ever
+   going red. Fixed by dropping the cached catalog in `preload()`, mirroring the texture fix one level
+   up; regression test added, which needed a dev-only `window.__phaserGame` handle because the case is
+   untestable from outside without one.
+2. **The Canvas filtering hole.** `pixelArt: true` does not make Canvas rendering crisp. Canvas draws
+   with `ctx.imageSmoothingEnabled = !frame.source.scaleMode`, and `scaleMode` defaults to `0`, so
+   `!0 === true` — smoothed. WebGL was correct only by accident of its own branch. `Phaser.AUTO` can
+   fall back to Canvas, so this was reachable in production, **with the runtime assertion actively
+   reporting that filtering was pinned.** Fixed by setting `setFilter(NEAREST)` explicitly on every
+   loaded texture and asserting the per-texture `scaleMode` alongside `config.antialias`.
+
+Finding 2 is worth dwelling on: it means the original design pinned filtering by *relying on
+derivation*, and the fix was to stop relying on it. As a side effect, `scaleMode === NEAREST` is now a
+*correct* assertion — which the code comment had previously (correctly, at the time) warned it was
+not. The comment has been rewritten to explain both halves rather than deleted.
+
+**Setting `reuseExistingServer: false`** immediately paid for itself: a dev server left running from
+an earlier measurement made the suite silently run **zero** tests. Killed by port *(vault C13)*.
+
+#### Mutation evidence for the implementation-review fixes
+
+| # | Mutation applied | Result | Restored |
+|---|---|---|---|
+| 8 | both cache-clearing fixes removed (`this.cache.json.remove` and `this.textures.remove`) | exactly the scene-RESTART e2e test red; the other 12 stayed green | ✅ verified 0 |
+| 9 | unreferenced `src/sim/orphan-scratch.ts` containing `Date.now()` | boundary scan red, naming the orphan | ✅ file removed |
+
+#### File split, not a justification
+
+Applying these fixes pushed `BootScene.ts` to **405 lines**, over the Global Constraints limit. The
+constraint permits a written justification; **none was written.** Catalog validation moved to
+`src/game/assetCatalog.ts` instead — it is pure and engine-free while the scene is neither, so it was
+the natural seam anyway. `BootScene.ts` is now 355 lines and nothing exceeds 400.
+
 ### What was rejected, and why *(vault C10 — silence reads as skipping)*
 
 - **`@types/node`** — rejected rather than requested as a dependency exception. Two needs, two
@@ -273,3 +337,79 @@ phase that a test which cannot fail is worth nothing: the rules looked correct a
 - **`console.error('Failed to process file: …')` from Phaser on the refusal paths.** Cannot be
   suppressed without patching the engine, and it is genuinely informative. Criterion 1.4's
   zero-console-errors assertion applies to the *clean* boot only, where it does not appear.
+- **No e2e runs against a production build.** Structurally impossible in this phase: the harness
+  reads `window.__game`, which is dev-only by design *(vault 1.6)*. **Phase 10 obligation.**
+- **The catalog carries no size or content hash**, so a *replaced* or wrong-sized asset boots clean.
+  Vault 1.3 requires blocking *missing* and *corrupt*, both of which are covered. Content
+  verification belongs with the asset pipeline in **Phase 4**, which is where generated assets and
+  their recorded dimensions first exist. **Phase 4 obligation.**
+- **Only Chromium is configured** in `playwright.config.ts`. The `image-rendering` assertion is
+  membership over the shared `CRISP_IMAGE_RENDERING` list precisely so a Firefox/WebKit run would not
+  be a false red, but that is untested until a second browser project exists.
+
+---
+
+## Vault-out — Phase 1
+
+What this phase learned that the vault did not already say, worth carrying forward.
+
+**1. Phaser 4.2.1 silently drops an undecodable image.** `File.onProcessError()` writes a
+`console.error`, sets `FILE_ERRORED`, and returns. No event — there is no `FILE_PROCESS_ERROR` — and
+`totalFailed` does not move, because it is only incremented on the load path. Vault 1.3's own
+sentence, *"a silent fallback for a missing input is the bug"*, describes the engine's loader. Any
+future asset gate must verify the **outcome**, never a completion signal.
+
+**2. `pixelArt: true` does not pin filtering on the Canvas renderer.** `TextureSource.scaleMode` is
+hardcoded to `DEFAULT` (=LINEAR=0) and is never derived from `pixelArt`. Canvas draws with
+`ctx.imageSmoothingEnabled = !frame.source.scaleMode` → `!0` → smoothed. WebGL is correct only by
+accident of its own branch (`scaleMode === LINEAR && config.antialias`). **Set `setFilter(NEAREST)`
+explicitly.** The vault's Phaser 3-era note that "the scale-mode constants are reversed" is true but
+incomplete — the constants being inverted is not the real trap; the real trap is that the property
+they name is never set from the config at all. Two unrelated things are called "scale mode":
+`Phaser.ScaleModes` (texture filtering) and `Phaser.Scale.ScaleModes` (canvas fitting).
+
+**3. Phaser's caches are game-global and survive a scene restart, and `LoaderPlugin.addFile` silently
+skips any already-cached key.** This makes *any* load-and-verify gate a no-op on the second entry to
+the scene. Applies to textures **and** to the JSON catalog. Drop the key before loading. This is the
+single most transferable lesson of the phase, because it converts a working gate into a decorative one
+without changing a line of the gate.
+
+**4. Vite's dev server never returns 404** — a missing file gets 200 + SPA-fallback HTML. So "point
+the loader at a nonexistent path" tests the corrupt-200 path, not the 404 path, and a suite claiming
+to cover both may cover one twice. Force a real 404 with Playwright route interception.
+
+**5. Toolchain.** Vite 8.2.0 + TypeScript 7.0.2 (the native Go compiler) + Phaser 4.2.1 compile clean
+together with `moduleResolution: bundler`; no fallback was needed. **No stable TypeScript 6 was ever
+published** — PRD.md's expectation of "TS 6" was unsatisfiable and has been corrected. `@types/node`
+was avoided twice (Vite's `import.meta.glob(..., { query: '?raw' })` for file reading; fixed values
+instead of `process.env` in the Playwright config), so the frozen dependency list held exactly.
+
+**6. The Codex protocol's real failure mode, and its limit.** The `CreateProcessAsUserW failed: 5`
+error is **permanent, not transient** — PRD.md's previous "a retry succeeded" was luck. Root cause:
+the sandbox spawns `pwsh.exe` resolved to a Microsoft Store execution alias, which a restricted token
+cannot launch. The `node_repl` instruction restores **file reading but not command execution**, so
+review 2 cannot run the test suite and its findings are file-evidence only. That is a division of
+labour, not a defect — but **every Codex finding must be re-verified by running something locally**,
+which is how all four of its source-level claims were confirmed here.
+
+**7. On the review protocol itself — the evidence this phase produces.** Three independent passes, in
+order, each finding what the previous missed:
+
+| Pass | Found |
+|---|---|
+| Codex **plan** review | the QA gate could not distinguish a successful boot from an infinite hang (`ready`/`bootError`) |
+| `code-reviewer` (1.8) | comments describing loader mechanisms that do not fire; concluded **no path exists** where boot succeeds with a missing asset |
+| **adversarial** (1.9) | **three** such paths — reserved keys, duplicate keys, scene restart |
+| Codex **implementation** review | **two blockers the other two missed** — the JSON-cache half of the restart path, and Canvas-renderer filtering |
+
+**A7 is confirmed at model scale.** The correctness review explicitly concluded there were no
+asset-missing paths; the adversarial brief, run separately with only the question *how could this be
+wrong?*, then found three. Running one brief and not the other would have shipped all of them. The
+cost of the fourth pass was justified twice over: both of Codex's findings were blockers, and neither
+was visible to any earlier reader.
+
+**8. Every gate in this phase was watched failing before being trusted** — nine mutations, each
+confirmed reverted by `grep -c` returning 0 *(C1, C12)*. Two of the scanner's own regression tests
+failed on first run and exposed genuinely dead rules (blanking string literals had also blanked the
+`'phaser'` specifier and `Date['now']`). That is the clearest evidence in the phase for C2: those
+rules looked correct, read correctly, and detected nothing.
