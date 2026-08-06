@@ -708,7 +708,7 @@ spec does not rediscover it.
 | 2.5 | Deleting any latch turns a test red | **PASS** — 18 mutations, 17 red on named assertions, 1 recorded survivor |
 | 2.6 | Every Playground knob moves an observable output | **PASS** — 11/11 in the unit sweep with a pinned roster, plus the scene driven in the browser |
 | 2.7 | Sim suite runs with Phaser uninstalled | **PASS** — 75/75 with `phaser` removed, restored to 4.2.1 exact |
-| 2.8 | Feel check in the browser: weighty, responsive, no input drops | **FAIL — NOT RUN.** The automated half ran and is recorded above. **No human has played it.** |
+| 2.8 | Feel check in the browser: weighty, responsive, no input drops | **PASS, with one defect found and fixed** — played by the user; see below |
 | 2.9 | No file > 400 lines; diff review and adversarial pass | **PASS** — largest file 387 lines; both briefs ran, findings applied or recorded |
 | 2.10 | Codex plan review ran; every finding applied or recorded | **PASS** — 8 applied, 1 acknowledged, 1 rejected with a reason |
 | 2.11 | Codex implementation review ran; every finding applied or recorded | **PASS** — 6 findings, 6 applied |
@@ -716,10 +716,38 @@ spec does not rediscover it.
 **Regression set:** Phase 1 criteria 1.1–1.7 and `phase-01-boot.spec.ts` — **PASS**, 13/13, with the
 three documented success-path assertion amendments. All 20 e2e tests pass, three runs in a row.
 
-**Phase 2 is therefore reported FAILING on criterion 2.8.** Ten of eleven criteria pass. A phase with
-an unrun criterion is reported failing, never as done — and the criterion that is unrun is precisely
-the one vault **C4** exists for: *"'we have tests' and 'someone has played it' are unrelated
-statements."* Seventy-five unit tests and twenty browser tests do not discharge it.
+### Criterion 2.8 — what playing it found *(vault C4)*
+
+The user played it and reported no problem with weight, responsiveness or dropped input. What they
+did report is the thing seventy-five unit tests and twenty browser tests could not have surfaced:
+
+> *"I managed to adjust the settings when I'm on the playground, but for some of them I can't be
+> sure it actually works or not because I didn't see any visual change."*
+
+**That is vault A6 stated from the player's chair** — *"a slider that visibly exists reads as a
+slider that visibly works."* The knob values themselves always updated on screen; what was missing
+was any way to see a knob's EFFECT. Four are invisible while playing by their nature: `coyoteTicks`
+and `jumpBufferTicks` are forgiveness windows you only notice at the exact edge of a ledge,
+`airFriction` acts only while airborne with nothing held, and `jumpCutDivisor` only if you tap
+rather than hold. Turning one of those looked identical to turning a dead knob.
+
+`knob-sweep.test.ts` was green throughout, and correctly so — it proves each knob changes an
+internal trajectory fingerprint. **That satisfied the criterion mechanically while missing its
+point entirely**, which is the cleanest example in this project so far of why C4 exists.
+
+Fixed by `src/sim/derived.ts` and a second Playground panel: eleven derived numbers — apex in px and
+tiles, airtime, short hop, top speed, ticks to top speed, ground stop distance, air drift, terminal
+fall speed, and both windows in milliseconds — each produced by running the real simulation in a
+scratch world rather than by a formula that could drift from it. They update on the same frame the
+knob does. Measured with gravity taken from 0.9 to 0.54: apex moves 150.3 px → 245.1 px (4.70 → 7.66
+tiles) and airtime 65 → 81 ticks, both visible without leaving the menu.
+
+`tests/unit/derived-feel.test.ts` now holds the Playground to the standard the sweep cannot:
+**for every knob, at least one DISPLAYED number must move.** An internal fingerprint change is no
+longer sufficient. The four knobs that motivated it are also asserted individually, so a regression
+names which one.
+
+**Phase 2 passes all eleven criteria.**
 
 ### What was rejected, and why *(vault C10)*
 
@@ -756,6 +784,15 @@ statements."* Seventy-five unit tests and twenty browser tests do not discharge 
 ## Vault-out — Phase 2
 
 What this phase learned that the vault did not already say.
+
+**0. A knob-sweep test can be green while every knob is invisible.** The single most valuable
+finding of the phase came from the user playing it for two minutes, not from any gate. All eleven knobs
+passed `knob-sweep.test.ts` — each provably changed an internal trajectory — and four of them showed
+the player nothing whatsoever when turned. **"The output moved" and "the player can see the output
+move" are different claims, and vault A6 is about the second one.** Any tuning UI needs the derived
+consequence displayed next to the control, or a working knob and a dead knob are indistinguishable
+from the chair. This is C4's *"only playing it found this"* landing on a gate that was specifically
+designed to prevent it.
 
 **1. A wait expressed in ticks cannot bound a SAMPLING window.** Three tests in this phase were
 written as *"advance N ticks, then read once"*, and all three were wrong. `waitTicks` guarantees at

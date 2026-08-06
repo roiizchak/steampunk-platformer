@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ticksToMs } from '../sim';
+import { derivedFeel } from '../sim/derived';
 import { DEFAULT_TUNING } from '../sim/player';
 import type { TuningKnobs } from '../sim/types';
 import { GameScene } from './GameScene';
@@ -49,6 +50,7 @@ export class PlaygroundScene extends GameScene {
   private knobKeys: (keyof TuningKnobs)[] = [];
   private selected = 0;
   private readout!: Phaser.GameObjects.Text;
+  private derivedText!: Phaser.GameObjects.Text;
 
   constructor() {
     super('Playground');
@@ -70,6 +72,14 @@ export class PlaygroundScene extends GameScene {
 
     this.readout = this.add
       .text(24, 64, '', { fontFamily: 'monospace', fontSize: '18px', color: '#c8a86b' })
+      .setScrollFactor(0);
+
+    // The derived panel is the answer to vault A6's actual complaint. Several knobs — both
+    // forgiveness windows, `airFriction`, `jumpCutDivisor` — have no effect a player can SEE while
+    // playing, so turning them looks identical to turning a dead knob. These numbers move on the
+    // same frame the knob does, which is the "confirm the output moved" half of the rule.
+    this.derivedText = this.add
+      .text(560, 64, '', { fontFamily: 'monospace', fontSize: '18px', color: '#7fb2c8' })
       .setScrollFactor(0);
 
     this.bindKnobKeys();
@@ -135,5 +145,21 @@ export class PlaygroundScene extends GameScene {
       return `${marker} ${drifted} ${key.padEnd(16)} ${String(tuning[key]).padStart(8)}${suffix}`;
     });
     this.readout.setText(lines);
+
+    const feel = derivedFeel(tuning, ticksToMs);
+    this.derivedText.setText([
+      'WHAT THE KNOBS DO',
+      '',
+      `jump apex        ${feel.apexPx} px  (${feel.apexTiles} tiles)`,
+      `airtime          ${feel.airtimeTicks} ticks (${ticksToMs(feel.airtimeTicks)}ms)`,
+      `short hop        ${feel.shortHopPx} px`,
+      `top speed        ${feel.topSpeed} px/tick`,
+      `time to top      ${feel.ticksToTopSpeed} ticks`,
+      `ground stop      ${feel.groundStopPx} px`,
+      `air drift        ${feel.airDriftPx} px`,
+      `terminal fall    ${feel.terminalFallSpeed} px/tick`,
+      `coyote window    ${feel.coyoteMs}ms`,
+      `buffer window    ${feel.bufferMs}ms`,
+    ]);
   }
 }
