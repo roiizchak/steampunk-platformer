@@ -18,22 +18,9 @@ import { CRISP_IMAGE_RENDERING } from '../../src/game/constants';
  * therefore asserts the TYPE before the value.
  */
 
-interface GameDebugView {
-  sceneKey: string;
-  tick: number;
-  player: unknown;
-  score: number;
-  health: number;
-  levelId: string | null;
-  ready: boolean;
-  bootError: string | null;
-}
-
-declare global {
-  interface Window {
-    __game?: GameDebugView;
-  }
-}
+// Moved to ./debugView.ts in Phase 2: a second spec declaring the same global with a different
+// shape is a TS2717 build failure, and two hand-maintained copies of one contract drift.
+import type { GameDebugView } from './debugView';
 
 /**
  * `loader.maxRetries` is 2 in Phaser 4, so a 404 is attempted THREE times before `loaderror`
@@ -98,9 +85,20 @@ test.describe('Phase 1 — Boot', () => {
     expect(typeof game.health).toBe('number');
     expect(typeof game.ready).toBe('boolean');
 
-    expect(game.sceneKey).toBe('Boot');
-    expect(game.tick).toBe(0);
-    expect(game.player).toBeNull();
+    // AMENDED IN PHASE 2, and recorded in QA-LOG.md as a deliberate regression-set change.
+    // Phase 1 asserted `'Boot'`, `tick === 0` and `player === null` because it deliberately built
+    // no destination — this file's own header said "there is no post-Boot scene in Phase 1".
+    // Phase 2 built GameScene, so a successful boot now ROUTES, and these three assertions would
+    // otherwise fail on a correct game.
+    //
+    // The refusal-path assertions are untouched (see 1.5 below, still `'Boot'`): refusing to
+    // route still means staying in Boot, which is what keeps the Phase 1 gate real.
+    expect(game.sceneKey).toBe('Game');
+    expect(game.tick).toBeGreaterThan(0);
+    expect(game.player).not.toBeNull();
+    // `player` is typed `unknown` on purpose, so narrowing it is a type assertion the spec has to
+    // make out loud rather than one the compiler makes for it (this file's header, vault C1).
+    expect(typeof (game.player as { x?: unknown }).x).toBe('number');
     expect(game.levelId).toBeNull();
 
     // The positive terminal state. This is the assertion that separates success from a hang.

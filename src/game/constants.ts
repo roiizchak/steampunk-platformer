@@ -9,6 +9,25 @@
 /** Simulation rate. Every duration in `src/sim/` is an integer count of these ticks (vault 2.1). */
 export const TICK_HZ = 60;
 
+/**
+ * Milliseconds of wall-clock per simulation tick.
+ *
+ * Lives OUTSIDE `src/sim/` on purpose. Converting real elapsed time into a whole number of ticks
+ * is the scene's job; the sim itself never sees a millisecond, which is what makes its behaviour
+ * independent of frame rate (vault 2.1).
+ */
+export const MS_PER_TICK = 1000 / TICK_HZ;
+
+/**
+ * The most ticks one render frame may drain.
+ *
+ * Without a cap, a long stall (a breakpoint, a background tab, a slow first paint) hands the next
+ * frame a delta worth hundreds of ticks, which takes longer to simulate than a frame, which grows
+ * the next delta further — the spiral of death. Capping means the game runs in slow motion for a
+ * moment instead of hanging, and slow motion is recoverable.
+ */
+export const MAX_TICKS_PER_FRAME = 5;
+
 /** Tile grid cell size in pixels. Phase 3 publishes this; Phase 4 spends money against it. */
 export const TILE_SIZE = 32;
 
