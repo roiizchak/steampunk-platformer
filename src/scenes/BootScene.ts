@@ -132,15 +132,14 @@ export class BootScene extends Phaser.Scene {
       return;
     }
 
-    this.add
-      .text(this.scale.width / 2, this.scale.height / 2, 'Boot OK', {
-        fontFamily: 'monospace',
-        fontSize: '32px',
-        color: '#c8a86b',
-      })
-      .setOrigin(0.5);
-
-    updateDebugState({ sceneKey: this.scene.key, ready: true, bootError: null });
+    // Route onward. Phase 1 deliberately terminated here and set `ready` itself, because there
+    // was nowhere to go; Phase 2 built the destination, so "the gate passed" and "the game is
+    // running" became different facts and `ready` moved to GameScene.create().
+    //
+    // The consequence is deliberate: if GameScene fails to construct, `ready` stays false with
+    // `bootError` null — the third state, a hang, which is distinguishable from both a clean boot
+    // and a refusal. Setting `ready` here would have reported a broken game as a good one.
+    this.scene.start('Game');
   }
 
   /**
@@ -292,6 +291,14 @@ export class BootScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // Deliberately no scene.start(). Refusing to route IS the feature.
+    //
+    // Stopping the play scenes matters from Phase 2 onward and only on a RESTART: re-entering
+    // Boot while Game is already running would leave a refused boot with a game still ticking
+    // behind the error screen, still publishing `player` and `tick`. "Refused to route" has to
+    // mean the game is not running, or the refusal is cosmetic. `scene.stop` on a scene that was
+    // never started is a no-op, so the fresh-boot path is unchanged.
+    this.scene.stop('Game');
+    this.scene.stop('Playground');
     updateDebugState({ sceneKey: this.scene.key, ready: false, bootError: message });
     console.error(`[boot] refused to route: ${message}`);
   }

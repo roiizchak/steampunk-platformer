@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { BootScene } from '../scenes/BootScene';
+import { GameScene } from '../scenes/GameScene';
+import { PlaygroundScene } from '../scenes/PlaygroundScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
 
 /**
@@ -33,5 +35,13 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // before `loaderror` fires. Deliberate: retries are consistent with the no-timeout decision
   // (vault 1.4) and the failure direction stays safe. The consequence is that any test of the
   // refusal path must allow for three attempts, or a correct refusal reads as a hang.
-  scene: [BootScene],
+  // Boot is first and therefore auto-started; Game is registered but idle until Boot's gate passes
+  // and routes to it.
+  //
+  // **PlaygroundScene is DEV ONLY** and is appended only under `import.meta.env.DEV`, which Vite
+  // statically folds to `false` in a production build — so the scene, and the whole `phaser` import
+  // chain it pulls in, are dropped from `dist/`. It was registered unconditionally until the Codex
+  // implementation review caught it (finding I2): PRD.md's file structure marks the scene DEV ONLY,
+  // and a tuning console reachable in the shipped game is not a cosmetic difference.
+  scene: import.meta.env.DEV ? [BootScene, GameScene, PlaygroundScene] : [BootScene, GameScene],
 };
