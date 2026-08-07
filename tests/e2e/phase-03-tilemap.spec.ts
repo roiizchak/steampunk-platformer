@@ -317,7 +317,16 @@ test.describe('Phase 3 — the boot gate covers levels too', () => {
           tilewidth: 32,
           tileheight: 32,
           layers: [
-            { type: 'tilelayer', name: 'ground', width: 60, height: 34, data: new Array(2040).fill(0) },
+            {
+              type: 'tilelayer',
+              name: 'ground',
+              width: 60,
+              height: 34,
+              // A row of real tiles, not 2040 zeros. An all-empty tile layer is now rejected in
+              // its own right ("draws nothing"), which would make this test pass for the wrong
+              // reason — it is here to prove the CAMERA TRAVEL rule fires.
+              data: [...new Array(1980).fill(0), ...new Array(60).fill(1)],
+            },
             {
               type: 'objectgroup',
               name: 'collision',

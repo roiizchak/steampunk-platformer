@@ -221,8 +221,15 @@ export class GameScene extends Phaser.Scene {
    * Phase 2 gated the binding alone and recorded the leftover string as accepted residue: a dead
    * method naming a scene that is not registered in production. It is unreachable, but "unreachable
    * dead code referencing a dev scene" is exactly what a Phase 10 bundle audit has to argue about,
-   * and the argument costs more than the guard. Verified: `ElementEditor` and `Playground` now
-   * appear zero times in the production bundle.
+   * and the argument costs more than the guard.
+   *
+   * **Verified precisely:** no `ElementEditor` or `Playground` **scene key** survives — the string
+   * literals are gone, along with both scene classes and every editor UI string. What does remain
+   * is these two method NAMES, as empty bodies (`togglePlayground(){}`), which Rollup cannot drop
+   * from a class that ships. A grep for the bare identifier therefore still returns 1 each, and an
+   * earlier version of this comment claimed otherwise; the code-reviewer gate owner measured it and
+   * was right. `tools/gen/verify-dist.mjs` asserts the correct thing — quoted scene keys — so the
+   * build gate cannot cry wolf over a name.
    */
   protected togglePlayground(): void {
     if (import.meta.env.DEV) {

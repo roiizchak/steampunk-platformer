@@ -76,7 +76,11 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
       if (typeof entry.url !== 'string' || entry.url === '') {
         return `${kind} entry "${entry.key}" has a missing or empty url`;
       }
-      if (PHASER_RESERVED_TEXTURE_KEYS.includes(entry.key)) {
+      // Only images: the reserved names are TEXTURE keys, and the tilemap cache is a separate
+      // namespace where they mean nothing. Applying the rule to levels was stricter than needed
+      // and, worse, reported "its file would never be fetched" — which is false for a level and
+      // would send whoever hit it looking in the wrong place. Raised by the code-reviewer owner.
+      if (kind === 'image' && PHASER_RESERVED_TEXTURE_KEYS.includes(entry.key)) {
         return `entry "${entry.key}" uses a key Phaser reserves; its file would never be fetched`;
       }
       if (seen.has(entry.key)) {

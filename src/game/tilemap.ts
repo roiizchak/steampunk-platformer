@@ -167,6 +167,14 @@ export function describeLevelProblem(raw: unknown): string | null {
     }
   }
 
+  // A tile layer of the right SIZE full of zeros draws nothing at all, which is the failure the
+  // "no tile layer" rule above describes and does not actually catch — raised by the qa-expert
+  // gate owner (brief 2). Gid 0 is Tiled's empty cell, so "every layer is empty" is a level with
+  // collision and no art: the player stands in a void, which reads as a broken camera.
+  if (!tileLayers.some((layer) => (layer.data as unknown[]).some((gid) => gid !== 0))) {
+    return 'every tile layer is empty — the level has collision but draws nothing';
+  }
+
   const objects = allObjects(layers);
   const solids = objects.filter((object) => boolProperty(object, 'solid'));
   if (solids.length === 0) {
@@ -200,10 +208,37 @@ export function describeLevelProblem(raw: unknown): string | null {
     return 'spawn has a non-numeric position';
   }
 
+  // Tiled reports a RECTANGLE object's x/y as its top-left, and a POINT's as the point itself.
+  // `parseLevel` reads spawn.x as the player's horizontal centre and spawn.y as the sole, which is
+  // only true for a point. A spawn authored as a rectangle would be silently offset by half its
+  // width and all of its height, and pass every other check — vault 3.2's "invisible until level
+  // design" shape. Raised by the code-reviewer gate owner; the generator already emits a point.
+  if ((spawn.width ?? 0) !== 0 || (spawn.height ?? 0) !== 0) {
+    return `spawn must be a point object, but has size ${String(spawn.width)} x ${String(spawn.height)}`;
+  }
+
   const widthPx = map.width * map.tilewidth;
   const heightPx = map.height * map.tileheight;
   if (spawn.x < 0 || spawn.x > widthPx || spawn.y < 0 || spawn.y > heightPx) {
     return `spawn (${spawn.x}, ${spawn.y}) is outside the map, which is ${widthPx} x ${heightPx} px`;
+  }
+
+  // The spawn must stand ON something.
+  //
+  // This check previously lived ONLY in tests/unit/tilemap-data.test.ts, which the qa-expert gate
+  // owner (brief 2) correctly called a production/test divergence: criterion 3.3's unit gate was
+  // asserting a stricter property than BootScene actually enforced, so a hand-authored or
+  // editor-saved level whose spawn floated over a gap would be waved through at runtime. Moving it
+  // here makes the boot gate and the unit gate the same rule, which is the whole point of there
+  // being one parser.
+  const standing = solids.some(
+    (solid) =>
+      solid.y === spawn.y &&
+      (spawn.x as number) > (solid.x as number) &&
+      (spawn.x as number) < (solid.x as number) + (solid.width as number),
+  );
+  if (!standing) {
+    return `spawn (${spawn.x}, ${spawn.y}) is not on top of any solid — the player starts falling`;
   }
 
   return null;

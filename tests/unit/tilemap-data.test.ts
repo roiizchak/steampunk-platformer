@@ -64,6 +64,12 @@ const SHIPPED_ENTRIES = Object.keys(SHIPPED).map((path) => [idOf(path), SHIPPED[
  */
 const NO_SOLID_PROPERTY = /no object carries the `solid` property/;
 
+/** The shipped level, parsed once, so published-number checks can be derived rather than typed. */
+const LEVEL_01 = parseLevel(
+  'level-01',
+  JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown,
+);
+
 describe('shipped level data (criterion 3.3, vault 3.1 — blocker)', () => {
   it('the sweep is not vacuous: shipped levels and bad fixtures were both found', () => {
     // Without this, a glob that silently matched nothing would make every `it.each` below pass by
@@ -120,11 +126,72 @@ describe('shipped level data (criterion 3.3, vault 3.1 — blocker)', () => {
  * The rule re-binds in Phase 4 against real background pixels.
  */
 describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => {
-  it.each(SHIPPED_ENTRIES)('%s derives its pixel extent from its own tile counts', (id, raw) => {
+  it.each(SHIPPED_ENTRIES)('%s reports the extent its own FILE declares', (id, raw) => {
+    const json = JSON.parse(raw) as {
+      width: number;
+      height: number;
+      tilewidth: number;
+      tileheight: number;
+    };
     const level = parseLevel(id, JSON.parse(raw) as unknown);
 
-    expect(level.widthPx).toBe(level.widthTiles * level.tileWidth);
-    expect(level.heightPx).toBe(level.heightTiles * level.tileHeight);
+    // Against the FILE's fields, not against `parseLevel`'s own outputs. The previous version read
+    // `level.widthPx === level.widthTiles * level.tileWidth`, which is `parseLevel` checked against
+    // itself and cannot go red for any input — flagged independently by both gate owners.
+    expect(level.widthPx).toBe(json.width * json.tilewidth);
+    expect(level.heightPx).toBe(json.height * json.tileheight);
+    expect(level.widthTiles).toBe(json.width);
+    expect(level.tileWidth).toBe(json.tilewidth);
+  });
+
+  /**
+   * The hardcode test, and it needs a SECOND map to exist at all.
+   *
+   * The qa-expert gate owner (brief 2) constructed the surviving mutant: with exactly one shipped
+   * level, `widthPx: 5760` hardcoded into `parseLevel` passes every assertion above — the pinned
+   * literal directly, and the self-consistency check by coincidence, because 180 × 32 really is
+   * 5760. Nothing in a single-file sweep can separate "derived" from "constant".
+   *
+   * This is deliberately NOT shipped data. Shipped-data coverage and derivation coverage are
+   * different questions and vault 3.1 is about not mistaking one for the other; this is the second
+   * one, so a synthetic map with different dimensions is exactly right.
+   */
+  it('derives the extent from the data, rather than returning a constant', () => {
+    const tiny = {
+      width: 7,
+      height: 5,
+      tilewidth: 16,
+      tileheight: 16,
+      layers: [
+        { type: 'tilelayer', name: 'g', data: [...new Array(34).fill(0), 1] },
+        {
+          type: 'objectgroup',
+          name: 'c',
+          objects: [
+            {
+              x: 0,
+              y: 64,
+              width: 112,
+              height: 16,
+              properties: [{ name: 'solid', type: 'bool', value: true }],
+            },
+            {
+              x: 56,
+              y: 64,
+              width: 0,
+              height: 0,
+              point: true,
+              properties: [{ name: 'spawn', type: 'bool', value: true }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const level = parseLevel('tiny', tiny);
+    expect(level.widthPx).toBe(112);
+    expect(level.heightPx).toBe(80);
+    expect(level.tileWidth).toBe(16);
   });
 
   it.each(SHIPPED_ENTRIES)('%s has at least a full viewport of scroll room on both axes', (id, raw) => {
@@ -252,7 +319,10 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     ['grid cell size', `Grid cell size ${TILE_SIZE} × ${TILE_SIZE} px`],
     ['camera zoom', `Camera zoom ${CAMERA_ZOOM}`],
     ['viewport', `Viewport / world view ${GAME_WIDTH} × ${GAME_HEIGHT} px`],
-    ['world extent', 'World extent (level-01) 5760 × 1536 px'],
+    // Derived from the shipped level, not hand-typed. The other rows all interpolate a runtime
+    // constant; this one used to be a bare string, so the doc and the literal could agree with
+    // each other while both drifted from the file that actually loads (qa-expert brief 2).
+    ['world extent', `World extent (level-01) ${LEVEL_01.widthPx} × ${LEVEL_01.heightPx} px`],
     [
       'character collision box',
       `Character collision box ${PLAYER_BOX.w * RENDER_SCALE} × ${PLAYER_BOX.h * RENDER_SCALE} px`,

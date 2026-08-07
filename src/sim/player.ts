@@ -180,12 +180,27 @@ export function resolveCollisions(
   previousX: number,
   previousY: number,
 ): boolean {
-  const halfW = (PLAYER_BOX.w * scale) / 2;
-  const height = PLAYER_BOX.h * scale;
+  /**
+   * Through `toWorld`, THE single local→world conversion (vault 2.10).
+   *
+   * This used to compute `halfW = (PLAYER_BOX.w * scale) / 2` inline — a second conversion, which
+   * is exactly what vault 2.10 forbids and what the doc comment on `toWorld` warns produces "art
+   * bottoms and collision bottoms that disagree". It also silently assumed the box is centred on
+   * the feet, ignoring `PLAYER_BOX.x` entirely. That was true only by coincidence, and Phase 3's
+   * character contract is what put a hand on those exact numbers, so the code-reviewer gate owner
+   * flagged it. Identical output today; correct if the box ever becomes asymmetric.
+   *
+   * `facing` is pinned to `1`: the COLLISION box does not mirror. Only a hitbox should, and that
+   * arrives in Phase 5 at step 4 of the tick contract.
+   */
+  const box = toWorld(PLAYER_BOX, player.x, player.y, 1, scale);
+  const leftOffset = player.x - box.x;
+  const rightOffset = box.x + box.w - player.x;
+  const height = box.h;
 
   for (const solid of solids) {
-    const left = player.x - halfW;
-    const right = player.x + halfW;
+    const left = player.x - leftOffset;
+    const right = player.x + rightOffset;
     const top = player.y - height;
     if (right <= solid.x || left >= solid.x + solid.w) {
       continue;
@@ -193,21 +208,21 @@ export function resolveCollisions(
     if (player.y <= solid.y || top >= solid.y + solid.h) {
       continue;
     }
-    const wasLeft = previousX + halfW <= solid.x;
-    const wasRight = previousX - halfW >= solid.x + solid.w;
+    const wasLeft = previousX + rightOffset <= solid.x;
+    const wasRight = previousX - leftOffset >= solid.x + solid.w;
     if (wasLeft) {
-      player.x = solid.x - halfW;
+      player.x = solid.x - rightOffset;
       player.vx = 0;
     } else if (wasRight) {
-      player.x = solid.x + solid.w + halfW;
+      player.x = solid.x + solid.w + leftOffset;
       player.vx = 0;
     }
   }
 
   let grounded = false;
   for (const solid of solids) {
-    const left = player.x - halfW;
-    const right = player.x + halfW;
+    const left = player.x - leftOffset;
+    const right = player.x + rightOffset;
     const top = player.y - height;
     if (right <= solid.x || left >= solid.x + solid.w) {
       continue;
