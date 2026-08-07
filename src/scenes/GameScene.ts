@@ -186,12 +186,26 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * The DEV guard is INSIDE the body, not only on the key binding, so Vite folds the whole thing
+   * away and the scene key does not survive into `dist/`.
+   *
+   * Phase 2 gated the binding alone and recorded the leftover string as accepted residue: a dead
+   * method naming a scene that is not registered in production. It is unreachable, but "unreachable
+   * dead code referencing a dev scene" is exactly what a Phase 10 bundle audit has to argue about,
+   * and the argument costs more than the guard. Verified: `ElementEditor` and `Playground` now
+   * appear zero times in the production bundle.
+   */
   protected togglePlayground(): void {
-    this.scene.start('Playground');
+    if (import.meta.env.DEV) {
+      this.scene.start('Playground');
+    }
   }
 
   protected toggleElementEditor(): void {
-    this.scene.start('ElementEditor');
+    if (import.meta.env.DEV) {
+      this.scene.start('ElementEditor');
+    }
   }
 
   /**

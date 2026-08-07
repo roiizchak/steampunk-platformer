@@ -54,6 +54,16 @@ function idOf(path: string): string {
 
 const SHIPPED_ENTRIES = Object.keys(SHIPPED).map((path) => [idOf(path), SHIPPED[path]!] as const);
 
+/**
+ * The one rejection reason the vault 3.3 tests are about.
+ *
+ * Pinned this precisely because mutation M20 survived a `/solid/i` assertion: a parser that
+ * invented solidity from object names produced a DIFFERENT rejection ("solid #6 has a non-positive
+ * size", from the zero-size spawn point it had just decided was solid) which also contains the
+ * word. An assertion that accepts the right answer for the wrong reason is not a gate.
+ */
+const NO_SOLID_PROPERTY = /no object carries the `solid` property/;
+
 describe('shipped level data (criterion 3.3, vault 3.1 — blocker)', () => {
   it('the sweep is not vacuous: shipped levels and bad fixtures were both found', () => {
     // Without this, a glob that silently matched nothing would make every `it.each` below pass by
@@ -178,7 +188,35 @@ describe('solidity comes from data, not names (vault 3.3 — blocker)', () => {
       }
     }
 
-    expect(describeLevelProblem(stripped)).toMatch(/solid/i);
+    // Matched against the SPECIFIC reason, not merely /solid/i. Mutation M20 proved the loose
+    // version vacuous: several unrelated rejection reasons also contain the word "solid", so the
+    // assertion passed for a parser that had failed in a completely different way.
+    expect(describeLevelProblem(stripped)).toMatch(NO_SOLID_PROPERTY);
+  });
+
+  /**
+   * ADDED AFTER MUTATION M20 SURVIVED. The two tests above did not catch a parser that falls back
+   * to `object.name` when the properties array is ABSENT — because every object in the shipped
+   * level has a properties array, so the fallback branch is never reached by renaming alone.
+   *
+   * That is the case vault 3.3 is actually about: not "does it read the name when the data is
+   * there", but "does it invent an answer from the name when the data is missing". So this deletes
+   * the data and puts the answer in the name and the type, which is the exact shape of the mutant.
+   */
+  it.each(SHIPPED_ENTRIES)('%s does not read a name when the property array is GONE', (_id, raw) => {
+    const trap = JSON.parse(raw) as {
+      layers: { objects?: Record<string, unknown>[] }[];
+    };
+    for (const layer of trap.layers) {
+      for (const object of layer.objects ?? []) {
+        delete object.properties;
+        object.name = 'solid';
+        object.type = 'solid';
+        object.class = 'solid';
+      }
+    }
+
+    expect(describeLevelProblem(trap)).toMatch(NO_SOLID_PROPERTY);
   });
 });
 
