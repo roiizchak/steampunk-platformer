@@ -64,6 +64,7 @@ interface TiledObject {
 interface TiledLayer {
   type?: unknown;
   objects?: unknown;
+  data?: unknown;
 }
 
 interface TiledMap {
@@ -145,10 +146,25 @@ export function describeLevelProblem(raw: unknown): string | null {
   }
 
   const layers = map.layers as TiledLayer[];
-  if (!layers.some((layer) => layer.type === 'tilelayer')) {
+  const tileLayers = layers.filter((layer) => layer.type === 'tilelayer');
+  if (tileLayers.length === 0) {
     // Collision without art is a level the player cannot see. It renders as an empty screen the
     // character mysteriously stands in, which reads as a broken camera rather than a broken level.
     return 'no tile layer — the level has collision but nothing to draw';
+  }
+
+  // A tile layer whose data does not match the map header draws a level that is silently truncated
+  // or wrapped — the art shifts relative to the collision objects, which is exactly the class of
+  // defect the Element Editor exists to chase and the last thing you want arriving from the file
+  // itself. Raised by the qa-expert gate owner (brief 1) as untested; it costs four lines.
+  const expectedCells = map.width * map.height;
+  for (const [index, layer] of tileLayers.entries()) {
+    if (!Array.isArray(layer.data)) {
+      return `tile layer #${index} has no data array`;
+    }
+    if (layer.data.length !== expectedCells) {
+      return `tile layer #${index} has ${layer.data.length} cells, expected ${expectedCells}`;
+    }
   }
 
   const objects = allObjects(layers);
