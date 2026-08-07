@@ -248,6 +248,62 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     expect(view.y + view.h).toBe(bounds.h);
   });
 
+  /**
+   * The RIGHT and TOP clamps, which nothing else reaches.
+   *
+   * Found by the code-reviewer gate owner (brief 2): the follow test holds ArrowRight, and the
+   * player wall-stops at x=1898 out of a 5760-wide level, so the camera never travels past
+   * x≈2860. Of `viewFits`'s four inequalities only the left and bottom were ever evaluated against
+   * a clamp doing work — a `bounds.w` of twice the level's width would have passed the whole suite.
+   *
+   * Driving the player there would take thousands of frames, so this scrolls the camera directly:
+   * the clamp under test is Phaser's, and it applies to any scroll however it was requested.
+   */
+  test('3.4 the camera clamps at the right and top edges too', async ({ page }) => {
+    await bootToGame(page);
+    const level = await shippedLevel(page);
+    const { bounds } = cameraSetup(level, 1920, 1080);
+
+    const corners = await page.evaluate(async () => {
+      const camera = (
+        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+      ).__phaserGame.scene.getScene('Game') as {
+        cameras: {
+          main: {
+            stopFollow(): void;
+            setScroll(x: number, y: number): void;
+            worldView: { x: number; y: number; width: number; height: number };
+          };
+        };
+      };
+      const main = camera.cameras.main;
+      main.stopFollow();
+
+      const read = async (x: number, y: number) => {
+        main.setScroll(x, y);
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        const v = main.worldView;
+        return { x: v.x, y: v.y, w: v.width, h: v.height };
+      };
+
+      // Far past every edge, in both directions. Phaser must clamp all four.
+      return {
+        bottomRight: await read(999_999, 999_999),
+        topLeft: await read(-999_999, -999_999),
+      };
+    });
+
+    expect(viewFits(bounds, corners.bottomRight)).toBe(true);
+    expect(viewFits(bounds, corners.topLeft)).toBe(true);
+
+    // And the clamps landed exactly on the level's own extent, so an oversized bound is visible
+    // rather than merely tolerated.
+    expect(corners.bottomRight.x + corners.bottomRight.w).toBe(level.widthPx);
+    expect(corners.bottomRight.y + corners.bottomRight.h).toBe(level.heightPx);
+    expect(corners.topLeft.x).toBe(0);
+    expect(corners.topLeft.y).toBe(0);
+  });
+
   test('3.3 the shipped level is the one the game actually loaded', async ({ page }) => {
     // Ties the unit suite's shipped-data sweep to the running game. `tilemap-data.test.ts` proves
     // the file on disk is valid; this proves the browser loaded THAT file and nothing else.

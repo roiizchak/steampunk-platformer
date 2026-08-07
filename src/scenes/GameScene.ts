@@ -123,7 +123,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   protected helpText(): string {
-    return 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  P playground  ·  O element editor';
+    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump';
+    // The dev-scene keys are bound only under `import.meta.env.DEV`, so advertising them in a
+    // production build offers the player two keys that do nothing. Vite folds this to `base`.
+    // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
+    // scene-key sweep could not see it: the string says "playground" in lowercase, inside a
+    // longer literal, and the sweep looked for quoted `Playground`.
+    return import.meta.env.DEV ? `${base}  ·  P playground  ·  O element editor` : base;
   }
 
   /**
@@ -277,16 +283,38 @@ export class GameScene extends Phaser.Scene {
    */
   private drawLevel(level: LevelData): void {
     const map = this.make.tilemap({ key: this.levelKey });
-    const tileset = map.addTilesetImage('greybox', 'placeholder-tile');
+
+    /**
+     * Resolved by POSITION, not by name.
+     *
+     * This used to hardcode `addTilesetImage('greybox', ...)` and `createLayer('ground', ...)`,
+     * which both the code-reviewer gate owner and Codex flagged, and the consequence was worse
+     * than the vault 3.3 style violation: `describeLevelProblem` never reads layer or tileset
+     * names, so a level with a renamed layer PASSED the boot gate and then threw here — leaving
+     * `ready` false with `bootError` null, which is the third state (a hang) that the whole
+     * refuse-to-route design exists to make impossible.
+     *
+     * Taking the first tileset and the first tile layer is data-driven, so a rename cannot break
+     * it, and it matches what `parseLevel` does — it reads every tile layer and never a name.
+     */
+    const tilesetName = (map.tilesets[0] as { name?: string } | undefined)?.name;
+    if (!tilesetName) {
+      throw new Error(`GameScene: level ${level.id} declares no tileset`);
+    }
+    const tileset = map.addTilesetImage(tilesetName, 'placeholder-tile');
     if (!tileset) {
-      // Returns null with only a console warning when the tileset NAME in the .tmj does not match.
-      // Silently drawing nothing is precisely the failure this scene must not have.
-      throw new Error(`GameScene: tileset "greybox" not found in level ${level.id}`);
+      // Returns null with only a console warning. Silently drawing nothing is precisely the
+      // failure this scene must not have.
+      throw new Error(`GameScene: tileset "${tilesetName}" could not be bound in level ${level.id}`);
     }
 
-    const layer = map.createLayer('ground', tileset, 0, 0);
+    const layerName = map.layers[0]?.name;
+    if (layerName === undefined) {
+      throw new Error(`GameScene: level ${level.id} has no tile layer`);
+    }
+    const layer = map.createLayer(layerName, tileset, 0, 0);
     if (!layer) {
-      throw new Error(`GameScene: tile layer "ground" not found in level ${level.id}`);
+      throw new Error(`GameScene: tile layer "${layerName}" could not be created in ${level.id}`);
     }
     // `createLayer` is typed `TilemapLayer | TilemapGPULayer` whatever the `gpu` argument is, so
     // the CPU choice is asserted at runtime rather than cast away. If a later edit passes

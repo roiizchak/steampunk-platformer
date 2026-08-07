@@ -30,7 +30,7 @@ catch?** A schema check passes on a level whose only route is a jump one pixel t
 **is the difficulty ramp reported as a spread or as a single headline number?** *(5.7.)*
 
 ### 5. Deliverables
-`levels/level-01..05.tmj` · `src/sim/progress.ts` · `src/scenes/LevelSelectScene.ts` ·
+`public/assets/levels/level-01..05.tmj` · `src/sim/progress.ts` · `src/scenes/LevelSelectScene.ts` ·
 `src/game/save.ts` · `tests/unit/progress.test.ts` · `tests/unit/level-data.test.ts` ·
 `tests/e2e/phase-08-progression.spec.ts`
 

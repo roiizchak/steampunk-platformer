@@ -21,7 +21,9 @@
 import { describe, expect, it } from 'vitest';
 import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE, TILE_SIZE } from '../../src/game/constants';
 import { describeLevelProblem, parseLevel } from '../../src/game/tilemap';
-import { PLAYER_BOX } from '../../src/sim/player';
+import { ticksToMs } from '../../src/sim/index';
+import { derivedFeel } from '../../src/sim/derived';
+import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
 
 const SHIPPED = import.meta.glob('../../public/assets/levels/*.tmj', {
   query: '?raw',
@@ -297,6 +299,16 @@ describe('the shipped catalog and the shipped levels agree', () => {
     expect(Array.isArray(catalog.levels)).toBe(true);
     expect(catalog.levels!.length).toBeGreaterThan(0);
 
+    // The catalog KEY must be the file's basename, not just the url. The Element Editor downloads
+    // `${key}.tmj` and its save note tells you to drop that file into public/assets/levels/ — so a
+    // key of "lvl1" against a url of ".../level-01.tmj" makes the editor emit a file that
+    // overwrites nothing and an edit that silently evaporates. Found by the code-reviewer gate
+    // owner (brief 2); the download filename assertion in the e2e only passes today because the
+    // two happen to coincide.
+    for (const entry of catalog.levels!) {
+      expect(entry.key, `catalog key must match the filename in ${entry.url}`).toBe(idOf(entry.url));
+    }
+
     const listed = new Set(catalog.levels!.map((entry) => idOf(entry.url)));
     const onDisk = new Set(SHIPPED_ENTRIES.map(([id]) => id));
     expect([...onDisk].filter((id) => !listed.has(id)), 'shipped but not in the catalog').toEqual([]);
@@ -333,8 +345,43 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     expect(doc).toContain(needle);
   });
 
+  it('publishes the camera travel, derived from the shipped level', () => {
+    // Codex (P10 follow-up): the travel figures were published but not pinned, so the doc could
+    // drift from the level while every other row stayed green.
+    const travelX = LEVEL_01.widthPx - GAME_WIDTH / CAMERA_ZOOM;
+    const travelY = LEVEL_01.heightPx - GAME_HEIGHT / CAMERA_ZOOM;
+    expect(doc).toContain(`Camera travel ${travelX} × ${travelY} px`);
+  });
+
   it('no longer carries the PROPOSED marker on the grid cell size (criterion 3.6)', () => {
     expect(doc).not.toContain('PROPOSED, not yet published');
+  });
+
+  /**
+   * THE SENSOR THE PHASE 2 SUITE DOES NOT HAVE.
+   *
+   * The code-reviewer gate owner (brief 2) pointed out that every movement assertion in
+   * `player-movement.test.ts` derives its expectation from `world.tuning.*` — so multiplying all
+   * eight distance knobs by the same factor is the single perturbation that suite is structurally
+   * incapable of noticing. Even the anti-vacuity guard gets *easier* to satisfy, because doubling
+   * `v` and `g` doubles the discrete-versus-continuous gap it demands.
+   *
+   * That is precisely the change this phase made. So the character contract is pinned as absolute
+   * numbers here, where a re-tune has to come and edit them deliberately.
+   */
+  it('pins the character contract in absolute pixels, not in knob-relative terms', () => {
+    const feel = derivedFeel(DEFAULT_TUNING, ticksToMs);
+    const bodyHeightPx = PLAYER_BOX.h * RENDER_SCALE;
+
+    expect(bodyHeightPx).toBe(96);
+    expect(PLAYER_BOX.w * RENDER_SCALE).toBe(44);
+    expect(feel.apexPx).toBeCloseTo(300.6, 1);
+    expect(feel.airtimeTicks).toBe(37);
+    // Jump height in body heights — the ratio that actually describes how the game feels, and the
+    // one number a uniform scaling of every knob does NOT leave alone.
+    expect(feel.apexPx / bodyHeightPx).toBeCloseTo(3.13, 2);
+    // And the character's share of the screen, which is what Phase 4 generates art against.
+    expect((bodyHeightPx / GAME_HEIGHT) * 100).toBeCloseTo(8.89, 2);
   });
 });
 

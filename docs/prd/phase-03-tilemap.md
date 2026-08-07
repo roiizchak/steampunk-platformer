@@ -36,7 +36,7 @@ against — what else does Phase 4 need published here that this plan does not p
 number found now is free; found in Phase 4 it is a re-generation.
 
 ### 5. Deliverables
-`levels/level-01.tmj` (grey-box) · `src/game/tilemap.ts` · `src/scenes/ElementEditorScene.ts` ·
+`public/assets/levels/level-01.tmj` (grey-box) · `src/game/tilemap.ts` · `src/scenes/ElementEditorScene.ts` ·
 `src/render/cameraRig.ts` · `tests/unit/tilemap-data.test.ts` · `tests/e2e/phase-03-tilemap.spec.ts` ·
 `docs/ASSET-PIPELINE.md` updated with the published cell size
 
@@ -45,7 +45,7 @@ number found now is free; found in Phase 4 it is a re-generation.
 |---|---|---|---|
 | 3.1 | Player lands on the collision layer and does not fall through | e2e | e2e |
 | 3.2 | Player cannot pass through a solid tile horizontally | e2e | e2e |
-| 3.3 | **Every** `.tmj` in `levels/` loads and passes a schema + collision-layer check | unit over shipped data *(3.1)* | `voltagent-qa-sec:qa-expert` |
+| 3.3 | **Every** `.tmj` in `public/assets/levels/` loads and passes a schema + collision-layer check | unit over shipped data *(3.1)* | `voltagent-qa-sec:qa-expert` |
 | 3.4 | Camera follows within bounds; never shows outside the map | e2e | e2e |
 | 3.5 | World width derived from the **shipped `.tmj`'s own `width × tilewidth`**, measured not assumed; a test pins the number. *(There is no background art in this phase — 3.2's "measured background pixels" rule binds Phase 4, when real art exists.)* | unit *(3.2)* | `voltagent-qa-sec:qa-expert` |
 | 3.6 | **Grid cell size published in ASSET-PIPELINE.md** — replacing the PROPOSED marker | doc review | — |

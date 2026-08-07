@@ -104,12 +104,30 @@ function boolProperty(object: TiledObject, name: string): boolean {
   return false;
 }
 
+/**
+ * Is this object a collision strip? Exported so the Element Editor selects strips with the SAME
+ * predicate that produced them.
+ *
+ * The editor used to re-implement this as `properties.some(p => p.name === 'solid' && p.value)`,
+ * which is not the same function: `boolProperty` reads the FIRST property with that name and
+ * stops. Given `[{solid:false},{solid:true}]` the two disagree, the editor's Nth-object walk
+ * desynchronises from `world.solids[N]`, and every strip from that point on is written its
+ * neighbour's coordinates — a structurally valid level with everything shifted. Found by the
+ * code-reviewer gate owner (brief 2). One predicate, one answer.
+ */
+export function isSolidObject(object: unknown): boolean {
+  return isRecord(object) && boolProperty(object as TiledObject, 'solid');
+}
+
 /** Every object on every object layer, flattened. Layer names are never consulted (vault 3.3). */
 function allObjects(layers: TiledLayer[]): TiledObject[] {
   const objects: TiledObject[] = [];
   for (const layer of layers) {
     if (layer.type === 'objectgroup' && Array.isArray(layer.objects)) {
-      objects.push(...(layer.objects as TiledObject[]));
+      // `.filter(isRecord)` because a null entry in the array would throw inside `boolProperty`,
+      // and an exception in the boot validator is a HANG rather than a refusal — the one outcome
+      // the whole refuse-to-route design exists to prevent (vault 1.4).
+      objects.push(...(layer.objects as unknown[]).filter(isRecord));
     }
   }
   return objects;
@@ -146,6 +164,31 @@ export function describeLevelProblem(raw: unknown): string | null {
   }
 
   const layers = map.layers as TiledLayer[];
+
+  /**
+   * Refuse the Tiled constructs this parser does not implement, rather than silently mis-reading
+   * them. Raised by the code-reviewer gate owner (brief 2), and the failure mode is nasty:
+   *
+   *  - drag a layer in Tiled and it writes `offsetx`/`offsety`. Every collision rect is then N px
+   *    from where Tiled draws it — and EVERY oracle in this phase is this same parser, so the unit
+   *    sweep, the e2e specs and the editor's own overlays all shift WITH the bug and agree.
+   *  - wrap the object layer in a `group` and the solids vanish, because nothing recurses.
+   *
+   * Both are exactly the art-versus-collision disagreement this phase is about, arriving through
+   * the file instead of through the editor. Supporting them is a Phase 8 job if a level ever needs
+   * them; refusing them is the honest thing to do until then.
+   */
+  for (const [index, layer] of layers.entries()) {
+    if (layer.type === 'group') {
+      return `layer #${index} is a group — nested layers are not supported, so its contents would be silently ignored`;
+    }
+    const offsetX = (layer as { offsetx?: unknown }).offsetx;
+    const offsetY = (layer as { offsety?: unknown }).offsety;
+    if ((typeof offsetX === 'number' && offsetX !== 0) || (typeof offsetY === 'number' && offsetY !== 0)) {
+      return `layer #${index} has a non-zero offset (${String(offsetX)}, ${String(offsetY)}), which this parser does not apply`;
+    }
+  }
+
   const tileLayers = layers.filter((layer) => layer.type === 'tilelayer');
   if (tileLayers.length === 0) {
     // Collision without art is a level the player cannot see. It renders as an empty screen the
@@ -223,22 +266,30 @@ export function describeLevelProblem(raw: unknown): string | null {
     return `spawn (${spawn.x}, ${spawn.y}) is outside the map, which is ${widthPx} x ${heightPx} px`;
   }
 
-  // The spawn must stand ON something.
+  // The spawn must have solid ground UNDER it — not exactly at its feet.
   //
-  // This check previously lived ONLY in tests/unit/tilemap-data.test.ts, which the qa-expert gate
-  // owner (brief 2) correctly called a production/test divergence: criterion 3.3's unit gate was
-  // asserting a stricter property than BootScene actually enforced, so a hand-authored or
-  // editor-saved level whose spawn floated over a gap would be waved through at runtime. Moving it
-  // here makes the boot gate and the unit gate the same rule, which is the whole point of there
-  // being one parser.
-  const standing = solids.some(
+  // The check first lived only in the unit test, which the qa-expert gate owner (brief 2) rightly
+  // called a production/test divergence: the boot gate was weaker than the criterion named after
+  // it. Moving it here was correct. Writing it as `solid.y === spawn.y` was not, and the
+  // code-reviewer gate owner (brief 2) found what that cost:
+  //
+  //   the Element Editor's ENTIRE PURPOSE is nudging a collision strip a pixel or two. Nudge the
+  //   strip the player spawns on — the first one — press save, drop the file in as the editor's
+  //   own save note instructs, and the next boot REFUSES TO ROUTE. Exact equality made the
+  //   editor's primary workflow emit a level the boot gate rejects.
+  //
+  // What the rule is actually protecting against is a spawn over a pit, or under the floor. A
+  // player that spawns a few pixels up and falls onto the ground is completely fine — the sim's
+  // own grey-box spawn is on the surface only so that FIXTURES need not count drop ticks, which is
+  // a test concern, not a level-data one.
+  const groundBelow = solids.some(
     (solid) =>
-      solid.y === spawn.y &&
+      (solid.y as number) >= (spawn.y as number) &&
       (spawn.x as number) > (solid.x as number) &&
       (spawn.x as number) < (solid.x as number) + (solid.width as number),
   );
-  if (!standing) {
-    return `spawn (${spawn.x}, ${spawn.y}) is not on top of any solid — the player starts falling`;
+  if (!groundBelow) {
+    return `spawn (${spawn.x}, ${spawn.y}) has no solid beneath it — the player falls out of the world`;
   }
 
   return null;

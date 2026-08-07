@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { isSolidObject } from '../game/tilemap';
 import type { Rect } from '../sim/types';
 import { GameScene } from './GameScene';
 
@@ -282,17 +283,12 @@ export class ElementEditorScene extends GameScene {
         continue;
       }
       for (const object of layer.objects) {
-        const properties = object.properties;
-        const isSolid =
-          Array.isArray(properties) &&
-          properties.some(
-            (p: unknown) =>
-              typeof p === 'object' &&
-              p !== null &&
-              (p as { name?: unknown }).name === 'solid' &&
-              (p as { value?: unknown }).value === true,
-          );
-        if (!isSolid) {
+        // The SAME predicate `parseLevel` used to build `world.solids`, imported rather than
+        // re-implemented. A local copy read "any property named solid with value true" while the
+        // parser reads "the FIRST property named solid" — they disagree on
+        // `[{solid:false},{solid:true}]`, which desynchronises this index walk from
+        // `world.solids[N]` and writes every later strip its neighbour's coordinates.
+        if (!isSolidObject(object)) {
           continue;
         }
 

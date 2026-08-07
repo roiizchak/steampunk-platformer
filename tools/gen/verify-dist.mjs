@@ -62,23 +62,65 @@ if (!existsSync(catalogPath)) {
 // 3. No DEV-only surface survived into the bundle. Scene KEYS are checked as string literals,
 //    because the identifiers `togglePlayground`/`toggleElementEditor` legitimately remain as empty
 //    method stubs once Vite folds their guarded bodies away.
-const bundles = readdirSync(join(root, 'dist/assets')).filter((f) => f.endsWith('.js'));
-if (bundles.length === 0) {
+const assetsDir = join(root, 'dist/assets');
+if (!existsSync(assetsDir)) {
+  // Reading a missing directory would throw and kill the build with a stack trace instead of the
+  // intended message — a false RED. Raised by the code-reviewer gate owner (brief 2).
+  problems.push('dist/assets does not exist — did vite build run?');
+}
+const bundles = existsSync(assetsDir) ? readdirSync(assetsDir).filter((f) => f.endsWith('.js')) : [];
+if (existsSync(assetsDir) && bundles.length === 0) {
   problems.push('dist/assets contains no javascript bundle');
 }
-for (const name of bundles) {
-  const src = readFileSync(join(root, 'dist/assets', name), 'utf8');
+
+// index.html is scanned too: it is shipped, and nothing else was looking at it.
+const scanned = [
+  ...bundles.map((name) => ['assets/' + name, join(assetsDir, name)]),
+  ...(existsSync(join(root, 'dist/index.html')) ? [['index.html', join(root, 'dist/index.html')]] : []),
+];
+
+for (const [label, path] of scanned) {
+  const src = readFileSync(path, 'utf8');
+  // Scene KEYS as quoted literals — the identifiers `togglePlayground`/`toggleElementEditor`
+  // legitimately survive as empty method stubs, so matching the bare word would cry wolf.
   for (const key of ['Playground', 'ElementEditor']) {
     for (const quote of ['`', "'", '"']) {
       if (src.includes(`${quote}${key}${quote}`)) {
-        problems.push(`${name} contains the DEV-only scene key ${quote}${key}${quote}`);
+        problems.push(`${label} contains the DEV-only scene key ${quote}${key}${quote}`);
       }
     }
   }
   for (const symbol of ['ElementEditorScene', 'PlaygroundScene', '__game', '__phaserGame']) {
     if (src.includes(symbol)) {
-      problems.push(`${name} contains the DEV-only symbol ${symbol}`);
+      problems.push(`${label} contains the DEV-only symbol ${symbol}`);
     }
+  }
+  // Case-INSENSITIVE sweep for USER-FACING prose naming a dev scene. The help text shipped
+  // "P playground · O element editor" to production past the quoted-key check above, because it is
+  // lowercase and sits inside a longer string.
+  //
+  // Each phrase carries a space, which is what keeps it off the identifiers `togglePlayground` and
+  // `toggleElementEditor` — those legitimately survive as empty method stubs, and a bare
+  // case-insensitive "playground" matches them and cries wolf. It did, on the first run.
+  for (const phrase of [' playground', 'element editor']) {
+    if (src.toLowerCase().includes(phrase)) {
+      problems.push(`${label} mentions the DEV-only scene "${phrase.trim()}" in shipped text`);
+    }
+  }
+}
+
+// Every image the catalog names must also have shipped, not only the levels.
+const builtCatalog = join(root, 'dist/assets/index.json');
+if (existsSync(builtCatalog)) {
+  const catalog = JSON.parse(readFileSync(builtCatalog, 'utf8'));
+  for (const entry of catalog.images ?? []) {
+    if (!existsSync(join(root, 'dist', entry.url))) {
+      problems.push(`catalog image "${entry.key}" points at ${entry.url}, which is not in dist/`);
+    }
+  }
+  const authoredCatalog = readFileSync(join(root, 'public/assets/index.json'));
+  if (!authoredCatalog.equals(readFileSync(builtCatalog))) {
+    problems.push('dist/assets/index.json differs from public/assets/index.json');
   }
 }
 
