@@ -4,7 +4,8 @@ Behaviour measured against `phaser@4.2.1` on this machine, in the phase named. E
 debugging session; none of them is in the Phaser docs in the form written here. **Read the section
 for the subsystem you are about to touch.**
 
-Fuller detail and the evidence for each is in [QA-LOG.md](QA-LOG.md), under the phase tagged.
+Fuller detail and the evidence for each is in that phase's QA log, [docs/qa/](qa/) — one file per
+phase, indexed from [QA-LOG.md](QA-LOG.md).
 
 ---
 

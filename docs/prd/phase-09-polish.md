@@ -47,7 +47,7 @@ And: **would the proposed frame-budget measurement distinguish "fast" from "not 
 | 9.5 | **Frame budget holds under worst case**: max enemies + max particles + shake | `voltagent-qa-sec:performance-engineer` *(9.4)* | `voltagent-qa-sec:performance-engineer` |
 | 9.6 | Frame-rate measurement distinguishes "fast" from "not drawing" | method review *(9.4)* | `voltagent-qa-sec:performance-engineer` |
 | 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | *(9.2)* | `voltagent-qa-sec:qa-expert` |
-| 9.8 | What the gates do **not** cover is stated in QA-LOG | *(9.3)* | — |
+| 9.8 | What the gates do **not** cover is stated in the phase QA log | *(9.3)* | — |
 | 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 9.10 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-09-plan.md` | — |
 | 9.11 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-09-impl.md` | codex |

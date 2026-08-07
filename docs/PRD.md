@@ -59,7 +59,8 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   uninstalled. *(LESSONS-APPLIED 1.1, blocker)*
 - **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of
   seconds, never a `deltaTime` multiply inside the sim. *(2.1, blocker)*
-- **No source file exceeds 400 lines** without a written one-line justification in `QA-LOG.md`.
+- **No source file exceeds 400 lines** without a written one-line justification in the phase's QA
+  log, `docs/qa/phase-NN-<slug>.md`.
 - **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
 - **All art via `genmedia`**, following [STYLE.md](STYLE.md). Zero tutorial assets, zero stock assets.
 - **Before any phase that generates, re-read [FAL-MODELS.md](FAL-MODELS.md)** — every endpoint's
@@ -133,8 +134,9 @@ Runs after vault-in and skill invocation, **before the first line of implementat
 ```
 /codex:rescue --wait --fresh Review the plan in docs/prd/phase-NN-<name>.md against this
 repository. Read first: docs/PRD.md (global constraints), docs/FAL-MODELS.md (if this phase
-generates), docs/LESSONS-APPLIED.md (the vault items this phase cites), docs/QA-LOG.md (what
-earlier phases actually found), and docs/reviews/ (what earlier phases were warned about).
+generates), docs/LESSONS-APPLIED.md (the vault items this phase cites), docs/qa/ (one log per
+phase — what earlier phases actually found), and docs/reviews/ (what earlier phases were warned
+about).
 
 Answer these, and only these:
 1. Which deliverables in this phase's section 5 are NOT actually required by its section 1 goal?
@@ -164,7 +166,7 @@ Check specifically:
 - Does src/sim/ import anything from Phaser, Date.now, Math.random, or the DOM? (blocker)
 - Is any duration expressed as a float of seconds rather than an integer tick count? (blocker)
 - Is any animation fps authored rather than derived as renderFrames x TICK_HZ / simTicks? (blocker)
-- Does any file exceed 400 lines without a justification in docs/QA-LOG.md?
+- Does any file exceed 400 lines without a justification in the phase's docs/qa/ log?
 - For each acceptance criterion in the phase's QA gate: does the code actually satisfy it, or
   only appear to?
 - Which test would still pass if the behaviour it names were deleted?
@@ -213,7 +215,7 @@ agent type. This section makes the column executable.
 | Owner in a gate | What it means |
 |---|---|
 | `voltagent-qa-sec:qa-expert` | spawn that agent — the default owner for a measurable criterion |
-| `voltagent-qa-sec:code-reviewer` | spawn that agent — diff review, adversarial pass *(Phase 1 precedent, [QA-LOG.md](QA-LOG.md) 1.8)* |
+| `voltagent-qa-sec:code-reviewer` | spawn that agent — diff review, adversarial pass *(Phase 1 precedent, [qa/phase-01-boot.md](qa/phase-01-boot.md) 1.8)* |
 | `voltagent-qa-sec:performance-engineer` | spawn that agent — frame budget, worst-case load. Phase 5 onward |
 | `voltagent-qa-sec:ui-ux-tester` | spawn that agent — UI behaviour and layout. Phase 6 onward |
 | `voltagent-qa-sec:accessibility-tester` | spawn that agent — WCAG claims only. Phase 6's contrast criterion |
@@ -239,9 +241,10 @@ feel weighty*, *is there a third leg* — are human judgements no agent can stan
   second brief is not optional and is not a re-run of the first.
 - **Every finding is applied, or recorded with a one-line reason for rejecting it** *(vault C11)* —
   the identical rule the Codex reviews carry. Silently dropping one is not permitted.
-- **Findings land in [QA-LOG.md](QA-LOG.md)**, under the phase's own section, in the findings-table
-  format Phase 1 already established. Do not invent a new file: `docs/reviews/` stays exclusively
-  Codex's, one plan/impl pair per phase.
+- **Findings land in the phase's own QA log**, [`docs/qa/phase-NN-<slug>.md`](qa/), in the
+  findings-table format Phase 1 already established. Do not invent a new file: that log and
+  `docs/reviews/` — which stays exclusively Codex's, one plan/impl pair per phase — are the only
+  two destinations.
 - **Preserve the agent's own "could not check" section** *(vault 9.3)*. A gate's blind spots are
   part of its result. An agent that reports none has almost certainly not looked for them.
 - **An agent may not turn its own criterion green from reasoning alone.** It must cite command
@@ -259,8 +262,9 @@ closing paragraph is fixed and matches the Codex prompts deliberately.
 Review docs/prd/phase-NN-<name>.md, section 6 (QA gate). You own criteria: <list>.
 
 Read first: docs/PRD.md (Global Constraints + this protocol), docs/LESSONS-APPLIED.md (the
-vault items this phase cites), docs/QA-LOG.md (what earlier phases already measured — check
-here before re-measuring anything), and docs/reviews/ (what earlier phases were warned about).
+vault items this phase cites), docs/qa/ (one log per phase — what earlier phases already
+measured; check here before re-measuring anything), and docs/reviews/ (what earlier phases were
+warned about).
 
 For each criterion you own, answer separately:
 1. Does the code actually satisfy it, or only appear to?
@@ -288,7 +292,7 @@ Do not modify any files. Cite file and line. State plainly what you could not ch
 
 | Owner | Add to the brief |
 |---|---|
-| `code-reviewer` | *"Also: does any file exceed 400 lines without a justification in docs/QA-LOG.md?"* |
+| `code-reviewer` | *"Also: does any file exceed 400 lines without a justification in this phase's docs/qa/ log?"* |
 | `performance-engineer` | *"Measure under the worst case this phase can produce, not the typical case. Distinguish 'fast' from 'not drawing' — a frame-rate number that cannot tell those apart is not a measurement (vault 9.4)."* |
 | `ui-ux-tester` | *"Drive the running game with `playwright-cli`; screenshot what you assert."* |
 | `accessibility-tester` | *"Name the WCAG success criterion and level for every claim. Measure the contrast ratio; do not estimate it."* |
@@ -351,10 +355,11 @@ public/assets/
 docs/
   PRD.md                      this file — the spine
   prd/                        one document per phase
+  qa/                         one QA log per phase
   reviews/                    Codex review outputs, one pair per phase
   FAL-MODELS.md               every fal endpoint: schema, price, gotchas
   STYLE.md  ASSET-PIPELINE.md  LESSONS-APPLIED.md  SOURCE-ANALYSIS.md
-  GENERATION-LOG.md  QA-LOG.md
+  GENERATION-LOG.md  QA-LOG.md  index + cross-phase entries
 ```
 
 ---

@@ -129,7 +129,8 @@ Full rationale in [PRD.md § The `window.__game` surface](docs/PRD.md#the-window
 - **`src/sim/` imports nothing from Phaser**, and reaches no clock, no `Math.random`, no DOM.
 - **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of
   seconds, never a `deltaTime` multiply inside the sim.
-- **No source file over 400 lines** without a written justification in `QA-LOG.md`. Prefer splitting.
+- **No source file over 400 lines** without a written justification in the phase's QA log under
+  `docs/qa/`. Prefer splitting.
 - **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
 - **A phase with a failing or unrun criterion is reported failing.** Never as done.
 - **A QA gate's Owner column is an instruction, not a label.** A criterion owned by a
@@ -161,7 +162,8 @@ with a one-line reason** — silently ignoring one is not permitted *(C11)*.
 
 The gate's agent owners are equally mandatory and run under the same C11 rule, each with **two
 briefs** *(A7)*. They run **before** the Codex implementation review, because applying their
-findings changes the diff Codex reviews. Agent findings go in `QA-LOG.md` under the phase;
+findings changes the diff Codex reviews. Agent findings go in the phase's own log,
+`docs/qa/phase-NN-<slug>.md`;
 `docs/reviews/` stays Codex-only. Full protocol, including the copy-paste briefs and the
 owner→agent map, in [PRD.md § The QA agent protocol](docs/PRD.md#the-qa-agent-protocol).
 
@@ -212,7 +214,7 @@ Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-revie
   `e2e-playwright-testing` authors the spec files under `tests/e2e/`. This project standardises on
   `e2e-playwright-testing`; the near-identical `playwright-e2e-testing` is deliberately never used,
   so no session flips between them. What of its rules did and did not apply here is already
-  recorded in [QA-LOG.md](docs/QA-LOG.md) under Phase 1.
+  recorded in [docs/qa/phase-01-boot.md](docs/qa/phase-01-boot.md).
 
 ## 6. Where everything else lives
 
@@ -222,7 +224,7 @@ Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-revie
 | `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
 | [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
 | [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. | When a citation is unfamiliar. |
-| [docs/QA-LOG.md](docs/QA-LOG.md) | Every decision, measurement and deliberate non-fix, per phase. | **Before re-measuring anything.** |
+| [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) | Every decision, measurement and deliberate non-fix. QA-LOG.md is the index plus the cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. | **Before re-measuring anything.** |
 | [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. | Before planning a phase — what the last one was warned about. |
 | [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. | Any art work. |
 | [docs/FAL-MODELS.md](docs/FAL-MODELS.md) | Every fal endpoint: schema, price, gotchas. | Before any generating phase — **and re-run `genmedia schema`**; a documented schema is a snapshot. |

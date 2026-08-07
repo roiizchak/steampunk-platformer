@@ -16,7 +16,8 @@ import { describe, expect, it } from 'vitest';
  *
  * WHAT THIS CANNOT DO. It checks that the documents say the right thing, never that anyone did
  * it. `assertsCompletedPhasesAreEvidenced` gets closest — a phase marked done in the PRD table
- * must have a QA-LOG row per criterion — but a row saying "PASS" is still a claim a human wrote.
+ * must have a row per criterion in its own `docs/qa/phase-NN-*.md` log — but a row saying "PASS"
+ * is still a claim a human wrote.
  * That is what criterion X.9's adversarial brief and the Codex implementation review are for.
  *
  * File contents come from Vite's `import.meta.glob(..., { query: '?raw' })`, not node:fs: the
@@ -51,7 +52,18 @@ const PHASES: ReadonlyArray<readonly [string, string]> = Object.keys(DOCS)
   .map((k) => [k.slice(k.lastIndexOf('/') + 1), norm(DOCS[k]!)] as const);
 
 const PRD = doc('/docs/PRD.md');
-const QA_LOG = doc('/docs/QA-LOG.md');
+
+/**
+ * Phase N's QA log. One file per phase under `docs/qa/` since 2026-08-07 — `docs/QA-LOG.md` is
+ * now the index and the home of the cross-phase entries. Matched by `phase-NN-` prefix rather
+ * than full name, because the slug is the phase's own and this test must not restate it.
+ */
+function qaLog(n: number): string {
+  const prefix = `/docs/qa/phase-${String(n).padStart(2, '0')}-`;
+  const key = Object.keys(DOCS).find((k) => k.includes(prefix));
+  if (key === undefined) throw new Error(`no QA log for phase ${n} (expected ${prefix}*.md)`);
+  return norm(DOCS[key]!);
+}
 
 /** Text between two markers, exclusive. Throws rather than returning "" — an empty
  *  slice makes every downstream assertion vacuously true (vault C2). */
@@ -225,11 +237,12 @@ describe('phase documents are executable instructions', () => {
     });
 
     /**
-     * A phase the PRD calls done must have a QA-LOG row for every one of its criteria.
-     * This is the closest mechanical stand-in for "a phase with an unrun criterion is reported
-     * failing" — it cannot tell whether the row is true, only whether it was written at all.
+     * A phase the PRD calls done must have a row for every one of its criteria in its own QA log,
+     * `docs/qa/phase-NN-*.md`. This is the closest mechanical stand-in for "a phase with an unrun
+     * criterion is reported failing" — it cannot tell whether the row is true, only whether it was
+     * written at all. A missing log file throws out of `qaLog`, which is the same red.
      */
-    it('every phase marked done in the PRD is evidenced criterion-by-criterion in QA-LOG', () => {
+    it('every phase marked done in the PRD is evidenced criterion-by-criterion in its QA log', () => {
       const table = between(PRD, '## The phases', '### Phase dependency notes');
       const done = table
         .split('\n')
@@ -240,7 +253,7 @@ describe('phase documents are executable instructions', () => {
       const gaps: string[] = [];
       for (const n of done) {
         const [, phase] = PHASES.find(([name]) => name.startsWith(`phase-${String(n).padStart(2, '0')}`))!;
-        const section = between(QA_LOG, `## Phase ${n} `, `## Vault-out — Phase ${n}`);
+        const section = between(qaLog(n), `## Phase ${n} `, `## Vault-out — Phase ${n}`);
         for (const row of gateRows(phase)) {
           const cited = new RegExp(`^\\|\\s*${row.id.replace('.', '\\.')}\\s*\\|`, 'm').test(section);
           if (!cited) gaps.push(`phase ${n} criterion ${row.id} has no QA-LOG row`);
