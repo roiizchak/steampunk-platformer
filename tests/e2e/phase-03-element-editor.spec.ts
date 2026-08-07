@@ -168,6 +168,83 @@ test.describe('Phase 3 — Element Editor (criterion 3.7)', () => {
     expect(after.y! - settled.y!).toBe(NUDGE_PRESSES);
   });
 
+  /**
+   * ADDED AFTER THE CODE-REVIEWER GATE OWNER (brief 2, adversarial) FOUND THE BUG THIS COVERS.
+   *
+   * Every editor test in this file pressed ArrowDown and nothing else, so three of the four
+   * vertical paths were unexercised — and ArrowUp was broken: it nudged the strip AND fired a jump,
+   * throwing the character 57 px off the strip being edited. `heldJump` contains UP, and the scene
+   * had "disabled" player input by clearing the key arrays, which cannot detach an already-bound
+   * `key.on('down')` listener.
+   *
+   * Nudging UP is the direction you use when collision sits below the art — the exact defect this
+   * scene exists to fix. So the untested direction was the one that mattered.
+   */
+  test('ArrowUp nudges the strip and does NOT make the player jump', async ({ page }) => {
+    await bootToGame(page);
+    await enterEditor(page);
+    await page.keyboard.press('BracketRight');
+
+    const before = await page.evaluate(() => window.__game?.player as { y?: number; state?: string });
+    expect(before.state).toBe('idle');
+
+    // Sample every frame across the nudge: a jump would show as a 'jump'/'fall' state or a y that
+    // departs and returns. Reading only before and after could miss the whole 37-tick arc.
+    const arc = await page.evaluate(async () => {
+      const states = new Set<string>();
+      let minY = Number.POSITIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+      let samples = 0;
+      const done = (async () => {
+        for (let frame = 0; frame < 90; frame += 1) {
+          await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+          const p = window.__game?.player as { y?: number; state?: string } | null | undefined;
+          if (typeof p?.y !== 'number' || typeof p?.state !== 'string') continue;
+          samples += 1;
+          states.add(p.state);
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+        }
+      })();
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ArrowUp', code: 'ArrowUp', keyCode: 38, which: 38, bubbles: true }),
+      );
+      await done;
+      return { states: [...states], minY, maxY, samples };
+    });
+
+    expect(arc.samples).toBeGreaterThan(40);
+    // Never left the ground: no jump or fall state at any sampled frame.
+    expect(arc.states).toEqual(['idle']);
+    // The strip moved up by exactly one pixel, and the player came with it — no arc.
+    expect(before.y! - arc.minY).toBe(1);
+    expect(arc.maxY).toBe(arc.minY);
+  });
+
+  test('SPACE does not make the player jump inside the editor either', async ({ page }) => {
+    // The same root cause reached Space and W, not only UP. One guard covers all of them, so this
+    // is the test that proves the guard is the guard rather than a per-key patch.
+    await bootToGame(page);
+    await enterEditor(page);
+    await page.keyboard.press('BracketRight');
+
+    const before = await page.evaluate(() => (window.__game?.player as { y?: number }).y);
+    await page.keyboard.down('Space');
+    const states = await page.evaluate(async () => {
+      const seen = new Set<string>();
+      for (let frame = 0; frame < 60; frame += 1) {
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        const p = window.__game?.player as { state?: string } | null | undefined;
+        if (typeof p?.state === 'string') seen.add(p.state);
+      }
+      return [...seen];
+    });
+    await page.keyboard.up('Space');
+
+    expect(states).toEqual(['idle']);
+    expect(await page.evaluate(() => (window.__game?.player as { y?: number }).y)).toBe(before);
+  });
+
   test('R reverts the selected strip to its authored position', async ({ page }) => {
     await bootToGame(page);
     await enterEditor(page);

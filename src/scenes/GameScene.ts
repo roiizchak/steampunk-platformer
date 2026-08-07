@@ -38,11 +38,26 @@ export class GameScene extends Phaser.Scene {
   private facingRect!: Phaser.GameObjects.Rectangle;
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
-  // `protected` so ElementEditorScene can hand the arrow keys over to strip nudging. Left private,
-  // an arrow press there would nudge the strip AND walk the player in the same frame.
-  protected heldLeft: Phaser.Input.Keyboard.Key[] = [];
-  protected heldRight: Phaser.Input.Keyboard.Key[] = [];
-  protected heldJump: Phaser.Input.Keyboard.Key[] = [];
+  private heldLeft: Phaser.Input.Keyboard.Key[] = [];
+  private heldRight: Phaser.Input.Keyboard.Key[] = [];
+  private heldJump: Phaser.Input.Keyboard.Key[] = [];
+
+  /**
+   * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
+   * arrows nudge a collision strip instead.
+   *
+   * This is a flag rather than the subclass clearing the key arrays, and the difference is a bug
+   * the code-reviewer gate owner measured. Held state is POLLED, so clearing `heldLeft`/`heldRight`
+   * really does stop walking. The jump EDGE is not polled — it arrives through `key.on('down')`
+   * listeners bound below (vault 2.5) — and those listeners stay attached to the `Key` objects no
+   * matter what happens to the array holding them. `heldJump` contains UP, which the editor binds
+   * to "nudge the strip up", so pressing it launched the character 57 px off the strip it was
+   * editing. Nudging UP is exactly what you do when collision sits below the art, which is the
+   * defect that scene exists for.
+   *
+   * One guard, in the one place both input paths pass through, rather than a detach per key.
+   */
+  protected playerInputEnabled = true;
 
   constructor(key = 'Game') {
     super(key);
@@ -146,6 +161,15 @@ export class GameScene extends Phaser.Scene {
    * edge therefore arrives by event, in `bindKeys()`.
    */
   private sampleHeldKeys(): void {
+    if (!this.playerInputEnabled) {
+      // Not just "read nothing" — actively clear. Leaving the last sampled values in place would
+      // keep the player walking in whatever direction was held when the editor opened.
+      this.input$.left = false;
+      this.input$.right = false;
+      this.input$.jumpHeld = false;
+      return;
+    }
+
     this.input$.left = this.heldLeft.some((key) => key.isDown);
     this.input$.right = this.heldRight.some((key) => key.isDown);
     this.input$.jumpHeld = this.heldJump.some((key) => key.isDown);
@@ -170,7 +194,11 @@ export class GameScene extends Phaser.Scene {
     this.heldJump = [addKey(SPACE), addKey(UP), addKey(W)];
 
     for (const key of this.heldJump) {
-      key.on('down', () => latchJumpPress(this.input$));
+      key.on('down', () => {
+        if (this.playerInputEnabled) {
+          latchJumpPress(this.input$);
+        }
+      });
     }
 
     // Without capture the browser scrolls the page on arrows and space — which also corrupts a

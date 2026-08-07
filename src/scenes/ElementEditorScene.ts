@@ -87,12 +87,16 @@ export class ElementEditorScene extends GameScene {
     // would nudge the strip AND accelerate the player in the same frame, so the readout and the
     // thing on screen would disagree about what just happened.
     //
+    // This used to clear GameScene's key arrays, which silently only half worked: held state is
+    // polled so walking stopped, but the jump EDGE arrives through listeners bound to the Key
+    // objects themselves, and `heldJump` contains UP — the key this scene binds to "nudge up".
+    // Pressing it threw the character 57 px off the strip being edited. See the flag's comment
+    // in GameScene.
+    //
     // The simulation still runs, and that is deliberate: watching the player SETTLE onto a strip
     // under gravity is the only way to see that the collision top and the drawn tile top agree,
     // which is the entire reason this scene exists.
-    this.heldLeft = [];
-    this.heldRight = [];
-    this.heldJump = [];
+    this.playerInputEnabled = false;
 
     this.bindEditorKeys();
     this.selectStrip(0);
