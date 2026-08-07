@@ -53,17 +53,6 @@ const PHASES: ReadonlyArray<readonly [string, string]> = Object.keys(DOCS)
 
 const PRD = doc('/docs/PRD.md');
 
-/**
- * Phase N's QA log. One file per phase under `docs/qa/` since 2026-08-07 — `docs/QA-LOG.md` is
- * now the index and the home of the cross-phase entries. Matched by `phase-NN-` prefix rather
- * than full name, because the slug is the phase's own and this test must not restate it.
- */
-function qaLog(n: number): string {
-  const prefix = `/docs/qa/phase-${String(n).padStart(2, '0')}-`;
-  const key = Object.keys(DOCS).find((k) => k.includes(prefix));
-  if (key === undefined) throw new Error(`no QA log for phase ${n} (expected ${prefix}*.md)`);
-  return norm(DOCS[key]!);
-}
 
 /** Text between two markers, exclusive. Throws rather than returning "" — an empty
  *  slice makes every downstream assertion vacuously true (vault C2). */
@@ -240,7 +229,8 @@ describe('phase documents are executable instructions', () => {
      * A phase the PRD calls done must have a row for every one of its criteria in its own QA log,
      * `docs/qa/phase-NN-*.md`. This is the closest mechanical stand-in for "a phase with an unrun
      * criterion is reported failing" — it cannot tell whether the row is true, only whether it was
-     * written at all. A missing log file throws out of `qaLog`, which is the same red.
+     * written at all. A log that is missing — or named anything other than its phase document —
+     * throws out of `doc`, which is the same red.
      */
     it('every phase marked done in the PRD is evidenced criterion-by-criterion in its QA log', () => {
       const table = between(PRD, '## The phases', '### Phase dependency notes');
@@ -252,8 +242,10 @@ describe('phase documents are executable instructions', () => {
 
       const gaps: string[] = [];
       for (const n of done) {
-        const [, phase] = PHASES.find(([name]) => name.startsWith(`phase-${String(n).padStart(2, '0')}`))!;
-        const section = between(qaLog(n), `## Phase ${n} `, `## Vault-out — Phase ${n}`);
+        const [name, phase] = PHASES.find(([f]) => f.startsWith(`phase-${String(n).padStart(2, '0')}`))!;
+        // The log is addressed by its phase document's own filename, so `docs/qa/` and `docs/prd/`
+        // are forced to line up file-for-file: a drifted slug is a missing log, and `doc` throws.
+        const section = between(doc(`/docs/qa/${name}`), `## Phase ${n} `, `## Vault-out — Phase ${n}`);
         for (const row of gateRows(phase)) {
           const cited = new RegExp(`^\\|\\s*${row.id.replace('.', '\\.')}\\s*\\|`, 'm').test(section);
           if (!cited) gaps.push(`phase ${n} criterion ${row.id} has no QA-LOG row`);

@@ -7,9 +7,10 @@ Created in Phase 1.
 
 ## The per-phase logs
 
-**One file per phase**, under [`docs/qa/`](qa/), slug matching the phase's `docs/prd/` document.
-Split out on 2026-08-07, when this file reached 1473 lines and was gaining roughly 350 a phase.
-A new phase adds `docs/qa/phase-NN-<slug>.md` — nothing else moves.
+**One file per phase**, under [`docs/qa/`](qa/), **named exactly for the phase's `docs/prd/`
+document** — `tests/unit/docs-contract.test.ts` addresses each log by that name, so the two
+directories cannot drift apart. Split out on 2026-08-07, when this file reached 1473 lines and was
+gaining roughly 350 a phase. A new phase adds `docs/qa/<its prd filename>` — nothing else moves.
 
 | Phase | QA log | Phase doc | Codex reviews |
 |---|---|---|---|
@@ -279,10 +280,12 @@ arithmetic over the four files minus the known additions (the index block and th
 **The one machine reader.** `tests/unit/docs-contract.test.ts`'s evidence check —
 *every phase the PRD marks ✅ done has a row for every one of its criteria* — sliced phase N out of
 the single file with `between(QA_LOG, '## Phase N ', '## Vault-out — Phase N')`. **The slice logic
-is unchanged**, including `between()`'s throw-on-empty *(C2)*; only its source changed, to a new
-`qaLog(n)` that resolves `docs/qa/phase-NN-*.md` by prefix. Matching the prefix rather than the full
-name keeps the slug the phase document's business and not this test's. Both `## Phase N —` headings
-therefore remain load-bearing inside the moved files, em dash included.
+is unchanged**, including `between()`'s throw-on-empty *(C2)*; only its source changed, to
+`doc('/docs/qa/' + <the phase document's own filename>)`. **The log is addressed by the name of the
+`docs/prd/` document it belongs to**, which is what forces the two directories to line up
+file-for-file — the convention is enforced rather than merely written down, and a drifted slug is
+indistinguishable from a missing log. Both `## Phase N —` headings therefore remain load-bearing
+inside the moved files, em dash included.
 
 **Watched fail before trusted** *(C1)*, redness read positively from `Tests N failed` plus the named
 spec, never from an exit code:
@@ -290,18 +293,26 @@ spec, never from an exit code:
 | # | Mutation | Red | Message |
 |---|---|---|---|
 | S1 | delete the `\| 3.7 \|` row from `docs/qa/phase-03-tilemap.md` | 1 | `phase 3 criterion 3.7 has no QA-LOG row` |
-| S2 | rename `phase-03-tilemap.md` → `phase-03-tiles.md` | **0** | — see below |
-| S3 | remove `docs/qa/phase-03-*.md` entirely | 1 | `no QA log for phase 3 (expected /docs/qa/phase-03-*.md)` |
+| S2 | rename `phase-03-tilemap.md` → `phase-03-tiles.md` | 1 | `document not found: /docs/qa/phase-03-tilemap.md` |
+| S3 | remove `docs/qa/phase-03-*.md` entirely | 1 | `document not found: /docs/qa/phase-03-tilemap.md` |
 
-**S2 was designed wrong, and running it is what showed that.** It was written expecting a red on a
-renamed slug. It stayed green, correctly: `qaLog` matches the `phase-03-` prefix, so the slug is
-free to change with the phase document. The failure mode that actually matters is the log being
-**absent** — a phase marked done whose log was never written — and that is S3, which was added after
-S2 came back green. A mutation that passes is not automatically a gap in the gate; here it was a
-gap in the mutation, and the distinction was only visible because the expected message was written
-down before the run.
+**S2 went green on the first attempt, and that is what produced the design above.** The resolver as
+first written matched the `phase-03-` prefix, on the reasoning that the slug was the phase
+document's business and this test should not restate it. Under that rule S2 is *correctly* green —
+but it also means `docs/qa/` and `docs/prd/` are free to drift apart, with the naming convention
+surviving only as a sentence in this file. Nothing enforced it.
 
-S1 is D9 from the docs-contract entry above, re-run against the new layout. Both mutations were
+The fix deleted code rather than adding a check: the resolver now asks for the phase document's own
+filename, so the drift it tolerated is unrepresentable and no second assertion is needed. S2 and S3
+now fail identically, which is the point — **a log named wrongly and a log not written are the same
+defect**, and the gate should not be able to tell them apart.
+
+The general lesson is about mutation design, not about this resolver. A mutation that comes back
+green is ambiguous: it can mean the gate has a hole, or the mutation targets behaviour the gate
+never promised. Only the *expected message, written down before the run*, separates the two — and
+here it turned a green result into the finding that the convention had no enforcement at all.
+
+S1 is D9 from the docs-contract entry above, re-run against the new layout. All three mutations were
 confirmed reverted by content hash **and** by the probe count returning to its original value
 *(C12)*, and the reconstruction proof was re-run afterwards to establish the tree was back to the
 verified state — a mutation left applied in a green tree is the exact failure C12 names.
