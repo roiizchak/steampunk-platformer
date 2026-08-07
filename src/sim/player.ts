@@ -21,27 +21,51 @@ import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './type
  * Every DURATION is an integer tick count (vault 2.1). Distances are pixels, velocities px/tick,
  * accelerations px/tick^2 — so nothing here is ever multiplied by a frame delta.
  *
- * `gravity: 0.9` with `jumpVelocity: 16` is deliberate and not arbitrary: it puts the discrete
- * apex about 8 px away from the continuous `v^2/2g` answer, which keeps criterion 2.2's check
+ * `gravity` against `jumpVelocity` is deliberate and not arbitrary: it puts the discrete apex a
+ * measurable distance away from the continuous `v^2/2g` answer, which keeps criterion 2.2's check
  * able to detect the substitution vault 2.14 is about. `player-movement.test.ts` asserts that gap
  * still exists, so retuning cannot silently make the apex test vacuous.
+ *
+ * ## Phase 3 re-tune — the character contract
+ *
+ * Phase 2 shipped a 46 px character, which at CAMERA_ZOOM on a 1080 px canvas is 4% of screen
+ * height. Phase 4 cannot generate art against that, and the Codex plan review (P9) called it out
+ * as the number Phase 4 needs published. The box grew to 96 px world (3.0 tiles), so **every
+ * distance-dimensioned knob doubled and every time- or ratio-dimensioned knob did not**:
+ *
+ *   px, px/tick, px/tick^2  ->  x2   runAccel airAccel runMax groundFriction airFriction
+ *                                    gravity maxFallSpeed jumpVelocity
+ *   ticks and pure ratios   ->  x1   coyoteTicks jumpBufferTicks jumpCutDivisor
+ *
+ * Ticks-to-apex is `v / g`, so doubling both leaves **airtime in ticks exactly unchanged** and
+ * **apex exactly doubled**: 150.3 -> 300.6 px, i.e. 3.13 body heights either way. The feel is
+ * preserved in time and scaled in space. The `v^2/2g` gap doubles too — 8.08 -> 16.16 px against
+ * an unchanged +/-2 px tolerance — so the anti-vacuity guard gets stronger, not weaker.
  */
 export const DEFAULT_TUNING: TuningKnobs = {
-  runAccel: 1.1,
-  airAccel: 0.65,
-  runMax: 5.2,
-  groundFriction: 1.6,
-  airFriction: 0.22,
-  gravity: 0.9,
-  maxFallSpeed: 17,
-  jumpVelocity: 16,
+  runAccel: 2.2,
+  airAccel: 1.3,
+  runMax: 10.4,
+  groundFriction: 3.2,
+  airFriction: 0.44,
+  gravity: 1.8,
+  maxFallSpeed: 34,
+  jumpVelocity: 32,
   jumpCutDivisor: 3,
   coyoteTicks: 7,
   jumpBufferTicks: 8,
 };
 
-/** The player's collision box, authored local: `+x` forward, `+y` up from the feet (vault 2.10). */
-export const PLAYER_BOX: LocalBox = { x: -13, y: 0, w: 26, h: 46 };
+/**
+ * The player's collision box, authored local: `+x` forward, `+y` up from the feet (vault 2.10).
+ *
+ * **Local px.** The world box is this multiplied by the world's `scale`, and at the published
+ * `RENDER_SCALE` of 2 that is 44 x 96 px = 1.375 x 3.0 tiles. Nothing outside `toWorld` may
+ * apply that multiply, and nothing anywhere may hardcode the product — the Phase 2 tests that
+ * pinned `26 x 46` as literals were rewritten to derive it, which is why this change was
+ * cheap to make.
+ */
+export const PLAYER_BOX: LocalBox = { x: -11, y: 0, w: 22, h: 48 };
 
 export function createTuning(): TuningKnobs {
   return { ...DEFAULT_TUNING };

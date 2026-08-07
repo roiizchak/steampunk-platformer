@@ -28,12 +28,39 @@ export const MS_PER_TICK = 1000 / TICK_HZ;
  */
 export const MAX_TICKS_PER_FRAME = 5;
 
-/** Tile grid cell size in pixels. Phase 3 publishes this; Phase 4 spends money against it. */
+/**
+ * Tile grid cell size in pixels. **PUBLISHED by Phase 3** — Phase 4 spends money against it.
+ * `tests/unit/tilemap-data.test.ts` pins this against both the shipped `.tmj` and the number
+ * written in ASSET-PIPELINE.md, so the doc and the code cannot drift apart (Codex P8).
+ */
 export const TILE_SIZE = 32;
 
-/** Base render resolution. 60 x 33.75 tiles visible at camera zoom 1. */
+/** Base render resolution. 60 x 33.75 tiles visible at CAMERA_ZOOM. */
 export const GAME_WIDTH = 1920;
 export const GAME_HEIGHT = 1080;
+
+/**
+ * **PUBLISHED by Phase 3.** The single runtime source — `src/render/cameraRig.ts` imports it
+ * rather than declaring its own, because three sources for one number (two modules and a doc)
+ * is three chances to drift while a doc review stays green (Codex P8).
+ *
+ * At zoom 1 the world view is exactly GAME_WIDTH x GAME_HEIGHT = 60 x 33.75 tiles.
+ */
+export const CAMERA_ZOOM = 1;
+
+/**
+ * Art and collision-geometry scale (vault 2.11) — **geometry only, never velocities**.
+ *
+ * **PUBLISHED by Phase 3 as part of the character contract**, which Phase 4 generates against:
+ * PLAYER_BOX is 22 x 48 local, so the world collision box is 44 x 96 px = 1.375 x 3.0 tiles,
+ * which is 8.9% of screen height at CAMERA_ZOOM. That satisfies STYLE.md's locked "96-128px
+ * character on a 32px grid = 3-4 tiles tall"; STYLE.md §9's unmeasured "~20%" prediction is
+ * superseded by this measurement, which is what §9 says Phase 3 is for.
+ *
+ * Integer, so pixel art stays crisp. Raising it is a Phase 4 art decision AND a movement
+ * re-tune: the character's height in pixels is what every distance knob is scaled against.
+ */
+export const RENDER_SCALE = 2;
 
 /**
  * Seed for Phaser's own Phaser.Math.RND. Fixed so e2e runs are reproducible; Phaser defaults

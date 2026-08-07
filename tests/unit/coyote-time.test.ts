@@ -27,14 +27,33 @@
 import { describe, expect, it } from 'vitest';
 import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { advance, createWorld } from '../../src/sim/tick';
-import type { World } from '../../src/sim/types';
+import type { Rect, World } from '../../src/sim/types';
+
+/**
+ * A ledge at the default spawn height with a very long drop under it.
+ *
+ * ADDED IN PHASE 3, and the reason is the whole point of the fixture guard below. This used to
+ * ride on `GREY_BOX_SOLIDS`, whose floor sits 180 px under the ledge — far enough for the sweep
+ * only while gravity was 0.9. Phase 3's character contract doubled gravity, the player started
+ * landing partway through a `2 x coyoteTicks + 2` sweep, and `jumpsAfterLeavingGroundBy` went
+ * red on CORRECT code because it was no longer measuring a coyote window at all.
+ *
+ * The floor is kept (a fall with nothing under it is a different test) but moved out of reach:
+ * the sweep's worst case falls ~245 px, against 3220 px of air. Injecting solids is the idiom
+ * `knob-sweep.test.ts` and `derived.ts` already use, and it removes a silent coupling between
+ * this fixture and a constant that has nothing to do with coyote time.
+ */
+const LEDGE_WITH_DEEP_AIR: Rect[] = [
+  { x: 0, y: 780, w: 700, h: 32 },
+  { x: 0, y: 4000, w: 8000, h: 120 },
+];
 
 /**
  * Walk right off the ledge and stop on the tick the player leaves the ground.
  * Returns the world positioned exactly at window-open, offset 0.
  */
 function walkOffLedge(): World {
-  const world = createWorld({ seed: 1, scale: 1 });
+  const world = createWorld({ seed: 1, scale: 1, solids: LEDGE_WITH_DEEP_AIR });
   const input = createSnapshot();
   advance(world, input, 10);
   expect(world.player.grounded).toBe(true);

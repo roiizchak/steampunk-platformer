@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
+import { RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import { playerRenderDesc } from '../render/playerView';
 import { createSnapshot, latchJumpPress } from '../sim/input';
@@ -19,8 +20,12 @@ import type { InputSnapshot, World } from '../sim/types';
 /** Seed for the sim's RNG. Fixed so an e2e run and a hands-on run are the same run (vault 2.3). */
 const SIM_SEED = 20260806;
 
-/** Grey-box scale. Phase 4 raises this when real art arrives; velocities never scale (vault 2.11). */
-const RENDER_SCALE = 1;
+/**
+ * Re-exported so the e2e specs can derive the drawn player's size instead of hardcoding it.
+ * The value itself lives in `src/game/constants.ts` — one source, so a doc, a scene and a test
+ * cannot each hold their own copy (Codex P8).
+ */
+export { RENDER_SCALE };
 
 export class GameScene extends Phaser.Scene {
   private world!: World;
