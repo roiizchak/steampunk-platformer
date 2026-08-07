@@ -10,8 +10,10 @@ Vite + Phaser 4.2.1 + TypeScript + vitest + Playwright stand up. An empty scene 
 inherits it.
 
 ### 2. Required skills
-`game-setup-and-config` · `scenes` · `scale-and-responsive` · `v4-new-features` ·
-`superpowers:executing-plans` · `e2e-playwright-testing`
+`game-setup-and-config` · `scenes` · `scale-and-responsive` · `v4-new-features` · `find-docs` ·
+`e2e-playwright-testing`
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 
 ### 3. Vault-in
 **1.1** sim imports nothing from Phaser — provable by uninstalling Phaser · **1.2** Vite config loader
@@ -59,13 +61,13 @@ sit in the Boot scene — so this phase's own QA gate could not fail. See
 |---|---|---|---|
 | 1.1 | `npm run build` succeeds; `tsc --noEmit` clean | command output | — |
 | 1.2 | `vitest run` green | command output | — |
-| 1.3 | **Sim suite passes with Phaser uninstalled** | uninstall, run, reinstall | qa-expert |
+| 1.3 | **Sim suite passes with Phaser uninstalled** | uninstall, run, reinstall | `voltagent-qa-sec:qa-expert` |
 | 1.4 | Canvas mounts; `sceneKey === 'Boot'`; zero console errors | `phase-01-boot.spec.ts` | e2e |
-| 1.5 | Missing texture blocks boot; corrupt 200 also blocks | deliberately break an asset, observe | qa-expert |
-| 1.6 | Filtering mode asserted at runtime with a comment explaining the reversed constants | code review | code-reviewer |
+| 1.5 | Missing texture blocks boot; corrupt 200 also blocks | deliberately break an asset, observe | `voltagent-qa-sec:qa-expert` |
+| 1.6 | Filtering mode asserted at runtime with a comment explaining the reversed constants | code review | `voltagent-qa-sec:code-reviewer` |
 | 1.7 | No source file > 400 lines | `wc -l` sweep | — |
-| 1.8 | Diff reviewed | `voltagent-qa-sec:code-reviewer` | code-reviewer |
-| 1.9 | Adversarial pass: *how could this be wrong?* | second review brief *(A7)* | code-reviewer |
+| 1.8 | Diff reviewed | `voltagent-qa-sec:code-reviewer` | `voltagent-qa-sec:code-reviewer` |
+| 1.9 | Adversarial pass: *how could this be wrong?* | second review brief *(A7)* | `voltagent-qa-sec:code-reviewer` |
 | 1.10 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-01-plan.md` | — |
 | 1.11 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-01-impl.md` | codex |
 

@@ -9,8 +9,14 @@ Grey-box movement that feels good: run, jump, coyote time, jump buffering. Plus 
 a dev-only scene with live-tunable movement parameters. **No art.** Primitives only.
 
 ### 2. Required skills
-`physics-arcade` · `input-keyboard-mouse-touch` · `game-object-components` · `time-and-timers` ·
-`superpowers:test-driven-development`
+`input-keyboard-mouse-touch` · `game-object-components` · `time-and-timers` ·
+`e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
+**Not `physics-arcade`.** Arcade Physics is deliberately unused — `Body.velocity` is px/**second**,
+integrated with a delta inside `World.step`, which is the exact multiply vault 2.1 forbids, and it
+lives in `phaser`, which vault 1.1 forbids `src/sim/` importing. There is no `physics` block in
+`gameConfig`. See CLAUDE.md § Engine gotchas.
 
 ### 3. Vault-in
 **2.1** integer ticks only · **2.2** numbered, authoritative `tick()` step order · **2.3** seeded
@@ -44,14 +50,14 @@ these unit tests would still pass if the behaviour it names were deleted?**
 | # | Criterion | Method | Owner |
 |---|---|---|---|
 | 2.1 | Hold Right → x increases monotonically | e2e via `__game` | e2e |
-| 2.2 | Jump apex within ±2px of the **discrete-integrator** prediction | unit | qa-expert |
-| 2.3 | Coyote time fires within its window and **not** outside it — fixture spans ≥ 2× the window | unit *(2.7)* | qa-expert |
-| 2.4 | Jump buffer: press before landing still jumps; press too early does not | unit | qa-expert |
-| 2.5 | Deleting any latch condition turns a test **red** — verified by doing it | mutation *(C1)* | qa-expert |
-| 2.6 | Every Playground knob moves an observable output | sweep *(A6)* | qa-expert |
+| 2.2 | Jump apex within ±2px of the **discrete-integrator** prediction | unit | `voltagent-qa-sec:qa-expert` |
+| 2.3 | Coyote time fires within its window and **not** outside it — fixture spans ≥ 2× the window | unit *(2.7)* | `voltagent-qa-sec:qa-expert` |
+| 2.4 | Jump buffer: press before landing still jumps; press too early does not | unit | `voltagent-qa-sec:qa-expert` |
+| 2.5 | Deleting any latch condition turns a test **red** — verified by doing it | mutation *(C1)* | `voltagent-qa-sec:qa-expert` |
+| 2.6 | Every Playground knob moves an observable output | sweep *(A6)* | `voltagent-qa-sec:qa-expert` |
 | 2.7 | Sim suite still runs with Phaser uninstalled | command | — |
 | 2.8 | Feel check in browser: weighty, responsive, no input drops | `playwright-cli` + hands-on *(C4)* | play |
-| 2.9 | No file > 400 lines; diff reviewed; adversarial pass | code-reviewer ×2 | code-reviewer |
+| 2.9 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 2.10 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-02-plan.md` | — |
 | 2.11 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-02-impl.md` | codex |
 

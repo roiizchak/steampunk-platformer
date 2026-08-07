@@ -10,7 +10,10 @@ health bar), and the collect→scoreboard tween. HUD lives in a **parallel UISce
 
 ### 2. Required skills
 `text-and-bitmaptext` · `graphics-and-shapes` · `scenes` · `data-manager` · `ui-ux-pro-max` ·
-`fal-prompting` (chroma-keyed HUD sheet)
+`impeccable` · `fal-prompting` (chroma-keyed HUD sheet) · `find-docs` ·
+`e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 
 ### 3. Vault-in
 **6.1** zero scroll factor pins against pan but **not** against zoom — needs a second non-zooming
@@ -42,15 +45,15 @@ that is true rather than on what is drawn?** *(6.4.)*
 | # | Criterion | Method | Owner |
 |---|---|---|---|
 | 6.1 | Pickup increments the counter; counter uses **tabular figures** so it does not jitter | e2e | e2e |
-| 6.2 | HUD pinned under camera pan **and** under zoom | e2e *(6.1)* | qa-expert |
-| 6.3 | Second camera built from live game size; resize does not crop the HUD | resize test *(6.2)* | qa-expert |
-| 6.4 | Health bar never draws full while health < max | unit *(6.4)* | qa-expert |
-| 6.5 | HUD legible at minimum supported resolution | screenshot | play |
-| 6.6 | Text contrast ≥ 4.5:1 — **WCAG 2.2 SC 1.4.3 (Contrast Minimum), Level AA**, normal-size text | measured | ui-ux-tester |
+| 6.2 | HUD pinned under camera pan **and** under zoom | e2e *(6.1)* | `voltagent-qa-sec:qa-expert` |
+| 6.3 | Second camera built from live game size; resize does not crop the HUD | resize test *(6.2)* | `voltagent-qa-sec:qa-expert` |
+| 6.4 | Health bar never draws full while health < max | unit *(6.4)* | `voltagent-qa-sec:qa-expert` |
+| 6.5 | HUD legible at minimum supported resolution | screenshot via `playwright-cli` | play |
+| 6.6 | Text contrast ≥ 4.5:1 — **WCAG 2.2 SC 1.4.3 (Contrast Minimum), Level AA**, normal-size text | measured, not estimated | `voltagent-qa-sec:accessibility-tester` |
 | 6.6b | HUD sheet has a **catalog entry in `index.json`** under the Phase 4 non-character schema | audit | — |
-| 6.7 | Canvas not double-centred; no stray margin offset | inspect *(6.6)* | qa-expert |
-| 6.8 | HUD sheet chroma-keyed cleanly; fill mask region correct | inspect | play |
-| 6.9 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | code-reviewer ×2 + perf | — |
+| 6.7 | Canvas not double-centred; no stray margin offset | inspect *(6.6)* | `voltagent-qa-sec:qa-expert` |
+| 6.8 | HUD sheet chroma-keyed cleanly; fill mask region correct | inspect + `playwright-cli` screenshot | play |
+| 6.9 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` | — |
 | 6.10 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-06-plan.md` | — |
 | 6.11 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-06-impl.md` | codex |
 

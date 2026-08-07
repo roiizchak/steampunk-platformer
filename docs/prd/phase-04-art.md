@@ -38,7 +38,24 @@ and Bria. Re-run `genmedia schema` on each; the documented snapshot is dated 202
 
 ### 2. Required skills
 `loading-assets` · `animations` · `sprites-and-images` · `render-textures` · `fal-gamedev` ·
-`fal-prompting` · `model-routing` · `genmedia-workflow` · `character-design`
+`fal-prompting` · `model-routing` · `genmedia-workflow` · `character-design` · `pixel-art-sprites` ·
+`game-asset-generation` · `spritecook-generate-sprites` · `find-docs` · `playwright-cli`
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
+
+⚠️ **The three sprite skills are subordinate to this project's locked art direction.** Where
+`pixel-art-sprites`, `game-asset-generation` or `spritecook-generate-sprites` suggests a style,
+pipeline, tool or endpoint that conflicts with [STYLE.md](../STYLE.md) §2–§5 or
+[FAL-MODELS.md](../FAL-MODELS.md), **those documents win and it is a STOP-and-ask** — not a prompt
+tweak. They are here for sheet layout, frame extraction and bounds technique, not for deciding what
+the game looks like or which endpoint spends money.
+
+🔒 **This is enforced, not just asserted.** `tests/unit/style-lock.test.ts` hashes the §2 parameter
+table, the §4 prompt template and the §5 separation rules, and additionally refuses a swapped
+endpoint, a percentage where a countable ratio belongs *(4.4)*, `enable_web_search` on, `4K`
+resolution, and any endpoint with no FAL-MODELS.md entry. Ten mutations were run against the real
+document and each went red — see QA-LOG.md. Gate-0 re-probe territory (§2b, `[SETTING]`,
+`[SCALE_RATIO]`, §5's measurement table) is deliberately outside the lock.
 
 ### 3. Vault-in
 **4.1** the reference image is the lever, not the wording · **4.2** name what to discard, element by
@@ -94,28 +111,29 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 4.0 | **Gate 0 re-probe run on `nano-banana-pro`**: dimensions, alpha, single health bar, scale ratio, **seed determinism** | STYLE.md §7 gate 0 | qa-expert |
+| 4.0 | **Gate 0 re-probe run on `nano-banana-pro`**: dimensions, alpha, single health bar, scale ratio, **seed determinism** | STYLE.md §7 gate 0 | `voltagent-qa-sec:qa-expert` |
+| 4.0a | **The style lock is green, and every locked-section hash change is an approved, recorded decision** — not a hash edited to clear a red suite | `tests/unit/style-lock.test.ts` | `voltagent-qa-sec:qa-expert` |
 | 4.0b | **CHARACTER ANCHOR chosen and written into STYLE.md as an immutable block** before any sheet is generated | STYLE.md §8 | — |
 | 4.0c | **Asset manifest published**: every character and enemy slug, and every animation each one needs, agreed before spend | doc | — |
 | 4.0d | Phase 3's **published camera zoom and viewport** read from ASSET-PIPELINE.md — "true sprite size" is meaningless without them | doc | — |
-| 4.1 | **4a hero asset readable at true sprite size** before batch spend | downscale + look *(4.24)* | play |
+| 4.1 | **4a hero asset readable at true sprite size** before batch spend | downscale + look, `playwright-cli` screenshot at Phase 3's published zoom *(4.24)* | play |
 | 4.2 | Batch estimate presented and approved before 4b | STOP | — |
-| 4.2b | **One 4 s Seedance 2 probe run and reconciled against the actual invoice line** before any animation batch | invoice *(4.9)* | qa-expert |
-| 4.2c | **Real clip fps and frame count read by `ffprobe`**, not assumed — Seedance 2 publishes neither | measured *(4.11)* | qa-expert |
-| 4.3 | Every asset's dimensions read from the file, recorded | script | qa-expert |
-| 4.4 | Alpha channel read directly; chroma keying applied where absent | script *(4.12)* | qa-expert |
-| 4.5 | Chroma gate self-tests on fixtures **before** judging real art | fixtures *(4.21)* | qa-expert |
-| 4.6 | Keep-largest-component **not** applied to jump/air/attack states | code review *(4.13)* | code-reviewer |
-| 4.7 | Every animation's fps derived as `renderFrames × TICK_HZ / simTicks` from **Phase 2's** movement timings | unit *(4.22)* | qa-expert |
+| 4.2b | **One 4 s Seedance 2 probe run and reconciled against the actual invoice line** before any animation batch | invoice *(4.9)* | `voltagent-qa-sec:qa-expert` |
+| 4.2c | **Real clip fps and frame count read by `ffprobe`**, not assumed — Seedance 2 publishes neither | measured *(4.11)* | `voltagent-qa-sec:qa-expert` |
+| 4.3 | Every asset's dimensions read from the file, recorded | script | `voltagent-qa-sec:qa-expert` |
+| 4.4 | Alpha channel read directly; chroma keying applied where absent | script *(4.12)* | `voltagent-qa-sec:qa-expert` |
+| 4.5 | Chroma gate self-tests on fixtures **before** judging real art | fixtures *(4.21)* | `voltagent-qa-sec:qa-expert` |
+| 4.6 | Keep-largest-component **not** applied to jump/air/attack states | code review *(4.13)* | `voltagent-qa-sec:code-reviewer` |
+| 4.7 | Every animation's fps derived as `renderFrames × TICK_HZ / simTicks` from **Phase 2's** movement timings | unit *(4.22)* | `voltagent-qa-sec:qa-expert` |
 | 4.8 | ~~Contact frame lands inside the active window~~ — **moved to Phase 5** with the attack sheets | — | — |
-| 4.9 | Loop flag verified per clip; held states meet a motion floor | measured *(4.23)* | qa-expert |
-| 4.10 | Box-vs-art audit: frame-diff method, INDETERMINATE allowed, no guesses | *(4.18)* | qa-expert |
-| 4.11 | Rebuild from a clean clone produces **byte-identical** PNGs | *(4.15)* | qa-expert |
-| 4.12 | A missing declared input **fails the build**, does not substitute | deliberately remove one *(4.16)* | qa-expert |
-| 4.13 | Every asset has catalog entry + bounds + anchor + active frames + saved config | `index.json` audit | qa-expert |
-| 4.14 | Anatomy check by looking — metrics cannot see a third leg | eyeball *(4.20)* | play |
-| 4.15 | Gym save path typechecked and inside the test include list | *(A4)* | code-reviewer |
-| 4.16 | No file > 400 lines; diff reviewed; adversarial pass | code-reviewer ×2 | code-reviewer |
+| 4.9 | Loop flag verified per clip; held states meet a motion floor | measured *(4.23)* | `voltagent-qa-sec:qa-expert` |
+| 4.10 | Box-vs-art audit: frame-diff method, INDETERMINATE allowed, no guesses | *(4.18)* | `voltagent-qa-sec:qa-expert` |
+| 4.11 | Rebuild from a clean clone produces **byte-identical** PNGs | *(4.15)* | `voltagent-qa-sec:qa-expert` |
+| 4.12 | A missing declared input **fails the build**, does not substitute | deliberately remove one *(4.16)* | `voltagent-qa-sec:qa-expert` |
+| 4.13 | Every asset has catalog entry + bounds + anchor + active frames + saved config | `index.json` audit | `voltagent-qa-sec:qa-expert` |
+| 4.14 | Anatomy check by looking — metrics cannot see a third leg | eyeball; `playwright-cli` screenshot of the Gym *(4.20)* | play |
+| 4.15 | Gym save path typechecked and inside the test include list | *(A4)* | `voltagent-qa-sec:code-reviewer` |
+| 4.16 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 4.17 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-04-plan.md` | — |
 | 4.18 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-04-impl.md` | codex |
 

@@ -38,9 +38,11 @@ export class GameScene extends Phaser.Scene {
   private facingRect!: Phaser.GameObjects.Rectangle;
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
-  private heldLeft: Phaser.Input.Keyboard.Key[] = [];
-  private heldRight: Phaser.Input.Keyboard.Key[] = [];
-  private heldJump: Phaser.Input.Keyboard.Key[] = [];
+  // `protected` so ElementEditorScene can hand the arrow keys over to strip nudging. Left private,
+  // an arrow press there would nudge the strip AND walk the player in the same frame.
+  protected heldLeft: Phaser.Input.Keyboard.Key[] = [];
+  protected heldRight: Phaser.Input.Keyboard.Key[] = [];
+  protected heldJump: Phaser.Input.Keyboard.Key[] = [];
 
   constructor(key = 'Game') {
     super(key);
@@ -106,7 +108,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   protected helpText(): string {
-    return 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  P playground';
+    return 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  P playground  ·  O element editor';
   }
 
   /**
@@ -155,7 +157,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P } = Phaser.Input.Keyboard.KeyCodes;
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O } = Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
     // second; with repeats enabled every one would latch a fresh jump edge, and holding the
@@ -180,11 +182,16 @@ export class GameScene extends Phaser.Scene {
     // on a scene that is not registered there — a silent no-op at best. Codex review 2, finding I2.
     if (import.meta.env.DEV) {
       addKey(P).on('down', () => this.togglePlayground());
+      addKey(O).on('down', () => this.toggleElementEditor());
     }
   }
 
   protected togglePlayground(): void {
     this.scene.start('Playground');
+  }
+
+  protected toggleElementEditor(): void {
+    this.scene.start('ElementEditor');
   }
 
   /**

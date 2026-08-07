@@ -6,6 +6,18 @@ This is the recipe. **Every later asset reuses it.** Changing anything in §2–
 needs approval, not a prompt tweak. Arrived at over 21 generations / $1.68 — see
 [GENERATION-LOG.md](GENERATION-LOG.md).
 
+🔒 **That last sentence is now a gate, not a request.** `tests/unit/style-lock.test.ts` pins the §2
+parameter table, the §4 prompt template and the §5 separation rules by content hash, and runs on every
+`npm test`. Edit one and the suite goes red with the new hash and instructions.
+
+**To change a locked section:** get approval, make the edit, run the suite, paste the printed hash into
+`LOCKS`, and record the reason in [QA-LOG.md](QA-LOG.md). **Never update a hash to make a red suite
+green** — the failure *is* the approval checkpoint.
+
+Deliberately **not** locked, so a gate-0 re-probe needs no ceremony: §2b, the `[SETTING]` values, the
+`[SCALE_RATIO]` calibration table and §5's measurement table. All four were measured on the retired
+`nano-banana-2` and are *supposed* to change. Verbatim text is locked; measurements are not.
+
 ---
 
 ## 1. Direction in one line
