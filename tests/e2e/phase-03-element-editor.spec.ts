@@ -32,7 +32,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { parseLevel, type LevelData } from '../../src/game/tilemap';
+import { describeLevelProblem, parseLevel, type LevelData } from '../../src/game/tilemap';
 import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
 
 const NUDGE_PRESSES = 7;
@@ -142,6 +142,54 @@ test.describe('Phase 3 — Element Editor (criterion 3.7)', () => {
     expect(s.x).toBe(was.x);
     expect(s.w).toBe(was.w);
     expect(s.h).toBe(was.h);
+  });
+
+  /**
+   * THE EDITOR'S OWN PRIMARY WORKFLOW, which every other test in this file stepped around.
+   *
+   * Each of them presses BracketRight twice first, landing on the wall — a strip that cannot break
+   * the spawn rule wherever it goes. Strip 0, the one the player actually spawns on, was selected
+   * by nothing. And it is the one you edit when the character floats above the ground, which is
+   * the entire motivating defect.
+   *
+   * When the "spawn stands on a solid" rule was written with exact equality, nudging strip 0 by a
+   * single pixel produced a file the boot gate REFUSED, so following the editor's own save note
+   * gave you a black screen. Found by the code-reviewer gate owner (brief 2).
+   */
+  test('nudging the strip the player spawns on still produces a loadable level', async ({ page }) => {
+    await bootToGame(page);
+    const before = await shippedLevel(page);
+    await enterEditor(page);
+    await captureDownloads(page);
+
+    // No BracketRight: strip 0 is selected on entry, and it is the one under the spawn point.
+    const spawnStrip = before.solids.findIndex(
+      (s) => s.y === before.spawn.y && before.spawn.x > s.x && before.spawn.x < s.x + s.w,
+    );
+    expect(spawnStrip, 'the spawn strip should be the one selected on entry').toBe(0);
+
+    for (let i = 0; i < NUDGE_PRESSES; i += 1) {
+      await page.keyboard.press('ArrowUp');
+    }
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: BOOT_TIMEOUT }),
+      page.keyboard.press('s'),
+    ]);
+    expect(download.suggestedFilename()).toBe('level-01.tmj');
+
+    const saved = await page.evaluate(() => {
+      const blob = (window as unknown as { __savedBlob: Blob | null }).__savedBlob;
+      return blob ? blob.text() : null;
+    });
+
+    // The real boot-gate validator, not just the parser: this is the question "would the game
+    // load the file the editor just told me to install".
+    expect(describeLevelProblem(JSON.parse(saved!))).toBeNull();
+
+    const after = parseLevel('level-01', JSON.parse(saved!));
+    expect(after.solids[0]!.y).toBe(before.solids[0]!.y - NUDGE_PRESSES);
+    expect(after.spawn).toEqual(before.spawn);
   });
 
   test('the nudge takes effect in the live simulation, not only in the saved file', async ({

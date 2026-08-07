@@ -282,9 +282,22 @@ export function describeLevelProblem(raw: unknown): string | null {
   // player that spawns a few pixels up and falls onto the ground is completely fine — the sim's
   // own grey-box spawn is on the surface only so that FIXTURES need not count drop ticks, which is
   // a test concern, not a level-data one.
+  // The rule, stated as the thing it actually protects: **the player must not fall out of the
+  // world.** A solid counts if it spans the spawn horizontally and its BOTTOM is at or below the
+  // spawn — i.e. the solid is not entirely above the player.
+  //
+  // Getting here took two wrong versions, and the second was caught by the regression test written
+  // for the first:
+  //   `solid.y === spawn.y`  broke nudging the spawn strip AT ALL.
+  //   `solid.y >= spawn.y`   broke nudging it UP, which is the direction you use when collision
+  //                          sits below the art — the motivating defect, again.
+  // Both were really asking "is the spawn resting exactly on a surface", which is a fixture
+  // concern borrowed from the sim's grey-box spawn, not a property a level file has to have. A
+  // player that spawns a few pixels above the ground falls onto it; one that spawns a few pixels
+  // inside it is pushed out on the first tick. Neither is a broken level. A pit is.
   const groundBelow = solids.some(
     (solid) =>
-      (solid.y as number) >= (spawn.y as number) &&
+      (solid.y as number) + (solid.height as number) >= (spawn.y as number) &&
       (spawn.x as number) > (solid.x as number) &&
       (spawn.x as number) < (solid.x as number) + (solid.width as number),
   );
