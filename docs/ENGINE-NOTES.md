@@ -69,3 +69,52 @@ Fuller detail and the evidence for each is in [QA-LOG.md](QA-LOG.md), under the 
 - **`TimerEvent` / `Clock` are wall-clock and honour `timeScale`**, and `addEvent` is deferred to the
   next frame. Keep them away from anything the simulation depends on — the sim's only clock is
   [`src/game/frameClock.ts`](../src/game/frameClock.ts).
+
+## Tilemaps *(Phase 3)*
+
+The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all of this is new.
+
+- **`TilemapGPULayer` is unusable in this project, and it is not a close call.** It is WebGL-only
+  and `TilemapGPULayerRender.js:7-20` installs a **no-op Canvas renderer** — where the ordinary
+  `TilemapLayer` installs both. The game runs `Phaser.AUTO` with a live Canvas fallback, so a GPU
+  layer would draw *nothing at all* on that fallback while every collision test stayed green. Same
+  shape as the tint restriction above. Use `map.createLayer(...)` and leave the `gpu` argument off.
+- **`createLayer` is typed `TilemapLayer | TilemapGPULayer` regardless of the `gpu` argument.**
+  Narrow it with `instanceof Phaser.Tilemaps.TilemapLayer` rather than casting, so a later edit
+  that passes `gpu: true` fails loudly instead of silently rendering nothing.
+- **`this.cache.tilemap.get(key)` returns `{ format, data }`, and `data` is the RAW Tiled JSON** —
+  `TilemapJSONFile.js:52-57`. That is what makes it possible for the unit suite and the running
+  game to share one parser: the object in the cache is the object `JSON.parse` would have produced.
+- **`addTilesetImage(tilesetName, textureKey)` returns `null` with only a console warning** when
+  the tileset name does not match the `.tmj`. Silently drawing nothing is the default; throw.
+- **`createLayer(layerID, ...)` likewise returns `null`** for an unknown layer name, and a layer can
+  only be created **once** per map.
+- **The `.tmj`'s `tilesets[].image` path is never fetched at runtime.** Phaser binds the texture by
+  the key handed to `addTilesetImage`. The path exists for Tiled's benefit, so it is relative to the
+  `.tmj`, not to the served root — those are different directories and only one of them is real.
+- **Levels must live under `public/`.** Vite copies `public/` verbatim into `dist/` and copies
+  nothing else. A root-level `levels/` is served in dev and absent from the build, which makes a
+  "shipped data" test green against a file the player never receives *(vault 3.1)*. `npm run build`
+  now runs `tools/gen/verify-dist.mjs`, which asserts each `.tmj` reached `dist/` byte for byte.
+- **Object layers are a better collision source than the tile grid when anything will edit them.**
+  A tile grid cannot express a sub-tile offset, so it cannot round-trip one; rectangles can. Read
+  solidity from a per-object **property**, never a layer or object name *(vault 3.3)* — and note
+  that a rename test cannot catch a name fallback in the *missing-property* path, because every
+  authored object has properties. Test the absent case explicitly.
+- **Tiled object `y` is the TOP edge** for rectangles on an orthogonal map, which matches a
+  top-left `Rect` directly. Point objects carry `width`/`height` of `0`, so any "solids must be
+  positive-sized" rule will also reject a point that was mistakenly marked solid — useful, but it
+  means a rejection reason mentioning "solid" is not proof the *solid property* rule fired.
+
+## Cameras *(Phase 3)*
+
+- **`setBounds` clamps scrolling and nothing else.** It does not stop objects leaving the world and
+  it cannot help when the view is larger than the map — at that point the camera necessarily shows
+  outside it. Validate that the level exceeds the viewport at load; it is invisible otherwise.
+- **`camera.worldView` is the honest oracle** for "what is on screen": a `Rectangle` recomputed
+  each frame from scroll, zoom and bounds. Assert against it rather than against `scrollX`, which
+  says what was requested rather than what was shown.
+- **`startFollow(target, roundPixels, lerpX, lerpY)` cannot be asserted by "the camera moved".**
+  Near a map edge the clamp legitimately holds the player far off centre, so a centring assertion
+  fails on a correct camera. Assert instead that the target stays inside `worldView` inset by a
+  margin — that fails for a camera which stopped following without failing at the boundaries.
