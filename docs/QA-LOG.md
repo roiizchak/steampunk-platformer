@@ -996,7 +996,7 @@ left applied, but a *fix* removed by the restore.
 | 3.5 | World width derived from the shipped `.tmj`, measured not assumed | **PASS** — `voltagent-qa-sec:qa-expert` ×2 briefs; 5760 × 1536 measured off the file, and a second synthetic map proves derivation rather than a constant |
 | 3.6 | Grid cell size published, replacing the PROPOSED marker | **PASS** — ASSET-PIPELINE §0a, pinned against the runtime constants by a test |
 | 3.6b | Camera zoom and viewport published | **PASS** — zoom 1, 1920 × 1080 = 60 × 33.75 tiles, plus extent, travel and the character contract |
-| 3.7 | Element Editor shows and edits a collision strip; the edit persists | **PASS mechanically; awaiting the user's hands-on pass** — see below |
+| 3.7 | Element Editor shows and edits a collision strip; the edit persists | **PASS** — mechanically, and by the user's hands-on pass; the saved file is `level-01.tmj` at the repo root — see below |
 | 3.8 | No file > 400 lines; diff reviewed; adversarial pass | **PASS, after a violation was found and fixed** — `voltagent-qa-sec:code-reviewer` ×2 briefs |
 | 3.9 | Codex plan review ran; every finding applied or recorded | **PASS** — 10 applied, 1 rejected with a reason |
 | 3.10 | Codex implementation review ran; every finding applied or recorded | **PASS** — 6 applied, 3 recorded with reasons; [phase-03-impl.md](reviews/phase-03-impl.md) |
@@ -1122,6 +1122,28 @@ camera sat correctly clamped at its bounds. There is no world boundary and no ki
 camera is right; the world simply ends and the player keeps going.
 
 This is **not** a Phase 3 criterion, and it is recorded rather than fixed — see below.
+
+**The user's hands-on pass discharges 3.7.** They ran the editor by hand and saved; the browser
+download landed at the repo root as `level-01.tmj`, which is kept as the artefact. Verified against
+the authored `public/assets/levels/level-01.tmj`:
+
+- **object count unchanged** (7 → 7), **tile layers byte-identical**, **every non-layer top-level
+  field identical** — the editor rewrites object geometry and nothing else, which is the round-trip
+  claim P7 asked for
+- **exactly two strips moved**, and both were moved *and* resized, so the `Shift`+arrow path was
+  exercised by hand and not only by the spec: id 2 `x` 4096 → 3908, `y` 1280 → 1275, `height`
+  256 → 308; id 5 `y` 896 → 792, `width` 256 → 270
+- the saved bytes pass **`describeLevelProblem` → null** and **`parseLevel`** — the same validator
+  the boot gate runs, so this file would boot
+
+The sub-tile deltas (`y` 1275, a 5 px nudge; `width` 270, a 14 px resize) are the point: they are
+not expressible in a tile grid, which is why collision is an object layer *(§ Collision is an object
+layer)*. A hand-made 5 px nudge surviving `JSON.stringify` → download → `parseLevel` is the whole
+criterion.
+
+**The shipped level is deliberately left as authored.** The root file is evidence of the editor
+working, not a level-design change; re-authoring `level-01` is Phase 8's job, and swapping it in
+here would move the strips the Phase 3 e2e oracles derive their expectations from.
 
 ### Deliberately not fixed *(vault C11)*
 
