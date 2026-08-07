@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Steampunk Platformer
 
 A short browser platformer — 3–5 levels, Victorian industrial steampunk, all art generated through
@@ -5,149 +9,98 @@ fal.ai — built as a learning exercise with a hard QA gate at every phase.
 
 **Phaser 4.2.1 · TypeScript 7 · Vite 8 · vitest · @playwright/test · Tiled · fal.ai via `genmedia`**
 
-## Read these before doing anything
+Ten phases, one per session. **Phases 1–3 are done; Phase 4 (fal art production + Character Gym)
+is next — and it is the first phase that spends money.** Its contract is published in
+[ASSET-PIPELINE.md § 0a](docs/ASSET-PIPELINE.md) and pinned against the runtime constants by
+`tests/unit/tilemap-data.test.ts`: 32 px grid, camera zoom 1, 1920 × 1080 view, 44 × 96 px character
+at `RENDER_SCALE` 2. **Animation timings are NOT published** — Phase 4 gate 0 must settle
+per-animation `simTicks` and whether a `walk` state exists before generating anything.
+The table of phases, their dependencies and their status is in
+[PRD.md § The phases](docs/PRD.md#the-phases) — it is the authority, not this line. Each phase is
+built on a `phase-NN-name` branch and merged to `main` after approval.
 
-| Document | What it is |
-|---|---|
-| [docs/PRD.md](docs/PRD.md) | **The spine.** Global Constraints, file structure, the `window.__game` surface, the Codex review protocol. Read once per session. |
-| `docs/prd/phase-NN-*.md` | One document per phase. **Read only the phase you are executing.** |
-| [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) | 133 vault notes distilled into hard requirements. Items are cited by ID (1.3, A7, C11…) throughout the codebase and the docs. |
-| [docs/QA-LOG.md](docs/QA-LOG.md) | Every decision, measurement and deliberate non-fix, per phase. **Check here before re-measuring anything.** |
-| [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. What an earlier phase was warned about. |
-| [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. |
-| [docs/FAL-MODELS.md](docs/FAL-MODELS.md) | Every fal endpoint: schema, price, gotchas. Re-read **and re-run `genmedia schema`** before any phase that generates. |
+Windows. The default shell is PowerShell; the Bash tool is also available and takes POSIX syntax.
 
-## Non-negotiables
-
-- **Dependencies are frozen** at runtime `phaser@4.2.1` (exact, no caret); dev `vite`, `typescript`,
-  `vitest`, `@playwright/test`. **Anything else: STOP and ask.** Phase 1 needed `@types/node` twice
-  and solved it without adding it — prefer that.
-- **`src/sim/` imports nothing from Phaser**, and reaches no clock, no `Math.random`, no DOM.
-  Mechanical proof: `npm run test:sim-isolated`.
-- **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of
-  seconds, never a `deltaTime` multiply inside the sim.
-- **No source file over 400 lines** without a written justification in `QA-LOG.md`. Prefer splitting.
-- **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
-- **A phase with a failing or unrun criterion is reported failing.** Never as done.
-- **STOP and ask** before: a new dependency, deleting a file, a fal batch over 5 generations, or
-  contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md.
-
-## Phase workflow
-
-Run each phase with `superpowers:executing-plans`, one phase per session, in this order:
-
-> vault-in → invoke the phase's named skills → **Codex plan review** → build → QA gate (incl. **Codex
-> implementation review**) → vault-out → **STOP for approval**
-
-Both Codex reviews are mandatory; neither may be skipped. Every finding is **applied** or **recorded
-with a one-line reason** — silently ignoring one is not permitted *(C11)*.
-
-⚠️ **Codex's sandboxed shell cannot spawn processes on this machine** (`CreateProcessAsUserW failed:
-5`). This is permanent — retrying does not help. Every review prompt must instruct it to use the
-`node_repl` MCP tool with `fs.readFileSync` for all file access. That restores file *reading*, not
-command *execution*, so review findings are file-evidence only and **must be re-verified locally**.
-Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-review-protocol).
-
-## Commands
+## 1. Commands
 
 ```bash
-npm run dev                # Vite dev server on :5173
-npm run build              # tsc --noEmit && vite build
-npm test                   # vitest (unit; sim only)
-npm run test:e2e           # Playwright
-npm run test:sim-isolated  # uninstall Phaser, run the sim suite, reinstall — QA criterion 1.3
+npm run dev                       # Vite dev server on :5173
+npm run build                     # tsc --noEmit && vite build
+npm run typecheck                 # tsc --noEmit alone — fastest full check
+npm test                          # vitest run (unit; sim + docs/style locks)
+npm run test:e2e                  # Playwright
+npm run test:sim-isolated         # uninstall Phaser, run the unit suite, reinstall — QA criterion 1.3
+
+npx vitest run tests/unit/coyote-time.test.ts        # one unit file
+npx vitest run -t "buffered jump"                    # one test by name
+npx playwright test tests/e2e/phase-02-movement.spec.ts
+npx playwright test -g "jump apex"                   # one e2e test by name
+npx playwright test --headed --workers=1             # watch it, no parallel interference
 ```
 
-## Engine gotchas already paid for — do not re-discover these
+`npm run test:sim-isolated` mutates `node_modules` — if it is interrupted, Phaser is left
+uninstalled. Recover with `npm i phaser@4.2.1 --save-exact`.
 
-Measured against Phaser 4.2.1. Detail and citations in [docs/QA-LOG.md](docs/QA-LOG.md), Phase 1 and
-Phase 2.
+## 2. Architecture
 
-**From Phase 2:**
+Three layers, and the boundaries between them are the whole design. Read them in this order.
 
-- **`Rectangle` has no `setFlipX`.** The Flip component is mixed into Sprite and Image but **not**
-  into Shape. The typechecker catches it; no test would.
-- **Tint is WebGL-only.** The game runs `Phaser.AUTO` with a live Canvas fallback, so a tinted
-  texture is not usable as a grey-box primitive — it renders plain white. Use a filled `Rectangle`.
-  Also, `setTintFill` no longer exists in v4: `setTint(c).setTintMode(Phaser.TintModes.FILL)`.
-- **Game Objects default to origin `0.5, 0.5`.** A feet-anchored convention must set
-  `setOrigin(0.5, 1)` explicitly, or the sprite floats half its height above the ground.
-- **`JustDown()` is a consuming read** that resets when checked, so two readers in one frame lose the
-  edge; polling `isDown` misses a press-and-release inside one frame. Latch edges from the keyboard
-  **event**, and register keys with **`emitOnRepeat: false`** — the OS repeats a held key ~30×/s and
-  every repeat would otherwise latch a fresh press.
-- **Phaser dedupes keyboard events** on `(code, timeStamp, type)`. Synthetic `KeyboardEvent`s built
-  in one tight loop share a `timeStamp` and get collapsed; and Chromium ignores `keyCode` in the
-  constructor, so attach it with `Object.defineProperty` or the event reaches nothing.
-- **`TimerEvent` / `Clock` are wall-clock and honour `timeScale`**, and `addEvent` is deferred to the
-  next frame. Keep them away from anything the simulation depends on.
-- **Arcade Physics is not used and must not be.** `Body.velocity` is px/**second**, integrated with a
-  delta inside `World.step` — the exact multiply vault 2.1 forbids — and it lives in `phaser`, which
-  vault 1.1 forbids `src/sim/` importing. There is deliberately no `physics` block in `gameConfig`.
+**`src/sim/` — the simulation. Pure, deterministic, engine-free.** Imports nothing from Phaser,
+touches no clock, no `Math.random`, no DOM. Every duration is an integer count of 60 Hz ticks; every
+distance is pixels. It is a pure function of `(state, input)` → `state`, which is what makes it unit
+testable in milliseconds and what makes replay and determinism possible later.
+`tests/unit/sim-boundary.test.ts` and `npm run test:sim-isolated` enforce this mechanically.
 
-- **Phaser's caches are game-global and survive a scene restart**, and `LoaderPlugin.addFile`
-  silently skips any already-cached key. Any load-and-verify gate becomes a **no-op on the second
-  entry to the scene** unless you drop the key first. Applies to textures *and* the JSON catalog.
-  This is the most dangerous one: it turns a working gate decorative without touching the gate.
-- **An undecodable image is dropped silently.** `File.onProcessError()` emits **no event** (there is
-  no `FILE_PROCESS_ERROR`) and does not move `totalFailed`. Verify the *outcome*, never a completion
-  signal.
-- **`pixelArt: true` does not pin filtering on the Canvas renderer.** `TextureSource.scaleMode` is
-  hardcoded to `DEFAULT` (=LINEAR=0) and never derived from config; Canvas draws with
-  `imageSmoothingEnabled = !scaleMode`. Call `setFilter(NEAREST)` explicitly.
-  Also: two unrelated things are named "scale mode" — `Phaser.ScaleModes` (texture filtering) and
-  `Phaser.Scale.ScaleModes` (canvas fitting).
-- **Default `scale.mode` is `NONE`**, not FIT. Set it explicitly.
-- **The ScaleManager owns `canvas.style`.** Never write project CSS targeting the canvas element.
-- **`Phaser.AUTO`, never `Phaser.WEBGL`** — the latter has no fallback and fails silently.
-- **Reset scene state in `init()`, not the constructor.** Scene starts are queued.
-- **`loader.maxRetries` defaults to 2**, so a failing file is attempted three times. Size test
-  timeouts for that, or a correct refusal reads as a hang.
-- **Vite's dev server never returns 404** — a missing file gets 200 + SPA-fallback HTML. To test a
-  real 404, force it with Playwright route interception.
+**`src/game/frameClock.ts` — the seam.** Milliseconds exist here and stop here. It accumulates real
+elapsed time from a variable-rate `requestAnimationFrame` and drains whole ticks out of it, capped at
+`MAX_TICKS_PER_FRAME` so a stalled tab cannot produce a thousand-tick catch-up. Everything downstream
+counts in ticks only — that is what makes behaviour independent of frame rate. It lives in
+`src/game/`, not `src/sim/`, on purpose.
 
-## Testing conventions
+**`src/render/` — sim state → drawn objects.** Engine-free decision functions (`playerView.ts` picks
+the frame, flip and tint from sim state; `cameraRig.ts` decides bounds and zoom and owns the
+`viewFits`/`tracksTarget` predicates); the scene applies the result. Pulling these decisions out of
+scenes *(vault 2.12)* is what makes their edge cases reachable from a unit test at all — and the
+predicates are imported by the unit tests **and** the e2e specs, so a criterion is asserted against
+one definition rather than two that agree on the happy path.
 
-- **Watch every gate fail before trusting it** *(C1)*. Re-introduce the bug, see red, restore, and
-  confirm the mutation actually reverted with `grep -c` *(C12)*.
-- **A gate that cannot go red is decoration** *(C2)*. Committed failing fixtures, not assertions
-  about assertions.
-- **Assert the type before the value** in e2e — a prior project passed vacuously on
-  `undefined === undefined` through a debug hook that returned nothing.
-- **Never `waitForTimeout`.** Wait on `window.__game.ready`. A sleep long enough to pass is long
-  enough to hide a hang.
-- **Kill dev servers by port before reporting done** *(C13)*. Playwright launches
-  `node ./node_modules/vite/bin/vite.js` directly — never `npm run dev`, whose shell wrapper orphans
-  the real process on Windows.
-- Run **two** review briefs per gate: one verifying the stated criteria, one asking *how could this be
-  wrong?* *(A7)*. In Phase 1 the first concluded there were no asset-missing paths; the second found
-  three, and Codex then found two more.
+**`src/game/tilemap.ts` — Tiled `.tmj` → plain data.** Pure: it takes an already-parsed object,
+imports nothing from Phaser, and does no I/O. That is what lets the unit suite run the **real**
+validator over the **shipped** bytes *(vault 3.1)*. **Collision is an object layer of rectangles
+carrying a `solid` property, not the tile grid** — solidity from data, never a name *(vault 3.3)* —
+because a tile grid cannot represent the sub-tile nudge the Element Editor exists to make.
 
-**Hard-won in Phase 2 — these three cost hours each:**
+**`src/scenes/` — the only place Phaser lives.** `BootScene` (load + refuse-to-route gate, with
+`bootLevels.ts` holding the level half), `GameScene` (production play). Dev-only scenes —
+`PlaygroundScene` and `ElementEditorScene` today, `GymScene` later — must be guarded with
+`import.meta.env.DEV` **at the point of creation** *and* inside anything that names them: the scene
+roster, the key binding, the toggle body, and `refuseToRoute`'s stop list. A "DEV ONLY" label in a
+document is not a build gate; Phase 2 shipped one to `dist/` before Codex caught it, and Phase 3
+shipped a help line advertising two dev keys before the adversarial brief caught that.
+`npm run build` now ends in `tools/gen/verify-dist.mjs`, which fails the build on any dev-only
+scene key, debug symbol or user-facing dev prose in the bundle — and asserts every `.tmj` reached
+`dist/` byte for byte.
 
-- **A wait expressed in ticks cannot bound a SAMPLING window.** `waitTicks(N)` guarantees *at least*
-  N ticks, never exactly N, and under parallel Playwright workers a single round trip can outlast the
-  whole window you are measuring. "Advance N ticks, then read once" produced a **false green with a
-  mutation applied** and a **false red on correct code**, in the same suite. Sample inside the page,
-  once per animation frame, and return an aggregate.
-- **A non-zero exit code is not evidence a gate caught anything.** A vitest spawned from a Node parent
-  loses its runner context and every suite dies at import, printing `Tests  no tests` and exiting 1.
-  Detect redness *positively*, from `Tests N failed` plus named failing specs. Drive mutation loops
-  from the shell, not from a Node script.
-- **Verify a mutation applied by "content changed AND the original count dropped by one"** — never by
-  "the original count is now zero". That is wrong when the mutant *contains* the original, and
-  meaningless when the replacement is empty; both write the file before failing, so a "refused"
-  mutation can sit applied in a green tree *(C12)*.
-- **A "DEV ONLY" label in a document is not a build gate.** Write the `import.meta.env.DEV` guard when
-  you create the artifact. `PlaygroundScene` shipped in `dist/` with every gate green until Codex's
-  implementation review read the whole diff against the whole PRD.
-- **An existence assertion cannot verify a timing claim.** "Did a jump happen" passed while the tick
-  order's documented window semantics were wrong. Assert *which tick*.
+**Nothing resolves a Tiled layer or tileset by NAME.** `GameScene` takes the first of each. A
+hardcoded name passed the boot gate and then threw in `create()`, which leaves `ready:false` with
+`bootError:null` — the hang state the whole refuse-to-route design exists to prevent, reached from
+a level the gate had approved.
 
-## The `window.__game` surface
+### The tick contract
+
+`src/sim/tick.ts` holds a **numbered 14-step order, declared authoritative** *(vault 2.2)*. Phase 5's
+combat timing is expressed against it, and art frame rates derive from windows that slot into it — so
+renumbering it later is a balance change, not a refactor. **Step 4 is reserved, empty, for Phase 5
+combat**, placed before integration so knockback reaches the same tick's movement.
+
+**Read that file's header before changing anything in `src/sim/`.** It states the two forgiveness
+windows separately and on purpose: they are *not* symmetric, because step 7 tests `grounded` as set
+by step 9 of the *previous* tick, so a buffered jump fires the tick **after** touchdown.
+
+### The `window.__game` surface
 
 Read-only, live, **dev build only** — installed via `Object.defineProperty` with a getter and no
-setter, and absent from `dist/`. Fixed in Phase 1; every later e2e spec depends on it.
+setter, absent from `dist/`, and Phase 10 verifies that absence.
 
 ```ts
 { sceneKey: string; tick: number; player: { x, y, vx, vy, state } | null;
@@ -155,25 +108,122 @@ setter, and absent from `dist/`. Fixed in Phase 1; every later e2e spec depends 
   ready: boolean; bootError: string | null }
 ```
 
-`ready` is the positive terminal condition, `bootError` the negative one. Both exist because there is
-deliberately **no loader timeout** *(vault 1.4)* — without them a successful boot, a refused boot and
-an infinite hang are indistinguishable, and the QA gate cannot fail.
+`ready` is the positive terminal condition every e2e spec waits on instead of sleeping; `bootError`
+is the negative one. Both exist because there is deliberately **no loader timeout** *(vault 1.4)* —
+without them a successful boot, a refused boot and an infinite hang are indistinguishable, and the
+QA gate cannot fail.
 
-`window.__phaserGame` is also dev-only. It exists so e2e can restart the Boot scene, and Phase 2 also
-uses it to assert the *drawn* `Rectangle` tracks the sim — without that, deleting `renderPlayer()`
-left every test green, because everything else reads `__game`, which the scene writes directly.
+`window.__phaserGame` is also dev-only. It exists so e2e can restart the Boot scene, and so a spec
+can assert the *drawn* object tracks the sim — without that, deleting `renderPlayer()` left every
+Phase 2 test green, because everything else reads `__game`, which the scene writes directly.
 
 **The surface is closed at nine fields** by a Phase 1 Codex ruling. Phase 2 wanted two values it does
-not carry (the Playground's selected knob; the rendered position) and rewrote both tests to measure
-behaviour instead. Adding a tenth field needs a STOP-and-ask.
+not carry and rewrote both tests to measure behaviour instead. A tenth field needs a STOP-and-ask.
+Full rationale in [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowgame-surface).
 
-## The tick contract
+## 3. Non-negotiables
 
-`src/sim/tick.ts` holds a **numbered 14-step order, declared authoritative** *(vault 2.2)*. Phase 5's
-combat timing is expressed against it and its art frame rates derive from windows that slot into it,
-so renumbering later is a balance change, not a refactor. **Step 4 is reserved, empty, for Phase 5
-combat** — placed before integration so knockback reaches the same tick's movement.
+- **Dependencies are frozen** at runtime `phaser@4.2.1` (exact, no caret); dev `vite`, `typescript`,
+  `vitest`, `@playwright/test`. **Anything else: STOP and ask.** Phase 1 needed `@types/node` twice
+  and solved it without adding it — prefer that.
+- **`src/sim/` imports nothing from Phaser**, and reaches no clock, no `Math.random`, no DOM.
+- **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of
+  seconds, never a `deltaTime` multiply inside the sim.
+- **No source file over 400 lines** without a written justification in `QA-LOG.md`. Prefer splitting.
+- **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
+- **A phase with a failing or unrun criterion is reported failing.** Never as done.
+- **A QA gate's Owner column is an instruction, not a label.** A criterion owned by a
+  `voltagent-qa-sec:*` agent is **unrun** until that agent has run it — twice, per *(A7)* — and
+  every finding is applied or recorded with a one-line reason *(C11)*. Owners map to agent types
+  in [PRD.md § The QA agent protocol](docs/PRD.md#the-qa-agent-protocol).
+- **The art direction is locked mechanically.** `tests/unit/style-lock.test.ts` hashes STYLE.md's §2
+  parameter table, §4 prompt template and §5 separation rules. A red hash is an approval checkpoint,
+  **never** something to clear by editing the hash. Measurements due for a gate-0 re-probe (§2b,
+  `[SETTING]`, `[SCALE_RATIO]`, §5's table) are deliberately outside the lock.
+- **The phase documents are linted.** `tests/unit/docs-contract.test.ts` checks every gate owner
+  against the roster it parses out of PRD.md, and enforces the §2 skill lists, the `play`/
+  `playwright-cli` pairing, both Codex criteria, and that every phase marked done has a QA-LOG row
+  per criterion. **Add a new owner type to PRD.md § The QA agent protocol first** — the test reads
+  it from there, so an owner the PRD does not define fails every gate that uses it.
+- **STOP and ask** before: a new dependency, deleting a file, a fal batch over 5 generations, or
+  contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md.
 
-Read that file's header before changing anything in `src/sim/`. It also states the two forgiveness
-windows separately and on purpose: they are *not* symmetric, because step 7 tests `grounded` as set
-by step 9 of the previous tick, so a buffered jump fires the tick **after** touchdown.
+## 4. Phase workflow
+
+Run each phase with `superpowers:executing-plans`, one phase per session, in this order:
+
+> vault-in → invoke the phase's named skills → **Codex plan review** → build → QA gate (**the agent
+> owners in the gate's Owner column**, then the **Codex implementation review**) → vault-out →
+> **STOP for approval**
+
+Both Codex reviews are mandatory; neither may be skipped. Every finding is **applied** or **recorded
+with a one-line reason** — silently ignoring one is not permitted *(C11)*.
+
+The gate's agent owners are equally mandatory and run under the same C11 rule, each with **two
+briefs** *(A7)*. They run **before** the Codex implementation review, because applying their
+findings changes the diff Codex reviews. Agent findings go in `QA-LOG.md` under the phase;
+`docs/reviews/` stays Codex-only. Full protocol, including the copy-paste briefs and the
+owner→agent map, in [PRD.md § The QA agent protocol](docs/PRD.md#the-qa-agent-protocol).
+
+⚠️ **Codex's sandboxed shell cannot spawn processes on this machine** (`CreateProcessAsUserW failed:
+5`). This is permanent — retrying does not help. Every review prompt must instruct it to use the
+`node_repl` MCP tool with `fs.readFileSync` for all file access. That restores file *reading*, not
+command *execution*, so review findings are file-evidence only and **must be re-verified locally**.
+Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-review-protocol).
+
+## 5. Testing rules
+
+- **Watch every gate fail before trusting it** *(C1)*. Re-introduce the bug, see red, restore, and
+  confirm the mutation actually reverted with `grep -c` *(C12)*.
+- **A gate that cannot go red is decoration** *(C2)*. Committed failing fixtures, not assertions
+  about assertions.
+- **Verify a mutation applied by "content changed AND the original count dropped by one"** — never by
+  "the original count is now zero". That is wrong when the mutant *contains* the original, and
+  meaningless when the replacement is empty; both write the file before failing, so a "refused"
+  mutation can sit applied in a green tree *(C12)*.
+- **A non-zero exit code is not evidence a gate caught anything.** A vitest spawned from a Node parent
+  loses its runner context and every suite dies at import, printing `Tests  no tests` and exiting 1.
+  Detect redness *positively*, from `Tests N failed` plus named failing specs. Drive mutation loops
+  from the shell, not from a Node script.
+- **Assert the type before the value** in e2e — a prior project passed vacuously on
+  `undefined === undefined` through a debug hook that returned nothing.
+- **An existence assertion cannot verify a timing claim.** "Did a jump happen" passed while the tick
+  order's documented window semantics were wrong. Assert *which tick*.
+- **Never `waitForTimeout`.** Wait on `window.__game.ready`. A sleep long enough to pass is long
+  enough to hide a hang.
+- **A wait expressed in ticks cannot bound a sampling window.** `waitTicks(N)` guarantees *at least*
+  N ticks, never exactly N, and under parallel Playwright workers a single round trip can outlast the
+  whole window being measured. "Advance N ticks, then read once" produced a **false green with a
+  mutation applied** and a **false red on correct code**, in the same suite. Sample inside the page,
+  once per animation frame, and return an aggregate.
+- **Kill dev servers by port before reporting done** *(C13)*. Playwright launches
+  `node ./node_modules/vite/bin/vite.js` directly — never `npm run dev`, whose shell wrapper orphans
+  the real process on Windows.
+- Run **two** review briefs per gate: one verifying the stated criteria, one asking *how could this be
+  wrong?* *(A7)*. In Phase 1 the first concluded there were no asset-missing paths; the second found
+  three, and Codex then found two more. Withhold brief 1's findings from brief 2 — a second pass that
+  has read the first one confirms it instead of attacking it. Both briefs are in
+  [PRD.md § The QA agent protocol](docs/PRD.md#the-qa-agent-protocol), ready to paste.
+- **A subagent's summary is a claim, not evidence.** An agent reporting a criterion green without
+  citing the command output, file and line, or screenshot has reported nothing. Re-verify locally
+  whatever it could not run — the same standing rule the Codex reviews carry.
+- **Two Playwright skills, two different jobs — do not swap them.** `playwright-cli` drives and
+  screenshots the *running* game, and is how every `play`-owned criterion gets its evidence.
+  `e2e-playwright-testing` authors the spec files under `tests/e2e/`. This project standardises on
+  `e2e-playwright-testing`; the near-identical `playwright-e2e-testing` is deliberately never used,
+  so no session flips between them. What of its rules did and did not apply here is already
+  recorded in [QA-LOG.md](docs/QA-LOG.md) under Phase 1.
+
+## 6. Where everything else lives
+
+| Document | What it is | When to read it |
+|---|---|---|
+| [docs/PRD.md](docs/PRD.md) | **The spine.** Phase table, Global Constraints, file structure, the QA agent and Codex review protocols. | Once per session, first. |
+| `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
+| [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
+| [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. | When a citation is unfamiliar. |
+| [docs/QA-LOG.md](docs/QA-LOG.md) | Every decision, measurement and deliberate non-fix, per phase. | **Before re-measuring anything.** |
+| [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. | Before planning a phase — what the last one was warned about. |
+| [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. | Any art work. |
+| [docs/FAL-MODELS.md](docs/FAL-MODELS.md) | Every fal endpoint: schema, price, gotchas. | Before any generating phase — **and re-run `genmedia schema`**; a documented schema is a snapshot. |
+| [docs/ASSET-PIPELINE.md](docs/ASSET-PIPELINE.md) · [docs/GENERATION-LOG.md](docs/GENERATION-LOG.md) · [docs/SOURCE-ANALYSIS.md](docs/SOURCE-ANALYSIS.md) | Generation → sheet → catalog pipeline; the log of every generation; the reference-art analysis. | Phase 4 onward. |

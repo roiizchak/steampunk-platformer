@@ -905,6 +905,11 @@ on the user's explicit decision.
 doubled; `coyoteTicks`, `jumpBufferTicks` and `jumpCutDivisor` did not. Ticks-to-apex is `v / g`, so
 this is a pure spatial scaling: airtime is unchanged and the apex exactly doubles.
 
+**Feel is preserved in TIME and scaled in SPACE — not preserved outright.** Codex (I8) was right
+that the first wording overstated it: the body grew by **2.087×**, not 2×, so jump height measured
+in body heights moves **3.27 → 3.13**. Both numbers were recorded correctly in the table below from
+the start; the prose around them was loose.
+
 ### Measurements — things that were checked rather than assumed
 
 | What | Measured | How |
@@ -953,6 +958,10 @@ one*, never "the count is now zero".
 | M35 | an all-empty tile layer is accepted | RED — 2 failed |
 | M36 | the spawn no longer has to stand on a solid | RED — 2 failed |
 | M37 | a rectangle spawn is accepted as a point | RED — 2 failed |
+| M38 | layer offsets silently ignored again | RED — 2 failed |
+| M39 | `group` layers accepted again | RED — 2 failed |
+| M40 | the character contract drifts (`RENDER_SCALE` 2 → 3) | RED — 4 failed |
+| M41 | the catalog key no longer has to match the filename | RED — 1 failed |
 
 **M27 is the one that justifies a Codex finding.** Deleting `drawLevel()` fails criteria 3.1, 3.2
 **and** 3.3. Before Codex (P4) forced drawn-tile assertions into those specs, every oracle read the
@@ -990,7 +999,7 @@ left applied, but a *fix* removed by the restore.
 | 3.7 | Element Editor shows and edits a collision strip; the edit persists | **PASS mechanically; awaiting the user's hands-on pass** — see below |
 | 3.8 | No file > 400 lines; diff reviewed; adversarial pass | **PASS, after a violation was found and fixed** — `voltagent-qa-sec:code-reviewer` ×2 briefs |
 | 3.9 | Codex plan review ran; every finding applied or recorded | **PASS** — 10 applied, 1 rejected with a reason |
-| 3.10 | Codex implementation review ran; every finding applied or recorded | *(recorded below)* |
+| 3.10 | Codex implementation review ran; every finding applied or recorded | **PASS** — 6 applied, 3 recorded with reasons; [phase-03-impl.md](reviews/phase-03-impl.md) |
 
 **Regression set:** Phases 1–2, specs 01–02 — **re-verified, not merely re-run**, because the
 character contract changed the knobs those tests were written against.
@@ -1042,6 +1051,64 @@ was the one that mattered.*
 Fixed with one guard in the one place both input paths pass through, which covers `UP`, `SPACE` and
 `W` together, rather than a detach per key. Mutation M33 turns the new tests red.
 
+### The defect this phase inflicted on itself, and the brief that caught it
+
+Applying `qa-expert` brief 2's finding — *"the spawn-stands-on-a-solid rule lives only in the test,
+so the boot gate is weaker than the criterion named after it"* — was correct. Writing it as
+`solid.y === spawn.y` was not.
+
+**The Element Editor exists to nudge a collision strip a pixel or two. Nudge the strip the player
+spawns on, press save, and drop the file in as the editor's own save note instructs — and the next
+boot refuses to route.** The primary workflow emitted a level the boot gate rejected.
+
+Nothing caught it because **every** editor spec pressed `BracketRight` twice on entry, landing on
+the wall — a strip that cannot violate the spawn rule wherever it goes. Strip 0, the one under the
+spawn, was selected by no test at all. `code-reviewer` brief 2 found it by reading the strip order
+out of the generator and noticing which index the specs never reach.
+
+Then the regression test written for that fix **caught the second wrong version**: `solid.y >=
+spawn.y` still broke nudging the strip *up*, which is the direction you use when collision sits
+below the art — the motivating defect, for the third time in one phase.
+
+The rule is now stated as the thing it actually protects: *a solid spans the spawn horizontally and
+its bottom is at or below it* — the player will not fall out of the world. Spawning slightly above
+the ground means falling onto it; slightly inside means being pushed out on tick one. Neither is a
+broken level. **The lesson is not "be careful": it is that a rule tightened in response to a review
+is a change like any other, and needs the workflow it constrains exercised against it.**
+
+### Criteria 3.8 and 3.10 — the adversarial pass and the Codex implementation review
+
+`code-reviewer` brief 2 and the Codex implementation review ran on the same diff and **neither found
+the other's headline defect**, which is the case for running both. Codex's report and full triage are
+in [phase-03-impl.md](reviews/phase-03-impl.md); the highlights either found:
+
+- **A level could pass the boot gate and then hang the game.** `GameScene` hardcoded
+  `addTilesetImage('greybox')` and `createLayer('ground')` while `describeLevelProblem` reads no
+  names — so a renamed layer was approved by the gate and threw in `create()`, leaving `ready=false`
+  with `bootError=null`. That is the third state, a hang, reached *from an approved level* — the one
+  outcome the whole refuse-to-route design exists to prevent. Both reviewers found this seam
+  independently. Fixed by resolving both by position, which is what vault 3.3 wanted anyway.
+- **Criterion 3.4 never exercised the right or top clamp.** The player wall-stops at x=1898 of 5760,
+  so of `viewFits`'s four inequalities only two were ever evaluated against a clamp doing work — a
+  `bounds.w` of twice the level's width passed the entire suite.
+- **The Phase 2 suite is structurally incapable of noticing this phase's re-tune.** Every movement
+  assertion derives from `world.tuning.*`, so multiplying all eight distance knobs by one factor is
+  the single perturbation it cannot see — and the anti-vacuity guard gets *easier* to satisfy,
+  because doubling `v` and `g` doubles the gap it demands. The character contract is now pinned in
+  absolute pixels, where a re-tune has to come and edit it deliberately.
+- **Production shipped a help line advertising two dev-only keys**, and `verify-dist` could not see
+  it: the sweep matched quoted `Playground`, and the string is lowercase inside a longer literal.
+  Both fixed — and the widened sweep immediately cried wolf on the `togglePlayground` identifier,
+  which is why it now matches user-facing phrases rather than bare words.
+- **A false claim in our own documents.** ASSET-PIPELINE §0a and the plan-review triage both stated
+  STYLE.md §9 *"has been updated"* with the measured 8.89 %. It never was — §9 still said ~20 %, so
+  Phase 4 would have opened two documents disagreeing by 2.25×. **Criterion 3.9 had been signed off
+  on a statement that was false in the tree.**
+- **Layer offsets and `group` layers were silently mis-read.** Drag a layer in Tiled and every
+  collision rect shifts — and every oracle in this phase is that same parser, so the unit sweep, the
+  e2e specs and the editor's own overlays would all shift *with* the bug and agree with each other.
+  Both are now refused rather than half-supported.
+
 ### Criterion 3.7 — what playing it found *(vault C4)*
 
 Driven with `playwright-cli` and screenshotted into `docs/evidence/`: the editor opens, overlays
@@ -1071,8 +1138,23 @@ This is **not** a Phase 3 criterion, and it is recorded rather than fixed — se
   allows justified exceptions, so the gate would need to parse QA-LOG for the justification. Left as
   a human check, now with the evidence that it can be breached through a green suite.
 - **`ElementEditorScene` matches the Nth solid object to `world.solids[N]`** when serialising. Both
-  walk the object layers in the same order, so it holds — but it is a coupling, and it is written
-  down in the method's own comment rather than defended by a test.
+  now use the *same* exported predicate, which closes the way Codex (I6) found to desynchronise
+  them. The ordering coupling itself remains, written down in the method's own comment rather than
+  defended by a test.
+- **Phase 4's animation timings do not exist yet** *(Codex I1)*. Phase 4 wants
+  `fps = renderFrames × TICK_HZ / simTicks`, and the sim publishes neither per-animation `simTicks`
+  nor a `walk` state — it has `idle | run | jump | fall`. **Not a Phase 3 deliverable**: §5 publishes
+  the grid and camera contract, while animation timing derives from Phase 5's combat windows and
+  Phase 4's own frame counts, neither of which exists. Authoring the numbers now would be inventing
+  them two phases early, which is the trap P9 avoided by measuring instead of guessing.
+  **Owner: Phase 4 gate 0, before any generation spend.**
+- **`resolveCollisions` is still untested for a vertically offset `LocalBox`** *(Codex I4)*. It now
+  goes through `toWorld`, so the horizontal offset is correct for an asymmetric box; `PLAYER_BOX.y`
+  is 0 and the vertical case has no coverage. Recorded rather than speculatively supported.
+- **The editor's "overlay for every solid" test is satisfiable by fewer overlays than there are
+  strips** *(Codex I7)*, because three platforms share `256 × 32` and the assertion reads sizes, not
+  positions. The live nudge tests already prove a *specific* strip moves, so this is a weak
+  assertion rather than an absent one.
 
 ---
 
