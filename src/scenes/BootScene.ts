@@ -1,12 +1,14 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
-import { CRISP_IMAGE_RENDERING } from '../game/constants';
+import { CRISP_IMAGE_RENDERING, GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import {
   CATALOG_KEY,
   describeCatalogProblem,
   type AssetCatalog,
   type CatalogEntry,
 } from '../game/assetCatalog';
+import { describeLevelProblem, parseLevel } from '../game/tilemap';
+import { cameraSetup } from '../render/cameraRig';
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -97,6 +99,61 @@ export class BootScene extends Phaser.Scene {
 
       this.load.image(entry.key, this.applyBreakAsset(entry, index));
     }
+
+    for (const entry of catalog.levels) {
+      // Same reasoning as the texture drop above, against the tilemap cache. A warm cache after a
+      // scene restart is exactly how Phase 1's gate was found to be a no-op.
+      if (this.cache.tilemap.exists(entry.key)) {
+        this.cache.tilemap.remove(entry.key);
+      }
+
+      this.load.tilemapTiledJSON(entry.key, entry.url);
+    }
+  }
+
+  /**
+   * Run the REAL level parser over every loaded `.tmj`, so a malformed level refuses to route
+   * exactly like a corrupt PNG does.
+   *
+   * Without this a 404'd or broken level reaches GameScene, which draws an empty world the player
+   * stands in — a failure that reads as a broken camera, not a missing file. The parser is the one
+   * the unit suite runs against the shipped bytes, so there is no second validator to drift.
+   *
+   * `cache.tilemap.get(key)` returns Phaser's `{ format, data }` wrapper and `data` is the raw
+   * Tiled JSON, verified in `node_modules/phaser/src/loader/filetypes/TilemapJSONFile.js:52-57`.
+   * `describeLevelProblem` refuses anything that is not a map object, so an unwrapped or
+   * differently-shaped cache entry fails loudly here rather than silently downstream.
+   */
+  private verifyLevels(catalog: AssetCatalog | undefined): string[] {
+    if (!catalog || !Array.isArray(catalog.levels)) {
+      return [];
+    }
+
+    const problems: string[] = [];
+
+    for (const entry of catalog.levels) {
+      const cached = this.cache.tilemap.get(entry.key) as { data?: unknown } | undefined;
+      if (!cached) {
+        problems.push(`level "${entry.key}" (${entry.url}) is not in the tilemap cache`);
+        continue;
+      }
+
+      const problem = describeLevelProblem(cached.data);
+      if (problem) {
+        problems.push(`level "${entry.key}" (${problem})`);
+        continue;
+      }
+
+      // The camera contract is part of "this level is loadable": a level no larger than the view
+      // cannot scroll, and vault 3.2 is the lesson that this is invisible until level design.
+      try {
+        cameraSetup(parseLevel(entry.key, cached.data), GAME_WIDTH, GAME_HEIGHT);
+      } catch (error) {
+        problems.push(`level "${entry.key}" (${String(error)})`);
+      }
+    }
+
+    return problems;
   }
 
   create(): void {
@@ -117,6 +174,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     problems.push(...this.verifyExpectedTextures(catalog));
+    problems.push(...this.verifyLevels(catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
     // mutates the thing it inspects is a trap for the next editor.
@@ -299,6 +357,9 @@ export class BootScene extends Phaser.Scene {
     // never started is a no-op, so the fresh-boot path is unchanged.
     this.scene.stop('Game');
     this.scene.stop('Playground');
+    // Phase 3 added a third play scene. It is DEV-only, but a refused boot leaving a dev scene
+    // ticking behind the error screen is the same cosmetic-refusal bug as the two above.
+    this.scene.stop('ElementEditor');
     updateDebugState({ sceneKey: this.scene.key, ready: false, bootError: message });
     console.error(`[boot] refused to route: ${message}`);
   }

@@ -1,6 +1,9 @@
 {
-  "_comment": "The asset catalog. BootScene loads exactly this list and refuses to route past boot if any entry is missing or unusable. Adding an asset to the game means adding it here.",
+  "_comment": "The asset catalog. BootScene loads exactly this list and refuses to route past boot if any entry is missing or unusable. Adding an asset to the game means adding it here. `levels` is REQUIRED and non-empty: an optional list is how a typo'd key ships a game with no levels and a boot that is perfectly happy about it.",
   "images": [
     { "key": "placeholder-tile", "url": "assets/placeholder-tile.png" }
+  ],
+  "levels": [
+    { "key": "level-01", "url": "assets/levels/level-01.tmj" }
   ]
 }

@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
-import { RENDER_SCALE } from '../game/constants';
+import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
+import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
+import { parseLevel, type LevelData } from '../game/tilemap';
+import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import { createSnapshot, latchJumpPress } from '../sim/input';
-import { GREY_BOX_SOLIDS, advance, createWorld } from '../sim/tick';
+import { advance, createWorld } from '../sim/tick';
 import type { InputSnapshot, World } from '../sim/types';
 
 /**
@@ -33,6 +36,8 @@ export class GameScene extends Phaser.Scene {
   private accumulatorMs = 0;
   private playerRect!: Phaser.GameObjects.Rectangle;
   private facingRect!: Phaser.GameObjects.Rectangle;
+  protected levelKey = '';
+  protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
   private heldLeft: Phaser.Input.Keyboard.Key[] = [];
   private heldRight: Phaser.Input.Keyboard.Key[] = [];
   private heldJump: Phaser.Input.Keyboard.Key[] = [];
@@ -54,10 +59,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.world = createWorld({ seed: SIM_SEED, scale: RENDER_SCALE });
+    const level = this.loadLevel();
+    this.world = createWorld({
+      seed: SIM_SEED,
+      scale: RENDER_SCALE,
+      // Phase 3: the SOURCE of the collision geometry, and only the source. The resolver in
+      // `src/sim/player.ts` is untouched, which is the whole point of `World.solids` having been
+      // plain data since Phase 2.
+      solids: level.solids,
+      spawn: level.spawn,
+    });
     this.input$ = createSnapshot();
 
-    this.drawSolids();
+    this.drawLevel(level);
     const desc = playerRenderDesc(this.world.player, this.world.scale);
     this.playerRect = this.add
       .rectangle(desc.x, desc.y, desc.w, desc.h, desc.colour)
@@ -73,11 +87,21 @@ export class GameScene extends Phaser.Scene {
       })
       .setScrollFactor(0);
 
+    this.followPlayer(level);
+
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
     // "the gate passed" and "the game is running" are different facts. If this scene fails to
     // create, `ready` stays false with `bootError` null — the third state, a hang, which the QA
     // gate can see precisely because it is distinct from both of the others (vault 1.4).
-    updateDebugState({ sceneKey: this.scene.key, ready: true, bootError: null });
+    //
+    // `levelId` fills the slot Phase 1 cut on the nine-field debug surface and left null. No new
+    // field, so the surface is still closed at nine (a tenth needs a STOP-and-ask).
+    updateDebugState({
+      sceneKey: this.scene.key,
+      ready: true,
+      bootError: null,
+      levelId: level.id,
+    });
     this.publishDebugState();
   }
 
@@ -163,10 +187,68 @@ export class GameScene extends Phaser.Scene {
     this.scene.start('Playground');
   }
 
-  private drawSolids(): void {
-    for (const solid of GREY_BOX_SOLIDS) {
-      this.add.rectangle(solid.x, solid.y, solid.w, solid.h, 0x2b2722).setOrigin(0, 0);
+  /**
+   * The shipped level, straight out of the tilemap cache BootScene filled and validated.
+   *
+   * Boot refuses to route on a level this would throw for, so reaching here means the data is
+   * good. Parsing again rather than passing an object across the scene boundary keeps `parseLevel`
+   * the single definition of what a level IS — the same function the unit suite runs over the
+   * shipped bytes *(vault 3.1)*.
+   */
+  protected loadLevel(): LevelData {
+    const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
+    const entry = catalog?.levels?.[0];
+    if (!entry) {
+      throw new Error('GameScene: the catalog lists no levels; Boot should have refused to route');
     }
+
+    const cached = this.cache.tilemap.get(entry.key) as { data?: unknown } | undefined;
+    this.levelKey = entry.key;
+    return parseLevel(entry.key, cached?.data);
+  }
+
+  /**
+   * Draw the level's tile layer.
+   *
+   * **CPU `TilemapLayer`, not `TilemapGPULayer`.** The game runs `Phaser.AUTO` with a live Canvas
+   * fallback, and the GPU layer is WebGL-only: `TilemapGPULayerRender.js` installs a no-op Canvas
+   * renderer, so on a Canvas fallback the entire level would draw nothing while every collision
+   * test stayed green. Same reasoning ENGINE-NOTES.md already records for tint.
+   *
+   * The tile layer is ART. Collision came from the object layer, and the two are authored to
+   * agree — proving they still agree is what the drawn-tile assertions in the Phase 3 e2e spec
+   * are for, and making them disagree is what the Element Editor is for.
+   */
+  private drawLevel(level: LevelData): void {
+    const map = this.make.tilemap({ key: this.levelKey });
+    const tileset = map.addTilesetImage('greybox', 'placeholder-tile');
+    if (!tileset) {
+      // Returns null with only a console warning when the tileset NAME in the .tmj does not match.
+      // Silently drawing nothing is precisely the failure this scene must not have.
+      throw new Error(`GameScene: tileset "greybox" not found in level ${level.id}`);
+    }
+
+    const layer = map.createLayer('ground', tileset, 0, 0);
+    if (!layer) {
+      throw new Error(`GameScene: tile layer "ground" not found in level ${level.id}`);
+    }
+    // `createLayer` is typed `TilemapLayer | TilemapGPULayer` whatever the `gpu` argument is, so
+    // the CPU choice is asserted at runtime rather than cast away. If a later edit passes
+    // `gpu: true` this throws instead of silently drawing nothing on the Canvas fallback.
+    if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
+      throw new Error('GameScene: expected a CPU TilemapLayer; the GPU layer has no Canvas fallback');
+    }
+    this.groundLayer = layer;
+  }
+
+  /** Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4). */
+  private followPlayer(level: LevelData): void {
+    const setup = cameraSetup(level, GAME_WIDTH, GAME_HEIGHT);
+    const camera = this.cameras.main;
+
+    camera.setBounds(setup.bounds.x, setup.bounds.y, setup.bounds.w, setup.bounds.h);
+    camera.setZoom(setup.zoom);
+    camera.startFollow(this.playerRect, false, setup.lerpX, setup.lerpY);
   }
 
   private renderPlayer(): void {

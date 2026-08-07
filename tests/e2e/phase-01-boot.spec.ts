@@ -29,6 +29,17 @@ import type { GameDebugView } from './debugView';
  */
 const REFUSAL_TIMEOUT = 20_000;
 
+/**
+ * ADDED IN PHASE 3, and recorded in QA-LOG.md as a deliberate regression-set change.
+ *
+ * Phase 3 made `levels` a REQUIRED catalog field (Codex plan review P3: an optional list is how a
+ * typo ships a game with no levels and a boot that is happy about it). Every catalog-injection
+ * fixture below therefore has to carry a VALID levels list — otherwise each one would still refuse
+ * to route, but for the missing levels list rather than for the defect it was written to test, and
+ * six sharp gates would quietly become one blunt one.
+ */
+const VALID_LEVELS = [{ key: 'level-01', url: 'assets/levels/level-01.tmj' }];
+
 function readGame(page: Page): Promise<GameDebugView> {
   return page.evaluate(() => {
     if (!window.__game) {
@@ -99,7 +110,10 @@ test.describe('Phase 1 — Boot', () => {
     // `player` is typed `unknown` on purpose, so narrowing it is a type assertion the spec has to
     // make out loud rather than one the compiler makes for it (this file's header, vault C1).
     expect(typeof (game.player as { x?: unknown }).x).toBe('number');
-    expect(game.levelId).toBeNull();
+    // AMENDED IN PHASE 3, recorded in QA-LOG.md as a deliberate regression-set change. Phase 1
+    // asserted null because nothing wrote this field; Phase 3 loads a Tiled level, so a null here
+    // now means the level never loaded — the assertion is stronger, not weaker.
+    expect(game.levelId).toBe('level-01');
 
     // The positive terminal state. This is the assertion that separates success from a hang.
     expect(game.ready).toBe(true);
@@ -237,7 +251,11 @@ test.describe('Phase 1 — Boot', () => {
     // found during Phase 1: a catalog that failed to load queued nothing, so nothing failed,
     // so boot succeeded with no assets at all.
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{"images":[]}' }),
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ images: [], levels: VALID_LEVELS }),
+      }),
     );
 
     await page.goto('/');
@@ -260,6 +278,7 @@ test.describe('Phase 1 — Boot', () => {
             { key: 'dup', url: 'assets/placeholder-tile.png' },
             { key: 'dup', url: 'assets/never-fetched.png' },
           ],
+          levels: VALID_LEVELS,
         }),
       }),
     );
@@ -280,7 +299,10 @@ test.describe('Phase 1 — Boot', () => {
       route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ images: [{ key: '__MISSING', url: 'assets/placeholder-tile.png' }] }),
+        body: JSON.stringify({
+          images: [{ key: '__MISSING', url: 'assets/placeholder-tile.png' }],
+          levels: VALID_LEVELS,
+        }),
       }),
     );
 
@@ -298,7 +320,11 @@ test.describe('Phase 1 — Boot', () => {
     // sits at ready=false/bootError=null forever. A hang is the one state the QA gate cannot
     // distinguish from a slow boot, so malformed input must become a refusal.
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{"images":[null]}' }),
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ images: [null], levels: VALID_LEVELS }),
+      }),
     );
 
     await page.goto('/');
