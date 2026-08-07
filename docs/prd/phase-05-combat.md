@@ -22,7 +22,12 @@ art unchanged, including the per-generation log entry with its request id. Endpo
 prices: [FAL-MODELS.md](../FAL-MODELS.md) §1–§5.
 
 ### 2. Required skills
-`physics-arcade` · `groups-and-containers` · `events-system` · `animations` · `data-manager`
+`groups-and-containers` · `events-system` · `animations` · `data-manager` ·
+`e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
+**Not `physics-arcade`** — see [Phase 2 §2](phase-02-player.md#2-required-skills). Hit detection is
+integer-tick sim code against the tick contract, never a Phaser collider.
 
 ### 3. Vault-in
 **5.1/2.9** a per-tick probability is **not** a behaviour — commit to episodes; one counter plus one
@@ -55,22 +60,22 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 5.1 | Turret fires only inside its radius; radius tunable and the change is observable | unit + sweep | qa-expert |
-| 5.2 | Scavenger patrols, detects, chases; each speed independently tunable | unit + sweep | qa-expert |
-| 5.3 | Enemy decisions commit to **episodes**, not per-tick rolls | code review *(5.1)* | code-reviewer |
-| 5.4 | Enemy walk animation advances past frame 0 during patrol | e2e/observed *(5.1)* | play |
+| 5.1 | Turret fires only inside its radius; radius tunable and the change is observable | unit + sweep | `voltagent-qa-sec:qa-expert` |
+| 5.2 | Scavenger patrols, detects, chases; each speed independently tunable | unit + sweep | `voltagent-qa-sec:qa-expert` |
+| 5.3 | Enemy decisions commit to **episodes**, not per-tick rolls | code review *(5.1)* | `voltagent-qa-sec:code-reviewer` |
+| 5.4 | Enemy walk animation advances past frame 0 during patrol | e2e/observed via `playwright-cli` *(5.1)* | play |
 | 5.4b | **Combat sim timings frozen and recorded BEFORE any combat art is generated** | doc + STOP *(4.22)* | — |
-| 5.4c | **Contact frame lands inside the active window on every attack sheet** *(moved from Phase 4)* | measured *(4.22)* | qa-expert |
-| 5.4d | Every combat sheet's fps derived as `renderFrames × TICK_HZ / simTicks`, never authored | unit *(4.22)* | qa-expert |
+| 5.4c | **Contact frame lands inside the active window on every attack sheet** *(moved from Phase 4)* | measured *(4.22)* | `voltagent-qa-sec:qa-expert` |
+| 5.4d | Every combat sheet's fps derived as `renderFrames × TICK_HZ / simTicks`, never authored | unit *(4.22)* | `voltagent-qa-sec:qa-expert` |
 | 5.4e | Every combat generation logged with its **request id** and reconciled cost | GENERATION-LOG.md | — |
-| 5.5 | Attack registers **only** on active frames; wind-up and recovery do not | unit *(4.22)* | qa-expert |
-| 5.6 | i-frames span their full window — fixture longer than the window | unit *(2.7)* | qa-expert |
-| 5.7 | **Enemy health bar never renders empty above 0 HP** | unit *(6.4)* | qa-expert |
-| 5.8 | Enemy health bar legible at true sprite size against a cool background | eyeball | play |
-| 5.9 | Every tuning knob sweeps and the number moves | sweep *(A6)* | qa-expert |
-| 5.10 | Damage comparisons use two **different** entities, not a symmetric fixture | unit *(5.8)* | qa-expert |
-| 5.11 | **Frame budget** measured under worst-case enemy count | `performance-engineer` | perf |
-| 5.12 | No file > 400 lines; diff reviewed; adversarial pass | code-reviewer ×2 | code-reviewer |
+| 5.5 | Attack registers **only** on active frames; wind-up and recovery do not | unit *(4.22)* | `voltagent-qa-sec:qa-expert` |
+| 5.6 | i-frames span their full window — fixture longer than the window | unit *(2.7)* | `voltagent-qa-sec:qa-expert` |
+| 5.7 | **Enemy health bar never renders empty above 0 HP** | unit *(6.4)* | `voltagent-qa-sec:qa-expert` |
+| 5.8 | Enemy health bar legible at true sprite size against a cool background | eyeball; `playwright-cli` screenshot | play |
+| 5.9 | Every tuning knob sweeps and the number moves | sweep *(A6)* | `voltagent-qa-sec:qa-expert` |
+| 5.10 | Damage comparisons use two **different** entities, not a symmetric fixture | unit *(5.8)* | `voltagent-qa-sec:qa-expert` |
+| 5.11 | **Frame budget** measured under worst-case enemy count | `voltagent-qa-sec:performance-engineer` | `voltagent-qa-sec:performance-engineer` |
+| 5.12 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 5.13 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-05-plan.md` | — |
 | 5.14 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-05-impl.md` | codex |
 

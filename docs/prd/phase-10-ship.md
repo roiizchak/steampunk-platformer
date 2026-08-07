@@ -17,7 +17,10 @@ settle: is the deliverable a hosted playable URL, or a `dist/` folder handed ove
 provider, and what is its rollback command? Answer it before Phase 9 ends, not here.
 
 ### 2. Required skills
-`game-setup-and-config` · `scale-and-responsive` · `superpowers:verification-before-completion`
+`game-setup-and-config` · `scale-and-responsive` · `security-review` · `find-docs` ·
+`e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 
 ### 3. Vault-in
 **10.1** after a toolchain upgrade diff the **outputs**, not the changelog — a Vite major silently
@@ -52,17 +55,17 @@ from all nine earlier phases — which warning was recorded-but-not-fixed and is
 | # | Criterion | Method | Owner |
 |---|---|---|---|
 | 10.1 | `npm run build` clean; production bundle runs | command + browser | — |
-| 10.2 | **`window.__game`, Playground, Gym and Element Editor absent from `dist/`** | grep the bundle *(1.6/10.6)* | qa-expert |
+| 10.2 | **`window.__game`, Playground, Gym and Element Editor absent from `dist/`** | grep the bundle *(1.6/10.6)* | `voltagent-qa-sec:qa-expert` |
 | 10.3 | Build-target and minifier defaults recorded with reversal instructions | doc *(10.1)* | — |
-| 10.4 | Bundle size change explained via raw-vs-gzip ratio | *(10.2)* | qa-expert |
-| 10.5 | Build config typechecked as its own program | *(10.3)* | code-reviewer |
-| 10.6 | CSP verified against the **production** header config locally. **Blocked until a hosting target is chosen — see §1** | *(10.5)* | qa-expert |
-| 10.7 | `git log --all -p` clean of secrets | command *(10.6)* | qa-expert |
+| 10.4 | Bundle size change explained via raw-vs-gzip ratio | *(10.2)* | `voltagent-qa-sec:qa-expert` |
+| 10.5 | Build config typechecked as its own program | *(10.3)* | `voltagent-qa-sec:code-reviewer` |
+| 10.6 | CSP verified against the **production** header config locally — never the dev server. **Blocked until a hosting target is chosen — see §1** | *(10.5)* + `security-review` | `voltagent-qa-sec:security-auditor` |
+| 10.7 | `git log --all -p` clean of secrets — history, not the working tree | command *(10.6)* | `voltagent-qa-sec:security-auditor` |
 | 10.8 | Licences split: code vs generated assets | doc *(10.6)* | — |
-| 10.9 | Asset rebuild from a fresh clone is byte-identical | *(10.9/4.15)* | qa-expert |
+| 10.9 | Asset rebuild from a fresh clone is byte-identical | *(10.9/4.15)* | `voltagent-qa-sec:qa-expert` |
 | 10.10 | **Specs 01–10 all green** | full suite | e2e |
-| 10.11 | **Every prior phase's acceptance criteria re-verified** | full regression | qa-expert |
-| 10.12 | Full playthrough on the production build | hands-on *(C4)* | play |
+| 10.11 | **Every prior phase's acceptance criteria re-verified** | full regression | `voltagent-qa-sec:qa-expert` |
+| 10.12 | Full playthrough on the production build | `playwright-cli` + hands-on *(C4)* | play |
 | 10.13 | **Every recorded-but-not-fixed Codex finding from phases 1–9 re-reviewed and dispositioned** | `docs/reviews/` sweep *(C11)* | — |
 | 10.14 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-10-plan.md` | — |
 | 10.15 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-10-impl.md` | codex |

@@ -22,13 +22,41 @@ into a fixed cell*, while Tiled **requires** a fixed grid. Both are right about 
 | **Object atlas** | props, pickups, lanterns, crates, signs, large set dressing | **variable frame sizes**, padded, chroma-backed, JSON metadata | object layer |
 | **Sprite sheet** | character and enemy animations | fixed cell **per animation**, not globally | not in Tiled — loaded by key |
 
-**Grid cell size: `32 × 32` px — PROPOSED, not yet published.** Phase 3 publishes the *binding* value
-by writing it back into this line, and only then may Phase 4 spend against it. Character target is
-**96–128 px tall = 3–4 tiles.**
+## 0a. The Phase 4 art contract — PUBLISHED by Phase 3
 
-Phase 3 must also publish, in this file, the **camera zoom and viewport size** it settles on. Without
-those, "readable at true sprite size" (Phase 4 gate 4.1) has no true size to test at — a 128 px
-sprite at 1× and at 2× zoom are different readability problems.
+Every number below is **binding**. Phase 4 spends real money against them, and
+`tests/unit/tilemap-data.test.ts` asserts this table matches `src/game/constants.ts`,
+`src/sim/player.ts` and the shipped `.tmj` — so the doc and the code cannot drift while both look
+right in isolation *(Codex plan review P8; criteria 3.6 and 3.6b)*.
+
+| What | Value | Where it lives in code |
+|---|---|---|
+| **Grid cell size** | **`32 × 32` px** | `TILE_SIZE` |
+| **Camera zoom** | **`1`** | `CAMERA_ZOOM` |
+| **Viewport / world view** | **`1920 × 1080` px = `60 × 33.75` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
+| **World extent (level-01)** | **`5760 × 1536` px = `180 × 48` tiles** | measured off the shipped `.tmj` |
+| **Camera travel** | **`3840 × 456` px** | extent − world view |
+| **Character collision box** | **`44 × 96` px = `1.375 × 3.0` tiles** | `PLAYER_BOX × RENDER_SCALE` |
+| **Character render height** | **`96` px — 8.89 % of screen height** | `PLAYER_BOX.h × RENDER_SCALE` |
+| **Render scale** | **`RENDER_SCALE` 2** | `RENDER_SCALE` |
+
+At zoom 1 a 32 px tile draws at 32 px and the character draws at 96 px. **Sprite art is authored
+at these exact pixel sizes** — there is no further scaling between the sheet and the screen, which
+is what makes "readable at true sprite size" (Phase 4 gate 4.1) a testable claim rather than a
+range.
+
+**Character target: 96 px tall = 3 tiles**, the bottom of STYLE.md's locked *96–128 px = 3–4 tiles*
+band. STYLE.md §9 predicted this would read as *"closer to 20 % of screen height"*; measured, it is
+**8.89 %**, and §9 has been updated. §9 is outside every hash-locked slice and its own text says
+*"Phase 3 sets the real camera"*, so this is the measurement it was waiting for, not an override.
+
+> **Why the character grew.** Phase 2 shipped a 46 px collision box — 4 % of screen height, which
+> no art can be generated against. The Codex plan review (P9) named it as the number Phase 4 needs
+> and does not have. Growing it 46 → 96 px doubled every distance-dimensioned tuning knob and left
+> every tick- and ratio-dimensioned one alone, so airtime is unchanged at 37 ticks and the jump
+> apex exactly doubled to 300.6 px. Full reasoning in `src/sim/player.ts`; evidence in QA-LOG.
+
+---
 
 ---
 

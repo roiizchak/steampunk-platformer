@@ -8,7 +8,10 @@
 Steam bursts, sparks, screen shake, hit-stop, landing dust, coin sparkle. Feel, not features.
 
 ### 2. Required skills
-`particles` · `tweens` · `filters-and-postfx` · `cameras` · `render-textures` · `motion-design`
+`particles` · `tweens` · `filters-and-postfx` · `cameras` · `render-textures` · `motion-design` ·
+`find-docs` · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 
 ### 3. Vault-in
 **9.1** hang game logic on the delta clock and keep tweens decorative — Phaser's tween manager reads
@@ -37,15 +40,15 @@ And: **would the proposed frame-budget measurement distinguish "fast" from "not 
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | code review *(9.1)* | code-reviewer |
-| 9.2 | No game logic sequenced off a tween completion | code review *(9.1)* | code-reviewer |
-| 9.3 | Tweens tracked individually; no kill-by-target | code review *(9.1)* | code-reviewer |
-| 9.4 | A fade force-settles its end value on stop as well as complete | unit | qa-expert |
-| 9.5 | **Frame budget holds under worst case**: max enemies + max particles + shake | `performance-engineer` *(9.4)* | perf |
-| 9.6 | Frame-rate measurement distinguishes "fast" from "not drawing" | method review *(9.4)* | perf |
-| 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | *(9.2)* | qa-expert |
+| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | code review *(9.1)* | `voltagent-qa-sec:code-reviewer` |
+| 9.2 | No game logic sequenced off a tween completion | code review *(9.1)* | `voltagent-qa-sec:code-reviewer` |
+| 9.3 | Tweens tracked individually; no kill-by-target | code review *(9.1)* | `voltagent-qa-sec:code-reviewer` |
+| 9.4 | A fade force-settles its end value on stop as well as complete | unit | `voltagent-qa-sec:qa-expert` |
+| 9.5 | **Frame budget holds under worst case**: max enemies + max particles + shake | `voltagent-qa-sec:performance-engineer` *(9.4)* | `voltagent-qa-sec:performance-engineer` |
+| 9.6 | Frame-rate measurement distinguishes "fast" from "not drawing" | method review *(9.4)* | `voltagent-qa-sec:performance-engineer` |
+| 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | *(9.2)* | `voltagent-qa-sec:qa-expert` |
 | 9.8 | What the gates do **not** cover is stated in QA-LOG | *(9.3)* | — |
-| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | code-reviewer ×2 | code-reviewer |
+| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 9.10 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-09-plan.md` | — |
 | 9.11 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-09-impl.md` | codex |
 

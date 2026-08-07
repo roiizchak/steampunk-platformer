@@ -5,3 +5,5 @@ dist/
 .deepeval/
 test-results/
 playwright-report/
+.playwright-cli/
+test-results/

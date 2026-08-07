@@ -7,6 +7,7 @@ import {
   type AssetCatalog,
   type CatalogEntry,
 } from '../game/assetCatalog';
+import { queueLevels, verifyLevels } from './bootLevels';
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -97,6 +98,10 @@ export class BootScene extends Phaser.Scene {
 
       this.load.image(entry.key, this.applyBreakAsset(entry, index));
     }
+
+    // Loading and verification both live in `bootLevels.ts` — see its header. Phase 3's additions
+    // pushed this file to 428 lines and the 400-line limit is a hard project rule.
+    queueLevels(this, catalog.levels);
   }
 
   create(): void {
@@ -117,6 +122,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     problems.push(...this.verifyExpectedTextures(catalog));
+    problems.push(...verifyLevels(this, catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
     // mutates the thing it inspects is a trap for the next editor.
@@ -298,7 +304,15 @@ export class BootScene extends Phaser.Scene {
     // mean the game is not running, or the refusal is cosmetic. `scene.stop` on a scene that was
     // never started is a no-op, so the fresh-boot path is unchanged.
     this.scene.stop('Game');
-    this.scene.stop('Playground');
+    // The dev scenes, guarded so their keys do not survive into `dist/`. In production neither is
+    // registered, so stopping them is already a no-op — the guard costs nothing and keeps the
+    // production bundle free of any mention of a scene that cannot exist there. Phase 3 added
+    // ElementEditor here for the same reason Playground is here: a refused boot that leaves a play
+    // scene ticking behind the error screen is a cosmetic refusal, not a refusal.
+    if (import.meta.env.DEV) {
+      this.scene.stop('Playground');
+      this.scene.stop('ElementEditor');
+    }
     updateDebugState({ sceneKey: this.scene.key, ready: false, bootError: message });
     console.error(`[boot] refused to route: ${message}`);
   }

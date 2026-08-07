@@ -26,7 +26,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 |---|---|---|---|---|
 | 1 | Boot | [phase-01-boot.md](prd/phase-01-boot.md) | — | ✅ **done** 2026-08-05 |
 | 2 | Player controller + Character Playground | [phase-02-player.md](prd/phase-02-player.md) | 1 | ✅ **done** 2026-08-06 |
-| 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 | — |
+| 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 | ✅ **done** 2026-08-07 |
 | 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | — |
 | 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | — |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | — |
@@ -42,7 +42,10 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 - **Phase 2 blocks Phase 5** — combat timing is expressed in the tick contract from Phase 2.
 - **Phase 4's 4a blocks 4b** — the hero-asset readability check gates the batch spend.
 - **Phases 7 and 9 are independent** of each other and could swap if needed.
-- **Phase 5 onward runs `performance-engineer`**; **Phase 6 onward runs `ui-ux-tester`**.
+- **Phase 5 onward runs `voltagent-qa-sec:performance-engineer`**; **Phase 6 onward runs
+  `voltagent-qa-sec:ui-ux-tester`** and, for its WCAG criterion,
+  `voltagent-qa-sec:accessibility-tester`; **Phase 10 additionally runs
+  `voltagent-qa-sec:security-auditor`**. See [§ The QA agent protocol](#the-qa-agent-protocol).
 
 ---
 
@@ -197,6 +200,112 @@ one was warned about.
 
 ---
 
+## The QA agent protocol
+
+**Added 2026-08-07 by user decision.** Codex is not the only reviewer in a QA gate. Every phase's
+gate has an **Owner** column, and most of its rows are owned by a subagent. Until now those owners
+were bare nouns — `qa-expert`, `code-reviewer`, `perf` — that read as labels rather than as
+instructions, and only one line in the whole repository (Phase 1's criterion 1.8) named a real
+agent type. This section makes the column executable.
+
+### Owner → what to actually do
+
+| Owner in a gate | What it means |
+|---|---|
+| `voltagent-qa-sec:qa-expert` | spawn that agent — the default owner for a measurable criterion |
+| `voltagent-qa-sec:code-reviewer` | spawn that agent — diff review, adversarial pass *(Phase 1 precedent, [QA-LOG.md](QA-LOG.md) 1.8)* |
+| `voltagent-qa-sec:performance-engineer` | spawn that agent — frame budget, worst-case load. Phase 5 onward |
+| `voltagent-qa-sec:ui-ux-tester` | spawn that agent — UI behaviour and layout. Phase 6 onward |
+| `voltagent-qa-sec:accessibility-tester` | spawn that agent — WCAG claims only. Phase 6's contrast criterion |
+| `voltagent-qa-sec:security-auditor` | spawn that agent, with the `security-review` skill — Phase 10's CSP and secret-scan criteria |
+| `codex` | `/codex:rescue`, per [§ The Codex review protocol](#the-codex-review-protocol) above |
+| `e2e` | **not an agent.** `npm run test:e2e`; specs authored with `e2e-playwright-testing` |
+| `play` | **not an agent.** Human hands-on, driven and screenshotted with `playwright-cli` |
+| `—` | **no owner.** Command output, a `wc -l` sweep, or a doc review |
+
+`e2e` and `play` are deliberately not agent rows. A spec file is evidence a machine produced; an
+agent asserting the spec would pass is not. And `play` exists because some criteria — *does this
+feel weighty*, *is there a third leg* — are human judgements no agent can stand in for *(vault C4)*.
+
+### The rules
+
+- **An owner is an instruction, not a label.** A criterion owned by an agent is **unrun** until
+  that agent has run against it. Per Global Constraints, a phase with an unrun criterion is
+  reported failing — never as done.
+- **Two briefs per agent-owned gate, always** *(vault A7)*. One verifies the stated criteria; the
+  second asks only *"how could this be wrong?"*. This is what the `code-reviewer ×2` criterion in
+  every phase has always meant; it was never written down. In Phase 1 the first brief concluded
+  there were no asset-missing paths, the second found three, and Codex then found two more. The
+  second brief is not optional and is not a re-run of the first.
+- **Every finding is applied, or recorded with a one-line reason for rejecting it** *(vault C11)* —
+  the identical rule the Codex reviews carry. Silently dropping one is not permitted.
+- **Findings land in [QA-LOG.md](QA-LOG.md)**, under the phase's own section, in the findings-table
+  format Phase 1 already established. Do not invent a new file: `docs/reviews/` stays exclusively
+  Codex's, one plan/impl pair per phase.
+- **Preserve the agent's own "could not check" section** *(vault 9.3)*. A gate's blind spots are
+  part of its result. An agent that reports none has almost certainly not looked for them.
+- **An agent may not turn its own criterion green from reasoning alone.** It must cite command
+  output, a file and line, or a screenshot. A subagent's summary is a claim, not evidence — and a
+  subagent that reports a criterion passing without citing what it ran has reported nothing.
+- **Re-verify locally what an agent could not run.** Same standing rule as Codex: agent findings
+  are file-evidence until a command in this repository confirms them.
+
+### The brief
+
+One base brief covers every agent owner. Fill in the phase, the owner, and its criteria; the
+closing paragraph is fixed and matches the Codex prompts deliberately.
+
+```
+Review docs/prd/phase-NN-<name>.md, section 6 (QA gate). You own criteria: <list>.
+
+Read first: docs/PRD.md (Global Constraints + this protocol), docs/LESSONS-APPLIED.md (the
+vault items this phase cites), docs/QA-LOG.md (what earlier phases already measured — check
+here before re-measuring anything), and docs/reviews/ (what earlier phases were warned about).
+
+For each criterion you own, answer separately:
+1. Does the code actually satisfy it, or only appear to?
+2. What did you run, read, or measure to know that? Quote it.
+3. Would this criterion still pass if the behaviour it names were deleted?
+
+Do not modify any files. Cite file and line for every claim. Rank by severity. State plainly
+what you could not check.
+```
+
+The **second brief** *(A7)* is run after the first returns, with the first brief's findings
+withheld from it:
+
+```
+Same phase, same criteria. Do not verify that the implementation meets them.
+
+Answer only: how could each of these criteria pass while the feature is still broken?
+Name the specific input, state, or ordering that would do it. If you cannot construct one for
+a criterion, say so — that is a real answer.
+
+Do not modify any files. Cite file and line. State plainly what you could not check.
+```
+
+**Per-owner additions** to the base brief:
+
+| Owner | Add to the brief |
+|---|---|
+| `code-reviewer` | *"Also: does any file exceed 400 lines without a justification in docs/QA-LOG.md?"* |
+| `performance-engineer` | *"Measure under the worst case this phase can produce, not the typical case. Distinguish 'fast' from 'not drawing' — a frame-rate number that cannot tell those apart is not a measurement (vault 9.4)."* |
+| `ui-ux-tester` | *"Drive the running game with `playwright-cli`; screenshot what you assert."* |
+| `accessibility-tester` | *"Name the WCAG success criterion and level for every claim. Measure the contrast ratio; do not estimate it."* |
+| `security-auditor` | *"Verify against the production build and the production header config, never the dev server."* |
+
+### Where this sits in the phase
+
+The QA gate is one step, and it contains both reviewer kinds:
+
+> vault-in → invoke §2 skills → **Codex plan review** → build → **QA gate: agent owners (×2 briefs
+> each) + Codex implementation review** → vault-out → STOP for approval
+
+Run the agent owners **before** the Codex implementation review. Codex reviews the diff as it will
+be reported, and applying an agent's findings changes that diff.
+
+---
+
 ## File structure
 
 Locked now so decomposition decisions are not made ad hoc later.
@@ -207,10 +316,13 @@ src/
   game/
     config.ts                 GameConfig: renderer, scale, pixelArt, FPS
     constants.ts              TICK_HZ, TILE_SIZE, world constants
+    frameClock.ts             real ms → whole ticks; the only clock the sim sees
+    assetCatalog.ts           public/assets/index.json load + validation
   sim/                        ← ZERO Phaser imports, ZERO clock, ZERO Math.random
     tick.ts                   numbered tick step order; the contract
     player.ts                 movement state machine
     input.ts                  input snapshot + consumption
+    derived.ts                knobs → readable feel metrics (jump height, apex…)
     rng.ts                    seeded xorshift32
     combat.ts                 (Phase 5) hit windows, damage, knockback
     progress.ts               (Phase 8) level completion, save state
@@ -235,7 +347,7 @@ tools/
   gen/                        tracked fal generation + frame-pick scripts
 public/assets/
   index.json                  the asset catalog
-levels/                       Tiled .tmj sources
+  levels/                     Tiled .tmj sources, SHIPPED VERBATIM
 docs/
   PRD.md                      this file — the spine
   prd/                        one document per phase
@@ -269,3 +381,10 @@ is the negative one. See [reviews/phase-01-plan.md](reviews/phase-01-plan.md) F1
 The surface is **read-only and live**: installed with `Object.defineProperty(window, '__game', { get })`
 and no setter, each read returning a frozen copy of current state. Not an object assigned once, which
 would go stale and let a spec asserting `tick === 0` pass forever.
+
+**`window.__phaserGame` is a second dev-only handle, and is not part of this surface.** It exposes
+the `Phaser.Game` instance so e2e can restart the Boot scene, and so a spec can assert the *drawn*
+object tracks the sim. Phase 2 needed the latter: deleting `renderPlayer()` left every test green,
+because everything else reads `__game`, which the scene writes directly. It carries no state of its
+own, so it does not widen the nine-field closure — but it is dev-only under the same rule, and
+Phase 10 verifies its absence from `dist/` alongside `__game`.

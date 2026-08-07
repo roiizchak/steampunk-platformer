@@ -6,6 +6,18 @@ This is the recipe. **Every later asset reuses it.** Changing anything in §2–
 needs approval, not a prompt tweak. Arrived at over 21 generations / $1.68 — see
 [GENERATION-LOG.md](GENERATION-LOG.md).
 
+🔒 **That last sentence is now a gate, not a request.** `tests/unit/style-lock.test.ts` pins the §2
+parameter table, the §4 prompt template and the §5 separation rules by content hash, and runs on every
+`npm test`. Edit one and the suite goes red with the new hash and instructions.
+
+**To change a locked section:** get approval, make the edit, run the suite, paste the printed hash into
+`LOCKS`, and record the reason in [QA-LOG.md](QA-LOG.md). **Never update a hash to make a red suite
+green** — the failure *is* the approval checkpoint.
+
+Deliberately **not** locked, so a gate-0 re-probe needs no ceremony: §2b, the `[SETTING]` values, the
+`[SCALE_RATIO]` calibration table and §5's measurement table. All four were measured on the retired
+`nano-banana-2` and are *supposed* to change. Verbatim text is locked; measurements are not.
+
 ---
 
 ## 1. Direction in one line
@@ -298,6 +310,14 @@ Then, on every batch, before the asset is accepted:
 ## 9. Scale reality check
 
 These mockups are concept art, not the game camera. At the locked **96–128px character on a 32px
-grid**, the character is 3–4 tiles tall, which at a normal camera zoom reads closer to **20%** of screen
-height than the ~31% in the anchor image. **The in-game character will look smaller than STYLE.md's
-anchor.** That is expected, and Phase 3 sets the real camera.
+grid**, the character is 3–4 tiles tall. **The in-game character will look smaller than STYLE.md's
+anchor.** That is expected, and Phase 3 set the real camera.
+
+**MEASURED IN PHASE 3, replacing this section's earlier guess of "closer to 20%".** The character
+is **96px on a 1080px viewport at camera zoom 1 — 8.89% of screen height**, against ~31% in the
+anchor image. The estimate was out by a factor of 2.25, which is exactly why §9 delegated the number
+to the phase that builds the camera rather than asserting one here.
+
+The binding figures live in [ASSET-PIPELINE.md](ASSET-PIPELINE.md) §0a and are pinned against the
+runtime constants by `tests/unit/tilemap-data.test.ts`. This section is prose about the anchor
+image; that table is the contract. **§9 is outside every hash-locked slice, so no lock hash moves.**

@@ -21,7 +21,8 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { DEFAULT_TUNING } from '../../src/sim/player';
+import { RENDER_SCALE } from '../../src/game/constants';
+import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
 import { BOOT_TIMEOUT, bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 
 test.describe('Phase 2 — player movement', () => {
@@ -86,8 +87,15 @@ test.describe('Phase 2 — player movement', () => {
     await bootToGame(page);
     await waitTicks(page, 10);
 
+    // AMENDED IN PHASE 3. This used to search for `width === 26 && height === 46`, hardcoding
+    // the product of PLAYER_BOX and the render scale. Phase 3 published the character contract
+    // and both factors changed, so the finder is now DERIVED from the same constants the scene
+    // draws from. A literal here would have made a published-number change look like a broken
+    // renderer, and the next change would break it again.
+    const drawnSize = { w: PLAYER_BOX.w * RENDER_SCALE, h: PLAYER_BOX.h * RENDER_SCALE };
+
     const readBoth = () =>
-      page.evaluate(() => {
+      page.evaluate((size) => {
         const scene = (
           window as unknown as {
             __phaserGame: { scene: { getScene(k: string): unknown } };
@@ -95,14 +103,14 @@ test.describe('Phase 2 — player movement', () => {
         ).__phaserGame.scene.getScene('Game') as {
           children: { list: { x: number; y: number; width: number; height: number }[] };
         };
-        // The player rectangle is the one whose size matches the collision box (26x46).
-        const drawn = scene.children.list.find((o) => o.width === 26 && o.height === 46);
+        // The player rectangle is the one whose size matches the world collision box.
+        const drawn = scene.children.list.find((o) => o.width === size.w && o.height === size.h);
         const sim = window.__game?.player as { x?: number; y?: number } | null | undefined;
         return {
           drawn: drawn ? { x: drawn.x, y: drawn.y } : null,
           sim: { x: sim?.x, y: sim?.y },
         };
-      });
+      }, drawnSize);
 
     const still = await readBoth();
     expect(still.drawn).not.toBeNull();

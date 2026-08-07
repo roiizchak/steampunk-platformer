@@ -8,7 +8,10 @@
 3–5 finished levels, level select, save state, difficulty ramp, and level-complete flow.
 
 ### 2. Required skills
-`tilemaps` · `scenes` · `data-manager` · `curves-and-paths`
+`tilemaps` · `scenes` · `data-manager` · `curves-and-paths` ·
+`e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
+`superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 
 ### 3. Vault-in
 **8.1/3.1** at least one test loads **every shipped** `.tmj` — the defect usually lives in one entry,
@@ -27,20 +30,20 @@ catch?** A schema check passes on a level whose only route is a jump one pixel t
 **is the difficulty ramp reported as a spread or as a single headline number?** *(5.7.)*
 
 ### 5. Deliverables
-`levels/level-01..05.tmj` · `src/sim/progress.ts` · `src/scenes/LevelSelectScene.ts` ·
+`public/assets/levels/level-01..05.tmj` · `src/sim/progress.ts` · `src/scenes/LevelSelectScene.ts` ·
 `src/game/save.ts` · `tests/unit/progress.test.ts` · `tests/unit/level-data.test.ts` ·
 `tests/e2e/phase-08-progression.spec.ts`
 
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 8.1 | **Every** shipped `.tmj` loads, validates, and is completable | unit + e2e *(8.1)* | qa-expert |
-| 8.2 | Full playthrough start → finish without a soft-lock | e2e + hands-on *(C4)* | play |
-| 8.3 | Completing a level unlocks the next; save survives reload | unit + e2e | qa-expert |
-| 8.4 | Save schema tolerates a missing/corrupt file without data loss | corrupt it deliberately | qa-expert |
-| 8.5 | Difficulty ramp measured, spread reported — not a single headline number | *(5.7)* | qa-expert |
-| 8.6 | Level-complete flow: align, animate, fade, overlay, continue | hands-on | play |
-| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | code-reviewer ×2 + perf | — |
+| 8.1 | **Every** shipped `.tmj` loads, validates, and is completable | unit + e2e *(8.1)* | `voltagent-qa-sec:qa-expert` |
+| 8.2 | Full playthrough start → finish without a soft-lock | e2e + `playwright-cli` + hands-on *(C4)* | play |
+| 8.3 | Completing a level unlocks the next; save survives reload | unit + e2e | `voltagent-qa-sec:qa-expert` |
+| 8.4 | Save schema tolerates a missing/corrupt file without data loss | corrupt it deliberately | `voltagent-qa-sec:qa-expert` |
+| 8.5 | Difficulty ramp measured, spread reported — not a single headline number | *(5.7)* | `voltagent-qa-sec:qa-expert` |
+| 8.6 | Level-complete flow: align, animate, fade, overlay, continue | `playwright-cli` + hands-on | play |
+| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` | — |
 | 8.8 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-08-plan.md` | — |
 | 8.9 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-08-impl.md` | codex |
 

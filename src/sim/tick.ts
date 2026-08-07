@@ -112,9 +112,17 @@ export interface CreateWorldOptions {
   /** Art and collision scale (vault 2.11). Required — a forgetful call site is a typecheck error. */
   scale: number;
   solids?: Rect[];
+  /**
+   * The player's feet at level start. Defaults to the grey-box spawn above.
+   *
+   * Optional on purpose: Phase 3 feeds this from the shipped `.tmj`'s spawn object, while every
+   * Phase 2 unit fixture keeps the grey-box default it was written against. A required field here
+   * would have meant editing forty call sites to say "unchanged".
+   */
+  spawn?: { x: number; y: number };
 }
 
-export function createWorld({ seed, scale, solids }: CreateWorldOptions): World {
+export function createWorld({ seed, scale, solids, spawn }: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
   }
@@ -128,8 +136,8 @@ export function createWorld({ seed, scale, solids }: CreateWorldOptions): World 
     tuning,
     scale,
     player: {
-      x: SPAWN_X,
-      y: SPAWN_Y,
+      x: spawn?.x ?? SPAWN_X,
+      y: spawn?.y ?? SPAWN_Y,
       vx: 0,
       vy: 0,
       facing: 1,
