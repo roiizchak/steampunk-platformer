@@ -4,16 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "assets:build": "node tools/gen/build-assets.mjs",
+    "assets:clips": "node tools/gen/build-clips.mjs",
+    "assets:prompts": "node tools/gen/write-prompts.mjs",
+    "assets:world": "node tools/gen/build-world.mjs",
     "build": "tsc --noEmit && vite build && node tools/gen/verify-dist.mjs",
+    "dev": "vite",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:sim-isolated": "npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact",
-    "assets:clips": "node tools/gen/build-clips.mjs",
-    "assets:build": "node tools/gen/build-assets.mjs",
-    "assets:world": "node tools/gen/build-world.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

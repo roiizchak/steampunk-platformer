@@ -76,6 +76,34 @@ export const SPAN_CLIP =
  * vertical" is geometry it can only satisfy one way. The second half removes the ground from the
  * frame entirely, because a figure implied to be *above* something grows a shadow for it — the first
  * jump and fall clips both drew one under boots that were nowhere near a floor.
+ *
+ * ## A monotonicity clause was tried here, and it cost a generation. Do not re-add it.
+ *
+ * Both one-shot clips come back NON-MONOTONIC: measured as source figure height across the six
+ * sampled frames, `jump` went 1190, 982, 908, 1077, 1074, 982 — compress, open, compress again —
+ * and `fall` went 1210, 1090, 834, **796**, 966, 1204, upright into a 66 %-of-standing cannonball
+ * and back. So `SPAN_CLIP`'s *"at every instant the body is at a different position from every other
+ * instant"* was borrowed, minus its *"extending then returning"* half, together with a sentence
+ * naming ONE DIRECTION ONLY and forbidding a return to any pose already passed.
+ *
+ * **Regenerated with it, the jump SOMERSAULTED — frame 4 fully inverted, boots above his head — and
+ * the fall pitched to horizontal.** The same paragraph already said, in the very next sentence, that
+ * he *"does not rotate, does not tip over, does not go horizontal, does not turn upside down and
+ * does not somersault"*. The model resolved "keep changing, never come back" the only way that is
+ * geometrically monotonic — by rotating — and it did so straight through five explicit negations.
+ *
+ * That is this model's documented behaviour arriving from a new direction *(STYLE.md §6)*: a NAMED
+ * element beats a negation, so adding a positive instruction that conflicts with a prohibition does
+ * not balance it, it overrides it. It is also the rule `motion.mjs` already carried — *never
+ * contradict your own prompt, the model resolves it by maximising* — and the clause was written
+ * without noticing it contradicted the paragraph it was being added to.
+ *
+ * A sentence naming the opening frame (*"the motion has ALREADY BEGUN in the very first frame"*)
+ * went in at the same time and did not work either: the regenerated `jump` still opens on a standing
+ * pose, and `motionOnset` moved from frame 5 to frame 15 — later, not earlier.
+ *
+ * Both are reverted. The non-monotonic middle is a real defect and is still open; the fix is NOT a
+ * stronger instruction in this paragraph.
  */
 const UPRIGHT_IN_AIR =
   'Throughout the clip he stays UPRIGHT and vertical, head above his boots and his spine straight ' +
