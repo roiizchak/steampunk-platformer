@@ -223,7 +223,7 @@ Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-revie
 | [docs/PRD.md](docs/PRD.md) | **The spine.** Phase table, Global Constraints, file structure, the QA agent and Codex review protocols. | Once per session, first. |
 | `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
 | [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
-| [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. | When a citation is unfamiliar. |
+| [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) · [docs/lessons/](docs/lessons/) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. LESSONS-APPLIED.md is the root rule, §A/§B/§C and the index; `docs/lessons/phase-NN-*.md` is one vault-in checklist per phase. | **The phase file when executing that phase**; the hub when a citation is unfamiliar. |
 | [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) | Every decision, measurement and deliberate non-fix. QA-LOG.md is the index plus the cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. | **Before re-measuring anything.** |
 | [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. | Before planning a phase — what the last one was warned about. |
 | [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. | Any art work. |

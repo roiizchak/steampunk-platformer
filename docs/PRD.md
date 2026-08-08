@@ -134,9 +134,10 @@ Runs after vault-in and skill invocation, **before the first line of implementat
 ```
 /codex:rescue --wait --fresh Review the plan in docs/prd/phase-NN-<name>.md against this
 repository. Read first: docs/PRD.md (global constraints), docs/FAL-MODELS.md (if this phase
-generates), docs/LESSONS-APPLIED.md (the vault items this phase cites), docs/qa/ (one log per
-phase — what earlier phases actually found), and docs/reviews/ (what earlier phases were warned
-about).
+generates), docs/lessons/phase-NN-<name>.md (this phase's vault items) together with
+docs/LESSONS-APPLIED.md (the root rule and §A/§B/§C, which bind every phase), docs/qa/ (one log
+per phase — what earlier phases actually found), and docs/reviews/ (what earlier phases were
+warned about).
 
 Answer these, and only these:
 1. Which deliverables in this phase's section 5 are NOT actually required by its section 1 goal?
@@ -261,10 +262,11 @@ closing paragraph is fixed and matches the Codex prompts deliberately.
 ```
 Review docs/prd/phase-NN-<name>.md, section 6 (QA gate). You own criteria: <list>.
 
-Read first: docs/PRD.md (Global Constraints + this protocol), docs/LESSONS-APPLIED.md (the
-vault items this phase cites), docs/qa/ (one log per phase — what earlier phases already
-measured; check here before re-measuring anything), and docs/reviews/ (what earlier phases were
-warned about).
+Read first: docs/PRD.md (Global Constraints + this protocol), docs/lessons/phase-NN-<name>.md
+(this phase's vault items) together with docs/LESSONS-APPLIED.md (the root rule and §A/§B/§C,
+which bind every phase), docs/qa/ (one log per phase — what earlier phases already measured;
+check here before re-measuring anything), and docs/reviews/ (what earlier phases were warned
+about).
 
 For each criterion you own, answer separately:
 1. Does the code actually satisfy it, or only appear to?
@@ -355,11 +357,13 @@ public/assets/
 docs/
   PRD.md                      this file — the spine
   prd/                        one document per phase
+  lessons/                    one vault-in checklist per phase
   qa/                         one QA log per phase
   reviews/                    Codex review outputs, one pair per phase
   FAL-MODELS.md               every fal endpoint: schema, price, gotchas
-  STYLE.md  ASSET-PIPELINE.md  LESSONS-APPLIED.md  SOURCE-ANALYSIS.md
-  GENERATION-LOG.md  QA-LOG.md  index + cross-phase entries
+  STYLE.md  ASSET-PIPELINE.md  SOURCE-ANALYSIS.md
+  LESSONS-APPLIED.md  QA-LOG.md  index + cross-phase entries
+  GENERATION-LOG.md
 ```
 
 ---

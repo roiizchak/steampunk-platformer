@@ -150,7 +150,19 @@ describe('phase documents are executable instructions', () => {
     expect([...LEGAL_OWNERS].sort()).toContain('play');
   });
 
-  describe.each(PHASES)('%s', (_name, phase) => {
+  describe.each(PHASES)('%s', (name, phase) => {
+    /**
+     * §D of LESSONS-APPLIED.md was split into one file per phase on 2026-08-08. Like the QA logs,
+     * each is addressed by its phase document's own filename, so `docs/lessons/` and `docs/prd/`
+     * are forced to line up file-for-file — a drifted slug and a missing file are the same red,
+     * which is the point. `doc` throws on a name it cannot resolve; the heading check is what
+     * stops an empty or wrong-phase file from passing.
+     */
+    it('has a vault-in file in docs/lessons named for this phase document', () => {
+      const n = Number(name.slice('phase-'.length, 'phase-'.length + 2));
+      expect(doc(`/docs/lessons/${name}`)).toContain(`### Phase ${n} —`);
+    });
+
     it('has all eight sections', () => {
       for (const heading of [
         '### 1. Goal and scope',
