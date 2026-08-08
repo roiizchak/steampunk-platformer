@@ -35,8 +35,10 @@ import {
   TILESET_TILE_COUNT,
   TILESET_WIDTH,
   groundTileGid,
+  hasSolidAbove,
   tileRect,
 } from '../../src/render/groundTiles';
+import { parseLevel } from '../../src/game/tilemap';
 import { PASS, gateBrassCap } from '../../tools/gen/gates.mjs';
 import { readPng } from '../../tools/gen/png.mjs';
 
@@ -144,5 +146,74 @@ describe('the surface rule itself', () => {
   it('refuses a gid outside the sheet instead of returning a silent rectangle', () => {
     expect(() => tileRect(0)).toThrow(/outside the tileset/);
     expect(() => tileRect(TILESET_FIRST_GID + TILESET_TILE_COUNT)).toThrow(/outside the tileset/);
+  });
+});
+
+/**
+ * `hasSolidAbove` — "buried" means a SOLID is above, not that a tile is drawn above.
+ *
+ * The shipped defect: the caller asked `layer.getTileAt(col, row - 1)` and called the answer
+ * `hasSolidAbove`. Decoration standing on the floor therefore buried the floor. Measured on
+ * `level-01`, the spike run at row 19, cols 24–27 cost the ground beneath it its brass cap across
+ * 384 px — and by STYLE.md §5 RULE ONE that edge is the *only* thing that says "floor".
+ *
+ * These run against the SHIPPED level bytes, the same technique as `tilemap-data.test.ts` running
+ * the real validator over the real file *(vault 3.1)*, plus synthetic fixtures for the two boundary
+ * cases the real level does not happen to contain.
+ */
+describe('hasSolidAbove — solidity from the object layer, never the tile grid (vault 3.3)', () => {
+  const level = parseLevel('level-01', shippedLevel());
+  const T = level.tileHeight;
+  const capped = (col: number, row: number) =>
+    groundTileGid(hasSolidAbove(level.solids, col, row, T)) === SURFACE_GID;
+
+  it('caps the ground under the spike run — the reported defect (4.22)', () => {
+    // Row 19 cols 24-27 hold gid 13, the spikes, which carry NO collision rectangle. The ground
+    // they stand on is row 20, and a player walks along it.
+    for (let col = 24; col <= 27; col += 1) {
+      expect(capped(col, 20)).toBe(true);
+    }
+  });
+
+  it('caps every walkable top and buries everything under one', () => {
+    expect(capped(5, 20)).toBe(true); // flat ground, left span
+    expect(capped(80, 20)).toBe(true); // flat ground, right span
+    expect(capped(5, 21)).toBe(false); // second ground row, buried by the first
+    expect(capped(34, 17)).toBe(true); // pillar top
+    expect(capped(34, 18)).toBe(false); // pillar, buried
+    expect(capped(34, 19)).toBe(false); // pillar, buried
+    expect(capped(50, 16)).toBe(true); // platform A
+    expect(capped(58, 12)).toBe(true); // platform B
+    expect(capped(66, 16)).toBe(true); // platform C
+  });
+
+  it('discriminates — it does not answer the same way everywhere (C2)', () => {
+    // Without this, a predicate hardwired to `false` would satisfy every "is capped" line above.
+    const answers = [capped(5, 20), capped(5, 21)];
+    expect(new Set(answers).size).toBe(2);
+  });
+
+  it('is HALF-OPEN: a solid whose top edge touches the cell bottom does not bury it', () => {
+    // The inclusive-overlap trap, and it inverts the whole level rather than one stretch. The
+    // ground rect starts at y=1920; the row-19 cell spans y 1824..1920. Touching is not covering.
+    const groundTop = 20 * T;
+    const solids = [{ x: 0, y: groundTop, w: 10 * T, h: 2 * T }];
+    expect(hasSolidAbove(solids, 5, 20)).toBe(false);
+    expect(hasSolidAbove(solids, 5, 21)).toBe(true);
+  });
+
+  it('sees a sub-tile-nudged collision strip that genuinely overlaps', () => {
+    // The Element Editor exists to nudge collision off the tile grid, so the predicate must not
+    // assume alignment. One pixel of real overlap is a solid above; zero is not.
+    const nudged = [{ x: 0, y: 20 * T - 1, w: 10 * T, h: T }];
+    expect(hasSolidAbove(nudged, 5, 21)).toBe(true);
+    const clearOfIt = [{ x: 0, y: 20 * T, w: 10 * T, h: T }];
+    expect(hasSolidAbove(clearOfIt, 5, 20)).toBe(false);
+  });
+
+  it('ignores a solid that is beside the cell rather than above it', () => {
+    const solids = [{ x: 20 * T, y: 19 * T, w: T, h: T }];
+    expect(hasSolidAbove(solids, 5, 20)).toBe(false);
+    expect(hasSolidAbove(solids, 20, 20)).toBe(true);
   });
 });

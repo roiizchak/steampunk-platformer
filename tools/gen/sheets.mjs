@@ -13,10 +13,27 @@
  * the pixels. This is the same reasoning as vault **4.18**'s warning that the furthest opaque column
  * is the wrong metric: the widest thing in a frame is rarely the thing you mean.
  *
- * **Vertical: align on the LOWEST opaque row — the feet.** `playerView` draws the sprite with origin
- * `(0.5, 1)` at the player's feet position, and `PLAYER_BOX` is authored `+y` up from the feet
- * *(vault 2.10)*. Art bottom and collision bottom must therefore be the same line. Getting this
- * wrong is the defect Phase 3's Element Editor exists because of.
+ * **Vertical: align on the lowest opaque row of the SHEET, once — not of each frame.** `playerView`
+ * draws the sprite with origin `(0.5, 1)` at the player's feet position, and `PLAYER_BOX` is
+ * authored `+y` up from the feet *(vault 2.10)*, so the art's contact line and the collision bottom
+ * must be the same line. The frame that reaches deepest — the contact pose, the most-extended pose —
+ * is the one that defines it. Every other frame then sits exactly its own measured, scaled lift
+ * above that line.
+ *
+ * It was per-FRAME, and that is the bug this paragraph is the fix for. Pinning each frame's own
+ * lowest pixel to the baseline is right for a planted idle and *inverted* for anything with a
+ * flight phase: at the frames where both boots are clear of the ground the whole body is dragged
+ * DOWN so the lowest boot reaches the line, so the legs pump while the torso sinks. Measured on the
+ * shipped art, in game px, the head sank `run` 15, `jump` 67, `fall` 98 — a full tile of concertina
+ * on the fall. `character-bounds.json`'s `_footOffsetPx` note predicted exactly this.
+ *
+ * The reason preserving it is safe, and not double motion on top of `stepVertical`: the clips are
+ * camera-locked and their prompts explicitly forbid the figure translating in frame *(`motion.mjs`)*.
+ * What the model drew is POSE, not travel.
+ *
+ * This rests on every cell having been cut from one shared row band, which is what `build-clips`
+ * emits and what `assertSingleRowLayout` enforces — `maxY` values from two different rows would be
+ * measured from different origins and the lift would be silent nonsense.
  *
  * ## Scale, and vault A5
  *
@@ -124,6 +141,28 @@ export function detectFrames(keyed, options = {}) {
   return frames;
 }
 
+/**
+ * Refuse anything but one row of frames, because the sheet baseline cannot survive two.
+ *
+ * `packStrip` compares `maxY` across cells to find which frame reaches deepest. That comparison is
+ * only meaningful if every cell was cut from the SAME row band — true for the `N x 1` strips
+ * `build-clips.mjs` emits, and not true in general: `detectFrames` returns a band per row, and the
+ * caller crops each rectangle to its own buffer and drops the original `y`. Two frames from
+ * different rows would then be compared through different origins, and the resulting lift would be
+ * wrong without anything looking wrong. Codex plan review finding 6.
+ */
+export function assertSingleRowLayout(rects) {
+  if (rects.length === 0) throw new Error('assertSingleRowLayout: no frames');
+  const tops = new Set(rects.map((r) => r.y));
+  if (tops.size !== 1) {
+    throw new Error(
+      `assertSingleRowLayout: frames span ${tops.size} row bands (tops ${[...tops].join(', ')}), ` +
+        `but the sheet baseline needs a single row so every frame's maxY shares one origin. A ` +
+        `multi-row sheet must be re-emitted as N x 1 by build-clips.mjs, not packed as-is.`,
+    );
+  }
+}
+
 /** Split a grid image into `cols * rows` cells, reading left to right, top to bottom. */
 export function splitGrid(image, cols, rows) {
   if (image.width % cols !== 0 || image.height % rows !== 0) {
@@ -205,8 +244,9 @@ export function deriveScale(standingHeightPx, renderHeightPx) {
  * Pack keyed cells into one uniform-cell horizontal strip.
  *
  * Every frame is scaled by the SAME `scale`, then placed so its centroid sits on the cell's centre
- * line and its lowest opaque row sits on `baselineY`. Returns the strip plus the per-frame metrics,
- * which is what the catalog and the Gym both need.
+ * line and its feet sit at their measured height above the SHEET's contact line — see the header's
+ * vertical paragraph. Returns the strip plus the per-frame metrics, which is what the catalog, the
+ * lift-profile manifest and the Gym all need.
  */
 export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) {
   if (!(scale > 0)) throw new Error(`packStrip: scale must be > 0, got ${scale}`);
@@ -217,7 +257,9 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
   };
   const frames = [];
 
-  cells.forEach((cell, index) => {
+  // Measure every frame BEFORE placing any of them: the baseline is a property of the sheet, and
+  // the deepest frame is the only one that can define it.
+  const metrics = cells.map((cell, index) => {
     const m = figureMetrics(cell);
     if (!m) {
       throw new Error(
@@ -225,6 +267,22 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
           `build, not be packed as an empty cell (vault 4.16).`,
       );
     }
+    return m;
+  });
+  const deepest = Math.max(...metrics.map((m) => m.maxY));
+
+  cells.forEach((cell, index) => {
+    const m = metrics[index];
+
+    /**
+     * How far above the sheet's contact line this frame's feet were DRAWN, in game pixels.
+     *
+     * Zero on the deepest frame by construction. Rounded once, here, so the value the strip is
+     * built from and the value the manifest records are the same integer — criterion 4.19 asserts
+     * exact equality, deliberately, because a tolerance would hide the rounding error most likely
+     * to appear at this line.
+     */
+    const liftPx = Math.round((deepest - m.maxY) * scale);
 
     // Trim first, then scale ONCE. Scaling the whole cell would waste most of the work and would
     // quantise the figure's position to the cell grid rather than to its own pixels.
@@ -236,7 +294,7 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
     // Centroid, expressed inside the trimmed figure, then scaled.
     const centroidInFigure = (m.centroidX - m.minX) * scale;
     const left = Math.round(index * frameWidth + frameWidth / 2 - centroidInFigure);
-    const top = Math.round(baselineY - sh);
+    const top = Math.round(baselineY - sh - liftPx);
 
     /**
      * CLIPPING CHECK — and note what it is checking.
@@ -268,6 +326,27 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
       );
     }
 
+    /**
+     * VERTICAL CLIPPING CHECK — the counterpart to the horizontal one above, and it was missing.
+     *
+     * The copy loop below skips any row outside the cell, so an over-tall or highly-lifted frame
+     * was silently decapitated instead of failing the build. A cropped sprite still looks like a
+     * sprite, which is exactly how the last two defects on this animation reached the screen. It
+     * matters more now than it did: a frame's placement is no longer bounded by its own height,
+     * because `liftPx` pushes it upward as well.
+     */
+    const overflowTop = -top;
+    const overflowBottom = top + sh - frameHeight;
+    if (overflowTop > 0 || overflowBottom > 0) {
+      throw new Error(
+        `packStrip: frame ${index} is clipped by the ${frameHeight}px cell vertically ` +
+          `(${Math.max(0, overflowTop)}px off the top, ${Math.max(0, overflowBottom)}px off the ` +
+          `bottom). It is ${sh}px tall and sits ${liftPx}px above the sheet's contact line, so a ` +
+          `cell of at least ${sh + liftPx}px is required. Raise frameHeight in ` +
+          `character-bounds.json — do NOT rescale this animation to fit (vault 4.14).`,
+      );
+    }
+
     for (let y = 0; y < sh; y += 1) {
       const ty = top + y;
       if (ty < 0 || ty >= frameHeight) continue;
@@ -291,8 +370,12 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
       drawnWidth: sw,
       drawnHeight: sh,
       pixels: m.pixels,
+      liftPx,
+      // The SOURCE coordinate the lift was measured from, carried out so the lift-profile manifest
+      // records its own inputs and a test can re-derive `liftPx` instead of trusting it.
+      sourceMaxY: m.maxY,
     });
   });
 
-  return { strip, frames };
+  return { strip, frames, deepestSourceY: deepest };
 }

@@ -66,6 +66,50 @@ export function isGreyboxFill(gid: number): boolean {
   return gid === GREYBOX_FILL_GID;
 }
 
+/** A solid rectangle in world space, top-left origin, `+y` down — the shape `LevelData.solids` has. */
+export interface SolidRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Is the cell directly above `(col, row)` **solid**?
+ *
+ * This asks the collision rectangles, not the tile layer, and the difference is a shipped bug. The
+ * caller used to ask `layer.getTileAt(col, row - 1)` — *is any tile DRAWN above me* — while calling
+ * the answer `hasSolidAbove`. A decorative tile standing on the ground therefore made the ground
+ * beneath it read as buried and lose its brass cap. It cost `level-01` a 4-tile stretch at
+ * x 2304–2688, under the spike run, where 384 px of walkable floor drew as plain brick — and
+ * STYLE.md §5 RULE ONE is *"a player identifies a platform by that brass edge alone"*. The header
+ * above already names the spike run as the case the `isGreyboxFill` guard was protecting; this is
+ * the other half of that protection, and it was missing.
+ *
+ * Solidity comes from the object layer, never from the tile grid *(vault 3.3)* — which is also why
+ * the fix cannot be "give the spikes a tile the rule ignores". Spikes are a hazard, not a platform:
+ * they stay non-solid, and you walk through them until Phase 5 owns hazards.
+ *
+ * **Half-open, positive-area overlap, and that is load-bearing.** An inclusive test would count the
+ * ground rectangle beginning at `y = 1920` as touching the row-19 cell that ends at `y = 1920`, and
+ * every row-20 cap in the level would invert to brick — the same defect, upside down. A rectangle
+ * must genuinely cover part of the cell's interior to bury it.
+ */
+export function hasSolidAbove(
+  solids: readonly SolidRect[],
+  col: number,
+  row: number,
+  tileSize: number = TILE_SIZE,
+): boolean {
+  const left = col * tileSize;
+  const right = left + tileSize;
+  const top = (row - 1) * tileSize;
+  const bottom = top + tileSize;
+  return solids.some(
+    (s) => s.x < right && s.x + s.w > left && s.y < bottom && s.y + s.h > top,
+  );
+}
+
 /** Packed sheet dimensions implied by the above, in pixels. Asserted against the shipped file. */
 export const TILESET_WIDTH = TILESET_COLUMNS * TILE_SIZE;
 export const TILESET_HEIGHT = (TILESET_TILE_COUNT / TILESET_COLUMNS) * TILE_SIZE;

@@ -9,12 +9,13 @@ import {
   TILESET_FIRST_GID,
   TILESET_TILE_COUNT,
   groundTileGid,
+  hasSolidAbove,
   isGreyboxFill,
 } from '../render/groundTiles';
 import { playerRenderDesc } from '../render/playerView';
 import { createSnapshot, latchJumpPress } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
-import type { InputSnapshot, World } from '../sim/types';
+import type { InputSnapshot, Rect, World } from '../sim/types';
 
 /**
  * The production play scene: it owns the clock, the keyboard, and the drawing. It owns no game
@@ -363,7 +364,7 @@ export class GameScene extends Phaser.Scene {
     if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
       throw new Error('GameScene: expected a CPU TilemapLayer; the GPU layer has no Canvas fallback');
     }
-    this.applySurfaceTiles(layer);
+    this.applySurfaceTiles(layer, level.solids);
     this.groundLayer = layer;
   }
 
@@ -462,20 +463,26 @@ export class GameScene extends Phaser.Scene {
    *
    * **`tile.index` is a GID.** `groundTileGid` returns one; do not put a local sheet index here.
    *
-   * The mutation-during-iteration is deliberate and safe: `forEachTile` walks rows top-down, so
-   * `getTileAt(y - 1)` reads a cell this loop has already rewritten. It does not matter, because
-   * the question asked is only *whether* a tile is above, never which one, and rewriting never
-   * empties a cell. Worth knowing before adding a second condition here that does care.
+   * **"Buried" is decided from the SOLIDS, not from the tile layer.** It used to read
+   * `layer.getTileAt(tile.x, tile.y - 1)` — *is any tile drawn above me* — while calling the answer
+   * `hasSolidAbove`. Decoration standing on the floor therefore buried the floor: the spike run at
+   * row 19 cost the ground beneath it its brass cap across four tiles, and that edge is the only
+   * thing STYLE.md §5 RULE ONE lets a player read as "floor". Solidity comes from the object layer
+   * *(vault 3.3)*, so that is what the question has to be asked of.
+   *
+   * This also retires the old mutation-during-iteration note. That note argued the loop was safe
+   * *because* `getTileAt` could only be asked whether a tile was present, never which one. The
+   * predicate no longer reads the layer at all, so the loop's rewrites cannot influence its own
+   * answers — the hazard the note was managing does not exist any more.
    */
-  private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer): void {
+  private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer, solids: readonly Rect[]): void {
     layer.forEachTile((tile) => {
       // Authored art is left exactly as the level file wrote it. Only the grey-box fill is the
       // rule's to reinterpret — see `GREYBOX_FILL_GID`.
       if (tile.index < 0 || !isGreyboxFill(tile.index)) {
         return;
       }
-      const above = layer.getTileAt(tile.x, tile.y - 1);
-      tile.index = groundTileGid(Boolean(above && above.index >= 0));
+      tile.index = groundTileGid(hasSolidAbove(solids, tile.x, tile.y));
     });
   }
 
