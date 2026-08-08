@@ -17,9 +17,11 @@ rebuilt. *(4.15, 4.17)*
 probes, not shipped assets, so nothing in the game depends on rebuilding them — but they are
 consequently **not rebuildable**, and that is stated here rather than discovered later.
 
-**Running total: 44 generations · $4.98 quoted, plus one contested Seedance clip.** 21 on the retired
-`nano-banana-2` ($1.68) and 22 on `nano-banana-pro` ($3.30), plus one `seedance-2.0/image-to-video`
-probe whose price two authoritative sources disagree on by ~22× ($0.056 vs $1.21).
+**Running total: 53 generations · $4.98 quoted, plus TEN contested Seedance clips.** 21 on the retired
+`nano-banana-2` ($1.68) and 22 on `nano-banana-pro` ($3.30), plus ten `seedance-2.0/image-to-video`
+generations — the original probe plus the nine of gate 4b/I — whose price two authoritative sources
+disagree on by ~22× ($0.056 vs $1.21 each). That puts the true total between **$5.54 and $17.08**, and
+the unread invoice is now the difference between a tenth of the budget and two thirds of it.
 **No invoice has been read yet** — every figure here is a quoted rate, and vault 4.9 is explicit
 that a quoted rate is not one.
 
@@ -540,3 +542,210 @@ walk   walk@brass-courier-walk#1..4
 run    run@brass-courier-run#1..4        (entered via walk@brass-courier-walk#1)
 jump   jump@brass-courier-jump#1..4  ->  fall@brass-courier-fall#1..2
 ```
+
+---
+
+## Gate 4b/I — the character animations move to Seedance video · 9 gens · contested · (cum. see below)
+
+**This reverses gate 4.2b's verdict.** That gate compared Seedance video against a
+`nano-banana-pro/edit` grid sheet and recorded *"probe B wins, and it is not close"*. The
+measurement was right; the conclusion was wrong, and the evidence was already in the shipped sheets
+rather than in the probe.
+
+### What the shipped per-frame sheets actually measured
+
+Consecutive-frame silhouette IoU, and the colour change inside the overlap:
+
+| anim | IoU (consecutive) | interior change | drawn width | drawn height |
+|---|---|---|---|---|
+| `idle` | **0.86 – 0.98** | 13 – 36 | 86 – 103 px | 293 – 294 px |
+| `walk` | 0.54 – 0.87 | 27 – 44 | 114 – 160 px | 285 – 306 px |
+| `run` | 0.45 – 0.60 | 33 – 44 | 102 – 151 px | 253 – 280 px |
+
+An IoU of 0.98 means the two poses **are the same pose**. So the idle carried no breath at all — and
+its interior still changed by 13–36 per channel, which is not motion, it is the character being
+redrawn slightly differently every frame. That is what "the idle looks weird" was: goggles, pauldron,
+bandolier and satchel boiling on a figure that never moved.
+
+**Trajectory coherence** puts a number on it. If a character is genuinely moving, two frame-steps
+travel about twice as far as one, because the poses lie on a path; if each frame is an independent
+redraw the differences are uncorrelated and two steps barely beat one.
+
+```
+                OLD    NEW      (2.00 = smooth path, 1.00 = independent redraws)
+   walk         1.09   1.51
+   run          1.13   1.62
+   idle         1.66   1.46
+```
+
+Walk and run were statistically indistinguishable from independent redraws. **The idle row went the
+other way and is recorded as it measured, not as it was expected to.** The old idle scores *higher*
+because it drifted monotonically off its neutral pose — measured at the time, frames 5–8 all sat
+0.037 from frame 1 and never returned — and a monotone drift is a perfectly smooth path. It is also
+a broken idle: it is precisely why no cut of it closed and why it had to be ping-ponged. Coherence
+rewards drift and penalises a closed loop, so it is the wrong instrument for idle. The defensible
+idle result is that **its loop now closes on its own**: wrap 0.00657 against a 0.02436 budget, with
+`pingPong` switched off.
+
+Root cause of all of it: per-frame image generation is N independent draws. It cannot hold identity
+between frames, and it cannot draw a difference smaller than its own noise floor — which a subtle
+breathing idle is. Video is temporally consistent *by construction*.
+
+### Why probe A failed, and why that was the prompt
+
+Probe A asked for *"exactly six full strides"* and returned a near-idle with a slow turn. That is a
+**named count with no named mechanics**. A sibling project (`C:\Claude\Street-Fighter`,
+`docs/art-pipeline.md`) measured the identical failure on a backpedal — *"he slid backward without
+moving his legs"*, 0.14 against 0.56–0.79 for its forward walk — and cured it by describing what each
+limb does. Its conclusion, reached before this project's: *"Independent per-pose still gens DRIFT
+badly… Video is temporally consistent by construction, which is what fixes the drift."*
+
+Three of its rules are now encoded in `tools/gen/motion.mjs`: `SPAN_CLIP` for one-shot motions, a
+named cycle COUNT for cyclic ones, and "subtle" never used as the whole instruction.
+
+### The generations
+
+All from the locked anchor (`019fe00f-2745-7b71-b34c-b26470e422c1`) as `image_url`, on
+`bytedance/seedance-2.0/image-to-video`, `9:16`, `720p`, `duration 4`, `generate_audio false`.
+
+| # | anim | `request_id` | kept | why |
+|---|---|---|---|---|
+| 1 | `idle` | `019fe104-7cd3-7482-afca-dbb3b7eef158` | ✅ | breathes; height spread 1.5% |
+| 2 | `walk` | `019fe104-a989-7701-93ee-a6a94fea32da` | ✅ | full stride cycle |
+| 3 | `run` | `019fe104-d373-74d0-8ef5-4896e07b1fef` | ✅ | knee drive, airborne phase |
+| 4 | `jump` | `019fe104-febe-7b41-9df4-3ddf9e086afa` | ❌ | lost side profile from frame 4; ground shadow |
+| 5 | `fall` | `019fe105-2f35-7061-8f71-6d2b72aaaaac` | ❌ | **somersaulted** — fully inverted by frame 6 |
+| 6 | `jump` | `019fe10c-d694-7ef1-997d-313fa7bb6ca1` | ❌ | upright, but rose out of frame: 4 of 6 frames headless |
+| 7 | `fall` | `019fe10d-046c-7591-89fe-d2beb0b77d9c` | ❌ | same — travelled out of frame |
+| 8 | `jump` | `019fe118-b92d-7241-a64e-418add36a4b5` | ✅ | fixed position, whole body in frame |
+| 9 | `fall` | `019fe118-e5bf-7c63-9210-7e411715ebff` | ✅ | fixed position, whole body in frame |
+
+Every clip measured by `ffprobe`, counted not read: **720×1280, 97 frames, 24/1, 4.041667 s**, all
+nine identical.
+
+**Three prompt lessons, each paid for with a generation:**
+
+1. **`SPAN_CLIP` is wrong for an airborne state.** It says *extending through the first half and
+   returning through the second*, which is true of a jab and false of a fall. The model resolved the
+   contradiction by rotating him. *Never contradict your own prompt — it resolves it by maximising.*
+2. **Negation does not remove a structural element** *(STYLE.md §6)*. "No shadow, no floor" was in
+   the shared block and both clips drew a ground shadow anyway, because a figure in mid-air implies a
+   surface to be above. Removing the surface from the geometry worked.
+3. **Do not ask the art for travel the sim already supplies.** `playerView` draws the sprite at the
+   player's position, which `stepVertical` moves every tick, so a sprite that also translates inside
+   its cell is asking for the motion twice — and it rose straight out of frame. Both airborne
+   animations are now a POSE PROGRESSION at a fixed position. No sampling window can put a cropped
+   head back.
+
+### The cycle count cannot come from the prompt
+
+Every cyclic brief names exactly two cycles. Measured on the clips that came back, the model
+delivered **4.0 for `walk`, 6.1 for `run` and 2.6 for `idle`**. `simTicks` is the duration of ONE
+cycle *(vault 4.22)*, so a sheet holding two strides halves the derived fps and puts foot-slide back.
+
+So `tools/gen/sampler.mjs` measures the cycle length off the finished clip: the shortest window
+whose wrap, after sampling N frames, is small against both its own median step and its furthest
+excursion from its first frame.
+
+**Two instruments were tried and one was discarded honestly.** Autocorrelating each frame's
+silhouette difference against frame 0 returned `r = 0.27–0.30` on all three clips and called the idle
+**12 cycles** — the signal is dominated by the monotone rise away from frame 0, which correlates at
+almost any lag. Reporting that peak as a period would have been vault **4.18**'s exact failure.
+
+The first version of the working instrument was also wrong, and its own output revealed it: scoring
+on `wrap ≤ 1.5 × medianStep` alone, it chose the **minimum** window length for both walk and run and
+reported 8.1 cycles in clips whose feet plainly showed 4 and 6. At a short window the samples are
+adjacent source frames, the median step is noise, and one of 85 candidate starts always passes by
+luck. The fix is the question that actually defines a cycle — did the pose travel away and come
+*back* — and its threshold is read off the clips rather than chosen:
+
+```
+   real closures      walk L=24 -> 0.025   run L=16 -> 0.045   idle L=37 -> 0.106
+   best-of-85 noise   walk L=12 -> 0.319   run L=12 -> 0.489   idle L=12 -> 0.522
+```
+
+Nothing falls between 0.11 and 0.15. The recovered counts — 4.0, 6.1, 2.6 — agree with foot-spread
+measured independently off the same clips.
+
+One-shot clips get the same treatment at the other end: every clip opens on the anchor pose, because
+the anchor is the start image, so sampling from frame 0 spends one or two of six frames on a standing
+figure. Sampling runs from the measured motion onset.
+
+### Two defects the existing gates could not see
+
+**`detectFrames` segmented a limb as a frame.** Its `minGap` was a flat 8 px, sane on a 2K grid sheet
+and far too small on a 1328 px-tall video frame, where the green gap between a swinging arm and the
+torso is wider than that. So `walk` built **15 cells for 12 sampled frames with three of them
+EMPTY**, and `fall` 7 for 6 with one empty — a character vanishing for a frame, mid-animation.
+
+**Every gate passed it.** `gateMotionFloor` and `gateLoopWrap` are difference metrics, and a blank
+frame is a large, perfectly consistent difference. A gate that cannot see a blank frame is decoration
+*(C2)*, so two things changed: `minGap` is now 2 % of the sheet height — the invariant it was
+reaching for is scale-free, since a gap between two figures is always much wider than a gap inside
+one — and `build-assets` now refuses any cell that is empty or shorter than half the median drawn
+height. Both were watched red before being trusted *(C1)*: forcing `minGap` back to 8 fails the build
+with `"walk" cell 2 of 15 is 4x5 against a median height of 293 — that is a fragment, not a frame`.
+
+`findSource` in `build-assets` was hardened at the same time. It used `.find()`, so with both a
+superseded generation and its replacement present it built whichever the filesystem listed first —
+and `idle-preview.png` matches `idle-` too. It now refuses an ambiguous prefix, the same fix `raw()`
+in `build-world.mjs` already carries.
+
+### What the new numbers are, and what re-deriving them was for
+
+**Scale re-derived, idle first** *(vault A5)*. The source changed from a 2K grid sheet where the
+courier stands 935 px to a 720×1280 clip where he stands 1209 px, so `288 / 1209 = 0.2382134`
+replaces `0.3080214`. Still a downscale — 4.2× — so every drawn pixel is one the model drew. The
+twelve idle frames span 1200–1218 px, a spread of **18 px / 1.5 %**.
+
+**Walk stride re-measured, 276 → 310 game px.** Same method as before so the two are comparable: the
+widest foot-to-foot span at a contact frame is one step, doubled for the two steps in a cycle. The
+new 12-frame walk peaks at 155 px on frames 2 and 12 and troughs at 53 on frame 9 — two peaks across
+the sheet, which independently confirms the sampler cut exactly one cycle. Leaving 276 against a
+310 px stride would have been a 12 % foot-slide, the exact defect the derivation exists to prevent.
+
+| anim | frames | simTicks | fps (derived) | provenance |
+|---|---|---|---|---|
+| `idle` | 8 → **12** | 90 | 9.33 → **8.00** | authored |
+| `walk` | 8 → **12** | 50 → **56** | 9.60 → **12.86** | measured |
+| `run` | 8 → **12** | 39 | 12.31 → **18.46** | measured |
+| `jump` | 4 → **6** | 18 | 13.33 → **20.00** | sim |
+| `fall` | 4 → **6** | 18 | 13.33 → **20.00** | sim |
+
+`simTicks` and `fps` are still derived by `animTimings()` from the sim and the measured inputs — only
+the inputs moved.
+
+> 🔴 **`run`'s stride is still NOT measured and must not be reported as if it were.** At a run contact
+> frame the trailing leg is airborne, so the foot band captures one boot and cannot call the step
+> length — INDETERMINATE by vault **4.18**'s own standard. Its 468 px is the value scaled from the
+> *old* walk art, so it is now doubly unverified. Settling it is a Gym task (ASSET-PIPELINE §6); the
+> observable if it is wrong is run foot-slide. This is a pre-existing open item, not one this work
+> introduced.
+
+### Verified on screen
+
+Dev build at 1920×1080, waiting on `window.__game.ready`, sampling once per animation frame inside
+the page and returning an aggregate — never `waitForTimeout`, never "advance N ticks then read once".
+
+```
+idle   12 distinct frames   8.00 fps measured   ( 8.00 derived)
+walk   12 distinct frames  12.80 fps measured   (12.86 derived)   5.54 px/tick = walkTopSpeed
+run    12 distinct frames  18.40 fps measured   (18.46 derived)   12.0 px/tick = topSpeed
+```
+
+**Foot-slide, measured on the shipped art:** walking covers **307 px per animation cycle** against a
+310 px drawn stride — a 1 % match. 0 console errors. Identity held across all nine clips: same face,
+goggles, pauldron, bandolier, satchel, forearm brace. Dev server killed by port *(C13)*.
+
+395 unit tests pass, typecheck clean, `npm run build` green including `verify-dist ok`.
+
+### Spend
+
+**9 Seedance clips at a price that is still unread.** `genmedia pricing` reports
+`unit_price 0.014 / "units"` with no unit defined, no cost field appears in any job record, and
+`genmedia` exposes no billing command — so the 22× disagreement ($0.056 vs $1.21 per clip) stands
+exactly where gate 4.2b left it. Bounds on this batch: **$0.50 – $10.89**. Cumulative worst case
+**$16.92 of the $25 ceiling**; cumulative best case $6.53.
+
+⚠️ The fal.ai dashboard invoice line remains the highest-value unread number in this phase, and it is
+now attached to nine clips rather than one.

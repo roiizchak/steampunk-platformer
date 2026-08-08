@@ -51,8 +51,28 @@ import { crop, downscale } from './resize.mjs';
  * Method: project opacity onto each axis, split on runs of empty rows/columns wider than `minGap`.
  * Frames are returned in reading order, top to bottom then left to right.
  */
-export function detectFrames(keyed, { minGap = 8, minExtent = 16 } = {}) {
+export function detectFrames(keyed, options = {}) {
   const { width, height, data } = keyed;
+
+  /**
+   * **`minGap` is a fraction of the sheet, not a constant, and that is a bug fix.**
+   *
+   * It was a flat 8 px, which is a sane gap-between-figures on a 2K grid sheet where the drawn
+   * character is a few hundred pixels tall. The video path packs 720x1280 source frames, in which
+   * the courier stands 1209 px tall — and at that size the green gap between his swinging arm and
+   * his torso is comfortably wider than 8 px. So the arm segmented as its OWN column band, became
+   * its own "frame", and then packed to nothing once `removeSpecks` had it.
+   *
+   * The result got through every gate: `walk` shipped 15 cells for 12 sampled frames with **three
+   * of them completely EMPTY**, and `fall` 7 for 6 with one empty. `gateMotionFloor` and
+   * `gateLoopWrap` both passed, because a blank frame is a large, perfectly consistent difference.
+   *
+   * The invariant the constant was reaching for is scale-free: a gap that separates two FIGURES is
+   * always much wider than a gap inside one. 2 % of the sheet height expresses that at any source
+   * resolution — 27 px here, and still 8 px on anything up to 400 px tall.
+   */
+  const minGap = options.minGap ?? Math.max(8, Math.round(height * 0.02));
+  const minExtent = options.minExtent ?? 16;
 
   const opaqueAt = (x, y) => data[(y * width + x) * 4 + 3] >= 8;
 

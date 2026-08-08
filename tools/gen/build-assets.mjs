@@ -49,15 +49,29 @@ function findSource(action) {
         `docs/GENERATION-LOG.md. This build does NOT substitute a placeholder (vault 4.16).`,
     );
   }
-  const file = readdirSync(GENERATED).find((f) => f.startsWith(`${action}-`) && f.endsWith('.png'));
-  if (!file) {
+  const files = readdirSync(GENERATED).filter(
+    (f) => f.startsWith(`${action}-`) && f.endsWith('.png'),
+  );
+  if (files.length === 0) {
     throw new Error(
       `assets:build: no source sheet for declared animation "${action}" in ${GENERATED}. ` +
         `A declared input that cannot be found fails the build; it is never substituted ` +
         `(vault 4.16).`,
     );
   }
-  return join(GENERATED, file);
+  // **An ambiguous prefix is refused, never resolved by picking the first.** This was `.find()`,
+  // which silently returns whichever entry `readdirSync` happened to list first — so a directory
+  // holding both a superseded generation and its replacement builds one of them at random, and
+  // `idle-preview.png` is a match for `idle-` too. `raw()` in build-world.mjs had the identical bug
+  // and caught a `-preview.png` on its first run after being hardened. Same fix, same reason.
+  if (files.length > 1) {
+    throw new Error(
+      `assets:build: "${action}" matches ${files.length} sheets in ${GENERATED} ` +
+        `(${files.join(', ')}). Move the superseded ones into ${GENERATED}/superseded/ — picking ` +
+        `the first would silently ship whichever the filesystem listed first.`,
+    );
+  }
+  return join(GENERATED, files[0]);
 }
 
 function loadConfig() {
@@ -98,10 +112,19 @@ function main() {
     const { keyed } = keySheet(findSource('idle'));
     const heights = framesOf(keyed).map((f) => figureMetrics(f)?.height ?? 0);
     const standing = Math.round(heights.reduce((a, b) => a + b, 0) / heights.length);
-    const scale = deriveScale(standing, 96);
+    // The target height is read from the config rather than written here. It was a literal `96`,
+    // which went stale the moment RENDER_SCALE moved 2 -> 6 and `renderHeightPx` became 288 — and a
+    // deriver that prints a number for the wrong target is worse than no deriver, because its output
+    // is meant to be pasted straight into the file it disagrees with.
+    const renderHeight = loadConfig().renderHeightPx;
+    const scale = deriveScale(standing, renderHeight);
     console.log(`idle frame heights: ${heights.join(', ')}`);
-    console.log(`mean standing height: ${standing} source px`);
-    console.log(`scale for a 96 px render height: ${scale.toFixed(8)}`);
+    const spread = Math.max(...heights) - Math.min(...heights);
+    console.log(
+      `mean standing height: ${standing} source px  (spread ${spread} px, ` +
+        `${((spread / standing) * 100).toFixed(1)}% — this is the frame-to-frame size pop)`,
+    );
+    console.log(`scale for a ${renderHeight} px render height: ${scale.toFixed(8)}`);
     console.log(`\nWrite this into ${CONFIG} deliberately. The build will not derive it (vault A5).`);
     return;
   }
@@ -163,6 +186,38 @@ function main() {
           `animation to fit, which is exactly what vault 4.14 forbids.`,
       );
     }
+
+    /**
+     * **No cell may be blank or a fragment**, checked before the gates rather than by them.
+     *
+     * This exists because it happened: `detectFrames`'s fixed 8 px `minGap` segmented a swinging
+     * arm as its own column band on the much larger video frames, so `walk` packed 15 cells for 12
+     * sampled frames with **three of them empty**, and `fall` 7 for 6. Every gate passed it —
+     * `gateMotionFloor` and `gateLoopWrap` are difference metrics, and a blank frame is a large,
+     * perfectly consistent difference. On screen it is a character vanishing for a frame.
+     *
+     * A gate that cannot see a blank frame is decoration *(C2)*, and the honest fix is a check that
+     * asks the question directly. The height test catches the near-miss too: a cell holding only a
+     * detached boot is not empty, but it is not a frame either.
+     */
+    const drawnHeights = frames.map((f) => f.drawnHeight);
+    const medianHeight = [...drawnHeights].sort((a, b) => a - b)[drawnHeights.length >> 1];
+    frames.forEach((f, i) => {
+      if (f.drawnHeight <= 0 || f.drawnWidth <= 0) {
+        throw new Error(
+          `assets:build: "${action}" packed an EMPTY cell at index ${i} of ${frames.length}. ` +
+            `That is a blank frame in the animation. It means the sheet segmented into more bands ` +
+            `than there are figures — usually a limb split off by detectFrames' minGap.`,
+        );
+      }
+      if (f.drawnHeight < medianHeight / 2) {
+        throw new Error(
+          `assets:build: "${action}" cell ${i} of ${frames.length} is ${f.drawnWidth}x` +
+            `${f.drawnHeight} against a median height of ${medianHeight} — that is a fragment, ` +
+            `not a frame. Same cause as an empty cell, caught one step earlier.`,
+        );
+      }
+    });
 
     // Gate the packed frames before writing them, not after — a sheet that fails its motion floor
     // should be visible at build time, not discovered in the Gym.
