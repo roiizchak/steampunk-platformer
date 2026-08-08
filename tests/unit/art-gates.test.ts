@@ -50,6 +50,7 @@ describe('the gate self-test (criterion 4.26, vault 4.21)', () => {
       'dimensions',
       'grid-exact',
       'loop-wrap',
+      'loop-wrap-largest-step',
       'motion-floor',
       'reach-band',
       'reach-ignores-static',

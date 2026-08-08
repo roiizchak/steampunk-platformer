@@ -147,7 +147,13 @@ export function anchorPrompt(template, concept) {
 export function sheetPrompt(template, { action, frames, cycles, phases }) {
   const rendering = templateBlock(template, 'RENDERING');
   const forbid = templateBlock(template, 'DO NOT INCLUDE');
-  const grid = frames === 4 ? 'a 2 by 2 grid' : `a 1 by ${frames} row`;
+  // A `1 by N` row is the wrong ask above four frames: the sheet is generated at a fixed 1:1
+  // aspect, so eight cells in a single row give each figure an eighth of the width and the
+  // character comes back too small to carry the detail this scale exists for. Two rows keeps the
+  // cells roughly square. `detectFrames` reads the real grid off the pixels either way — this only
+  // decides how much resolution each figure gets *(the idle sheet came back 4 x 2 unasked)*.
+  const GRIDS = { 4: 'a 2 by 2 grid', 6: 'a 3 by 2 grid', 8: 'a 4 by 2 grid', 12: 'a 4 by 3 grid' };
+  const grid = GRIDS[frames] ?? `a 1 by ${frames} row`;
   return [
     `A ${frames}-frame ${action} animation sprite sheet of THIS EXACT CHARACTER, arranged as ` +
       `${grid}. Read left to right, top to bottom.`,
@@ -195,25 +201,66 @@ export function sheetPrompt(template, { action, frames, cycles, phases }) {
  * else.
  */
 export const SHEET_PHASES = Object.freeze({
+  /**
+   * **Eight frames, not four, and the reason is arithmetic rather than taste.**
+   *
+   * The frame rate is derived, never authored: `fps = renderFrames x TICK_HZ / simTicks`, where
+   * `simTicks = round(stride / speed)` *(vault 4.22)*. After the Phase 4 re-scale the walk cycle
+   * covers 276 px at 5.54 px/tick — **50 ticks** — so four frames derive to **4.8 fps**. That is
+   * the honest anti-foot-slide answer and it is visibly choppy; the only term left to move is the
+   * frame count. Eight frames put walk at 9.6 fps and run at 12.3 fps, both in the ordinary band
+   * for pixel-art locomotion, with the feet still landing exactly where the sim says.
+   *
+   * The phases are the standard eight-pose cycle — contact, down, passing, up, then the same four
+   * mirrored — rather than four poses with in-betweens invented, because naming each pose is what
+   * this model actually obeys.
+   */
   run: [
-    'contact — right leg forward and planted, left leg extended back, torso pitched slightly ' +
-      'forward, arms counter-swung',
-    'passing — legs together beneath the body, left knee driving up, body at its highest',
-    'contact — left leg forward and planted, right leg extended back, arms swapped',
-    'passing — legs together beneath the body, right knee driving up, body at its highest',
+    'contact — right foot striking the ground in front, left leg extended back, torso pitched ' +
+      'forward, left arm forward and right arm back',
+    'down — weight fully over the bent right leg, body at its LOWEST point of the cycle, left leg ' +
+      'swinging through beneath',
+    'passing — right leg driving back and straightening, left knee lifted high in front',
+    'up — full extension off the right toe, BOTH FEET CLEAR OF THE GROUND, body at its HIGHEST, ' +
+      'left leg reaching forward',
+    'contact — left foot striking the ground in front, right leg extended back, arms swapped',
+    'down — weight fully over the bent left leg, body at its LOWEST, right leg swinging through',
+    'passing — left leg driving back and straightening, right knee lifted high in front',
+    'up — full extension off the left toe, BOTH FEET CLEAR OF THE GROUND, body at its HIGHEST, ' +
+      'right leg reaching forward',
   ],
   walk: [
     'contact — right heel just down in front, left toe just leaving behind, stride SHORT and the ' +
       'torso upright, arms swinging gently at the sides',
-    'passing — legs together beneath the body, left knee lifted only slightly, body at its highest',
+    'down — weight settling over the right leg, knee softly bent, body at its LOWEST point',
+    'passing — legs together directly beneath the body, left knee lifted only slightly',
+    'up — pushing off the right toe, body at its HIGHEST, left leg reaching gently forward',
     'contact — left heel just down in front, right toe just leaving behind, arms swapped',
-    'passing — legs together beneath the body, right knee lifted only slightly',
+    'down — weight settling over the left leg, knee softly bent, body at its LOWEST',
+    'passing — legs together directly beneath the body, right knee lifted only slightly',
+    'up — pushing off the left toe, body at its HIGHEST, right leg reaching gently forward',
   ],
+  /**
+   * Eight ASKED-FOR poses, replacing four asked-for poses that came back as eight.
+   *
+   * The first idle sheet was requested as a 4-frame 2 x 2 grid and returned **8 figures in 4 x 2**
+   * — recorded at the time as a happy accident, since `detectFrames` reads the grid off the pixels
+   * and `fps` derives from whatever count is really there. It is not an accident that helps: four
+   * of the eight poses were the model's invention, so the loop steps unevenly regardless of the
+   * frame rate. Naming all eight is what makes a smooth cycle a specification rather than a hope.
+   *
+   * The arc returns to neutral at frame 8 so the wrap into frame 1 is continuous — which is what
+   * `gateLoopWrap` measures.
+   */
   idle: [
     'neutral stance, both feet flat and level, arms relaxed at the sides, chest at rest',
-    'a shallow inhale — the chest and shoulders rise very slightly, the head lifts a fraction',
+    'the very beginning of an inhale — the chest starts to lift, shoulders barely moving',
+    'inhaling — chest and shoulders clearly but gently risen, the head lifting a fraction',
     'the top of the breath — posture at its tallest, still clearly the same relaxed stance',
-    'exhale — the chest settles back toward neutral, shoulders dropping',
+    'holding, the faintest settle — the shoulders ease a little while the chest stays full',
+    'the beginning of the exhale — the chest starts to fall, shoulders dropping slightly',
+    'exhaling — chest and shoulders most of the way back down, the head lowering a fraction',
+    'almost neutral again — a hair below the starting pose, about to settle into frame 1',
   ],
   // Airborne. NOTE these two are exactly the states `keepLargestComponent` is forbidden for
   // (vault 4.13): a raised arm or a trailing coat can legitimately be a second component.

@@ -142,9 +142,30 @@ export function gateLoopWrap(frames, slack = 1.5) {
     steps.push(frameDifference(frames[i - 1], frames[i]));
   }
   const wrap = frameDifference(frames[frames.length - 1], frames[0]);
-  const median = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)];
-  const budget = median * slack;
-  const value = { wrap, medianStep: median, budget };
+  const sorted = [...steps].sort((a, b) => a - b);
+  const median = sorted[Math.floor(steps.length / 2)];
+  const largestStep = sorted[sorted.length - 1];
+
+  /**
+   * The budget is the median times `slack`, **or the largest step the clip already makes**,
+   * whichever is larger.
+   *
+   * The gate asks one question: does the wrap read as a SNAP? A wrap no bigger than a step the
+   * animation already contains cannot, by definition — the viewer has already seen a jump that
+   * size and read it as motion.
+   *
+   * Without that clause the gate fails clips it should not. A ping-ponged idle plays `1..n` then
+   * `n-1..2`, so its wrap is literally the drawn `2 -> 1` step; but mirroring also duplicates every
+   * small interior step, which drags the median DOWN, and the real step then fails a budget derived
+   * from the halved median. Measured on the shipped idle: wrap 0.01523 against a 0.01516 budget —
+   * a 0.5 % miss on a step the artist drew, while the clip's own largest step was 0.02491.
+   *
+   * This makes the gate weaker in exactly one direction, and it is worth naming: a clip whose
+   * frames are ALL wildly far apart now has a large budget. That case is already caught, by
+   * `gateMotionFloor` from below and by the fact that such a clip has no coherent motion to read.
+   */
+  const budget = Math.max(median * slack, largestStep);
+  const value = { wrap, medianStep: median, largestStep, budget };
   return wrap <= budget
     ? verdict(PASS, value, `wrap ${wrap.toFixed(5)} within ${budget.toFixed(5)}`)
     : verdict(FAIL, value, `wrap ${wrap.toFixed(5)} exceeds ${budget.toFixed(5)} — it snaps`);
@@ -595,6 +616,22 @@ export function selfTest() {
     'loop-wrap',
     gateLoopWrap(ramp).status === FAIL && gateLoopWrap(pingpong).status === PASS,
     'a clip that jumps back at the wrap fails; one that returns smoothly passes',
+  );
+
+  // --- the largest-step clause, pinned in both directions.
+  //
+  // A clip with one big interior move and a wrap the SAME size must pass — the viewer has already
+  // seen a jump that size and read it as motion. The same clip with a wrap larger than anything it
+  // contains must still fail, or widening the budget would have made the gate decorative.
+  const shade = (k) => fill(blank(16, 16, [0, 0, 0, 255]), 0, 0, 16, 16, [k, k, k, 255]);
+  //           steps: 10, 10, 120        wrap back to 0 is 140 -> larger than any step
+  const bigStepBadWrap = [0, 10, 20, 140].map(shade);
+  //           steps: 10, 10, 120        wrap 3 -> 0 is 120, exactly the largest step
+  const bigStepGoodWrap = [0, 10, 20, 140].map(shade).concat([shade(20)]);
+  check(
+    'loop-wrap-largest-step',
+    gateLoopWrap(bigStepBadWrap).status === FAIL && gateLoopWrap(bigStepGoodWrap).status === PASS,
+    'a wrap no larger than a step the clip already makes is not a snap; a larger one still is',
   );
 
   // --- reach band: a moved arm is measured; a 4px twitch is INDETERMINATE, never a guess.

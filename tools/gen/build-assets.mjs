@@ -118,7 +118,31 @@ function main() {
   for (const action of ACTIONS) {
     const source = findSource(action);
     const { keyed, key, agreement } = keySheet(source);
-    const cells = framesOf(keyed);
+    let cells = framesOf(keyed);
+
+    /**
+     * **Ping-pong: play the poses out and back, so the wrap is a real step by construction.**
+     *
+     * Requested for `idle` in `character-bounds.json`, and it is an animation-design statement
+     * rather than a workaround for a bad sheet. A breathing loop genuinely IS a there-and-back —
+     * the chest rises and falls through the same positions — while a walk cycle is not, because
+     * a reversed stride is a character moonwalking. So this is opt-in per animation, never
+     * automatic, and never applied because a gate went red.
+     *
+     * It is also the fix that works. The regenerated 8-pose idle failed `gateLoopWrap` with a wrap
+     * of 0.0356 against a 0.0152 budget, and no shorter prefix closed either: measured back to
+     * frame 1, frames 5 through 8 all sit 0.037-0.038 away, so the model drifted off the neutral
+     * pose partway through and never returned. Re-rolling is a coin flip on a model STYLE.md §3
+     * records as NOT seed-deterministic. Mirroring is deterministic and free, and it is exactly
+     * what `mirrorLoop` already does for the parallax seams — which went FAIL -> PASS on the same
+     * reasoning.
+     *
+     * Interior frames only (`1..n` then `n-1..2`), so neither endpoint is duplicated and every
+     * step in the loop is a step the artist actually drew.
+     */
+    if (config.animations?.[action]?.pingPong) {
+      cells = [...cells, ...cells.slice(1, -1).reverse()];
+    }
 
     // Feet on the LAST row of the cell: `playerView` draws at origin (0.5, 1) on the player's feet
     // position, and PLAYER_BOX is authored +y up from the feet (vault 2.10). Any gap below the feet

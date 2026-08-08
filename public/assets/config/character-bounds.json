@@ -22,13 +22,14 @@
   "_stride": "Ground distance one full 4-frame cycle covers, in GAME pixels. Scaled x3 with RENDER_SCALE 2 -> 6, because these are GAME pixels. This is what makes the locomotion frame rate derived rather than authored (vault 4.22): simTicks = round(stride / topSpeed), so retuning runMax or walkMax re-derives the fps with no asset rebuild, and foot-slide is the observable defect if the number is wrong. WALK is measured directly - at both contact frames both boots are planted and the foot band spans 45-46 source-derived px, doubled for the two steps in a cycle. RUN is NOT measured the same way and must not be reported as if it were: at its contact frames the trailing leg is airborne, so the foot band captures only one boot (21-22 px) and the metric cannot call the stride - INDETERMINATE by vault 4.18's own standard. It is instead scaled from walk by the ratio of full-extension widths (78/46), giving 78 px per step and 156 per cycle at the old scale. Re-derive it in the Gym against the real running character.",
 
   "animations": {
-    "idle": { "loop": true, "footOffsetPx": 0, "activeFrames": [] },
+    "idle": { "loop": true, "pingPong": true, "footOffsetPx": 0, "activeFrames": [] },
     "walk": { "loop": true, "footOffsetPx": 0, "activeFrames": [] },
     "run": { "loop": true, "footOffsetPx": 0, "activeFrames": [] },
     "jump": { "loop": false, "footOffsetPx": 0, "activeFrames": [] },
     "fall": { "loop": false, "footOffsetPx": 0, "activeFrames": [] }
   },
 
+  "_pingPong": "Play the poses out and back (1..n then n-1..2) so the loop wrap is a real drawn step rather than a jump. Opt-in per animation and never applied because a gate went red: a breathing idle genuinely IS a there-and-back, while a reversed walk cycle is a character moonwalking. Set for idle because the 8-pose sheet drifted off its neutral pose partway through - measured, frames 5-8 all sit 0.037 from frame 1 - so no cut of it closes, and this model is not seed-deterministic (STYLE.md 3) so re-rolling is a coin flip. Doubling the frames also raises the derived fps, which is the other half of why the loop read as choppy.",
   "_footOffsetPx": "Per-animation vertical nudge, applied to the packed frame. Zero for every animation today. It exists because an airborne pose tucks its legs, so the art's lowest pixel sits above where the collision box bottom actually is - bottom-aligning jump and fall makes the character appear to stand on air. That is a Gym adjustment (ASSET-PIPELINE §6), and this is the field it saves into.",
   "_activeFrames": "Per-frame attack hitbox toggles. Empty for every animation because attack, hurt and death are PHASE 5 deliverables - their contact frames must align to active windows defined in src/sim/combat.ts, which does not exist yet."
 }

@@ -19,20 +19,20 @@
     {
       "key": "brass-courier-idle",
       "url": "assets/characters/brass-courier/sheets/idle.png",
-      "frameWidth": 288, "frameHeight": 336, "frameCount": 8,
-      "simTicks": 90, "fps": 5.333333333333333, "loop": true, "derivedFrom": "authored"
+      "frameWidth": 288, "frameHeight": 336, "frameCount": 14,
+      "simTicks": 90, "fps": 9.333333333333334, "loop": true, "derivedFrom": "authored"
     },
     {
       "key": "brass-courier-walk",
       "url": "assets/characters/brass-courier/sheets/walk.png",
-      "frameWidth": 288, "frameHeight": 336, "frameCount": 4,
-      "simTicks": 50, "fps": 4.8, "loop": true, "derivedFrom": "measured"
+      "frameWidth": 288, "frameHeight": 336, "frameCount": 8,
+      "simTicks": 50, "fps": 9.6, "loop": true, "derivedFrom": "measured"
     },
     {
       "key": "brass-courier-run",
       "url": "assets/characters/brass-courier/sheets/run.png",
-      "frameWidth": 288, "frameHeight": 336, "frameCount": 4,
-      "simTicks": 39, "fps": 6.153846153846154, "loop": true, "derivedFrom": "measured"
+      "frameWidth": 288, "frameHeight": 336, "frameCount": 8,
+      "simTicks": 39, "fps": 12.307692307692308, "loop": true, "derivedFrom": "measured"
     },
     {
       "key": "brass-courier-jump",
