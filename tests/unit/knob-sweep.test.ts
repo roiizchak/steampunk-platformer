@@ -47,6 +47,7 @@ const EXPECTED_KNOBS = [
   'maxFallSpeed',
   'runAccel',
   'runMax',
+  'walkMax',
 ];
 
 /**
@@ -98,6 +99,39 @@ const SCENARIOS: Record<string, Scenario> = {
       advance(world, input, 5);
       input.right = true;
       return countJumps(world, input, 40);
+    }),
+
+  /**
+   * The walk modifier: the only scenario in which `walkMax` is the ACTIVE cap.
+   *
+   * Without this, `walkMax` moves no observable output in any scenario and the sweep goes red —
+   * correctly. That redness is the proof the knob is real rather than decorative (vault A6), and
+   * it is why the scenario was added alongside the knob rather than after it.
+   *
+   * It ends mid-approach on purpose: run past convergence and every walkMax under the distance
+   * covered produces the same resting fingerprint, so the scenario stops discriminating.
+   */
+  walkHeld: (tuning) =>
+    withTuning(tuning, undefined, (world, input) => {
+      advance(world, input, 5);
+      input.right = true;
+      input.walkHeld = true;
+      return countJumps(world, input, 12);
+    }),
+
+  /**
+   * The cap SHRINKING under a moving player — reach `runMax` first, then hold the modifier.
+   *
+   * This is the bleed path in `stepHorizontal`, which the steady-state `walkHeld` scenario never
+   * touches: there the player is under the cap the whole way up. Codex plan review finding 8.
+   */
+  walkFromRun: (tuning) =>
+    withTuning(tuning, undefined, (world, input) => {
+      advance(world, input, 5);
+      input.right = true;
+      const jumps = countJumps(world, input, 20);
+      input.walkHeld = true;
+      return jumps + countJumps(world, input, 4);
     }),
 
   /** Ground friction: accelerate, then release and coast. */
@@ -210,7 +244,9 @@ function perturbations(key: string, value: number): number[] {
 describe('every Playground knob moves an observable output (criterion 2.6, vault A6)', () => {
   it('the knob roster matches the hand-written list — deleting a knob goes RED (Codex F7a)', () => {
     expect(Object.keys(DEFAULT_TUNING).sort()).toEqual([...EXPECTED_KNOBS].sort());
-    expect(EXPECTED_KNOBS.length).toBe(11);
+    // 11 through Phase 3; `walkMax` is Phase 4's, added with the `walk` state. Deleting a knob
+    // AND its roster entry together would satisfy the equality above, so the count is pinned too.
+    expect(EXPECTED_KNOBS.length).toBe(12);
   });
 
   it('every knob is a finite number, so a sweep of it means something', () => {

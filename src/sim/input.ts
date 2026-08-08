@@ -11,9 +11,9 @@
  *   > render frame ended.** A frame that drains zero ticks must leave the press exactly where it
  *   > found it.
  *
- * Persistent state (`left`, `right`, `jumpHeld`) is not latched at all. Vault 2.5 permits sampling
- * it, because "is the key down" is true across a whole batch by definition. Only edges — "the key
- * went down" — can be destroyed by observing them at the wrong rate.
+ * Persistent state (`left`, `right`, `jumpHeld`, `walkHeld`) is not latched at all. Vault 2.5
+ * permits sampling it, because "is the key down" is true across a whole batch by definition. Only
+ * edges — "the key went down" — can be destroyed by observing them at the wrong rate.
  *
  * Why the scene latches from the keyboard EVENT rather than polling:
  * `Phaser.Input.Keyboard.JustDown()` is a consuming read that resets when checked, and polling
@@ -30,6 +30,7 @@ export function createSnapshot(): InputSnapshot {
     right: false,
     jumpHeld: false,
     jumpPressed: false,
+    walkHeld: false,
   };
 }
 

@@ -46,6 +46,7 @@ export const DEFAULT_TUNING: TuningKnobs = {
   runAccel: 2.2,
   airAccel: 1.3,
   runMax: 10.4,
+  walkMax: 4.8,
   groundFriction: 3.2,
   airFriction: 0.44,
   gravity: 1.8,
@@ -116,23 +117,56 @@ export function enterState(player: PlayerSim, next: PlayerState): void {
 }
 
 /**
- * Step 4 of the tick order: pick the state from the facts already established this tick.
+ * Step 11 of the tick order: pick the state from the facts already established this tick.
  *
  * Derived, never assigned piecemeal from six places — which is how a state machine acquires a
  * transition nobody can find.
+ *
+ * **The walk branch tests the BODY, not the button.** `walkHeld` alone is not enough: with
+ * direction released, friction takes several ticks to bring `vx` under `walkMax`, and publishing
+ * `walk` during those ticks would play the walk animation at run speed. That is foot-slide arriving
+ * through the state machine rather than through the art, and it is invisible to a steady-state test
+ * (Codex plan review finding 8, case 2). Testing `|vx| <= walkMax` here makes the invariant a
+ * tautology enforced at the one door, which is the only place it cannot be forgotten.
  */
-export function resolveState(player: PlayerSim, movingHorizontally: boolean): void {
+export function resolveState(
+  player: PlayerSim,
+  movingHorizontally: boolean,
+  walkHeld: boolean,
+  tuning: TuningKnobs,
+): void {
   if (!player.grounded) {
     enterState(player, player.vy < 0 ? 'jump' : 'fall');
     return;
   }
-  enterState(player, movingHorizontally ? 'run' : 'idle');
+  if (!movingHorizontally) {
+    enterState(player, 'idle');
+    return;
+  }
+  const walking = walkHeld && Math.abs(player.vx) <= tuning.walkMax;
+  enterState(player, walking ? 'walk' : 'run');
 }
 
-/** Step 6: horizontal acceleration, friction, and the speed cap. */
-export function stepHorizontal(player: PlayerSim, tuning: TuningKnobs, dir: -1 | 0 | 1): void {
+/**
+ * Step 5: horizontal acceleration, friction, and the active speed cap.
+ *
+ * The cap is `walkMax` while the modifier is held and `runMax` otherwise — so unlike every other
+ * knob in this file, **the cap can change under a moving player**. A plain clamp to the new cap is
+ * an instantaneous velocity change from `runMax` to `walkMax` in a single tick, which reads as a
+ * stutter and cannot be smoothed in the render layer later because vault 2.11 forbids scaling
+ * velocities there. So an over-cap speed BLEEDS toward the cap at `friction` instead
+ * (Codex plan review finding 8, case 1). Accelerating still clamps, as it always did — that path
+ * cannot exceed the cap in the first place.
+ */
+export function stepHorizontal(
+  player: PlayerSim,
+  tuning: TuningKnobs,
+  dir: -1 | 0 | 1,
+  walkHeld: boolean,
+): void {
   const accel = player.grounded ? tuning.runAccel : tuning.airAccel;
   const friction = player.grounded ? tuning.groundFriction : tuning.airFriction;
+  const cap = walkHeld ? tuning.walkMax : tuning.runMax;
 
   if (dir === 0) {
     // Decelerate toward zero and STOP there. Without the clamp the player creeps forever at a
@@ -146,10 +180,18 @@ export function stepHorizontal(player: PlayerSim, tuning: TuningKnobs, dir: -1 |
   }
 
   player.facing = dir === 1 ? 1 : -1;
-  player.vx = Math.max(-tuning.runMax, Math.min(tuning.runMax, player.vx + accel * dir));
+
+  const speed = Math.abs(player.vx);
+  if (speed > cap && Math.sign(player.vx) === dir) {
+    // Already faster than the cap allows and still pushing that way: the cap shrank under us.
+    player.vx = dir * Math.max(cap, speed - friction);
+    return;
+  }
+
+  player.vx = Math.max(-cap, Math.min(cap, player.vx + accel * dir));
 }
 
-/** Step 7: gravity, the fall-speed clamp, and the early-release jump cut. */
+/** Step 6: gravity, the fall-speed clamp, and the early-release jump cut. */
 export function stepVertical(player: PlayerSim, tuning: TuningKnobs, jumpHeld: boolean): void {
   if (player.jumpCutPending && !jumpHeld && player.vy < 0) {
     player.vy = player.vy / tuning.jumpCutDivisor;
@@ -164,7 +206,7 @@ export function stepVertical(player: PlayerSim, tuning: TuningKnobs, jumpHeld: b
 }
 
 /**
- * Step 10: resolve the player's box against static geometry, one axis at a time.
+ * Step 9: resolve the player's box against static geometry, one axis at a time.
  *
  * Axis-separated resolution rather than a single overlap push. A combined push has to guess which
  * axis caused the overlap, and it guesses wrong exactly at the corner of a platform — which reads

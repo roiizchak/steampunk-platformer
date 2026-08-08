@@ -184,7 +184,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    Placed BEFORE integration on purpose so knockback reaches this tick's movement.
 
   // 5. Horizontal.
-  stepHorizontal(player, tuning, dir);
+  stepHorizontal(player, tuning, dir, input.walkHeld);
 
   // 6. Vertical.
   stepVertical(player, tuning, input.jumpHeld);
@@ -233,7 +233,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     position published in the same tick describe the same moment — see the header note on
   //     Codex review 2 finding I4.
 
-  resolveState(player, dir !== 0 || player.vx !== 0);
+  resolveState(player, dir !== 0 || player.vx !== 0, input.walkHeld, tuning);
 
   // 12. Emit edges (vault 2.5) — returned, never reconstructed by comparing state across frames.
 

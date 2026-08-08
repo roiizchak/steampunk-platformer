@@ -41,6 +41,7 @@ export class GameScene extends Phaser.Scene {
   private heldLeft: Phaser.Input.Keyboard.Key[] = [];
   private heldRight: Phaser.Input.Keyboard.Key[] = [];
   private heldJump: Phaser.Input.Keyboard.Key[] = [];
+  private heldWalk: Phaser.Input.Keyboard.Key[] = [];
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -123,7 +124,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   protected helpText(): string {
-    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump';
+    // SHIFT is a PRODUCTION control, so it belongs in `base` and not behind the DEV branch below.
+    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk';
     // The dev-scene keys are bound only under `import.meta.env.DEV`, so advertising them in a
     // production build offers the player two keys that do nothing. Vite folds this to `base`.
     // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
@@ -173,12 +175,14 @@ export class GameScene extends Phaser.Scene {
       this.input$.left = false;
       this.input$.right = false;
       this.input$.jumpHeld = false;
+      this.input$.walkHeld = false;
       return;
     }
 
     this.input$.left = this.heldLeft.some((key) => key.isDown);
     this.input$.right = this.heldRight.some((key) => key.isDown);
     this.input$.jumpHeld = this.heldJump.some((key) => key.isDown);
+    this.input$.walkHeld = this.heldWalk.some((key) => key.isDown);
   }
 
   private bindKeys(): void {
@@ -187,7 +191,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O } = Phaser.Input.Keyboard.KeyCodes;
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, SHIFT } = Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
     // second; with repeats enabled every one would latch a fresh jump edge, and holding the
@@ -198,6 +202,9 @@ export class GameScene extends Phaser.Scene {
     this.heldLeft = [addKey(LEFT), addKey(A)];
     this.heldRight = [addKey(RIGHT), addKey(D)];
     this.heldJump = [addKey(SPACE), addKey(UP), addKey(W)];
+    // The walk modifier. Persistent state, sampled every frame in `sampleHeldKeys` — no `down`
+    // listener, because unlike jump it is not an edge and has nothing to latch.
+    this.heldWalk = [addKey(SHIFT)];
 
     for (const key of this.heldJump) {
       key.on('down', () => {

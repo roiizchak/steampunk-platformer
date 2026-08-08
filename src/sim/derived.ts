@@ -39,6 +39,22 @@ export interface DerivedFeel {
   topSpeed: number;
   /** Ticks of held input to reach it. */
   ticksToTopSpeed: number;
+  /** The same cap with the walk modifier held. The only output `walkMax` moves. */
+  walkTopSpeed: number;
+  /**
+   * Ticks whose PUBLISHED state was `jump`, and ticks whose published state was `fall`.
+   *
+   * **Counted, never obtained as `airtimeTicks - riseTicks`.** `airtimeTicks` includes the landing
+   * tick, which is already `grounded` and therefore publishes `idle` or `run` — so subtracting
+   * misallocates one non-fall tick to the fall animation. Codex plan review finding 9 predicted
+   * exactly that off-by-one against an earlier draft of the Phase 4 plan.
+   *
+   * These are the `simTicks` the jump and fall animation frame rates are derived from
+   * (`fps = renderFrames * TICK_HZ / simTicks`, vault 4.22). A derivation that cannot be wrong by
+   * one is worth more than a corrected subtraction.
+   */
+  riseTicks: number;
+  fallTicks: number;
   /** Pixels travelled between releasing the key and stopping, on the ground. */
   groundStopPx: number;
   /** The same in the air — how much a released jump keeps drifting. */
@@ -70,10 +86,19 @@ export function derivedFeel(tuning: TuningKnobs, ticksToMs: (t: number) => numbe
   jump.input.jumpPressed = true;
   let apex = floorY;
   let airtime = 0;
+  let riseTicks = 0;
+  let fallTicks = 0;
   for (let i = 0; i < 600; i += 1) {
     const events = advance(jump.world, jump.input, 1);
     apex = Math.min(apex, jump.world.player.y);
     airtime += 1;
+    // Count the state this tick PUBLISHED. The landing tick is grounded and publishes idle/run,
+    // so it lands in neither bucket — which is the whole point of counting instead of subtracting.
+    if (jump.world.player.state === 'jump') {
+      riseTicks += 1;
+    } else if (jump.world.player.state === 'fall') {
+      fallTicks += 1;
+    }
     if (events.landed) {
       break;
     }
@@ -109,6 +134,22 @@ export function derivedFeel(tuning: TuningKnobs, ticksToMs: (t: number) => numbe
     ticksToTop = i + 1;
   }
   const topSpeed = run.world.player.vx;
+
+  // The same run-up with the walk modifier held. Separate scratch world: reusing `run` would start
+  // from `runMax` and measure the bleed-down path instead of the cap.
+  const walk = scratch(tuning);
+  advance(walk.world, walk.input, 5);
+  walk.input.right = true;
+  walk.input.walkHeld = true;
+  let previousWalkVx = -1;
+  for (let i = 0; i < 600; i += 1) {
+    advance(walk.world, walk.input, 1);
+    if (walk.world.player.vx === previousWalkVx) {
+      break;
+    }
+    previousWalkVx = walk.world.player.vx;
+  }
+  const walkTopSpeed = walk.world.player.vx;
 
   // Ground stop: distance covered after releasing the key.
   run.input.right = false;
@@ -148,6 +189,9 @@ export function derivedFeel(tuning: TuningKnobs, ticksToMs: (t: number) => numbe
     shortHopPx: round(floorY - hopApex),
     topSpeed: round(topSpeed, 2),
     ticksToTopSpeed: ticksToTop,
+    walkTopSpeed: round(walkTopSpeed, 2),
+    riseTicks,
+    fallTicks,
     groundStopPx: round(groundStopPx),
     airDriftPx: round(airDriftPx),
     terminalFallSpeed: round(fastest, 2),

@@ -46,6 +46,7 @@ export interface PlayerRenderDesc {
  */
 const STATE_COLOURS: Record<PlayerState, number> = {
   idle: 0xc8a86b,
+  walk: 0xd4b87a,
   run: 0xe0c98a,
   jump: 0x7fb2c8,
   fall: 0x9a7bb0,
