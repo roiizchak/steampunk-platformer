@@ -132,11 +132,34 @@ export function anchorPrompt(template, concept) {
 
 /** The three anchor concepts. They differ in BUILD and SILHOUETTE, not in style or rendering. */
 export const ANCHOR_CONCEPTS = Object.freeze({
+  /**
+   * The approved silhouette, made explicitly male.
+   *
+   * Round 1's courier read as androgynous and the user asked for a man. Exactly ONE thing moves
+   * *(vault 4.10)*: the subject's sex is now stated four ways — noun, pronoun, jaw, stubble — with
+   * the clothing, the goggles, the satchel and the arm brace left word for word as they were, since
+   * those are what read well at 96 px. Two moving variables would make the next comparison
+   * unattributable.
+   */
   courier:
-    'a young courier of slight athletic build, brass goggles pushed up on the forehead over short ' +
-    'dark hair, layered clothing with visible folds and stitching, leather straps and buckles, a ' +
-    'satchel worn across the body, ornate metal fittings, and a mechanical brace on the left ' +
-    'forearm. Practical boots. A distinct face with a visible expression.',
+    'a young MAN, male, of slight athletic build. He has a squared masculine jaw, a straight brow ' +
+    'and light stubble. Brass goggles with multiple stacked lenses and a cracked leather strap ' +
+    'pushed up on the forehead over short dark hair. ' +
+    // Detail density, named element by element. STYLE.md §6's whole finding is that this model
+    // obeys a specifically named element and ignores a generic instruction — "highly detailed"
+    // is a generic instruction. Round 2 read as under-decorated, so the ornamentation is now
+    // enumerated rather than asked for. This does NOT contradict the locked RENDERING block
+    // (vault 4.3); it is the same demand, made specific.
+    'ORNAMENTATION, all of it visible: a riveted brass pauldron on one shoulder; a layered ' +
+    'high collar over a buttoned waistcoat; a bandolier of small capped copper vials across the ' +
+    'chest; a pocket watch on a brass chain looped to a waistcoat button; a wide leather belt ' +
+    'with a heavy engraved brass buckle and three tool loops holding a spanner and calipers; a ' +
+    'worn satchel with a scuffed flap, two brass catches and stitched repair patches; knee patches ' +
+    'and elbow patches with visible stitching; frayed cuffs; a mechanical brace on the left ' +
+    'forearm built from riveted brass plates, a small round pressure gauge with a visible needle, ' +
+    'and two thin copper pipes running to a knuckle guard. ' +
+    'Every metal surface shows patina, wear and individual rivets. Practical scuffed boots with ' +
+    'buckled straps. A distinct male face with a visible expression.',
   engineer:
     'a heavy-set older engineer, broad shouldered, brass goggles pushed up on the forehead over ' +
     'grey cropped hair, a long weighted work coat with visible folds and stitching, thick leather ' +

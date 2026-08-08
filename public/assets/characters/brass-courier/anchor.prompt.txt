@@ -1,0 +1,18 @@
+A single full-body character sprite reference for a 2D side-scrolling platformer, standing alone against a flat background.
+
+FRAMING: the whole character from the top of the head to the soles of both boots, with empty space above and below. Three-quarter view facing to the right. A neutral standing pose, weight on both feet, arms clear of the torso so the silhouette reads. Nothing is cropped.
+
+CHARACTER: a young MAN, male, of slight athletic build. He has a squared masculine jaw, a straight brow and light stubble. Brass goggles with multiple stacked lenses and a cracked leather strap pushed up on the forehead over short dark hair. ORNAMENTATION, all of it visible: a riveted brass pauldron on one shoulder; a layered high collar over a buttoned waistcoat; a bandolier of small capped copper vials across the chest; a pocket watch on a brass chain looped to a waistcoat button; a wide leather belt with a heavy engraved brass buckle and three tool loops holding a spanner and calipers; a worn satchel with a scuffed flap, two brass catches and stitched repair patches; knee patches and elbow patches with visible stitching; frayed cuffs; a mechanical brace on the left forearm built from riveted brass plates, a small round pressure gauge with a visible needle, and two thin copper pipes running to a knuckle guard. Every metal surface shows patina, wear and individual rivets. Practical scuffed boots with buckled straps. A distinct male face with a visible expression.
+
+SILHOUETTE: unmistakable and asymmetric, readable as a solid black shape at three tiles tall. No two characters in this game share an outline.
+
+BACKGROUND: one flat uniform chroma green field, RGB 0 255 0, edge to edge. No floor, no shadow cast onto the background, no gradient, no vignette, no scenery, no props, no ground line, no platform beneath the feet. The character touches nothing.
+
+RENDERING: detailed high-definition pixel art in the tradition of Owlboy, Blasphemous and Dead
+Cells. Dense fine pixel detail and heavy ornamentation on every foreground surface: individual
+rivets, seams, engraved filigree, wear, patina, cracked mortar, bolt heads. Many shading steps
+per material with hand-dithered gradients. Hard edges and crisp dark outlines on every
+gameplay-critical shape.
+
+DO NOT INCLUDE: words, letters, sentences, logos, watermarks, signatures, photorealism, 3D
+rendering, depth of field blur, soft focus, airbrushed gradients, lens flare., background scenery, ground shadow, drop shadow, floor, interface, health bar, portrait medallion, multiple characters, cropped limbs.
