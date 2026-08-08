@@ -17,8 +17,15 @@ export interface FigureMetrics {
   width: number;
   height: number;
   centroidX: number;
+  centroidY: number;
   pixels: number;
 }
+
+/**
+ * Which landmark a sheet's frames are aligned on. `feet` when the ART puts the character on the
+ * floor; `centroid` when the SIM owns altitude, i.e. `jump` and `fall`.
+ */
+export type VerticalAnchor = 'feet' | 'centroid';
 
 export interface PackedFrame {
   index: number;
@@ -33,6 +40,8 @@ export interface PackedFrame {
    * carries and criterion 4.19 asserts.
    */
   liftPx: number;
+  sourceMaxY: number;
+  sourceCentroidY: number;
 }
 
 export declare function detectFrames(
@@ -46,7 +55,20 @@ export declare function figureMetrics(image: RgbaImage, alphaFloor?: number): Fi
 export declare function keyCell(cell: RgbaImage): RgbaImage;
 export declare function deriveScale(standingHeightPx: number, renderHeightPx: number): number;
 
+export declare function frameLifts(
+  cells: RgbaImage[],
+  metrics: FigureMetrics[],
+  scale: number,
+  anchor?: VerticalAnchor,
+): number[];
+
 export declare function packStrip(
   cells: RgbaImage[],
-  options: { scale: number; frameWidth: number; frameHeight: number; baselineY: number },
-): { strip: RgbaImage; frames: PackedFrame[] };
+  options: {
+    scale: number;
+    frameWidth: number;
+    frameHeight: number;
+    baselineY: number;
+    anchor?: VerticalAnchor;
+  },
+): { strip: RgbaImage; frames: PackedFrame[]; deepestSourceY: number };

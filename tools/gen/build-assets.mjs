@@ -205,11 +205,13 @@ function main() {
      * defect — it is the trailing boot lifting, or the flight phase — and re-zeroing it per frame
      * is what made the torso sink while the legs pumped. See `sheets.mjs`'s header.
      */
+    const anchor = config.animations?.[action]?.verticalAnchor ?? 'feet';
     const { strip, frames, deepestSourceY } = packStrip(cells, {
       scale,
       frameWidth,
       frameHeight,
       baselineY: frameHeight,
+      anchor,
     });
 
     const tallest = Math.max(...frames.map((f) => f.drawnHeight));
@@ -285,8 +287,14 @@ function main() {
     });
 
     liftProfile[action] = {
+      anchor,
       deepestSourceY,
-      frames: frames.map((f) => ({ index: f.index, sourceMaxY: f.sourceMaxY, liftPx: f.liftPx })),
+      frames: frames.map((f) => ({
+        index: f.index,
+        sourceMaxY: f.sourceMaxY,
+        sourceCentroidY: Number(f.sourceCentroidY.toFixed(3)),
+        liftPx: f.liftPx,
+      })),
     };
 
     const flag = summary.status === PASS ? 'ok  ' : '⚠   ';

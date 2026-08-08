@@ -195,6 +195,7 @@ export function figureMetrics(image, alphaFloor = 8) {
   let maxX = -1;
   let maxY = -1;
   let sumX = 0;
+  let sumY = 0;
   let count = 0;
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
@@ -204,6 +205,7 @@ export function figureMetrics(image, alphaFloor = 8) {
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
         sumX += x;
+        sumY += y;
         count += 1;
       }
     }
@@ -216,6 +218,8 @@ export function figureMetrics(image, alphaFloor = 8) {
     width: maxX - minX + 1,
     height: maxY - minY + 1,
     centroidX: sumX / count,
+    /** Vertical centre of mass — the landmark the `centroid` vertical anchor tracks. */
+    centroidY: sumY / count,
     pixels: count,
   };
 }
@@ -248,7 +252,47 @@ export function deriveScale(standingHeightPx, renderHeightPx) {
  * vertical paragraph. Returns the strip plus the per-frame metrics, which is what the catalog, the
  * lift-profile manifest and the Gym all need.
  */
-export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) {
+/**
+ * How far above the sheet's contact line each frame is drawn, in game pixels.
+ *
+ * Two anchors, because two different things are true of grounded and airborne animations.
+ *
+ * **`feet`** — track the figure's lowest opaque row. Right whenever the ART is what puts the
+ * character on the floor: the contact frame defines the line and a lifted boot or a flight phase
+ * reads as exactly the lift the model drew.
+ *
+ * **`centroid`** — track the figure's vertical centre of mass instead. Right for `jump` and `fall`,
+ * where the SIM owns altitude: `stepVertical` already moves the sprite every tick, so art that also
+ * rises adds a second, uncorrelated motion. Measured on the shipped clips, feet-anchoring gave the
+ * jump 51 px of its own climb and put a 48 px balloon in the middle of the fall; centroid-anchoring
+ * holds both inside ~11 px and lets only the pose change. Chosen on sight from the A/B, which is the
+ * only way this one could be chosen — ranges alone cannot separate pose deformation from drift.
+ *
+ * Both are then **normalised so the lowest-drawn frame sits exactly on the line**. Centroid lifts are
+ * signed, and without this a frame could be placed below the cell floor — which the vertical guard
+ * would (correctly) throw on. Normalising preserves every inter-frame relationship and only chooses
+ * where the set as a whole rests.
+ */
+export function frameLifts(cells, metrics, scale, anchor = 'feet') {
+  let raw;
+  if (anchor === 'feet') {
+    const deepest = Math.max(...metrics.map((m) => m.maxY));
+    raw = metrics.map((m) => (deepest - m.maxY) * scale);
+  } else if (anchor === 'centroid') {
+    const reference = Math.max(...metrics.map((m) => m.centroidY));
+    raw = metrics.map((m) => (reference - m.centroidY) * scale);
+  } else {
+    throw new Error(
+      `frameLifts: unknown vertical anchor "${anchor}". Use "feet" for grounded animations or ` +
+        `"centroid" for airborne ones, and say which in character-bounds.json.`,
+    );
+  }
+  const rounded = raw.map((v) => Math.round(v));
+  const floor = Math.min(...rounded);
+  return rounded.map((v) => v - floor);
+}
+
+export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY, anchor = 'feet' }) {
   if (!(scale > 0)) throw new Error(`packStrip: scale must be > 0, got ${scale}`);
   const strip = {
     width: frameWidth * cells.length,
@@ -271,18 +315,17 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
   });
   const deepest = Math.max(...metrics.map((m) => m.maxY));
 
+  /**
+   * Computed once for the whole sheet, before anything is placed — see `frameLifts`. Zero on the
+   * lowest-drawn frame by construction, and an integer, so the value the strip is built from and
+   * the value the manifest records are the same number. Criterion 4.19 asserts exact equality
+   * deliberately: a tolerance would hide the rounding error most likely to appear here.
+   */
+  const lifts = frameLifts(cells, metrics, scale, anchor);
+
   cells.forEach((cell, index) => {
     const m = metrics[index];
-
-    /**
-     * How far above the sheet's contact line this frame's feet were DRAWN, in game pixels.
-     *
-     * Zero on the deepest frame by construction. Rounded once, here, so the value the strip is
-     * built from and the value the manifest records are the same integer — criterion 4.19 asserts
-     * exact equality, deliberately, because a tolerance would hide the rounding error most likely
-     * to appear at this line.
-     */
-    const liftPx = Math.round((deepest - m.maxY) * scale);
+    const liftPx = lifts[index];
 
     // Trim first, then scale ONCE. Scaling the whole cell would waste most of the work and would
     // quantise the figure's position to the cell grid rather than to its own pixels.
@@ -371,9 +414,11 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY }) 
       drawnHeight: sh,
       pixels: m.pixels,
       liftPx,
-      // The SOURCE coordinate the lift was measured from, carried out so the lift-profile manifest
-      // records its own inputs and a test can re-derive `liftPx` instead of trusting it.
+      // The SOURCE coordinates the lift was measured from — both of them, whichever anchor was
+      // used — carried out so the lift-profile manifest records its own inputs and a test can
+      // re-derive `liftPx` instead of trusting it.
       sourceMaxY: m.maxY,
+      sourceCentroidY: m.centroidY,
     });
   });
 
