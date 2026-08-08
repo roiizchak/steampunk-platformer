@@ -345,25 +345,62 @@ export function parallaxPrompt(template, depth) {
   const forbid = templateBlock(template, 'DO NOT INCLUDE');
   const layers = {
     far:
-      'THE FURTHEST LAYER — sky and distant city. A high smog-yellowed dusk sky graded to deep ' +
-      'blue-grey overhead, with layered banks of soot cloud. Along the horizon, the silhouetted ' +
-      'skyline of a vast Victorian industrial city: dozens of chimney stacks of different heights ' +
-      'trailing smoke, gasometer drums, the ribs of a distant railway shed, church spires, ' +
-      'cranes, and a great cog-toothed clock tower. Everything at this depth is flat silhouette ' +
-      'with almost no internal detail, heavily hazed.',
+      // "smog-yellowED DUSK sky" used to sit here, and it is why this layer came back 24.8% warm
+      // while the COLOUR block below forbade warmth in the same prompt. STYLE.md §6: the model
+      // obeys a NAMED ELEMENT and ignores a generic adjective, so a named warm noun beats "no warm
+      // colour anywhere" every time. The cure is to name a COLD element, not to forbid the warm one
+      // harder — the same lesson that killed the ground line under the character sheets.
+      'THE FURTHEST LAYER — sky and distant city. A high cold slate-blue dusk sky, the colour of ' +
+      'wet steel, graded to near-black blue-grey overhead, with layered banks of grey-blue soot ' +
+      'cloud. Along the horizon, the silhouetted skyline of a vast Victorian industrial city: ' +
+      'dozens of chimney stacks of different heights trailing smoke, gasometer drums, the ribs of ' +
+      'a distant railway shed, church spires, cranes, and a great cog-toothed clock tower. ' +
+      'Everything at this depth is flat silhouette with almost no internal detail, heavily hazed. ' +
+      'This layer fills the whole frame edge to edge — it is the backdrop everything else sits ' +
+      'in front of, so it has no empty margin and no cut-out area.',
     mid:
-      'THE MIDDLE LAYER — the near city. Whole facades of soot-stained brick warehouses and ' +
-      'factories: tall arched windows with small panes and iron glazing bars, some lit dimly and ' +
-      'some dark, projecting gantries and hoists, external iron staircases and fire escapes, ' +
-      'riveted pipework running up the walls, water tanks on frames, hanging chains, ventilation ' +
-      'cowls, downpipes, and painted-out signage worn back to the brick. Moderate internal detail ' +
-      'and a little haze.',
+      'THE MIDDLE LAYER — the near city, standing along the BOTTOM of the frame. Whole facades of ' +
+      'soot-stained brick warehouses and factories rise from the bottom edge: tall arched windows ' +
+      'with small panes and iron glazing bars, some lit dimly and some dark, projecting gantries ' +
+      'and hoists, external iron staircases and fire escapes, riveted pipework running up the ' +
+      'walls, water tanks on frames, hanging chains, ventilation cowls, downpipes, and ' +
+      'painted-out signage worn back to the brick. Moderate internal detail and a little haze. ' +
+      'The rooflines are uneven, at different heights across the strip, and the TALLEST of them ' +
+      'reaches only about two thirds of the way up the frame.',
     near:
-      'THE NEAREST BACKGROUND LAYER — the alley wall immediately behind the player, but still ' +
-      'BEHIND everything walkable. A dense wall of riveted ironwork and brick: bundled copper ' +
-      'pipes with valve wheels and pressure vessels, a bank of gauges, bolted flanges, brackets, ' +
-      'cables in loops, a ladder, grates, dripping stains and heavy patina. High internal detail, ' +
-      'crisp, no haze.',
+      'THE NEAREST BACKGROUND LAYER — the alley furniture immediately behind the player, but ' +
+      'still BEHIND everything walkable. SEPARATE PIECES OF IRONWORK STANDING ALONG THE BOTTOM ' +
+      'EDGE AND THE TWO SIDE MARGINS, not a continuous wall: bundled copper pipes with valve ' +
+      'wheels, a pressure vessel, a bank of gauges on a bracket, bolted flanges, a hanging loop ' +
+      'of cable, a riveted ladder, a grate, a downpipe with dripping stains and heavy patina. ' +
+      'High internal detail, crisp, no haze. The pieces are different heights, none of them ' +
+      'taller than half the frame, and there are wide clear gaps between them.',
+  };
+
+  /**
+   * Where the layer must NOT be, said as geometry rather than as a negation.
+   *
+   * Phase 4 first briefed all three of these as complete full-frame scenes, and got exactly that:
+   * three opaque images, of which only the front one is ever visible. A parallax needs the back
+   * layers to show THROUGH the front ones, and this model produces transparency the only way it
+   * can — by painting a flat chroma field that post-processing keys out.
+   *
+   * Constraining the geometry is what works on this model. It is what got 16 separated tiles and a
+   * single HUD assembly, and what removed the ground line from under the character; asking for
+   * "a transparent background" or forbidding a wall does not.
+   */
+  const chroma = {
+    far: '',
+    mid:
+      'BACKGROUND: everything above the rooflines — the entire upper third of the frame and every ' +
+      'gap in the skyline — is one flat uniform chroma green field, RGB 0 255 0. There is no sky, ' +
+      'no cloud and no haze in that area, only flat chroma green. At least a third of the whole ' +
+      'image is chroma green.',
+    near:
+      'BACKGROUND: everything that is not one of the pieces of ironwork is one flat uniform ' +
+      'chroma green field, RGB 0 255 0 — the whole upper half of the frame, and every gap between ' +
+      'the pieces, top to bottom. There is no wall, no brick and no sky behind them, only flat ' +
+      'chroma green. MOST of the image is chroma green.',
   };
   return [
     'A horizontally scrolling parallax background layer for a 2D side-scrolling Victorian ' +
@@ -381,6 +418,7 @@ export function parallaxPrompt(template, depth) {
     'The strip is uniformly busy from left to right, with no single dominant focal object and no ' +
       'empty stretch, so it reads the same wherever the camera stops. Nothing is cropped in a way ' +
       'that demands a specific alignment.',
+    ...(chroma[depth] ? ['', chroma[depth]] : []),
     '',
     rendering,
     '',

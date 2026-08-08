@@ -45,6 +45,7 @@ describe('the gate self-test (criterion 4.26, vault 4.21)', () => {
   it('covers every gate this module exposes', () => {
     expect(results.map((r) => r.gate).sort()).toEqual([
       'alpha',
+      'brass-cap',
       'chroma-tolerance',
       'dimensions',
       'grid-exact',

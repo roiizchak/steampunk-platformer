@@ -44,6 +44,12 @@ export const CHROMA = Object.freeze({
   KEY: Object.freeze([0, 255, 0]),
 });
 
+/**
+ * How close a second channel may come to the key's peak before "the dominant channel" stops being
+ * a meaningful idea. Magenta (255,0,255) ties exactly; green (2,253,2) does not come close.
+ */
+const SPILL_TIE = 32;
+
 /** States whose art may legitimately be more than one connected component (vault 4.13). */
 const MULTI_COMPONENT_STATES = Object.freeze(['jump', 'fall', 'attack', 'hurt', 'death']);
 
@@ -132,6 +138,62 @@ export function estimateKeyColour(image, { minAgreement = 0.9, tolerance = CHROM
 }
 
 /**
+ * Estimate the key colour from the chroma FIELD itself, wherever it happens to sit in the frame.
+ *
+ * `estimateKeyColour` samples the one-pixel border, which is exactly right for a sprite isolated
+ * on a field and exactly wrong for a scene layer. A parallax mid-layer has factory facades standing
+ * along its bottom edge by design — the chroma is in the upper part of the frame, not around it —
+ * so the border median is a mixture and the function refuses on art that is perfectly good.
+ * Measured on the regenerated layers: border agreement 43 % for `mid` and 64 % for `near`, both
+ * well below the 90 % floor, while 26 % and 49 % of those images respectively were flat chroma.
+ *
+ * So this one finds the field by colour rather than by position: take every pixel within
+ * `tolerance` of the chroma we asked for, and return the MEDIAN of that population. The median is
+ * what keeps it honest — anti-aliased edge pixels sit inside the tolerance and would drag a mean,
+ * and the point of measuring at all is that the model does not return the green it was told to
+ * *(vault 4.11: read it off the file, never off the label — and here the label is the prompt)*.
+ *
+ * Refuses rather than guessing *(vault 4.16)* when the field never arrived: below `minShare` of the
+ * image, there is nothing to key, and a caller that proceeded would ship an opaque layer that
+ * silently hides everything behind it. That is the exact defect this replaces.
+ */
+export function estimateFieldColour(
+  image,
+  { expect = CHROMA.KEY, tolerance = CHROMA.HIGH, minShare = 0.1 } = {},
+) {
+  const { data } = image;
+  const total = data.length / 4;
+  // Per-channel histograms over the in-tolerance population, so the median costs no sort.
+  const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+  let n = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (keyDistance(data[i], data[i + 1], data[i + 2], expect) > tolerance) continue;
+    hist[0][data[i]] += 1;
+    hist[1][data[i + 1]] += 1;
+    hist[2][data[i + 2]] += 1;
+    n += 1;
+  }
+  const share = n / total;
+  if (share < minShare) {
+    throw new Error(
+      `estimateFieldColour: only ${(share * 100).toFixed(2)}% of the image is within ${tolerance} ` +
+        `of (${[...expect].join(',')}), below the ${minShare * 100}% floor. There is no chroma ` +
+        `field here to key, so this layer would be fully opaque and hide everything behind it.`,
+    );
+  }
+  const median = (channel) => {
+    const half = n >> 1;
+    let seen = 0;
+    for (let v = 0; v < 256; v += 1) {
+      seen += hist[channel][v];
+      if (seen > half) return v;
+    }
+    return 255;
+  };
+  return { key: [median(0), median(1), median(2)], share };
+}
+
+/**
  * Key out the background, in place on a copy. Returns a new image.
  *
  * Pixels at or below `LOW` become fully transparent; at or above `HIGH` are untouched; between,
@@ -169,6 +231,47 @@ export function keyOut(image, options = {}) {
     const average = (out[p + others[0]] + out[p + others[1]]) / 2;
     if (out[p + dominant] > average) {
       out[p + dominant] = Math.round(average + (out[p + dominant] - average) * t);
+    }
+  }
+
+  /**
+   * Second pass: despill everything the ramp never reached.
+   *
+   * The band despill above only runs for `low < d < high`. A blend of chroma green and a dark
+   * blue-grey wall lands at an L1 distance well ABOVE `high` — it is correctly classified as
+   * subject, so its alpha is right — while still being visibly green. Those pixels form a bright
+   * green outline around every keyed element, and raising `high` does not reach them: measured on
+   * the parallax near layer, taking `high` from 120 to 320 moved the green-dominant share of
+   * opaque pixels only from 3.69 % to 3.21 %, and keyed exactly the same 48.1 % either way.
+   *
+   * The pass is safe because it is **measured** to be, not assumed: the far parallax layer carries
+   * no chroma field at all, so every pixel in it is legitimate art, and **0.00 %** of it is
+   * green-dominant at any threshold. This palette — cold blue-grey, brick, iron, brass — never
+   * goes green-dominant on purpose. Clamping to the MAX of the other two channels rather than
+   * their average is the conservative choice: it removes the dominance and nothing more.
+   *
+   * It lives inside `keyOut` rather than at the two call sites because every keyed asset has the
+   * defect. The tileset measured 8.3 % green-dominant pixels before this existed, and nobody had
+   * noticed.
+   */
+  if (options.despill !== false) {
+    const peak = Math.max(...key);
+    const dominant = key.indexOf(peak);
+    // **Only when ONE channel is unambiguously the key's own.** A magenta key is (255,0,255): two
+    // channels tie for the maximum, `indexOf` picks red arbitrarily, and clamping red to the
+    // brightest of the others turns a legitimate warm subject pixel (180,140,60) into (140,140,60).
+    // The unit suite caught exactly that, and it was right to — "the dominant channel" is not a
+    // defined quantity for a two-channel key, so there is nothing here to safely pull down.
+    const ambiguous = key.filter((c) => peak - c <= SPILL_TIE).length !== 1;
+    if (!ambiguous) {
+      const [c0, c1] = [0, 1, 2].filter((c) => c !== dominant);
+      for (let p = 0; p < out.length; p += 4) {
+        if (out[p + 3] === 0) continue;
+        const ceiling = Math.max(out[p + c0], out[p + c1]);
+        if (out[p + dominant] > ceiling) {
+          out[p + dominant] = ceiling;
+        }
+      }
     }
   }
 

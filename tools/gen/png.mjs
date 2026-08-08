@@ -17,7 +17,25 @@
  * is how a build ships an empty sprite that every downstream metric happily measures.
  */
 
+import { readFileSync } from 'node:fs';
 import { deflateSync, inflateSync } from 'node:zlib';
+
+/**
+ * Decode a PNG off disk, given a path relative to the repository root.
+ *
+ * It lives here rather than in a test because the unit suite has no way to reach the filesystem:
+ * the dependency list is frozen, so there is no `@types/node`, and `node:fs` cannot be imported
+ * from a `.ts` file under `strict`. `.mjs` sits outside the tsconfig `include`, so this module
+ * already imports `node:zlib` without dragging types into the project — `readFileSync` rides the
+ * same bridge, and `png.d.mts` is what makes it callable from a test.
+ *
+ * Every other unit test reads shipped files through `import.meta.glob(..., { query: '?raw' })`,
+ * which is correct for text and lossy for a PNG: `?raw` decodes the bytes as UTF-8 and every
+ * byte above 0x7F becomes a replacement character.
+ */
+export function readPng(path) {
+  return decodePng(readFileSync(path));
+}
 
 const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

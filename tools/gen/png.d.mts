@@ -26,6 +26,11 @@ export interface RgbaImage {
 }
 
 export declare function decodePng(buffer: Uint8Array): DecodedPng;
+/**
+ * Decode a PNG off disk. The path is resolved relative to the process cwd, which for both vitest
+ * and the `tools/gen/` scripts is the repository root.
+ */
+export declare function readPng(path: string): DecodedPng;
 export declare function encodePng(
   width: number,
   height: number,

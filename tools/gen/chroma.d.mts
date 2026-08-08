@@ -20,7 +20,7 @@ export declare function keyDistance(
 export declare function hasRealAlpha(image: RgbaImage): boolean;
 export declare function keyOut(
   image: RgbaImage,
-  options?: { low?: number; high?: number; key?: readonly number[] },
+  options?: { low?: number; high?: number; key?: readonly number[]; despill?: boolean },
 ): RgbaImage;
 export declare function components(
   image: RgbaImage,
@@ -30,6 +30,10 @@ export declare function removeSpecks(image: RgbaImage, minPx?: number): RgbaImag
 export declare function assertComponentPolicy(state: string): void;
 export declare function keepLargestComponent(image: RgbaImage, state: string): RgbaImage;
 export declare function multiComponentStates(): string[];
+export declare function estimateFieldColour(
+  image: RgbaImage,
+  options?: { expect?: readonly number[]; tolerance?: number; minShare?: number },
+): { key: number[]; share: number };
 export declare function estimateKeyColour(
   image: RgbaImage,
   options?: { minAgreement?: number; tolerance?: number },

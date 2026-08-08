@@ -1,10 +1,15 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
-import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
+import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE, TILE_SIZE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import { parseLevel, type LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
+import {
+  TILESET_FIRST_GID,
+  TILESET_TILE_COUNT,
+  groundTileGid,
+} from '../render/groundTiles';
 import { playerRenderDesc } from '../render/playerView';
 import { createSnapshot, latchJumpPress } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
@@ -313,11 +318,34 @@ export class GameScene extends Phaser.Scene {
     if (!tilesetName) {
       throw new Error(`GameScene: level ${level.id} declares no tileset`);
     }
-    const tileset = map.addTilesetImage(tilesetName, 'tiles-industrial', 32, 32, 0, 0, 1);
+    const tileset = map.addTilesetImage(tilesetName, 'tiles-industrial', TILE_SIZE, TILE_SIZE);
     if (!tileset) {
       // Returns null with only a console warning. Silently drawing nothing is precisely the
       // failure this scene must not have.
       throw new Error(`GameScene: tileset "${tilesetName}" could not be bound in level ${level.id}`);
+    }
+
+    /**
+     * **`addTilesetImage`'s `gid` argument does nothing here, and relying on it cost a defect.**
+     *
+     * The `.tmj` already declares this tileset, so Phaser finds it by name, calls `setImage` and
+     * returns early — `firstgid` keeps whatever the level file said, and the `gid` argument is
+     * only ever read on the branch that CONSTRUCTS a tileset. An earlier version passed `1` here
+     * and read it back as if it had been applied.
+     *
+     * `setImage` does recompute `total` from the texture, so the 4x4 packed sheet becomes 16 tiles
+     * even though the grey-box `.tmj` declares `tilecount: 1`. That is what makes the extra tiles
+     * reachable at all — and it is also why the two facts `groundTiles.ts` indexes against are
+     * asserted here rather than assumed. Phaser draws NOTHING for a gid outside the tileset, with
+     * no warning at draw time, so a mismatch is invisible until someone looks at the floor.
+     */
+    const bound = tileset as unknown as { firstgid: number; total: number };
+    if (bound.firstgid !== TILESET_FIRST_GID || bound.total !== TILESET_TILE_COUNT) {
+      throw new Error(
+        `GameScene: tileset "${tilesetName}" bound as firstgid ${bound.firstgid} with ` +
+          `${bound.total} tiles; src/render/groundTiles.ts indexes ${TILESET_TILE_COUNT} tiles ` +
+          `from firstgid ${TILESET_FIRST_GID}. Every ground tile would be the wrong one.`,
+      );
     }
 
     const layerName = map.layers[0]?.name;
@@ -427,26 +455,24 @@ export class GameScene extends Phaser.Scene {
   /**
    * Give the tile layer a brass-capped TOP and plain masonry beneath it.
    *
-   * The shipped level was authored grey-box: its tile layer fills every solid cell with the same
-   * gid, because Phase 3 only needed geometry. Drawn with a brass-capped walkway tile that reads as
-   * a striped block — the brass leading edge repeating on every row, which is precisely what
-   * STYLE.md §5 RULE ONE is for. The rule is "a player identifies a platform by that brass edge
-   * alone", and an edge on every row identifies nothing.
+   * The rule and the two GIDs live in `src/render/groundTiles.ts`, engine-free, so
+   * `tests/unit/ground-tiles.test.ts` can check them against the pixels of the shipped sheet.
+   * They were scene-local literals until both turned out to be wrong — see that file's header.
    *
-   * So the index is chosen from the NEIGHBOURHOOD rather than from the level data: a cell with
-   * nothing above it is a walking surface and gets the brass cap; anything buried gets brick. The
-   * level file is untouched, which matters because `tests/unit/tilemap-data.test.ts` pins its
-   * bytes and its geometry.
+   * **`tile.index` is a GID.** `groundTileGid` returns one; do not put a local sheet index here.
+   *
+   * The mutation-during-iteration is deliberate and safe: `forEachTile` walks rows top-down, so
+   * `getTileAt(y - 1)` reads a cell this loop has already rewritten. It does not matter, because
+   * the question asked is only *whether* a tile is above, never which one, and rewriting never
+   * empties a cell. Worth knowing before adding a second condition here that does care.
    */
   private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer): void {
-    const SURFACE = 0; // riveted walkway plate with the brass leading edge
-    const BRICK = 8;   // soot-stained brick, row 3 of the tileset
     layer.forEachTile((tile) => {
       if (tile.index < 0) {
         return;
       }
       const above = layer.getTileAt(tile.x, tile.y - 1);
-      tile.index = above && above.index >= 0 ? BRICK : SURFACE;
+      tile.index = groundTileGid(Boolean(above && above.index >= 0));
     });
   }
 

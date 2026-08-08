@@ -321,8 +321,124 @@ export function regionStats(image, region) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * 9. Brass cap — STYLE.md §5 RULE ONE, as a measurement.
+ * Axis: VERTICAL distribution of warm pixels within one tile.
+ * ------------------------------------------------------------------ */
+
+/**
+ * What counts as "warm", and how much of it a capped tile needs.
+ *
+ * Warmth is not decoration in this game: STYLE.md §5 makes it the signal that a thing is
+ * reachable. Brass on top of a tile says *stand here*; brass anywhere else says nothing, or worse,
+ * lies. So the gate measures **where** the warm pixels are, not merely that some exist.
+ */
+export const WARM = Object.freeze({
+  MIN_ALPHA: 32,
+  MIN_RED: 110,
+  RED_OVER_BLUE: 40,
+  GREEN_OVER_BLUE: 15,
+  /** The top quarter of a tile — where a leading edge lives. */
+  CAP_BAND: 0.25,
+  CAP_MIN_FRACTION: 0.02,
+  CAP_TOP_SHARE: 0.8,
+  PLAIN_MAX_FRACTION: 0.01,
+});
+
+function isWarm(data, i) {
+  if (data[i + 3] <= WARM.MIN_ALPHA) return false;
+  const r = data[i];
+  const g = data[i + 1];
+  const b = data[i + 2];
+  return r >= WARM.MIN_RED && r - b >= WARM.RED_OVER_BLUE && g - b >= WARM.GREEN_OVER_BLUE;
+}
+
+/**
+ * Does this tile carry a brass leading edge along its TOP, or is it plain masonry?
+ *
+ * `BLIND_SPOTS` used to list the brass rule as something *"no region statistic sees"*, and that was
+ * true of a region statistic — `regionStats` returns one saturation number for a whole area, which
+ * a tile with a brass bar across its middle and a tile with a brass cap on its top edge produce
+ * equally. The axis that separates them is **vertical distribution**, which is vault 4.19's whole
+ * point: enumerate what your metrics measure, then ask which axis the failure lives on.
+ *
+ * That distinction is not hypothetical. Phase 4 shipped a ground stack drawn with a mid-bar tile
+ * instead of a capped one, and every gate that existed stayed green.
+ *
+ * `expect` is `'capped'` (a walking surface) or `'plain'` (buried masonry). A tile with no opaque
+ * pixels is INDETERMINATE, never a guess *(vault 4.18)*.
+ */
+export function gateBrassCap(image, expect, region) {
+  const x0 = Math.max(0, region?.x ?? 0);
+  const y0 = Math.max(0, region?.y ?? 0);
+  const x1 = Math.min(image.width, x0 + (region?.w ?? image.width));
+  const y1 = Math.min(image.height, y0 + (region?.h ?? image.height));
+  const bandEnd = y0 + (y1 - y0) * WARM.CAP_BAND;
+
+  let opaque = 0;
+  let warm = 0;
+  let warmTop = 0;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const i = (y * image.width + x) * 4;
+      if (image.data[i + 3] <= WARM.MIN_ALPHA) continue;
+      opaque += 1;
+      if (!isWarm(image.data, i)) continue;
+      warm += 1;
+      if (y < bandEnd) warmTop += 1;
+    }
+  }
+
+  const cells = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
+  if (opaque === 0) {
+    return verdict(INDETERMINATE, null, 'no opaque pixels in the region — nothing to judge');
+  }
+
+  const warmFraction = warm / opaque;
+  const topShare = warm === 0 ? 0 : warmTop / warm;
+  const value = { opaque, opaqueFraction: opaque / cells, warm, warmFraction, topShare };
+
+  if (expect === 'plain') {
+    return warmFraction <= WARM.PLAIN_MAX_FRACTION
+      ? verdict(PASS, value, `plain: ${(warmFraction * 100).toFixed(2)}% warm`)
+      : verdict(
+          FAIL,
+          value,
+          `expected plain masonry but ${(warmFraction * 100).toFixed(1)}% of it is warm — ` +
+            `warmth is the reachability signal, so a warm buried tile reads as a platform`,
+        );
+  }
+  if (expect !== 'capped') {
+    throw new Error(`gateBrassCap: expect must be 'capped' or 'plain', got ${String(expect)}`);
+  }
+  if (warmFraction < WARM.CAP_MIN_FRACTION) {
+    return verdict(
+      FAIL,
+      value,
+      `expected a brass leading edge but only ${(warmFraction * 100).toFixed(2)}% of the tile is ` +
+        `warm — STYLE.md §5 RULE ONE says a player identifies a platform by that edge alone`,
+    );
+  }
+  if (topShare < WARM.CAP_TOP_SHARE) {
+    return verdict(
+      FAIL,
+      value,
+      `the tile is ${(warmFraction * 100).toFixed(1)}% warm but only ` +
+        `${(topShare * 100).toFixed(0)}% of that sits in its top ${WARM.CAP_BAND * 100}% — brass ` +
+        `across the middle is a stripe, not a leading edge, and stacked it reads as a barcode`,
+    );
+  }
+  return verdict(
+    PASS,
+    value,
+    `capped: ${(warmFraction * 100).toFixed(1)}% warm, ${(topShare * 100).toFixed(0)}% of it on top`,
+  );
+}
+
 export const BLIND_SPOTS = Object.freeze([
-  'the brass leading-edge rule (STYLE.md §5 RULE ONE) — a local edge cue no region statistic sees',
+  'the brass leading-edge rule is only PARTLY gated: gateBrassCap measures where the warm pixels ' +
+    'sit inside one tile, but not whether the cap is continuous across adjoining tiles, and not ' +
+    'whether it reads as an edge at true size — both stay play-owned',
   'anatomy: a third limb scores FAVOURABLY on silhouette metrics (vault 4.20)',
   'facing direction',
   'readability at true sprite size (vault 4.24 — look to find, count to decide)',
@@ -496,6 +612,28 @@ export function selfTest() {
     'seam',
     gateSeam(gradient).status === FAIL && gateSeam(mirrored).status === PASS,
     'a ramp tears at the wrap; a mirrored strip loops',
+  );
+
+  // --- brass cap: the fixture set is the defect that shipped.
+  //
+  // Three 32x32 tiles on the same grey body: one with the warm band on its top edge, one with the
+  // SAME AMOUNT of warm across its middle, and one with none at all. The middle-bar tile is the
+  // one Phase 4 actually drew on every ground row, and a metric that only counts warm pixels
+  // cannot tell it from the capped one — they are identical on that axis. This fixture fails if
+  // the gate ever stops measuring vertical position.
+  const grey = () => fill(blank(32, 32, [0, 0, 0, 0]), 0, 0, 32, 32, [70, 66, 62, 255]);
+  const cappedTile = fill(grey(), 0, 0, 32, 4, [190, 150, 70, 255]);
+  const midBarTile = fill(grey(), 0, 14, 32, 4, [190, 150, 70, 255]);
+  const plainTile = grey();
+  check(
+    'brass-cap',
+    gateBrassCap(cappedTile, 'capped').status === PASS &&
+      gateBrassCap(midBarTile, 'capped').status === FAIL &&
+      gateBrassCap(plainTile, 'capped').status === FAIL &&
+      gateBrassCap(plainTile, 'plain').status === PASS &&
+      gateBrassCap(midBarTile, 'plain').status === FAIL &&
+      gateBrassCap(blank(32, 32, [0, 0, 0, 0]), 'capped').status === INDETERMINATE,
+    'a top edge passes, the SAME warmth across the middle fails, and an empty tile is INDETERMINATE',
   );
 
   // --- summarise: all-INDETERMINATE is not a pass.

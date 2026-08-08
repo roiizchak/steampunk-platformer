@@ -55,6 +55,40 @@ describe('keying is by L1 distance with tolerance, never equality (vault 4.13)',
     expect(Array.from(out.data.slice(0, 3))).toEqual([180, 140, 60]);
   });
 
+  it('despills a green rim that sits OUTSIDE the ramp band', () => {
+    // The defect this pass exists for. A blend of chroma green and a dark blue-grey wall lands
+    // far beyond HIGH, so it is correctly kept as subject — and it is still visibly green. On the
+    // regenerated parallax layers that produced a bright green outline around every keyed element.
+    const green: readonly number[] = [0, 255, 0];
+    const rim = fill(blank(4, 4, [0, 0, 0, 255]), 0, 0, 4, 4, [60, 150, 80, 255]);
+    expect(keyDistance(60, 150, 80, green)).toBeGreaterThan(CHROMA.HIGH); // outside the band
+    const out = keyOut(rim, { key: green });
+    expect(out.data[3]).toBe(255); // still fully opaque — alpha is not what was wrong
+    expect(out.data[1]).toBeLessThanOrEqual(Math.max(out.data[0], out.data[2]));
+    expect(Array.from(out.data.slice(0, 3))).toEqual([60, 80, 80]);
+  });
+
+  it('raising HIGH would have damaged the subject instead of fixing it', () => {
+    // Without this the despill pass looks like a redundant tolerance tweak, so state what widening
+    // the band actually costs. Measured on the real layer, taking HIGH from 120 to 320 moved the
+    // green-dominant share of opaque pixels only from 3.69% to 3.21% — and it does that by pulling
+    // solid pixels INTO the alpha ramp. A solid wall becoming translucent is a worse defect than
+    // the rim it was meant to cure.
+    const green: readonly number[] = [0, 255, 0];
+    const rim = fill(blank(4, 4, [0, 0, 0, 255]), 0, 0, 4, 4, [60, 150, 80, 255]);
+    const widened = keyOut(rim, { key: green, high: 320, despill: false });
+    expect(widened.data[3]).toBeGreaterThan(0);
+    expect(widened.data[3]).toBeLessThan(255); // an opaque wall pixel, now see-through
+  });
+
+  it('skips the despill when the key has no single dominant channel', () => {
+    // Magenta is (255,0,255): red and blue tie. "The dominant channel" is undefined, and picking
+    // one destroys real colour — the first version of the despill turned a legitimate warm
+    // (180,140,60) into (140,140,60). Guarding the ambiguity is why that suite went green again.
+    const subject = fill(blank(4, 4, [0, 0, 0, 255]), 0, 0, 4, 4, [180, 140, 60, 255]);
+    expect(Array.from(keyOut(subject, { key: MAGENTA }).data.slice(0, 3))).toEqual([180, 140, 60]);
+  });
+
   it('ramps alpha in the band between LOW and HIGH rather than cutting hard', () => {
     // A colour deliberately placed between the two thresholds.
     const mid = Math.round((CHROMA.LOW + CHROMA.HIGH) / 2);

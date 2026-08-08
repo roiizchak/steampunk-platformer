@@ -12,23 +12,41 @@
 
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
 import { decodePng, encodePng } from './png.mjs';
-import { estimateKeyColour, keyOut, removeSpecks } from './chroma.mjs';
+import { estimateFieldColour, estimateKeyColour, keyOut, removeSpecks } from './chroma.mjs';
 import { detectFrames } from './sheets.mjs';
 import { crop, downscale, mirrorLoop } from './resize.mjs';
-import { gateGridExact, gateSeam, regionStats, PASS } from './gates.mjs';
+import { gateGridExact, gateSeam, regionStats, PASS, WARM } from './gates.mjs';
 
 const TILE_SIZE = 32;
 const RAW = '_generated/world';
 
 function raw(prefix) {
-  const file = readdirSync(RAW).find((f) => f.startsWith(`${prefix}-`) && f.endsWith('.png'));
-  if (!file) {
+  // Model output is `<prefix>-<request_id>.png`, and the request id is what makes a generation
+  // citable in GENERATION-LOG.md. Matching it explicitly also excludes this script's own
+  // `-preview.png` output, which lands in the same folder and is not a source.
+  const files = readdirSync(RAW).filter((f) =>
+    new RegExp(`^${prefix}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png$`)
+      .test(f),
+  );
+  if (files.length === 0) {
     throw new Error(
       `assets:world: no source for "${prefix}" in ${RAW}. A declared input that cannot be found ` +
         `fails the build and is never substituted (vault 4.16).`,
     );
   }
-  return decodePng(readFileSync(`${RAW}/${file}`));
+  if (files.length > 1) {
+    // `.find()` used to sit here, which silently takes whichever name readdir returns first.
+    // Regenerating an asset leaves BOTH the old and the new file in place — the filename carries
+    // the request_id — so the build would keep using the superseded image and every gate would
+    // pass on it. That is the stale-asset failure this phase has already paid for twice, and an
+    // ambiguous input is not a resolvable one: move the superseded file out of `${RAW}/`.
+    throw new Error(
+      `assets:world: "${prefix}" is ambiguous — ${files.length} candidates in ${RAW}:\n` +
+        files.map((f) => `  ${f}`).join('\n') +
+        `\nThe build refuses to guess which generation is current.`,
+    );
+  }
+  return decodePng(readFileSync(`${RAW}/${files[0]}`));
 }
 
 /** Square a tile about its centre before downscaling, so nothing is stretched. */
@@ -98,13 +116,61 @@ function buildTileset() {
   return rects.length;
 }
 
+/**
+ * Which layers must end up with transparency, and how much of each is expected to key away.
+ *
+ * `far` is the backdrop — it fills the frame and keys nothing. `mid` and `near` are drawn on a
+ * chroma field precisely so the layers behind them are visible, which is the whole difference
+ * between a parallax and three pictures stacked back to front.
+ *
+ * Phase 4 shipped the second version. All three layers measured 100.0 % opaque, so `near` covered
+ * `mid` and `far` completely and the two of them were downloaded, processed, gated, loaded and
+ * drawn without ever being seen. Every gate in the pipeline was green: none of them asked whether
+ * a layer had any transparency at all.
+ *
+ * The bounds are wide on purpose. They are not an art critique — they are there to catch the two
+ * failures that actually happen: **nothing keyed** (the model ignored the chroma instruction, or
+ * `estimateKeyColour` locked onto the wrong colour) and **everything keyed** (it returned a mostly
+ * flat frame). Both have happened on this model already.
+ */
+const KEYED_LAYERS = { far: null, mid: [0.15, 0.75], near: [0.3, 0.9] };
+
 function buildParallax() {
   mkdirSync('public/assets/backgrounds', { recursive: true });
   const out = [];
   for (const depth of ['far', 'mid', 'near']) {
-    const image = raw(`parallax-${depth}`);
-    const before = gateSeam(image);
-    const stats = regionStats(image);
+    const source = raw(`parallax-${depth}`);
+    const before = gateSeam(source);
+    const stats = regionStats(source);
+    const expected = KEYED_LAYERS[depth];
+
+    // Key BEFORE downscaling. The other order looks equivalent and is not: a box filter averages
+    // a chroma-green pixel into its opaque neighbours, so downscaling first leaves a green fringe
+    // baked into the colour of every edge, which no later keying can reach.
+    //
+    // `keepLargestComponent` is deliberately NOT used here, for the same reason vault 4.13 gives
+    // for `jump` and `fall`: a background layer is legitimately dozens of disconnected pieces, and
+    // keeping only the largest would delete the ladder, the cables and every gauge.
+    let image = source;
+    let keyedFraction = 0;
+    if (expected) {
+      // `estimateFieldColour`, not `estimateKeyColour` — see that function's header. These layers
+      // are scenes with structure on their edges, so the field is found by colour, not by position.
+      const { key, share } = estimateFieldColour(source);
+      image = removeSpecks(keyOut(source, { key }));
+      keyedFraction = transparentFraction(image);
+      const [min, max] = expected;
+      if (keyedFraction < min || keyedFraction > max) {
+        throw new Error(
+          `assets:world: ${depth} keyed ${(keyedFraction * 100).toFixed(1)}% of its pixels away, ` +
+            `outside the expected ${min * 100}-${max * 100}% (key ${key.join(',')}, field ` +
+            `${(share * 100).toFixed(1)}% of the frame). 0% means the chroma field never arrived ` +
+            `and this layer would silently hide everything behind it; near 100% means the frame ` +
+            `came back flat.`,
+        );
+      }
+    }
+
     // Downscale to the viewport height (1080) so the layer is not four times larger than it draws,
     // THEN mirror. Mirroring first would double the work for an identical result.
     const target = 1080;
@@ -122,12 +188,55 @@ function buildParallax() {
       encodePng(looped.width, looped.height, looped.data),
     );
     console.log(
-      `ok  bg-${depth.padEnd(5)} ${image.width}x${image.height} -> ${looped.width}x${looped.height}` +
-        `  sat ${stats.saturation.toFixed(3)}  seam ${before.status} -> ${after.status}`,
+      `ok  bg-${depth.padEnd(5)} ${source.width}x${source.height} -> ` +
+        `${looped.width}x${looped.height}  sat ${stats.saturation.toFixed(3)}  warm ` +
+        `${(warmFraction(looped) * 100).toFixed(2)}%  keyed ` +
+        `${expected ? `${(keyedFraction * 100).toFixed(1)}%` : 'n/a (backdrop)'}` +
+        `  seam ${before.status} -> ${after.status}`,
     );
-    out.push({ depth, width: looped.width, height: looped.height, seam: after.status });
+    out.push({
+      depth,
+      width: looped.width,
+      height: looped.height,
+      seam: after.status,
+      keyedFraction: expected ? keyedFraction : null,
+      warmFraction: warmFraction(looped),
+    });
   }
   return out;
+}
+
+/** Fraction of pixels the key removed. Read off the alpha channel's VALUES *(vault 4.12)*. */
+function transparentFraction(image) {
+  let clear = 0;
+  for (let i = 3; i < image.data.length; i += 4) {
+    if (image.data[i] === 0) clear += 1;
+  }
+  return clear / (image.data.length / 4);
+}
+
+/**
+ * Fraction of the layer's OPAQUE pixels that are warm — STYLE.md §5 RULE TWO as a number.
+ *
+ * Recorded rather than asserted. The rule is hash-locked and says "no warm colour anywhere behind",
+ * but the honest place to enforce it is the prompt, and turning it into a build-breaking threshold
+ * here would just invite someone to tune the threshold. `WARM` is shared with `gateBrassCap`, so
+ * "warm" means one thing across the whole pipeline.
+ */
+function warmFraction(image) {
+  let opaque = 0;
+  let warm = 0;
+  for (let i = 0; i < image.data.length; i += 4) {
+    if (image.data[i + 3] <= WARM.MIN_ALPHA) continue;
+    opaque += 1;
+    const r = image.data[i];
+    const g = image.data[i + 1];
+    const b = image.data[i + 2];
+    if (r >= WARM.MIN_RED && r - b >= WARM.RED_OVER_BLUE && g - b >= WARM.GREEN_OVER_BLUE) {
+      warm += 1;
+    }
+  }
+  return opaque === 0 ? 0 : warm / opaque;
 }
 
 function buildHud() {
