@@ -3,12 +3,14 @@ import { CATALOG_KEY, type AssetCatalog, type SheetEntry } from '../game/assetCa
 import { RENDER_SCALE } from '../game/constants';
 import {
   boundsRect,
+  actionFromKey,
   editsFromConfig,
   emptyEdits,
   frameCells,
-  liftAboveCellFloor,
   measureCellBounds,
+  readoutLines,
   serialiseBounds,
+  slugOf,
   type Bounds,
   type BoundsEdits,
 } from '../render/gymBounds';
@@ -51,11 +53,9 @@ import { PLAYER_BOX } from '../sim/player';
  * and a human moves it, which also keeps the config's provenance notes under human review.
  */
 
-const BLUE = 0x4fa3d1;
-const GREEN = 0x5fbf5f;
-const RED = 0xd14f4f;
-const WHITE = 0xffffff;
-const GROUND = 0xc8a86b;
+// ASSET-PIPELINE section 6 fixes these four: white frame bounds, blue visual footprint, green
+// collision, red attack hitbox. GROUND is the contact line they are all judged against.
+const BLUE = 0x4fa3d1, GREEN = 0x5fbf5f, RED = 0xd14f4f, WHITE = 0xffffff, GROUND = 0xc8a86b;
 
 /**
  * Magnifications the anatomy check cycles through. 1 is true size — the size the player sees.
@@ -66,11 +66,9 @@ const GROUND = 0xc8a86b;
  */
 const ZOOMS = [1, 2, 4] as const;
 
-/** The contact line's y. Low enough that a 2x cell clears the top of the view. */
-const GROUND_Y = 880;
-
-/** Centre of the drawn figure. Right of the readout, so magnifying never puts art under text. */
-const CENTRE_X = 1250;
+/** The contact line's y, low enough that a 2x cell clears the top of the view; and the figure's
+ *  centre, right of the readout so magnifying never puts art under text. */
+const GROUND_Y = 880, CENTRE_X = 1250;
 
 export class GymScene extends Phaser.Scene {
   private sheets: SheetEntry[] = [];
@@ -181,18 +179,20 @@ export class GymScene extends Phaser.Scene {
     return this.sheets[this.index];
   }
 
-  /** The animation name as `character-bounds.json` declares it — `brass-courier-run` -> `run`. */
+  /**
+   * The animation name, relative to the slug the config declares — NOT `key.split('-').pop()`,
+   * which collides across characters (see `actionFromKey`). With no config there is no slug, so
+   * the whole key is returned and `serialiseBounds` refuses it loudly, which is correct.
+   */
   private get action(): string {
-    const parts = this.sheet.key.split('-');
-    return parts[parts.length - 1];
+    const slug = slugOf(this.rawConfig);
+    return slug === null ? this.sheet.key : actionFromKey(this.sheet.key, slug);
   }
 
   /**
-   * Advance the animation by hand rather than with `sprite.play()`.
-   *
-   * The Gym's whole job is to hold ONE frame still and measure it, and a Phaser animation playing
-   * underneath would move the frame between the measurement and the overlay drawn from it. Stepping
-   * the frame here means the number on screen and the box on screen are the same frame, always.
+   * Advance the animation by hand, not with `sprite.play()`. The Gym's job is to hold ONE frame
+   * still and measure it; an animation playing underneath would move the frame between the
+   * measurement and the overlay drawn from it.
    */
   update(_time: number, deltaMs: number): void {
     if (!this.playing) {
@@ -380,21 +380,20 @@ export class GymScene extends Phaser.Scene {
       this.overlay.strokeRect(...screenRect);
     }
 
-    this.readout.setText([
-      `SHEET      ${sheet.key}   [ ]`,
-      `FRAME      ${this.frame + 1} / ${sheet.frameCount}   , .   ${this.playing ? 'playing' : 'PAUSED'}  SPACE`,
-      `TIMING     ${sheet.fps.toFixed(2)} fps · ${sheet.simTicks} simTicks · ${sheet.derivedFrom}`,
-      `CELL       ${sheet.frameWidth} x ${sheet.frameHeight}   zoom ${zoom}x  M`,
-      '',
-      bounds && rect
-        ? `FOOTPRINT  ${rect.w} x ${rect.h} px   lift above cell floor ${liftAboveCellFloor(bounds, sheet.frameHeight)} px`
-        : 'FOOTPRINT  INDETERMINATE — no opaque pixel in this cell (vault 4.18)',
-      `COLLISION  ${PLAYER_BOX.w * RENDER_SCALE} x ${PLAYER_BOX.h * RENDER_SCALE} px — read-only, PLAYER_BOX x RENDER_SCALE`,
-      `OFFSET     ${offset} px   Z X`,
-      `ACTIVE     ${active.length ? active.map((f) => f + 1).join(' ') : '(none)'}   A toggles this frame`,
-      '',
-      'white cell · blue footprint · green collision · red active frame',
-      'S save · R revert · G back to game',
-    ]);
+    this.readout.setText(
+      // `...sheet` spreads the catalog row itself — key, frame size, count, fps, simTicks,
+      // derivedFrom — so the panel cannot restate a number the catalog already owns.
+      readoutLines({
+        ...sheet,
+        frame: this.frame,
+        zoom,
+        playing: this.playing,
+        bounds,
+        collisionW: PLAYER_BOX.w * RENDER_SCALE,
+        collisionH: PLAYER_BOX.h * RENDER_SCALE,
+        offsetPx: offset,
+        activeFrames: active,
+      }),
+    );
   }
 }

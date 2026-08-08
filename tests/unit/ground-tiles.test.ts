@@ -36,6 +36,7 @@ import {
   TILESET_WIDTH,
   groundTileGid,
   hasSolidAbove,
+  isGreyboxFill,
   tileRect,
 } from '../../src/render/groundTiles';
 import { parseLevel } from '../../src/game/tilemap';
@@ -216,4 +217,58 @@ describe('hasSolidAbove — solidity from the object layer, never the tile grid 
     expect(hasSolidAbove(solids, 5, 20)).toBe(false);
     expect(hasSolidAbove(solids, 20, 20)).toBe(true);
   });
+});
+
+describe('the surface rule reaches every shipped level (4.22)', () => {
+  /**
+   * `GameScene.applySurfaceTiles` rewrites a tile only when `isGreyboxFill(tile.index)` — i.e. only
+   * `GREYBOX_FILL_GID`. That is deliberate: authored art must be left as the level file wrote it.
+   *
+   * **But it means the brass-cap rule is a silent no-op on any level whose ground is painted with a
+   * different gid**, which is the normal outcome of editing a level in Tiled with some other brush
+   * selected. Every ground row would draw whatever was painted, no cap anywhere, and STYLE.md
+   * RULE ONE — *a player identifies a platform by that brass edge alone* — fails totally with
+   * nothing red. The e2e assertions cannot see it either: they sample `level-01`, which is
+   * generated.
+   *
+   * Raised by the `voltagent-qa-sec:code-reviewer` gate owner, brief 2. Fixed here rather than in
+   * the scene because throwing inside `GameScene.create()` would produce `ready:false` with
+   * `bootError:null` — the hang state — and a boot-gate check is a bigger change than this phase
+   * should make. A red unit test the day someone authors a level is the right place to find out.
+   */
+  for (const [path, raw] of Object.entries(LEVELS)) {
+    const level = parseLevel(path, JSON.parse(raw));
+
+    it(`${path.split('/').pop()}: the tile above every solid's top row is greybox fill`, () => {
+      const tileLayer = (JSON.parse(raw) as {
+        layers: { type?: string; data?: number[]; width?: number }[];
+      }).layers.find((l) => l.type === 'tilelayer' && Array.isArray(l.data));
+      expect(tileLayer, 'the level has no tile layer').toBeDefined();
+      const data = tileLayer!.data!;
+      const width = tileLayer!.width!;
+
+      // The cells the rule is supposed to reinterpret: the top row of every solid rectangle.
+      const notReinterpretable: string[] = [];
+      for (const solid of level.solids) {
+        const row = Math.floor(solid.y / TILE_SIZE);
+        const from = Math.floor(solid.x / TILE_SIZE);
+        const to = Math.floor((solid.x + solid.w - 1) / TILE_SIZE);
+        for (let col = from; col <= to; col += 1) {
+          const gid = data[row * width + col];
+          // 0 is empty — a platform whose art is drawn by objects rather than tiles. Only a
+          // NON-EMPTY, NON-greybox tile is the silent-no-op case.
+          if (gid !== 0 && !isGreyboxFill(gid)) {
+            notReinterpretable.push(`(${col},${row})=gid ${gid}`);
+          }
+        }
+      }
+
+      expect(
+        notReinterpretable.slice(0, 8),
+        'these ground cells carry authored art, so applySurfaceTiles skips them and they will ' +
+          'NEVER receive a brass cap. Either paint the ground with the greybox fill gid, or ' +
+          'change the surface rule — but do not ship a level whose floor has no leading edge.',
+      ).toEqual([]);
+    });
+  }
 });

@@ -347,9 +347,29 @@ describe('dropCastShadow removes a flat blob under the figure, and nothing else 
 
   it('erases a wide flat ellipse lying below the boots', () => {
     const img = figure();
-    fill(img, 50, 160, 100, 10, [20, 20, 20, 255]); // 1000 px, 10:1, entirely below
-    expect(sizes(img)).toEqual([9600, 1000]);
+    // 4 px tall against a 120 px body = 3.3%, which is the proportion a real cast shadow has:
+    // the shipped `fall` shadow was 10 px under a ~1200 px figure, i.e. 0.8%. The fixture used to
+    // be 10 px against the same 120 px body — 8.3%, which is a BOOT's proportion, not a shadow's,
+    // and it stopped passing when the height guard was added. The guard was right and the fixture
+    // was unrepresentative; corrected rather than the guard loosened.
+    fill(img, 50, 160, 100, 4, [20, 20, 20, 255]); // 400 px, 25:1, entirely below
+    expect(sizes(img)).toEqual([9600, 400]);
     expect(sizes(dropCastShadow(img))).toEqual([9600]);
+  });
+
+  it('KEEPS a severed boot below the figure — the case vault 4.13 exists for', () => {
+    // The discriminating fixture, and the reason the height guard was added at all. A chroma-key
+    // gap can sever a trailing boot on an airborne frame; two boots severed together, or one raked
+    // back, is a wide flat blob lying wholly below the torso — which cleared BOTH original tests
+    // (below the main mass, and 4:1 or wider). `dropCastShadow` would then have committed exactly
+    // the deletion `keepLargestComponent` is forbidden from committing on these states, under a
+    // different name and with no `assertComponentPolicy` on the stack.
+    //
+    // Raised by the `voltagent-qa-sec:code-reviewer` gate owner, brief 2.
+    const img = figure();
+    fill(img, 40, 150, 120, 12, [90, 60, 40, 255]); // 1440 px, 10:1 wide, but 10% of the body
+    expect(sizes(img)).toEqual([9600, 1440]);
+    expect(sizes(dropCastShadow(img)), 'a severed boot was deleted').toEqual([9600, 1440]);
   });
 
   it('KEEPS a detached boot below the figure — the thing vault 4.13 protects', () => {

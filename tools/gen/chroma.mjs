@@ -432,7 +432,7 @@ export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
  * entirely below the main mass and it is a flat smear. A detached boot is neither — it sits within
  * or beside the figure's vertical span, and it is not 10:1 wide. Both conditions must hold.
  */
-export function dropCastShadow(image, { minAspect = 4, minPx = 40 } = {}) {
+export function dropCastShadow(image, { minAspect = 4, minPx = 40, maxHeightFraction = 0.04 } = {}) {
   const { labels, sizes } = components(image);
   if (sizes.length < 2) return image;
 
@@ -458,7 +458,23 @@ export function dropCastShadow(image, { minAspect = 4, minPx = 40 } = {}) {
     const b = box[i];
     const w = b.maxX - b.minX + 1;
     const h = b.maxY - b.minY + 1;
-    if (b.minY > box[main].maxY && w >= h * minAspect) doomed.add(i);
+    // THREE conditions, and the third was added after the code-reviewer gate owner's adversarial
+    // brief pointed out that this function is the unguarded twin of `keepLargestComponent`.
+    //
+    // 4.6 forbids keep-largest-component on airborne states because a chroma-key gap legitimately
+    // severs a trailing boot, and this function deletes a non-largest component on every airborne
+    // cell without ever calling `assertComponentPolicy`. It passed 4.6 on the letter while being
+    // able to commit exactly the deletion 4.6 exists to prevent — two boots severed together, or
+    // one raked back, is a wide flat blob below the torso and clears both original tests.
+    //
+    // A shadow is a SMEAR; a boot has real vertical extent. Measured against the MAIN MASS rather
+    // than the image, so it is scale-invariant: the courier stands ~1200 source px, a boot is
+    // ~100 px (8% of him), and the shipped cast shadow was 10 px (0.8%). 4% sits an order of
+    // magnitude clear of both, and unlike the aspect ratio it does not depend on how many boots
+    // were severed at once — two boots side by side is a wide flat blob and clears 4:1 easily.
+    const mainHeight = box[main].maxY - box[main].minY + 1;
+    const tooTallToBeAShadow = h > mainHeight * maxHeightFraction;
+    if (b.minY > box[main].maxY && w >= h * minAspect && !tooTallToBeAShadow) doomed.add(i);
   }
   if (doomed.size === 0) return image;
 

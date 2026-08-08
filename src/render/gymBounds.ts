@@ -119,6 +119,91 @@ export function liftAboveCellFloor(bounds: Bounds, cellHeight: number): number {
   return cellHeight - 1 - bounds.maxY;
 }
 
+/**
+ * The animation name a sheet key refers to, relative to the character the config declares.
+ *
+ * `brass-courier-run` + slug `brass-courier` -> `run`. It throws on a key belonging to a different
+ * character rather than guessing.
+ *
+ * **The naive version was `key.split('-').pop()`, and it is a silent cross-character corruption
+ * waiting for Phase 5.** The moment a second character exists, `boiler-brute-run` also reduces to
+ * `run` — a name `character-bounds.json` DOES declare — so nudging the enemy's foot offset would
+ * write the courier's, and `serialiseBounds` would accept it because the animation exists. Every
+ * gate stays green. The catalog is one asset away from that today.
+ *
+ * Raised by the `voltagent-qa-sec:code-reviewer` gate owner, brief 2.
+ */
+export function actionFromKey(sheetKey: string, slug: string): string {
+  const prefix = `${slug}-`;
+  if (!sheetKey.startsWith(prefix) || sheetKey.length === prefix.length) {
+    throw new Error(
+      `actionFromKey: sheet "${sheetKey}" does not belong to character "${slug}". Editing it ` +
+        `against this character's bounds would write one character's config from another's sheet.`,
+    );
+  }
+  return sheetKey.slice(prefix.length);
+}
+
+/** The character a bounds config is for. `null` when the config is unreadable or declares none. */
+export function slugOf(raw: unknown): string | null {
+  const slug = (raw as { slug?: unknown } | null)?.slug;
+  return typeof slug === 'string' && slug.length > 0 ? slug : null;
+}
+
+/** Everything the Gym's readout needs. Plain data, so the panel is testable without a scene. */
+export interface ReadoutState {
+  /** Named to match `SheetEntry`, so a caller can spread its catalog row straight in. */
+  key: string;
+  frame: number;
+  frameCount: number;
+  fps: number;
+  simTicks: number;
+  derivedFrom: string;
+  frameWidth: number;
+  frameHeight: number;
+  zoom: number;
+  playing: boolean;
+  bounds: Bounds | null;
+  collisionW: number;
+  collisionH: number;
+  offsetPx: number;
+  activeFrames: readonly number[];
+}
+
+/**
+ * The Gym's readout, as lines of text.
+ *
+ * Pure, and here rather than in the scene for the reason everything else in this file is: it states
+ * measurements a human then acts on, and a panel that quietly disagrees with the boxes drawn beside
+ * it is worse than no panel. Extracting it also kept `GymScene.ts` under the 400-line limit by
+ * moving logic out rather than by deleting the comments that explain it — which is what the rule
+ * asks for and what shaving docstrings to hit a number is not.
+ *
+ * **Frame numbers are 1-based HERE and 0-based everywhere else.** The readout is for a human;
+ * `activeFrames` in the config is indexed the way `generateFrameNumbers` indexes, from 0. Phase 5
+ * reads those against animation frames, so the two bases must not be reconciled in the wrong
+ * direction — raised by the code-reviewer gate owner, brief 2, as an unpinned off-by-one.
+ */
+export function readoutLines(state: ReadoutState): string[] {
+  const rect = state.bounds ? boundsRect(state.bounds) : null;
+  return [
+    `SHEET      ${state.key}   [ ]`,
+    `FRAME      ${state.frame + 1} / ${state.frameCount}   , .   ${state.playing ? 'playing' : 'PAUSED'}  SPACE`,
+    `TIMING     ${state.fps.toFixed(2)} fps · ${state.simTicks} simTicks · ${state.derivedFrom}`,
+    `CELL       ${state.frameWidth} x ${state.frameHeight}   zoom ${state.zoom}x  M`,
+    '',
+    state.bounds && rect
+      ? `FOOTPRINT  ${rect.w} x ${rect.h} px   lift above cell floor ${liftAboveCellFloor(state.bounds, state.frameHeight)} px`
+      : 'FOOTPRINT  INDETERMINATE — no opaque pixel in this cell (vault 4.18)',
+    `COLLISION  ${state.collisionW} x ${state.collisionH} px — read-only, PLAYER_BOX x RENDER_SCALE`,
+    `OFFSET     ${state.offsetPx} px   Z X`,
+    `ACTIVE     ${state.activeFrames.length ? state.activeFrames.map((f) => f + 1).join(' ') : '(none)'}   A toggles this frame  (shown 1-based, stored 0-based)`,
+    '',
+    'white cell · blue footprint · green collision · red active frame',
+    'S save · R revert · G back to game',
+  ];
+}
+
 /** The per-animation fields `character-bounds.json` actually owns, and the only ones the Gym writes. */
 export interface BoundsEdits {
   /** Vertical nudge per animation, in game px. The field ASSET-PIPELINE §6 names as the Gym's own. */
