@@ -334,6 +334,29 @@ the prompt saved verbatim beside it as `anchor.prompt.txt`.
 > wording — so when a generation drifts, re-feed this anchor, do not rewrite this description.
 > Changing it is an approval checkpoint, not a prompt tweak.
 
+### AMENDMENT — soles levelled, 2026-08-08, approved by the user
+
+**The description above is unchanged. The IMAGE was corrected once, geometrically, and this is the
+record of it.** The original anchor drew the forward boot **58 px above** the rear one, so the two
+soles did not rest on the same line. Every clip generated from it inherited the stance, and the
+shipped `idle` carried a flat **6 px gap under one boot in all twelve frames** — which is what the
+user reported, twice, as the character "not looking like it's always on the ground". `packStrip`
+aligns on the lowest opaque pixel, so the rear boot defined the ground and the front boot hung.
+
+Fixed by shifting the forward leg down 58 px below a seam at `y = 2380` — a clean vertical section
+of the boot shaft, above the flare — and repeating that cross-section to fill the vacated band. The
+figure grew 2526 → 2527 px; the measured sole gap went **58 px → 1 px**, and the rebuilt `idle`
+measures **0 px in every frame**.
+
+It was done in pixels because a generated edit could not do it: one
+`fal-ai/nano-banana-pro/edit` pass (`019fe1e8-b66e-7cd3-bc9e-89e8f3a29b1f`) naming the change
+explicitly returned the geometry **unchanged**, 59 px against 58. Pixel surgery is also the option
+that cannot drift the identity, which is the whole point of a locked anchor.
+
+The pre-amendment image is kept beside it as `anchor-original.png`. All five clips were re-shot from
+the corrected anchor, so no sheet mixes the two stances. Uploaded at
+`https://v3b.fal.media/files/b/0aa58723/DAg3WILCtZZT1FGD0AlvQ_anchor.png`.
+
 ```text
 CHARACTER ANCHOR:
 brass-courier, a young man in his early twenties, lean and wiry with a narrow upright stance;

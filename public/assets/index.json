@@ -51,8 +51,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 50,
-      "fps": 14.4,
+      "simTicks": 46,
+      "fps": 15.652173913043478,
       "loop": true,
       "derivedFrom": "measured"
     },
@@ -62,8 +62,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 28,
-      "fps": 25.714285714285715,
+      "simTicks": 27,
+      "fps": 26.666666666666668,
       "loop": true,
       "derivedFrom": "measured"
     },
