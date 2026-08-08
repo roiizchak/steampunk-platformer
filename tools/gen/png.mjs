@@ -37,6 +37,19 @@ export function readPng(path) {
   return decodePng(readFileSync(path));
 }
 
+/**
+ * The same bridge, one step earlier: the raw file bytes.
+ *
+ * `gateDimensions` and `gateAlpha` take a buffer rather than a decoded image, because reading the
+ * IHDR and the colour type is the whole point of them — a decoded image has already lost the
+ * distinction between "no alpha channel" and "an alpha channel that is entirely 255". A test
+ * cannot call `readFileSync` itself (`@types/node` is deliberately not a dependency, and `tests/`
+ * is inside the typecheck program), so it comes through here.
+ */
+export function readBytes(path) {
+  return readFileSync(path);
+}
+
 const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 /** Channels per pixel, by PNG colour type. `null` means we do not handle it. */

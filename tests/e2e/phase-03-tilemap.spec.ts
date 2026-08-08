@@ -227,6 +227,71 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     expect(lost, `camera stopped tracking the player on ${lost.length} frames`).toEqual([]);
   });
 
+  test('3.4 the camera follows VERTICALLY as well — scrollY responds to a jump', async ({ page }) => {
+    /**
+     * Added in Phase 4, after the adversarial brief predicted — and a mutation confirmed — that
+     * criterion 3.4 passes with vertical following **entirely dead**.
+     *
+     * `startFollow(sprite, false, lerpX, 0)` leaves every other assertion in this file green: the
+     * view still fits the map, `scrollX` still increases, and `tracksTarget` is satisfied because
+     * the camera is bottom-clamped on this level, so its bottom inset is excused and a grounded
+     * player at y 1920 trivially clears the top one.
+     *
+     * The honest history is worth keeping: BEFORE the inset was made clamp-aware, 3.4 failed on
+     * 200/200 frames — on a correct camera — so it was red-on-everything and equally
+     * non-discriminating. The fix turned a fail-CLOSED vacuum into a fail-OPEN one. This is the
+     * assertion that was missing from both versions.
+     *
+     * It is testable only because the arithmetic allows it: the map is 2112 px tall against a
+     * 1080 px view, so the camera clamps at scrollY 1032 and cannot move until the player rises
+     * above y 1572 — 348 px of climb. The jump apex is 413 px. A shorter jump, a taller view or a
+     * shallower map would make vertical follow genuinely unobservable here, and this test would
+     * have to say so rather than quietly weaken.
+     */
+    await bootToGame(page);
+    await waitTicks(page, 30);
+
+    const readScrollY = () =>
+      page.evaluate(() => {
+        const scene = (
+          window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+        ).__phaserGame.scene.getScene('Game') as { cameras: { main: { scrollY: number } } };
+        return scene.cameras.main.scrollY;
+      });
+
+    const grounded = await readScrollY();
+    expect(typeof grounded).toBe('number');
+
+    // Sample INSIDE the page, once per animation frame, across the whole arc and return an
+    // aggregate — a tick-expressed wait cannot bound this window (see the file header).
+    await page.keyboard.down('Space');
+    const lowest = await page.evaluate(
+      () =>
+        new Promise<number>((resolve) => {
+          const scene = (
+            window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+          ).__phaserGame.scene.getScene('Game') as { cameras: { main: { scrollY: number } } };
+          let min = Number.POSITIVE_INFINITY;
+          let frames = 0;
+          const step = () => {
+            min = Math.min(min, scene.cameras.main.scrollY);
+            frames += 1;
+            if (frames >= 90) {
+              resolve(min);
+              return;
+            }
+            requestAnimationFrame(step);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    await page.keyboard.up('Space');
+
+    // The camera rose. Asserted as a strict inequality against the grounded clamp, because
+    // "scrollY changed" would also be satisfied by it drifting back down after a landing.
+    expect(lowest, 'the camera never moved vertically during a jump').toBeLessThan(grounded);
+  });
+
   test('3.4 the camera stays inside the map at the left edge, where clamping is doing the work', async ({
     page,
   }) => {

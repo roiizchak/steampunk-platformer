@@ -31,6 +31,7 @@ export declare function decodePng(buffer: Uint8Array): DecodedPng;
  * and the `tools/gen/` scripts is the repository root.
  */
 export declare function readPng(path: string): DecodedPng;
+export declare function readBytes(path: string): Uint8Array;
 export declare function encodePng(
   width: number,
   height: number,
