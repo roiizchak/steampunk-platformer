@@ -105,16 +105,22 @@ export const SPAN_CLIP =
  * Both are reverted. The non-monotonic middle is a real defect and is still open; the fix is NOT a
  * stronger instruction in this paragraph.
  */
-const UPRIGHT_IN_AIR =
-  'Throughout the clip he stays UPRIGHT and vertical, head above his boots and his spine straight ' +
-  'up and down, seen in strict side profile facing RIGHT. His body does not rotate, does not tip ' +
-  'over, does not go horizontal, does not turn upside down and does not somersault at any point. ' +
-  'He is high in the air with nothing at all beneath him: there is no ground, no floor and no ' +
-  'surface anywhere in the frame, not even far below him, and nothing casts a shadow — the flat ' +
-  'chroma green simply continues past the bottom edge. ' +
-  'FRAMING: his whole body is inside the frame in every single moment of the clip, from the top of ' +
-  'his hair to the soles of his boots, with a clear band of plain green above his head and another ' +
-  'below his boots. No part of him is ever cut off by the top, bottom, left or right edge.';
+const UPRIGHT_IN_AIR = `
+
+CONSTRAINTS. Every line is absolute.
+He is airborne for the entire clip. He never stands, never lands, never touches anything.
+He stays UPRIGHT: head above his boots, spine straight up and down.
+Strict side profile, facing RIGHT, for every frame.
+No rotation. No tipping. No leaning past upright.
+He never goes horizontal. He never turns upside down. He never somersaults. He never tumbles.
+He HANGS IN ONE PLACE. His body does not travel up, down, left or right in the frame at any moment.
+Only his arms and legs move. His head and torso stay at the same height in the frame throughout.
+There is no ground, no floor, no surface and no horizon anywhere in the frame, not even far below him.
+Nothing casts a shadow. The flat chroma green continues past every edge of the frame.
+His whole body is in frame at every moment, from the top of his hair to the soles of his boots.
+There is plain green above his head and plain green below his boots in every frame.
+No part of him is ever cut off by the top, bottom, left or right edge.
+Locked camera. No zoom. No pan. No dolly. No camera movement of any kind.`;
 
 /**
  * Shared tail: identity, camera lock and the chroma field.
@@ -251,26 +257,37 @@ export const VIDEO_MOTIONS = Object.freeze({
     cyclic: false,
     frames: 6,
     motion:
-      'is airborne, caught in the middle of a leap, and HANGS IN EXACTLY THE SAME PLACE in the ' +
-      'frame for the whole clip. His body does not travel up, down, left or right within the frame ' +
-      'at any point — he neither rises nor sinks in shot. ONLY HIS POSE CHANGES, unfolding steadily ' +
-      'from the first moment to the last: he begins compressed, both knees drawn up under his ' +
-      'chest and his arms held low and close, and opens out through the clip — the leading knee ' +
-      'dropping, the trailing leg reaching down and back, the arms swinging outward and upward — ' +
-      'until he is stretched out at full extension at the end. ' +
+      'is airborne, caught in the middle of a leap.\n' +
+      '\n' +
+      'POSE. Three fixed points, and he passes smoothly and evenly between them:\n' +
+      'AT THE FIRST MOMENT — both knees are drawn up under his chest, boots tucked close beneath ' +
+      'him, arms held low and close to his body. He is compressed and small.\n' +
+      'AT THE HALFWAY POINT — exactly halfway between the two shapes: the leading knee has dropped ' +
+      'to about hip height, the trailing leg reaches down and back below him, both arms are out ' +
+      'from his sides at about shoulder height.\n' +
+      'AT THE LAST MOMENT — he is stretched out at full extension: the leading leg reaching down ' +
+      'and forward, the trailing leg reaching down and back, both arms swung up and outward. He is ' +
+      'open and tall.\n' +
+      'He is at a different point along that path in every frame, and he never doubles back toward ' +
+      'a shape he has already passed through.' +
       `${UPRIGHT_IN_AIR}`,
   },
   fall: {
     cyclic: false,
     frames: 6,
     motion:
-      'is airborne, caught in the middle of a fall, and HANGS IN EXACTLY THE SAME PLACE in the ' +
-      'frame for the whole clip. His body does not travel up, down, left or right within the frame ' +
-      'at any point — he neither sinks nor rises in shot. ONLY HIS POSE CHANGES, gathering steadily ' +
-      'from the first moment to the last: he begins stretched out, his legs trailing behind and ' +
-      'below him and his arms out wide, and gathers through the clip — the knees coming forward ' +
-      'and down beneath his hips, the boots swinging under him, the arms drawing down and in to ' +
-      'his sides — until he is set to land with both boots directly below him at the end. ' +
+      'is airborne, caught in the middle of a fall.\n' +
+      '\n' +
+      'POSE. Three fixed points, and he passes smoothly and evenly between them:\n' +
+      'AT THE FIRST MOMENT — he is stretched out and open: both legs trailing behind and below him, ' +
+      'both arms out wide from his sides.\n' +
+      'AT THE HALFWAY POINT — exactly halfway between the two shapes: the knees have come forward ' +
+      'to about hip height, the boots are swinging beneath him, the arms are drawn halfway in ' +
+      'towards his sides.\n' +
+      'AT THE LAST MOMENT — he is gathered and set to land: both knees bent in front of him, both ' +
+      'boots directly below his hips, both arms drawn down and in close to his sides.\n' +
+      'He is at a different point along that path in every frame, and he never doubles back toward ' +
+      'a shape he has already passed through.' +
       `${UPRIGHT_IN_AIR}`,
   },
 });

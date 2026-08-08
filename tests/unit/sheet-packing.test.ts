@@ -52,6 +52,22 @@ function cellWithFigure(w: number, h: number, top: number, bottom: number, x0 = 
   return { width: w, height: h, data };
 }
 
+/** Vertical centre of mass of one packed cell, in strip coordinates. */
+function centroidYOf(strip: RgbaImage, index: number, frameWidth: number): number {
+  let sum = 0;
+  let n = 0;
+  for (let y = 0; y < strip.height; y += 1) {
+    for (let x = index * frameWidth; x < (index + 1) * frameWidth; x += 1) {
+      if (strip.data[(y * strip.width + x) * 4 + 3] >= 8) {
+        sum += y;
+        n += 1;
+      }
+    }
+  }
+  if (n === 0) throw new Error(`centroidYOf: frame ${index} is empty`);
+  return sum / n;
+}
+
 /** Rows of fully transparent pixels between the figure's lowest opaque row and the cell's bottom. */
 function gapBelowFeet(strip: RgbaImage, index: number, frameWidth: number): number {
   for (let y = strip.height - 1; y >= 0; y -= 1) {
@@ -147,35 +163,53 @@ describe('packStrip vertical alignment — one baseline per sheet', () => {
    * mass barely moved and leaves it where it is. That difference is the whole argument for the
    * jump/fall anchor, so it is asserted rather than described.
    */
-  it('the centroid anchor holds a tucked pose still where the feet anchor would launch it', () => {
+  it('the centroid anchor aligns the DRAWN centres of mass; the feet anchor does not', () => {
+    /**
+     * Frame 1 has the same head line but its legs tucked up, so it is 8 px shorter — the shape an
+     * airborne pose actually has. Feet-anchoring lifts it by that whole 8 px and its body rides 4 px
+     * high; centroid-anchoring lifts it 4 and the two centres of mass land on the same row.
+     *
+     * This assertion is on the PIXELS, not on `liftPx`, and that is deliberate: the first version of
+     * this test compared lift numbers computed by the same expression it was checking, and it
+     * happily passed a formula that left the packed figures 110 px apart on the real art.
+     */
     const tucked = [
-      cellWithFigure(20, 40, 10, 33), // extended: rows 10..33, centroid 21.5
-      cellWithFigure(20, 40, 12, 31), // tucked in from BOTH ends: same centroid 21.5
+      cellWithFigure(20, 40, 10, 33), // extended: rows 10..33, 24 tall
+      cellWithFigure(20, 40, 10, 25), // legs tucked: same top, 16 tall
     ];
     const o = { scale: 1, frameWidth: 40, frameHeight: 60, baselineY: 60 };
-    expect(packStrip(tucked, { ...o, anchor: 'feet' }).frames.map((f) => f.liftPx)).toEqual([0, 2]);
-    expect(packStrip(tucked, { ...o, anchor: 'centroid' }).frames.map((f) => f.liftPx)).toEqual([
-      0, 0,
-    ]);
+
+    const byFeet = packStrip(tucked, { ...o, anchor: 'feet' });
+    const byCentroid = packStrip(tucked, { ...o, anchor: 'centroid' });
+    expect(byFeet.frames.map((f) => f.liftPx)).toEqual([0, 8]);
+    expect(byCentroid.frames.map((f) => f.liftPx)).toEqual([0, 4]);
+
+    const centres = (s: RgbaImage) => [0, 1].map((i) => centroidYOf(s, i, 40));
+    const [cA, cB] = centres(byCentroid.strip);
+    expect(cB - cA).toBe(0);
+    const [fA, fB] = centres(byFeet.strip);
+    expect(Math.abs(fB - fA)).toBeGreaterThan(0); // ...and the two anchors genuinely disagree
   });
 
   it('normalises signed centroid lifts so the lowest-drawn frame rests on the line', () => {
-    // Centroid lifts are signed: a frame whose centre of mass sits BELOW the reference wants to be
-    // drawn under the contact line, which the vertical guard would rightly throw on. Normalising
-    // keeps every inter-frame relationship and only chooses where the set as a whole rests.
+    // Centroid lifts are signed, so without normalisation a frame lands under the cell floor and the
+    // vertical guard throws. Normalising keeps every inter-frame relationship and only chooses where
+    // the set as a whole rests. Two equal-height figures at different heights need no correction at
+    // all relative to each other, which is the degenerate case worth pinning.
     const cells2 = [
-      cellWithFigure(20, 40, 8, 27), // centroid 17.5
-      cellWithFigure(20, 40, 14, 33), // centroid 23.5 — 6 lower
+      cellWithFigure(20, 40, 8, 27), // 20 tall
+      cellWithFigure(20, 40, 14, 33), // 20 tall, drawn 6 lower
     ];
-    const { frames } = packStrip(cells2, {
+    const { strip, frames } = packStrip(cells2, {
       scale: 1,
       frameWidth: 40,
       frameHeight: 60,
       baselineY: 60,
       anchor: 'centroid',
     });
-    expect(frames.map((f) => f.liftPx)).toEqual([6, 0]);
+    expect(frames.map((f) => f.liftPx)).toEqual([0, 0]);
     expect(Math.min(...frames.map((f) => f.liftPx))).toBe(0);
+    expect(centroidYOf(strip, 1, 40) - centroidYOf(strip, 0, 40)).toBe(0);
   });
 
   it('refuses an anchor it does not implement rather than silently defaulting', () => {
@@ -237,7 +271,7 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   const liftsOf = (a: string) =>
     liftProfile.animations[a as keyof typeof liftProfile.animations].frames.map((f) => f.liftPx);
   const maxLift = (a: string) => Math.max(...liftsOf(a));
-  const range = (a: string) => Math.max(...liftsOf(a)) - Math.min(...liftsOf(a));
+
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
     expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall']);
@@ -254,11 +288,14 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(anim.frames.length).toBeGreaterThan(0);
     expect(['feet', 'centroid']).toContain(anim.anchor);
 
-    const landmark = (f: { sourceMaxY: number; sourceCentroidY: number }) =>
-      anim.anchor === 'feet' ? f.sourceMaxY : f.sourceCentroidY;
-    const reference = Math.max(...anim.frames.map(landmark));
+    const deepest = Math.max(...anim.frames.map((f) => f.sourceMaxY));
     const rounded = anim.frames.map((f) =>
-      Math.round((reference - landmark(f)) * liftProfile.scale),
+      Math.round(
+        anim.anchor === 'feet'
+          ? (deepest - f.sourceMaxY) * liftProfile.scale
+          : // the centroid's offset INSIDE the figure, less the height the figure is placed by
+            (f.sourceCentroidY - f.sourceMinY) * liftProfile.scale - f.drawnHeight,
+      ),
     );
     const expected = rounded.map((v) => v - Math.min(...rounded));
 
@@ -301,19 +338,38 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(maxLift('idle')).toBeLessThanOrEqual(2); // ...and a planted stance stays planted
   });
 
-  it('airborne animations do NOT add altitude of their own — the reason centroid was chosen', () => {
+  it('airborne animations hold the body still — measured on the DRAWN pixels', () => {
     /**
-     * The sim's `stepVertical` already moves the sprite every tick, so art that also rises adds a
-     * second, uncorrelated motion. Under feet-anchoring the jump climbed 51 px on its own and the
-     * fall ballooned 48 px through its middle and came back — a visible hitch mid-descent. The
-     * chosen anchor holds the body still and lets only the pose change, and THAT is what this
-     * asserts: a bound, not a floor. Switching either back to `feet` blows it.
+     * The property centroid anchoring exists to produce, asserted where it is actually visible.
+     *
+     * A first version of this bounded `liftPx` instead and had to be thrown away: under the
+     * `centroid` anchor `liftPx` is the CORRECTION applied, not the residual left behind, so
+     * bounding it bounds how much unwanted translation the clip contained — a fact about the model's
+     * obedience, not about the sheet. It duly went red when a better clip that happened to drift
+     * more was packed correctly. Vault **4.19** again: name the axis your metric measures.
+     *
+     * What matters is the OUTPUT: the sim's `stepVertical` supplies altitude, so the drawn figure's
+     * centre of mass must sit at the same height in every frame. Feet-anchoring the same sheets
+     * scattered it by 40-70 px, which is the hitch mid-jump and mid-fall.
      */
-    expect(range('fall')).toBeLessThanOrEqual(20);
-    expect(range('jump')).toBeLessThanOrEqual(50);
-    // Not vacuous: the poses must still differ frame to frame, or "no balloon" is satisfied by a
-    // sheet that never moves at all.
-    expect(range('jump')).toBeGreaterThan(0);
-    expect(range('fall')).toBeGreaterThan(0);
+    for (const action of ['jump', 'fall'] as const) {
+      const anim = liftProfile.animations[action];
+      expect(anim.anchor).toBe('centroid');
+      const strip = readPng(`${SHEETS}/${action}.png`);
+      const centres = anim.frames.map((f) => centroidYOf(strip, f.index, FRAME_WIDTH));
+      const spread = Math.max(...centres) - Math.min(...centres);
+      expect(spread).toBeLessThanOrEqual(2); // rounding only
+    }
+  });
+
+  it('...and the grounded ones deliberately do NOT hold it still (C2: this can go red)', () => {
+    // The anti-vacuity partner. If the assertion above passed for every sheet it would be measuring
+    // nothing — a feet-anchored locomotion cycle must move its centre of mass, because that IS the
+    // bob and the flight phase.
+    const strip = readPng(`${SHEETS}/run.png`);
+    const centres = liftProfile.animations.run.frames.map((f) =>
+      centroidYOf(strip, f.index, FRAME_WIDTH),
+    );
+    expect(Math.max(...centres) - Math.min(...centres)).toBeGreaterThan(2);
   });
 });

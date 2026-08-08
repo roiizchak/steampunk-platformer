@@ -402,6 +402,67 @@ export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
  * **Judged by AREA, never by `alpha > 0`** *(vault 4.13)*. The self-test fixture is a four-pixel
  * speck that an `alpha > 0` check scores as a whole second figure.
  */
+/**
+ * Drop a cast SHADOW: a detached blob lying wholly below the figure, far wider than it is tall.
+ *
+ * The airborne prompts say *"nothing casts a shadow"* and name the reason — a figure implied to be
+ * above something grows a surface for it. The model mostly obeys and then draws one anyway on the
+ * odd frame: the shipped `fall` has one on frame 5, a 108 x 10 ellipse 695 px in area, sitting 7 px
+ * under the boots.
+ *
+ * It is not cosmetic. It is the lowest opaque thing in the cell, so it captures the foot line, drags
+ * the centroid down, and renders as a dark disc floating under an airborne character — the same
+ * class of defect as the chroma halo, which also defined a contact line it had no business defining.
+ *
+ * **An area threshold cannot do this job**, which is why `removeSpecks` is not simply turned up. At
+ * this scale a boot is roughly 600 px and this shadow is 695, and vault **4.13** forbids
+ * keep-largest-component on exactly these two animations because an airborne pose legitimately
+ * splits when a chroma-key gap severs a trailing boot. Raising `minPx` past 695 would therefore eat
+ * the very thing 4.13 exists to protect.
+ *
+ * The discriminating axes are SHAPE and POSITION, and a shadow is unambiguous on both: it lies
+ * entirely below the main mass and it is a flat smear. A detached boot is neither — it sits within
+ * or beside the figure's vertical span, and it is not 10:1 wide. Both conditions must hold.
+ */
+export function dropCastShadow(image, { minAspect = 4, minPx = 40 } = {}) {
+  const { labels, sizes } = components(image);
+  if (sizes.length < 2) return image;
+
+  const box = sizes.map(() => ({ minX: Infinity, maxX: -1, minY: Infinity, maxY: -1 }));
+  for (let p = 0; p < labels.length; p += 1) {
+    const label = labels[p];
+    if (label < 0) continue;
+    const b = box[label];
+    const x = p % image.width;
+    const y = (p - x) / image.width;
+    if (x < b.minX) b.minX = x;
+    if (x > b.maxX) b.maxX = x;
+    if (y < b.minY) b.minY = y;
+    if (y > b.maxY) b.maxY = y;
+  }
+
+  let main = 0;
+  for (let i = 1; i < sizes.length; i += 1) if (sizes[i] > sizes[main]) main = i;
+
+  const doomed = new Set();
+  for (let i = 0; i < sizes.length; i += 1) {
+    if (i === main || sizes[i] < minPx) continue;
+    const b = box[i];
+    const w = b.maxX - b.minX + 1;
+    const h = b.maxY - b.minY + 1;
+    if (b.minY > box[main].maxY && w >= h * minAspect) doomed.add(i);
+  }
+  if (doomed.size === 0) return image;
+
+  const out = new Uint8ClampedArray(image.data);
+  for (let p = 0; p < labels.length; p += 1) {
+    if (doomed.has(labels[p])) {
+      out[p * 4] = 0; out[p * 4 + 1] = 0; out[p * 4 + 2] = 0; out[p * 4 + 3] = 0;
+    }
+  }
+  return { width: image.width, height: image.height, data: out };
+}
+
 export function removeSpecks(image, minPx = CHROMA.MIN_COMPONENT_PX) {
   const { labels, sizes } = components(image);
   const out = new Uint8ClampedArray(image.data);

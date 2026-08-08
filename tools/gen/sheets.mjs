@@ -279,8 +279,23 @@ export function frameLifts(cells, metrics, scale, anchor = 'feet') {
     const deepest = Math.max(...metrics.map((m) => m.maxY));
     raw = metrics.map((m) => (deepest - m.maxY) * scale);
   } else if (anchor === 'centroid') {
-    const reference = Math.max(...metrics.map((m) => m.centroidY));
-    raw = metrics.map((m) => (reference - m.centroidY) * scale);
+    /**
+     * Place so the DRAWN centre of mass lands on one row — which is NOT the same as differencing the
+     * cell-absolute centroid, and the first version of this did exactly that and was wrong by up to
+     * 110 px.
+     *
+     * The placement is `top = baselineY - sh - lift`, i.e. every frame is positioned by its own
+     * scaled HEIGHT and then lifted. So the packed centroid is `top + (centroidY - minY) * scale`,
+     * and the quantity that has to be cancelled is the centroid's offset *inside the figure* minus
+     * that height. The cell-absolute centroid ignores both, so aligning on it left the figures
+     * scattered exactly as far apart as their heights differed.
+     *
+     * Any constant falls out in the normalisation below, so there is no reference frame to choose.
+     */
+    raw = metrics.map((m) => {
+      const sh = Math.max(1, Math.round(m.height * scale));
+      return (m.centroidY - m.minY) * scale - sh;
+    });
   } else {
     throw new Error(
       `frameLifts: unknown vertical anchor "${anchor}". Use "feet" for grounded animations or ` +
@@ -417,6 +432,7 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY, an
       // The SOURCE coordinates the lift was measured from — both of them, whichever anchor was
       // used — carried out so the lift-profile manifest records its own inputs and a test can
       // re-derive `liftPx` instead of trusting it.
+      sourceMinY: m.minY,
       sourceMaxY: m.maxY,
       sourceCentroidY: m.centroidY,
     });

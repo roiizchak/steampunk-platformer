@@ -38,6 +38,12 @@ export declare function chooseCycleWindow(
 export declare const MAX_WRAP_OVER_EXCURSION: number;
 
 export declare const ONSET_FRACTION: number;
+export declare const LIFT_OFF_FRACTION: number;
+export declare function liftOffOnset(
+  footRows: readonly number[],
+  headRows: readonly number[],
+  fraction?: number,
+): number | null;
 export declare function motionOnset(
   diff: (i: number, j: number) => number,
   sourceFrames: number,

@@ -142,6 +142,46 @@ export const ONSET_FRACTION = 0.25;
  * Returns 0 when the clip is already moving at frame 0 — which is the correct answer, not a
  * fallback.
  */
+/**
+ * How far the feet must rise, as a fraction of the figure's standing height, to count as airborne.
+ *
+ * 4 % is a boot's depth: below that a heel lifting off, a toe rolling, or one row of chroma-key
+ * jitter would all read as a take-off.
+ */
+export const LIFT_OFF_FRACTION = 0.04;
+
+/**
+ * The first frame in which the character has actually LEFT THE GROUND.
+ *
+ * `motionOnset` answers a different question — *when did the silhouette start changing* — and for an
+ * airborne clip that is the wrong axis *(vault 4.18: enumerate what your metric measures, then ask
+ * which axis the failure lives on)*. Both `jump` and `fall` open on the anchor pose, because the
+ * anchor is the start image, and the character then crouches or leans BEFORE leaving the ground.
+ * Silhouette difference counts that crouch, so a 25 %-of-peak threshold picked source frame 13 of
+ * the fall — a man standing upright with both boots down.
+ *
+ * That standing frame then went into a `centroid`-anchored sheet, where an upright figure's centre
+ * of mass sits far higher than a gathered one's, and the packer had to lift it 65 px to line the
+ * centroids up — 15 px out of the top of a 336 px cell. The vertical guard threw, which is how this
+ * was found rather than shipped.
+ *
+ * `footRows[t]` is the lowest occupied row of the figure in frame `t`, in any consistent units —
+ * the silhouette masks `build-clips` already computes give it for free. Take-off is the first frame
+ * whose feet sit `LIFT_OFF_FRACTION` of the standing height above where they started.
+ *
+ * Returns `null` when the feet never rise, which is an honest INDETERMINATE *(vault 4.18)*: a clip
+ * in which the character never leaves the ground is not an airborne clip, and the caller should say
+ * so rather than fall back to frame 0.
+ */
+export function liftOffOnset(footRows, headRows, fraction = LIFT_OFF_FRACTION) {
+  if (footRows.length === 0) return null;
+  const standing = footRows[0] - headRows[0];
+  if (!(standing > 0)) return null;
+  const threshold = footRows[0] - standing * fraction;
+  const at = footRows.findIndex((row) => row < threshold);
+  return at < 0 ? null : at;
+}
+
 export function motionOnset(diff, sourceFrames, fraction = ONSET_FRACTION) {
   const from0 = Array.from({ length: sourceFrames }, (_, t) => diff(0, t));
   const peak = Math.max(...from0);

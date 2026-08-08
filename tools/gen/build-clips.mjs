@@ -34,7 +34,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIDEO_MOTIONS } from './motion.mjs';
-import { chooseCycleWindow, motionOnset, windowIndices } from './sampler.mjs';
+import {
+  LIFT_OFF_FRACTION,
+  chooseCycleWindow,
+  liftOffOnset,
+  motionOnset,
+  windowIndices,
+} from './sampler.mjs';
 
 const VIDEO_DIR = '_generated/video';
 const SHEET_DIR = '_generated/sheets';
@@ -118,6 +124,22 @@ function findClip(action) {
  * runs later, in `build-assets`, against a colour it measures for itself. This is a coarser test on
  * purpose — it only has to be good enough to say whether two poses are the same.
  */
+/** Topmost and lowest occupied rows of a silhouette mask — the head line and the foot line. */
+function maskRows(mask) {
+  let head = -1;
+  let foot = -1;
+  for (let y = 0; y < PROBE_H; y += 1) {
+    for (let x = 0; x < PROBE_W; x += 1) {
+      if (mask[y * PROBE_W + x]) {
+        if (head < 0) head = y;
+        foot = y;
+        break;
+      }
+    }
+  }
+  return { head, foot };
+}
+
 function silhouettes(clip) {
   const raw = execFileSync(
     'ffmpeg',
@@ -210,7 +232,26 @@ function main() {
       // start image, so the courier stands still for the first stretch of it. Six frames spread
       // across the whole clip spend one or two on a standing figure, which inside an 18-tick jump
       // is a third of the animation. Sampling runs from the measured motion onset to the end.
-      onset = motionOnset(diff, sourceFrames);
+      /**
+       * Take-off is measured from the FEET, not from the silhouette — see `liftOffOnset`.
+       * `motionOnset` remains the fallback for a one-shot that is not airborne at all (there are
+       * none today, but `attack` in Phase 5 will be exactly that).
+       */
+      const masks = silhouettes(clip);
+      const bands = masks.map((m) => maskRows(m));
+      const lift = liftOffOnset(
+        bands.map((b) => b.foot),
+        bands.map((b) => b.head),
+      );
+      if (lift === null) {
+        throw new Error(
+          `assets:clips: "${action}" is an airborne one-shot but its feet never leave the ground — ` +
+            `no frame has them ${Math.round(LIFT_OFF_FRACTION * 100)}% of a standing height above ` +
+            `where they started. That is an INDETERMINATE, not a licence to sample from frame 0 ` +
+            `(vault 4.18); the clip did not perform the motion and must be regenerated.`,
+        );
+      }
+      onset = lift;
       indices = windowIndices(onset, sourceFrames - 1 - onset, frames);
     }
 

@@ -42,3 +42,7 @@ export declare function estimateKeyColour(
   image: RgbaImage,
   options?: { minAgreement?: number; tolerance?: number },
 ): { key: number[]; agreement: number };
+export declare function dropCastShadow(
+  image: RgbaImage,
+  options?: { minAspect?: number; minPx?: number },
+): RgbaImage;

@@ -26,7 +26,13 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePng, encodePng } from './png.mjs';
-import { estimateKeyColour, keyOut, removeSpecks, trimHalo } from './chroma.mjs';
+import {
+  dropCastShadow,
+  estimateKeyColour,
+  keyOut,
+  removeSpecks,
+  trimHalo,
+} from './chroma.mjs';
 import {
   assertSingleRowLayout,
   detectFrames,
@@ -170,7 +176,16 @@ function main() {
   for (const action of ACTIONS) {
     const source = findSource(action);
     const { keyed, key, agreement } = keySheet(source);
-    let cells = framesOf(keyed);
+    /**
+     * Per CELL, not per sheet — "below the figure" only means anything inside one frame.
+     *
+     * Applied to the whole strip first, and it did nothing: `dropCastShadow` compares each blob
+     * against the LARGEST component, and on a six-frame sheet that is one particular pose. A shadow
+     * under frame 5 is not below the tallest figure on the sheet, so the test never fired while the
+     * ellipse stayed visible in the output. Measuring across a boundary the concept does not cross
+     * is the same error `assertSingleRowLayout` guards on the other axis.
+     */
+    let cells = framesOf(keyed).map((cell) => dropCastShadow(cell));
 
     /**
      * **Ping-pong: play the poses out and back, so the wrap is a real step by construction.**
@@ -291,8 +306,10 @@ function main() {
       deepestSourceY,
       frames: frames.map((f) => ({
         index: f.index,
+        sourceMinY: f.sourceMinY,
         sourceMaxY: f.sourceMaxY,
         sourceCentroidY: Number(f.sourceCentroidY.toFixed(3)),
+        drawnHeight: f.drawnHeight,
         liftPx: f.liftPx,
       })),
     };
