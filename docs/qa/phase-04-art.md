@@ -329,6 +329,65 @@ out-of-tree rather than applied, so it did not see vitest report red; it has no 
 the Gym at all, so F3 is read from code, not observed, and 4.14/4.25 are untouched by it; and it did
 not audit the ~8,000 lines of generator internals owned by the other agent's criteria.
 
+## Rebuild determinism (4.11) — measured, and the criterion as worded cannot be met
+
+**The half that holds, and it is now measured rather than assumed.** Running `npm run assets:build`
+against the existing `_generated/sheets/` and diffing the tree produces **no change at all** — all
+five strips and `lift-profile.json` come back byte for byte identical. The deterministic-encoding
+comments in `png.mjs` and `resize.mjs` were design intent that nothing had checked; this checks it.
+
+```
+$ git status --short          # clean
+$ npm run assets:build        # 5 strips + lift-profile.json rewritten
+$ git status --short          # still clean -> byte-identical
+```
+
+**The half that cannot be met as written.** The criterion says *"rebuild from a clean clone produces
+byte-identical PNGs"*. A clean clone cannot rebuild at all: `_generated/` is gitignored and holds
+**128 MB** of source clips and intermediate sheets (63 MB of `.mp4`, 65 MB of extracted frames). The
+build reads `_generated/sheets/` and correctly **fails loudly** on a missing input rather than
+substituting *(vault 4.16)* — so on a clean clone it does not produce wrong PNGs, it produces none.
+
+So the criterion is decomposed rather than declared passed:
+
+| | status |
+|---|---|
+| same inputs → same bytes | **PASS**, measured above |
+| clean clone → same bytes | **UNACHIEVABLE** without committing 128 MB of clips |
+
+**This is a decision for the phase owner, not something to quietly restate.** The options are to
+commit the source clips (expensive, and they are model outputs that cannot be regenerated
+identically — STYLE.md §3 records this model as not seed-deterministic), to accept that shipped art
+is reproducible only from a machine holding the clips, or to reword 4.11 to the determinism claim
+that is actually checkable. **Not decided here.**
+
+Worth stating alongside: because the model is not seed-deterministic, re-running the GENERATION step
+can never reproduce these bytes. The most any rebuild gate can prove is that the *packing* of fixed
+clips is deterministic — which is the part that had a real bug in it this phase, so it is also the
+part worth pinning.
+
+## Lane C - `play`, hands-on with `playwright-cli`
+
+The lane that closed this defect. Two prior rounds were closed on numbers and rejected on sight, so
+these are looked at, not measured.
+
+| Shot | What it shows |
+|---|---|
+| Standing on flat ground at true size, `x 624, y 1920, idle` | **Both boots on the hazard stripe, no float, no gap.** This is the defect the user reported, at the size a player sees it. The character reads clearly against the industrial background at 1x - criterion 4.1. |
+| The ground under the spike run, `x 2523` | **The yellow-black cap runs unbroken beneath the spikes.** This is criterion 4.22 by eye: before the fix, four tiles of it were plain brick. The spikes are non-solid and he walks through them, which is correct until Phase 5 makes them hurt. |
+| The Gym at 1x and clamped 2x | Anatomy check, criterion 4.14: two arms, two legs, two boots, one head, one satchel, one pauldron. **No third limb.** The 4x zoom cut the head off, which is why the zoom is now clamped - found by looking, not by a metric. |
+| The Gym's overlays on `jump` frame 5 | White cell, blue measured footprint, green collision, red active-frame toggle, all drawn correctly, with `lift above cell floor 35 px` - the centroid anchor holding an airborne pose off the ground. |
+
+**Checked and cleared, so it is not re-investigated:** the dark vertical band right of the spike run
+is `bg-near` artwork - a shadowed alley between two pipe stacks - not a parallax seam. All three
+layers are intact 1920x1080 tilesprites with only their `tilePositionX` differing.
+
+**Not covered by this lane, and it is the honest gap:** the platform tops and the pillar were not
+photographed, because reaching them means crossing the 288 px pit at x 3840-4128 and a missed jump
+drops the player out of the world (the Phase 5 carry-in). The e2e spec asserts the drawn-vs-sim
+invariant continuously across takeoff, flight and landing, which covers the mechanism; what is
+missing is a human having looked at the character standing on a platform edge.
+
 ## Criterion-by-criterion
 
 **Not yet complete.** The rows below are filled only where evidence exists; the rest are UNRUN and
@@ -349,7 +408,7 @@ before the PRD may mark this phase done.
 | 4.2b | **FAIL** | The invoice has not been read. This is the blocker. |
 | 4.10 | **UNRUN** | `gateReachBand` — the frame-diff box audit the criterion names — is called only from `selfTest()` and unit fixtures. Verified by grep: no call site against the real sheets, no result in any log. |
 | 4.12 | **UNRUN** | `findSource` throws on a missing or ambiguous action, but no test exercises it and no log records the "deliberately remove one" run being watched fail. Right shape, unproven. |
-| 4.11 | **UNRUN** | Byte-identical rebuild is not implemented as an automated gate. |
+| 4.11 | **HALF PASS, half UNACHIEVABLE as worded** | See §Rebuild determinism. Same-input determinism is now measured and holds; clean-clone rebuild cannot be done without committing 128 MB of source clips. |
 | 4.16 | **FAIL** | Ten files over 400 lines. See §File sizes. |
 | 4.18 | **UNRUN** | Codex implementation review. |
 | all others | **UNRUN** | Awaiting their gate owners. |
