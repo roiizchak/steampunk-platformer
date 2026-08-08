@@ -26,7 +26,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePng, encodePng } from './png.mjs';
-import { estimateKeyColour, keyOut, removeSpecks } from './chroma.mjs';
+import { estimateKeyColour, keyOut, removeSpecks, trimHalo } from './chroma.mjs';
 import { detectFrames, figureMetrics, packStrip, deriveScale } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
 
@@ -88,7 +88,11 @@ function loadConfig() {
 function keySheet(path) {
   const decoded = decodePng(readFileSync(path));
   const { key, agreement } = estimateKeyColour(decoded);
-  const keyed = removeSpecks(keyOut(decoded, { key }));
+  // `trimHalo` runs BEFORE `removeSpecks` and before anything measures the figure. The halo it
+  // removes is connected to the character, so component-area filtering cannot see it, and every
+  // downstream measurement — the packer's feet alignment, the derived scale, the stride — would
+  // otherwise be taken against a haze rather than against the boots.
+  const keyed = removeSpecks(trimHalo(keyOut(decoded, { key })));
   return { decoded, keyed, key, agreement };
 }
 

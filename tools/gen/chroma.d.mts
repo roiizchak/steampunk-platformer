@@ -26,6 +26,10 @@ export declare function components(
   image: RgbaImage,
   minAlpha?: number,
 ): { labels: Int32Array; sizes: number[] };
+export declare function trimHalo(
+  image: RgbaImage,
+  options?: { solidAlpha?: number; maxDistance?: number },
+): RgbaImage;
 export declare function removeSpecks(image: RgbaImage, minPx?: number): RgbaImage;
 export declare function assertComponentPolicy(state: string): void;
 export declare function keepLargestComponent(image: RgbaImage, state: string): RgbaImage;

@@ -325,6 +325,78 @@ export function components(image, minAlpha = 1) {
 }
 
 /**
+ * Erase the soft HALO a video codec leaves around a figure on a saturated chroma field.
+ *
+ * ## The defect, measured
+ *
+ * The Seedance clips come back with a broad soft glow around the courier — chroma bleed at a
+ * high-contrast edge against saturated green, which the LOW/HIGH tolerance ramp resolves into a wide
+ * band of partial alpha rather than removing. Rendered as brightness it is unmistakable: an
+ * elliptical haze reaching 20–40 px past the silhouette on every side.
+ *
+ * It broke two things at once, and neither was obvious from the sheet:
+ *
+ * ```
+ *          lowest row with alpha>=8   lowest row with alpha>=128   gap
+ *   idle          335                        335                     0
+ *   walk          335                        327 - 331             4 - 8
+ *   run           335                        315 - 330             5 - 20
+ * ```
+ *
+ * `packStrip` aligns the figure's lowest opaque row onto the cell's last row, because `playerView`
+ * draws at origin `(0.5, 1)` on the player's feet *(vault 2.10)*. With the halo counted as figure, it
+ * aligned the HALO to the ground — so the visible boots hung 4–20 px above the tiles, and because the
+ * halo's depth varies per frame, the character also bobbed vertically by up to 15 px while running.
+ * "Doesn't look like they stand on the tiles" and "still not smooth" were one defect.
+ *
+ * ## Why the test is geometric and not chromatic
+ *
+ * The obvious guess — residual green — is wrong, and measuring said so: **0 %** of the halo is
+ * green-dominant, because `keyOut`'s despill has already neutralised its colour. It is not a colour
+ * that needs keying, it is an alpha that should never have survived.
+ *
+ * An alpha floor alone cannot separate it either: the halo runs up to alpha 127, well into the range
+ * a genuine anti-aliased edge occupies, so any floor high enough to erase it would harden every
+ * silhouette. What actually distinguishes them is DISTANCE. Real edge anti-aliasing is 1–2 px from
+ * solid ink. Halo is 5–40 px from anything solid. So a partial-alpha pixel is kept only if it is
+ * within `maxDistance` of a genuinely solid one, and dropped otherwise — which preserves edge quality
+ * exactly while removing a haze that is nowhere near the figure.
+ *
+ * **What this would eat, stated rather than discovered:** a feature that is thin AND entirely
+ * semi-transparent everywhere — a wisp of smoke, a single-pixel cable — has no solid core to be near,
+ * so it goes. At this source resolution (the courier stands 1209 px) every real feature has one. If a
+ * later asset does not, that asset needs a different cleanup, not a looser distance.
+ */
+export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
+  const { width, height, data } = image;
+  const out = new Uint8ClampedArray(data);
+  const solid = new Uint8Array(width * height);
+  for (let p = 0; p < width * height; p += 1) solid[p] = data[p * 4 + 3] >= solidAlpha ? 1 : 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const p = y * width + x;
+      const alpha = data[p * 4 + 3];
+      if (alpha === 0 || solid[p]) continue;
+      let near = false;
+      for (let dy = -maxDistance; dy <= maxDistance && !near; dy += 1) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -maxDistance; dx <= maxDistance; dx += 1) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          if (solid[yy * width + xx]) { near = true; break; }
+        }
+      }
+      if (!near) {
+        out[p * 4] = 0; out[p * 4 + 1] = 0; out[p * 4 + 2] = 0; out[p * 4 + 3] = 0;
+      }
+    }
+  }
+  return { width, height, data: out };
+}
+
+/**
  * Erase components smaller than `MIN_COMPONENT_PX`.
  *
  * **Judged by AREA, never by `alpha > 0`** *(vault 4.13)*. The self-test fixture is a four-pixel

@@ -749,3 +749,86 @@ exactly where gate 4.2b left it. Bounds on this batch: **$0.50 – $10.89**. Cum
 
 ⚠️ The fal.ai dashboard invoice line remains the highest-value unread number in this phase, and it is
 now attached to nine clips rather than one.
+
+---
+
+## Gate 4b/J — the halo, the floating feet, and the last of the jitter · 0 gens · $0
+
+Two reports after 4b/I shipped: *"the character does not look like they stand or walk on the tiles"*
+and *"it's not completely smooth"*. **One defect, two symptoms, no regeneration needed.**
+
+### Measured
+
+`packStrip` aligns the figure's lowest opaque row onto the cell's last row, because `playerView`
+draws at origin `(0.5, 1)` on the player's feet *(vault 2.10)*. Cell height is 336, so the boots
+should sit on row 335 in every cell. Measured on the shipped strips:
+
+| anim | lowest row, alpha ≥ 8 | lowest row, alpha ≥ 128 | gap |
+|---|---|---|---|
+| `idle` | 335 | 335 | **0** |
+| `walk` | 335 | 327 – 331 | **4 – 8 px** |
+| `run` | 335 | 315 – 330 | **5 – 20 px** |
+| `fall` | 335 | 282 – 335 | 0 – 53 px |
+
+So something faint was being aligned to the ground and the visible boots were hanging above it — and
+because the depth of it varied per frame, the character bobbed vertically by up to 15 px while
+running, *on top of* the real bob and out of phase with it. Standing wrong and moving roughly were
+the same bug.
+
+### What it was — and two wrong guesses, both discarded on measurement
+
+Rendering the alpha channel as brightness showed it immediately *(vault 4.24 — look to find)*: a
+broad soft **halo** around the whole lower body, reaching 20–40 px past the silhouette, mean alpha
+14–42, spanning 120–140 px horizontally. Chroma bleed at a high-contrast edge against a saturated
+green field, which the LOW/HIGH tolerance ramp resolves into partial alpha instead of removing.
+
+- **Guess 1: residual green the key missed.** Wrong — **0.00 %** of the halo is green-dominant, on
+  every animation. `keyOut`'s despill had already neutralised its colour. It was not a colour
+  problem.
+- **Guess 2: clip the ramp with an alpha floor.** Wrong — the halo reaches alpha 127, well inside the
+  range a genuine anti-aliased edge occupies, so any floor high enough to erase it would harden every
+  silhouette in the game.
+
+The property that actually separates them is **distance**. Real edge anti-aliasing is 1–2 px from
+solid ink; this halo is 5–40 px from anything solid. `trimHalo` in `chroma.mjs` keeps a partial-alpha
+pixel only when a genuinely solid one (alpha ≥ 192) lies within 2 px, and drops it otherwise — edge
+quality preserved exactly, haze gone. It runs before `removeSpecks`, because the halo is *connected*
+to the figure and component-area filtering cannot see it, and before anything measures the figure.
+
+**Stated rather than discovered:** this would erase a feature that is thin AND semi-transparent
+everywhere — a wisp of smoke, a one-pixel cable — since it has no solid core to be near. At this
+source resolution every real feature has one. A later asset that does not needs a different cleanup,
+not a looser distance.
+
+### Result
+
+```
+   gap between the faint bottom and the solid boot, after trimming
+   idle 0 0 0 0 0 0 0 0 0 0 0 0
+   walk 0 0 0 0 0 0 0 0 0 0 0 0
+   run  0 0 0 0 0 0 0 0 0 0 0 0
+   jump 0 0 0 0 0 0        fall 0 0 0 0 0 0
+```
+
+Every frame of every animation now puts the boots on row 335.
+
+**Neither the scale nor the stride moved** — re-derived and re-measured after the trim, still
+`0.23821340` and still 310 px. The halo corrupted the *alignment* only, not the size measurements,
+which is why the 4b/I numbers stand unchanged.
+
+**On screen, dev build at 1920×1080:** the drawn sprite's bottom equals the sim's feet position to
+**0.0 px across all 481 samples and all 12 run frames**, with feet y constant at 1920 — which is
+`GROUND_TOP_ROW 20 × TILE_SIZE 96`, the top of the ground tiles. Confirmed by eye at magnification:
+the soles sit on the hazard-striped cap.
+
+**Residual motion, measured, and it is the animation rather than a defect:** lateral head wander is
+2 px (idle), 5 px (walk), 4 px (run); vertical head travel is 4 px (idle — the breath), 9 px (walk)
+and 14 px (run), i.e. a 3–5 % bob, which is what a walk and a run do. The halo float was 5–20 px and
+out of phase with it.
+
+Six new fixture-backed cases in `chroma-gate.test.ts` pin the behaviour in both directions, including
+one asserting that a `maxDistance` wide enough to reach the halo *keeps* it — so the function cannot
+be quietly turned into a no-op by loosening the distance *(C2)*.
+
+401 unit tests pass, typecheck clean, build green including `verify-dist ok`. Dev server killed by
+port *(C13)*. **No generations, no spend** — cumulative unchanged at $5.54–$17.08.

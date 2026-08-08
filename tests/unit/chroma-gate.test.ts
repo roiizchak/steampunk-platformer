@@ -29,6 +29,7 @@ import {
   keyOut,
   multiComponentStates,
   removeSpecks,
+  trimHalo,
 } from '../../tools/gen/chroma.mjs';
 import { fill } from '../../tools/gen/gates.mjs';
 import { blank } from '../../tools/gen/png.mjs';
@@ -231,5 +232,91 @@ describe('one shared module (vault 4.13)', () => {
     const t = chromaThresholds();
     t.LOW = 999;
     expect(CHROMA.LOW).toBe(40);
+  });
+});
+
+/**
+ * `trimHalo` — the soft glow a video codec leaves around a figure on saturated chroma.
+ *
+ * This is the defect that made the character float above the tiles and bob while running: the halo
+ * counted as figure, so `packStrip` aligned the HALO's lowest row to the cell bottom instead of the
+ * boots. Measured on the shipped strips, walk's boots sat 4-8 px high and run's 5-20 px, varying per
+ * frame.
+ *
+ * The fixtures below pin the distinction the function is built on — anti-aliasing is 1-2 px from
+ * solid ink, halo is far from it — in BOTH directions, so widening the distance cannot quietly make
+ * the function a no-op.
+ */
+describe('trimHalo removes a distant haze and keeps a real anti-aliased edge', () => {
+  /**
+   * A solid core (d <= 10), a 1 px anti-aliased ring at alpha 128 (d == 11), a deliberate 2 px void,
+   * then a wide faint halo at alpha 40 (d 14..20). The void makes the fixture unambiguous: with the
+   * default `maxDistance` of 2 the AA ring is adjacent to solid ink and the halo is not, so nothing
+   * sits on the boundary and the expectations below cannot pass by luck.
+   */
+  const withHalo = () => {
+    const img = blank(64, 64, [0, 0, 0, 0]);
+    const set = (x: number, y: number, a: number) => {
+      const p = (y * 64 + x) * 4;
+      img.data[p] = 180; img.data[p + 1] = 140; img.data[p + 2] = 60; img.data[p + 3] = a;
+    };
+    for (let y = 0; y < 64; y += 1) {
+      for (let x = 0; x < 64; x += 1) {
+        const d = Math.max(Math.abs(x - 32), Math.abs(y - 32));
+        if (d <= 10) set(x, y, 255);
+        else if (d === 11) set(x, y, 128);
+        else if (d >= 14 && d <= 20) set(x, y, 40);
+      }
+    }
+    return img;
+  };
+
+  const alphaAt = (img: { width: number; data: Uint8ClampedArray }, x: number, y: number) =>
+    img.data[(y * img.width + x) * 4 + 3];
+
+  it('keeps the anti-aliased edge pixel one step outside solid ink', () => {
+    const out = trimHalo(withHalo());
+    expect(alphaAt(out, 32, 21)).toBe(128); // d === 11, adjacent to the solid core
+  });
+
+  it('erases the halo that is nowhere near a solid pixel', () => {
+    const out = trimHalo(withHalo());
+    expect(alphaAt(withHalo(), 32, 15)).toBe(40); // d === 17, present before
+    expect(alphaAt(out, 32, 15)).toBe(0); //           and gone after
+  });
+
+  it('leaves the solid core untouched', () => {
+    const out = trimHalo(withHalo());
+    expect(alphaAt(out, 32, 32)).toBe(255);
+  });
+
+  it('moves the lowest opaque row up to the real edge — the bug that floated the character', () => {
+    const lowest = (img: { width: number; height: number; data: Uint8ClampedArray }) => {
+      let y = -1;
+      for (let yy = 0; yy < img.height; yy += 1) {
+        for (let xx = 0; xx < img.width; xx += 1) if (alphaAt(img, xx, yy) >= 8) y = yy;
+      }
+      return y;
+    };
+    expect(lowest(withHalo())).toBe(52); // the halo's bottom, 20 px from centre
+    expect(lowest(trimHalo(withHalo()))).toBe(43); // the drawn edge, 11 px from centre
+  });
+
+  it('a distance wide enough to reach the halo would keep it — so the gate can go red', () => {
+    // Guards against "fixing" a future halo by loosening maxDistance until nothing is trimmed.
+    const out = trimHalo(withHalo(), { maxDistance: 12 });
+    expect(alphaAt(out, 32, 15)).toBe(40);
+  });
+
+  it('does not erase a semi-transparent region that HAS a solid core nearby', () => {
+    const img = blank(32, 32, [0, 0, 0, 0]);
+    for (let y = 10; y < 22; y += 1) {
+      for (let x = 10; x < 22; x += 1) {
+        const p = (y * 32 + x) * 4;
+        img.data[p + 3] = x < 16 ? 255 : 90;
+      }
+    }
+    const out = trimHalo(img);
+    expect(alphaAt(out, 17, 15)).toBe(90);
   });
 });
