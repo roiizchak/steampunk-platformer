@@ -94,7 +94,9 @@ export const DEFAULT_TUNING: TuningKnobs = {
  * The player's collision box, authored local: `+x` forward, `+y` up from the feet (vault 2.10).
  *
  * **Local px.** The world box is this multiplied by the world's `scale`, and at the published
- * `RENDER_SCALE` of 2 that is 44 x 96 px = 1.375 x 3.0 tiles. Nothing outside `toWorld` may
+ * `RENDER_SCALE` of **6** that is **132 x 288 px = 1.375 x 3.0 tiles** — the same tile footprint,
+ * because `TILE_SIZE` moved 32 -> 96 in the same rescale. It said "scale 2, 44 x 96" until the
+ * Codex implementation review caught it (finding 12). Nothing outside `toWorld` may
  * apply that multiply, and nothing anywhere may hardcode the product — the Phase 2 tests that
  * pinned `26 x 46` as literals were rewritten to derive it, which is why this change was
  * cheap to make.

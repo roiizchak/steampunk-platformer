@@ -38,7 +38,6 @@ const REFUSAL_TIMEOUT = 20_000;
  * to route, but for the missing levels list rather than for the defect it was written to test, and
  * six sharp gates would quietly become one blunt one.
  */
-const VALID_LEVELS = [{ key: 'level-01', url: 'assets/levels/level-01.tmj' }];
 
 /**
  * A catalog-injection body built FROM the shipped catalog, with only the field under test replaced.
@@ -341,16 +340,15 @@ test.describe('Phase 1 — Boot', () => {
   });
 
   test('1.5 a malformed catalog entry refuses rather than hanging', async ({ page }) => {
+    // Built from the real catalog, so this refuses for the MALFORMED ENTRY rather than for the
+    // missing sheets list — Codex implementation review, finding 3.
+    const malformed = await catalogWith(page, { images: [null] });
     // `entry.key` on a null entry throws inside the filecomplete handler; unhandled, that
     // propagates through the loader, `complete` never fires, create() never runs, and the game
     // sits at ready=false/bootError=null forever. A hang is the one state the QA gate cannot
     // distinguish from a slow boot, so malformed input must become a refusal.
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ images: [null], levels: VALID_LEVELS }),
-      }),
+      route.fulfill({ status: 200, contentType: 'application/json', body: malformed }),
     );
 
     await page.goto('/');
@@ -392,6 +390,31 @@ test.describe('Phase 1 — Boot', () => {
     const game = await readGame(page);
     expect(game.ready).toBe(false);
     expect(game.bootError).toContain(broken.key);
+  });
+
+  test('1.5 a null LEVEL entry refuses rather than hanging (Codex review 2, finding 2)', async ({
+    page,
+  }) => {
+    // The same hang, one list over. `describeCatalogProblem` rejects a non-object entry, but
+    // `create()` still called `verifyLevels`, which checked only `Array.isArray(catalog.levels)`
+    // and then dereferenced `entry.key` — and `[null]` IS an array. It threw mid-collection, so
+    // `refuseToRoute` never ran and boot sat at ready:false / bootError:null forever.
+    //
+    // This is the fixture that distinguishes "refused" from "hung": the wait below is on a
+    // TERMINAL state, so a hang fails as a timeout rather than passing as a sleep.
+    const body = await catalogWith(page, { levels: [null] });
+    await page.route('**/assets/index.json', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body }),
+    );
+
+    await page.goto('/');
+    await waitForTerminalState(page, REFUSAL_TIMEOUT);
+
+    const game = await readGame(page);
+    expect(typeof game.bootError).toBe('string');
+    expect(game.bootError).toContain('asset-catalog');
+    expect(game.ready).toBe(false);
+    expect(game.sceneKey).toBe('Boot');
   });
 
   test('1.6 a CSS override of the pinned filtering blocks boot', async ({ page }) => {

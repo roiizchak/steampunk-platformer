@@ -18,7 +18,7 @@ claimed about it appear together at true size.
 |---|---|
 | **Spend unreconciled** | 22 Seedance clips at **$6.21 – $31.60** against a **$25 ceiling**. `genmedia pricing` reports `0.014 / "units"` with no unit defined; no job record carries a cost field; two authoritative sources disagree by ~22×. Only the fal.ai dashboard invoice settles it, and it has not been read. Criterion **4.2b** cannot pass without it. |
 | **Criteria unrun** | The gate's agent owners had not run at the time of writing. A criterion whose owner has not run it is UNRUN. |
-| **Codex implementation review not run** | Criterion **4.18**. |
+| **Codex implementation review: BLOCK** | Criterion **4.18** ran. Two blockers found; one fixed, one corrected and deferred with its cost recorded. |
 | **S7 not done** | Speed hand-tuning in the Playground; the shipped movement numbers are the derived starting point only. |
 | **`run` stride provisional** | 320 px/cycle, two agreeing methods resting on a single frame. Criterion **4.10**'s INDETERMINATE condition is close. |
 | **Traceability gap** | Five paid generations have `.mp4` files with no `.job.json`. A live vault-4.17 violation, recorded in [GENERATION-LOG.md](../GENERATION-LOG.md). |
@@ -388,6 +388,35 @@ drops the player out of the world (the Phase 5 carry-in). The e2e spec asserts t
 invariant continuously across takeoff, flight and landing, which covers the mechanism; what is
 missing is a human having looked at the character standing on a platform edge.
 
+## Lane D — Codex implementation review (criterion 4.18)
+
+**Verdict: BLOCK.** Full disposition of all twelve findings in
+[docs/reviews/phase-04-impl.md](../reviews/phase-04-impl.md). The two blockers, both re-verified
+locally by mutation:
+
+**B1 — the runtime does not derive fps, and the comment saying it does was false.** `GameScene`
+never imported `animTimings`; it passes `sheet.fps` from the catalog. I had read that comment
+earlier in this session and believed it. Corrected in place. **Not a silent-drift risk** — that is
+the part Codex could not weigh from files alone: `asset-catalog.test.ts` derives fps from the live
+tuning and asserts equality per animation, so a retune without a rebuild goes red. Runtime
+derivation needs strides the catalog has no field for; deferred with the cost written down.
+
+**B2 — the hang fix had been applied to the instance, not the class.** `verifyLevels` still threw
+during problem collection on `levels: [null]` — an array, so it passed the `Array.isArray` guard,
+then dereferenced `entry.key`. Fixed the same way as `verifySheets`. Watched fail: the mutation
+produces `TypeError: Cannot read properties of null (reading 'key')` and a 20 s timeout on the
+terminal state, which is the hang reproduced exactly.
+
+**The reviewer also disagreed with itself usefully once:** it says the new level-fill test "would
+pass if `applySurfaceTiles` were deleted", which is true of that test and false of the criterion —
+the drawn-index e2e assertions do catch a deleted call site, verified by mutation, and Codex names
+them in the same paragraph.
+
+**Recorded, not fixed** *(C11)*: the missing `assets:fetch`/`assets:verify` workflow behind 4.11
+(needs a decision); the Gym's pre-fetch edit race; `dropCastShadow`'s residual ≤4% window; 4.20's
+PRD text needing amendment rather than a silent test exemption; and the centroid oracle's
+three-decimal rounding, which is a latent false-RED and therefore the safe direction.
+
 ## Criterion-by-criterion
 
 **Not yet complete.** The rows below are filled only where evidence exists; the rest are UNRUN and
@@ -410,5 +439,5 @@ before the PRD may mark this phase done.
 | 4.12 | **UNRUN** | `findSource` throws on a missing or ambiguous action, but no test exercises it and no log records the "deliberately remove one" run being watched fail. Right shape, unproven. |
 | 4.11 | **HALF PASS, half UNACHIEVABLE as worded** | See §Rebuild determinism. Same-input determinism is now measured and holds; clean-clone rebuild cannot be done without committing 128 MB of source clips. |
 | 4.16 | **FAIL** | Ten files over 400 lines. See §File sizes. |
-| 4.18 | **UNRUN** | Codex implementation review. |
+| 4.18 | **RAN — verdict BLOCK** | [phase-04-impl.md](../reviews/phase-04-impl.md); 12 findings, all applied or recorded. |
 | all others | **UNRUN** | Awaiting their gate owners. |

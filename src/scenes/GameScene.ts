@@ -410,10 +410,24 @@ export class GameScene extends Phaser.Scene {
   /**
    * Register one Phaser animation per catalog sheet, with the frame rate DERIVED from the sim.
    *
-   * The fps handed to Phaser comes from `animTimings()`, not from `index.json` — the catalog's
-   * copy is a record, and `tests/unit/asset-catalog.test.ts` asserts the two agree. Deriving it
-   * here means retuning `runMax` changes the run animation's speed on the next boot with no asset
-   * rebuild, which is the whole point of vault 4.22.
+   * **The fps handed to Phaser comes from the CATALOG, and this comment used to claim otherwise.**
+   *
+   * It said the value came from `animTimings()` and that retuning `runMax` would change the run
+   * animation on the next boot with no asset rebuild. Neither is true: this file does not import
+   * `animTimings`, and the line below passes `sheet.fps` straight from `index.json`. The Codex
+   * implementation review caught it (finding 1); I had read the comment and believed it.
+   *
+   * What IS true, and is the property vault 4.22 actually needs: the catalog's numbers cannot
+   * disagree with the simulation, because `tests/unit/asset-catalog.test.ts` derives
+   * `fps = renderFrames x TICK_HZ / simTicks` from the live `DEFAULT_TUNING` and the shipped
+   * strides and asserts equality per animation. Retune a knob without rebuilding and that suite
+   * goes RED — the drift is caught, it is simply caught at test time rather than absorbed at boot.
+   *
+   * Deriving here would need the per-cycle strides, which live in `character-bounds.json` and are
+   * NOT loaded at runtime — the catalog has no field for them. Adding one is a schema change that
+   * touches `describeCatalogProblem`, every boot fixture and `verify-dist`, which is the cost
+   * ASSET-MANIFEST section 4 documents. Deliberately not done inside a phase that is already
+   * reported failing; recorded in `docs/qa/phase-04-art.md` instead.
    */
   private registerAnimations(): void {
     const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
