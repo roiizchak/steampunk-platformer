@@ -14,6 +14,17 @@ the player's `attack` / `hurt` / `death` sheets and all enemy sheets. They canno
 Phase 4 because their frame rate is derived from `simTicks` and their contact frames are aligned to
 active windows — and both are defined in `src/sim/combat.ts`, which is built here.
 
+📌 **Carried in from Phase 4, found by playtesting, deliberately not fixed there.** The player can
+run off the **left edge of `level-01`** and fall out of the world — there is no wall, no kill plane
+and no respawn, so the sim keeps integrating downward forever and the only recovery is a reload. It
+is recorded rather than patched because a kill plane is a **death** and death is this phase's
+`hurt`/`death` state machine; bolting a Phase 4 respawn onto a game with no health model would have
+to be undone here. **Whatever fix lands must cover the world's other three edges too** — the same
+hole exists wherever a level's collision does not reach its bounds, and `level-01` merely makes the
+left one easy to reach. The spike run at cols 24–27 is the paired item: it is non-solid and
+non-damaging today, which is correct — you do not stand on spikes — and making it hurt is the same
+hazard work.
+
 **Order within this phase is therefore strict: grey-box the combat sim and freeze its timings FIRST,
 then generate art against those frozen numbers.** Generating first would author a flat fps, which is
 vault **4.22** — *every light attack had 0.43 s of art over a 0.25 s move, so the strike was never

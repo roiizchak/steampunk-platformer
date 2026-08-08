@@ -343,11 +343,17 @@ export function components(image, minAlpha = 1) {
  *   run           335                        315 - 330             5 - 20
  * ```
  *
- * `packStrip` aligns the figure's lowest opaque row onto the cell's last row, because `playerView`
- * draws at origin `(0.5, 1)` on the player's feet *(vault 2.10)*. With the halo counted as figure, it
- * aligned the HALO to the ground — so the visible boots hung 4–20 px above the tiles, and because the
- * halo's depth varies per frame, the character also bobbed vertically by up to 15 px while running.
+ * `packStrip` aligns on the figure's lowest opaque row, because `playerView` draws at origin
+ * `(0.5, 1)` on the player's feet *(vault 2.10)*. With the halo counted as figure, it aligned the
+ * HALO to the ground — so the visible boots hung 4–20 px above the tiles, and because the halo's
+ * depth varies per frame, the character also bobbed vertically by up to 15 px while running.
  * "Doesn't look like they stand on the tiles" and "still not smooth" were one defect.
+ *
+ * **The measurement above is per-FRAME because that is what the packer did when it was taken.** It
+ * now takes one baseline per SHEET — the deepest frame reaches the cell's last row and every other
+ * frame keeps its measured lift *(see `sheets.mjs`)* — which changes nothing about why the halo had
+ * to go: whichever frame is deepest, a halo under it defines a contact line it has no business
+ * defining, and it moves the whole sheet rather than one cell.
  *
  * ## Why the test is geometric and not chromatic
  *
@@ -413,6 +419,8 @@ export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
  * It is not cosmetic. It is the lowest opaque thing in the cell, so it captures the foot line, drags
  * the centroid down, and renders as a dark disc floating under an airborne character — the same
  * class of defect as the chroma halo, which also defined a contact line it had no business defining.
+ * Under per-SHEET anchoring it is worse, not better: if the shadowed frame is the deepest one it
+ * sets the baseline for **every** frame in the sheet, so one stray ellipse lifts all twelve.
  *
  * **An area threshold cannot do this job**, which is why `removeSpecks` is not simply turned up. At
  * this scale a boot is roughly 600 px and this shadow is 695, and vault **4.13** forbids
