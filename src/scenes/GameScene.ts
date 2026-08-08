@@ -142,7 +142,9 @@ export class GameScene extends Phaser.Scene {
     // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
     // scene-key sweep could not see it: the string says "playground" in lowercase, inside a
     // longer literal, and the sweep looked for quoted `Playground`.
-    return import.meta.env.DEV ? `${base}  ·  P playground  ·  O element editor` : base;
+    return import.meta.env.DEV
+      ? `${base}  ·  P playground  ·  O element editor  ·  G gym`
+      : base;
   }
 
   /**
@@ -203,7 +205,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, SHIFT } = Phaser.Input.Keyboard.KeyCodes;
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT } = Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
     // second; with repeats enabled every one would latch a fresh jump edge, and holding the
@@ -236,6 +238,7 @@ export class GameScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       addKey(P).on('down', () => this.togglePlayground());
       addKey(O).on('down', () => this.toggleElementEditor());
+      addKey(G).on('down', () => this.toggleGym());
     }
   }
 
@@ -265,6 +268,13 @@ export class GameScene extends Phaser.Scene {
   protected toggleElementEditor(): void {
     if (import.meta.env.DEV) {
       this.scene.start('ElementEditor');
+    }
+  }
+
+  /** Same five-place DEV discipline as the two above. See `GymScene`'s docstring for why all five. */
+  protected toggleGym(): void {
+    if (import.meta.env.DEV) {
+      this.scene.start('Gym');
     }
   }
 

@@ -360,6 +360,7 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       this.scene.stop('Playground');
       this.scene.stop('ElementEditor');
+      this.scene.stop('Gym');
     }
     updateDebugState({ sceneKey: this.scene.key, ready: false, bootError: message });
     console.error(`[boot] refused to route: ${message}`);

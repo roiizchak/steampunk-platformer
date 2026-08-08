@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { BootScene } from '../scenes/BootScene';
 import { GameScene } from '../scenes/GameScene';
 import { ElementEditorScene } from '../scenes/ElementEditorScene';
+import { GymScene } from '../scenes/GymScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
 
@@ -45,6 +46,6 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // implementation review caught it (finding I2): PRD.md's file structure marks the scene DEV ONLY,
   // and a tuning console reachable in the shipped game is not a cosmetic difference.
   scene: import.meta.env.DEV
-    ? [BootScene, GameScene, PlaygroundScene, ElementEditorScene]
+    ? [BootScene, GameScene, PlaygroundScene, ElementEditorScene, GymScene]
     : [BootScene, GameScene],
 };
