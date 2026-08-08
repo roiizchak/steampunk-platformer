@@ -100,11 +100,34 @@ export function tracksTarget(
   targetX: number,
   targetY: number,
   insetPx: number,
+  bounds?: Rect,
 ): boolean {
+  // On a side where the view is already flush against the map, the inset is DROPPED to zero.
+  //
+  // Without this the predicate and `viewFits` are jointly unsatisfiable, and criterion 3.4 asserts
+  // both. Measured on the shipped level: the map is 2112 px tall, the view 1080, and the walking
+  // surface sits at y 1920 — so a grounded player is 192 px above the world's bottom edge while
+  // the camera, clamped by `viewFits`, cannot open more than that. Demanding a 200 px margin there
+  // is demanding the camera leave the map. It failed on 200 of 200 sampled frames, on a camera
+  // that was tracking correctly.
+  //
+  // Dropping to zero is the honest floor rather than a smaller fudge: where the camera has no
+  // freedom, the only thing it can be held to is that the player is on screen at all. Every side
+  // the camera CAN still move keeps the full inset, which is where following is actually in
+  // question — in a side-scroller, the horizontal axis for almost the whole level.
+  //
+  // `bounds` is optional so the predicate keeps its old meaning when a caller has no map to
+  // measure against, which is what the existing unit fixtures exercise.
+  const flush = (atEdge: boolean) => (atEdge ? 0 : insetPx);
+  const left = flush(bounds !== undefined && worldView.x <= bounds.x);
+  const right = flush(bounds !== undefined && worldView.x + worldView.w >= bounds.x + bounds.w);
+  const top = flush(bounds !== undefined && worldView.y <= bounds.y);
+  const bottom = flush(bounds !== undefined && worldView.y + worldView.h >= bounds.y + bounds.h);
+
   return (
-    targetX > worldView.x + insetPx &&
-    targetX < worldView.x + worldView.w - insetPx &&
-    targetY > worldView.y + insetPx &&
-    targetY < worldView.y + worldView.h - insetPx
+    targetX > worldView.x + left &&
+    targetX < worldView.x + worldView.w - right &&
+    targetY > worldView.y + top &&
+    targetY < worldView.y + worldView.h - bottom
   );
 }

@@ -216,7 +216,14 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
 
     // Codex P6: containment plus movement is satisfied by a scripted pan that ignores the player.
     // This is the claim the criterion actually makes — the player stays comfortably on screen.
-    const lost = track.views.filter((v, i) => !tracksTarget(v, track.targets[i]!.x, track.targets[i]!.y, 200));
+    // `bounds` is passed so the inset is not demanded on a side the camera is clamped against.
+    // Without it this asserted something `viewFits` — asserted three lines up — forbids: the map is
+    // 2112 px tall and the walking surface is at y 1920, so a grounded player is 192 px above the
+    // world's bottom edge and can never be 200 px clear of a view pinned there. See
+    // `tracksTarget` in cameraRig.ts.
+    const lost = track.views.filter(
+      (v, i) => !tracksTarget(v, track.targets[i]!.x, track.targets[i]!.y, 200, bounds),
+    );
     expect(lost, `camera stopped tracking the player on ${lost.length} frames`).toEqual([]);
   });
 
