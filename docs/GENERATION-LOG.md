@@ -832,3 +832,91 @@ be quietly turned into a no-op by loosening the distance *(C2)*.
 
 401 unit tests pass, typecheck clean, build green including `verify-dist ok`. Dev server killed by
 port *(C13)*. **No generations, no spend** — cumulative unchanged at $5.54–$17.08.
+
+---
+
+## Phase 4 — batch V: the levelled anchor, and everything re-shot from it
+
+**Why there was a fifth batch at all.** The user reported, after two rounds of measured-green work,
+that *"one of the legs (right) is not sitting on the tile"*. It was not the packer and not the level:
+the **locked anchor image itself** drew the forward boot 58 source px above the rear one. `packStrip`
+aligns on the lowest opaque row, so the rear boot was pinned to the ground and the forward boot hung
+— a flat 6 game-px gap under one sole, **identical in all twelve idle frames**. Identical-every-frame
+is the signature that says the defect is in the source, not in the animation.
+
+### V.0 — the anchor edit that did not work
+
+| # | Endpoint | `request_id` | Result |
+|---|---|---|---|
+| V.0 | `fal-ai/nano-banana-pro/edit` | `019fe1e8-b66e-7cd3-bc9e-89e8f3a29b1f` | **FAILED its purpose.** Asked to level the two boots; returned geometrically identical art — sole offset 59 px against the original 58. |
+
+**Recorded because it is a reusable finding, not a one-off:** an edit model will not reliably make a
+small, precise geometric correction. The prompt named the change explicitly and the model returned a
+picture that satisfies every word of it while moving nothing that matters. What worked was
+deterministic pixel surgery on the forward-leg band, seam at y=2380, 59 px down, iterating bottom-up.
+Anchor sole gap **58 px → 1 px**; idle sole gap in game **6 px → 0 px in every frame**, confirmed on
+screen at 3× against the hazard stripe. The amendment is recorded in [STYLE.md](STYLE.md) §8 and the
+original is kept as `anchor-original.png`.
+
+### V.1 — all five clips re-shot from the levelled anchor
+
+`bytedance/seedance-2.0/image-to-video`, 4 s / 720p / 9:16, from
+`https://v3b.fal.media/files/b/0aa58723/DAg3WILCtZZT1FGD0AlvQ_anchor.png`.
+
+| Animation | `request_id` |
+|---|---|
+| idle | `019fe1ec-93fb-7101-861b-30a429e337e8` |
+| walk | `019fe1ec-9aa1-7e93-9465-e8a94edac60c` |
+| run | `019fe1ec-a0b0-7453-931f-c63a8c4481a6` |
+| jump | `019fe1ec-a696-7f83-90fd-f0184b2a641b` |
+| fall | `019fe1ec-ac98-7661-804e-406d7724efa3` |
+
+Consequences, each re-derived rather than carried over *(vault A5)*: scale **0.23723229** (idle
+standing 1214 src px, frame-to-frame spread 10 px = 0.8 %); walk stride **254 px** → `simTicks` 46,
+fps 15.65; run stride **320 px** → `simTicks` 27, fps 26.67, and still **provisional** — eleven of
+twelve run frames measure a single boot in the foot band, so two agreeing methods rest on one frame.
+
+### V.2 — the batch this replaced
+
+| Animation | `request_id` | Why superseded |
+|---|---|---|
+| idle | `019fe104-7cd3-7482-afca-dbb3b7eef158` | shot from the unlevelled anchor |
+| walk | `019fe104-a989-7701-93ee-a6a94fea32da` | shot from the unlevelled anchor |
+| run | `019fe104-d373-74d0-8ef5-4896e07b1fef` | shot from the unlevelled anchor |
+| jump | `019fe118-b92d-7241-a64e-418add36a4b5` | re-shot with three-point pose anchors after the monotonicity clause somersaulted |
+| fall | `019fe118-e5bf-7c63-9210-7e411715ebff` | as above |
+
+### ⚠️ Traceability gap — five generations whose request ids are NOT recoverable
+
+`_generated/video/superseded/` holds five `.mp4` files with **no `.job.json` beside them**. They are
+the batch before V.2. The clips exist; what produced them does not, so they cannot be traced to a
+prompt, a price or a date.
+
+**This is a live violation of vault 4.17** — *save the prompt and the job record beside every asset* —
+and it is recorded as a violation rather than quietly omitted. Nothing shipped depends on those five
+files, so no shipped asset is untraceable; the cost is that five paid generations cannot be
+reconciled against the invoice.
+
+**The cause is a manual file move, and there is no code fix in place.** `build-clips.mjs` does not
+write job records at all — it reads `.mp4` files and emits `_generated/clip-report.json` — so
+nothing in the tooling either caused this or prevents it. The records were orphaned by hand:
+`superseded-v1/` was archived with its `.job.json` files, `superseded/` was not. **Do not read this
+paragraph as a fix that landed.** The open item is that archiving a clip must move its job record
+with it, and today that is a habit rather than a gate.
+
+### Spend — still unreconciled, and this is the phase's highest-value open number
+
+| | clips |
+|---|---|
+| before this session | 10 |
+| this session (V.1 + V.2 + the airborne re-shoot) | 12 |
+| **total Seedance clips** | **22** |
+
+Plus one `nano-banana-pro/edit` (V.0) and the earlier image batch.
+
+**$6.21 – $31.60** against a **$25 ceiling**, and the range is the problem: `genmedia pricing`
+reports `0.014 / "units"` with no unit defined, no job record carries a cost field, and there is no
+billing command. Two authoritative sources disagree by ~22×, and **only the fal.ai dashboard invoice
+settles it.** The upper bound is now past the ceiling. **No further generation without approval.**
+This is the number [phase-04-art.md](prd/phase-04-art.md) §7 names as the phase's highest-value
+vault-out item, and it stays open.
