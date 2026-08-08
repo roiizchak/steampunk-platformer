@@ -129,7 +129,22 @@ export class BootScene extends Phaser.Scene {
    * Phaser appends a `__BASE` frame to every texture, which is why the count is compared after
    * excluding it rather than against `getFrameNames().length` directly.
    */
-  private verifySheets(catalog: AssetCatalog): string[] {
+  private verifySheets(catalog: AssetCatalog | undefined): string[] {
+    // The same guard `verifyExpectedTextures` carries, and it was MISSING here — the defect that
+    // broke criterion 1.5. `create()` collects problems and only then calls `refuseToRoute`, so a
+    // check that THROWS while collecting means the refusal never happens: `ready` stays false with
+    // `bootError` null, which is the hang state the whole refuse-to-route design exists to prevent
+    // (vault 1.4). Seven 1.5 specs went from asserting a refusal to timing out, because a fixture
+    // catalog with no `sheets` array reached `for (const sheet of catalog.sheets)` and threw
+    // `catalog.sheets is not iterable`.
+    //
+    // Guarding on `describeCatalogProblem` rather than on `Array.isArray` alone is deliberate: a
+    // catalog already being reported as malformed should not also emit a per-sheet complaint about
+    // every entry it does not have.
+    if (describeCatalogProblem(catalog) || !catalog) {
+      return [];
+    }
+
     const problems: string[] = [];
     for (const sheet of catalog.sheets) {
       const texture = this.textures.get(sheet.key);
@@ -167,9 +182,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     problems.push(...this.verifyExpectedTextures(catalog));
-    if (catalog) {
-      problems.push(...this.verifySheets(catalog));
-    }
+    problems.push(...this.verifySheets(catalog));
     problems.push(...verifyLevels(this, catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that

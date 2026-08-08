@@ -40,6 +40,34 @@ const REFUSAL_TIMEOUT = 20_000;
  */
 const VALID_LEVELS = [{ key: 'level-01', url: 'assets/levels/level-01.tmj' }];
 
+/**
+ * A catalog-injection body built FROM the shipped catalog, with only the field under test replaced.
+ *
+ * **Phase 4 repeated the mistake the paragraph above predicts, and this is the fix for the class
+ * rather than the instance.** `sheets` became a required, non-empty catalog field; every fixture
+ * below still carried only `images` and `levels`, so each one refused for *"missing its sheets
+ * list"* instead of for the defect it was written to test. Five sharp gates became one blunt one,
+ * exactly as forecast — and a hardcoded `VALID_SHEETS` would go stale again the moment Phase 6 adds
+ * HUD sheets or Phase 7 adds audio cues.
+ *
+ * Reading the real catalog means a fixture only ever differs from a working boot by the one thing
+ * it is testing, whatever fields the catalog grows later.
+ */
+async function catalogWith(page: Page, override: Record<string, unknown>): Promise<string> {
+  const response = await page.request.get('/assets/index.json');
+  expect(response.ok(), 'the shipped catalog did not load over HTTP').toBe(true);
+  return JSON.stringify({ ...(await response.json()), ...override });
+}
+
+/** The first catalog image — the entry `?breakAsset=corrupt` redirects, derived rather than named. */
+async function firstImage(page: Page): Promise<{ key: string; url: string }> {
+  const response = await page.request.get('/assets/index.json');
+  expect(response.ok(), 'the shipped catalog did not load over HTTP').toBe(true);
+  const [first] = ((await response.json()) as { images: { key: string; url: string }[] }).images;
+  expect(typeof first?.key, 'the catalog lists no images to break').toBe('string');
+  return first;
+}
+
 function readGame(page: Page): Promise<GameDebugView> {
   return page.evaluate(() => {
     if (!window.__game) {
@@ -192,7 +220,11 @@ test.describe('Phase 1 — Boot', () => {
     // a 404 (measured: GET /assets/does-not-exist.png -> 200 text/html). Pointing the loader
     // at a nonexistent path therefore exercises the corrupt-200 path, not the 404 path, and
     // the two would silently collapse into one test that claims to be two.
-    await page.route('**/assets/placeholder-tile.png', (route) =>
+    // The asset is DERIVED from the shipped catalog, never named. It used to be a literal
+    // `placeholder-tile`, which the Phase 3/4 art work removed from the catalog entirely — so the
+    // interception matched nothing, the boot succeeded, and this gate stopped testing a 404 at all.
+    const broken = await firstImage(page);
+    await page.route(`**/${broken.url}`, (route) =>
       route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not Found' }),
     );
 
@@ -206,7 +238,7 @@ test.describe('Phase 1 — Boot', () => {
     // stays green when an unrelated refusal (a filtering regression, a malformed catalog)
     // fires instead, while still claiming the 404 path is covered.
     expect(game.bootError).toContain('load error');
-    expect(game.bootError).toContain('placeholder-tile');
+    expect(game.bootError).toContain(broken.key);
     expect(game.ready).toBe(false);
     // It refused rather than routing onward.
     expect(game.sceneKey).toBe('Boot');
@@ -215,6 +247,9 @@ test.describe('Phase 1 — Boot', () => {
   test('1.5 a corrupt 200 blocks boot', async ({ page }) => {
     // corrupt-fixture.png is committed HTML, served with a 200 and content-type image/png
     // (measured). This is the silent-fallback case a status-code check alone waves through.
+    // `?breakAsset=corrupt` redirects the catalog's FIRST image, so the expected key is read
+    // from the catalog rather than restated here.
+    const broken = await firstImage(page);
     await page.goto('/?breakAsset=corrupt');
     await waitForTerminalState(page, REFUSAL_TIMEOUT);
 
@@ -224,7 +259,7 @@ test.describe('Phase 1 — Boot', () => {
     // The distinguishing signal: no transport error, so `loaderror` stays silent and the
     // texture verification is what catches it. Asserting the message keeps the two 1.5 cases
     // from collapsing into "something refused".
-    expect(game.bootError).toContain('placeholder-tile');
+    expect(game.bootError).toContain(broken.key);
     expect(game.bootError).toContain('not registered');
     expect(game.bootError).not.toContain('load error');
     expect(game.ready).toBe(false);
@@ -250,12 +285,9 @@ test.describe('Phase 1 — Boot', () => {
     // An empty expectation satisfies itself trivially. This is the shape of the real defect
     // found during Phase 1: a catalog that failed to load queued nothing, so nothing failed,
     // so boot succeeded with no assets at all.
+    const body = await catalogWith(page, { images: [] });
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ images: [], levels: VALID_LEVELS }),
-      }),
+      route.fulfill({ status: 200, contentType: 'application/json', body }),
     );
 
     await page.goto('/');
@@ -269,18 +301,17 @@ test.describe('Phase 1 — Boot', () => {
   test('1.5 a duplicate catalog key blocks boot', async ({ page }) => {
     // Phaser's addFile silently skips a key that already exists, so the second entry is never
     // fetched while an existence check passes for both.
+    // Built before the route is registered: the fulfil callback is synchronous, and a catalog
+    // fetched from inside it would be intercepted by the route it is being used to define.
+    const real = await firstImage(page);
+    const body = await catalogWith(page, {
+      images: [
+        { key: 'dup', url: real.url },
+        { key: 'dup', url: 'assets/never-fetched.png' },
+      ],
+    });
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          images: [
-            { key: 'dup', url: 'assets/placeholder-tile.png' },
-            { key: 'dup', url: 'assets/never-fetched.png' },
-          ],
-          levels: VALID_LEVELS,
-        }),
-      }),
+      route.fulfill({ status: 200, contentType: 'application/json', body }),
     );
 
     await page.goto('/');
@@ -295,15 +326,10 @@ test.describe('Phase 1 — Boot', () => {
     // __DEFAULT/__MISSING/__WHITE/__NORMAL are real 32x32 textures registered at boot. A
     // catalog entry using one would never be fetched, yet would pass both existence and
     // non-zero-dimension checks — a clean boot with the asset entirely absent.
+    const real = await firstImage(page);
+    const body = await catalogWith(page, { images: [{ key: '__MISSING', url: real.url }] });
     await page.route('**/assets/index.json', (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          images: [{ key: '__MISSING', url: 'assets/placeholder-tile.png' }],
-          levels: VALID_LEVELS,
-        }),
-      }),
+      route.fulfill({ status: 200, contentType: 'application/json', body }),
     );
 
     await page.goto('/');
@@ -348,7 +374,8 @@ test.describe('Phase 1 — Boot', () => {
 
     // Now break the asset and restart the scene WITHOUT reloading the page, so every cache
     // stays warm. A gate that only re-validates cached state would still say ready.
-    await page.route('**/assets/placeholder-tile.png', (route) =>
+    const broken = await firstImage(page);
+    await page.route(`**/${broken.url}`, (route) =>
       route.fulfill({ status: 404, contentType: 'text/plain', body: 'Not Found' }),
     );
 
@@ -364,7 +391,7 @@ test.describe('Phase 1 — Boot', () => {
 
     const game = await readGame(page);
     expect(game.ready).toBe(false);
-    expect(game.bootError).toContain('placeholder-tile');
+    expect(game.bootError).toContain(broken.key);
   });
 
   test('1.6 a CSS override of the pinned filtering blocks boot', async ({ page }) => {

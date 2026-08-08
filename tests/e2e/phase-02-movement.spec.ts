@@ -21,8 +21,7 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { RENDER_SCALE } from '../../src/game/constants';
-import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
+import { DEFAULT_TUNING } from '../../src/sim/player';
 import { BOOT_TIMEOUT, bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 
 test.describe('Phase 2 — player movement', () => {
@@ -87,30 +86,37 @@ test.describe('Phase 2 — player movement', () => {
     await bootToGame(page);
     await waitTicks(page, 10);
 
-    // AMENDED IN PHASE 3. This used to search for `width === 26 && height === 46`, hardcoding
-    // the product of PLAYER_BOX and the render scale. Phase 3 published the character contract
-    // and both factors changed, so the finder is now DERIVED from the same constants the scene
-    // draws from. A literal here would have made a published-number change look like a broken
-    // renderer, and the next change would break it again.
-    const drawnSize = { w: PLAYER_BOX.w * RENDER_SCALE, h: PLAYER_BOX.h * RENDER_SCALE };
-
+    // AMENDED IN PHASE 3, then AGAIN IN PHASE 4, and the second amendment is the interesting one.
+    //
+    // Phase 3 replaced a hardcoded `width === 26 && height === 46` with the product of PLAYER_BOX
+    // and the render scale, so a published-number change could not read as a broken renderer.
+    // Phase 4 broke it anyway, in a way that derivation could not protect against: the player is
+    // no longer a Rectangle sized to the collision box, it is a Sprite sized to the ART CELL
+    // (288 x 384 against a 132 x 288 box). The finder matched nothing, `drawn` came back null, and
+    // the one test standing between this suite and a deleted `renderPlayer()` went red.
+    //
+    // It now finds the player by TEXTURE KEY, which is what actually identifies it. The size was
+    // only ever a proxy, and the lesson is that a proxy survives exactly until the thing it stands
+    // in for changes shape.
     const readBoth = () =>
-      page.evaluate((size) => {
+      page.evaluate(() => {
         const scene = (
           window as unknown as {
             __phaserGame: { scene: { getScene(k: string): unknown } };
           }
         ).__phaserGame.scene.getScene('Game') as {
-          children: { list: { x: number; y: number; width: number; height: number }[] };
+          children: { list: Record<string, unknown>[] };
         };
-        // The player rectangle is the one whose size matches the world collision box.
-        const drawn = scene.children.list.find((o) => o.width === size.w && o.height === size.h);
+        const drawn = scene.children.list.find((o) => {
+          const key = (o.texture as { key?: string } | undefined)?.key;
+          return typeof key === 'string' && key.startsWith('brass-courier-');
+        }) as { x: number; y: number } | undefined;
         const sim = window.__game?.player as { x?: number; y?: number } | null | undefined;
         return {
           drawn: drawn ? { x: drawn.x, y: drawn.y } : null,
           sim: { x: sim?.x, y: sim?.y },
         };
-      }, drawnSize);
+      });
 
     const still = await readBoth();
     expect(still.drawn).not.toBeNull();

@@ -136,6 +136,15 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 | 4.16 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 4.17 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-04-plan.md` | — |
 | 4.18 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-04-impl.md` | codex |
+| 4.19 | **Packed per-frame lift equals the committed lift-profile manifest EXACTLY** — no ±1 tolerance, which would hide a `round`/`floor` off-by-one | unit, against `config/lift-profile.json` | `voltagent-qa-sec:qa-expert` |
+| 4.20 | For every animation the **deepest** frame reaches the final cell row, **and at least one other frame does not** — the second half is what fails on a per-frame packer | unit | `voltagent-qa-sec:qa-expert` |
+| 4.21 | A frame that overflows the cell vertically **throws**; it is never silently clipped or rescaled *(vault 4.14)* | committed bad fixture *(C2)* | `voltagent-qa-sec:qa-expert` |
+| 4.22 | Ground keeps its brass cap under **non-solid** decoration; half-open positive-area overlap proven at a cell boundary and under a sub-tile nudge | unit | `voltagent-qa-sec:code-reviewer` |
+| 4.23 | Drawn feet meet the surface on flat ground, on all three platform tops and on the pillar — the drawn sprite bottom equals the sim's feet `y`, asserted against the imported predicate | `e2e` | `e2e` |
+| 4.24 | At the run's flight phase the torso **rises**: sampled head-y is higher than at the contact frame. Sampled inside the page once per animation frame and returned as an aggregate — a tick-expressed wait cannot bound the window | `e2e` | `e2e` |
+| 4.25 | The jump/fall vertical anchor was chosen **on sight** from the three candidates against a ground line, and the choice is recorded | `playwright-cli` screenshots *(4.24)* | play |
+| 4.26 | No `Gym` / `GymScene` scene key, debug symbol or user-facing dev prose in `dist/`, and the sweep was watched go red *(C1)* | `tools/gen/verify-dist.mjs` | — |
+| 4.27 | The **anchor image's own contact geometry** is measured before generating from it — both soles on one line, or the offset recorded and corrected at source | measured; STYLE.md §8 | `voltagent-qa-sec:qa-expert` |
 
 **Regression set:** Phases 1–3, specs 01–03.
 
