@@ -9,6 +9,7 @@ import {
   TILESET_FIRST_GID,
   TILESET_TILE_COUNT,
   groundTileGid,
+  isGreyboxFill,
 } from '../render/groundTiles';
 import { playerRenderDesc } from '../render/playerView';
 import { createSnapshot, latchJumpPress } from '../sim/input';
@@ -468,7 +469,9 @@ export class GameScene extends Phaser.Scene {
    */
   private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer): void {
     layer.forEachTile((tile) => {
-      if (tile.index < 0) {
+      // Authored art is left exactly as the level file wrote it. Only the grey-box fill is the
+      // rule's to reinterpret — see `GREYBOX_FILL_GID`.
+      if (tile.index < 0 || !isGreyboxFill(tile.index)) {
         return;
       }
       const above = layer.getTileAt(tile.x, tile.y - 1);

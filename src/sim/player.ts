@@ -41,17 +41,50 @@ import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './type
  * **apex exactly doubled**: 150.3 -> 300.6 px, i.e. 3.13 body heights either way. The feel is
  * preserved in time and scaled in space. The `v^2/2g` gap doubles too — 8.08 -> 16.16 px against
  * an unchanged +/-2 px tolerance — so the anti-vacuity guard gets stronger, not weaker.
+ *
+ * ## Phase 4 re-tune — the camera got closer, so the feel had to change
+ *
+ * `RENDER_SCALE` 2 -> 6 by user decision. Scaling every distance knob by 3 the way Phase 3 did
+ * would have preserved the feel *exactly*, and that is the trap: the feel was wrong, and it was
+ * wrong for a reason that only becomes visible once the character fills the screen.
+ *
+ * Two things were unplayable at the new scale, and **neither is visible in px/tick**:
+ *
+ *  1. **Top speed.** 10.4 px/tick over a 96 px character is 6.5 body heights per second. Scaling
+ *     to 31.2 px/tick over a 288 px character is still 6.5. The user's complaint — "moves too
+ *     fast" — is a statement about that ratio, and a pure x3 does not touch it.
+ *  2. **Jump height.** 3.13 body heights was 28 % of the screen at 8.89 %-tall character. At
+ *     26.7 % tall it is **84 % of the screen** — the character would leap almost the entire
+ *     viewport, which no level can be composed around.
+ *
+ * So the knobs below are derived from **three perceptual targets** instead of from the old
+ * numbers, because px/tick is not what a player perceives:
+ *
+ *   top speed  2.5 body heights / second   (user's choice; was 6.5)
+ *   jump apex  ~1.6 body heights           (~43 % of screen height; was 3.13)
+ *   airtime    37 ticks                    UNCHANGED — this is the tick contract
+ *
+ * Airtime is held fixed on purpose. `tick.ts`'s numbered order is declared authoritative and
+ * Phase 5's combat windows are expressed against it, so rise 18 / fall 18 must not move. Holding
+ * `v / g` constant at 18 while scaling both is what keeps it: apex scales, airtime does not.
+ *
+ * Ratios preserved from the shipped tune, so only the three targets above actually changed:
+ * time-to-top-speed (`runMax / runAccel`, 4.7 ticks), `airAccel / runAccel`, `walkMax / runMax`,
+ * both frictions against `runMax`, and `maxFallSpeed / jumpVelocity`.
+ *
+ * **These are a starting point to be tuned by hand in the Playground**, which is the user's stated
+ * choice and what the Playground is for. The settled values belong in `docs/qa/phase-04-art.md`.
  */
 export const DEFAULT_TUNING: TuningKnobs = {
-  runAccel: 2.2,
-  airAccel: 1.3,
-  runMax: 10.4,
-  walkMax: 4.8,
-  groundFriction: 3.2,
-  airFriction: 0.44,
-  gravity: 1.8,
-  maxFallSpeed: 34,
-  jumpVelocity: 32,
+  runAccel: 2.55,
+  airAccel: 1.51,
+  runMax: 12.0,
+  walkMax: 5.54,
+  groundFriction: 3.69,
+  airFriction: 0.51,
+  gravity: 2.7,
+  maxFallSpeed: 51.6,
+  jumpVelocity: 48.6,
   jumpCutDivisor: 3,
   coyoteTicks: 7,
   jumpBufferTicks: 8,

@@ -17,7 +17,31 @@ import { detectFrames } from './sheets.mjs';
 import { crop, downscale, mirrorLoop } from './resize.mjs';
 import { gateGridExact, gateSeam, regionStats, PASS, WARM } from './gates.mjs';
 
-const TILE_SIZE = 32;
+/**
+ * Read `TILE_SIZE` out of the runtime constants rather than declaring a second copy.
+ *
+ * It was a literal `32` here, which is the same "two sources for one number" defect Codex named in
+ * the Phase 3 plan review (P8) for `CAMERA_ZOOM`. It went unnoticed until `TILE_SIZE` moved to 96
+ * and this script cheerfully packed a 128x128 sheet for a 384x384 grid — a build that succeeds and
+ * ships tiles at a quarter of the size the game indexes them at.
+ *
+ * Parsing the `.ts` is the same trick `prompt.mjs` uses to take the §4 template verbatim out of
+ * STYLE.md: the source of truth stays where it belongs and this file cannot drift from it. It
+ * throws rather than defaulting, because a default is how the wrong number gets used silently.
+ */
+function runtimeTileSize() {
+  const src = readFileSync('src/game/constants.ts', 'utf8');
+  const match = /export const TILE_SIZE = (\d+);/.exec(src);
+  if (!match) {
+    throw new Error(
+      'assets:world: could not read TILE_SIZE from src/game/constants.ts. That file is the one ' +
+        'source for the grid; this script must not carry its own copy.',
+    );
+  }
+  return Number(match[1]);
+}
+
+const TILE_SIZE = runtimeTileSize();
 const RAW = '_generated/world';
 
 function raw(prefix) {

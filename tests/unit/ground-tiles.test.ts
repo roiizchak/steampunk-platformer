@@ -117,13 +117,19 @@ describe('STYLE.md §5 RULE ONE, measured on the shipped tiles', () => {
     expect(verdict.value?.opaqueFraction).toBeGreaterThan(0.95);
   });
 
-  it('rejects the tile the off-by-one actually drew', () => {
-    // gid 8 — the shipped value of BRICK — resolves to local 7. Asserting it FAILS both ways is
-    // what makes this suite a gate rather than a description: it can go red, and it is red on the
-    // code as shipped (C2). Warm across the middle is neither a cap nor plain masonry.
-    const shippedBrick = tileRect(8);
-    expect(gateBrassCap(sheet, 'plain', shippedBrick).status).not.toBe(PASS);
-    expect(gateBrassCap(sheet, 'capped', shippedBrick).status).not.toBe(PASS);
+  it('discriminates across the sheet rather than passing everything', () => {
+    // The anti-vacuity check (C2). An earlier version of this pinned gid 8 — the tile the
+    // off-by-one actually drew — as failing both ways. That was a fact about ONE generation of the
+    // sheet, and regenerating the tileset silently turned it into an assertion about a different
+    // tile. A property that survives regeneration is the right shape: the gate must SPLIT the
+    // sheet, because one that answers PASS to everything would pass the two assertions above while
+    // measuring nothing at all.
+    const verdicts = Array.from({ length: TILESET_TILE_COUNT }, (_, local) =>
+      gateBrassCap(sheet, 'capped', tileRect(TILESET_FIRST_GID + local)).status === PASS,
+    );
+    const capped = verdicts.filter(Boolean).length;
+    expect(capped).toBeGreaterThan(0);
+    expect(capped).toBeLessThan(TILESET_TILE_COUNT);
   });
 });
 

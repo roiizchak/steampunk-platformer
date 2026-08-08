@@ -31,30 +31,48 @@ right in isolation *(Codex plan review P8; criteria 3.6 and 3.6b)*.
 
 | What | Value | Where it lives in code |
 |---|---|---|
-| **Grid cell size** | **`32 × 32` px** | `TILE_SIZE` |
+| **Grid cell size** | **`96 × 96` px** | `TILE_SIZE` |
 | **Camera zoom** | **`1`** | `CAMERA_ZOOM` |
-| **Viewport / world view** | **`1920 × 1080` px = `60 × 33.75` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
-| **World extent (level-01)** | **`5760 × 1536` px = `180 × 48` tiles** | measured off the shipped `.tmj` |
-| **Camera travel** | **`3840 × 456` px** | extent − world view |
-| **Character collision box** | **`44 × 96` px = `1.375 × 3.0` tiles** | `PLAYER_BOX × RENDER_SCALE` |
-| **Character render height** | **`96` px — 8.89 % of screen height** | `PLAYER_BOX.h × RENDER_SCALE` |
-| **Render scale** | **`RENDER_SCALE` 2** | `RENDER_SCALE` |
+| **Viewport / world view** | **`1920 × 1080` px = `20 × 11.25` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
+| **World extent (level-01)** | **`8640 × 2112` px = `90 × 22` tiles** | measured off the shipped `.tmj` |
+| **Camera travel** | **`6720 × 1032` px** | extent − world view |
+| **Character collision box** | **`132 × 288` px = `1.375 × 3.0` tiles** | `PLAYER_BOX × RENDER_SCALE` |
+| **Character render height** | **`288` px — 26.67 % of screen height** | `PLAYER_BOX.h × RENDER_SCALE` |
+| **Render scale** | **`RENDER_SCALE` 6** | `RENDER_SCALE` |
 
-At zoom 1 a 32 px tile draws at 32 px and the character draws at 96 px. **Sprite art is authored
+At zoom 1 a 96 px tile draws at 96 px and the character draws at 288 px. **Sprite art is authored
 at these exact pixel sizes** — there is no further scaling between the sheet and the screen, which
 is what makes "readable at true sprite size" (Phase 4 gate 4.1) a testable claim rather than a
 range.
 
-**Character target: 96 px tall = 3 tiles**, the bottom of STYLE.md's locked *96–128 px = 3–4 tiles*
-band. STYLE.md §9 predicted this would read as *"closer to 20 % of screen height"*; measured, it is
-**8.89 %**, and §9 has been updated. §9 is outside every hash-locked slice and its own text says
-*"Phase 3 sets the real camera"*, so this is the measurement it was waiting for, not an override.
+**Character target: 288 px tall = 3 tiles**, which is STYLE.md's locked *96–128 px = 3–4 tiles*
+read as the **ratio** it always was. STYLE.md §9 predicted the character would read as *"closer to
+20 % of screen height"*; Phase 3 measured **8.89 %** and superseded it, and Phase 4's re-scale lands
+at **26.67 %** — nearer §9's first instinct than the measurement that replaced it. §9 is outside
+every hash-locked slice, so this moves no hash.
 
-> **Why the character grew.** Phase 2 shipped a 46 px collision box — 4 % of screen height, which
-> no art can be generated against. The Codex plan review (P9) named it as the number Phase 4 needs
-> and does not have. Growing it 46 → 96 px doubled every distance-dimensioned tuning knob and left
-> every tick- and ratio-dimensioned one alone, so airtime is unchanged at 37 ticks and the jump
-> apex exactly doubled to 300.6 px. Full reasoning in `src/sim/player.ts`; evidence in QA-LOG.
+> **Why the character grew, twice.**
+>
+> Phase 2 shipped a 46 px collision box — 4 % of screen height, which no art can be generated
+> against. The Codex plan review (P9) named it as the number Phase 4 needs and does not have.
+> Growing it 46 → 96 px doubled every distance-dimensioned tuning knob and left every tick- and
+> ratio-dimensioned one alone, so airtime was unchanged at 37 ticks and the jump apex exactly
+> doubled to 300.6 px.
+>
+> **Phase 4 grew it again, 96 → 288 px, by user decision**, with `TILE_SIZE` 32 → 96 alongside so
+> the character stays 3 tiles tall. The reason is resolution, not size: the generated source figure
+> is **935 px tall**, and cutting it to 96 px discarded about 90 % of the linear detail. No camera
+> zoom can restore that — zooming displays the 96 px that survived as 3×3 blocks. Re-cutting the
+> same source at 288 px is still a **3.2× downscale**, so every pixel drawn is one the model
+> actually drew. The reference art being matched carries detail 96 px cannot hold.
+>
+> This time the knobs did **not** simply scale. A pure ×3 preserves the feel exactly, and the feel
+> was wrong in two ways that are invisible in px/tick and only appear once the character fills the
+> screen: top speed was 6.5 body heights per second either way, and a 3.13-body-height jump went
+> from 28 % of the screen to **84 %** of it. The re-tune is derived from perceptual targets
+> instead — 2.5 heights/s and a ~1.6-height apex — with **airtime held at 37 ticks**, because
+> `tick.ts`'s order is the contract Phase 5 is written against. Full reasoning in
+> `src/sim/player.ts`; measured evidence in `docs/qa/phase-04-art.md`.
 
 ---
 

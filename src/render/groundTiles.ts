@@ -50,6 +50,22 @@ export const TILESET_TILE_COUNT = 16;
 /** The `firstgid` the shipped level declares, and the only one these GIDs are correct for. */
 export const TILESET_FIRST_GID = 1;
 
+/**
+ * The gid the grey-box level generator fills structural cells with — and the ONLY gid the surface
+ * rule is allowed to rewrite.
+ *
+ * Without this, `applySurfaceTiles` rewrote every tile in the layer, so the level file could only
+ * ever say "solid here" and nothing else. Any authored decoration — the spike run, later a sign or
+ * a grate — would be silently replaced by brick on the first frame, and the level data would look
+ * correct in Tiled while never reaching the screen.
+ */
+export const GREYBOX_FILL_GID = 1;
+
+/** Should the surface rule touch this cell, or is it authored art the level means to keep? */
+export function isGreyboxFill(gid: number): boolean {
+  return gid === GREYBOX_FILL_GID;
+}
+
 /** Packed sheet dimensions implied by the above, in pixels. Asserted against the shipped file. */
 export const TILESET_WIDTH = TILESET_COLUMNS * TILE_SIZE;
 export const TILESET_HEIGHT = (TILESET_TILE_COUNT / TILESET_COLUMNS) * TILE_SIZE;

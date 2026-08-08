@@ -32,8 +32,17 @@ export const MAX_TICKS_PER_FRAME = 5;
  * Tile grid cell size in pixels. **PUBLISHED by Phase 3** — Phase 4 spends money against it.
  * `tests/unit/tilemap-data.test.ts` pins this against both the shipped `.tmj` and the number
  * written in ASSET-PIPELINE.md, so the doc and the code cannot drift apart (Codex P8).
+ *
+ * **Changed 32 -> 96 in Phase 4 by user decision**, with `RENDER_SCALE` 2 -> 6 alongside it. The
+ * ratio is untouched: the character is still 3 tiles tall, which is what STYLE.md locks.
+ *
+ * The reason is resolution, not size. The generated character source is **935 px tall**; cutting
+ * it to 96 px discarded about 90 % of the linear detail, and no camera zoom can put that back —
+ * zooming displays the 96 px that survived as 3x3 blocks. Re-cutting the same source at 288 px is
+ * still a 3.2x DOWNSCALE, so every pixel on screen is one that was actually drawn. The reference
+ * art the user is matching carries detail 96 px cannot hold.
  */
-export const TILE_SIZE = 32;
+export const TILE_SIZE = 96;
 
 /** Base render resolution. 60 x 33.75 tiles visible at CAMERA_ZOOM. */
 export const GAME_WIDTH = 1920;
@@ -51,16 +60,20 @@ export const CAMERA_ZOOM = 1;
 /**
  * Art and collision-geometry scale (vault 2.11) — **geometry only, never velocities**.
  *
- * **PUBLISHED by Phase 3 as part of the character contract**, which Phase 4 generates against:
- * PLAYER_BOX is 22 x 48 local, so the world collision box is 44 x 96 px = 1.375 x 3.0 tiles,
- * which is 8.9% of screen height at CAMERA_ZOOM. That satisfies STYLE.md's locked "96-128px
- * character on a 32px grid = 3-4 tiles tall"; STYLE.md §9's unmeasured "~20%" prediction is
- * superseded by this measurement, which is what §9 says Phase 3 is for.
+ * **PUBLISHED by Phase 3 as part of the character contract**, and **raised 2 -> 6 in Phase 4 by
+ * user decision** together with `TILE_SIZE`. PLAYER_BOX is 22 x 48 local, so the world collision
+ * box is 132 x 288 px = 1.375 x 3.0 tiles — the same tile ratio as before, still inside STYLE.md's
+ * locked "96-128px character on a 32px grid = 3-4 tiles tall" read as a ratio.
  *
- * Integer, so pixel art stays crisp. Raising it is a Phase 4 art decision AND a movement
- * re-tune: the character's height in pixels is what every distance knob is scaled against.
+ * The character now occupies **26.7 % of screen height**, against 8.89 % at RENDER_SCALE 2.
+ * STYLE.md §9's original unmeasured prediction was "closer to 20 %"; Phase 3 measured 8.89 % and
+ * superseded it, and this change lands nearer §9's first instinct than that measurement did.
+ *
+ * Integer, so pixel art stays crisp. The header of `src/sim/player.ts` states exactly which knobs
+ * moved with it and which did not — raising it is an art decision AND a movement re-tune, because
+ * the character's height in pixels is what every distance knob is scaled against.
  */
-export const RENDER_SCALE = 2;
+export const RENDER_SCALE = 6;
 
 /**
  * Seed for Phaser's own Phaser.Math.RND. Fixed so e2e runs are reproducible; Phaser defaults

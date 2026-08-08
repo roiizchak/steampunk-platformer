@@ -210,12 +210,43 @@ describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => 
   it('level-01 measures exactly the extent published for Phase 4', () => {
     const level = parseLevel('level-01', JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown);
 
-    expect(level.widthTiles).toBe(180);
-    expect(level.heightTiles).toBe(48);
-    expect(level.widthPx).toBe(5760);
-    expect(level.heightPx).toBe(1536);
-    expect(level.widthPx - GAME_WIDTH / CAMERA_ZOOM).toBe(3840);
-    expect(level.heightPx - GAME_HEIGHT / CAMERA_ZOOM).toBe(456);
+    expect(level.widthTiles).toBe(90);
+    expect(level.heightTiles).toBe(22);
+    expect(level.widthPx).toBe(8640);
+    expect(level.heightPx).toBe(2112);
+    expect(level.widthPx - GAME_WIDTH / CAMERA_ZOOM).toBe(6720);
+    expect(level.heightPx - GAME_HEIGHT / CAMERA_ZOOM).toBe(1032);
+  });
+
+  /**
+   * **Every raised platform must be reachable by the jump the sim actually produces.**
+   *
+   * This is the assertion whose absence would have shipped an unplayable level. The Phase 4 scale
+   * change moved the apex from 9.4 tiles to 4.81, and the shipped layout had platforms a 7-tile
+   * rise apart. The level still parsed, still drew, still had camera travel, and every gate in the
+   * suite stayed green — the player simply could not get up, which no measurement here was asking
+   * about.
+   *
+   * Both sides are derived: the apex from `derivedFeel` running the real sim, the rises from the
+   * shipped `.tmj`'s own collision rectangles. A literal on either side would let a re-tune drift
+   * back into the same hole.
+   */
+  it('level-01 keeps every solid surface within reach of the measured jump', () => {
+    const level = parseLevel('level-01', JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown);
+    const feel = derivedFeel(DEFAULT_TUNING, ticksToMs);
+
+    // Distinct surface heights, top-most first. A player climbs them in order.
+    const tops = [...new Set(level.solids.map((s) => s.y))].sort((a, b) => b - a);
+    expect(tops.length).toBeGreaterThan(1);
+
+    for (let i = 1; i < tops.length; i += 1) {
+      const rise = tops[i - 1]! - tops[i]!;
+      expect(
+        rise,
+        `a ${rise}px rise (${(rise / TILE_SIZE).toFixed(2)} tiles) exceeds the measured ` +
+          `${feel.apexPx}px apex (${(feel.apexPx / TILE_SIZE).toFixed(2)} tiles) — unreachable`,
+      ).toBeLessThanOrEqual(feel.apexPx);
+    }
   });
 });
 
@@ -373,15 +404,29 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     const feel = derivedFeel(DEFAULT_TUNING, ticksToMs);
     const bodyHeightPx = PLAYER_BOX.h * RENDER_SCALE;
 
-    expect(bodyHeightPx).toBe(96);
-    expect(PLAYER_BOX.w * RENDER_SCALE).toBe(44);
-    expect(feel.apexPx).toBeCloseTo(300.6, 1);
+    // EDITED DELIBERATELY in Phase 4, which is exactly what this test exists to force. The scale
+    // change (RENDER_SCALE 2 -> 6) is the perturbation described above, and this was the only
+    // assertion in the repository that could see it.
+    expect(bodyHeightPx).toBe(288);
+    expect(PLAYER_BOX.w * RENDER_SCALE).toBe(132);
+    expect(feel.apexPx).toBeCloseTo(461.7, 1);
+
+    // UNCHANGED, and the reason the re-tune scaled `jumpVelocity` and `gravity` together rather
+    // than picking them freely: `tick.ts`'s numbered order is declared authoritative and Phase 5's
+    // combat windows are written against it, so airtime is not a free variable.
     expect(feel.airtimeTicks).toBe(37);
+    expect(feel.riseTicks).toBe(18);
+    expect(feel.fallTicks).toBe(18);
+
     // Jump height in body heights — the ratio that actually describes how the game feels, and the
-    // one number a uniform scaling of every knob does NOT leave alone.
-    expect(feel.apexPx / bodyHeightPx).toBeCloseTo(3.13, 2);
+    // one number a uniform scaling of every knob does NOT leave alone. It moved on purpose: 3.13
+    // body heights was 28 % of the screen at the old scale and would have been 84 % at this one.
+    expect(feel.apexPx / bodyHeightPx).toBeCloseTo(1.6, 2);
+    // Top speed in body heights per second — the measure the user's "moves too fast" was about,
+    // and the one a pure re-scale leaves at 6.5 no matter how big the character gets.
+    expect((feel.topSpeed * 60) / bodyHeightPx).toBeCloseTo(2.5, 2);
     // And the character's share of the screen, which is what Phase 4 generates art against.
-    expect((bodyHeightPx / GAME_HEIGHT) * 100).toBeCloseTo(8.89, 2);
+    expect((bodyHeightPx / GAME_HEIGHT) * 100).toBeCloseTo(26.67, 2);
   });
 });
 

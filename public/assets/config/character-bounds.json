@@ -2,24 +2,24 @@
   "_comment": "Saved character configuration. THE SCALE LIVES HERE ON PURPOSE (vault A5): a global constant derived from a single regenerable frame means regenerating that frame silently rescales every other animation and moves every measured bound. `npm run assets:build` READS this and never computes it; `node tools/gen/build-assets.mjs --derive-scale` prints a new one for a human to paste in deliberately. Regenerating a sheet therefore moves nothing here.",
   "slug": "brass-courier",
 
-  "renderHeightPx": 96,
-  "scale": 0.1026738,
-  "_scale": "Source pixels to game pixels. Derived once from the mean figure height of the eight idle frames (935 source px), which is the only genuinely neutral upright pose in the set. 96 / 935 = 0.1026738.",
+  "renderHeightPx": 288,
+  "scale": 0.3080214,
+  "_scale": "Source pixels to game pixels. Derived once from the mean figure height of the eight idle frames (935 source px), which is the only genuinely neutral upright pose in the set. 288 / 935 = 0.3080214. RAISED from 96 px (scale 0.1026738) in Phase 4 when RENDER_SCALE went 2 -> 6: the same derivation against the same 935 px source, so this is still a 3.2x DOWNSCALE and every drawn pixel is one the model actually drew.",
 
-  "frameWidth": 96,
-  "frameHeight": 112,
-  "_frame": "3 x 3.5 tiles. The widest drawn frame is 79 px (fall, arms out) and the tallest is 99 px (run), so the cell has margin for the centroid alignment to push a frame off-centre without clipping. The build FAILS rather than rescaling an animation to fit (vault 4.14).",
+  "frameWidth": 288,
+  "frameHeight": 336,
+  "_frame": "3 x 3.5 tiles at TILE_SIZE 96. At the previous scale the widest drawn frame was 79 px (fall, arms out) and the tallest 99 px (run), both inside a 96 x 112 cell; every dimension here is exactly 3x those, so the cell has margin for the centroid alignment to push a frame off-centre without clipping. The build FAILS rather than rescaling an animation to fit (vault 4.14).",
 
   "_baseline": "Feet sit on the LAST row of the cell, not on an inset baseline. `playerView` draws the sprite at origin (0.5, 1) on the player's feet position and PLAYER_BOX is authored +y up from the feet (vault 2.10), so any transparent gap below the feet sinks the character into the ground by exactly that many pixels.",
 
   "collisionBox": {
-    "widthPx": 44,
-    "heightPx": 96,
+    "widthPx": 132,
+    "heightPx": 288,
     "_source": "PLAYER_BOX x RENDER_SCALE, published in ASSET-PIPELINE.md §0a and pinned by tests/unit/tilemap-data.test.ts. The ART is narrower than this (36 px at the anchor), which is the safe direction."
   },
 
-  "stridePxPerCycle": { "walk": 92, "run": 156 },
-  "_stride": "Ground distance one full 4-frame cycle covers, in GAME pixels. This is what makes the locomotion frame rate derived rather than authored (vault 4.22): simTicks = round(stride / topSpeed), so retuning runMax or walkMax re-derives the fps with no asset rebuild, and foot-slide is the observable defect if the number is wrong. WALK is measured directly - at both contact frames both boots are planted and the foot band spans 45-46 px, doubled to 92 for the two steps in a cycle. RUN is NOT measured the same way and must not be reported as if it were: at its contact frames the trailing leg is airborne, so the foot band captures only one boot (21-22 px) and the metric cannot call the stride - INDETERMINATE by vault 4.18's own standard. It is instead scaled from walk by the ratio of full-extension widths (78/46), giving 78 px per step and 156 per cycle. Re-derive it in the Gym against the real running character.",
+  "stridePxPerCycle": { "walk": 276, "run": 468 },
+  "_stride": "Ground distance one full 4-frame cycle covers, in GAME pixels. Scaled x3 with RENDER_SCALE 2 -> 6, because these are GAME pixels. This is what makes the locomotion frame rate derived rather than authored (vault 4.22): simTicks = round(stride / topSpeed), so retuning runMax or walkMax re-derives the fps with no asset rebuild, and foot-slide is the observable defect if the number is wrong. WALK is measured directly - at both contact frames both boots are planted and the foot band spans 45-46 source-derived px, doubled for the two steps in a cycle. RUN is NOT measured the same way and must not be reported as if it were: at its contact frames the trailing leg is airborne, so the foot band captures only one boot (21-22 px) and the metric cannot call the stride - INDETERMINATE by vault 4.18's own standard. It is instead scaled from walk by the ratio of full-extension widths (78/46), giving 78 px per step and 156 per cycle at the old scale. Re-derive it in the Gym against the real running character.",
 
   "animations": {
     "idle": { "loop": true, "footOffsetPx": 0, "activeFrames": [] },

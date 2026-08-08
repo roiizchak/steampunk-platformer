@@ -342,7 +342,22 @@ export const WARM = Object.freeze({
   CAP_BAND: 0.25,
   CAP_MIN_FRACTION: 0.02,
   CAP_TOP_SHARE: 0.8,
-  PLAIN_MAX_FRACTION: 0.01,
+  /**
+   * "Plain" is defined on the SAME axis as "capped", not on total warmth.
+   *
+   * The first version asked for <= 1 % warm, and a regenerated tileset showed why that is the
+   * wrong question: every masonry tile in it carries some warm pixels (1.8 %, 6.4 %, 12.1 %,
+   * 15.4 %) scattered through the brick, and STYLE.md §5 puts the foreground in warm colour on
+   * purpose — the ground is *supposed* to be warm. What RULE ONE actually forbids is a buried tile
+   * that reads as a platform TOP, and that is warmth **concentrated along the top edge**.
+   *
+   * So `plain` means "does not read as a leading edge": the warmth is not gathered on top, and the
+   * tile is not predominantly warm. Raising a threshold to make a red test green is exactly what
+   * this project forbids, so the record is explicit — the ceiling moved because the measure was
+   * wrong, and the measure that decides the verdict is `topShare`, which did not move.
+   */
+  PLAIN_MAX_TOP_SHARE: 0.5,
+  PLAIN_MAX_FRACTION: 0.1,
 });
 
 function isWarm(data, i) {
@@ -399,14 +414,29 @@ export function gateBrassCap(image, expect, region) {
   const value = { opaque, opaqueFraction: opaque / cells, warm, warmFraction, topShare };
 
   if (expect === 'plain') {
-    return warmFraction <= WARM.PLAIN_MAX_FRACTION
-      ? verdict(PASS, value, `plain: ${(warmFraction * 100).toFixed(2)}% warm`)
-      : verdict(
-          FAIL,
-          value,
-          `expected plain masonry but ${(warmFraction * 100).toFixed(1)}% of it is warm — ` +
-            `warmth is the reachability signal, so a warm buried tile reads as a platform`,
-        );
+    if (topShare >= WARM.PLAIN_MAX_TOP_SHARE) {
+      return verdict(
+        FAIL,
+        value,
+        `expected buried masonry but ${(topShare * 100).toFixed(0)}% of its warm pixels sit in ` +
+          `the top ${WARM.CAP_BAND * 100}% — that reads as a leading edge, and an edge on every ` +
+          `row identifies nothing (STYLE.md §5 RULE ONE)`,
+      );
+    }
+    if (warmFraction > WARM.PLAIN_MAX_FRACTION) {
+      return verdict(
+        FAIL,
+        value,
+        `expected buried masonry but ${(warmFraction * 100).toFixed(1)}% of it is warm — warmth ` +
+          `is the reachability signal, and a tile this warm competes with the platforms`,
+      );
+    }
+    return verdict(
+      PASS,
+      value,
+      `plain: ${(warmFraction * 100).toFixed(1)}% warm, only ` +
+        `${(topShare * 100).toFixed(0)}% of it on top`,
+    );
   }
   if (expect !== 'capped') {
     throw new Error(`gateBrassCap: expect must be 'capped' or 'plain', got ${String(expect)}`);

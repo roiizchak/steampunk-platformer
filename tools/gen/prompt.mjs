@@ -303,22 +303,26 @@ export function tilesetPrompt(template) {
       'lighting that implies a light source outside the tile.',
     '',
     'EVERY WALKABLE TILE IS CAPPED ALONG ITS TOP EDGE WITH A BRIGHT POLISHED BRASS LEADING EDGE ' +
-      'that catches the light. This is the rule a player reads a platform by, and it is not ' +
-      'optional on any surface tile.',
+      'that catches the light, AND THAT BRASS CAP CARRIES REPEATING DIAGONAL AMBER-AND-DARK ' +
+      'HAZARD STRIPES running along it like painted industrial safety marking. The stripes sit ' +
+      'ONLY on the top cap, never on the body of the tile below it. This is the rule a player ' +
+      'reads a platform by, and it is not optional on any surface tile.',
     '',
     'THE SIXTEEN TILES, all richly ornamented:',
-    '  Row 1 — walkway surfaces: a riveted wrought-iron walkway plate with a brass leading edge; ' +
-      'the same with a drainage slot and bolt heads; the same with a raised tread pattern and wear ' +
-      'scuffs; the same with a seam joint and two hex bolts.',
-    '  Row 2 — walkway ends and corners: a left end cap with a brass corner bracket; a right end ' +
-      'cap with a brass corner bracket; an inner corner with a gusset plate; a narrow single-width ' +
-      'ledge with brass on top and a scrolled iron bracket beneath.',
+    '  Row 1 — walkway surfaces, each with the diagonally striped brass cap along its top: a ' +
+      'riveted wrought-iron walkway plate; the same with a drainage slot and bolt heads; the same ' +
+      'with a raised tread pattern and wear scuffs; the same with a seam joint and two hex bolts.',
+    '  Row 2 — walkway ends and undersides, all with the striped brass cap on top: a left end cap ' +
+      'with an ornate scrolled iron corner bracket beneath it; a right end cap with the mirrored ' +
+      'bracket; a narrow single-width ledge carried on a filigree gusset; a platform underside of ' +
+      'ornamental cast-iron scrollwork and a row of small arched corbels.',
     '  Row 3 — masonry beneath: soot-stained Victorian brick with cracked mortar and a weep hole; ' +
       'the same brick with a course of engraved stone banding; rough cut stone blocks with chisel ' +
       'marks and moss in the joints; brick with a riveted iron tie-plate bolted across it.',
-    '  Row 4 — industrial fill: a bank of vertical copper pipes with collars and patina; a riveted ' +
-      'boiler plate with a seam and four dome rivets; a cast-iron grate with square apertures and ' +
-      'a brass frame; a stone block with an embedded brass gear half sunk into it.',
+    '  Row 4 — hazards and fill: a row of upward-pointing polished steel SPIKES with dark red ' +
+      'rusted bases, sharp and clearly dangerous; a section of tall gothic wrought-iron RAILING ' +
+      'with pointed finials and a quatrefoil pattern; a bank of vertical copper pipes with collars ' +
+      'and patina; a cast-iron grate with square apertures and a brass frame.',
     '',
     'CONSISTENCY: every tile is the same square size, drawn at the same scale, in the same palette ' +
       'and the same lighting, so any two can sit side by side. Tiles do not overlap and nothing ' +
