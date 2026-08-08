@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   boundsRect,
+  editsFromConfig,
   emptyEdits,
   frameCells,
   liftAboveCellFloor,
@@ -201,5 +202,69 @@ describe('the shipped character-bounds.json', () => {
 
   it('declares every animation the Gym can select', () => {
     expect(Object.keys(raw.animations).sort()).toEqual(['fall', 'idle', 'jump', 'run', 'walk']);
+  });
+});
+
+describe('editsFromConfig — the Gym must start from the file, not from zero', () => {
+  /**
+   * The bug this closes, in one sentence: `serialiseBounds` ASSIGNS what it is handed, so a Gym
+   * seeded from zero silently discards every value the file already held for the fields it owns.
+   *
+   * Raised by the `voltagent-qa-sec:code-reviewer` gate owner, brief 1, finding F3. Latent on
+   * today's art — every animation reads 0 and `[]` — and live the moment Phase 5 fills
+   * `activeFrames`, which is what the field exists for.
+   */
+  const populated = {
+    animations: {
+      idle: { footOffsetPx: 0, activeFrames: [] },
+      run: { footOffsetPx: -3, activeFrames: [3, 4] },
+    },
+  };
+
+  it('reads the values already in the file', () => {
+    expect(editsFromConfig(populated)).toEqual({
+      footOffsetPx: { idle: 0, run: -3 },
+      activeFrames: { idle: [], run: [3, 4] },
+    });
+  });
+
+  it('a one-field edit no longer destroys the others — the actual defect', () => {
+    // Seed from the file, nudge idle only, save. `run` must come back untouched.
+    const edits = editsFromConfig(populated);
+    edits.footOffsetPx.idle = -1;
+    const out = JSON.parse(serialiseBounds(populated, edits));
+    expect(out.animations.idle.footOffsetPx).toBe(-1);
+    expect(out.animations.run.footOffsetPx).toBe(-3);
+    expect(out.animations.run.activeFrames).toEqual([3, 4]);
+  });
+
+  it('and seeding from zero DOES destroy them — so this test can fail', () => {
+    // The pre-fix behaviour, asserted explicitly. Without this the test above passes on a config
+    // whose other animations happen to be zero anyway, which is exactly today's shipped art (C2).
+    const edits = emptyEdits();
+    edits.footOffsetPx.idle = -1;
+    const out = JSON.parse(serialiseBounds(populated, edits));
+    expect(out.animations.run.footOffsetPx).toBe(-3); // untouched: never handed to the serialiser
+    expect(edits.activeFrames.run).toBeUndefined(); // ...but a run edit would have wiped [3, 4]
+    const wiping = emptyEdits();
+    wiping.activeFrames.run = [];
+    expect(JSON.parse(serialiseBounds(populated, wiping)).animations.run.activeFrames).toEqual([]);
+  });
+
+  it('does not alias the config — mutating the edits cannot reach back into the file', () => {
+    const edits = editsFromConfig(populated);
+    edits.activeFrames.run.push(9);
+    expect(populated.animations.run.activeFrames).toEqual([3, 4]);
+  });
+
+  it('yields empty edits for an unreadable config rather than throwing', () => {
+    // The Gym still measures and still draws without a config; only saving is refused.
+    expect(editsFromConfig(null)).toEqual(emptyEdits());
+    expect(editsFromConfig({ scale: 1 })).toEqual(emptyEdits());
+  });
+
+  it('ignores fields of the wrong type instead of copying them through', () => {
+    const junk = { animations: { idle: { footOffsetPx: '3', activeFrames: 'nope' } } };
+    expect(editsFromConfig(junk)).toEqual(emptyEdits());
   });
 });

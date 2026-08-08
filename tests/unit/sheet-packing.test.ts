@@ -271,6 +271,7 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   const liftsOf = (a: string) =>
     liftProfile.animations[a as keyof typeof liftProfile.animations].frames.map((f) => f.liftPx);
   const maxLift = (a: string) => Math.max(...liftsOf(a));
+  const minLift = (a: string) => Math.min(...liftsOf(a));
 
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
@@ -336,6 +337,35 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(maxLift('run')).toBeGreaterThanOrEqual(10); // a real flight phase
     expect(maxLift('walk')).toBeGreaterThanOrEqual(3); // the trailing boot
     expect(maxLift('idle')).toBeLessThanOrEqual(2); // ...and a planted stance stays planted
+  });
+
+  /**
+   * `idle` is EXPECTED to be flat, and that is a hole this test closes rather than ignores.
+   *
+   * Criterion 4.20 reads "the deepest frame reaches the final cell row, and at least one other
+   * frame does not". On the shipped art every one of idle's twelve frames measures a lift of 0, so
+   * the second half is literally false for it — correctly, because the courier breathes without
+   * lifting a boot and the model drew exactly that.
+   *
+   * The consequence is the part worth testing: **a regression to per-frame anchoring is
+   * indistinguishable from correct behaviour inside `idle`**, because both produce a flat sheet.
+   * So 4.20's discriminating half is asserted per animation, on the four animations whose art does
+   * leave the ground, and idle's flatness is asserted as a deliberate expectation instead of being
+   * quietly exempt.
+   *
+   * Raised by the `voltagent-qa-sec:qa-expert` gate owner, brief 1, finding 5. Nothing previously
+   * asserted a non-zero lift on `jump` or `fall` at all — they happened to be right.
+   */
+  it('every animation that leaves the ground has a frame that does not touch the floor (4.20)', () => {
+    for (const action of ['walk', 'run', 'jump', 'fall'] as const) {
+      expect(maxLift(action), `${action} packed flat — the per-sheet baseline is gone`).toBeGreaterThan(0);
+    }
+    // ...and the deepest frame of every animation, idle included, still reaches the final row.
+    for (const action of ['idle', 'walk', 'run', 'jump', 'fall'] as const) {
+      expect(minLift(action), `${action} never reaches its cell floor`).toBe(0);
+    }
+    // idle is flat BY DESIGN, stated so a future reader does not "fix" it into a bob.
+    expect(maxLift('idle')).toBe(0);
   });
 
   it('airborne animations hold the body still — measured on the DRAWN pixels', () => {

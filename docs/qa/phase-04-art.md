@@ -22,7 +22,7 @@ claimed about it appear together at true size.
 | **S7 not done** | Speed hand-tuning in the Playground; the shipped movement numbers are the derived starting point only. |
 | **`run` stride provisional** | 320 px/cycle, two agreeing methods resting on a single frame. Criterion **4.10**'s INDETERMINATE condition is close. |
 | **Traceability gap** | Five paid generations have `.mp4` files with no `.job.json`. A live vault-4.17 violation, recorded in [GENERATION-LOG.md](../GENERATION-LOG.md). |
-| **400-line rule broken nine times** | Criterion **4.16**. Not justified, not split. See §File sizes. |
+| **400-line rule broken ten times** | Criterion **4.16**. Mostly this phase's doing, not inherited — see §File sizes for the measured before/after. |
 
 ---
 
@@ -258,14 +258,76 @@ Only one of the nine has been dealt with the way the rule asks: `src/scenes/GymS
 402 and was trimmed to 397 by removing a footprint-rect computation repeated four times — smaller
 *and* less able to disagree with itself, which is the argument for splitting in miniature.
 
-Note that six of the nine predate this session's work (`gates.mjs`, `chroma.mjs`, `prompt.mjs` and
-`sheets.mjs` are Phase 4 tooling; the two e2e specs and `tilemap-data.test.ts` are older). That
-explains how they got here; it does not excuse them, and **the rule has no test behind it** — Phase 3
-recorded that deliberately, noting a line-count check is cheap but the rule permits a justification
-a test cannot read. The consequence is visible above: with nothing mechanical watching, nine files
-crossed the line across two phases without anyone noticing until the gate was run by hand.
+**CORRECTED, by the `voltagent-qa-sec:code-reviewer` gate owner (F2), and the correction matters.**
+An earlier version of this section claimed *"six of the nine predate this session's work… the two
+e2e specs and `tilemap-data.test.ts` are older"*. Measured against `origin/main`:
 
----
+```
+                                    main   HEAD
+tests/e2e/phase-01-boot.spec.ts      399 -> 426    crossed IN THIS DIFF
+src/scenes/GameScene.ts              369 -> 538    crossed IN THIS DIFF
+src/scenes/BootScene.ts              376 -> 438    crossed IN THIS DIFF
+tests/unit/tilemap-data.test.ts      421 -> 466    already over on main
+tests/e2e/phase-03-tilemap.spec.ts   424 -> 431    already over on main
+tools/gen/gates.mjs                    0 -> 726    new this phase
+```
+
+`phase-01-boot.spec.ts` was **399 on main** — one line under — and crossed to 426 inside the four
+commits under review, in the fixture repairs. It is the newest breach, not an inherited one. Only
+**two** files were genuinely over on `main`, and those are Phase 3's unrecorded breach. The rest is
+this phase's, which is a materially worse position than the one this section originally described.
+
+Since then, `tests/unit/sheet-packing.test.ts` also crossed (405) when the 4.20 per-animation
+assertions were added, making it **ten**. `src/scenes/GymScene.ts` came off the list the way the rule
+asks: `editsFromConfig` moved to `src/render/gymBounds.ts`, where it is engine-free and unit-tested,
+leaving the scene at 400.
+
+`src/scenes/GameScene.ts` at 538 violates the strictest reading — CLAUDE.md §3 says *no source file*,
+and `src/` is unambiguously that.
+
+## Lane A — `voltagent-qa-sec:qa-expert`, brief 1
+
+Every finding re-verified locally before being accepted *(a subagent's summary is a claim, not
+evidence)*. Two of them corrected a verdict I had already written as PASS.
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | **4.2b unmet, and the project's own log says so.** A nine-clip batch ran before any invoice reconciliation. | **Accepted.** Already the phase's top blocker. Nothing to change — the record was already correct, which is the point of having one. |
+| 2 | **4.19's oracle is narrower than "independent".** The manifest's `liftPx` is `packStrip`'s own returned value, so the gate guards the PACK step, not the MEASUREMENT step: a systematic bug in `figureMetrics` would move the manifest and the sheet together. | **Accepted, ceiling recorded.** Verified: `build-assets.mjs` writes `liftPx` straight from the `frames` array `packStrip` returns. What *is* independent is real — the suite re-measures the shipped PNG's pixels with a function defined only in the test file and demands exact equality, which is what catches a placement bug diverging from its own reported lift. The distinction is now stated rather than implied. |
+| 3 | **4.10's instrument has never been run against real art.** `gateReachBand` is called only from `selfTest()` and the unit fixtures. | **Accepted → 4.10 is UNRUN.** Verified by grep: no call site against the `brass-courier` sheets anywhere, and no result recorded in any log. The instrument is proven to work; the audit it exists for has not happened. |
+| 4 | **4.27 was satisfied after the fact, not before.** The anchor's sole offset was found from the user's report, post-ship; no code measures an anchor's contact geometry before it is used. | **Accepted → my PASS was wrong, corrected to FAIL below.** The defect is genuinely fixed and verified in-game, but the criterion asks for a pre-generation measurement and there is no such step. A one-off manual correction is not a gate. |
+| 5 | **4.20 does not hold for `idle`, and a regression could hide there.** Every one of idle's twelve frames measures a lift of 0, so "at least one other frame does not reach the final row" is literally false for it — and a revert to per-frame anchoring would be indistinguishable from correct behaviour inside that sheet. Nothing asserted a non-zero lift on `jump` or `fall` at all. | **Accepted and FIXED.** Verified: `idle 0×12`, `walk max 6`, `run max 17`, `jump max 54`, `fall max 16`. Idle's flatness is correct — the courier breathes without lifting a boot — so the fix is to assert it as a deliberate expectation and to assert a non-zero lift on the four animations that DO leave the ground. Watched fail: flattening `jump`'s lifts to zero turns the new assertion red, plus two existing ones; reverted byte-clean. |
+| 6 | **`selfTest()` is not wired into the build.** `art-gates.test.ts` says it lives beside the gates "so the BUILD runs it too", but no build script calls it. | **Accepted, recorded, not fixed.** Verified by grep: zero call sites in `build-assets.mjs`, `build-world.mjs`, `build-clips.mjs`, and no `pre` hook in `package.json`. "Gates self-test before judging real art" is currently enforced by remembering to run `npm test` first. The comment claiming otherwise is now the misleading part. |
+| 7 | **`docs/qa/phase-04-art.md` does not exist**, so five code comments cite a C11 record that is absent. | **Already resolved, and the agent read a pre-commit tree.** This file was created in `ef7b915`, after the agent started. Kept in the table rather than deleted, because "the reviewer saw an older tree" is a thing to notice, not to hide. |
+| — | **4.12 has the right shape but was never exercised.** `findSource` throws on a missing or ambiguous action, but no test covers it and no log records the "deliberately remove one" run being watched fail. | **Accepted → 4.12 is UNRUN**, not passing. The agent explicitly declined to call it green from the code shape alone, which is the correct call. |
+
+**What the agent could not check, preserved** *(vault 9.3)*: the real invoice; whether 4.12's manual
+removal was ever performed; the contents of the QA log that did not yet exist; the e2e-owned
+criteria, which are not its; and 4.11, which it confirmed is not implemented as an automated gate —
+only design-intent comments about deterministic encoding exist, with no test that clones fresh,
+rebuilds and diffs bytes.
+
+## Lane A — `voltagent-qa-sec:code-reviewer`, brief 1
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | **HIGH — 4.22's predicate is proven, its call site is not.** Reverting `GameScene.applySurfaceTiles` to the original `layer.getTileAt` leaves every unit test green: `ground-tiles.test.ts` imports the pure function and never reads a drawn tile index, and the nearest e2e assertion (`index > 0`) is satisfied by `BRICK_GID` as happily as by `SURFACE_GID`. | **Accepted and FIXED.** Verified by mutation: with the shipped bug reintroduced, **464 unit tests passed** — only an incidental unused-variable typecheck warning noticed. So the gate for 4.22 could not see the defect 4.22 exists for. Two e2e tests added asserting the DRAWN index: `SURFACE_GID` on the four ground cells under the spike run, `BRICK_GID` one row down, and `BRICK_GID` under the pillar so the first assertion is a discrimination rather than "everything is capped". Watched fail — *col 24 lost its brass cap under the spikes* — then reverted clean. |
+| F2 | **HIGH — 4.16 fails, and this log's own accounting was wrong.** `phase-01-boot.spec.ts` was 399 on `main` and crossed to 426 **inside this diff**, so it is the newest breach, not an inherited one. | **Accepted, and the section corrected.** Re-measured independently against `origin/main`; the agent's numbers reproduce exactly. My "six of the nine predate this session" was wrong: only two files were over on `main`. |
+| F3 | **MEDIUM — the Gym's edits are never seeded from the config it saves over.** `serialiseBounds` assigns rather than merges, so nudging one field would silently discard every other value the file held. Latent today (all zeros), live the moment Phase 5 fills `activeFrames`. | **Accepted and FIXED.** The seeding is now `editsFromConfig` in `src/render/gymBounds.ts` — engine-free and unit-tested, which is also what took `GymScene.ts` back under 400. Six new tests, including one asserting the **pre-fix behaviour explicitly**, so the fix's test cannot pass merely because today's config happens to be all zeros *(C2)*. `revert()` now returns to the file's values rather than to zero. |
+| F4 | **LOW — `this.action` is untested string surgery.** `sheet.key.split('-').pop()` yields `heavy` for `attack-heavy`. | **Recorded, not fixed.** Mitigated as the agent says: `serialiseBounds` throws *"edit for 'heavy', which character-bounds.json does not declare"*, so it fails loudly rather than writing garbage — which is the A4-relevant property. Revisit when Phase 5 adds a multi-word action. |
+| F5 | **INFO — 4.6 satisfied in fact, not only in policy.** `keepLargestComponent` is never called anywhere in the pipeline, and its guard is inside the function so no call site can bypass it. Measured on the real clips, every survivor is one whole figure per frame and everything the 256 px floor removes is <=48 px; no cell is multi-component, so `dropCastShadow` is a no-op on today's art. | **Accepted.** This is the strongest form of the criterion and the measurement is the part worth keeping. |
+| F6 | **INFO — the camera-predicate change is legitimate and covered.** Independently re-derived the 2112 / 1080 / 1920 geometry and confirmed the two predicates were jointly unsatisfiable; confirmed the three new unit fixtures cover excused-flush, rejected-non-flush and never-excused-off-screen. | **Accepted.** An independent reviewer reaching the same conclusion is what a contract change to another phase's criterion needed. |
+
+**Corrections the agent made to itself, kept because they are the interesting part:** its first
+`ls docs/qa/` came back truncated and it *nearly* reported `phase-04-art.md` missing — it re-checked
+with `git ls-tree` and caught itself. The other agent, reading an earlier tree, did report it
+missing. Same file, two reviewers, opposite conclusions, and the difference was one re-check.
+
+**What it could not check, preserved** *(vault 9.3)*: it did not run `test:e2e` or `build`, so the
+seven repaired 1.5 specs and 4.26 rest on the parent's evidence; its 4.22 mutation was replicated
+out-of-tree rather than applied, so it did not see vitest report red; it has no runtime evidence of
+the Gym at all, so F3 is read from code, not observed, and 4.14/4.25 are untouched by it; and it did
+not audit the ~8,000 lines of generator internals owned by the other agent's criteria.
 
 ## Criterion-by-criterion
 
@@ -275,16 +337,19 @@ before the PRD may mark this phase done.
 
 | # | Verdict | Evidence |
 |---|---|---|
-| 4.19 | **PASS** | `tests/unit/sheet-packing.test.ts`, exact equality against the committed `lift-profile.json`; both anchoring and rounding mutants red. |
-| 4.20 | **PASS** | Same suite: deepest frame on the final row, at least one other frame not. |
+| 4.19 | **PASS**, with its ceiling stated | Exact equality against the committed manifest, plus a fresh re-measurement of the shipped PNG's pixels. It guards the PACK step; it cannot catch a systematic bug in `figureMetrics`, because manifest and sheet would move together. |
+| 4.20 | **PASS**, after qa-expert finding 5 | `idle` is flat in all twelve frames, so 4.20's second half is literally false for it — correctly, since the courier breathes without lifting a boot. A regression to per-frame anchoring would therefore be invisible inside `idle`, and nothing asserted a non-zero lift on `jump` or `fall` at all. Now asserted per animation, with idle's flatness pinned as deliberate. |
 | 4.21 | **PASS** | Committed overflow fixture; the packer throws rather than clipping *(vault 4.14 — the cell was raised 336 → 384 instead)*. |
-| 4.22 | **PASS** | `tests/unit/ground-tiles.test.ts` against shipped `level-01.tmj`: spike-run cap, all platform/pillar caps, discrimination, half-open boundary, sub-tile nudge. |
+| 4.22 | **PASS**, after F1 | The predicate's unit fixtures, PLUS two e2e tests asserting the drawn tile index — added because the call site was unguarded and the shipped bug passed 464 tests. |
 | 4.23 | **PASS** | `tests/e2e/phase-04-assets.spec.ts` — drawn bottom ≡ sim feet y on 120+ samples spanning takeoff, flight and landing; `originY` mutant red. |
 | 4.24 | **PASS** | Same spec; old-packer geometry mutant red at 267 vs 279. See the weak-assertion note above. |
 | 4.25 | **PASS** | Three anchoring candidates rendered against a ground line and chosen on sight; rationale in `character-bounds.json` `_verticalAnchor`. |
 | 4.26 | **PASS** | `verify-dist ok`; sweep watched red on all three Gym checks. |
-| 4.27 | **PASS** | Anchor sole gap 58 → 1 px at source, 6 → 0 px in game; [STYLE.md](../STYLE.md) §8 amendment; `anchor-original.png` retained. |
+| 4.27 | **FAIL** - my earlier PASS was wrong | The defect is genuinely fixed and verified in-game. But the criterion asks for the anchor to be measured **before generating from it**, and it was measured after shipping, from the user's report. No code measures an anchor's contact geometry, so there is no gate - only a one-off manual correction. Raised by `qa-expert` brief 1, finding 4. |
 | 4.2b | **FAIL** | The invoice has not been read. This is the blocker. |
+| 4.10 | **UNRUN** | `gateReachBand` — the frame-diff box audit the criterion names — is called only from `selfTest()` and unit fixtures. Verified by grep: no call site against the real sheets, no result in any log. |
+| 4.12 | **UNRUN** | `findSource` throws on a missing or ambiguous action, but no test exercises it and no log records the "deliberately remove one" run being watched fail. Right shape, unproven. |
 | 4.11 | **UNRUN** | Byte-identical rebuild is not implemented as an automated gate. |
+| 4.16 | **FAIL** | Ten files over 400 lines. See §File sizes. |
 | 4.18 | **UNRUN** | Codex implementation review. |
 | all others | **UNRUN** | Awaiting their gate owners. |

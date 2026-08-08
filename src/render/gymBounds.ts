@@ -131,6 +131,42 @@ export function emptyEdits(): BoundsEdits {
   return { footOffsetPx: {}, activeFrames: {} };
 }
 
+/**
+ * The edits implied by a config file — i.e. the values already in it for the fields the Gym owns.
+ *
+ * The Gym must START from these, not from each type's zero, because `serialiseBounds` ASSIGNS what
+ * it is handed. Seeded from zero, nudging `footOffsetPx` on one animation and saving would silently
+ * discard every other value the file already held: a config declaring
+ * `run: { footOffsetPx: -3, activeFrames: [3, 4] }` would be written back as
+ * `footOffsetPx: -1, activeFrames: []`, with the Gym's readout showing the edit rather than the
+ * effective value, so nothing warned you.
+ *
+ * Latent while every animation reads 0 and `[]`, and live the moment Phase 5 fills `activeFrames`,
+ * which is the field's entire purpose. Raised by the `voltagent-qa-sec:code-reviewer` gate owner,
+ * brief 1, finding F3 — the vault-A4 "a dev scene writing shipped configuration is using live
+ * ammunition" class exactly.
+ *
+ * Lives here rather than in the scene so it is reachable from a unit test, which is the same reason
+ * `serialiseBounds` does. An unreadable config yields empty edits rather than throwing: the Gym's
+ * other jobs — measuring and looking — do not need it, and `serialiseBounds` refuses the save
+ * separately *(vault 4.16)*.
+ */
+export function editsFromConfig(raw: unknown): BoundsEdits {
+  const edits = emptyEdits();
+  if (!hasAnimations(raw)) {
+    return edits;
+  }
+  for (const [name, entry] of Object.entries(raw.animations)) {
+    if (typeof entry?.footOffsetPx === 'number') {
+      edits.footOffsetPx[name] = entry.footOffsetPx;
+    }
+    if (Array.isArray(entry?.activeFrames)) {
+      edits.activeFrames[name] = [...entry.activeFrames];
+    }
+  }
+  return edits;
+}
+
 interface BoundsFile {
   animations: Record<string, { footOffsetPx?: number; activeFrames?: number[] }>;
 }

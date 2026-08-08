@@ -3,6 +3,7 @@ import { CATALOG_KEY, type AssetCatalog, type SheetEntry } from '../game/assetCa
 import { RENDER_SCALE } from '../game/constants';
 import {
   boundsRect,
+  editsFromConfig,
   emptyEdits,
   frameCells,
   liftAboveCellFloor,
@@ -143,6 +144,8 @@ export class GymScene extends Phaser.Scene {
         throw new Error(`HTTP ${response.status}`);
       }
       this.rawConfig = await response.json();
+      this.edits = editsFromConfig(this.rawConfig);
+      this.refresh();
     } catch (error) {
       // Not fatal: measuring and looking are the Gym's main jobs and neither needs the config.
       // Saving is refused explicitly rather than writing a guess (vault 4.16).
@@ -248,8 +251,9 @@ export class GymScene extends Phaser.Scene {
   }
 
   private revert(): void {
-    this.edits = emptyEdits();
-    this.note.setText('edits reverted');
+    // Back to the FILE's values, not to zero — see `editsFromConfig`.
+    this.edits = editsFromConfig(this.rawConfig);
+    this.note.setText('edits reverted to the values in character-bounds.json');
     this.refresh();
   }
 
@@ -269,9 +273,9 @@ export class GymScene extends Phaser.Scene {
       anchor.remove();
       URL.revokeObjectURL(url);
       // The reformat is disclosed rather than hidden: the shipped file is hand-grouped with blank
-      // lines and one-line animation entries, and `JSON.stringify` reproduces neither. No value
-      // moves — `tests/unit/gym-bounds.test.ts` pins that — but the diff will be larger than the
-      // edit, and someone reviewing it should know that before they read it as damage.
+      // lines that `JSON.stringify` does not reproduce. No value moves — gym-bounds.test.ts pins
+      // that — but the diff is larger than the edit, and a reviewer should know before reading it
+      // as damage.
       this.note.setText(
         'saved character-bounds.json — move it into public/assets/config/ ' +
           '(values unchanged; blank-line grouping is not preserved)',
@@ -319,8 +323,7 @@ export class GymScene extends Phaser.Scene {
 
   private refresh(): void {
     const sheet = this.sheet;
-    // Clamp to the largest zoom whose whole cell still fits above the ground line. A magnification
-    // that crops the figure is worse than no magnification: it looks like a measurement.
+    // Clamp to the largest zoom whose whole cell fits above the ground line — see ZOOMS.
     const asked = ZOOMS[this.zoomStep];
     const fits = ZOOMS.filter((z) => sheet.frameHeight * z <= GROUND_Y);
     const zoom = asked <= (fits[fits.length - 1] ?? 1) ? asked : (fits[fits.length - 1] ?? 1);
