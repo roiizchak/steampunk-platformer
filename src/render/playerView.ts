@@ -30,8 +30,16 @@ export interface PlayerRenderDesc {
   originY: number;
   /** Mirror the sprite. Read from `facing`, never re-derived from velocity. */
   flipX: boolean;
-  /** Fill colour, `0xRRGGBB`. */
+  /** Fill colour, `0xRRGGBB`. Grey-box only — the Playground and the Gym still draw rectangles. */
   colour: number;
+  /**
+   * The animation key to play. Phase 4.
+   *
+   * `colour` is kept beside it deliberately rather than deleted: two dev scenes still draw the
+   * grey box, and a coloured rectangle is a far more legible failure than an invisible sprite if a
+   * texture ever goes missing.
+   */
+  animKey: string;
 }
 
 /**
@@ -52,6 +60,35 @@ const STATE_COLOURS: Record<PlayerState, number> = {
   fall: 0x9a7bb0,
 };
 
+/**
+ * THE state → animation-key map. Phase 4.
+ *
+ * A `Record<PlayerState, string>`, so adding a state to the union is a compile error here until it
+ * is handled — the same seam `STATE_COLOURS` provided, kept deliberately. Phase 5 adds `attack`,
+ * `hurt` and `death` and will be told about it by the typechecker rather than by a black sprite.
+ *
+ * The slug is part of the key because the catalog namespace is flat and enemies land in it too.
+ */
+const SLUG = 'brass-courier';
+
+const STATE_ANIMS: Record<PlayerState, string> = {
+  idle: `${SLUG}-idle`,
+  walk: `${SLUG}-walk`,
+  run: `${SLUG}-run`,
+  jump: `${SLUG}-jump`,
+  fall: `${SLUG}-fall`,
+};
+
+/** The animation key for a state. Exported so the scene registers exactly what it plays. */
+export function animKeyFor(state: PlayerState): string {
+  return STATE_ANIMS[state];
+}
+
+/** Every animation key the player can ask for, for registration and for the e2e assertions. */
+export function allAnimKeys(): string[] {
+  return Object.values(STATE_ANIMS);
+}
+
 export function playerRenderDesc(player: PlayerSim, scale: number): PlayerRenderDesc {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`playerRenderDesc: scale must be a finite number greater than 0, got ${scale}`);
@@ -68,5 +105,6 @@ export function playerRenderDesc(player: PlayerSim, scale: number): PlayerRender
     originY: 1,
     flipX: player.facing === -1,
     colour: STATE_COLOURS[player.state],
+    animKey: STATE_ANIMS[player.state],
   };
 }

@@ -93,6 +93,41 @@ export function crop(image, x, y, w, h) {
   return { width: w, height: h, data: out };
 }
 
+/**
+ * Make a strip loop by appending its own mirror image: `A ++ reverse(A)`.
+ *
+ * **Why mirroring rather than a crossfade.** A generative model will not produce a tileable seam on
+ * request, and all three parallax layers failed `gateSeam` on their first build. A crossfade blends
+ * two dissimilar edges into a blurred band that reads as a smear when it scrolls past. Mirroring is
+ * exact instead of approximate: the join in the middle repeats the source's last column, and the
+ * wrap at the ends repeats the source's first column, so BOTH seams are continuous by construction
+ * rather than by tuning a blend width.
+ *
+ * The cost is a visible symmetry if a player watches one layer scroll for a full period. At the
+ * scroll factors this game uses, the far layer takes the whole level to move 576 px against a
+ * 5092 px strip, so no player reaches it. That trade is recorded rather than hidden.
+ *
+ * It also doubles the width, which is what makes the layers long enough to cover the camera travel
+ * without repeating at all.
+ */
+export function mirrorLoop(image) {
+  const { width, height, data } = image;
+  const w2 = width * 2;
+  const out = new Uint8ClampedArray(w2 * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const src = (y * width + x) * 4;
+      const left = (y * w2 + x) * 4;
+      const right = (y * w2 + (w2 - 1 - x)) * 4;
+      for (let c = 0; c < 4; c += 1) {
+        out[left + c] = data[src + c];
+        out[right + c] = data[src + c];
+      }
+    }
+  }
+  return { width: w2, height, data: out };
+}
+
 /** Lay images out left-to-right on a transparent ground. Used for side-by-side comparisons. */
 export function hstack(images, gap = 8) {
   const width = images.reduce((sum, im) => sum + im.width, 0) + gap * (images.length - 1);

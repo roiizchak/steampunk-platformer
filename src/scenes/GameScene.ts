@@ -34,8 +34,8 @@ export class GameScene extends Phaser.Scene {
   private world!: World;
   private input$!: InputSnapshot;
   private accumulatorMs = 0;
-  private playerRect!: Phaser.GameObjects.Rectangle;
-  private facingRect!: Phaser.GameObjects.Rectangle;
+  private playerSprite!: Phaser.GameObjects.Sprite;
+  private parallax: { image: Phaser.GameObjects.TileSprite; factor: number }[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
   private heldLeft: Phaser.Input.Keyboard.Key[] = [];
@@ -89,16 +89,20 @@ export class GameScene extends Phaser.Scene {
     });
     this.input$ = createSnapshot();
 
+    this.createParallax();
     this.drawLevel(level);
     const desc = playerRenderDesc(this.world.player, this.world.scale);
-    this.playerRect = this.add
-      .rectangle(desc.x, desc.y, desc.w, desc.h, desc.colour)
-      .setOrigin(desc.originX, desc.originY);
-    this.facingRect = this.add.rectangle(desc.x, desc.y, 1, 1, 0x1a1714).setOrigin(0, 1);
+    this.registerAnimations();
+    this.playerSprite = this.add
+      .sprite(desc.x, desc.y, desc.animKey)
+      .setOrigin(desc.originX, desc.originY)
+      .setDepth(10);
+    this.playerSprite.play(desc.animKey);
 
+    this.createHud();
     this.bindKeys();
     this.add
-      .text(24, 24, this.helpText(), {
+      .text(24, 168, this.helpText(), {
         fontFamily: 'monospace',
         fontSize: '18px',
         color: '#8f8776',
@@ -157,6 +161,7 @@ export class GameScene extends Phaser.Scene {
     advance(this.world, this.input$, ticks);
 
     this.renderPlayer();
+    this.renderParallax();
     this.publishDebugState();
   }
 
@@ -308,7 +313,7 @@ export class GameScene extends Phaser.Scene {
     if (!tilesetName) {
       throw new Error(`GameScene: level ${level.id} declares no tileset`);
     }
-    const tileset = map.addTilesetImage(tilesetName, 'placeholder-tile');
+    const tileset = map.addTilesetImage(tilesetName, 'tiles-industrial', 32, 32, 0, 0, 1);
     if (!tileset) {
       // Returns null with only a console warning. Silently drawing nothing is precisely the
       // failure this scene must not have.
@@ -329,6 +334,7 @@ export class GameScene extends Phaser.Scene {
     if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
       throw new Error('GameScene: expected a CPU TilemapLayer; the GPU layer has no Canvas fallback');
     }
+    this.applySurfaceTiles(layer);
     this.groundLayer = layer;
   }
 
@@ -339,27 +345,137 @@ export class GameScene extends Phaser.Scene {
 
     camera.setBounds(setup.bounds.x, setup.bounds.y, setup.bounds.w, setup.bounds.h);
     camera.setZoom(setup.zoom);
-    camera.startFollow(this.playerRect, false, setup.lerpX, setup.lerpY);
+    camera.startFollow(this.playerSprite, false, setup.lerpX, setup.lerpY);
   }
 
   private renderPlayer(): void {
     const desc = playerRenderDesc(this.world.player, this.world.scale);
-    this.playerRect.setPosition(desc.x, desc.y);
-    this.playerRect.setSize(desc.w, desc.h);
-    this.playerRect.setFillStyle(desc.colour);
+    this.playerSprite.setPosition(desc.x, desc.y);
 
-    // `desc.flipX` cannot go to `setFlipX` here: Phaser 4's Flip component is mixed into Sprite
-    // and Image but NOT into Shape, so `Rectangle` has no such method — the typechecker caught
-    // this, not a test. A Sprite would need a texture, and this phase deliberately has no art.
-    //
-    // So facing is drawn as a nose on the leading edge. That keeps the flip DECISION exercised
-    // and visible during the hands-on feel check instead of parked until Phase 4, where a
-    // mirrored hitbox first shows up as art that does not match its collision.
-    const nose = desc.w * 0.3;
-    this.facingRect.setPosition(desc.x + (desc.flipX ? -desc.w / 2 : desc.w / 2 - nose), desc.y);
-    this.facingRect.setSize(nose, desc.h * 0.2);
-    this.facingRect.setFillStyle(0x1a1714);
+    // A real flip at last. Phase 2 drew facing as a "nose" rectangle because Phaser 4's Flip
+    // component is mixed into Sprite and Image but NOT into Shape, so the grey-box `Rectangle`
+    // had no `setFlipX` — the typechecker caught that, not a test. The decision was exercised
+    // anyway so it would not arrive untested in this phase, which is why this line is a
+    // one-for-one replacement rather than new behaviour.
+    this.playerSprite.setFlipX(desc.flipX);
+
+    // Restart only on a CHANGE of animation. Calling play() every frame with the same key would
+    // reset the clip to frame 0 on every render, so a looping walk cycle would freeze on its
+    // first pose while `__game` cheerfully reported the right state.
+    if (this.playerSprite.anims.getName() !== desc.animKey) {
+      this.playerSprite.play(desc.animKey);
+    }
   }
+
+  /**
+   * Register one Phaser animation per catalog sheet, with the frame rate DERIVED from the sim.
+   *
+   * The fps handed to Phaser comes from `animTimings()`, not from `index.json` — the catalog's
+   * copy is a record, and `tests/unit/asset-catalog.test.ts` asserts the two agree. Deriving it
+   * here means retuning `runMax` changes the run animation's speed on the next boot with no asset
+   * rebuild, which is the whole point of vault 4.22.
+   */
+  private registerAnimations(): void {
+    const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
+    if (!catalog) {
+      throw new Error('GameScene: the asset catalog is missing after boot approved it');
+    }
+    for (const sheet of catalog.sheets) {
+      if (this.anims.exists(sheet.key)) {
+        this.anims.remove(sheet.key);
+      }
+      this.anims.create({
+        key: sheet.key,
+        frames: this.anims.generateFrameNumbers(sheet.key, {
+          start: 0,
+          end: sheet.frameCount - 1,
+        }),
+        frameRate: sheet.fps,
+        repeat: sheet.loop ? -1 : 0,
+      });
+    }
+  }
+
+  /**
+   * Three scrolling background layers, drawn behind everything.
+   *
+   * `TileSprite` rather than `Image` because it wraps its texture natively, and the layers were
+   * built to wrap: `build-world.mjs` mirrors each one so both its middle join and its end wrap
+   * repeat a source column exactly. `gateSeam` went from FAIL to PASS across that step, which is
+   * what makes the wrap safe to rely on here.
+   *
+   * `setScrollFactor(0)` pins them to the camera and the scroll is applied by hand in
+   * `renderParallax`, because Phaser's own scroll factor moves the OBJECT while a TileSprite needs
+   * its texture offset moved instead — otherwise the layer slides off its own edges.
+   */
+  private createParallax(): void {
+    const layers: { key: string; factor: number }[] = [
+      { key: 'bg-far', factor: 0.15 },
+      { key: 'bg-mid', factor: 0.35 },
+      { key: 'bg-near', factor: 0.6 },
+    ];
+    this.parallax = layers.map(({ key, factor }, i) => {
+      const image = this.add
+        .tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, key)
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(-100 + i);
+      return { image, factor };
+    });
+  }
+
+  /**
+   * Give the tile layer a brass-capped TOP and plain masonry beneath it.
+   *
+   * The shipped level was authored grey-box: its tile layer fills every solid cell with the same
+   * gid, because Phase 3 only needed geometry. Drawn with a brass-capped walkway tile that reads as
+   * a striped block — the brass leading edge repeating on every row, which is precisely what
+   * STYLE.md §5 RULE ONE is for. The rule is "a player identifies a platform by that brass edge
+   * alone", and an edge on every row identifies nothing.
+   *
+   * So the index is chosen from the NEIGHBOURHOOD rather than from the level data: a cell with
+   * nothing above it is a walking surface and gets the brass cap; anything buried gets brick. The
+   * level file is untouched, which matters because `tests/unit/tilemap-data.test.ts` pins its
+   * bytes and its geometry.
+   */
+  private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer): void {
+    const SURFACE = 0; // riveted walkway plate with the brass leading edge
+    const BRICK = 8;   // soot-stained brick, row 3 of the tileset
+    layer.forEachTile((tile) => {
+      if (tile.index < 0) {
+        return;
+      }
+      const above = layer.getTileAt(tile.x, tile.y - 1);
+      tile.index = above && above.index >= 0 ? BRICK : SURFACE;
+    });
+  }
+
+  /**
+   * The HUD: portrait medallion plus one continuous health bar, pinned to the camera.
+   *
+   * Drawn at the assembly's authored size with `setScrollFactor(0)` so it never scrolls, and at a
+   * high depth so nothing in the world can cover it.
+   */
+  private createHud(): void {
+    this.add
+      .image(24, 24, 'hud-health')
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(1000);
+  }
+
+  private renderParallax(): void {
+    // `setScrollFactor(0)` already pins these to the camera, so their position is in SCREEN space
+    // and stays at the origin. Setting it to the camera's scroll — which is what the first version
+    // did — double-applies the scroll and slides the layer down and right off the viewport, which
+    // showed up as a black band above a strip of background. Only the TEXTURE offset moves.
+    const scrollX = this.cameras.main.scrollX;
+    for (const { image, factor } of this.parallax) {
+      image.tilePositionX = scrollX * factor;
+    }
+  }
+
+
 
   /** The read-only debug view every e2e spec is written against. Dev build only. */
   private publishDebugState(): void {

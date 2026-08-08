@@ -1,0 +1,167 @@
+/**
+ * `npm run assets:world` — tileset, parallax layers and HUD from raw model output to shipped assets.
+ *
+ * The tileset is the interesting one. `nano-banana-pro` exposes no explicit `width`/`height`, so a
+ * 32 px grid cannot be requested — SOURCE-ANALYSIS open question 7. It is achieved in post instead:
+ * the model is asked for separated tiles on a chroma field, the tiles are **detected from the
+ * pixels** with the same projection used for sprite sheets, each is squared and downscaled to
+ * exactly `TILE_SIZE`, and the result is packed into a strict grid with no padding. Grid exactness
+ * is then a property of the packer rather than a hope about the prompt, and `gateGridExact` proves
+ * it on the written file *(criterion 4.23)*.
+ */
+
+import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { decodePng, encodePng } from './png.mjs';
+import { estimateKeyColour, keyOut, removeSpecks } from './chroma.mjs';
+import { detectFrames } from './sheets.mjs';
+import { crop, downscale, mirrorLoop } from './resize.mjs';
+import { gateGridExact, gateSeam, regionStats, PASS } from './gates.mjs';
+
+const TILE_SIZE = 32;
+const RAW = '_generated/world';
+
+function raw(prefix) {
+  const file = readdirSync(RAW).find((f) => f.startsWith(`${prefix}-`) && f.endsWith('.png'));
+  if (!file) {
+    throw new Error(
+      `assets:world: no source for "${prefix}" in ${RAW}. A declared input that cannot be found ` +
+        `fails the build and is never substituted (vault 4.16).`,
+    );
+  }
+  return decodePng(readFileSync(`${RAW}/${file}`));
+}
+
+/** Square a tile about its centre before downscaling, so nothing is stretched. */
+function square(image) {
+  const side = Math.max(image.width, image.height);
+  const out = new Uint8ClampedArray(side * side * 4);
+  const ox = Math.floor((side - image.width) / 2);
+  const oy = Math.floor((side - image.height) / 2);
+  for (let y = 0; y < image.height; y += 1) {
+    const from = y * image.width * 4;
+    out.set(image.data.subarray(from, from + image.width * 4), ((oy + y) * side + ox) * 4);
+  }
+  return { width: side, height: side, data: out };
+}
+
+function buildTileset() {
+  const sheet = raw('tileset');
+  const { key } = estimateKeyColour(sheet);
+  const keyed = removeSpecks(keyOut(sheet, { key }));
+  const rects = detectFrames(keyed, { minGap: 12, minExtent: 48 });
+
+  const cols = 4;
+  const rows = Math.ceil(rects.length / cols);
+  const width = cols * TILE_SIZE;
+  const height = rows * TILE_SIZE;
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  rects.forEach((r, i) => {
+    // Cut from the KEYED copy, not the original.
+    //
+    // The first version cut from the original on the reasoning that "a solid tile must stay solid"
+    // and keying was only needed to locate the tiles. That was wrong, and it shipped a bright green
+    // floor: the tiles are not square, so squaring one pads it with whatever surrounded it — which
+    // is chroma green — and `detectFrames` bounds are tight rather than exact, so a rim of green
+    // survives on every edge. Keying cannot damage a tile interior here because nothing in the
+    // palette is near chroma green; brass, brick and iron are all far outside the threshold.
+    const tile = downscale(square(crop(keyed, r.x, r.y, r.w, r.h)), TILE_SIZE, TILE_SIZE);
+    const cx = (i % cols) * TILE_SIZE;
+    const cy = Math.floor(i / cols) * TILE_SIZE;
+    for (let y = 0; y < TILE_SIZE; y += 1) {
+      const from = y * TILE_SIZE * 4;
+      data.set(tile.data.subarray(from, from + TILE_SIZE * 4), ((cy + y) * width + cx) * 4);
+    }
+  });
+
+  const packed = { width, height, data };
+  const grid = gateGridExact(packed, TILE_SIZE);
+  if (grid.status !== PASS) {
+    throw new Error(`assets:world: tileset failed the grid gate — ${grid.reason}`);
+  }
+
+  mkdirSync('public/assets/tiles', { recursive: true });
+  writeFileSync('public/assets/tiles/industrial.png', encodePng(width, height, data));
+
+  // The single tile the shipped level references. Extracted from the packed sheet rather than
+  // re-sliced, so the two can never disagree.
+  const first = crop(packed, 0, 0, TILE_SIZE, TILE_SIZE);
+  writeFileSync(
+    'public/assets/tiles/walkway.png',
+    encodePng(TILE_SIZE, TILE_SIZE, first.data),
+  );
+
+  console.log(
+    `ok  tileset   ${rects.length} tiles detected  ->  ${width}x${height} ` +
+      `(${grid.value.cols}x${grid.value.rows} @ ${TILE_SIZE}px)  ${grid.status}`,
+  );
+  return rects.length;
+}
+
+function buildParallax() {
+  mkdirSync('public/assets/backgrounds', { recursive: true });
+  const out = [];
+  for (const depth of ['far', 'mid', 'near']) {
+    const image = raw(`parallax-${depth}`);
+    const before = gateSeam(image);
+    const stats = regionStats(image);
+    // Downscale to the viewport height (1080) so the layer is not four times larger than it draws,
+    // THEN mirror. Mirroring first would double the work for an identical result.
+    const target = 1080;
+    const scaled = downscale(image, Math.round((image.width * target) / image.height), target);
+    const looped = mirrorLoop(scaled);
+    const after = gateSeam(looped);
+    if (after.status !== PASS) {
+      throw new Error(
+        `assets:world: ${depth} still fails the seam gate after mirroring — ${after.reason}. ` +
+          `A background that tears at the wrap is a visible defect on every pass of the camera.`,
+      );
+    }
+    writeFileSync(
+      `public/assets/backgrounds/${depth}.png`,
+      encodePng(looped.width, looped.height, looped.data),
+    );
+    console.log(
+      `ok  bg-${depth.padEnd(5)} ${image.width}x${image.height} -> ${looped.width}x${looped.height}` +
+        `  sat ${stats.saturation.toFixed(3)}  seam ${before.status} -> ${after.status}`,
+    );
+    out.push({ depth, width: looped.width, height: looped.height, seam: after.status });
+  }
+  return out;
+}
+
+function buildHud() {
+  const image = raw('hud');
+  const { key } = estimateKeyColour(image);
+  const keyed = removeSpecks(keyOut(image, { key }));
+  const rects = detectFrames(keyed, { minGap: 16, minExtent: 64 });
+  if (rects.length !== 1) {
+    throw new Error(
+      `assets:world: expected ONE HUD assembly, detected ${rects.length}. STYLE.md's geometry ` +
+        `constraint exists to guarantee a single row — a second component means it did not hold.`,
+    );
+  }
+  const r = rects[0];
+  const trimmed = crop(keyed, r.x, r.y, r.w, r.h);
+  // The assembly draws at 1/8 of the 1080 viewport height, which puts the medallion at ~135 px.
+  const target = 128;
+  const scaled = downscale(trimmed, Math.round((r.w * target) / r.h), target);
+  mkdirSync('public/assets/hud', { recursive: true });
+  writeFileSync(
+    'public/assets/hud/health-assembly.png',
+    encodePng(scaled.width, scaled.height, scaled.data),
+  );
+  console.log(
+    `ok  hud       1 assembly  ${r.w}x${r.h} -> ${scaled.width}x${scaled.height}  key(${key.join(',')})`,
+  );
+  return { width: scaled.width, height: scaled.height };
+}
+
+const tiles = buildTileset();
+const backgrounds = buildParallax();
+const hud = buildHud();
+writeFileSync(
+  '_generated/world-report.json',
+  `${JSON.stringify({ tiles, backgrounds, hud }, null, 2)}\n`,
+);
+console.log('\nwrote tiles, backgrounds and hud into public/assets/');

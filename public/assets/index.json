@@ -1,9 +1,50 @@
 {
-  "_comment": "The asset catalog. BootScene loads exactly this list and refuses to route past boot if any entry is missing or unusable. Adding an asset to the game means adding it here. `levels` is REQUIRED and non-empty: an optional list is how a typo'd key ships a game with no levels and a boot that is perfectly happy about it.",
+  "_comment": "The asset catalog. BootScene loads exactly this list and refuses to route past boot if any entry is missing or unusable. Adding an asset to the game means adding it here. `levels`, `images` and `sheets` are all REQUIRED and non-empty: an optional list is how a typo'd key ships a game with no levels, no art or no player and a boot that is perfectly happy about it.",
+  "_sheets": "fps and simTicks are RECORDED here, not authoritative. src/render/animTiming.ts derives them from the live simulation (fps = renderFrames * TICK_HZ / simTicks, vault 4.22), and tests/unit/asset-catalog.test.ts asserts the two agree. A number living in two places drifts unless something compares them. `derivedFrom` records how each simTicks was arrived at, so idle's authored breathing period cannot quietly read as a derived one.",
+
   "images": [
-    { "key": "placeholder-tile", "url": "assets/placeholder-tile.png" }
+    { "key": "walkway-tile", "url": "assets/tiles/walkway.png" },
+    { "key": "tiles-industrial", "url": "assets/tiles/industrial.png" },
+    { "key": "bg-far", "url": "assets/backgrounds/far.png" },
+    { "key": "bg-mid", "url": "assets/backgrounds/mid.png" },
+    { "key": "bg-near", "url": "assets/backgrounds/near.png" },
+    { "key": "hud-health", "url": "assets/hud/health-assembly.png" }
   ],
+
   "levels": [
     { "key": "level-01", "url": "assets/levels/level-01.tmj" }
+  ],
+
+  "sheets": [
+    {
+      "key": "brass-courier-idle",
+      "url": "assets/characters/brass-courier/sheets/idle.png",
+      "frameWidth": 96, "frameHeight": 112, "frameCount": 8,
+      "simTicks": 90, "fps": 5.333333333333333, "loop": true, "derivedFrom": "authored"
+    },
+    {
+      "key": "brass-courier-walk",
+      "url": "assets/characters/brass-courier/sheets/walk.png",
+      "frameWidth": 96, "frameHeight": 112, "frameCount": 4,
+      "simTicks": 19, "fps": 12.631578947368421, "loop": true, "derivedFrom": "measured"
+    },
+    {
+      "key": "brass-courier-run",
+      "url": "assets/characters/brass-courier/sheets/run.png",
+      "frameWidth": 96, "frameHeight": 112, "frameCount": 4,
+      "simTicks": 15, "fps": 16, "loop": true, "derivedFrom": "measured"
+    },
+    {
+      "key": "brass-courier-jump",
+      "url": "assets/characters/brass-courier/sheets/jump.png",
+      "frameWidth": 96, "frameHeight": 112, "frameCount": 4,
+      "simTicks": 18, "fps": 13.333333333333334, "loop": false, "derivedFrom": "sim"
+    },
+    {
+      "key": "brass-courier-fall",
+      "url": "assets/characters/brass-courier/sheets/fall.png",
+      "frameWidth": 96, "frameHeight": 112, "frameCount": 4,
+      "simTicks": 18, "fps": 13.333333333333334, "loop": false, "derivedFrom": "sim"
+    }
   ]
 }

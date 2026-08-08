@@ -99,9 +99,54 @@ export class BootScene extends Phaser.Scene {
       this.load.image(entry.key, this.applyBreakAsset(entry, index));
     }
 
+    for (const sheet of catalog.sheets) {
+      // Same removal rule as images, for the same reason — plus the TextureManager caches the
+      // frame CARVING, so a stale entry would keep the old frame size even if the pixels reloaded.
+      if (this.textures.exists(sheet.key)) {
+        this.textures.remove(sheet.key);
+      }
+      this.load.spritesheet(sheet.key, sheet.url, {
+        frameWidth: sheet.frameWidth,
+        frameHeight: sheet.frameHeight,
+      });
+    }
+
     // Loading and verification both live in `bootLevels.ts` — see its header. Phase 3's additions
     // pushed this file to 428 lines and the 400-line limit is a hard project rule.
     queueLevels(this, catalog.levels);
+  }
+
+  /**
+   * Verify each sheet carries the FRAME COUNT the catalog claims — criterion 4.19's precondition.
+   *
+   * This check exists because none of the others can see the failure it is for. A spritesheet
+   * loaded with the wrong `frameWidth` produces a texture with correct overall dimensions, non-zero
+   * source size, and a perfectly valid-looking image; `verifyExpectedTextures` passes it. What it
+   * carries is the wrong number of frames, so every animation built on it plays fragments of two
+   * poses at once. Codex's plan review named this as the most likely way the phase ships something
+   * subtly wrong.
+   *
+   * Phaser appends a `__BASE` frame to every texture, which is why the count is compared after
+   * excluding it rather than against `getFrameNames().length` directly.
+   */
+  private verifySheets(catalog: AssetCatalog): string[] {
+    const problems: string[] = [];
+    for (const sheet of catalog.sheets) {
+      const texture = this.textures.get(sheet.key);
+      if (!texture || texture.key === '__MISSING') {
+        problems.push(`sheet "${sheet.key}" did not load`);
+        continue;
+      }
+      const actual = texture.getFrameNames(false).length;
+      if (actual !== sheet.frameCount) {
+        problems.push(
+          `sheet "${sheet.key}" carries ${actual} frames but the catalog claims ` +
+            `${sheet.frameCount} — the frame size is wrong, not the file`,
+        );
+      }
+      texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+    return problems;
   }
 
   create(): void {
@@ -122,6 +167,9 @@ export class BootScene extends Phaser.Scene {
     }
 
     problems.push(...this.verifyExpectedTextures(catalog));
+    if (catalog) {
+      problems.push(...this.verifySheets(catalog));
+    }
     problems.push(...verifyLevels(this, catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
