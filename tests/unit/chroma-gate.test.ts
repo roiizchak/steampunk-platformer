@@ -21,6 +21,7 @@ import {
   CHROMA,
   assertComponentPolicy,
   chromaThresholds,
+  estimateKeyColour,
   components,
   hasRealAlpha,
   keepLargestComponent,
@@ -119,6 +120,53 @@ describe('keepLargestComponent is refused for airborne and attacking states (cri
 
   it('the forbidden list is the documented one, so shrinking it is visible in a diff', () => {
     expect(multiComponentStates().sort()).toEqual(['attack', 'death', 'fall', 'hurt', 'jump']);
+  });
+});
+
+describe('the key colour is MEASURED from the image, not assumed from the prompt', () => {
+  /**
+   * Measured on the first real batch. Three anchors, one prompt clause — "one flat uniform chroma
+   * green field, RGB 0 255 0" — and three different greens came back. Two at `~(1,252,1)`, L1
+   * distance 4-30 from pure. The third at **(0,195,64)**, distance 124-144, which is ABOVE the HIGH
+   * threshold, so it was classified as subject and 0% of the image keyed away.
+   *
+   * Widening LOW to cover 144 would eat a dark green coat. Measuring per image is the same rule as
+   * vault 4.11 — read it off the file, never off the label — where here the label is the prompt.
+   */
+  const backdrop = (rgb: [number, number, number]) => {
+    const image = blank(64, 64, [rgb[0], rgb[1], rgb[2], 255]);
+    fill(image, 20, 20, 24, 24, [180, 140, 60, 255]); // a subject that does not touch the border
+    return image;
+  };
+
+  it('recovers the off-target green that broke the assumed key', () => {
+    const { key, agreement } = estimateKeyColour(backdrop([0, 195, 64]));
+    expect(key).toEqual([0, 195, 64]);
+    expect(agreement).toBe(1);
+  });
+
+  it('keying with the measured key clears a background the assumed key leaves untouched', () => {
+    const image = backdrop([0, 195, 64]);
+    const assumed = keyOut(image); // default key: pure green
+    const measured = keyOut(image, { key: estimateKeyColour(image).key });
+    const clear = (im: { data: Uint8ClampedArray }) =>
+      Array.from(im.data).filter((_, i) => i % 4 === 3 && im.data[i] === 0).length;
+    expect(clear(assumed)).toBe(0);
+    expect(clear(measured)).toBeGreaterThan(0);
+  });
+
+  it('is robust to a subject touching one edge — median, not mean', () => {
+    const image = backdrop([0, 250, 0]);
+    fill(image, 0, 30, 3, 4, [200, 30, 30, 255]); // subject bleeding onto the left border
+    expect(estimateKeyColour(image).key).toEqual([0, 250, 0]);
+  });
+
+  it('REFUSES a non-chroma image rather than cutting into the subject (vault 4.16)', () => {
+    const photo = blank(64, 64, [0, 0, 0, 255]);
+    for (let x = 0; x < 64; x += 1) {
+      fill(photo, x, 0, 1, 64, [x * 4, 255 - x * 4, 128, 255]);
+    }
+    expect(() => estimateKeyColour(photo)).toThrow(/does not have a uniform chroma background/);
   });
 });
 

@@ -30,3 +30,7 @@ export declare function removeSpecks(image: RgbaImage, minPx?: number): RgbaImag
 export declare function assertComponentPolicy(state: string): void;
 export declare function keepLargestComponent(image: RgbaImage, state: string): RgbaImage;
 export declare function multiComponentStates(): string[];
+export declare function estimateKeyColour(
+  image: RgbaImage,
+  options?: { minAgreement?: number; tolerance?: number },
+): { key: number[]; agreement: number };

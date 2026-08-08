@@ -75,6 +75,63 @@ export function hasRealAlpha(image) {
 }
 
 /**
+ * Estimate the key colour from the image's own border, instead of assuming the one we asked for.
+ *
+ * **Measured on the first real batch, and it is why this function exists.** Three anchors were
+ * generated from prompts naming "one flat uniform chroma green field, RGB 0 255 0". Two came back
+ * at `~(1,252,1)` — L1 distance 4–30 from pure, comfortably inside `LOW`. The third came back at
+ * **`(0,195,64)`**, distance 124–144, which is *above* `HIGH`, so it was classified as SUBJECT and
+ * **0 % of the image keyed away**. The prompt was identical in that clause. The model simply
+ * returned a different green.
+ *
+ * Widening `LOW` to 144 to cover it would start eating real subject pixels — a dark green coat is
+ * a legitimate thing for this character to wear. So the key is MEASURED per image, which is the
+ * same principle as vault 4.11: read it off the file, never off the label. Here the label is the
+ * prompt.
+ *
+ * Refuses rather than guessing *(vault 4.16)*: if the border is not overwhelmingly one colour, this
+ * is not a chroma-backed image and the caller must not proceed as though it were.
+ */
+export function estimateKeyColour(image, { minAgreement = 0.9, tolerance = CHROMA.HIGH } = {}) {
+  const { width, height, data } = image;
+  const samples = [];
+  const push = (x, y) => {
+    const i = (y * width + x) * 4;
+    samples.push([data[i], data[i + 1], data[i + 2]]);
+  };
+  // The whole border, one pixel deep. A vignette makes corners drift, so sample all of it.
+  for (let x = 0; x < width; x += 1) {
+    push(x, 0);
+    push(x, height - 1);
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    push(0, y);
+    push(width - 1, y);
+  }
+  if (samples.length === 0) {
+    throw new Error('estimateKeyColour: image has no border to sample');
+  }
+
+  // Median per channel: robust to a subject that touches an edge, unlike a mean.
+  const median = (channel) => {
+    const sorted = samples.map((s) => s[channel]).sort((a, b) => a - b);
+    return sorted[sorted.length >> 1];
+  };
+  const key = [median(0), median(1), median(2)];
+
+  const agreeing = samples.filter((s) => keyDistance(s[0], s[1], s[2], key) <= tolerance).length;
+  const agreement = agreeing / samples.length;
+  if (agreement < minAgreement) {
+    throw new Error(
+      `estimateKeyColour: only ${(agreement * 100).toFixed(1)}% of border pixels are within ` +
+        `${tolerance} of the median (${key.join(',')}). This image does not have a uniform ` +
+        `chroma background — keying it would cut into the subject. Regenerate it instead.`,
+    );
+  }
+  return { key, agreement };
+}
+
+/**
  * Key out the background, in place on a copy. Returns a new image.
  *
  * Pixels at or below `LOW` become fully transparent; at or above `HIGH` are untouched; between,

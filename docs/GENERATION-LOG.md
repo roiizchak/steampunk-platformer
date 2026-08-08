@@ -123,6 +123,103 @@ Two defects chased: an **unrequested second health bar**, and **character scale*
 
 ---
 
+# ═══ Everything above was `fal-ai/nano-banana-2`. Everything below is `nano-banana-pro`. ═══
+
+## Gate 0 — the model-swap re-probe · 2 gens · $0.30 · (cum. $1.98)
+
+Phase 4a's first job, blocking every other gate. §4 template unchanged, `[SCALE_RATIO]` = *one and
+four fifths*, `[SETTING]` = the approved exterior street. Prompt extracted from STYLE.md §4 by
+`tools/gen/prompt.mjs` rather than retyped, and saved verbatim at `_generated/gate-0/prompt.txt`.
+
+| # | `request_id` | endpoint | seed | non-default inputs | quoted | invoiced | output | measured |
+|---|---|---|---|---|---|---|---|---|
+| 1 | `019fdffa-0b2c-7a02-b24f-04f8e77522c7` | `fal-ai/nano-banana-pro` | `20260804` | `aspect_ratio 16:9`, `resolution 2K`, `output_format png`, `num_images 1` | $0.15 | *pending* | `run1-…png` | **2752 × 1536**, RGB, no alpha |
+| 2 | `019fdffb-0b65-7c60-a1b6-1e4daf0e31dc` | `fal-ai/nano-banana-pro` | `20260804` | identical to #1 | $0.15 | *pending* | `run2-…png` | **2752 × 1536**, RGB, no alpha |
+
+**#2 is deliberately a byte-for-byte repeat of #1.** It exists only to answer gate 0.5.
+
+| Gate | Question | Answer |
+|---|---|---|
+| 0.1 | Returned pixel dimensions | **2752 × 1536, ratio 1.7917** — identical to `nano-banana-2`, and still **not** 16 : 9 (1.7778). The job record reports `width: null`, so this is read off the file *(4.11)*. |
+| 0.2 | Alpha channel | **Absent.** PNG colour type 2 (RGB); no pixel carries transparency. Read from the channel's values, never from `mode` *(4.12)*. **Chroma keying remains mandatory.** |
+| 0.3 | Still one health bar? | **Yes.** One capsule bar attached to the circular medallion, assembly one row tall. The §6 geometry constraint survives the model swap. |
+| 0.4 | Does *one and four fifths* still land at ~31 %? | **No — it lands at ~22.6 %.** See below. |
+| 0.5 | **Seed determinism** | **NO.** See below. |
+
+### 🔴 0.5 — `nano-banana-pro` is NOT seed-deterministic
+
+Two identical calls, same seed, same everything: **59.4 % of RGBA bytes differ**, mean absolute
+pixel difference **0.807 %** of full scale. The images are visibly different scenes in the same
+style.
+
+STYLE.md §3 states the consequence in advance: *"if two identical calls at the same seed return
+different images, the whole A/B method in this section is void."* It is void. Three things follow:
+
+1. **A prompt edit can no longer be attributed by comparing two generations.** Run-to-run variance
+   at constant seed is the noise floor, and it is now measured rather than assumed *(vault 4.8)*.
+2. **`seed` is a record-keeping label, not a control.** It is still logged, because it is part of
+   the request, but it buys no reproducibility.
+3. **The byte-identical rebuild contract *(4.15)* cannot be met by re-generating.** It can only be
+   met by re-fetching the same `request_id`'s output — which is exactly why this log's contract
+   requires the id on every row and why `assets:fetch` fetches by id. The design already assumed
+   this; the probe confirms it was necessary.
+
+### 🔴 0.4 — the scale transfer function changed
+
+Measured off run 1 at full resolution: the character spans **y ≈ 858 → 1205 = 347 px** of a 1536 px
+frame, i.e. **22.6 % of screen height**, or **4.43 screen-heights** of visible world.
+
+| | `nano-banana-2` | `nano-banana-pro` |
+|---|---|---|
+| stated ratio | one and four fifths (1.8) | one and four fifths (1.8) |
+| actual screen-heights | ~3.2 | **~4.43** |
+| character fills | ~31 % | **~22.6 %** |
+| transfer function | **× ~1.6** | **× ~2.46** |
+
+`nano-banana-pro` renders substantially more vertical world for the same wording. Per STYLE.md §7
+this is a gate-0 failure that means re-running §6's technique ladder against the new model, **not**
+rewording and hoping. Visual estimate from a full-resolution crop, ±3 %, the same method §4's
+calibration table uses.
+
+## Gate 0b — character anchor candidates · 3 gens · $0.45 · (cum. $2.43)
+
+Full-body concepts on chroma green, per STYLE.md §8. `9:16` rather than `1:1` because the character
+contract is 44 × 96 px — aspect 0.458 — and a square frame wastes half the pixels on a standing
+figure. RENDERING and DO-NOT-INCLUDE blocks lifted verbatim from the locked §4 template by
+`prompt.mjs` so the anchor cannot drift stylistically from the approved scene *(vault 4.3)*.
+
+| # | `request_id` | seed | concept | measured | figure | at 96 px |
+|---|---|---|---|---|---|---|
+| 1 | `019fdffe-f3d7-74d1-9b5a-7e9230dc8a07` | `20260804` | courier | 1536 × 2752, RGB | 862 × 2206 (0.391) | 38 × 96 |
+| 2 | `019fdfff-6c4d-71c2-b9d7-fbd20af6de91` | `20260805` | engineer | 1536 × 2752, RGB | — see below | 54 × 96 |
+| 3 | `019fdfff-d571-7cf1-a4e3-afc1d1716962` | `20260806` | aerialist | 1536 × 2752, RGB | 1006 × 1958 (0.514) | 49 × 96 |
+
+### 🔴 The model does not return the green you ask for
+
+All three prompts carried the identical clause *"one flat uniform chroma green field, RGB 0 255 0"*.
+
+| concept | background actually returned | L1 distance from pure | keyed away with the assumed key |
+|---|---|---|---|
+| courier | `(0,251,0)` … `(8,245,11)` | 4 – 29 | 73.7 % |
+| aerialist | `(1,252,1)` … `(10,244,9)` | 5 – 30 | 79.3 % |
+| **engineer** | **`(0,195,64)`** … `(8,190,71)` | **124 – 144** | **0.0 %** |
+
+124–144 is **above** `CHROMA.HIGH`, so every background pixel was classified as **subject** and the
+figure trimmed to the full frame. Nothing about the prompt differed.
+
+**Fix, and it is not a wider tolerance.** Raising `LOW` to 144 would start keying out a dark green
+coat, which this character may legitimately wear. Instead `chroma.mjs` gained
+`estimateKeyColour()`: sample the one-pixel border, take the per-channel **median** (robust to a
+subject touching an edge, unlike a mean), and refuse outright if under 90 % of border pixels agree —
+because an image without a uniform chroma background must not be keyed at all *(vault 4.16)*. This
+is vault **4.11** applied one level up: read the key colour off the file, never off the label, where
+here the label is the prompt.
+
+Re-keyed against the measured colour: courier 73.8 %, aerialist 79.4 %, **engineer 55.2 %** — all
+three correct. Committed as a regression test with the real numbers.
+
+---
+
 ## Cost summary
 
 | Round | Gens | Cost | Cumulative |
@@ -132,6 +229,9 @@ Two defects chased: an **unrequested second health bar**, and **character scale*
 | 3 separation mechanisms | 4 | $0.32 | $0.96 |
 | 4 combined A+D | 2 | $0.16 | $1.12 |
 | 5–9 HUD + scale correction | 7 | $0.56 | **$1.68** |
+| **— endpoint changed to `nano-banana-pro`, $0.15/image —** | | | |
+| Gate 0 model-swap re-probe | 2 | $0.30 | $1.98 |
+| Gate 0b anchor candidates | 3 | $0.45 | **$2.43** |
 
 **Kept as approved anchor:** `assets/style-probe/r9-bar-smaller.png` (1 of 21).
 Everything else is retained as evidence — none deleted.
