@@ -130,6 +130,66 @@ export function anchorPrompt(template, concept) {
   ].join('\n');
 }
 
+/**
+ * Probe B's prompt: an N-frame animation sheet produced by `nano-banana-pro/edit` from the anchor.
+ *
+ * The competing path to Seedance. Its advantage is that the frame count is whatever you ask for,
+ * so `fps = renderFrames * TICK_HZ / simTicks` needs no resampling step at all; its risk is the one
+ * SOURCE-ANALYSIS §6 records from the reference project — per-frame image generation produced
+ * *"a lot of additional stuff, and it wasn't a smooth motion"*.
+ *
+ * Two clauses are load-bearing and neither is decoration:
+ *  - **The baseline.** Frames whose feet sit at different heights cannot be packed into a sheet
+ *    without the character bobbing, and the bob is indistinguishable from animation.
+ *  - **The chroma field, repeated per cell.** The background is what gets keyed; asking once at the
+ *    top of the prompt is not enough when the model is drawing four sub-images.
+ */
+export function sheetPrompt(template, { action, frames, cycles, phases }) {
+  const rendering = templateBlock(template, 'RENDERING');
+  const forbid = templateBlock(template, 'DO NOT INCLUDE');
+  const grid = frames === 4 ? 'a 2 by 2 grid' : `a 1 by ${frames} row`;
+  return [
+    `A ${frames}-frame ${action} animation sprite sheet of THIS EXACT CHARACTER, arranged as ` +
+      `${grid}. Read left to right, top to bottom.`,
+    '',
+    `MOTION: the character performs exactly ${cycles} full ${action} cycle across the ` +
+      `${frames} frames, seen in strict side profile facing RIGHT.`,
+    ...phases.map((p, i) => `  Frame ${i + 1}: ${p}`),
+    '',
+    'IDENTITY: every frame is the same character as the reference image — same face, same hair, ' +
+      'same brass pauldron, same goggles, same bandolier, same satchel, same forearm brace, same ' +
+      'palette. Only the pose changes between frames.',
+    '',
+    'BASELINE: in every frame the character stands on the same invisible ground line, at the same ' +
+      'scale, with the soles of the feet at an identical height from the bottom of that frame. The ' +
+      'character does not drift up, down, or sideways between frames.',
+    '',
+    'BACKGROUND: every frame sits on the same flat uniform chroma green field, RGB 0 255 0, edge ' +
+      'to edge. No ground line, no shadow, no scenery, no border, no gridlines, no gutter of any ' +
+      'other colour between frames, no frame numbers, no labels.',
+    '',
+    rendering,
+    '',
+    `${forbid}, frame numbers, labels, gridlines, borders, background scenery, ground shadow, ` +
+      'interface, health bar, multiple characters, cropped limbs.',
+  ].join('\n');
+}
+
+/**
+ * Frame phases per action. Tracked here, in the generator, rather than described in prose — vault
+ * **4.15**: hand-picked frames living in a document mean the documented command rebuilds something
+ * else.
+ */
+export const SHEET_PHASES = Object.freeze({
+  run: [
+    'contact — right leg forward and planted, left leg extended back, torso pitched slightly ' +
+      'forward, arms counter-swung',
+    'passing — legs together beneath the body, left knee driving up, body at its highest',
+    'contact — left leg forward and planted, right leg extended back, arms swapped',
+    'passing — legs together beneath the body, right knee driving up, body at its highest',
+  ],
+});
+
 /** The three anchor concepts. They differ in BUILD and SILHOUETTE, not in style or rendering. */
 export const ANCHOR_CONCEPTS = Object.freeze({
   /**

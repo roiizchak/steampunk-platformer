@@ -278,3 +278,50 @@ game's render height — narrower than the 44 × 96 collision box, which is the 
 **Two of these six also returned off-target chroma** — `(4,178,55)` and `(65,162,81)` — bringing the
 count to three of nine. This is not an outlier; it is roughly a third of generations, and it is why
 the key colour is measured per image rather than assumed.
+
+## Gate 4.2b/4.2c — the two animation probes · 2 gens · $0.15 + contested · (cum. $3.48 + A)
+
+The plan's decision D1: run BOTH candidate pipelines on the same anchor for the same animation and
+batch on the winner, rather than adopting the documented path on the strength of a claim made about
+different models. Marginal cost of the comparison: $0.15, because probe A was mandatory anyway.
+
+| Probe | Endpoint | `request_id` | Inputs | Quoted |
+|---|---|---|---|---|
+| **A** | `bytedance/seedance-2.0/image-to-video` | `019fe018-61cd-7da2-9a78-b7d5d6601f97` | `duration 4`, `resolution 720p`, `aspect_ratio 9:16`, `generate_audio false`, `end_image_url` = anchor | **$0.056 – $1.21, contested ~22×** |
+| **B** | `fal-ai/nano-banana-pro/edit` | `019fe017-815b-74e0-9440-dbdfcdba03f7` | `aspect_ratio 1:1`, `resolution 2K`, `image_urls` = [anchor] | **$0.15, agreed** |
+
+### 4.2c — the clip, measured by `ffprobe`, not assumed
+
+```
+codec h264 · 720 × 1280 · r_frame_rate 24/1 · avg_frame_rate 24/1
+nb_frames 97 · nb_read_frames 97 (counted) · duration 4.041667 s
+```
+
+**24 fps, 97 frames.** SOURCE-ANALYSIS §6c's "~97 frames at 24 fps" turns out to be **correct** — but
+it was stated as a Seedance property while the same document said Seedance publishes no frame rate,
+which is why the Codex plan review flagged it *(finding 6)*. The finding was about **provenance, not
+arithmetic**: an unjustified claim that happens to be true is still unjustified, and the next one may
+not be. It is now measured, on this clip, and the number is counted rather than read from a header.
+
+### The verdict: probe B wins, and it is not close
+
+| | A — Seedance video | B — `nano-banana-pro/edit` sheet |
+|---|---|---|
+| **Did it produce the motion asked for?** | ❌ **No.** The prompt named *"exactly six full strides"*; the clip shows a near-idle with a slow turn. No stride occurs. | ✅ Four genuine run phases with real leg extension |
+| Identity across the animation | Drifts — the figure rotates out of strict side profile into 3/4 despite the instruction | ✅ Held: face, pauldron, goggles, bandolier, satchel, brace all stable |
+| Figure aspect frame to frame | **0.374 → 0.518**, a 38 % swing — the "constant scale" instruction was ignored | Varies per cell, but within one image and correctable in packing |
+| Frames | 97, must be resampled down to the sim's window | Exactly the 4 requested — **no resampling step at all** |
+| Cost | contested ~22× | $0.15, agreed by both sources |
+| Defects to fix | the motion itself | a ground line drawn despite "no ground line"; per-cell offset and scale |
+
+**This reverses the expectation recorded in SOURCE-ANALYSIS §6.** That section adopted video-to-frames
+on the strength of the reference project's finding that per-frame image generation gave *"a lot of
+additional stuff, and it wasn't a smooth motion"* — measured on **Grok and `nano-banana-2`**, and it
+does not hold for `nano-banana-pro/edit`, which preserves identity from a reference image far better
+than the models that claim was made about. Vault **4.9** in its plainest form: probe one model on one
+cue before committing a batch. The probe cost $0.15 and changed the pipeline.
+
+⚠️ **Probe A's real invoice line is still unread** — `genmedia` exposes no billing command, so the
+figure must come from the fal.ai dashboard. It no longer gates a batch, because no Seedance batch
+will be run; it is still the highest-value number for the vault-out, since two authoritative sources
+disagree by ~22× and only the invoice settles which.
