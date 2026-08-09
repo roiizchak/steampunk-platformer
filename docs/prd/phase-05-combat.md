@@ -69,9 +69,21 @@ rate was. Two rules follow, and they are why 4.27 is at the top of this list:
    absent.** `genmedia pricing` was wrong by ~21×, cheap. It is not a price; do not project on it.
 2. **A gate that prevents a re-shoot is worth more than a cheaper endpoint.**
 
+**This phase's ceiling is $40, and it is a hard STOP.** Agreed with the user before any spend: halt
+mid-batch and ask rather than finishing a sheet through the line. It was the one number Phase 5 had
+recorded nowhere in the repo. First-pass cost is ≈$16.67 across ~15 clips and ~8 stills, leaving
+≈$23 of rework headroom — at Phase 4's 77 % rework rate that lands over the line, at 50 % it lands
+near $32. Named descope levers, in the order they get pulled: `rust-scavenger/hurt` (tint flash
+instead), `brass-sentry/death` (last `fire` frame plus a particle), `rust-scavenger/chase` (reuse
+`walk` and accept the foot-slide, recorded). The number goes to the user before any lever is pulled.
+
 ### 2. Required skills
 `groups-and-containers` · `events-system` · `animations` · `data-manager` ·
 `e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Generating:** `fal-gamedev` · `fal-prompting` · `model-routing` · `genmedia-workflow` ·
+`character-design` — this phase produces art. They were omitted when the Gate 7 Codex review moved
+`attack`/`hurt`/`death` here from Phase 4, because their frame rate derives from `simTicks` in
+`src/sim/combat.ts`, which did not exist until now.
 **Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
 `superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 **Not `physics-arcade`** — see [Phase 2 §2](phase-02-player.md#2-required-skills). Hit detection is
@@ -126,6 +138,7 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 | 5.12 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 5.13 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-05-plan.md` | — |
 | 5.14 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-05-impl.md` | codex |
+| 5.15 | **Hazard and kill-plane timing** — a hazard thinner than one tick of travel at `maxFallSpeed` still registers, and the kill plane fires on the tick the player crosses it | unit, committed fixture at the tunnelling speed *(C2)* | `voltagent-qa-sec:qa-expert` |
 
 **Regression set:** Phases 1–4, specs 01–04.
 

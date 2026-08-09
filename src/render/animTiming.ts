@@ -43,10 +43,21 @@
 import { TICK_HZ } from '../game/constants';
 import { ATTACK, DEATH_TICKS, HURT_TICKS, attackTotalTicks } from '../sim/combat';
 import type { DerivedFeel } from '../sim/derived';
+import type { EnemySlug } from '../sim/enemies';
+import { SCAVENGER } from '../sim/enemies';
 import type { PlayerState } from '../sim/types';
+import { SENTRY_FIRE_TICKS, type EnemyAnim } from './enemyView';
 
-/** Every animation the player has. Identical to `PlayerState` on purpose — see `playerView.ts`. */
-export type AnimName = PlayerState;
+/**
+ * Every animation any subject has.
+ *
+ * It was an alias of `PlayerState`, which left the enemy animations with no home in the timing
+ * table at all *(Codex plan review C2)* — and an animation outside this table is an animation whose
+ * fps has to come from somewhere else, which is vault 4.22's authored-fps failure with extra steps.
+ * Widened rather than duplicated into a second parallel table, which would be vault 5.3's *"two
+ * definitions of one concept"*.
+ */
+export type AnimName = PlayerState | EnemyAnim;
 
 /** How a `simTicks` was arrived at. Carried into `index.json` so provenance survives the pipeline. */
 export type TimingProvenance = 'sim' | 'measured' | 'authored';
@@ -111,8 +122,14 @@ export interface MeasuredStrides {
   walk: number;
 }
 
-/** Frames actually present in each sheet, read from the sheet — never assumed. */
-export type MeasuredFrames = Record<AnimName, number>;
+/**
+ * Frames actually present in each PLAYER sheet, read from the sheet — never assumed.
+ *
+ * Pinned to `PlayerState` rather than `AnimName` when `AnimName` widened: an enemy sheet is not a
+ * player sheet, and a `Record` spanning both would demand enemy frame counts from every call site
+ * that only has the player. Enemy counts arrive through `enemyAnimTimings`.
+ */
+export type MeasuredFrames = Record<PlayerState, number>;
 
 /**
  * Build the full timing table. The single place the catalog's `fps`, `simTicks` and `derivedFrom`
@@ -123,7 +140,7 @@ export function animTimings(
   frames: MeasuredFrames,
   strides: MeasuredStrides,
 ): AnimTiming[] {
-  const rows: { name: AnimName; simTicks: number; loop: boolean; from: TimingProvenance }[] = [
+  const rows: { name: PlayerState; simTicks: number; loop: boolean; from: TimingProvenance }[] = [
     { name: 'idle', simTicks: IDLE_TICKS, loop: true, from: 'authored' },
     { name: 'walk', simTicks: strideTicks(strides.walk, feel.walkTopSpeed), loop: true, from: 'measured' },
     { name: 'run', simTicks: strideTicks(strides.run, feel.topSpeed), loop: true, from: 'measured' },
@@ -154,5 +171,63 @@ export function animTimings(
       loop,
       derivedFrom: from,
     };
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Enemy timings — guard G2 extended to the subjects Phase 5 adds.
+ * ------------------------------------------------------------------ */
+
+/** Stride lengths measured off an ENEMY sheet, world px per cycle. */
+export interface EnemyStrides {
+  walk: number;
+  chase: number;
+}
+
+/** Frames present in each of one enemy's sheets, read from the sheet. */
+export type EnemyFrames = Partial<Record<EnemyAnim, number>>;
+
+/**
+ * The timing table for one enemy, with the same rule as the player's: **every `simTicks` is
+ * imported from the simulation or measured off the art, never authored here.**
+ *
+ * This exists now, before a single enemy sheet has been generated, on purpose. The Phase 4 defect
+ * was not that a number was wrong — it was that a number was *typed* at the moment the sheets
+ * landed, with nothing forcing it to come from the move it describes. Writing the derivation first
+ * means the pipeline in step 6a has nowhere to put a hand-picked fps.
+ *
+ * The two locomotion rows divide the measured stride by the speed the enemy actually reaches, so
+ * retuning `patrolSpeed` or `chaseSpeed` re-derives the frame rate and foot-slide stays the
+ * observable defect *(vault 4.22)*. `chase` divides by `chaseSpeed` rather than reusing `walk`'s
+ * number — reusing it is exactly how a chase animation ends up flip-booking at patrol pace.
+ */
+export function enemyAnimTimings(
+  slug: EnemySlug,
+  frames: EnemyFrames,
+  strides: EnemyStrides,
+): AnimTiming[] {
+  const rows: { name: EnemyAnim; simTicks: number; loop: boolean; from: TimingProvenance }[] =
+    slug === 'brass-sentry'
+      ? [
+          { name: 'idle', simTicks: IDLE_TICKS, loop: true, from: 'authored' },
+          // Rides the sentry's existing `cooldownCounter`, so the muzzle animation's length and the
+          // window the sim plays it over are the same number by construction.
+          { name: 'fire', simTicks: SENTRY_FIRE_TICKS, loop: false, from: 'sim' },
+          { name: 'death', simTicks: DEATH_TICKS, loop: false, from: 'sim' },
+        ]
+      : [
+          { name: 'walk', simTicks: strideTicks(strides.walk, SCAVENGER.patrolSpeed), loop: true, from: 'measured' },
+          { name: 'chase', simTicks: strideTicks(strides.chase, SCAVENGER.chaseSpeed), loop: true, from: 'measured' },
+          { name: 'death', simTicks: DEATH_TICKS, loop: false, from: 'sim' },
+        ];
+
+  return rows.map(({ name, simTicks, loop, from }) => {
+    const renderFrames = frames[name];
+    if (renderFrames === undefined) {
+      // Named rather than defaulted. A missing sheet that silently became `deriveFps(undefined)` is
+      // the hole `asset-catalog.test.ts` closed for the player; enemies get the same treatment.
+      throw new Error(`enemyAnimTimings: ${slug} has no measured frame count for \`${name}\``);
+    }
+    return { name, renderFrames, simTicks, fps: deriveFps(renderFrames, simTicks), loop, derivedFrom: from };
   });
 }

@@ -119,7 +119,7 @@ answer numbers is given so neither numbering is orphaned.
 | **C3** | 10 (first half) | blocker | **APPLIED, and the drift is confirmed locally.** `tick.ts:48-51` states the coyote window starts on *"the first tick after the player walks off a ledge… the ledge tick itself is not one of them."* `types.ts:109-112` states *"`N` means the jump is accepted on the tick the player leaves the ground and on the `N − 1` ticks after it."* **These contradict.** `tick.ts` is the declared authority *(vault 2.2)*, so `types.ts` is wrong. Fixed as step 2's first task, and a single `windowOpen(counter, knob)` predicate is exported and imported by combat's hit window, i-frames, the hurt timer and `resolveState` — before combat can add a fourth private copy of a rule two copies already disagree about. |
 | **C4** | 2 | high | **APPLIED per criterion**, in the plan's §6 evidence column. The sharpest instance is 5.2/5.9: a *displayed* number can move while the live enemy reads a stale value, which is the Phase 2 four-knob failure *(A6)* repeating — so the sweep now asserts the enemy's **measured travel**, not a readout. |
 | **C5** | 3 | high | **APPLIED.** `scale` derives from the **locked anchor** (immutable, STYLE.md §8), never from a regenerable idle sheet. My draft had claimed A5 while doing the thing A5 forbids. |
-| **C6** | 8 | medium | **APPLIED.** The plan's self-contradiction is resolved (the three-edge clamp is step 9 / `resolveCollisions`; damage and hazards are step 4), step 4's internals are **ordered**, hazards use a **swept overlap** rather than a point sample, and **new criterion 5.15** tests hazard and kill-plane timing — which nothing in the gate tested at all. |
+| **C6** | 8 | medium | **APPLIED, then PARTLY REVISED IN IMPLEMENTATION — see the note below.** The plan's self-contradiction is resolved (the three-edge clamp is step 9 / `resolveCollisions`), hazards use a **swept overlap** rather than a point sample, and **new criterion 5.15** tests hazard and kill-plane timing — which nothing in the gate tested at all. The one part that did NOT survive contact with the code is "damage and hazards are step 4": it is step **9b**. |
 | **C7** | 7 | medium | **APPLIED**, folded into C3: the `resolveState` early return gates on the one exported `windowOpen` predicate rather than an ad-hoc comparison. |
 | **C8** | 9 | medium | **APPLIED.** 5.7 gains a live scene-tree assertion through `window.__phaserGame`, following the `phase-03-tilemap.spec.ts` precedent. `window.__game` stays closed at nine fields — no tenth field, so no STOP-and-ask is triggered. |
 | **C9** | 10 (second half) | medium | **APPLIED.** Codex confirms no enemy behaviour is a per-tick probability — the blocker in vault 5.1 is clear — but correctly notes determinism is not commitment: detection recomputed each tick still flaps on a boundary. Detection now latches with hysteresis, and 5.3's evidence is a **flap test**, not a structural read. |
@@ -132,3 +132,44 @@ reason. Nothing was silently dropped.
 
 **Still to run:** review 2 (`--wait --resume`) against the diff, criterion 5.14. The phase cannot be
 reported done until it has run and every finding of *its* is applied or recorded.
+
+---
+
+## Amendment — C6's step-4 placement did not survive implementation
+
+Recorded here rather than quietly changed, per *(C11)*. Codex's finding stands in full; what changed
+is **my disposition of it**, and the reason is that C6 asked for two things that turn out to be
+incompatible.
+
+**What the triage said:** world-geometry damage — hazards, the kill plane, enemy contact — resolves
+inside **step 4**, ordered i-frame expiry → hazard/kill-plane → attack windows → damage → knockback
+→ death. The stated benefit: knockback reaches the same tick's movement, because step 4 runs before
+integration.
+
+**Why it cannot:** the same finding requires hazard contact to be **swept**, and a swept test needs
+**both endpoints of this tick's motion**. The second endpoint does not exist until step 8 has
+integrated and step 9 has resolved. Evaluated at step 4, contact can only be a point sample against
+last tick's position — which is precisely the tunnelling defect C6 raised the sweep to prevent. The
+ordering and the guarantee cannot both hold.
+
+**What was built:** the guarantee. World-geometry damage runs at **step 9b**, after collision, using
+the `previousX`/`previousY` locals step 8 already captures. `src/sim/worldDamage.ts` carries the full
+reasoning; `src/sim/tick.ts`'s header records 9b in the numbered contract.
+
+**What it costs, stated plainly:** a hazard's `hurt` state is entered after this tick's movement, so
+knockback lands on the following tick — a uniform 16 ms. That is the same price, for the same
+reason, as the jump buffer's already-documented one-tick delay. It is a real regression against
+C6's stated intent and is accepted deliberately, not overlooked.
+
+**Why 9b and not a renumber:** renumbering this contract is a balance change to a phase that has
+spent money on art *(vault 2.2)*. A letter keeps every existing number meaning what Phase 2 through
+4 assumed, and 9b genuinely belongs to resolving where the body ended up this tick.
+
+**One benefit fell out of it.** Step 11 derives the movement state *after* 9b, so a `hurt` entered
+there is published on the tick it happened. At step 4 it would have been overwritten by this tick's
+own movement — the trap `resolveState`'s combat guard (C7) exists to catch.
+
+Gated by `tests/unit/tick-world-damage.test.ts`, whose tunnelling case derives the hazard band from
+the real fall trajectory rather than a hand-picked constant, and asserts both halves: that **no tick
+ever sampled inside the band**, and that the damage landed anyway. Degrading the sweep to a point
+test fails that one spec and no other.
