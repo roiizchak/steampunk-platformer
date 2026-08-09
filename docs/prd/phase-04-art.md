@@ -177,8 +177,13 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 ### 7. Vault-out
 Whether fal's alpha/aspect/cost behaviour matched the vault's Higgsfield-era findings *(A2)*. Whether
 Seedance 2 clips held character identity across separate generations. **The real invoice versus both
-quoted rates** — this is the highest-value number in the phase, because two authoritative sources
-disagreed by ~22× and only the invoice settles it. Whether `end_image_url` actually produced a clean
+quoted rates** — the highest-value number in the phase, because two authoritative sources disagreed
+by ~22× and only the invoice settles it. **Answered 2026-08-09: `$31.39`, over the `$25` ceiling by
+`$6.39`. The pessimistic source was right to ~1 %; `genmedia pricing` was wrong by ~21×, cheap.**
+The transferable rule: **when two sources disagree on cost, budget the pessimistic one and treat the
+optimistic one as absent.** Second: ~77 % of the clips were rework, so the recurring lesson is that
+*art spend is dominated by defect rate, not by unit price* — and the most expensive defect here is
+the one criterion **4.27** still does not gate. Whether `end_image_url` actually produced a clean
 loop. Whether N-frame resampling survived contact-frame alignment.
 
 ### 8. Demo
