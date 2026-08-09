@@ -99,9 +99,69 @@ export class BootScene extends Phaser.Scene {
       this.load.image(entry.key, this.applyBreakAsset(entry, index));
     }
 
+    for (const sheet of catalog.sheets) {
+      // Same removal rule as images, for the same reason — plus the TextureManager caches the
+      // frame CARVING, so a stale entry would keep the old frame size even if the pixels reloaded.
+      if (this.textures.exists(sheet.key)) {
+        this.textures.remove(sheet.key);
+      }
+      this.load.spritesheet(sheet.key, sheet.url, {
+        frameWidth: sheet.frameWidth,
+        frameHeight: sheet.frameHeight,
+      });
+    }
+
     // Loading and verification both live in `bootLevels.ts` — see its header. Phase 3's additions
     // pushed this file to 428 lines and the 400-line limit is a hard project rule.
     queueLevels(this, catalog.levels);
+  }
+
+  /**
+   * Verify each sheet carries the FRAME COUNT the catalog claims — criterion 4.19's precondition.
+   *
+   * This check exists because none of the others can see the failure it is for. A spritesheet
+   * loaded with the wrong `frameWidth` produces a texture with correct overall dimensions, non-zero
+   * source size, and a perfectly valid-looking image; `verifyExpectedTextures` passes it. What it
+   * carries is the wrong number of frames, so every animation built on it plays fragments of two
+   * poses at once. Codex's plan review named this as the most likely way the phase ships something
+   * subtly wrong.
+   *
+   * Phaser appends a `__BASE` frame to every texture, which is why the count is compared after
+   * excluding it rather than against `getFrameNames().length` directly.
+   */
+  private verifySheets(catalog: AssetCatalog | undefined): string[] {
+    // The same guard `verifyExpectedTextures` carries, and it was MISSING here — the defect that
+    // broke criterion 1.5. `create()` collects problems and only then calls `refuseToRoute`, so a
+    // check that THROWS while collecting means the refusal never happens: `ready` stays false with
+    // `bootError` null, which is the hang state the whole refuse-to-route design exists to prevent
+    // (vault 1.4). Seven 1.5 specs went from asserting a refusal to timing out, because a fixture
+    // catalog with no `sheets` array reached `for (const sheet of catalog.sheets)` and threw
+    // `catalog.sheets is not iterable`.
+    //
+    // Guarding on `describeCatalogProblem` rather than on `Array.isArray` alone is deliberate: a
+    // catalog already being reported as malformed should not also emit a per-sheet complaint about
+    // every entry it does not have.
+    if (describeCatalogProblem(catalog) || !catalog) {
+      return [];
+    }
+
+    const problems: string[] = [];
+    for (const sheet of catalog.sheets) {
+      const texture = this.textures.get(sheet.key);
+      if (!texture || texture.key === '__MISSING') {
+        problems.push(`sheet "${sheet.key}" did not load`);
+        continue;
+      }
+      const actual = texture.getFrameNames(false).length;
+      if (actual !== sheet.frameCount) {
+        problems.push(
+          `sheet "${sheet.key}" carries ${actual} frames but the catalog claims ` +
+            `${sheet.frameCount} — the frame size is wrong, not the file`,
+        );
+      }
+      texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
+    return problems;
   }
 
   create(): void {
@@ -122,6 +182,7 @@ export class BootScene extends Phaser.Scene {
     }
 
     problems.push(...this.verifyExpectedTextures(catalog));
+    problems.push(...this.verifySheets(catalog));
     problems.push(...verifyLevels(this, catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
@@ -312,6 +373,7 @@ export class BootScene extends Phaser.Scene {
     if (import.meta.env.DEV) {
       this.scene.stop('Playground');
       this.scene.stop('ElementEditor');
+      this.scene.stop('Gym');
     }
     updateDebugState({ sceneKey: this.scene.key, ready: false, bootError: message });
     console.error(`[boot] refused to route: ${message}`);

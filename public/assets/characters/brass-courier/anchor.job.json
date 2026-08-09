@@ -1,0 +1,31 @@
+{
+  "status": "completed",
+  "endpoint_id": "fal-ai/nano-banana-pro",
+  "request_id": "019fe00f-2745-7b71-b34c-b26470e422c1",
+  "result": {
+    "images": [
+      {
+        "url": "https://v3b.fal.media/files/b/0aa57adb/S7mjic0e57DlQU-0N9MFU_Tvvk8MvQ.png",
+        "content_type": "image/png",
+        "file_name": "S7mjic0e57DlQU-0N9MFU_Tvvk8MvQ.png",
+        "file_size": null,
+        "width": null,
+        "height": null
+      }
+    ],
+    "description": ""
+  },
+  "downloaded_files": [
+    {
+      "url": "https://v3b.fal.media/files/b/0aa57adb/S7mjic0e57DlQU-0N9MFU_Tvvk8MvQ.png",
+      "path": "C:\\Claude\\Steampunk Platformer\\_generated\\anchor-r\\r3-019fe00f-2745-7b71-b34c-b26470e422c1.png",
+      "size_bytes": 4343524,
+      "json_path": "images[0]"
+    }
+  ],
+  "gallery": {
+    "session_id": "ee486df1daa7",
+    "path": "C:\\Users\\royko\\.genmedia\\gallery\\sessions\\ee486df1daa7\\index.html",
+    "url": "file:///C:/Users/royko/.genmedia/gallery/sessions/ee486df1daa7/index.html"
+  }
+}

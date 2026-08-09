@@ -142,4 +142,44 @@ describe('tracksTarget (criterion 3.4 — following, not merely moving)', () => 
     expect(tracksTarget(view, 999, 200 + VIEW_H / 2, 0)).toBe(false);
     expect(tracksTarget(view, 1001, 200 + VIEW_H / 2, 0)).toBe(true);
   });
+
+  /**
+   * The clamped-edge rule, added in Phase 4 after criterion 3.4 went red on a CORRECT camera.
+   *
+   * The shipped level's walking surface sits 192 px above the world's bottom edge, so a grounded
+   * player can never be 200 px clear of a view that `viewFits` pins to that edge. The two
+   * predicates 3.4 asserts together were jointly unsatisfiable, and it failed on 200 of 200
+   * sampled frames. Where the camera has no freedom, the only claim it can be held to is that the
+   * player is on screen; everywhere else the full inset still applies.
+   */
+  describe('a side flush against the map drops its inset — but only that side', () => {
+    // A view pinned to the bottom-right of a map exactly one view bigger in each direction.
+    const map: Rect = { x: 0, y: 0, w: VIEW_W * 2, h: VIEW_H * 2 };
+    const pinned: Rect = { x: VIEW_W, y: VIEW_H, w: VIEW_W, h: VIEW_H };
+
+    it('accepts a target inside the inset on the two flush sides', () => {
+      // 10 px from the right edge and 10 px from the bottom edge — both clamped, both excused.
+      const x = pinned.x + VIEW_W - 10;
+      const y = pinned.y + VIEW_H - 10;
+      expect(tracksTarget(pinned, x, y, 200, map)).toBe(true);
+      // ...and without the map it is still rejected, so the old meaning is intact.
+      expect(tracksTarget(pinned, x, y, 200)).toBe(false);
+    });
+
+    it('still rejects a target inside the inset on a side the camera COULD have moved', () => {
+      // Left and top are NOT flush here — the camera has a whole view of travel available — so
+      // drifting into the margin there is a real tracking failure and stays red.
+      expect(tracksTarget(pinned, pinned.x + 10, pinned.y + VIEW_H / 2, 200, map)).toBe(false);
+      expect(tracksTarget(pinned, pinned.x + VIEW_W / 2, pinned.y + 10, 200, map)).toBe(false);
+    });
+
+    it('never excuses a target that is off screen entirely, even on a flush side', () => {
+      expect(tracksTarget(pinned, pinned.x + VIEW_W + 1, pinned.y + VIEW_H / 2, 200, map)).toBe(
+        false,
+      );
+      expect(tracksTarget(pinned, pinned.x + VIEW_W / 2, pinned.y + VIEW_H + 1, 200, map)).toBe(
+        false,
+      );
+    });
+  });
 });

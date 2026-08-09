@@ -41,16 +41,50 @@ import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './type
  * **apex exactly doubled**: 150.3 -> 300.6 px, i.e. 3.13 body heights either way. The feel is
  * preserved in time and scaled in space. The `v^2/2g` gap doubles too — 8.08 -> 16.16 px against
  * an unchanged +/-2 px tolerance — so the anti-vacuity guard gets stronger, not weaker.
+ *
+ * ## Phase 4 re-tune — the camera got closer, so the feel had to change
+ *
+ * `RENDER_SCALE` 2 -> 6 by user decision. Scaling every distance knob by 3 the way Phase 3 did
+ * would have preserved the feel *exactly*, and that is the trap: the feel was wrong, and it was
+ * wrong for a reason that only becomes visible once the character fills the screen.
+ *
+ * Two things were unplayable at the new scale, and **neither is visible in px/tick**:
+ *
+ *  1. **Top speed.** 10.4 px/tick over a 96 px character is 6.5 body heights per second. Scaling
+ *     to 31.2 px/tick over a 288 px character is still 6.5. The user's complaint — "moves too
+ *     fast" — is a statement about that ratio, and a pure x3 does not touch it.
+ *  2. **Jump height.** 3.13 body heights was 28 % of the screen at 8.89 %-tall character. At
+ *     26.7 % tall it is **84 % of the screen** — the character would leap almost the entire
+ *     viewport, which no level can be composed around.
+ *
+ * So the knobs below are derived from **three perceptual targets** instead of from the old
+ * numbers, because px/tick is not what a player perceives:
+ *
+ *   top speed  2.5 body heights / second   (user's choice; was 6.5)
+ *   jump apex  ~1.6 body heights           (~43 % of screen height; was 3.13)
+ *   airtime    37 ticks                    UNCHANGED — this is the tick contract
+ *
+ * Airtime is held fixed on purpose. `tick.ts`'s numbered order is declared authoritative and
+ * Phase 5's combat windows are expressed against it, so rise 18 / fall 18 must not move. Holding
+ * `v / g` constant at 18 while scaling both is what keeps it: apex scales, airtime does not.
+ *
+ * Ratios preserved from the shipped tune, so only the three targets above actually changed:
+ * time-to-top-speed (`runMax / runAccel`, 4.7 ticks), `airAccel / runAccel`, `walkMax / runMax`,
+ * both frictions against `runMax`, and `maxFallSpeed / jumpVelocity`.
+ *
+ * **These are a starting point to be tuned by hand in the Playground**, which is the user's stated
+ * choice and what the Playground is for. The settled values belong in `docs/qa/phase-04-art.md`.
  */
 export const DEFAULT_TUNING: TuningKnobs = {
-  runAccel: 2.2,
-  airAccel: 1.3,
-  runMax: 10.4,
-  groundFriction: 3.2,
-  airFriction: 0.44,
-  gravity: 1.8,
-  maxFallSpeed: 34,
-  jumpVelocity: 32,
+  runAccel: 2.55,
+  airAccel: 1.51,
+  runMax: 12.0,
+  walkMax: 5.54,
+  groundFriction: 3.69,
+  airFriction: 0.51,
+  gravity: 2.7,
+  maxFallSpeed: 51.6,
+  jumpVelocity: 48.6,
   jumpCutDivisor: 3,
   coyoteTicks: 7,
   jumpBufferTicks: 8,
@@ -60,7 +94,9 @@ export const DEFAULT_TUNING: TuningKnobs = {
  * The player's collision box, authored local: `+x` forward, `+y` up from the feet (vault 2.10).
  *
  * **Local px.** The world box is this multiplied by the world's `scale`, and at the published
- * `RENDER_SCALE` of 2 that is 44 x 96 px = 1.375 x 3.0 tiles. Nothing outside `toWorld` may
+ * `RENDER_SCALE` of **6** that is **132 x 288 px = 1.375 x 3.0 tiles** — the same tile footprint,
+ * because `TILE_SIZE` moved 32 -> 96 in the same rescale. It said "scale 2, 44 x 96" until the
+ * Codex implementation review caught it (finding 12). Nothing outside `toWorld` may
  * apply that multiply, and nothing anywhere may hardcode the product — the Phase 2 tests that
  * pinned `26 x 46` as literals were rewritten to derive it, which is why this change was
  * cheap to make.
@@ -116,23 +152,56 @@ export function enterState(player: PlayerSim, next: PlayerState): void {
 }
 
 /**
- * Step 4 of the tick order: pick the state from the facts already established this tick.
+ * Step 11 of the tick order: pick the state from the facts already established this tick.
  *
  * Derived, never assigned piecemeal from six places — which is how a state machine acquires a
  * transition nobody can find.
+ *
+ * **The walk branch tests the BODY, not the button.** `walkHeld` alone is not enough: with
+ * direction released, friction takes several ticks to bring `vx` under `walkMax`, and publishing
+ * `walk` during those ticks would play the walk animation at run speed. That is foot-slide arriving
+ * through the state machine rather than through the art, and it is invisible to a steady-state test
+ * (Codex plan review finding 8, case 2). Testing `|vx| <= walkMax` here makes the invariant a
+ * tautology enforced at the one door, which is the only place it cannot be forgotten.
  */
-export function resolveState(player: PlayerSim, movingHorizontally: boolean): void {
+export function resolveState(
+  player: PlayerSim,
+  movingHorizontally: boolean,
+  walkHeld: boolean,
+  tuning: TuningKnobs,
+): void {
   if (!player.grounded) {
     enterState(player, player.vy < 0 ? 'jump' : 'fall');
     return;
   }
-  enterState(player, movingHorizontally ? 'run' : 'idle');
+  if (!movingHorizontally) {
+    enterState(player, 'idle');
+    return;
+  }
+  const walking = walkHeld && Math.abs(player.vx) <= tuning.walkMax;
+  enterState(player, walking ? 'walk' : 'run');
 }
 
-/** Step 6: horizontal acceleration, friction, and the speed cap. */
-export function stepHorizontal(player: PlayerSim, tuning: TuningKnobs, dir: -1 | 0 | 1): void {
+/**
+ * Step 5: horizontal acceleration, friction, and the active speed cap.
+ *
+ * The cap is `walkMax` while the modifier is held and `runMax` otherwise — so unlike every other
+ * knob in this file, **the cap can change under a moving player**. A plain clamp to the new cap is
+ * an instantaneous velocity change from `runMax` to `walkMax` in a single tick, which reads as a
+ * stutter and cannot be smoothed in the render layer later because vault 2.11 forbids scaling
+ * velocities there. So an over-cap speed BLEEDS toward the cap at `friction` instead
+ * (Codex plan review finding 8, case 1). Accelerating still clamps, as it always did — that path
+ * cannot exceed the cap in the first place.
+ */
+export function stepHorizontal(
+  player: PlayerSim,
+  tuning: TuningKnobs,
+  dir: -1 | 0 | 1,
+  walkHeld: boolean,
+): void {
   const accel = player.grounded ? tuning.runAccel : tuning.airAccel;
   const friction = player.grounded ? tuning.groundFriction : tuning.airFriction;
+  const cap = walkHeld ? tuning.walkMax : tuning.runMax;
 
   if (dir === 0) {
     // Decelerate toward zero and STOP there. Without the clamp the player creeps forever at a
@@ -146,10 +215,18 @@ export function stepHorizontal(player: PlayerSim, tuning: TuningKnobs, dir: -1 |
   }
 
   player.facing = dir === 1 ? 1 : -1;
-  player.vx = Math.max(-tuning.runMax, Math.min(tuning.runMax, player.vx + accel * dir));
+
+  const speed = Math.abs(player.vx);
+  if (speed > cap && Math.sign(player.vx) === dir) {
+    // Already faster than the cap allows and still pushing that way: the cap shrank under us.
+    player.vx = dir * Math.max(cap, speed - friction);
+    return;
+  }
+
+  player.vx = Math.max(-cap, Math.min(cap, player.vx + accel * dir));
 }
 
-/** Step 7: gravity, the fall-speed clamp, and the early-release jump cut. */
+/** Step 6: gravity, the fall-speed clamp, and the early-release jump cut. */
 export function stepVertical(player: PlayerSim, tuning: TuningKnobs, jumpHeld: boolean): void {
   if (player.jumpCutPending && !jumpHeld && player.vy < 0) {
     player.vy = player.vy / tuning.jumpCutDivisor;
@@ -164,7 +241,7 @@ export function stepVertical(player: PlayerSim, tuning: TuningKnobs, jumpHeld: b
 }
 
 /**
- * Step 10: resolve the player's box against static geometry, one axis at a time.
+ * Step 9: resolve the player's box against static geometry, one axis at a time.
  *
  * Axis-separated resolution rather than a single overlap push. A combined push has to guess which
  * axis caused the overlap, and it guesses wrong exactly at the corner of a platform — which reads

@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import type { AssetCatalog, CatalogEntry } from '../game/assetCatalog';
+import { describeCatalogProblem, type AssetCatalog, type CatalogEntry } from '../game/assetCatalog';
 import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import { describeLevelProblem, parseLevel } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
@@ -48,7 +48,19 @@ export function queueLevels(scene: Phaser.Scene, levels: CatalogEntry[]): void {
  * differently-shaped cache entry fails loudly here rather than silently downstream.
  */
 export function verifyLevels(scene: Phaser.Scene, catalog: AssetCatalog | undefined): string[] {
-  if (!catalog || !Array.isArray(catalog.levels)) {
+  // The SAME guard `verifyExpectedTextures` and `verifySheets` carry, and it was missing here.
+  //
+  // `create()` collects problems and only then calls `refuseToRoute`, so a check that THROWS while
+  // collecting means the refusal never happens: `ready:false` with `bootError:null`, the hang state
+  // (vault 1.4). `Array.isArray(catalog.levels)` is not enough — `levels: [null]` IS an array, and
+  // `entry.key` on the null entry throws. `describeCatalogProblem` already rejects a non-object
+  // entry, so the catalog is being reported as the problem anyway; iterating it as well adds
+  // nothing but a way to crash.
+  //
+  // Found by the Codex implementation review (finding 2) AFTER the same defect had been fixed in
+  // `verifySheets` — the fix had been applied to the instance rather than to the class, which is
+  // exactly the failure mode a second reviewer exists to catch.
+  if (!catalog || describeCatalogProblem(catalog) || !Array.isArray(catalog.levels)) {
     return [];
   }
 

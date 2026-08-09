@@ -21,51 +21,124 @@
 // Element Editor. Here they are authored to agree with the tiles exactly; making them disagree is
 // what the editor is for.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const TILE = 32;
-const W_TILES = 180;
-const H_TILES = 48;
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
-// Sized against vault 3.2: at zoom 1 the view is 1920 x 1080, so this leaves 3840 x 456 px of
-// camera travel. The lesson behind that rule is a shipped side-scroller with 10px of scroll room.
-const GROUND_TOP_ROW = 40; // world y = 1280
-const GAP_FROM = 120; // tile columns 120..127 have no ground: an 8-tile, 256px gap
-const GAP_TO = 127;
+/**
+ * The grid comes from the runtime constants, never from a copy.
+ *
+ * `TILE` was a literal `32` here. When `TILE_SIZE` moved to 96 that made this script emit a level
+ * on a grid the game does not use — a file that loads, validates and draws, at a third of the size
+ * every collision rectangle assumes. Same defect Codex named for `CAMERA_ZOOM` in the Phase 3 plan
+ * review (P8); `tools/gen/build-world.mjs` reads it the same way for the same reason.
+ */
+function runtimeConstant(name) {
+  const src = readFileSync(resolve(ROOT, 'src/game/constants.ts'), 'utf8');
+  const match = new RegExp(`export const ${name} = (\\d+);`).exec(src);
+  if (!match) {
+    throw new Error(`make-greybox-level: could not read ${name} from src/game/constants.ts`);
+  }
+  return Number(match[1]);
+}
 
-// tile column, top row, height in rows. 3 rows tall so it blocks a run but can be jumped for the
-// demo. Criterion 3.2 drives the player into its left face at world x = 1920.
-const WALL_COL = 60;
-const WALL_TOP_ROW = 37;
+const TILE = runtimeConstant('TILE_SIZE');
+const VIEW_COLS = runtimeConstant('GAME_WIDTH') / TILE; // 20 at TILE 96
+const VIEW_ROWS = runtimeConstant('GAME_HEIGHT') / TILE; // 11.25 at TILE 96
+
+/**
+ * ## Phase 4 re-author — the jump got shorter, so the level had to move
+ *
+ * At `TILE_SIZE` 32 this was 180 x 48 tiles with platforms a 224 px rise apart. That rise is
+ * **7 tiles**, and the Phase 4 re-tune puts the measured apex at **4.81 tiles** — so every raised
+ * platform in the old layout became unreachable the moment the scale changed. Nothing would have
+ * caught that: the level still validates, still draws, and the player simply cannot get up.
+ *
+ * The layout is also composed for the reference art the user is matching: stacked ledges at two
+ * heights with short hops between them, rather than one long flat floor.
+ *
+ * **Every distance below is stated in tiles and checked against the measured jump** at the bottom
+ * of this file, so a future re-tune fails loudly here instead of silently stranding the player.
+ */
+const W_TILES = 90; // 4.5 screens wide
+const H_TILES = 22; // 1.96 screens tall
+
+/**
+ * Two rows of fill below the walking surface, not four.
+ *
+ * Four rows put 384 px of buried masonry on screen — **36 % of the viewport**, a solid brown band
+ * across the bottom third. The reference art has platforms standing over shadow, and the fill is
+ * not the subject of the shot. The camera clamps to the level's bottom, so the fill depth IS the
+ * amount of it the player sees; two rows lands it at ~18 %.
+ */
+const GROUND_TOP_ROW = 20;
+const GAP_FROM = 40; // a 3-tile hole in the ground
+const GAP_TO = 42;
+
+// 3 rows tall: blocks a run, can be jumped. The Phase 3 e2e drives the player into its left face.
+const WALL_COL = 34;
+const WALL_TOP_ROW = 17;
 const WALL_ROWS = 3;
 
-// Raised platforms past the gap. Reachable: the published apex is 300.6px, so a 224px rise from
-// the ground and a 160px rise between platforms are both comfortably inside it.
+/**
+ * Stacked ledges. Rises are 4 tiles (384 px) against a 4.81-tile apex, and the horizontal hops
+ * are 2 tiles (192 px) against the 2.25 tiles the character covers by apex at top speed — so each
+ * one is reachable while rising, not only at the top of the arc.
+ */
 const PLATFORMS = [
-  { fromCol: 134, toCol: 141, row: 33 },
-  { fromCol: 147, toCol: 154, row: 28 },
-  { fromCol: 160, toCol: 167, row: 33 },
+  { fromCol: 48, toCol: 53, row: 16 },
+  { fromCol: 56, toCol: 61, row: 12 },
+  { fromCol: 64, toCol: 69, row: 16 },
 ];
 
-// 10 tiles in, which leaves ~49 tiles of flat ground before the wall. That run-up is load-bearing
-// for the inherited Phase 2 specs: phase-02-playground walks the player until |vx| saturates and
-// phase-02-movement asserts it lands back at exactly its starting y.
-const SPAWN_COL = 10;
+/**
+ * Spikes, as authored decoration in the tile layer.
+ *
+ * They carry no collision — hazards are Phase 5, and inventing damage here would mean inventing
+ * timings Phase 5 then changes. What they prove now is that the tile layer can hold **authored**
+ * art at all: `applySurfaceTiles` rewrites only the grey-box fill gid and leaves any other gid
+ * alone, so a level is no longer forced to be one uniform id.
+ */
+// The packed sheet `tools/gen/build-world.mjs` emits: 16 tiles in a 4 x 4 grid. Declared here so
+// the .tmj's own tileset block covers every gid the layer below is allowed to use.
+const TILESET_COLS = 4;
+const TILESET_ROWS = 4;
 
+const SPIKE_GID = 13;
+const SPIKES = [{ fromCol: 24, toCol: 27, row: GROUND_TOP_ROW - 1 }];
+
+// 6 tiles in, leaving a 28-tile flat run-up before the wall. That run is load-bearing for the
+// inherited Phase 2 specs: one walks until |vx| saturates (5 ticks) and one asserts the player
+// lands back at exactly its starting y.
+const SPAWN_COL = 6;
+
+// Vault 3.2, checked here rather than assumed: a side-scroller that cannot scroll looks identical
+// to one that works. The lesson behind the rule is a level shipped with 10 px of scroll room.
+if (W_TILES <= VIEW_COLS || H_TILES <= VIEW_ROWS) {
+  throw new Error(
+    `make-greybox-level: ${W_TILES}x${H_TILES} tiles does not exceed the ` +
+      `${VIEW_COLS}x${VIEW_ROWS}-tile view — the camera would have nothing to scroll to.`,
+  );
+}
+
+const FILL_GID = 1;
 const solid = new Uint8Array(W_TILES * H_TILES);
 const at = (col, row) => row * W_TILES + col;
 
 for (let col = 0; col < W_TILES; col += 1) {
   if (col >= GAP_FROM && col <= GAP_TO) continue;
-  for (let row = GROUND_TOP_ROW; row < H_TILES; row += 1) solid[at(col, row)] = 1;
+  for (let row = GROUND_TOP_ROW; row < H_TILES; row += 1) solid[at(col, row)] = FILL_GID;
 }
 for (let row = WALL_TOP_ROW; row < WALL_TOP_ROW + WALL_ROWS; row += 1) {
-  solid[at(WALL_COL, row)] = 1;
+  solid[at(WALL_COL, row)] = FILL_GID;
 }
 for (const { fromCol, toCol, row } of PLATFORMS) {
-  for (let col = fromCol; col <= toCol; col += 1) solid[at(col, row)] = 1;
+  for (let col = fromCol; col <= toCol; col += 1) solid[at(col, row)] = FILL_GID;
+}
+for (const { fromCol, toCol, row } of SPIKES) {
+  for (let col = fromCol; col <= toCol; col += 1) solid[at(col, row)] = SPIKE_GID;
 }
 
 // The collision strips, in world pixels. Authored to match the tiles above exactly.
@@ -153,17 +226,28 @@ const map = {
   tileheight: TILE,
   tilesets: [
     {
-      columns: 1,
+      /**
+       * **The tileset must declare every gid the layer uses.** It said `tilecount: 1`, which was
+       * survivable only while every cell was gid 1. The moment the layer carried an authored gid
+       * (the spike run, gid 13) Phaser's own `AssignTileProperties` threw at PARSE time —
+       * `mapData.tiles[13]` is undefined — and the throw landed inside `create()`, which leaves
+       * `ready:false` with `bootError:null`. That is the hang state the whole refuse-to-route
+       * design exists to prevent, reached from a level the boot gate had approved.
+       *
+       * These now describe the real packed sheet, 4 x 4 at `TILE`, so the file is honest about
+       * what it references and any gid in range parses.
+       */
+      columns: TILESET_COLS,
       firstgid: 1,
       // Relative to this file, for Tiled's benefit. Phaser binds the texture by catalog KEY in
       // GameScene.addTilesetImage, so this path is never fetched at runtime.
-      image: '../placeholder-tile.png',
-      imageheight: TILE,
-      imagewidth: TILE,
+      image: '../tiles/industrial.png',
+      imageheight: TILESET_ROWS * TILE,
+      imagewidth: TILESET_COLS * TILE,
       margin: 0,
       name: 'greybox',
       spacing: 0,
-      tilecount: 1,
+      tilecount: TILESET_COLS * TILESET_ROWS,
       tileheight: TILE,
       tilewidth: TILE,
     },

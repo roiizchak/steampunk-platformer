@@ -10,11 +10,19 @@ fal.ai — built as a learning exercise with a hard QA gate at every phase.
 **Phaser 4.2.1 · TypeScript 7 · Vite 8 · vitest · @playwright/test · Tiled · fal.ai via `genmedia`**
 
 Ten phases, one per session. **Phases 1–3 are done; Phase 4 (fal art production + Character Gym)
-is next — and it is the first phase that spends money.** Its contract is published in
+is in progress and is the first phase that spends money.** Its contract is published in
 [ASSET-PIPELINE.md § 0a](docs/ASSET-PIPELINE.md) and pinned against the runtime constants by
-`tests/unit/tilemap-data.test.ts`: 32 px grid, camera zoom 1, 1920 × 1080 view, 44 × 96 px character
-at `RENDER_SCALE` 2. **Animation timings are NOT published** — Phase 4 gate 0 must settle
-per-animation `simTicks` and whether a `walk` state exists before generating anything.
+`tests/unit/tilemap-data.test.ts`: **96 px grid, camera zoom 1, 1920 × 1080 view, 132 × 288 px
+character at `RENDER_SCALE` 6.**
+
+> ⚠️ These numbers were **32 px / 44 × 96 / scale 2** until Phase 4's 3× world rescale, and this
+> paragraph still said so afterwards — caught by the Codex implementation review, finding 12. The
+> constants are the authority (`src/game/constants.ts`); prose is not. `PLAYER_BOX` is 22 × 48 in
+> sim units and 132 × 288 drawn.
+
+Animation timings ARE now settled for `idle`, `walk`, `run`, `jump` and `fall` — see
+`public/assets/index.json` and `character-bounds.json`. `walk` exists as its own state, selected by
+`SHIFT`. **`run`'s stride is still provisional** and is the number to distrust.
 The table of phases, their dependencies and their status is in
 [PRD.md § The phases](docs/PRD.md#the-phases) — it is the authority, not this line. Each phase is
 built on a `phase-NN-name` branch and merged to `main` after approval.

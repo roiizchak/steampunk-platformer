@@ -37,8 +37,14 @@ export interface LocalBox {
 /**
  * Player states. Vault 2.6: every state has exactly one door — see `enterState()` in `player.ts`.
  * Phase 5 adds `attack`, `hurt` and `death` here and to that one function.
+ *
+ * `walk` was added in Phase 4. It is a REAL state with its own speed cap, not a render-layer
+ * relabelling of slow `run` — holding the modifier changes how the game plays. It carries an
+ * invariant the one door enforces: **`walk` is never published while `|vx|` exceeds `walkMax`**,
+ * because a walk animation playing at run speed is foot-slide arriving through the state machine
+ * instead of through the art. `tests/unit/walk-state.test.ts` asserts it on every tick.
  */
-export type PlayerState = 'idle' | 'run' | 'jump' | 'fall';
+export type PlayerState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
 
 /** Seeded xorshift32 state (vault 2.3). A mutable single-field cell, never a global. */
 export interface Rng {
@@ -53,14 +59,20 @@ export interface Rng {
  * across a batch replays the press; clearing it because a tick happened drops it. Both are real
  * failures the vault records.
  *
- * `left` / `right` / `jumpHeld` are PERSISTENT state, which vault 2.5 says is safe to sample every
- * tick. Only edges need the latch.
+ * `left` / `right` / `jumpHeld` / `walkHeld` are PERSISTENT state, which vault 2.5 says is safe to
+ * sample every tick. Only edges need the latch.
  */
 export interface InputSnapshot {
   left: boolean;
   right: boolean;
   jumpHeld: boolean;
   jumpPressed: boolean;
+  /**
+   * The walk modifier. Persistent, so it gets NO latch and NO consume function — "is the key down"
+   * is true across a whole batch by definition, and only edges can be destroyed by observing them
+   * at the wrong rate.
+   */
+  walkHeld: boolean;
 }
 
 /** Live movement knobs. Every field is swept by `tests/unit/knob-sweep.test.ts` (vault A6). */
@@ -71,6 +83,14 @@ export interface TuningKnobs {
   airAccel: number;
   /** Horizontal speed cap, px/tick. */
   runMax: number;
+  /**
+   * Horizontal speed cap while the walk modifier is held, px/tick. Distance-dimensioned, so it
+   * scales with `RENDER_SCALE` exactly like `runMax` did in the Phase 3 re-tune.
+   *
+   * There is deliberately no `walkAccel`: `runAccel` governs both, and only the cap differs. A
+   * second knob would need its own sweep scenario and buys nothing observable.
+   */
+  walkMax: number;
   /** Deceleration applied with no horizontal input, grounded, px/tick^2. */
   groundFriction: number;
   /** Deceleration applied with no horizontal input, airborne, px/tick^2. */

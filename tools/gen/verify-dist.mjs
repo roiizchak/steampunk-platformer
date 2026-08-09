@@ -83,14 +83,14 @@ for (const [label, path] of scanned) {
   const src = readFileSync(path, 'utf8');
   // Scene KEYS as quoted literals — the identifiers `togglePlayground`/`toggleElementEditor`
   // legitimately survive as empty method stubs, so matching the bare word would cry wolf.
-  for (const key of ['Playground', 'ElementEditor']) {
+  for (const key of ['Playground', 'ElementEditor', 'Gym']) {
     for (const quote of ['`', "'", '"']) {
       if (src.includes(`${quote}${key}${quote}`)) {
         problems.push(`${label} contains the DEV-only scene key ${quote}${key}${quote}`);
       }
     }
   }
-  for (const symbol of ['ElementEditorScene', 'PlaygroundScene', '__game', '__phaserGame']) {
+  for (const symbol of ['ElementEditorScene', 'PlaygroundScene', 'GymScene', '__game', '__phaserGame']) {
     if (src.includes(symbol)) {
       problems.push(`${label} contains the DEV-only symbol ${symbol}`);
     }
@@ -102,7 +102,9 @@ for (const [label, path] of scanned) {
   // Each phrase carries a space, which is what keeps it off the identifiers `togglePlayground` and
   // `toggleElementEditor` — those legitimately survive as empty method stubs, and a bare
   // case-insensitive "playground" matches them and cries wolf. It did, on the first run.
-  for (const phrase of [' playground', 'element editor']) {
+  // ' gym' carries its leading space for the same reason the other two do: it is what keeps the
+  // sweep off the identifier `toggleGym`, which legitimately survives as an empty method stub.
+  for (const phrase of [' playground', 'element editor', ' gym']) {
     if (src.toLowerCase().includes(phrase)) {
       problems.push(`${label} mentions the DEV-only scene "${phrase.trim()}" in shipped text`);
     }
