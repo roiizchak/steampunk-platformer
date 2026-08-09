@@ -419,3 +419,60 @@ to the phase that builds the camera rather than asserting one here.
 The binding figures live in [ASSET-PIPELINE.md](ASSET-PIPELINE.md) §0a and are pinned against the
 runtime constants by `tests/unit/tilemap-data.test.ts`. This section is prose about the anchor
 image; that table is the contract. **§9 is outside every hash-locked slice, so no lock hash moves.**
+
+---
+
+## 10. ENEMY ANCHORS — LOCKED (Phase 5)
+
+**Outside every hash-locked slice, like §8 and §9 — no lock hash moves.** These blocks are
+nonetheless **immutable**: they are the images every enemy clip is generated from, so editing one
+after the clips exist silently invalidates every sheet derived from it. Changing an anchor is a
+re-shoot of that subject, not an edit.
+
+Both were gated by **G1** (`tools/gen/anchorGate.mjs`) **before a single clip was generated** — the
+ordering criterion 4.27 exists to enforce. Full provenance, including the four discarded candidates
+and what they cost, in [generations/phase-05-anchors.md](generations/phase-05-anchors.md).
+
+### `brass-sentry` — the static turret
+
+Source image: `public/assets/characters/brass-sentry/anchor.png`, request id
+`019fe7a5-0a0a-7441-9dac-aa49338bbfcb` (`images[0]`), `fal-ai/nano-banana-pro`, 2K, 1:1.
+Prompt: `public/assets/characters/brass-sentry/anchor.prompt.txt`.
+
+**G1: PASS — 3 contact limbs, 0 px spread against a 21 px limit** on a 1410 px figure.
+
+**Drawn at 2 tiles / 192 px**, against the scavenger's 2.5 and the player's 3. The three heights are
+the primary readability channel and were decided against
+[ASSET-PIPELINE.md §0a](ASSET-PIPELINE.md) before a prompt was written.
+
+**Three splayed legs, and that is a gate decision as much as a design one.** A single pedestal
+returns ONE ground-contact component, and G1 must then answer `INDETERMINATE` — which would leave
+this anchor ungated for exactly the defect that cost $7 in Phase 4. A tripod gives the gate
+something to measure. Candidate 2 of the same request came back as a single column and was
+discarded for precisely that reason.
+
+Cold blue-grey steel and tarnished brass; a drum housing, a stubby finned barrel, a glass lens like
+a closed eye, and a stencilled number plate. No face. It must not read as a person.
+
+### `rust-scavenger` — the patroller
+
+Source image: `public/assets/characters/rust-scavenger/anchor.png`, request id
+`019fe7a8-3cfd-7833-bd6a-2dacd543792f` (`images[1]`), `fal-ai/nano-banana-pro`, 2K, 1:1.
+Prompt: `public/assets/characters/rust-scavenger/anchor.prompt.txt`.
+
+**G1: PASS — 2 contact limbs, 23 px spread against a 25 px limit** on a 1661 px figure. Close to the
+line, deliberately not re-shot: 23 source px is ≈3 px once drawn at 240 px.
+
+**Drawn at 2.5 tiles / 240 px.** Hunched and forward-leaning on purpose — it has to read as SHORTER
+than the player at a glance, and a stooped stance makes 240 against 288 unmistakable where an
+upright figure of the same height would not be.
+
+**`ONLY the two feet touch the ground` is a load-bearing clause, not flavour.** Round 1 asked for
+arms *"hanging toward the ground"* and got a knuckle-dragger whose fingertips entered G1's ground
+band — so the gate compared a hand against a foot and reported 104 px. The gate was right; the
+question was wrong. **G1 cannot tell a hand from a boot, and any future subject that puts something
+other than its feet into the bottom 12 % of its own height must say so in its concept.**
+
+A riveted bucket head with a slit and two amber lamps, mismatched scavenged plates lashed on with
+wire, a counterweight on a chain, a leaking exhaust stack. Scavenged and improvised, never
+manufactured.

@@ -520,4 +520,67 @@ export const ANCHOR_CONCEPTS = Object.freeze({
     'harness of leather straps and buckles across the chest and thighs, a long trailing scarf, ' +
     'ornate metal fittings, and a spring-loaded grappling launcher strapped to the right forearm. ' +
     'Light laced boots. A distinct face with a visible expression.',
+
+  /* ---------------------------------------------------------------- *
+   * Phase 5's enemies. Both are 2 tiles or shorter against the player's 3.
+   * ---------------------------------------------------------------- */
+
+  /**
+   * `brass-sentry` — the static turret. **2 tiles, 192 px drawn.**
+   *
+   * **Three splayed legs, not a pedestal, and that is a gate decision rather than a style one.**
+   * G1 measures the vertical spread between ground-contact limbs; a single column returns ONE
+   * component and G1 must then answer INDETERMINATE, which would leave this anchor ungated for
+   * exactly the defect that cost $7 in Phase 4. A tripod gives the gate something to measure, and
+   * it also reads as a machine that was *placed* rather than one that grew there.
+   *
+   * Cool metal against the scavenger's warm rust, so the two separate by colour as well as by the
+   * 192/240 px silhouette difference — colour is the redundant channel here, not the primary one.
+   */
+  brassSentry:
+    'a squat mechanical SENTRY TURRET, not a person, no face, waist-high and wider than it is ' +
+    'tall. It stands on THREE splayed riveted brass legs whose feet all rest flat on the same ' +
+    'level ground, evenly spaced, none raised. ' +
+    'Above the legs a riveted brass drum housing with a hinged inspection plate, two small round ' +
+    'pressure gauges with visible needles, and a single glass lens set in a brass ring on the ' +
+    'front like a closed eye. ' +
+    'ORNAMENTATION, all of it visible: a short stubby barrel projecting forward from the drum ' +
+    'with a flared muzzle and three cooling fins; a coiled copper pipe running from the drum to ' +
+    'the barrel; exposed cog teeth at the barrel pivot; a small hinged brass hatch with two ' +
+    'wing nuts; heavy hexagonal bolts around the drum seam; a stencilled number plate. ' +
+    'Cold blue-grey steel and tarnished brass, verdigris in the crevices, individual rivets on ' +
+    'every plate. Weathered but intact and clearly still working.',
+
+  /**
+   * `rust-scavenger` — the patroller that chases. **2.5 tiles, 240 px drawn.**
+   *
+   * Hunched on purpose: it has to read as SHORTER than the player at a glance, and a hunched
+   * quadruped-ish stance makes 240 px against 288 px unmistakable where an upright figure of the
+   * same height would not be. Warm rust against the sentry's cold steel.
+   *
+   * Two legs, both planted, for the same G1 reason as the sentry.
+   *
+   * **"Hands clear of the ground" is a G1 requirement, not a style preference.** The first shoot
+   * asked for *"long thin arms hanging toward the ground"* and got a knuckle-dragger whose
+   * fingertips entered the ground band — so G1 counted FIVE contact limbs and measured the spread
+   * between a hand and a foot, 104 px, rather than between the two feet. The gate was right and the
+   * question was wrong. G1 assumes ground-contact components are what the subject stands on; any
+   * subject that puts something else down there must say otherwise here. It is also better art
+   * direction: fingers dangling at the floor smear across a walk cycle.
+   */
+  rustScavenger:
+    'a hunched scrap-metal SCAVENGER creature, bipedal but stooped low with a forward-leaning ' +
+    'posture, thin arms BENT AT THE ELBOW with both hands held up at hip height and well clear ' +
+    'of the ground, clearly SHORTER and squatter than a human. It stands on TWO clawed ' +
+    'mechanical feet, both flat on the same level ground, weight evenly on both, neither raised. ' +
+    'ONLY the two feet touch the ground. ' +
+    'Its head is a riveted iron bucket with a narrow horizontal slit and two small glowing ' +
+    'amber lamps behind it. ' +
+    'ORNAMENTATION, all of it visible: mismatched scavenged plates lashed over the torso with ' +
+    'wire and leather cord; a bent exhaust stack on the back leaking a wisp of steam; exposed ' +
+    'piston rods at both elbows; a heavy counterweight on a chain at the hip; three salvaged ' +
+    'gears wired to the chest as makeshift armour; frayed rope bindings at the shoulders; ' +
+    'individual rivets and bolt heads on every plate. ' +
+    'Warm rust orange and oxidised copper, deep pitting and flaking corrosion, streaked with ' +
+    'grime. Scavenged and improvised, never manufactured.',
 });
