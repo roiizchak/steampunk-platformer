@@ -12,6 +12,7 @@ import {
   hasSolidAbove,
   isGreyboxFill,
 } from '../render/groundTiles';
+import { HUD_SLOT, playerHudFill } from '../render/playerHud';
 import { playerRenderDesc } from '../render/playerView';
 import { EnemyLayer } from './enemyLayer';
 import { createSnapshot, latchAttackPress, latchJumpPress } from '../sim/input';
@@ -44,6 +45,7 @@ export class GameScene extends Phaser.Scene {
   private accumulatorMs = 0;
   private playerSprite!: Phaser.GameObjects.Sprite;
   private enemies!: EnemyLayer;
+  private hudFill!: Phaser.GameObjects.Graphics;
   private parallax: { image: Phaser.GameObjects.TileSprite; factor: number }[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -182,6 +184,7 @@ export class GameScene extends Phaser.Scene {
     advance(this.world, this.input$, ticks);
 
     this.renderPlayer();
+    this.renderHud();
     this.enemies.sync();
     this.renderParallax();
     this.publishDebugState();
@@ -556,6 +559,27 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(1000);
+    // Drawn OVER the art, at a higher depth. Phase 4 shipped the image alone, so the bar was full
+    // gold at any hp — a bar that lies, on the player's own health. Found by playtesting; no unit
+    // test in the suite looks at the HUD, which is exactly vault C4.
+    this.hudFill = this.add.graphics().setScrollFactor(0).setDepth(1001);
+  }
+
+  private renderHud(): void {
+    const { player } = this.world;
+    const fill = playerHudFill(player.hp, player.maxHp, 24, 24);
+    this.hudFill.clear();
+
+    // The EMPTY portion is what gets painted, not the full one. `hud-health.png` already contains a
+    // completely full gold bar, so drawing a gold fill over it was invisible — gold on gold, which
+    // is how the first version of this fix looked identical to the bug it was fixing. Blanking the
+    // spent part turns the art's bar into the lit portion and the drawn rectangle into the drained
+    // one, which also means the bezel and highlights in the art survive untouched.
+    const spentX = fill.x + fill.w;
+    const spentW = HUD_SLOT.w - fill.w;
+    if (spentW > 0) {
+      this.hudFill.fillStyle(0x241c18, 0.92).fillRect(spentX, fill.y, spentW, fill.h);
+    }
   }
 
   private renderParallax(): void {
