@@ -228,6 +228,7 @@ Full detail in [PRD.md § The Codex review protocol](docs/PRD.md#the-codex-revie
 
 | Document | What it is | When to read it |
 |---|---|---|
+| [docs/HANDOFF.md](docs/HANDOFF.md) | **Where the last session stopped**, what is done, what is blocked, and the traps that are not visible in the code. | **First, when resuming a phase mid-flight.** |
 | [docs/PRD.md](docs/PRD.md) | **The spine.** Phase table, Global Constraints, file structure, the QA agent and Codex review protocols. | Once per session, first. |
 | `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
 | [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
