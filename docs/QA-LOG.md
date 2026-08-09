@@ -17,6 +17,12 @@ gaining roughly 350 a phase. A new phase adds `docs/qa/<its prd filename>` — n
 | 1 — Boot | [qa/phase-01-boot.md](qa/phase-01-boot.md) | [prd/phase-01-boot.md](prd/phase-01-boot.md) | [plan](reviews/phase-01-plan.md) · [impl](reviews/phase-01-impl.md) |
 | 2 — Player controller + Character Playground | [qa/phase-02-player.md](qa/phase-02-player.md) | [prd/phase-02-player.md](prd/phase-02-player.md) | [plan](reviews/phase-02-plan.md) · [impl](reviews/phase-02-impl.md) |
 | 3 — Tiled tilemap pipeline + Element Editor | [qa/phase-03-tilemap.md](qa/phase-03-tilemap.md) | [prd/phase-03-tilemap.md](prd/phase-03-tilemap.md) | [plan](reviews/phase-03-plan.md) · [impl](reviews/phase-03-impl.md) |
+| 4 — fal art production + Character Gym | [qa/phase-04-art.md](qa/phase-04-art.md) | [prd/phase-04-art.md](prd/phase-04-art.md) | [plan](reviews/phase-04-plan.md) · [impl](reviews/phase-04-impl.md) |
+| 5 — Combat, enemies and hazards | [qa/phase-05-combat.md](qa/phase-05-combat.md) | [prd/phase-05-combat.md](prd/phase-05-combat.md) | [plan](reviews/phase-05-plan.md) · impl *(pending — criterion 5.14)* |
+
+> Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
+> not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads
+> the per-phase files by path, so a missing row here costs discoverability rather than a red suite.
 
 Each file holds that phase's `## Phase N —` section and its `## Vault-out — Phase N` section, moved
 verbatim. `tests/unit/docs-contract.test.ts` reads them by that path — see the split record at the
