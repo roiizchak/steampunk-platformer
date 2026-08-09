@@ -75,6 +75,11 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
   }
 
   for (const scavenger of world.enemies.scavengers) {
+    // A corpse is scenery. Without this the body the player just killed keeps costing hp until it
+    // is walked around, which reads as the kill not having registered.
+    if (scavenger.hp <= 0) {
+      continue;
+    }
     if (overlapsScavenger(scavenger, box, world.scale)) {
       damagePlayer(player, SCAVENGER.damage);
       break;

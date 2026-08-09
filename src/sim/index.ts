@@ -59,6 +59,7 @@ export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, segmentHitsRec
 export type { Projectile } from './projectiles';
 export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
 export { applyWorldDamage } from './worldDamage';
+export { ATTACK_BOX, PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from './playerAttack';
 export { stepEnemies } from './enemyTurn';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {

@@ -229,6 +229,14 @@ export interface TickEvents {
    * open at all during those ticks".
    */
   hitActive: boolean;
+  /**
+   * The swing CONNECTED with at least one enemy this tick.
+   *
+   * Distinct from `hitActive`, which only says the hitbox was live. Emitted rather than
+   * reconstructed by comparing enemy hp across frames *(vault 2.5)* — the render layer wants it for
+   * a hit-stop or a flash, and diffing hp would also fire when a hazard hurt something.
+   */
+  hitLanded: boolean;
 }
 
 /**

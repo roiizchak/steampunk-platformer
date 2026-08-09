@@ -97,6 +97,7 @@ import { PLAYER_MAX_HP, IFRAME_TICKS, stepCombat } from './combat';
 import { type EnemySpawn, spawnEnemies } from './enemies';
 import { stepEnemies } from './enemyTurn';
 import { type WorldBounds, clampToBounds } from './hazards';
+import { applyPlayerAttack } from './playerAttack';
 import { applyWorldDamage } from './worldDamage';
 import { createRng, nextFloat } from './rng';
 import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
@@ -206,7 +207,14 @@ export function createWorld({
 }
 
 function noEvents(): TickEvents {
-  return { jumped: false, landed: false, leftGround: false, attackStarted: false, hitActive: false };
+  return {
+    jumped: false,
+    landed: false,
+    leftGround: false,
+    attackStarted: false,
+    hitActive: false,
+    hitLanded: false,
+  };
 }
 
 /**
@@ -283,6 +291,9 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
   //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
   //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
+  //     The player's own swing resolves FIRST, so a killing blow lands before the thing it killed
+  //     can trade a hit back — see `playerAttack.ts`, which also records why that is ungated.
+  events.hitLanded = applyPlayerAttack(world) > 0;
   applyWorldDamage(world, previousX, previousY);
 
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at

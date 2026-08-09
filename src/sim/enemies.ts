@@ -79,6 +79,12 @@ export interface Sentry {
   cooldownCounter: number;
   hp: number;
   maxHp: number;
+  /**
+   * The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`: this is how
+   * one press costs one hit even though the hitbox is live for several ticks, without giving
+   * anything an id.
+   */
+  lastHitSwing: number;
 }
 
 export interface SentryOptions {
@@ -103,6 +109,7 @@ export function createSentry(options: SentryOptions): Sentry {
     cooldownCounter: cooldown,
     hp,
     maxHp: hp,
+    lastHitSwing: -1,
   };
 }
 
@@ -181,6 +188,8 @@ export interface Scavenger {
   chaseCounter: number;
   hp: number;
   maxHp: number;
+  /** The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`. */
+  lastHitSwing: number;
 }
 
 export interface ScavengerOptions {
@@ -211,6 +220,7 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     chaseCounter: 0,
     hp,
     maxHp: hp,
+    lastHitSwing: -1,
   };
 }
 
