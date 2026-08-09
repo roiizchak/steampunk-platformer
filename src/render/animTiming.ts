@@ -41,6 +41,7 @@
  */
 
 import { TICK_HZ } from '../game/constants';
+import { ATTACK, DEATH_TICKS, HURT_TICKS, attackTotalTicks } from '../sim/combat';
 import type { DerivedFeel } from '../sim/derived';
 import type { PlayerState } from '../sim/types';
 
@@ -128,6 +129,19 @@ export function animTimings(
     { name: 'run', simTicks: strideTicks(strides.run, feel.topSpeed), loop: true, from: 'measured' },
     { name: 'jump', simTicks: feel.riseTicks, loop: false, from: 'sim' },
     { name: 'fall', simTicks: feel.fallTicks, loop: false, from: 'sim' },
+    /**
+     * Phase 5's combat rows. **`simTicks` is IMPORTED from `src/sim/combat.ts`, never retyped**
+     * *(vault 5.3)* — so retuning the swing changes the sheet's fps with nobody editing a number
+     * here, and `asset-catalog.test.ts` then goes red until the sheets are rebuilt.
+     *
+     * This is the whole of vault 4.22 in three lines: the art's frame rate is a function of the
+     * move's length, so a move that gets shorter cannot leave its animation playing past the end of
+     * it. The alternative — an authored fps — is how *"every light attack had 0.43 s of art over a
+     * 0.25 s move, so the strike was never drawn."*
+     */
+    { name: 'attack', simTicks: attackTotalTicks(ATTACK), loop: false, from: 'sim' },
+    { name: 'hurt', simTicks: HURT_TICKS, loop: false, from: 'sim' },
+    { name: 'death', simTicks: DEATH_TICKS, loop: false, from: 'sim' },
   ];
 
   return rows.map(({ name, simTicks, loop, from }) => {

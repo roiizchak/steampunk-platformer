@@ -11,7 +11,7 @@
  *   1.  Sample the seeded RNG exactly once -> `world.tickRoll`     (2.3 — the only advance)
  *   2.  Consume input edges from the mutable working copy          (2.4 — cleared on consumption)
  *   3.  Arm the jump-buffer window if a press edge arrived
- *   4.  [RESERVED — Phase 5 combat] hit windows, i-frames, damage, knockback
+ *   4.  Combat: i-frames, combat-state expiry, the attack edge, the live hitbox  (Phase 5)
  *   5.  Horizontal: accel / air-accel / friction, clamped to runMax
  *   6.  Vertical: gravity, fall clamp, early-release jump cut
  *   7.  Jump resolution: buffer open AND (grounded OR coyote open) -> impulse, close both
@@ -23,11 +23,17 @@
  *   13. Advance every window counter — LAST, after every test of it
  *   14. tickCount++
  *
- * **Step 4 is reserved by number now, before it has any content.** Codex plan review F6: a hit
- * window activated after integration cannot affect the same tick's collision, and knockback
- * written after step 8 lands a tick late. Since vault 2.11 forbids scaling velocities, that offset
- * cannot be papered over in the render layer later. Reserving the slot costs one comment; moving
- * it in Phase 5 costs the art.
+ * **Step 4 was reserved by number in Phase 2, before it had any content, and Phase 5 filled it
+ * without moving anything.** Codex plan review F6: a hit window activated after integration cannot
+ * affect the same tick's collision, and knockback written after step 8 lands a tick late. Since
+ * vault 2.11 forbids scaling velocities, that offset cannot be papered over in the render layer.
+ * Reserving the slot cost one comment; it saved renumbering a contract the art is now derived from.
+ *
+ * **Step 4's own internals are ordered too** (Phase 5 Codex plan review C6 — "all in step 4" does
+ * not say what happens when a kill plane and an attack resolve on the same tick):
+ * i-frame expiry, then combat-state expiry, then the attack edge, then the live hitbox. Damage from
+ * world geometry — hazards, the kill plane, enemy contact — is applied by the CALLER around this,
+ * because `combat.ts` deliberately imports no level data.
  *
  * **State moved from step 4 to step 11 after Codex implementation review I4.** Resolved before
  * integration, the state published each tick described the position of the PREVIOUS one: a jump's
@@ -77,6 +83,7 @@ import {
   stepHorizontal,
   stepVertical,
 } from './player';
+import { PLAYER_MAX_HP, IFRAME_TICKS, stepCombat } from './combat';
 import { createRng, nextFloat } from './rng';
 import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
 import { advanceWindow, windowOpen } from './windows';
@@ -149,12 +156,18 @@ export function createWorld({ seed, scale, solids, spawn }: CreateWorldOptions):
       ticksSinceGrounded: tuning.coyoteTicks,
       ticksSinceJumpPressed: tuning.jumpBufferTicks,
       jumpCutPending: false,
+      hp: PLAYER_MAX_HP,
+      maxHp: PLAYER_MAX_HP,
+      combatCounter: 0,
+      // CLOSED, for the same reason as the two windows above: seeding at 0 would spawn the player
+      // invulnerable for three quarters of a second.
+      iFrameCounter: IFRAME_TICKS,
     },
   };
 }
 
 function noEvents(): TickEvents {
-  return { jumped: false, landed: false, leftGround: false };
+  return { jumped: false, landed: false, leftGround: false, attackStarted: false, hitActive: false };
 }
 
 /**
@@ -181,8 +194,14 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 
   const dir: -1 | 0 | 1 = input.left === input.right ? 0 : input.right ? 1 : -1;
 
-  // 4. [RESERVED — Phase 5 combat] hit-window activation, i-frames, damage, knockback.
+  // 4. Combat — Phase 5 filled the slot Phase 2 reserved.
   //    Placed BEFORE integration on purpose so knockback reaches this tick's movement.
+  //    `stepCombat` owns the internal order (i-frames, state expiry, the attack edge, the live
+  //    hitbox); world-geometry damage — hazards, the kill plane, enemy contact — is applied by the
+  //    caller, because those need level data `src/sim/combat.ts` deliberately does not import.
+  const combat = stepCombat(player, input);
+  events.attackStarted = combat.attackStarted;
+  events.hitActive = combat.hitActive;
 
   // 5. Horizontal.
   stepHorizontal(player, tuning, dir, input.walkHeld);

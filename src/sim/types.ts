@@ -44,7 +44,26 @@ export interface LocalBox {
  * because a walk animation playing at run speed is foot-slide arriving through the state machine
  * instead of through the art. `tests/unit/walk-state.test.ts` asserts it on every tick.
  */
-export type PlayerState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
+export type PlayerState = MovementState | CombatState;
+
+/**
+ * States derived from the body every tick, at step 11.
+ *
+ * These are *re-decided* each tick from grounded / moving / walkHeld. Nothing remembers them, which
+ * is what makes them safe to recompute.
+ */
+export type MovementState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
+
+/**
+ * States combat OWNS, entered at step 4 and held for a fixed number of ticks.
+ *
+ * The distinction is load-bearing, not taxonomy. `resolveState` at step 11 derives a movement state
+ * unconditionally, so without a category to test against it would overwrite an `attack` entered at
+ * step 4 **on the same tick, every tick** — the swing would be set and erased before anything could
+ * draw it, and "did an attack happen" would still pass. Found by the Phase 5 Codex plan review
+ * (C7); pinned by `tests/unit/player-combat.test.ts`.
+ */
+export type CombatState = 'attack' | 'hurt' | 'death';
 
 /** Seeded xorshift32 state (vault 2.3). A mutable single-field cell, never a global. */
 export interface Rng {
@@ -73,6 +92,12 @@ export interface InputSnapshot {
    * at the wrong rate.
    */
   walkHeld: boolean;
+  /**
+   * Attack. An EDGE, with the same latch/consume pair as `jumpPressed` and for the same reason —
+   * holding the key must not swing repeatedly, and a frame that drained zero ticks must not eat the
+   * press. Bound to `Z` and `J`; jump stays on SPACE so every Phase 2 spec keeps working.
+   */
+  attackPressed: boolean;
 }
 
 /** Live movement knobs. Every field is swept by `tests/unit/knob-sweep.test.ts` (vault A6). */
@@ -156,6 +181,29 @@ export interface PlayerSim {
   ticksSinceJumpPressed: number;
   /** True while a jump is rising and has not yet been cut short by releasing the button. */
   jumpCutPending: boolean;
+
+  /* --- Phase 5 combat. Every counter increments; none is a decrementing timer. --- */
+
+  hp: number;
+  maxHp: number;
+  /**
+   * Ticks spent in the CURRENT combat state. Meaningless unless `state` is a `CombatState`.
+   *
+   * **One counter for all three combat states, not three.** They are mutually exclusive — you
+   * cannot be attacking and dead — so a counter each would admit "attacking on tick 4 and hurt on
+   * tick 9 simultaneously", a state nothing can draw *(vault 5.1: two counters admit the
+   * unrepresentable state)*. `enterState` resets it, which is why that funnel exists.
+   */
+  combatCounter: number;
+  /**
+   * Ticks since damage was last taken. Invulnerable while this window is open.
+   *
+   * Separate from `combatCounter` on purpose, and this is NOT the case vault 5.1 warns about:
+   * i-frames are **orthogonal** to the combat state, not a second counter for the same concept.
+   * They outlast hitstun by design, so the player is idle, walking or jumping — a movement state —
+   * while still invulnerable. One counter could not represent that.
+   */
+  iFrameCounter: number;
 }
 
 /** Per-tick event edges (vault 2.5). Emitted, never reconstructed from a state comparison. */
@@ -163,6 +211,16 @@ export interface TickEvents {
   jumped: boolean;
   landed: boolean;
   leftGround: boolean;
+  /** A swing began on this tick. The render layer plays the sheet from this, not from a state diff. */
+  attackStarted: boolean;
+  /**
+   * The attack hitbox is live on this tick — criterion 5.5.
+   *
+   * An EDGE-free per-tick fact, deliberately: the caller asks "is it live now", never "has it been
+   * live since". Under `advance()` these OR across the batch, which is correct for "did the window
+   * open at all during those ticks".
+   */
+  hitActive: boolean;
 }
 
 /**

@@ -58,6 +58,11 @@ const STATE_COLOURS: Record<PlayerState, number> = {
   run: 0xe0c98a,
   jump: 0x7fb2c8,
   fall: 0x9a7bb0,
+  // Phase 5. Warm and saturated for the states the player CAUSES, cold for the ones done TO them —
+  // so a grey-box playtest can tell "I swung" from "I was hit" without reading a debug field.
+  attack: 0xe8813a,
+  hurt: 0xc4463f,
+  death: 0x5a4a52,
 };
 
 /**
@@ -77,6 +82,9 @@ const STATE_ANIMS: Record<PlayerState, string> = {
   run: `${SLUG}-run`,
   jump: `${SLUG}-jump`,
   fall: `${SLUG}-fall`,
+  attack: `${SLUG}-attack`,
+  hurt: `${SLUG}-hurt`,
+  death: `${SLUG}-death`,
 };
 
 /** The animation key for a state. Exported so the scene registers exactly what it plays. */

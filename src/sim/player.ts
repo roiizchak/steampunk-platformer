@@ -13,6 +13,7 @@
  * order is the contract, and a contract buried inside 200 lines of arithmetic is not one.
  */
 
+import { isCombatState } from './combat';
 import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './types';
 
 /**
@@ -170,6 +171,20 @@ export function resolveState(
   walkHeld: boolean,
   tuning: TuningKnobs,
 ): void {
+  /**
+   * **Combat wins.** Step 4 owns `attack`, `hurt` and `death`; they persist across ticks and are
+   * released by their own timer, not re-derived from the body.
+   *
+   * Without this, an `attack` entered at step 4 is overwritten here on the SAME tick — every tick —
+   * so the swing is set and erased before anything can draw it, and a "did an attack happen"
+   * assertion still passes. Found by the Phase 5 Codex plan review (C7); the predicate is imported
+   * from `combat.ts` rather than restated as three string comparisons *(vault 5.3)*.
+   *
+   * Verified load-bearing: deleting these three lines fails six tests in `player-combat.test.ts`.
+   */
+  if (isCombatState(player.state)) {
+    return;
+  }
   if (!player.grounded) {
     enterState(player, player.vy < 0 ? 'jump' : 'fall');
     return;

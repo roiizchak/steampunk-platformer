@@ -32,7 +32,9 @@
  * drifted by one tick before Phase 5 found it *(vault 5.3, blocker)*. Combat does not get a fourth.
  */
 
-import { windowOpen } from './windows';
+import { consumeAttackPress } from './input';
+import type { CombatState, InputSnapshot, PlayerSim, PlayerState } from './types';
+import { advanceWindow, windowOpen } from './windows';
 
 /** A three-phase move. Every field is an integer count of 60 Hz ticks. */
 export interface CombatTiming {
@@ -74,6 +76,15 @@ export const IFRAME_TICKS = 45;
 
 /** Death: **45 ticks, 750 ms** before the respawn, long enough for the death sheet to be seen. */
 export const DEATH_TICKS = 45;
+
+/**
+ * Player health: **100**, so a damage number reads as a percentage without arithmetic.
+ *
+ * The sentry's 10 and the scavenger's 15 are then legible as "ten hits" and "about seven" — which
+ * is the property that makes the enemy health bar's 2/100 case in criterion 5.7 a real number
+ * rather than a contrived one.
+ */
+export const PLAYER_MAX_HP = 100;
 
 /**
  * The animation clock runs one tick behind the sim.
@@ -130,4 +141,135 @@ export function attackPhase(counter: number, timing: CombatTiming): AttackPhase 
  */
 export function hitWindowOpen(counter: number, timing: CombatTiming): boolean {
   return attackPhase(counter, timing) === 'active';
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 4 — the running machine.
+ * ------------------------------------------------------------------ */
+
+const COMBAT_STATES: ReadonlySet<PlayerState> = new Set<PlayerState>(['attack', 'hurt', 'death']);
+
+/**
+ * Is this a state combat owns, and therefore one step 11 must not overwrite?
+ *
+ * Exported because `resolveState` imports it rather than testing three string literals of its own
+ * *(vault 5.3)*. Adding a fourth combat state later then changes one set, not two lists that agree
+ * until the day they do not.
+ */
+export function isCombatState(state: PlayerState): state is CombatState {
+  return COMBAT_STATES.has(state);
+}
+
+/** How long the given combat state lasts, in ticks. */
+export function combatStateTicks(state: CombatState): number {
+  switch (state) {
+    case 'attack':
+      return attackTotalTicks(ATTACK);
+    case 'hurt':
+      return HURT_TICKS;
+    case 'death':
+      return DEATH_TICKS;
+  }
+}
+
+/**
+ * Is the player currently invulnerable?
+ *
+ * The one predicate — `damagePlayer` consults it, the tests import it, and the HUD will too. Never
+ * re-expressed as `iFrameCounter < IFRAME_TICKS` at a call site *(vault 5.3)*.
+ */
+export function invulnerable(player: PlayerSim): boolean {
+  return windowOpen(player.iFrameCounter, IFRAME_TICKS);
+}
+
+/**
+ * Apply damage. Returns whether it landed.
+ *
+ * The **boolean return is the point**: a caller that cannot tell a refused hit from a landed one
+ * will happily play a hit spark during i-frames. Refusal is a normal outcome here, not an error.
+ *
+ * Death is decided here rather than at the end of step 4, because a lethal hit must not also enter
+ * `hurt` — hitstun on a corpse would play the wrong sheet and then release control of a dead
+ * player.
+ */
+export function damagePlayer(player: PlayerSim, amount: number): boolean {
+  if (!Number.isInteger(amount) || amount < 0) {
+    throw new Error(`damagePlayer: amount must be a non-negative integer, got ${amount}`);
+  }
+  if (player.state === 'death' || invulnerable(player)) {
+    return false;
+  }
+
+  player.hp = Math.max(0, player.hp - amount);
+  player.iFrameCounter = 0;
+  enterCombatState(player, player.hp === 0 ? 'death' : 'hurt');
+  return true;
+}
+
+/**
+ * Enter a combat state through the one door, resetting the shared counter.
+ *
+ * Kept here rather than in `player.ts`'s `enterState` because only combat states carry a duration;
+ * `enterState` remains the door for movement states and this delegates to the same idea.
+ */
+export function enterCombatState(player: PlayerSim, next: CombatState): void {
+  player.state = next;
+  player.combatCounter = 0;
+}
+
+/** What step 4 did this tick, for the caller to turn into events. */
+export interface CombatStep {
+  /** The attack's hitbox is live on this tick — criterion 5.5. */
+  hitActive: boolean;
+  /** A swing began this tick. */
+  attackStarted: boolean;
+}
+
+/**
+ * **Step 4 of the tick order.** Runs before integration, so knockback reaches this tick's movement.
+ *
+ * Internal order, fixed (Codex C6 — "all in step 4" does not say what happens when two things
+ * resolve on the same tick):
+ *
+ *   1. i-frame expiry — first, so a hazard cannot re-trigger inside its own grace window
+ *   2. combat-state expiry — release `attack`/`hurt` when their window closes
+ *   3. accept the attack edge — only if the player is free to act
+ *   4. report whether the hitbox is live
+ *
+ * Damage, hazards and knockback are applied by the caller between 1 and 2, because they need world
+ * geometry this module deliberately does not import.
+ */
+export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep {
+  // 1. i-frames.
+  player.iFrameCounter = advanceWindow(player.iFrameCounter, IFRAME_TICKS);
+
+  // 2. Combat-state expiry. `death` is terminal here — the respawn is the caller's decision, and
+  //    releasing it into `idle` would let a dead player walk.
+  if (isCombatState(player.state) && player.state !== 'death') {
+    player.combatCounter += 1;
+    if (!windowOpen(player.combatCounter, combatStateTicks(player.state))) {
+      // Hand the body back to step 11, which re-derives a movement state from grounded/moving.
+      player.state = 'idle';
+      player.combatCounter = 0;
+    }
+  }
+
+  // 3. The attack edge is consumed EVERY tick whether or not it is honoured, so a press made while
+  //    dead or mid-swing does not queue up and fire later.
+  const pressed = consumeAttackPress(input);
+  let attackStarted = false;
+  if (pressed && canAct(player)) {
+    enterCombatState(player, 'attack');
+    attackStarted = true;
+  }
+
+  // 4. Is the hitbox live this tick?
+  const hitActive = player.state === 'attack' && hitWindowOpen(player.combatCounter, ATTACK);
+
+  return { hitActive, attackStarted };
+}
+
+/** Free to start a new action? Not while already committed to one. */
+export function canAct(player: PlayerSim): boolean {
+  return !isCombatState(player.state);
 }

@@ -76,20 +76,57 @@ function animOf(key: string): AnimName {
   return key.slice(`${bounds.slug}-`.length) as AnimName;
 }
 
+const catalogFrames = new Map<string, number>(
+  catalog.sheets.map((s) => [animOf(s.key), s.frameCount]),
+);
+
+/**
+ * Animations the timing table knows about but no sheet exists for yet.
+ *
+ * Phase 5 adds `attack`, `hurt` and `death` to the table when it builds the combat sim, and
+ * generates their art later in the same phase — so between those two points the table legitimately
+ * describes more animations than the catalog ships. **That gap is asserted rather than hidden**:
+ * the list below must be empty by the end of Phase 5, and the test that reads it says so.
+ *
+ * The previous version cast a partial map with `as Record<AnimName, number>`, which turned a
+ * missing sheet into `deriveFps(undefined, …)` and a thrown error deep inside the table — an
+ * unhelpful failure for a legitimate intermediate state.
+ */
+const PENDING_ART: readonly AnimName[] = ['attack', 'hurt', 'death'];
+
 const derived = animTimings(
   derivedFeel(DEFAULT_TUNING, ticksToMs),
   // Frame counts come from the CATALOG rather than being retyped, so this compares the catalog's
-  // timings against the sim for the sheets the catalog actually claims to have.
-  Object.fromEntries(
-    catalog.sheets.map((s) => [animOf(s.key), s.frameCount]),
-  ) as Record<AnimName, number>,
+  // timings against the sim for the sheets the catalog actually claims to have. Pending rows get a
+  // placeholder purely so the table can be built; nothing below compares them.
+  Object.fromEntries([
+    ...catalogFrames.entries(),
+    ...PENDING_ART.map((name) => [name, 1] as const),
+  ]) as Record<AnimName, number>,
   bounds.stridePxPerCycle,
 );
 
 describe('the catalog records the timings the simulation derives (criterion 4.7, vault 4.22)', () => {
   it('found a non-empty catalog and a bounds file', () => {
     expect(catalog.sheets.length).toBeGreaterThan(0);
-    expect(derived.length).toBe(catalog.sheets.length);
+    // Every derived row is either shipped or explicitly pending — no third category, so a row
+    // cannot go missing from the catalog by being quietly forgotten.
+    expect(derived.length).toBe(catalog.sheets.length + PENDING_ART.length);
+  });
+
+  /**
+   * **The Phase 5 completion gate for art.** `PENDING_ART` is the list of animations the sim needs
+   * and the catalog does not yet ship. It must be empty before Phase 5 can be reported done — and
+   * this test is what makes "we forgot to generate the hurt sheet" a red suite rather than a black
+   * sprite discovered in a playtest.
+   */
+  it('names exactly which sheets are still awaiting art', () => {
+    for (const name of PENDING_ART) {
+      expect(catalogFrames.has(name), `${name} is in PENDING_ART but the catalog ships it — remove it from the list`).toBe(false);
+    }
+    for (const [name] of catalogFrames) {
+      expect(PENDING_ART).not.toContain(name);
+    }
   });
 
   it.each(['walk', 'run', 'jump', 'fall', 'idle'])('%s agrees on simTicks, fps and loop', (name) => {

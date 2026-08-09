@@ -20,8 +20,10 @@ export { TICK_HZ, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT } from '../game/constants';
 
 export type {
   AdvanceEvents,
+  CombatState,
   InputSnapshot,
   LocalBox,
+  MovementState,
   PlayerSim,
   PlayerState,
   Rect,
@@ -31,7 +33,13 @@ export type {
   World,
 } from './types';
 
-export { consumeJumpPress, createSnapshot, latchJumpPress } from './input';
+export {
+  consumeAttackPress,
+  consumeJumpPress,
+  createSnapshot,
+  latchAttackPress,
+  latchJumpPress,
+} from './input';
 export { createRng, nextFloat, nextU32, rollChance } from './rng';
 export {
   DEFAULT_TUNING,
@@ -46,16 +54,24 @@ export {
 } from './player';
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
 export { advanceWindow, windowOpen } from './windows';
-export type { AttackPhase, CombatTiming } from './combat';
+export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,
   DEATH_TICKS,
   HURT_TICKS,
   IFRAME_TICKS,
+  PLAYER_MAX_HP,
   PLAY_LAG_TICKS,
   attackPhase,
   attackTotalTicks,
+  canAct,
+  combatStateTicks,
+  damagePlayer,
+  enterCombatState,
   hitWindowOpen,
+  invulnerable,
+  isCombatState,
+  stepCombat,
 } from './combat';
 export type { Scavenger, ScavengerOptions, Sentry, SentryOptions, Sighting } from './enemies';
 export {

@@ -31,6 +31,7 @@ export function createSnapshot(): InputSnapshot {
     jumpHeld: false,
     jumpPressed: false,
     walkHeld: false,
+    attackPressed: false,
   };
 }
 
@@ -54,5 +55,28 @@ export function latchJumpPress(input: InputSnapshot): void {
 export function consumeJumpPress(input: InputSnapshot): boolean {
   const pressed = input.jumpPressed;
   input.jumpPressed = false;
+  return pressed;
+}
+
+/**
+ * Record that attack went down this frame. The one door for arming this edge (vault 2.6).
+ *
+ * Same idempotence as `latchJumpPress`: holding `Z`, or `Z` and `J` both bound and both firing,
+ * arms one swing, not two. The edge is a boolean, not a count.
+ */
+export function latchAttackPress(input: InputSnapshot): void {
+  input.attackPressed = true;
+}
+
+/**
+ * Take the attack edge if there is one. The ONLY way it is cleared.
+ *
+ * Consumed by step 4 of `tick()`, not by the scene's frame loop — a frame that drained zero ticks
+ * must not eat the press, which is the distinction vault 2.4 draws and the reason this mirrors the
+ * jump pair exactly rather than inventing a second mechanism.
+ */
+export function consumeAttackPress(input: InputSnapshot): boolean {
+  const pressed = input.attackPressed;
+  input.attackPressed = false;
   return pressed;
 }

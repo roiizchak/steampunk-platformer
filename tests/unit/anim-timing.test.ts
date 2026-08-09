@@ -35,7 +35,16 @@ import { DEFAULT_TUNING } from '../../src/sim/player';
 const feel = () => derivedFeel(DEFAULT_TUNING, ticksToMs);
 
 /** Frame counts stand in for what the real sheets will report. The timings must not assume them. */
-const FRAMES: MeasuredFrames = { idle: 4, walk: 8, run: 8, jump: 4, fall: 4 };
+const FRAMES: MeasuredFrames = {
+  idle: 4,
+  walk: 8,
+  run: 8,
+  jump: 4,
+  fall: 4,
+  attack: 6,
+  hurt: 3,
+  death: 6,
+};
 const STRIDES = { run: 144, walk: 96 };
 
 describe('jump and fall durations are COUNTED from the sim (Codex finding 9)', () => {
@@ -115,7 +124,18 @@ describe('the timing table', () => {
 
   it('covers every animation exactly once', () => {
     const names = timings().map((t) => t.name).sort();
-    const expected: AnimName[] = ['fall', 'idle', 'jump', 'run', 'walk'];
+    // Phase 5 added the three combat rows. The list is spelled out rather than derived from the
+    // table under test, so a row silently disappearing is a failure rather than a smaller loop.
+    const expected: AnimName[] = [
+      'attack',
+      'death',
+      'fall',
+      'hurt',
+      'idle',
+      'jump',
+      'run',
+      'walk',
+    ];
     expect(names).toEqual(expected);
   });
 
