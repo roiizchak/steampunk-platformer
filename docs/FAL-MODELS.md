@@ -215,9 +215,11 @@ publishes nothing. **`ffprobe` the downloaded clip and record what it actually s
 cent. There is no way to buy less than 4 seconds.
 
 ⚠️ **`end_image_url` = the same anchor is the loop trick.** Pass the anchor as both first and last
-frame and the clip should close into a true loop — exactly what idle, walk and run cycles need, and
-something Grok could not do at all. **The input exists; its loop quality is unverified.** Phase 5
-gate 4.9 decides it. Omit it for one-shot actions (attack, hurt, death) where the end pose differs.
+frame and the clip closes into a true loop — exactly what idle, walk and run cycles need, and
+something Grok could not do at all. ✅ **VERIFIED and gated in Phase 4** *(not Phase 5 — this line
+named the wrong phase)*: `gateLoopWrap` runs over every shipped `loop` sheet in
+`tests/unit/shipped-sheets.test.ts` and is green on idle, walk and run. Omit it for one-shot actions
+(attack, hurt, death) where the end pose differs.
 
 ⚠️ **`generate_audio` defaults to `true`.** fal's docs state cost is identical either way, so this is
 bytes and generation time, not money — set it `false` regardless.

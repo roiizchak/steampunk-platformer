@@ -156,9 +156,13 @@ genmedia run bytedance/seedance-2.0/image-to-video \
 Every flag above is deliberate:
 
 - **`--duration 4`** — the minimum. Seedance 2 cannot generate a shorter clip.
-- **`--end_image_url` = the same anchor** — *intended* to close the clip into a **true loop**, which is
-  what idle, walk and run cycles need. **Unverified: the input exists, its loop quality does not yet.**
-  Phase 4 gate 4.9 is what decides whether it works. Omit it for one-shot actions (attack, hurt,
+- **`--end_image_url` = the same anchor** — closes the clip into a **true loop**, which is what idle,
+  walk and run cycles need. ✅ **VERIFIED in Phase 4, and now gated.**
+  `tests/unit/shipped-sheets.test.ts` runs `gateLoopWrap` over the shipped strip of every sheet marked
+  `loop`, asserting the wrap seam is no larger than a step the clip already takes — green on idle,
+  walk and run. This line read *"the input exists, its loop quality does not yet"* until the gate
+  existed; **do not restore that wording without deleting the gate.** Omit it for one-shot actions
+  (attack, hurt,
   death), where the end pose differs.
 - **`--resolution 720p`** — the only value the schema and the model-API reference agree on. Higher
   tiers are advertised by one and not the other, and **price is no longer resolution-free**, so the old
