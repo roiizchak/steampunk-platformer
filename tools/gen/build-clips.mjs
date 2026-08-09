@@ -92,7 +92,8 @@ function findClip(action) {
   if (!existsSync(VIDEO_DIR)) {
     throw new Error(
       `assets:clips: ${VIDEO_DIR} does not exist. Raw model output is gitignored by design — ` +
-        `re-fetch it from the request ids in docs/GENERATION-LOG.md. This build does NOT ` +
+        `re-fetch it from the request ids in docs/generations/ (indexed by ` +
+        `docs/GENERATION-LOG.md). This build does NOT ` +
         `substitute a placeholder (vault 4.16).`,
     );
   }

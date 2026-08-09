@@ -114,7 +114,8 @@ Three commits on `phase-04-art`:
 
 Gate 4.2b had recorded *"probe B wins, and it is not close"* for per-frame `nano-banana-pro/edit`
 sheets. **That verdict is reversed and the reversal is recorded in
-[GENERATION-LOG.md](GENERATION-LOG.md) § Gate 4b/I.** Measured on the shipped sheets, consecutive
+[generations/phase-04-video.md](generations/phase-04-video.md) § Gate 4b/I.** Measured on the
+shipped sheets, consecutive
 idle frames scored a silhouette IoU of 0.86–0.98 — the same pose — while the interior still changed
 by 13–36 per channel. That is not animation, it is the character being redrawn every frame. Video is
 temporally consistent by construction. The sibling project at `C:\Claude\Street-Fighter`
@@ -194,7 +195,8 @@ npm test && npm run typecheck && npm run build
 - **Regenerate `idle` FIRST** if clips are ever re-fetched: the scale derives from it and every other
   animation is packed against it *(vault A5)*.
 - `_generated/` is **gitignored**. The nine clips live in `_generated/video/` with their
-  `.job.json` and `.prompt.txt` beside them; `request_id`s are in GENERATION-LOG § Gate 4b/I. Losing
+  `.job.json` and `.prompt.txt` beside them; `request_id`s are in
+  [generations/phase-04-video.md](generations/phase-04-video.md) § Gate 4b/I. Losing
   that directory means re-fetching from those ids, and `build-clips`/`build-assets` **fail loudly**
   rather than substituting *(vault 4.16)*.
 - Superseded per-frame sheets are in `_generated/sheets/superseded/`. Do not move them back —

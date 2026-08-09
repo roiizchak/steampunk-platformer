@@ -359,6 +359,7 @@ docs/
   prd/                        one document per phase
   lessons/                    one vault-in checklist per phase
   qa/                         one QA log per phase
+  generations/                one fal generation log per gate group
   reviews/                    Codex review outputs, one pair per phase
   FAL-MODELS.md               every fal endpoint: schema, price, gotchas
   STYLE.md  ASSET-PIPELINE.md  SOURCE-ANALYSIS.md

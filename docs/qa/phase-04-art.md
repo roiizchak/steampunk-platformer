@@ -21,7 +21,7 @@ claimed about it appear together at true size.
 | **Codex implementation review: BLOCK** | Criterion **4.18** ran. Two blockers found; one fixed, one corrected and deferred with its cost recorded. |
 | **S7 not done** | Speed hand-tuning in the Playground; the shipped movement numbers are the derived starting point only. |
 | **`run` stride provisional** | 320 px/cycle, two agreeing methods resting on a single frame. Criterion **4.10**'s INDETERMINATE condition is close. |
-| **Traceability gap** | Five paid generations have `.mp4` files with no `.job.json`. A live vault-4.17 violation, recorded in [GENERATION-LOG.md](../GENERATION-LOG.md). |
+| **Traceability gap** | Five paid generations have `.mp4` files with no `.job.json`. A live vault-4.17 violation, recorded in [generations/phase-04-video.md](../generations/phase-04-video.md). |
 | **400-line rule broken ten times** | Criterion **4.16**. Mostly this phase's doing, not inherited — see §File sizes for the measured before/after. |
 
 ---

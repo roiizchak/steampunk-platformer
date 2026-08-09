@@ -97,7 +97,7 @@ generated on the old endpoint. Also lost: the `0.5K` resolution tier.
 
 ✅ **RE-MEASURED on `nano-banana-pro`, Phase 4a gate 0, 2026-08-08.** Request ids
 `019fdffa-0b2c-7a02-b24f-04f8e77522c7` and `019fdffb-0b65-7c60-a1b6-1e4daf0e31dc`;
-full working in [GENERATION-LOG.md](GENERATION-LOG.md) § Gate 0.
+full working in [generations/phase-04-anchor.md](generations/phase-04-anchor.md) § Gate 0.
 
 1. **Returned pixel dimensions at `16:9` / `2K`: `2752 × 1536`, ratio `1.7917`.** Identical to
    `nano-banana-2`, and still **not** 16 : 9 (1.7778). Read off the file, because the job record
@@ -303,7 +303,8 @@ One generation on `fal-ai/nano-banana-pro` with the §4 template unchanged, seed
 mandatory · 0.3 one health bar, the geometry constraint holds · **0.4 FAILED** — ~22.6 %, transfer
 ×2.46, resolved by recording the constant and re-deriving at background generation · **0.5 FAILED —
 the model is not seed-deterministic**, which voids §3's A/B method. Full working in
-[GENERATION-LOG.md](GENERATION-LOG.md) § Gate 0; consequences written into §2b and §4.
+[generations/phase-04-anchor.md](generations/phase-04-anchor.md) § Gate 0; consequences written into
+§2b and §4.
 
 Any of 0.3 / 0.4 failing means re-running §6's technique ladder against the new model — **not**
 tweaking the wording and hoping. Record the result in GENERATION-LOG.md as Gate 7 round 1.

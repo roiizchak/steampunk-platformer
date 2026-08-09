@@ -67,7 +67,8 @@ function findSource(action) {
     throw new Error(
       `assets:build: ${GENERATED} does not exist. Raw model output is gitignored by design — ` +
         `run \`npm run assets:fetch\` to re-fetch it from the request ids in ` +
-        `docs/GENERATION-LOG.md. This build does NOT substitute a placeholder (vault 4.16).`,
+        `docs/generations/ (indexed by docs/GENERATION-LOG.md). This build does NOT substitute ` +
+        `a placeholder (vault 4.16).`,
     );
   }
   const files = readdirSync(GENERATED).filter(
