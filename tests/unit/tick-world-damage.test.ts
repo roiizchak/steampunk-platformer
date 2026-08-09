@@ -286,3 +286,41 @@ describe('enemies damage the player', () => {
     expect(SCAVENGER.damage).toBeGreaterThan(SENTRY.damage);
   });
 });
+
+/**
+ * The turret must be able to hit a player it is not level with.
+ *
+ * This exists because the first implementation fired on **x alone**, and `level-01` puts the sentry
+ * on a ledge four tiles above the ground — so every shot sailed over a grounded player's head,
+ * forever. Every test in the block above still passed: a projectile spawned, it moved, it was
+ * aimed the right way along x. "Did a shot exist" is not "could it ever connect".
+ */
+describe('the sentry can hit a player it is not level with', () => {
+  it('a shot from a ledge reaches a player standing on the ground below', () => {
+    const world = worldWith({
+      // Sentry feet 384px (4 tiles) above the floor the player stands on — the level-01 geometry.
+      enemies: [{ slug: 'brass-sentry' as const, x: 1100, y: 576, patrolMin: 1090, patrolMax: 1110 }],
+      spawn: { x: 900, y: 960 },
+    });
+
+    for (let i = 0; i < 200 && world.player.hp === PLAYER_MAX_HP; i += 1) {
+      tick(world, { ...IDLE });
+    }
+
+    expect(world.player.hp).toBe(PLAYER_MAX_HP - SENTRY.damage);
+  });
+
+  it('the shot descends — a purely horizontal velocity is the defect, pinned', () => {
+    const world = worldWith({
+      enemies: [{ slug: 'brass-sentry' as const, x: 1100, y: 576, patrolMin: 1090, patrolMax: 1110 }],
+      spawn: { x: 900, y: 960 },
+    });
+    tick(world, { ...IDLE });
+
+    const shot = world.projectiles[0]!;
+    expect(shot.vy).toBeGreaterThan(0); // downward, toward the player below
+    expect(shot.vx).toBeLessThan(0); // leftward, toward the player behind
+    // Speed is the knob, not an accident of the components.
+    expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(SENTRY.projectileSpeed, 6);
+  });
+});

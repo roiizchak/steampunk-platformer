@@ -11,8 +11,8 @@
  *   1.  Sample the seeded RNG exactly once -> `world.tickRoll`     (2.3 — the only advance)
  *   2.  Consume input edges from the mutable working copy          (2.4 — cleared on consumption)
  *   3.  Arm the jump-buffer window if a press edge arrived
- *   4.  Enemies and combat: enemy AI, projectiles, then i-frames, combat-state expiry, the
- *       attack edge, the live hitbox                                  (Phase 5)
+ *   4a. Enemies: AI decisions, projectile flight, sentries firing        (Phase 5)
+ *   4b. Combat: i-frames, combat-state expiry, the attack edge, the live hitbox  (Phase 5)
  *   5.  Horizontal: accel / air-accel / friction, clamped to runMax
  *   6.  Vertical: gravity, fall clamp, early-release jump cut
  *   7.  Jump resolution: buffer open AND (grounded OR coyote open) -> impulse, close both
@@ -94,9 +94,9 @@ import {
   stepVertical,
 } from './player';
 import { PLAYER_MAX_HP, IFRAME_TICKS, stepCombat } from './combat';
-import { SENTRY, type EnemySpawn, spawnEnemies, stepScavenger, stepSentry } from './enemies';
+import { type EnemySpawn, spawnEnemies } from './enemies';
+import { stepEnemies } from './enemyTurn';
 import { type WorldBounds, clampToBounds } from './hazards';
-import { fireProjectile, stepProjectiles } from './projectiles';
 import { applyWorldDamage } from './worldDamage';
 import { createRng, nextFloat } from './rng';
 import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
@@ -233,28 +233,14 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 
   const dir: -1 | 0 | 1 = input.left === input.right ? 0 : input.right ? 1 : -1;
 
-  // 4. Combat — Phase 5 filled the slot Phase 2 reserved.
+  // 4. Enemies, then combat — Phase 5 filled the slot Phase 2 reserved, without moving anything.
   //    Placed BEFORE integration on purpose so knockback reaches this tick's movement.
-  //    `stepCombat` owns the internal order (i-frames, state expiry, the attack edge, the live
-  //    hitbox); world-geometry damage — hazards, the kill plane, enemy contact — is applied by the
-  //    caller, because those need level data `src/sim/combat.ts` deliberately does not import.
   //
-  //    Enemies move FIRST, against the player's position as of the end of last tick. That is a
-  //    well-defined moment for every enemy in the world; "after the player has integrated" would
-  //    make an enemy's decision depend on where it sits in the array relative to the player's own
-  //    update, which is the shape of a bug that only appears when a list is reordered.
-  const sighting = { playerX: player.x, playerY: player.y };
-  for (const scavenger of world.enemies.scavengers) {
-    stepScavenger(scavenger, sighting);
-  }
-  world.projectiles = stepProjectiles(world.projectiles, world.bounds.widthPx);
-  for (const sentry of world.enemies.sentries) {
-    if (stepSentry(sentry, sighting).fired) {
-      world.projectiles.push(
-        fireProjectile(sentry.x, sentry.y, player.x, SENTRY.projectileSpeed, SENTRY.damage),
-      );
-    }
-  }
+  //    4a. Every enemy's turn and the shots in flight — `enemyTurn.ts`.
+  //    4b. `stepCombat` owns combat's internal order: i-frames, state expiry, the attack edge, the
+  //        live hitbox. World-geometry damage is NOT here — it is step 9b, because a swept test
+  //        needs a position that does not exist yet. See `worldDamage.ts`.
+  stepEnemies(world);
 
   const combat = stepCombat(player, input);
   events.attackStarted = combat.attackStarted;

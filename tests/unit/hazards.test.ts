@@ -19,13 +19,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_TUNING } from '../../src/sim/player';
-import { belowKillPlane, clampToBounds, sweptHazardHit } from '../../src/sim/hazards';
+import { belowKillPlane, clampToBounds, segmentHitsRect } from '../../src/sim/hazards';
 import type { Rect } from '../../src/sim/types';
 
 /** A spike strip thinner than one tick of travel at terminal velocity. */
 const THIN: Rect = { x: 0, y: 1000, w: 400, h: 40 };
 
-describe('sweptHazardHit — the tunnelling case', () => {
+describe('segmentHitsRect — the tunnelling case', () => {
   it('catches a hazard crossed entirely between two ticks', () => {
     // Above it on one tick, below it on the next. No tick ever samples inside.
     const fromY = 990;
@@ -33,7 +33,7 @@ describe('sweptHazardHit — the tunnelling case', () => {
     expect(toY).toBeGreaterThan(THIN.y + THIN.h);
     expect(fromY).toBeLessThan(THIN.y);
 
-    expect(sweptHazardHit(200, fromY, 200, toY, THIN)).toBe(true);
+    expect(segmentHitsRect(200, fromY, 200, toY, THIN)).toBe(true);
   });
 
   it('a point test at either endpoint would have missed it — the defect, pinned', () => {
@@ -49,21 +49,21 @@ describe('sweptHazardHit — the tunnelling case', () => {
    * the misses are asserted just as hard as the hits.
    */
   it('does not fire for a path that stays clear of the hazard', () => {
-    expect(sweptHazardHit(200, 800, 200, 900, THIN)).toBe(false); // stops short
-    expect(sweptHazardHit(200, 1100, 200, 1200, THIN)).toBe(false); // starts past it
-    expect(sweptHazardHit(900, 990, 900, 1100, THIN)).toBe(false); // right x, wrong column
+    expect(segmentHitsRect(200, 800, 200, 900, THIN)).toBe(false); // stops short
+    expect(segmentHitsRect(200, 1100, 200, 1200, THIN)).toBe(false); // starts past it
+    expect(segmentHitsRect(900, 990, 900, 1100, THIN)).toBe(false); // right x, wrong column
   });
 
   it('fires when the feet come to rest inside the hazard', () => {
-    expect(sweptHazardHit(200, 990, 200, 1020, THIN)).toBe(true);
+    expect(segmentHitsRect(200, 990, 200, 1020, THIN)).toBe(true);
   });
 
   it('fires on a purely horizontal walk into the hazard', () => {
-    expect(sweptHazardHit(-50, 1020, 50, 1020, THIN)).toBe(true);
+    expect(segmentHitsRect(-50, 1020, 50, 1020, THIN)).toBe(true);
   });
 
   it('fires when the player is already standing in it and does not move', () => {
-    expect(sweptHazardHit(200, 1020, 200, 1020, THIN)).toBe(true);
+    expect(segmentHitsRect(200, 1020, 200, 1020, THIN)).toBe(true);
   });
 });
 

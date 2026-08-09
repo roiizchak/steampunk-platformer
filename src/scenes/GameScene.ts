@@ -13,7 +13,8 @@ import {
   isGreyboxFill,
 } from '../render/groundTiles';
 import { playerRenderDesc } from '../render/playerView';
-import { createSnapshot, latchJumpPress } from '../sim/input';
+import { EnemyLayer } from './enemyLayer';
+import { createSnapshot, latchAttackPress, latchJumpPress } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
 import type { InputSnapshot, Rect, World } from '../sim/types';
 
@@ -42,6 +43,7 @@ export class GameScene extends Phaser.Scene {
   private input$!: InputSnapshot;
   private accumulatorMs = 0;
   private playerSprite!: Phaser.GameObjects.Sprite;
+  private enemies!: EnemyLayer;
   private parallax: { image: Phaser.GameObjects.TileSprite; factor: number }[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -49,6 +51,7 @@ export class GameScene extends Phaser.Scene {
   private heldRight: Phaser.Input.Keyboard.Key[] = [];
   private heldJump: Phaser.Input.Keyboard.Key[] = [];
   private heldWalk: Phaser.Input.Keyboard.Key[] = [];
+  private heldAttack: Phaser.Input.Keyboard.Key[] = [];
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -93,6 +96,12 @@ export class GameScene extends Phaser.Scene {
       // plain data since Phase 2.
       solids: level.solids,
       spawn: level.spawn,
+      // Phase 5, and all four from the SAME parsed level — the world's edges, the spikes that now
+      // hurt, and both enemies. Nothing here is a scene constant; move an enemy in Tiled and it
+      // moves in the game.
+      bounds: { widthPx: level.widthPx, heightPx: level.heightPx },
+      hazards: level.hazards,
+      enemies: level.enemies,
     });
     this.input$ = createSnapshot();
 
@@ -105,6 +114,9 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(desc.originX, desc.originY)
       .setDepth(10);
     this.playerSprite.play(desc.animKey);
+
+    this.enemies = new EnemyLayer(this, this.world);
+    this.enemies.create();
 
     this.createHud();
     this.bindKeys();
@@ -136,7 +148,7 @@ export class GameScene extends Phaser.Scene {
 
   protected helpText(): string {
     // SHIFT is a PRODUCTION control, so it belongs in `base` and not behind the DEV branch below.
-    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk';
+    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  Z / J attack';
     // The dev-scene keys are bound only under `import.meta.env.DEV`, so advertising them in a
     // production build offers the player two keys that do nothing. Vite folds this to `base`.
     // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
@@ -170,6 +182,7 @@ export class GameScene extends Phaser.Scene {
     advance(this.world, this.input$, ticks);
 
     this.renderPlayer();
+    this.enemies.sync();
     this.renderParallax();
     this.publishDebugState();
   }
@@ -190,6 +203,14 @@ export class GameScene extends Phaser.Scene {
       this.input$.right = false;
       this.input$.jumpHeld = false;
       this.input$.walkHeld = false;
+      // The EDGES too, not only the held state. A press latched in the frame before the editor
+      // opened would otherwise sit in the snapshot and fire the moment control came back — a jump
+      // or a swing the player asked for in a different context, arriving seconds later. This was
+      // already true of `jumpPressed` before Phase 5; adding attack made it worth fixing rather
+      // than mirroring. Discarding input the player never aimed at the game is not vault 2.4's
+      // "cleared because a tick ran" — no tick is running.
+      this.input$.jumpPressed = false;
+      this.input$.attackPressed = false;
       return;
     }
 
@@ -205,7 +226,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT } = Phaser.Input.Keyboard.KeyCodes;
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, Z, J } = Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
     // second; with repeats enabled every one would latch a fresh jump edge, and holding the
@@ -220,10 +241,23 @@ export class GameScene extends Phaser.Scene {
     // listener, because unlike jump it is not an edge and has nothing to latch.
     this.heldWalk = [addKey(SHIFT)];
 
+    // Attack is an EDGE with the same latch/consume pair as jump, for the same reason: holding the
+    // key must not swing repeatedly, and a frame that drained zero ticks must not eat the press.
+    // `Z` and `J`; jump stays on SPACE so every Phase 2 spec keeps working unchanged.
+    this.heldAttack = [addKey(Z), addKey(J)];
+
     for (const key of this.heldJump) {
       key.on('down', () => {
         if (this.playerInputEnabled) {
           latchJumpPress(this.input$);
+        }
+      });
+    }
+
+    for (const key of this.heldAttack) {
+      key.on('down', () => {
+        if (this.playerInputEnabled) {
+          latchAttackPress(this.input$);
         }
       });
     }
@@ -543,6 +577,9 @@ export class GameScene extends Phaser.Scene {
     updateDebugState({
       tick: this.world.tickCount,
       player: { x: player.x, y: player.y, vx: player.vx, vy: player.vy, state: player.state },
+      // `health` has been on the nine-field surface since Phase 1 and permanently 0 until now.
+      // Filling it is not widening the surface — the field already existed and was a lie.
+      health: player.hp,
     });
   }
 

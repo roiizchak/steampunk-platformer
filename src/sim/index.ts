@@ -55,10 +55,11 @@ export {
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
 export { advanceWindow, windowOpen } from './windows';
 export type { Clampable, WorldBounds } from './hazards';
-export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, sweptHazardHit } from './hazards';
+export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, segmentHitsRect } from './hazards';
 export type { Projectile } from './projectiles';
 export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
 export { applyWorldDamage } from './worldDamage';
+export { stepEnemies } from './enemyTurn';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,

@@ -93,7 +93,12 @@ export function clampToBounds(player: Clampable, bounds: WorldBounds, halfWidth:
 }
 
 /**
- * Did the player's feet cross this hazard between last tick and this one?
+ * Did a moving point cross this rectangle between last tick and this one?
+ *
+ * Named generically because it has two callers: the hazard sweep below, and the projectile hit
+ * test in `projectiles.ts`. It was `sweptHazardHit` until the sentry needed the same maths against
+ * the player box — one definition, two consumers, rather than a near-copy that agrees on the easy
+ * cases *(vault 5.3)*.
  *
  * A **segment-versus-rectangle** test, not a point test. The segment is last tick's feet to this
  * tick's; the rectangle is the hazard. Standing still is the degenerate case where the segment is a
@@ -104,12 +109,12 @@ export function clampToBounds(player: Clampable, bounds: WorldBounds, halfWidth:
  * No square roots, no normalisation, and it is exact for the vertical and horizontal cases that
  * dominate here rather than being a near-miss of them.
  */
-export function sweptHazardHit(
+export function segmentHitsRect(
   fromX: number,
   fromY: number,
   toX: number,
   toY: number,
-  hazard: Rect,
+  box: Rect,
 ): boolean {
   let tMin = 0;
   let tMax = 1;
@@ -126,10 +131,10 @@ export function sweptHazardHit(
     return tMin <= tMax;
   };
 
-  if (!clip(fromX, toX - fromX, hazard.x, hazard.x + hazard.w)) {
+  if (!clip(fromX, toX - fromX, box.x, box.x + box.w)) {
     return false;
   }
-  if (!clip(fromY, toY - fromY, hazard.y, hazard.y + hazard.h)) {
+  if (!clip(fromY, toY - fromY, box.y, box.y + box.h)) {
     return false;
   }
   return tMin <= tMax;
@@ -149,7 +154,7 @@ export function hazardHit(
   hazards: readonly Rect[],
 ): Rect | null {
   for (const hazard of hazards) {
-    if (sweptHazardHit(fromX, fromY, toX, toY, hazard)) {
+    if (segmentHitsRect(fromX, fromY, toX, toY, hazard)) {
       return hazard;
     }
   }
