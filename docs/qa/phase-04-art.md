@@ -329,6 +329,67 @@ out-of-tree rather than applied, so it did not see vitest report red; it has no 
 the Gym at all, so F3 is read from code, not observed, and 4.14/4.25 are untouched by it; and it did
 not audit the ~8,000 lines of generator internals owned by the other agent's criteria.
 
+## The e2e suite went red at the close of the phase, and the code was not the cause
+
+Found while taking the final verification run before STOP-for-approval. **29 failed / 15 passed** on
+an invocation that had been 44/44 green earlier the same day, against **byte-identical source** — the
+only commits in between were documentation.
+
+**What it was not.** Not the code (`git diff --name-only` since the green run is `docs/` only, working
+tree clean). Not a stale dev server *(vault C13)* — the port was verified free and the run repeated
+red. Not leaked processes — counts were identical before and after. Not machine starvation — 18 % CPU,
+9 GB free. The game booted correctly in a real browser at the same moment: `ready:true`, tick 478,
+player grounded, console clean but for a `favicon.ico` 404.
+
+**What it was.** Every boot loads **34.5 MB of PNG**, 21.4 MB of it the three parallax layers
+(`mid.png` alone is 9.1 MB). Phases 1–3 booted greybox art measured in kilobytes. **This phase's real
+art silently invalidated the suite's parallelism budget** — 8 concurrent Chromium instances each
+pulling 34.5 MB through one vite dev server, each with a 20 s boot bound. One run surfaced
+`ECONNRESET` on `GET /assets/index.json`, which is the server dropping a connection rather than the
+game hanging.
+
+| workers | result |
+|---|---|
+| 8 (Playwright's default here, 16 logical cores) | **29 failed / 15 passed** |
+| 4 | failed |
+| 2 | failed |
+| 1 | **44 passed**, twice, ~260 s |
+
+**Fixed by pinning `workers: 1`** in `playwright.config.ts`, with the measurement table and the
+reasoning in the file. `npm run test:e2e` — the default invocation, not a special flag — is now
+**44 passed**.
+
+🔴 **The part worth carrying, and it is not the fix.** Every one of these failures presented as
+`bootToGame` timing out with **neither `ready` nor `bootError`** — which is *exactly* the
+`ready:false / bootError:null` hang state that the whole refuse-to-route design exists to make
+impossible, and that this phase already fixed twice (`verifySheets`, then `verifyLevels`). A
+contended dev server and a genuine boot hang are **indistinguishable at the assertion**. That trains
+a reader to dismiss a red suite as flaky, which is how a real hang ships.
+
+**Explicitly rejected: raising `BOOT_TIMEOUT`.** A bound loose enough to survive a contended server is
+loose enough to hide a real hang — the same reasoning that bans `waitForTimeout`. The honest fix is a
+smaller payload: the parallax layers are uncompressed and enormous for what they draw. Restoring
+parallelism is gated on that, and is Phase 5 work.
+
+**Confidence, stated rather than implied.** The payload explanation is the *leading* one and is well
+supported (the `ECONNRESET`, the size measurement, the monotone worker/failure relationship). It is
+not proven — I did not isolate it by serving a compressed build. What *is* proven is the fix:
+`workers: 1` is green twice, and every other count is red.
+
+### A second defect, found while measuring the first
+
+`anchor.png` (6.1 MB) and `anchor-original.png` (4.1 MB) are **absent from `index.json`, unreferenced
+anywhere in `src/`, and present in `dist/`** — together with `anchor.job.json` and
+`anchor.prompt.txt`. **10.2 MB of the shipped bundle is source art the game never loads.**
+
+They live under `public/`, which Vite copies wholesale, and they are there deliberately: vault 4.17
+requires the prompt and job record to sit beside the asset. **The convention is right and its
+location is wrong** — provenance belongs somewhere that does not ship. `verify-dist.mjs` does not
+catch this, because it checks for dev-only *symbols*, not for unreferenced *weight*.
+
+Recorded, not fixed: moving provenance out of `public/` changes where vault 4.17's records live, which
+is a decision, not a cleanup — and this phase is at its approval boundary. Phase 5 item.
+
 ## Rebuild determinism (4.11) — measured, and the criterion as worded cannot be met
 
 **The half that holds, and it is now measured rather than assumed.** Running `npm run assets:build`
