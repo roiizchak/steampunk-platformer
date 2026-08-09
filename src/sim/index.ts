@@ -54,6 +54,8 @@ export {
 } from './player';
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
 export { advanceWindow, windowOpen } from './windows';
+export type { Clampable, WorldBounds } from './hazards';
+export { belowKillPlane, clampToBounds, hazardHit, sweptHazardHit } from './hazards';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,
