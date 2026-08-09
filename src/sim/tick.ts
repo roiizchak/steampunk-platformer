@@ -79,6 +79,7 @@ import {
 } from './player';
 import { createRng, nextFloat } from './rng';
 import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
+import { advanceWindow, windowOpen } from './windows';
 
 /**
  * Grey-box collision geometry: a floor and two raised platforms with a gap between them.
@@ -191,8 +192,8 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 
   // 7. Jump resolution. Both windows are tested BEFORE step 13 advances them, which is what makes
   //    the definition above true rather than one tick optimistic.
-  const bufferOpen = player.ticksSinceJumpPressed < tuning.jumpBufferTicks;
-  const coyoteOpen = player.ticksSinceGrounded < tuning.coyoteTicks;
+  const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
+  const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
   if (bufferOpen && (player.grounded || coyoteOpen)) {
     player.vy = -tuning.jumpVelocity;
     player.jumpCutPending = true;
@@ -255,11 +256,18 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     Codex plan review F5 predicted the first and this implementation had it; `coyote-time.
   //     test.ts` then caught the second, which is the same defect mirrored. Both endpoints of
   //     both windows are asserted there against the live knob.
-  if (!coyoteArmedThisTick && player.ticksSinceGrounded < tuning.coyoteTicks) {
-    player.ticksSinceGrounded += 1;
+  //
+  //     The `advanceWindow` call is the shared saturating increment from `windows.ts`; the guard in
+  //     front of it — WHETHER this tick is spent at all — is the step-order rule above and stays
+  //     here, with the numbered order that owns it.
+  if (!coyoteArmedThisTick) {
+    player.ticksSinceGrounded = advanceWindow(player.ticksSinceGrounded, tuning.coyoteTicks);
   }
-  if (!events.landed && player.ticksSinceJumpPressed < tuning.jumpBufferTicks) {
-    player.ticksSinceJumpPressed += 1;
+  if (!events.landed) {
+    player.ticksSinceJumpPressed = advanceWindow(
+      player.ticksSinceJumpPressed,
+      tuning.jumpBufferTicks,
+    );
   }
 
   // 14.

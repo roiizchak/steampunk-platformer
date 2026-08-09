@@ -107,11 +107,32 @@ export interface TuningKnobs {
    */
   jumpCutDivisor: number;
   /**
-   * Coyote window, in TICKS. See the window definition in `tick.ts`: `N` means the jump is
-   * accepted on the tick the player leaves the ground and on the `N - 1` ticks after it.
+   * Coyote window, in TICKS. **`tick.ts`'s header is the authority; this is a pointer to it, not a
+   * second definition** *(vault 2.2, 5.3)*.
+   *
+   * `N` means the jump is accepted on the `N` consecutive ticks starting with the **first tick
+   * AFTER** the player walks off a ledge. The ledge tick itself is not one of them, because step 7
+   * had already run when step 10 armed the window.
+   *
+   * > This comment said "accepted on the tick the player leaves the ground" until Phase 5, which
+   * > contradicted `tick.ts` by exactly one tick and was found by the Phase 5 Codex plan review
+   * > (C3) before combat could add a third window to the disagreement. `coyote-time.test.ts` and
+   * > `tick.ts` were right; this was the outlier. Vault 5.3 in its literal form — two definitions
+   * > of one concept, drifting.
    */
   coyoteTicks: number;
-  /** Jump-buffer window, in TICKS. Same inclusive definition as `coyoteTicks`. */
+  /**
+   * Jump-buffer window, in TICKS.
+   *
+   * **NOT the same definition as `coyoteTicks` — the two windows are deliberately asymmetric**, and
+   * this comment claimed they matched until Phase 5. A press is remembered for `N` ticks starting
+   * with **the tick of the press itself** (inclusive), where coyote's window starts the tick *after*
+   * the ledge. And when the player is airborne, "able to jump" is the tick AFTER touchdown, not the
+   * touchdown tick, because step 7 tests `grounded` as step 9 of the previous tick set it.
+   *
+   * Both endpoints are pinned by `tests/unit/coyote-time.test.ts`. Read `tick.ts`'s header before
+   * changing either.
+   */
   jumpBufferTicks: number;
 }
 

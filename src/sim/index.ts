@@ -45,6 +45,30 @@ export {
   toWorld,
 } from './player';
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
+export { advanceWindow, windowOpen } from './windows';
+export type { AttackPhase, CombatTiming } from './combat';
+export {
+  ATTACK,
+  DEATH_TICKS,
+  HURT_TICKS,
+  IFRAME_TICKS,
+  PLAY_LAG_TICKS,
+  attackPhase,
+  attackTotalTicks,
+  hitWindowOpen,
+} from './combat';
+export type { Scavenger, ScavengerOptions, Sentry, SentryOptions, Sighting } from './enemies';
+export {
+  CHASE_COMMIT_TICKS,
+  SCAVENGER,
+  SENTRY,
+  createScavenger,
+  createSentry,
+  detects,
+  sentrySees,
+  stepScavenger,
+  stepSentry,
+} from './enemies';
 
 /** Convert an integer tick count to whole milliseconds. Ticks are the unit; ms is for display. */
 export function ticksToMs(ticks: number): number {
