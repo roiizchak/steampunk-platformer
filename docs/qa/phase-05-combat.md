@@ -98,6 +98,46 @@ Saving: **≈ $4.76** against the plan's first-pass estimate, before any rework.
 
 ---
 
+## Art findings — what the first batch taught
+
+Full provenance in [generations/phase-05-anchors.md](../generations/phase-05-anchors.md) and
+[phase-05-clips.md](../generations/phase-05-clips.md). The three findings worth carrying forward:
+
+**1. G1 caught the 4.27 defect on the first new art it ever saw.** A scavenger candidate came back
+with one foot 52 px above the other against a 27 px limit. In Phase 4 that shape of defect shipped
+and was found by eye after ≈$7 of clips had been shot from it; here it cost $0.15 and never left
+`_generated/`. The gate had already been validated against the real historical files — the original
+anchor fails at 59 px, the corrected one passes at 0, and the hand-recorded figure was 58.
+
+**2. `poseSpan` works and `SPAN_CLIP` does not, and the split was total.** Four of four clips using
+three timed poses hit their specified poses; two of two using `SPAN_CLIP` failed. `SPAN_CLIP`
+describes a SHAPE — *"extending through the first half and returning through the second"* — and the
+model satisfied it exactly by raising the spanner and lowering it, which is not a strike. Three
+timed poses describe a GEOMETRY. **I reasoned that `attack` and `hurt` genuinely do extend and
+return, so `SPAN_CLIP` was right for them; the reasoning was sound and the outcome was wrong.** All
+six one-shots now use `poseSpan`. This is STYLE.md §6's stills finding arriving in the video path.
+
+**3. `ffprobe` cannot see what a clip depicts.** All nine round-1 clips reported 720 × 1280, 97
+frames, 4.041667 s — perfect, identical, and two of them were unusable. The six-frame contact strip
+is what caught it, and it costs nothing.
+
+### Uncertain, and deliberately not re-shot yet
+
+| Clip | Suspicion | Why an eye cannot settle it |
+|---|---|---|
+| `brass-sentry/idle` | Near-frozen | For a machine at rest that may be correct rather than Phase 4's *"no breath, only boil"*. It will measure near the motion floor either way, and the gate is the arbiter. |
+| `rust-scavenger/walk` | Possible near-idle | Legs move, poses are close. This is an IoU measurement, not a judgement. |
+| all three `death`s | Back-loaded | The contact strips sample EVENLY; `sampler.mjs` selects on a difference matrix. A held opening that wastes three of six even samples may cost nothing once the real sampler runs. Re-shooting on the strength of a strip that uses the wrong sampling would be spending money to fix an artefact of the measurement. |
+
+### Open against G5 (criterion 5.4c)
+
+`brass-courier/attack`'s reach peaks **late** — around 5/6 of the way through the clip — while the
+active window is ticks 6–10 of 20, i.e. 30–50 %. Whether that survives sampling is exactly what G5
+measures. Written down before the measurement so the answer cannot be quietly rounded to a pass;
+`INDETERMINATE` and `FAIL` are both legal outcomes.
+
+---
+
 ## Known limitations, recorded rather than fixed *(C11)*
 
 | # | What | Why it is not fixed here |
@@ -106,6 +146,9 @@ Saving: **≈ $4.76** against the plan's first-pass estimate, before any rework.
 | 2 | **`HUD_SLOT` is measured from the shipped `hud-health.png`.** | Uncomfortably close to what vault A5 forbids. Declared in one place with its provenance instead of re-measured at runtime. **If the HUD art is regenerated, re-measure those four numbers** — no gate can see a stale slot, the fill just sits slightly off inside the frame. |
 | 3 | **The sentry's projectile does not collide with solids.** | It would need the solid list, an ordering decision against the player's own motion, and a second swept test. The sentry has clear line of sight in `level-01`, so the case does not arise. |
 | 4 | **`enemyKnobs` uses a named field list, not enumeration.** | An enemy's `x`, `hp` and counters are state, not tuning; a panel that let you drag `hp` would be a cheat menu. Cost: adding a knob means adding it there too. |
+| 5 | **G1 cannot tell a boot from a hand.** It measures ground-contact components and assumes they are what the subject stands on. | Exposed by the round-1 scavenger, whose fingertips entered the ground band so the gate compared a hand against a foot and reported 104 px. The number was right; the question was wrong. Giving it limb semantics is a much larger gate than 4.27 needs. Constraint pushed into the prompts instead: any subject putting something other than its feet into the bottom 12 % of its height must say so in its concept. |
+| 6 | **The two new anchors add 7.5 MB under `public/`**, which Vite copies into `dist/`. | It grows the already-recorded debt about relocating anchor art out of the shipped payload. Followed the established `brass-courier` layout rather than inventing a second one; the relocation is a standing STOP-and-ask. |
+| 7 | **`character-bounds.json`'s `scale` is saved and never recomputed by the build — but its PROVENANCE is the idle sheet**, a regenerable frame. | A5's protection is intact in practice: regenerating a sheet moves nothing, because the build reads the saved value. Codex C5's point stands about where the number came from, and it becomes live at step 6a when each new subject needs its own. |
 
 ---
 
