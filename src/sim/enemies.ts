@@ -31,6 +31,18 @@
 
 import { windowOpen } from './windows';
 
+/**
+ * The roster, and the only list of it.
+ *
+ * `src/game/tilemap.ts` validates every `.tmj` enemy slug against this, so a slug a level can name
+ * is exactly a slug this module can build. Keeping the list beside the constructors — rather than
+ * in the parser, or in a scene — is what makes that true by construction: adding an enemy without
+ * a `createX` is a typecheck error at the switch that builds them, not a level that boots one
+ * enemy short.
+ */
+export const ENEMY_SLUGS = ['brass-sentry', 'rust-scavenger'] as const;
+export type EnemySlug = (typeof ENEMY_SLUGS)[number];
+
 /** Where the player is, as far as an enemy is concerned. */
 export interface Sighting {
   playerX: number;

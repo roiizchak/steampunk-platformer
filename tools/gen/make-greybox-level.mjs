@@ -20,6 +20,13 @@
 // rectangles are the only representation that can round-trip a sub-tile nudge back out of the
 // Element Editor. Here they are authored to agree with the tiles exactly; making them disagree is
 // what the editor is for.
+//
+// PHASE 5 ADDS TWO MORE KINDS OF OBJECT, AND ONE OF THEM CLOSES A DEBT
+// `hazard: true` rectangles and `enemy: "<slug>"` rectangles. The hazard rects are derived from
+// the SAME `SPIKES` array that draws the spike tiles, which is what makes "the drawn spikes hurt"
+// true by construction rather than by a second list someone has to remember to keep in step —
+// Phase 4 shipped that spike run drawn and harmless, and `level-entities.test.ts` now gates the
+// agreement by measuring which gids fall inside a hazard rect.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -109,6 +116,23 @@ const TILESET_ROWS = 4;
 const SPIKE_GID = 13;
 const SPIKES = [{ fromCol: 24, toCol: 27, row: GROUND_TOP_ROW - 1 }];
 
+/**
+ * Where the two enemies stand, and how far the patroller may walk.
+ *
+ * A rectangle says all of it: its horizontal span IS the patrol beat, its bottom edge is where the
+ * feet rest, and `tilesTall` is the authored sprite height from the plan — `brass-sentry` 2 tiles
+ * against `rust-scavenger`'s 2.5 and the player's 3. Those three heights being distinct is a
+ * readability decision taken against the published contract in ASSET-PIPELINE.md §0a, before a
+ * prompt was written, so silhouette alone separates them at true sprite size.
+ *
+ * Both beats sit strictly inside a ground strip. `describeLevelProblem` checks BOTH ends, so a
+ * patrol authored over the ground gap at cols 40–42 refuses to boot rather than walking on air.
+ */
+const ENEMIES = [
+  { slug: 'brass-sentry', fromCol: 50, toCol: 51, standRow: 16, tilesTall: 2 },
+  { slug: 'rust-scavenger', fromCol: 68, toCol: 79, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
+];
+
 // 6 tiles in, leaving a 28-tile flat run-up before the wall. That run is load-bearing for the
 // inherited Phase 2 specs: one walks until |vx| saturates (5 ticks) and one asserts the player
 // lands back at exactly its starting y.
@@ -189,6 +213,39 @@ objects.push({
   y: px(GROUND_TOP_ROW),
 });
 
+// One hazard rectangle per spike run, from the same array that drew the tiles.
+for (const { fromCol, toCol, row } of SPIKES) {
+  objects.push({
+    height: TILE,
+    id: nextObjectId++,
+    name: '',
+    properties: [{ name: 'hazard', type: 'bool', value: true }],
+    rotation: 0,
+    type: '',
+    visible: true,
+    width: px(toCol - fromCol + 1),
+    x: px(fromCol),
+    y: px(row),
+  });
+}
+
+for (const { slug, fromCol, toCol, standRow, tilesTall } of ENEMIES) {
+  const height = tilesTall * TILE;
+  objects.push({
+    height,
+    id: nextObjectId++,
+    name: '',
+    properties: [{ name: 'enemy', type: 'string', value: slug }],
+    rotation: 0,
+    type: '',
+    visible: true,
+    width: px(toCol - fromCol + 1),
+    x: px(fromCol),
+    // Tiled's `y` is the TOP, and `standRow` is the surface the feet rest on.
+    y: px(standRow) - height,
+  });
+}
+
 const map = {
   compressionlevel: -1,
   height: H_TILES,
@@ -268,5 +325,6 @@ writeFileSync(out, `${JSON.stringify(map, null, 2)}\n`, 'utf8');
 console.log(
   `wrote ${out}\n` +
     `  ${W_TILES} x ${H_TILES} tiles @ ${TILE}px = ${W_TILES * TILE} x ${H_TILES * TILE} px\n` +
-    `  ${strips.length} collision strips, spawn at (${px(SPAWN_COL) + TILE / 2}, ${px(GROUND_TOP_ROW)})`,
+    `  ${strips.length} collision strips, spawn at (${px(SPAWN_COL) + TILE / 2}, ${px(GROUND_TOP_ROW)})\n` +
+    `  ${SPIKES.length} hazard rects, ${ENEMIES.map((e) => e.slug).join(' + ')}`,
 );

@@ -30,6 +30,10 @@ function levelOf(widthPx: number, heightPx: number): LevelData {
     heightPx,
     solids: [{ x: 0, y: heightPx - 32, w: widthPx, h: 32 }],
     spawn: { x: 64, y: heightPx - 32 },
+    // The camera reads neither, and they are spelled out rather than spread from a partial so a
+    // future field is a typecheck error here too — that seam is why this literal is not a cast.
+    hazards: [],
+    enemies: [],
   };
 }
 

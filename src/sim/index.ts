@@ -75,9 +75,10 @@ export {
   isCombatState,
   stepCombat,
 } from './combat';
-export type { Scavenger, ScavengerOptions, Sentry, SentryOptions, Sighting } from './enemies';
+export type { EnemySlug, Scavenger, ScavengerOptions, Sentry, SentryOptions, Sighting } from './enemies';
 export {
   CHASE_COMMIT_TICKS,
+  ENEMY_SLUGS,
   SCAVENGER,
   SENTRY,
   createScavenger,
