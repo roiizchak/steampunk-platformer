@@ -54,6 +54,8 @@
  *   the key off the image, so a field that drifts or speckles costs alpha at the edges.
  */
 
+import { COMBAT_MOTIONS } from './motionCombat.mjs';
+
 /**
  * Appended to every ONE-SHOT motion (`jump`, `fall`), never to a cyclic one.
  *
@@ -145,6 +147,46 @@ const HOLD = [
     'No texture, no speckle, no gradient, no shadow, no floor, no ground line, no platform, no ' +
     'scenery. He stands on nothing and touches nothing.',
 ].join(' ');
+
+/**
+ * The two clauses of `HOLD` that are true of ANY subject, so an enemy can reuse them.
+ *
+ * Split out in Phase 5. `HOLD` above opens with *"this is the same man… brass goggles… satchel"* —
+ * feeding that to a turret would ask the model to grow a courier out of it, and a fallback that
+ * quietly did so is exactly the class of bug `videoPrompt` already refuses for a missing motion.
+ * So identity is now per subject and REQUIRED for every namespaced entry; only the camera lock and
+ * the chroma field are shared, because neither says anything about who is in frame.
+ */
+const HOLD_CAMERA =
+  'CAMERA: the camera is completely locked. It never pans, never zooms, never dollies and never ' +
+  'rotates. The subject stays at exactly the same size and stays in the same place in the frame ' +
+  'for the whole clip, and is never cropped by any edge.';
+
+const HOLD_BACKGROUND =
+  'BACKGROUND: perfectly flat uniform chroma green, RGB 0 255 0, edge to edge, for the whole clip. ' +
+  'No texture, no speckle, no gradient, no shadow, no floor, no ground line, no platform, no ' +
+  'scenery. It stands on nothing and touches nothing.';
+
+/**
+ * One-shot pose scaffolding, used instead of `SPAN_CLIP` wherever the motion does NOT return.
+ *
+ * `SPAN_CLIP` says *"extending through the first half and returning through the second"*, which is
+ * true of a jab and false of a death — and Phase 4 paid a generation to learn that the model
+ * resolves a self-contradicting prompt by maximising it (it somersaulted the fall). A one-shot that
+ * ends somewhere new therefore names **three fixed poses with their times**, which is geometry the
+ * model can satisfy exactly one way, rather than a monotonicity clause — the plan is explicit that
+ * a monotonicity clause made the Phase 4 jump somersault through five negations.
+ */
+export function poseSpan(first, halfway, last) {
+  return (
+    'Perform this as ONE single continuous motion that fills the ENTIRE clip and never repeats. ' +
+    `At the very FIRST moment of the clip: ${first} ` +
+    `HALFWAY through the clip: ${halfway} ` +
+    `At the very LAST moment of the clip: ${last} ` +
+    'Move smoothly and steadily between those three poses and never hold still, so that at every ' +
+    'instant the body is at a different position from every other instant.'
+  );
+}
 
 /**
  * One motion brief per animation. `cyclic` decides the prompt tail and how the clip is sampled.
@@ -290,6 +332,8 @@ export const VIDEO_MOTIONS = Object.freeze({
       'a shape he has already passed through.' +
       `${UPRIGHT_IN_AIR}`,
   },
+
+  ...COMBAT_MOTIONS,
 });
 
 /**
@@ -304,10 +348,36 @@ export function videoPrompt(template, action, blocks) {
         `rather than falling back to another action's motion (vault 4.16).`,
     );
   }
+  /**
+   * Identity is per subject and has **no fallback**, for the same reason a missing motion throws.
+   * `HOLD` opens with *"this is the same man… brass goggles… satchel"*; a turret handed that would
+   * be asked to grow a courier out of itself, and it would try. The legacy bare keys (`idle`,
+   * `walk`, `run`, `jump`, `fall`) are the courier's and keep `HOLD`; every namespaced `slug/action`
+   * must declare its own.
+   */
+  const namespaced = action.includes('/');
+  if (namespaced && !spec.identity) {
+    throw new Error(
+      `motion: "${action}" is namespaced but declares no identity clause. An enemy inheriting the ` +
+        `courier's identity is a worse failure than a missing prompt (vault 4.16).`,
+    );
+  }
+  const hold = namespaced
+    ? [spec.identity, HOLD_CAMERA, HOLD_BACKGROUND].join(' ')
+    : HOLD;
+
+  /**
+   * The one-shot tail. `span` wins when the motion does NOT return (`death`, `fire`); otherwise a
+   * non-cyclic motion gets `SPAN_CLIP`, which is only correct for a motion that extends and comes
+   * back. Cyclic motions get neither — their count is in the brief.
+   */
+  const tail = spec.span ?? (spec.cyclic ? '' : SPAN_CLIP);
+
   return [
-    `A single continuous shot of THIS EXACT CHARACTER, who ${spec.motion}`,
+    `A single continuous shot of THIS EXACT SUBJECT, which ${spec.motion}`,
+    ...(tail ? ['', tail] : []),
     '',
-    HOLD,
+    hold,
     '',
     blocks.rendering,
     '',
