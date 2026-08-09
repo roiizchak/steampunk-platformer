@@ -7,10 +7,11 @@ Index entry in [QA-LOG.md](../QA-LOG.md). Findings from the gate's agent owners 
 
 ## THE FROZEN COMBAT TIMINGS — criterion 5.4b
 
-**Recorded 2026-08-09, before any fal generation for this phase.** No `request_id` exists for Phase 5
-at the time of writing; `docs/generations/phase-05-*.md` is empty. That ordering is the criterion:
-the numbers art is derived from must be fixed *before* the art is bought, or the art is what fixes
-the numbers.
+**Recorded 2026-08-09, before any fal generation for this phase.** At the moment this table was
+written no `request_id` existed for Phase 5 and `docs/generations/phase-05-*.md` did not exist —
+both do now, and the ordering between them is the criterion. The numbers art is derived from must be
+fixed *before* the art is bought, or the art is what fixes the numbers. This paragraph is a dated
+record of that ordering, not a description of the repository today.
 
 Every value below is **live in `src/sim/`** and imported by `src/render/animTiming.ts` — never
 retyped there *(vault 5.3)*. This table is a record of what was frozen, not a second definition; if
