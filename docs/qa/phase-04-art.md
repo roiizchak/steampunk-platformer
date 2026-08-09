@@ -355,11 +355,20 @@ So the criterion is decomposed rather than declared passed:
 | same inputs → same bytes | **PASS**, measured above |
 | clean clone → same bytes | **UNACHIEVABLE** without committing 128 MB of clips |
 
-**This is a decision for the phase owner, not something to quietly restate.** The options are to
-commit the source clips (expensive, and they are model outputs that cannot be regenerated
-identically — STYLE.md §3 records this model as not seed-deterministic), to accept that shipped art
-is reproducible only from a machine holding the clips, or to reword 4.11 to the determinism claim
-that is actually checkable. **Not decided here.**
+**This was a decision for the phase owner, not something to quietly restate — and it has been made.**
+**2026-08-09: the criterion is re-scoped to the packing step**, the option the measurements support.
+Committing the clips was rejected — 128 MB in git buys reproducibility of a step that is already
+reproducible on any machine holding them — and "accept machine-local" was rejected as a *wording* for
+the criterion, because a criterion that cannot be run is not a criterion. The new text and the full
+rationale are in [phase-04-art.md § 6](../prd/phase-04-art.md), under the criteria table.
+
+Two consequences are carried forward rather than closed:
+
+- **The clips are the only copy of a non-regenerable input.** Losing `_generated/` freezes the art at
+  its current packing; it must be archived outside git.
+- **`assets:fetch` / `assets:verify` are still promised by `ASSET-PIPELINE.md` and undefined in
+  `package.json`** (Codex impl-review finding 5). Building them is what would make a clean-clone
+  rebuild real. That is the successor to this criterion, and Phase 4 does not own it.
 
 Worth stating alongside: because the model is not seed-deterministic, re-running the GENERATION step
 can never reproduce these bytes. The most any rebuild gate can prove is that the *packing* of fixed
@@ -412,10 +421,14 @@ pass if `applySurfaceTiles` were deleted", which is true of that test and false 
 the drawn-index e2e assertions do catch a deleted call site, verified by mutation, and Codex names
 them in the same paragraph.
 
-**Recorded, not fixed** *(C11)*: the missing `assets:fetch`/`assets:verify` workflow behind 4.11
-(needs a decision); the Gym's pre-fetch edit race; `dropCastShadow`'s residual ≤4% window; 4.20's
-PRD text needing amendment rather than a silent test exemption; and the centroid oracle's
-three-decimal rounding, which is a latent false-RED and therefore the safe direction.
+**Recorded, not fixed** *(C11)*: the missing `assets:fetch`/`assets:verify` workflow, now the
+recorded successor to a re-scoped 4.11 rather than an open question; the Gym's pre-fetch edit race;
+`dropCastShadow`'s residual ≤4% window; and the centroid oracle's three-decimal rounding, which is a
+latent false-RED and therefore the safe direction.
+
+**Closed since, by the phase owner on 2026-08-09**: 4.11's wording (re-scoped to packing
+determinism) and 4.20's PRD text (amended to name the flat-animation exemption the test already
+implements). Both are now criteria the gate can actually run.
 
 ## Criterion-by-criterion
 
@@ -426,7 +439,7 @@ before the PRD may mark this phase done.
 | # | Verdict | Evidence |
 |---|---|---|
 | 4.19 | **PASS**, with its ceiling stated | Exact equality against the committed manifest, plus a fresh re-measurement of the shipped PNG's pixels. It guards the PACK step; it cannot catch a systematic bug in `figureMetrics`, because manifest and sheet would move together. |
-| 4.20 | **PASS**, after qa-expert finding 5 | `idle` is flat in all twelve frames, so 4.20's second half is literally false for it — correctly, since the courier breathes without lifting a boot. A regression to per-frame anchoring would therefore be invisible inside `idle`, and nothing asserted a non-zero lift on `jump` or `fall` at all. Now asserted per animation, with idle's flatness pinned as deliberate. |
+| 4.20 | **PASS**, after qa-expert finding 5 and the 2026-08-09 PRD amendment | The test's exemption now matches the criterion's text; before the amendment the code was right and the PRD was wrong. `idle` is flat in all twelve frames, so 4.20's second half is literally false for it — correctly, since the courier breathes without lifting a boot. A regression to per-frame anchoring would therefore be invisible inside `idle`, and nothing asserted a non-zero lift on `jump` or `fall` at all. Now asserted per animation, with idle's flatness pinned as deliberate. |
 | 4.21 | **PASS** | Committed overflow fixture; the packer throws rather than clipping *(vault 4.14 — the cell was raised 336 → 384 instead)*. |
 | 4.22 | **PASS**, after F1 | The predicate's unit fixtures, PLUS two e2e tests asserting the drawn tile index — added because the call site was unguarded and the shipped bug passed 464 tests. |
 | 4.23 | **PASS** | `tests/e2e/phase-04-assets.spec.ts` — drawn bottom ≡ sim feet y on 120+ samples spanning takeoff, flight and landing; `originY` mutant red. |
@@ -437,7 +450,7 @@ before the PRD may mark this phase done.
 | 4.2b | **FAIL** | The invoice has not been read. This is the blocker. |
 | 4.10 | **UNRUN** | `gateReachBand` — the frame-diff box audit the criterion names — is called only from `selfTest()` and unit fixtures. Verified by grep: no call site against the real sheets, no result in any log. |
 | 4.12 | **UNRUN** | `findSource` throws on a missing or ambiguous action, but no test exercises it and no log records the "deliberately remove one" run being watched fail. Right shape, unproven. |
-| 4.11 | **HALF PASS, half UNACHIEVABLE as worded** | See §Rebuild determinism. Same-input determinism is now measured and holds; clean-clone rebuild cannot be done without committing 128 MB of source clips. |
+| 4.11 | **PASS**, against the criterion as re-scoped | See §Rebuild determinism. Same-input packing determinism is measured and holds byte for byte. The clean-clone half was **removed from the criterion by the phase owner on 2026-08-09**, not quietly restated: it is unachievable in principle (Seedance 2 is not seed-deterministic) as well as in practice (128 MB of gitignored clips). The successor work — `assets:fetch` / `assets:verify` — is recorded, unbuilt, and not a Phase 4 task. |
 | 4.16 | **FAIL** | Ten files over 400 lines. See §File sizes. |
 | 4.18 | **RAN — verdict BLOCK** | [phase-04-impl.md](../reviews/phase-04-impl.md); 12 findings, all applied or recorded. |
 | all others | **UNRUN** | Awaiting their gate owners. |

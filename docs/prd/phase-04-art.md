@@ -128,7 +128,7 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 | 4.8 | ~~Contact frame lands inside the active window~~ — **moved to Phase 5** with the attack sheets | — | — |
 | 4.9 | Loop flag verified per clip; held states meet a motion floor | measured *(4.23)* | `voltagent-qa-sec:qa-expert` |
 | 4.10 | Box-vs-art audit: frame-diff method, INDETERMINATE allowed, no guesses | *(4.18)* | `voltagent-qa-sec:qa-expert` |
-| 4.11 | Rebuild from a clean clone produces **byte-identical** PNGs | *(4.15)* | `voltagent-qa-sec:qa-expert` |
+| 4.11 | **Packing is deterministic**: the same `_generated/` inputs rebuild every shipped PNG and `lift-profile.json` byte for byte. Scoped to packing on purpose — see the note below the table | *(4.15)* | `voltagent-qa-sec:qa-expert` |
 | 4.12 | A missing declared input **fails the build**, does not substitute | deliberately remove one *(4.16)* | `voltagent-qa-sec:qa-expert` |
 | 4.13 | Every asset has catalog entry + bounds + anchor + active frames + saved config | `index.json` audit | `voltagent-qa-sec:qa-expert` |
 | 4.14 | Anatomy check by looking — metrics cannot see a third leg | eyeball; `playwright-cli` screenshot of the Gym *(4.20)* | play |
@@ -137,7 +137,7 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 | 4.17 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-04-plan.md` | — |
 | 4.18 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-04-impl.md` | codex |
 | 4.19 | **Packed per-frame lift equals the committed lift-profile manifest EXACTLY** — no ±1 tolerance, which would hide a `round`/`floor` off-by-one | unit, against `config/lift-profile.json` | `voltagent-qa-sec:qa-expert` |
-| 4.20 | For every animation the **deepest** frame reaches the final cell row, **and at least one other frame does not** — the second half is what fails on a per-frame packer | unit | `voltagent-qa-sec:qa-expert` |
+| 4.20 | For every animation the **deepest** frame reaches the final cell row, **and at least one other frame does not** — the second half is what fails on a per-frame packer. An animation whose figure genuinely never leaves the ground is exempt from the second half **only if its flatness is pinned as a named expectation**, never by a blanket tolerance | unit | `voltagent-qa-sec:qa-expert` |
 | 4.21 | A frame that overflows the cell vertically **throws**; it is never silently clipped or rescaled *(vault 4.14)* | committed bad fixture *(C2)* | `voltagent-qa-sec:qa-expert` |
 | 4.22 | Ground keeps its brass cap under **non-solid** decoration; half-open positive-area overlap proven at a cell boundary and under a sub-tile nudge | unit | `voltagent-qa-sec:code-reviewer` |
 | 4.23 | Drawn feet meet the surface on flat ground, on all three platform tops and on the pillar — the drawn sprite bottom equals the sim's feet `y`, asserted against the imported predicate | `e2e` | `e2e` |
@@ -147,6 +147,32 @@ audio cues land in Phases 6 and 7 and need catalog entries too)
 | 4.27 | The **anchor image's own contact geometry** is measured before generating from it — both soles on one line, or the offset recorded and corrected at source | measured; STYLE.md §8 | `voltagent-qa-sec:qa-expert` |
 
 **Regression set:** Phases 1–3, specs 01–03.
+
+> **On 4.11's scope, and why it was narrowed.** It read *"rebuild from a clean clone produces
+> byte-identical PNGs"* until the Phase 4 gate measured what that would take. A clean clone cannot
+> rebuild at all: `_generated/` is gitignored and holds **128 MB** of source clips and extracted
+> frames, and the build correctly **fails loudly** on a missing input rather than substituting
+> *(vault 4.16, criterion 4.12)* — so it yields no PNGs, not wrong ones.
+>
+> The wider criterion was also unachievable in principle, not just in practice: **Seedance 2 is not
+> seed-deterministic** (STYLE.md §3), so re-running the *generation* step can never reproduce these
+> bytes from a prompt. The most any rebuild gate can prove is that the **packing** of fixed clips is
+> deterministic — which is exactly the step that carried a real bug this phase, so it is the part
+> worth pinning. Committing the clips was rejected: 128 MB in git buys reproducibility of a step that
+> is already reproducible on any machine holding them.
+>
+> **Two things this leaves open, deliberately.** The clips are the *only* copy of an input that
+> cannot be regenerated identically, so losing them freezes the art at its current packing — archive
+> them outside git. And `ASSET-PIPELINE.md` still promises `assets:fetch` / `assets:verify`, which
+> `package.json` does not define (Codex impl-review finding 5); implementing them is what would make
+> a clean-clone rebuild real, and it is the successor to this criterion, not a Phase 4 task.
+
+> **On 4.20's exemption.** `idle` measures a lift of 0 across all twelve frames — correctly, since
+> the courier breathes without lifting a boot — so the criterion's second half is literally false for
+> it. The exemption is written as a **named per-animation expectation**, not a tolerance: the test
+> asserts `idle` is flat *and* asserts a non-zero lift on `walk`, `run`, `jump` and `fall`. A blanket
+> "some animations may be flat" would have let a revert to per-frame anchoring pass unseen, which is
+> the regression 4.20 exists to catch.
 
 ### 7. Vault-out
 Whether fal's alpha/aspect/cost behaviour matched the vault's Higgsfield-era findings *(A2)*. Whether
