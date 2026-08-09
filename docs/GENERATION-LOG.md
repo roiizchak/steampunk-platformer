@@ -63,7 +63,7 @@ and nothing else moves.**
 | [generations/phase-04-world.md](generations/phase-04-world.md) | 4b/G · 4b/H | `fal-ai/nano-banana-pro` | 13 · $1.95 |
 | [generations/phase-04-video.md](generations/phase-04-video.md) | 4b/I · 4b/J · batch V | `bytedance/seedance-2.0/image-to-video` | 21 clips + 1 edit |
 | [generations/phase-05-anchors.md](generations/phase-05-anchors.md) | Phase 5 step 4b — enemy anchors, **G1-gated before any clip** | `fal-ai/nano-banana-pro` | 6 · $0.90 |
-| [generations/phase-05-clips.md](generations/phase-05-clips.md) | Phase 5 step 5 — combat + enemy clips, **generated and measured, not yet verified** | `bytedance/seedance-2.0/image-to-video` | 9 · ≈$10.71 |
+| [generations/phase-05-clips.md](generations/phase-05-clips.md) | Phase 5 step 5 — combat + enemy clips, **generated and measured, not yet verified** | `bytedance/seedance-2.0/image-to-video` | 11 · ≈$13.09 |
 
 **The cross-cutting entries below stay here.** The cost summary and the invoice reconciliation span
 every gate and have no single owner.

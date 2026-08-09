@@ -36,10 +36,16 @@ export const COMBAT_MOTIONS = Object.freeze({
   /**
    * The swing. `simTicks` 20 - 6 startup, 4 active, 10 recovery.
    *
-   * `SPAN_CLIP` is CORRECT here and used as-is: a strike genuinely does extend and return, which is
-   * the one shape that clause describes. The contact frame has to land inside the active window,
-   * which is what G5 measures off the finished sheet - so the brief names WHERE the arm is at the
-   * halfway point rather than leaving the peak to fall wherever the model likes.
+   * **Round 1 used `SPAN_CLIP` and there was no strike in the clip at all.** He raised the spanner
+   * overhead and held it there: "extending through the first half and returning through the second"
+   * was read as *raise it, then lower it*, which is a perfectly good reading of that sentence and
+   * not the motion. No sampling can recover a contact frame from a clip that never contains one.
+   *
+   * The signal across the whole batch was unambiguous — every clip that used `poseSpan` hit its
+   * specified poses, and both that used `SPAN_CLIP` failed. `SPAN_CLIP` describes a SHAPE; three
+   * timed poses describe a GEOMETRY, and this model obeys geometry. So the swing is now three poses
+   * with the halfway one nailed to "arm extended horizontally FORWARD, spanner at its furthest
+   * point from the body" — which is also exactly what G5 measures as the contact frame.
    */
   'brass-courier/attack': {
     cyclic: false,
@@ -49,21 +55,29 @@ export const COMBAT_MOTIONS = Object.freeze({
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
       'Nothing is added, removed or recoloured at any point. He has EXACTLY two arms and two legs ' +
       'in every single frame and grows no extra limb.',
+    span: poseSpan(
+      'the heavy spanner is drawn back and up behind his right shoulder, both boots planted, ' +
+        'shoulders coiled away from the direction he will strike.',
+      'the spanner has been driven all the way FORWARD and DOWN and his right arm is extended ' +
+        'straight out horizontally in front of him at chest height, elbow locked, the spanner at ' +
+        'its single furthest point from his body, shoulders square to the strike. This is the ' +
+        'moment of impact.',
+      'the spanner has swung on through and down past his knee and his arm has settled back ' +
+        'toward his side, shoulders returning to a neutral stance.',
+    ),
     motion:
-      'swings a heavy spanner in one overhead arc: he draws it back and up behind his shoulder, ' +
-      'then drives it forward and down through a full committed strike, then lets the arm settle ' +
-      'back toward his side. His boots stay planted on the same spot the whole time and he does ' +
-      'NOT step, walk or travel - only the upper body and arms move through the swing. At the ' +
-      'exact halfway point of the clip the spanner is at its furthest reach in front of him and ' +
-      'his shoulders are square to the direction of the strike.',
+      'swings a heavy spanner through one committed horizontal strike. His boots stay planted on ' +
+      'the same spot the whole time and he does NOT step, walk or travel - only the upper body ' +
+      'and arms move. He NEVER lifts the spanner above his own head and NEVER holds it overhead.',
   },
 
   /**
    * Taking a hit. `simTicks` 18, and the pose must be unmistakable at 96 px from `attack`.
    *
-   * A recoil DOES return - the body snaps back and recovers - so `SPAN_CLIP` fits. What it must not
-   * do is fall over: that is `death`, and two states that look alike at sprite size are two states
-   * the player cannot tell apart.
+   * **Round 1 used `SPAN_CLIP` and came back as a turn-and-reach**, with the profile lost as he
+   * rotated toward the camera — nothing in it read as being struck. Same fix as `attack`: three
+   * timed poses instead of a shape. What it must still not do is fall over — that is `death`, and
+   * two states that look alike at sprite size are two states the player cannot tell apart.
    */
   'brass-courier/hurt': {
     cyclic: false,
@@ -73,11 +87,19 @@ export const COMBAT_MOTIONS = Object.freeze({
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
       'Nothing is added, removed or recoloured at any point. He has EXACTLY two arms and two legs ' +
       'in every single frame and grows no extra limb.',
+    span: poseSpan(
+      'he is standing upright in his normal stance, unhurt, in strict side profile facing RIGHT.',
+      'he has been struck: his head and shoulders are snapped sharply BACKWARD away from the ' +
+        'direction he faces, his chin is up, his spine is arched back, his near arm has flown up ' +
+        'across his chest and his far arm is flung out behind him. Both boots are still flat on ' +
+        'the ground in the same spot.',
+      'he has pulled himself back upright into his normal stance, still in strict side profile ' +
+        'facing RIGHT, still on both feet.',
+    ),
     motion:
-      'recoils backward from a blow: his head and shoulders snap back and away, his spine arches ' +
-      'away from the impact, one arm flies up across his chest, and then he pulls himself back ' +
-      'toward his stance. He stays ON HIS FEET the whole time and NEVER falls, NEVER kneels and ' +
-      'NEVER lies down. His boots stay on the same spot; he does not step or travel.',
+      'takes a heavy blow and recoils from it. He stays ON HIS FEET the whole time and NEVER ' +
+      'falls, NEVER kneels and NEVER lies down. His boots stay on the same spot; he does not step ' +
+      'or travel. He stays in STRICT SIDE PROFILE facing RIGHT and never turns toward the viewer.',
   },
 
   /**
