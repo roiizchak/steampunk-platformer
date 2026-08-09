@@ -29,7 +29,7 @@
  * failure mode the editor was built to find, made representable.
  */
 
-import { ENEMY_SLUGS, type EnemySlug } from '../sim/enemies';
+import { ENEMY_SLUGS, type EnemySlug, type EnemySpawn } from '../sim/enemies';
 import type { Rect } from '../sim/types';
 import {
   allObjects,
@@ -53,25 +53,10 @@ import {
 export { isHazardObject, isSolidObject } from './tiledObjects';
 
 /**
- * Where one enemy starts, and how far it may walk.
- *
- * Authored as a Tiled **rectangle**, and every field below is derived from that one shape: `x` is
- * its horizontal centre, `y` its bottom edge (the feet), and its left and right edges are the
- * patrol beat. A patroller's range is therefore a thing the designer draws on the platform rather
- * than a pair of numbers typed into a scene — and a static enemy simply ignores the span.
- *
- * The alternative, a point plus two properties, puts the beat somewhere you cannot see while
- * authoring it, which is how a patrol that overhangs its platform gets shipped.
+ * Re-exported from the sim, which owns the roster and the constructors. See `EnemySpawn` there
+ * for what each field means and why a rectangle declares all of them.
  */
-export interface EnemySpawn {
-  slug: EnemySlug;
-  /** Horizontal centre of the rectangle. */
-  x: number;
-  /** The rectangle's BOTTOM edge — the sole, matching `spawn.y`. */
-  y: number;
-  patrolMin: number;
-  patrolMax: number;
-}
+export type { EnemySpawn };
 
 /** A parsed, validated level. Every pixel figure is MEASURED from the file, never assumed. */
 export interface LevelData {

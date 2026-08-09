@@ -207,6 +207,25 @@ export function damagePlayer(player: PlayerSim, amount: number): boolean {
 }
 
 /**
+ * Kill outright, ignoring i-frames.
+ *
+ * The kill plane is not damage and must not be survivable: a player who falls out of the world
+ * during an i-frame window would otherwise keep falling forever, which is the exact Phase 4 defect
+ * this closes. So it does not route through `damagePlayer`, whose whole job is to respect the
+ * grace window.
+ *
+ * Idempotent — re-entering `death` every tick would reset `combatCounter` and the death animation
+ * would never advance past its first frame.
+ */
+export function killPlayer(player: PlayerSim): void {
+  if (player.state === 'death') {
+    return;
+  }
+  player.hp = 0;
+  enterCombatState(player, 'death');
+}
+
+/**
  * Enter a combat state through the one door, resetting the shared counter.
  *
  * Kept here rather than in `player.ts`'s `enterState` because only combat states carry a duration;

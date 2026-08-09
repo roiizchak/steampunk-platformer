@@ -7,7 +7,15 @@
  * Vault 2.1 (blocker): every DURATION here is an integer count of 60 Hz ticks. Every DISTANCE is
  * pixels. Velocities are px/tick, accelerations px/tick^2 — never px/second, so nothing in this
  * directory ever multiplies by a frame delta.
+ *
+ * The two imports below are `import type` and are erased at compile time, so the apparent cycle
+ * with `hazards.ts` (which imports `Rect` from here) has no runtime edge and cannot affect module
+ * initialisation order.
  */
+
+import type { EnemySet } from './enemies';
+import type { WorldBounds } from './hazards';
+import type { Projectile } from './projectiles';
 
 /** Axis-aligned box. `x`/`y` are the TOP-LEFT corner in world space, where +y is DOWN. */
 export interface Rect {
@@ -243,6 +251,20 @@ export interface World {
   player: PlayerSim;
   /** Static collision geometry. Phase 3 replaces the SOURCE of these; the resolver is unchanged. */
   solids: Rect[];
+  /**
+   * The world's extent, in pixels. The bottom is a KILL PLANE; left, right and top are collision.
+   *
+   * Two treatments on purpose: falling is a death you can see coming, walking off the side is not.
+   * Clamping all four was considered and rejected — a pit you cannot fall into is not a platformer.
+   * See `hazards.ts`.
+   */
+  bounds: WorldBounds;
+  /** Damaging geometry. Contact is SWEPT, so a hazard thinner than one tick of travel still bites. */
+  hazards: Rect[];
+  /** Every live enemy, one array per type. */
+  enemies: EnemySet;
+  /** Shots in flight. Replaced each tick rather than spliced — see `projectiles.ts`. */
+  projectiles: Projectile[];
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

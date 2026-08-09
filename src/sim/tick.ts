@@ -11,12 +11,14 @@
  *   1.  Sample the seeded RNG exactly once -> `world.tickRoll`     (2.3 — the only advance)
  *   2.  Consume input edges from the mutable working copy          (2.4 — cleared on consumption)
  *   3.  Arm the jump-buffer window if a press edge arrived
- *   4.  Combat: i-frames, combat-state expiry, the attack edge, the live hitbox  (Phase 5)
+ *   4.  Enemies and combat: enemy AI, projectiles, then i-frames, combat-state expiry, the
+ *       attack edge, the live hitbox                                  (Phase 5)
  *   5.  Horizontal: accel / air-accel / friction, clamped to runMax
  *   6.  Vertical: gravity, fall clamp, early-release jump cut
  *   7.  Jump resolution: buffer open AND (grounded OR coyote open) -> impulse, close both
  *   8.  Integrate, semi-implicit Euler: v first, then position     (2.14)
- *   9.  Collide and resolve -> grounded
+ *   9.  Collide and resolve -> grounded, then clamp to the world's three solid edges
+ *   9b. World-geometry damage: kill plane, hazards, projectiles, enemy contact  (Phase 5)
  *   10. Window arming: left the ground this tick -> open coyote
  *   11. State transition, through the one door                     (2.6)
  *   12. Emit this tick's event edges                               (2.5)
@@ -34,6 +36,14 @@
  * i-frame expiry, then combat-state expiry, then the attack edge, then the live hitbox. Damage from
  * world geometry — hazards, the kill plane, enemy contact — is applied by the CALLER around this,
  * because `combat.ts` deliberately imports no level data.
+ *
+ * **9b is lettered, not numbered, and that is deliberate.** The plan put world-geometry damage in
+ * step 4. It cannot go there: a SWEPT hazard test needs both endpoints of this tick's motion, and
+ * the second does not exist until step 8 has integrated. At step 4 contact could only be a point
+ * sample — the exact tunnelling defect the swept test exists to prevent. A letter rather than a new
+ * number because renumbering this list is a balance change to a phase that has spent money on art,
+ * and because 9b genuinely is part of resolving where the body ended up. Full reasoning, and the
+ * one-tick knockback delay it costs, in `worldDamage.ts`.
  *
  * **State moved from step 4 to step 11 after Codex implementation review I4.** Resolved before
  * integration, the state published each tick described the position of the PREVIOUS one: a jump's
@@ -84,6 +94,10 @@ import {
   stepVertical,
 } from './player';
 import { PLAYER_MAX_HP, IFRAME_TICKS, stepCombat } from './combat';
+import { SENTRY, type EnemySpawn, spawnEnemies, stepScavenger, stepSentry } from './enemies';
+import { type WorldBounds, clampToBounds } from './hazards';
+import { fireProjectile, stepProjectiles } from './projectiles';
+import { applyWorldDamage } from './worldDamage';
 import { createRng, nextFloat } from './rng';
 import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
 import { advanceWindow, windowOpen } from './windows';
@@ -115,11 +129,24 @@ export const GREY_BOX_SOLIDS: Rect[] = [
 const SPAWN_X = 470;
 const SPAWN_Y = 780;
 
+/**
+ * The grey-box world's extent.
+ *
+ * Measured from `GREY_BOX_SOLIDS` rather than typed: the floor spans 0..1920 and its underside is
+ * at 1080, so those ARE the edges. Typing them separately is how a level and its bounds drift.
+ */
+const GREY_BOX_BOUNDS: WorldBounds = { widthPx: 1920, heightPx: 1080 };
+
 export interface CreateWorldOptions {
   seed: number;
   /** Art and collision scale (vault 2.11). Required — a forgetful call site is a typecheck error. */
   scale: number;
   solids?: Rect[];
+  /** Defaults to the grey-box extent, so Phase 2's fixtures keep the world they were written in. */
+  bounds?: WorldBounds;
+  hazards?: Rect[];
+  /** Level placements. `spawnEnemies` turns each into the live entity its slug names. */
+  enemies?: readonly EnemySpawn[];
   /**
    * The player's feet at level start. Defaults to the grey-box spawn above.
    *
@@ -130,7 +157,15 @@ export interface CreateWorldOptions {
   spawn?: { x: number; y: number };
 }
 
-export function createWorld({ seed, scale, solids, spawn }: CreateWorldOptions): World {
+export function createWorld({
+  seed,
+  scale,
+  solids,
+  spawn,
+  bounds,
+  hazards,
+  enemies,
+}: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
   }
@@ -141,6 +176,10 @@ export function createWorld({ seed, scale, solids, spawn }: CreateWorldOptions):
     rng: createRng(seed),
     tickRoll: 0,
     solids: solids ?? GREY_BOX_SOLIDS,
+    bounds: bounds ?? GREY_BOX_BOUNDS,
+    hazards: hazards ?? [],
+    enemies: spawnEnemies(enemies ?? []),
+    projectiles: [],
     tuning,
     scale,
     player: {
@@ -199,6 +238,24 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    `stepCombat` owns the internal order (i-frames, state expiry, the attack edge, the live
   //    hitbox); world-geometry damage — hazards, the kill plane, enemy contact — is applied by the
   //    caller, because those need level data `src/sim/combat.ts` deliberately does not import.
+  //
+  //    Enemies move FIRST, against the player's position as of the end of last tick. That is a
+  //    well-defined moment for every enemy in the world; "after the player has integrated" would
+  //    make an enemy's decision depend on where it sits in the array relative to the player's own
+  //    update, which is the shape of a bug that only appears when a list is reordered.
+  const sighting = { playerX: player.x, playerY: player.y };
+  for (const scavenger of world.enemies.scavengers) {
+    stepScavenger(scavenger, sighting);
+  }
+  world.projectiles = stepProjectiles(world.projectiles, world.bounds.widthPx);
+  for (const sentry of world.enemies.sentries) {
+    if (stepSentry(sentry, sighting).fired) {
+      world.projectiles.push(
+        fireProjectile(sentry.x, sentry.y, player.x, SENTRY.projectileSpeed, SENTRY.damage),
+      );
+    }
+  }
+
   const combat = stepCombat(player, input);
   events.attackStarted = combat.attackStarted;
   events.hitActive = combat.hitActive;
@@ -230,9 +287,17 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   player.x += player.vx;
   player.y += player.vy;
 
-  // 9. Collide and resolve.
+  // 9. Collide and resolve — including the world's three solid edges, which are collision and not
+  //    death. `clampToBounds` runs after the solids so a level's own geometry wins where the two
+  //    overlap, and it zeroes vx as well as x (see `hazards.ts`).
   const wasGrounded = player.grounded;
   player.grounded = resolveCollisions(player, world.solids, world.scale, previousX, previousY);
+  clampToBounds(player, world.bounds, (PLAYER_BOX.w / 2) * world.scale);
+
+  // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
+  //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
+  //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
+  applyWorldDamage(world, previousX, previousY);
 
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at
   //     step 8 and must not reopen it here, or every jump would buy a second one in mid-air.

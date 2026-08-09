@@ -31,6 +31,16 @@
 
 import type { Rect } from './types';
 
+/**
+ * What one contact with damaging geometry costs.
+ *
+ * 20 of 100, so five contacts kill — enough that spikes are a real threat and few enough that a
+ * single mistimed jump is not a run ender. One number for every hazard today; `hazardHit` returns
+ * the RECTANGLE rather than a boolean precisely so a furnace can cost more than a spike later
+ * without changing a call site.
+ */
+export const HAZARD_DAMAGE = 20;
+
 /** The world's extent in pixels. `LevelData` already carries both; `World` is given them. */
 export interface WorldBounds {
   widthPx: number;

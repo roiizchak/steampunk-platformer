@@ -55,7 +55,10 @@ export {
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
 export { advanceWindow, windowOpen } from './windows';
 export type { Clampable, WorldBounds } from './hazards';
-export { belowKillPlane, clampToBounds, hazardHit, sweptHazardHit } from './hazards';
+export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, sweptHazardHit } from './hazards';
+export type { Projectile } from './projectiles';
+export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
+export { applyWorldDamage } from './worldDamage';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,
@@ -75,10 +78,23 @@ export {
   isCombatState,
   stepCombat,
 } from './combat';
-export type { EnemySlug, Scavenger, ScavengerOptions, Sentry, SentryOptions, Sighting } from './enemies';
+export type {
+  EnemySet,
+  EnemySlug,
+  EnemySpawn,
+  Scavenger,
+  ScavengerOptions,
+  Sentry,
+  SentryOptions,
+  Sighting,
+} from './enemies';
 export {
   CHASE_COMMIT_TICKS,
   ENEMY_SLUGS,
+  SCAVENGER_BOX,
+  SENTRY_BOX,
+  overlapsScavenger,
+  spawnEnemies,
   SCAVENGER,
   SENTRY,
   createScavenger,
