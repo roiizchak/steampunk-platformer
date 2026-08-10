@@ -1,8 +1,7 @@
 # Session handoff — Phase 5 (combat, enemies, hazards)
 
-**Branch:** `phase-05-combat`, 11 commits ahead of `main`, all committed, working tree clean.
-**Written:** 2026-08-09, at the end of session 1. **Phase 5 is NOT complete and must not be reported
-complete.** The next session finishes it.
+**Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), **amended 2026-08-10 (session 2)
+— see §8, which supersedes §4 and §6.** **Phase 5 is NOT complete and must not be reported complete.**
 
 Read this first, then [PRD.md](PRD.md), then
 [prd/phase-05-combat.md](prd/phase-05-combat.md) §6 (the gate), then
@@ -186,3 +185,85 @@ Then kill dev servers **by port** *(C13)* — Playwright launches `node ./node_m
 directly, and `npm run dev`'s wrapper orphans the real process on Windows.
 
 **A phase with a failing or unrun criterion is reported failing.** Most of §3 is unrun.
+
+---
+
+## 8. Session 2 — 2026-08-10. **This section supersedes §4 and §6.**
+
+The full plan is `C:\Users\royko\.claude\plans\resume-phase-5-combat-synthetic-starfish.md`
+(revision 2, user-approved). The Codex review of it and its triage are appended to
+[reviews/phase-05-plan.md](reviews/phase-05-plan.md). What follows is only what will not survive in
+the code.
+
+### The clip content audit — only 2 of 11 bought clips are shippable
+
+Every clip was judged by eye against the mechanic its sim state names, from the six-frame contact
+strips. **KEEP:** `brass-courier/hurt-r2` (recoil peaks ~20 %, correct for 18 ticks) and
+`rust-scavenger/chase` (real run, stride 40–50 % of body height; trim the lead-in so f6 loops to f1).
+**Everything else is re-shot.** That is an 82 % rework rate against Phase 4's 77 %, and it is not
+presented as a good number. `rust-scavenger/walk` is a **sway, not a gait** — stride ≲15 % of body
+height — so the pair is currently "idle + run", not "walk + run".
+
+**§5's three "unresolved" clips are now resolved, and the answer was not the one expected.** The
+deaths are genuinely back-loaded (collapse begins at frame 4 of 6), *and* the sentry clips are
+cropped — but the framing defect, not the back-loading, is what condemns them. `brass-sentry/idle`'s
+near-frozen motion turned out to be **correct** for a machine; it is re-shot only for the crop.
+
+### The three defects, root causes
+
+1. **Crop — a parameter, not a prompt.** `ASSET-PIPELINE.md:147-170` already prescribes
+   `--aspect_ratio "1:1"` for `bytedance/seedance-2.0/image-to-video`. **Session 1 submitted `9:16`.**
+   The sentry is wider than tall, so its square anchor forced into 9:16 lost ~14 % off each side.
+   **The prompt was never the problem** — `HOLD_CAMERA` (`motion.mjs:160-163`) already says *"is never
+   cropped by any edge"* and the forbid tail already lists `cropped limbs`. Do not try to fix this
+   with more prompt words. **And the parameters are in no file at all:** `write-prompts.mjs:28-35`
+   writes prompt text, the job is submitted by hand, `.job.json` records only the response.
+2. **Hands.** No gate, and the only two hand mentions in the whole prompt corpus are incidental
+   (`motion.mjs:226`, `motionCombat.mjs:122`). **No hand gate is being built** — a semantic one is not
+   cheap, and the plan says so rather than pretending. The levers are a grip clause and a required
+   full-resolution strip review.
+3. **Depiction.** The locked anchor carries a **small silver open-end spanner in a belt tool loop**
+   with both hands empty — confirmed by eye. The attack clip invented a large two-handed pipe wrench.
+   And `src/sim/projectiles.ts` fires a real bolt that nothing draws.
+
+### Three blockers Codex found that were invisible from the code alone
+
+- **`build-clips.mjs` cannot extract any grounded one-shot.** Its non-cyclic branch throws on no foot
+  lift; its own comment names `attack` as the case and promises `motionOnset` as the fallback —
+  **which is never called.** This blocks *all* packing and is now the phase's first task.
+- **There is no projectile event to hang an impact spark on.** `TickEvents` is six booleans, none
+  about projectiles; `hitLanded` is the *player's melee*. Off-bounds bolts vanish at
+  `projectiles.ts:99-104` with no signal. Solved with **no sim change**: diff the projectile list
+  between ticks — present then absent means despawned.
+- **`Sentry` stores no firing vector**, and `sentryRenderDesc` hard-codes `flipX:false` (*"A turret
+  does not turn."*). Selecting the elevated-fire sheet from the player's *live* position would swing
+  the barrel art after the bolt had left. Two integer pixel deltas are stored at spawn instead.
+
+### Traps for whoever picks this up
+
+- **`file-size.test.ts` green does NOT mean "no file over 400 lines."** It asserts *≤10 over-limit
+  files, each name-dropped somewhere in `docs/qa/`* — its own comment says *"A ceiling, not an
+  assertion that everything is fine."* Criterion 5.12 cannot be evidenced by that test alone.
+  The repo is at **10 of 10**; `motion.mjs` is at 388 and `GymScene.ts` at **399**.
+- **`enemy-view.test.ts` imports no Phaser.** Every 5.7 assertion today is a pure function. A live
+  scene-tree assertion is still owed, and it must run **at 2/60 HP** — a full bar proves nothing.
+- **`enemyLayer.ts` still draws Rectangles** and says so: *"step 6 swaps in `Sprite`s."* Nothing had.
+- **Nothing writes `public/assets/index.json`** — it is hand-maintained, read at `BootScene.ts:65`.
+- **G4 and G5 do not exist.** §4 said "run G4" as though it did. `anchorGate.mjs` (G1) has no CLI —
+  it is a test, so session 1's anchor verdicts were produced out of band.
+- HANDOFF §4's `GymScene.ts:108,182` is **stale in both numbers and characterisation**: the config
+  load is `:140` and the action derivation `:187-189` uses `slugOf`/`actionFromKey`, not string surgery.
+
+### Decisions taken with the user — do not relitigate
+
+Draw the **belt spanner** (Phase 4 art untouched) · **generated bolt still + code trail/spark** ·
+**re-shoot all three deaths now** · **buy a second elevated `fire` sheet**, selected by the persisted
+shot-time vector. The bolt and `fire-elevated` are **approved expansion beyond the frozen nine-sheet
+scope**, so `qa/phase-05-combat.md:65-77` must be amended to ten sheets.
+
+### Spend
+
+$13.99 spent. Plan spends **$9.67** — Batch 1 probe 3 clips $3.57, Batch 2 five generations $5.95,
+Batch 3 one still $0.15 — ending at **$23.66 of $40**, leaving $16.34 of rework headroom.
+**No descope lever is pulled.** Batch 1's `brass-sentry/fire` changes **one variable** (the ratio) so
+the root cause is actually isolated; if it still crops, **STOP and re-plan — do not spend Batch 2.**

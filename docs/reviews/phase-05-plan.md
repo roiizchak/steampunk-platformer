@@ -173,3 +173,230 @@ Gated by `tests/unit/tick-world-damage.test.ts`, whose tunnelling case derives t
 the real fall trajectory rather than a hand-picked constant, and asserts both halves: that **no tick
 ever sampled inside the band**, and that the damage landed anyway. Degrading the sweep to a point
 test fails that one spec and no other.
+
+---
+---
+
+# Phase 5 — Codex plan review of the SESSION-2 completion plan
+
+**Ran:** 2026-08-10, in session 2, **before any code and before any further spend**.
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` / `fs.readFileSync`
+instruction from [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
+**Reviewed:** the session-2 completion plan at
+`C:\Users\royko\.claude\plans\resume-phase-5-combat-synthetic-starfish.md` (revision 1) against
+[phase-05-combat.md](../prd/phase-05-combat.md), [PRD.md](../PRD.md),
+[FAL-MODELS.md](../FAL-MODELS.md), [ASSET-PIPELINE.md](../ASSET-PIPELINE.md),
+[LESSONS-APPLIED.md](../LESSONS-APPLIED.md), [lessons/phase-05-combat.md](../lessons/phase-05-combat.md),
+[qa/phase-05-combat.md](../qa/phase-05-combat.md), [HANDOFF.md](../HANDOFF.md), the review above, and
+`build-assets.mjs`, `build-clips.mjs`, `gates.mjs`, `anchorGate.mjs`, `motion.mjs`,
+`motionCombat.mjs`, `write-prompts.mjs`, `GymScene.ts`, `enemyLayer.ts`, `animTiming.ts`,
+`enemyView.ts`, `projectiles.ts`, `combat.ts`, `file-size.test.ts`, `docs-contract.test.ts`,
+`style-lock.test.ts`.
+
+**This is a second plan review, not the implementation review.** Criterion 5.14 — the implementation
+review on the diff, `--wait --resume` — is still **UNRUN** and runs last.
+
+**Scope split, recorded rather than implied.** Codex again had **no network access** and again
+**could not spawn a process** (`CreateProcessAsUserW failed: 5`), so it ran no typecheck, test or
+build and verified no fal price or schema claim. Everything below is **file evidence only**, and
+Codex stated that limitation itself. **Every one of the ten findings was re-verified locally, and
+all ten were CONFIRMED.** Three were blockers that the plan's author had missed entirely.
+
+---
+
+## The review, verbatim
+
+> 1. **High** — bespoke projectile/elevated-fire art is not required. Phase 5 requires a firing
+>    turret, combat art, and enemy sheets, but the frozen scope defines exactly nine sheets and only
+>    `idle`/`fire`/`death` for the sentry. The generated bolt, trail, impact spark, second
+>    `fire-elevated` sheet, and angle-selection logic extend that scope
+>    (`docs/prd/phase-05-combat.md:7-15`; `docs/qa/phase-05-combat.md:65-77`; plan `:309-312,330-340`).
+>
+>    **Medium** — G4/G6 and their supporting infrastructure are not §1 or §6 deliverables.
+>    `clipJobs.mjs`, `submit-clips.mjs`, padded-anchor tooling, G4 drift, and G6 edge-bleed are
+>    preventive pipeline work. The plan itself explicitly places G4/G6 outside §6; only G5 directly
+>    proves criterion 5.4c (plan `:103-114,403-405`; `docs/prd/phase-05-combat.md:128-130`).
+>
+>    **Low** — part of W16 is housekeeping outside the goal/gate. The stale `animTiming` comment,
+>    generation-total correction, and M3 manifest note are not required by §1 or §6 (plan
+>    `:359-367`). Conversely, `assets:fetch`/`assets:verify`, the deliberate-removal run, and the Gym
+>    async guard are independently binding Phase-4 debt and should not be mistaken for optional scope
+>    (`docs/prd/phase-05-combat.md:53-60`).
+>
+> 2. **Blocker** — 5.12 can green with ten violations. The criterion says "No file > 400 lines," but
+>    the cited test expressly allows up to ten such files; it only requires them to be mentioned in a
+>    QA log. Therefore `file-size.test.ts` green does not prove 5.12
+>    (`docs/prd/phase-05-combat.md:138`; plan `:398`; `tests/unit/file-size.test.ts:61-85`). This
+>    reopens the first review's false-green concern.
+>
+>    **High** — 5.2 does not prove both speeds are independently tunable. Its cited test changes only
+>    `patrolSpeed`; `chaseSpeed` is merely compared against two constants, so a stale or ignored live
+>    chase-speed knob can pass (plan `:384`; `tests/unit/enemy-ai.test.ts:107-129`). This reopens C4.
+>
+>    **High** — 5.4c permits a non-answer as evidence. The gate requires every attack contact frame
+>    to land inside the active window, but Phase E accepts `INDETERMINATE` being recorded without
+>    saying that it fails the phase (`docs/prd/phase-05-combat.md:128`; plan `:202-207,388`). That
+>    reopens C1 unless `INDETERMINATE` is explicitly a failing 5.4c result.
+>
+>    **High** — 5.4d omits the newly added sheet. The plan adds `fire-elevated`, yet W11 still packs
+>    and catalogs nine sheets, while the current timing authority only knows sentry `idle`, `fire`,
+>    and `death`. The nine covered rows could pass while the tenth sheet has no derived timing (plan
+>    `:273-274,322-328,389`; `src/render/animTiming.ts:209-231`).
+>
+>    **High** — 5.11 has no concrete non-vacuity check. "Must distinguish fast from not drawing" is
+>    only an instruction; the evidence column specifies no draw-count, visible-object, or scene-tree
+>    assertion. A fast run with missing render objects could still be accepted (plan `:353-357,397`;
+>    `docs/LESSONS-APPLIED.md:14-19`).
+>
+>    **Medium** — 5.7's live assertion is not pinned to low HP. W14 says to inspect the drawn scene
+>    tree but does not put the live enemy at 2/60 or another near-empty value. A full-health bar can
+>    pass while the low-HP rendering remains empty; the existing unit test checks only the
+>    engine-free function (plan `:350-351,393`; `tests/unit/enemy-view.test.ts:32-46,78-81`). This
+>    partially reopens C8.
+>
+> 3. **High** — vault A5. The plan claims to satisfy A5 by deriving scale from a locked anchor, then
+>    immediately says the anchor cannot supply the scale and it will instead be derived from packed
+>    source frames. That is again a regenerable source, exactly the ordering trap A5 warns about
+>    (plan `:232-236`; `docs/LESSONS-APPLIED.md:35`). The repository still records scale provenance
+>    as the regenerated idle sheet, and the QA log already identifies that limitation
+>    (`public/assets/config/character-bounds.json:2-7`; `docs/qa/phase-05-combat.md:152`). This
+>    reopens C5.
+>
+> 4. **Blocker** — there is no projectile-despawn event for W12's impact spark. Projectiles that
+>    leave bounds are silently omitted from the returned array; `TickEvents` contains only
+>    jump/landing/attack fields. The plan's claimed "existing despawn event" does not exist (plan
+>    `:334-336`; `src/sim/projectiles.ts:82-107`; `src/sim/types.ts:217-240`).
+>
+>    **Blocker** — no persisted firing angle exists for W13. A projectile captures its vector once at
+>    spawn, but `Sentry` stores no angle/vector and `sentryRenderDesc` receives only the sentry and
+>    scale. No task preserves the shot-time angle for the following 18-tick animation
+>    (`src/sim/projectiles.ts:48-78`; `src/sim/enemies.ts:73-88`;
+>    `src/render/enemyView.ts:47-52,106-119`; plan `:338-340`).
+>
+>    **Blocker** — `build-clips.mjs` cannot currently extract combat one-shots. Its comment promises
+>    `motionOnset` as the fallback for future `attack`, but the implementation instead throws whenever
+>    a non-cyclic clip has no foot lift, so `attack`, `hurt`, and grounded deaths cannot pass this
+>    path; the plan addresses only `VIDEO_DIR` (`tools/gen/build-clips.mjs:231-256`; plan `:224-227`).
+>
+>    **High** — the live enemy-sprite renderer does not exist, and no work item clearly creates it.
+>    `EnemyLayer` still creates rectangles and explicitly says a later step must swap them for
+>    sprites, while W14 assumes a live animation frame can be sampled
+>    (`src/scenes/enemyLayer.ts:19-28,40-61`; plan `:322-328,346-351`).
+>
+>    **High** — the plan's counts are internally stale. Fourteen motion records exist before
+>    `fire-elevated`; adding it yields fifteen total motions and ten Phase-5 combat/enemy sheets, yet
+>    W1 still demands fourteen records and W11 nine catalog rows (`tools/gen/motion.mjs:206,336-337`;
+>    `docs/qa/phase-05-combat.md:65-77`; plan `:134-139,273-274,322-328`).
+>
+>    The checked branch and source-length assertions are otherwise accurate: `.git/HEAD` names
+>    `phase-05-combat`, and the cited files end at `build-assets.mjs:368`, `motion.mjs:388`,
+>    `anchorGate.mjs:193`, and `GymScene.ts:399`.
+>
+> 5. **High** — the sentry animation will most likely disagree with the actual bolt trajectory.
+>    Projectile aim is frozen once at firing (necessary for a dodgeable non-homing shot), but no
+>    shot-time angle survives on the sentry; the plan only says to choose the animation "from the aim
+>    angle," and recomputing from the player's current position could switch the barrel animation
+>    after the bolt has already left (`src/sim/projectiles.ts:48-78`; `src/sim/enemyTurn.ts:40-53`;
+>    `src/sim/enemies.ts:73-88`; plan `:338-340`). That is the likeliest subtle shipment: the game
+>    works, but the art telegraphs a different trajectory from the projectile.
+>
+> 6. **High** — the repository supports correlation, not the claimed root cause. It confirms every
+>    existing Phase-5 clip was requested at `9:16` and returned `720×1280`, and that the documented
+>    schema default is `auto`; nowhere in the repository's schema record does it say `auto` infers the
+>    input image's aspect (`docs/generations/phase-05-clips.md:5-14,68-70`;
+>    `docs/FAL-MODELS.md:183-197`). The causal claim is unverified from repository evidence.
+>
+>    **High** — the planned probe cannot isolate the cause. Batch 1 simultaneously changes the ratio
+>    to `auto`, pads the anchor, and changes the prompt margin, so success cannot tell whether
+>    explicit `9:16`, insufficient source margin, or prompt/model framing caused the defect (plan
+>    `:149-162,263-266,287-302`). The plan itself concedes model recropping is unknown (plan
+>    `:289-290,435-438`).
+>
+>    **Medium** — repository authorities contradict the categorical framing. The current asset
+>    pipeline prescribes an explicit `1:1` ratio for this endpoint, while STYLE records sprite
+>    generation at `9:16`; neither prescribes `auto` (`docs/ASSET-PIPELINE.md:147-170`;
+>    `docs/STYLE.md:219-227`). The existing Phase-5 audit also calls sentry `fire` and `death` good,
+>    whereas the new plan says every sentry clip is cropped — that may be a later discovery, but the
+>    repository record is presently inconsistent (`docs/generations/phase-05-clips.md:87-97`; plan
+>    `:37-44`).
+>
+>    **Medium** — G6 does not prove semantic completeness. It only catches an occupied bounding box
+>    touching an outer edge; a model can omit or reform a muzzle/leg and still leave green margin.
+>    `build-clips` also produces RGB chroma frames rather than alpha frames, so the plan does not
+>    specify what "opaque bbox" means at that seam (plan `:109,165-176`;
+>    `tools/gen/build-clips.mjs:121-126,183-200`).
+>
+> 7. **High** — W6 depends on art that Batch 2 has not created. W6 declares `fire-elevated` and says
+>    any declared-but-missing action fails the build, but that clip is not purchased until Batch 2, so
+>    W6 cannot complete its own end-to-end build while all unpaid work remains ahead of spending (plan
+>    `:215-231,304-307`).
+>
+>    **High** — W6 also requires a scale derived from packed source frames, while packing is deferred
+>    to W11 after all three spend batches. Its per-slug bounds configuration cannot be finalized in
+>    Phase A under the plan's stated provenance (plan `:232-236,320-328`). The spend batches
+>    themselves need not swap order — Batch 3 is correctly after Batch 1 because its bolt palette
+>    depends on the `fire` discharge — but the "all Phase A lands before a dollar moves" boundary is
+>    impossible: at least W6's full validation/finalization must occur after Batch 2 (plan
+>    `:287-312`).
+>
+> **Could not check:** No shell command, typecheck, unit test, browser test, build, FAL schema query,
+> or visual inspection of the binary clips/images was run. The repository-wide "exactly ten
+> over-limit files" count was not independently recomputed. This is file-evidence only, read through
+> `node_repl` with `fs.readFileSync`, per the machine's permanent process-spawn limitation.
+
+---
+
+## Local re-verification
+
+Every claim above was re-checked locally against the working tree before triage, because Codex could
+run nothing. **Ten of ten CONFIRMED, none refuted.** The decisive quotes:
+
+| Claim | Verdict | Decisive local evidence |
+|---|---|---|
+| No projectile event | **CONFIRMED** | `TickEvents` has exactly six booleans — `jumped, landed, leftGround, attackStarted, hitActive, hitLanded`. `hitLanded` is *the player's melee* connecting. `projectiles.ts:99-104` pushes survivors to `alive` and returns; off-bounds shots vanish with no signal. |
+| No firing angle on `Sentry` | **CONFIRMED** | Fields are `x, y, radius, cooldown, cooldownCounter, hp, maxHp, lastHitSwing`. `sentryRenderDesc(sentry, scale)` hard-codes `flipX: false` with the comment *"A turret does not turn."* |
+| `build-clips.mjs` throws on grounded one-shots | **CONFIRMED** | *"is an airborne one-shot but its feet never leave the ground … must be regenerated."* The comment above it names the gap: *"`motionOnset` remains the fallback for a one-shot that is not airborne at all (there are none today, but `attack` in Phase 5 will be exactly that)."* `motionOnset` is never called in that branch. |
+| 5.12 false green | **CONFIRMED** | Two assertions: `expect(unrecorded).toEqual([])` (path **or bare filename** appearing anywhere in `docs/qa/` suffices) and `expect(over.length).toBeLessThanOrEqual(10)`, commented *"A ceiling, not an assertion that everything is fine."* |
+| No sprite renderer | **CONFIRMED** | `enemyLayer.ts:19-28`: *"Rectangles, not sprites, until the art exists … **step 6 swaps in `Sprite`s** and starts reading `desc.animKey`."* `enemy-view.test.ts` imports no Phaser at all. |
+| Counts stale | **CONFIRMED** | `VIDEO_MOTIONS` = 14 today (5 inline + 9 from `COMBAT_MOTIONS`). |
+| `1:1` vs `9:16` | **CONFIRMED, and they are different endpoints** | `ASSET-PIPELINE.md` prescribes `--aspect_ratio "1:1"` for the **video** call; `STYLE.md` records `9:16` for the **nano-banana-pro stills**. No contradiction — but Phase 5 used `9:16` for the video, against its own pipeline document. |
+| Prior "good" verdict on sentry clips | **CONFIRMED** | The section is titled *"Eyeball triage, recorded so a later measurement can contradict it"*, status *"EYEBALLED, NOT YET MEASURED"*. It read motion and missed framing. |
+| FAL-MODELS silent on `auto` | **CONFIRMED** | It tabulates `auto` as the default and a legal value and never says what it does. |
+| `enemy-view.test.ts` is pure | **CONFIRMED** | Zero `Phaser` occurrences; every assertion calls `healthBarFillWidth`, `fillIsHonest`, `sentryAnim`, `scavengerAnim`, `enemyAnimKeys`. |
+
+---
+
+## Triage
+
+One line per finding, `D1…D10`. Applied, or recorded with a reason *(C11 — silently ignoring one is
+not permitted)*.
+
+| ID | Codex answer | Severity | Disposition |
+|---|---|---|---|
+| **D1** | 4 (first) | blocker | **APPLIED, and better than the plan proposed.** The "impact spark off the existing despawn event" hooked nothing that exists. Fixed with **zero sim change**: the renderer already receives the projectile list each tick, so a bolt present last tick and absent this tick has despawned — draw the spark at its last position. Plan W16. |
+| **D2** | 4 (second) + 5 | blocker | **APPLIED.** New work item W6: two **integer pixel deltas** (`lastFireDx/lastFireDy`) stored on `Sentry` at spawn — no floats, no angles in the sim — tested to remain unchanged while the player moves during the 18-tick `fire` window. This was also Codex's answer to Q5 and it was right. |
+| **D3** | 4 (third) | blocker | **APPLIED.** Promoted to **W1, the first task of the phase**, because it blocks all packing. The session had found only the `VIDEO_DIR` bug and would have hit the throw on the first combat clip. |
+| **D4** | 2 (first) | blocker | **APPLIED.** 5.12's evidence column corrected: a green `file-size.test.ts` proves *"≤10 over-limit files, each name-dropped in a QA log"*, not the criterion. Evidence is now the reviewer's diff read **plus** the ten files named with justifications (4.16 debt). |
+| **D5** | 4 (fourth) | high | **APPLIED.** New work item W8. Criteria 5.4, 5.8 and 5.11 all depended on a renderer that no task was building. |
+| **D6** | 3 | high | **APPLIED.** The contradiction was real: the plan claimed anchor-derived scale and then said packed-frame-derived. The anchor is 2048² against 720×1280 clips, so it **cannot** supply the sheet's scale. The plan no longer claims A5 compliance — it is recorded as a C11 limitation beside the existing one at `qa/phase-05-combat.md:152`. |
+| **D7** | 6 (second) | high | **APPLIED.** The probe changed three variables at once. Batch 1's `brass-sentry/fire` now changes **one** — the aspect ratio, to the `1:1` this repository's own pipeline document already prescribes — with the unpadded anchor and the prompt held constant. |
+| **D8** | 4 (fifth) | high | **APPLIED.** 14 → 15 motions, 9 → 10 sheets, throughout; plus an amendment to the frozen scope table so the docs do not contradict the build. |
+| **D9** | 7 | high | **APPLIED.** `fire-elevated` joins the sentry's action list in Phase C, after Batch 2 buys it; scale finalisation moves to W15. The "all Phase A before a dollar moves" boundary was impossible as written. |
+| **D10** | 2 (rest) + 6 (third, fourth) | high/med | **ALL APPLIED.** 5.2 gains a `chaseSpeed` sweep measuring chase travel; **`INDETERMINATE` is stated to be a FAILING 5.4c result**; 5.7's live assertion is pinned at **2/60 HP**; 5.11 gains a counted visible-sprite/projectile assertion; 5.4d covers `fire-elevated`; G6 is respecified against the **chroma-keyed mask** (not "opaque pixels" — `build-clips` emits RGB, not alpha) with its semantic blind spot stated. |
+| **D11** | 1 | high/med/low | **RECORDED, NOT APPLIED as a cut.** Codex is right that the projectile bolt and `fire-elevated` exceed the frozen nine-sheet scope — but both are **explicit user decisions taken in this session**, so they are approved expansion; the plan amends the scope table rather than dropping them. On G4/G6 not being §6 deliverables: also correct, and they stay, because PRD §1b's own rule is *"a gate that prevents a re-shoot is worth more than a cheaper endpoint."* |
+
+**One correction to the plan's own framing, made because Codex forced it.** The plan asserted the
+repository proved the `aspect_ratio` root cause. It does not — `FAL-MODELS.md:183-197` lists `auto`
+and never says what it does; that came from a live `genmedia schema` query, recorded in the QA log as
+live evidence. What the repository *does* show is stronger and had been missed:
+**`ASSET-PIPELINE.md:147-170` already prescribed `1:1` for this endpoint, and Phase 5 submitted
+`9:16` against its own documented pipeline.**
+
+**Net effect:** three blockers and six high findings changed the work materially — one task promoted
+to first position, two new work items created, one sim change added, one probe redesigned to isolate
+a single variable, six evidence rows rewritten, and one vault claim withdrawn rather than defended.
+One finding was recorded with a reason. Nothing was silently dropped.
+
+**Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
+diff, saved to `docs/reviews/phase-05-impl.md`. The phase cannot be reported done until it has run
+and every finding of *its* is applied or recorded.
