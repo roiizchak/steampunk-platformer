@@ -31,11 +31,15 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIDEO_MOTIONS } from './motion.mjs';
 import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
 import { findClip } from './clipSource.mjs';
+import { decodePng } from './png.mjs';
+import { keyOut } from './chroma.mjs';
+import { crop } from './resize.mjs';
+import { gateEdgeBleed } from './edgeGate.mjs';
 
 const SHEET_DIR = '_generated/sheets';
 
@@ -164,6 +168,38 @@ function extract(clip, indices, out) {
   );
 }
 
+/**
+ * **G6 — edge bleed** (`edgeGate.mjs`). Every clip in this phase came back with the subject sheared
+ * off by ITS OWN video frame edge — see that module's header for the defect and why it FAILs a
+ * bounding box that touches or nearly touches the canvas boundary.
+ *
+ * The sheet `extract()` just wrote is NOT that canvas: each cell is the source `probe.width` x
+ * `probe.height` frame padded by `GUTTER` px of chroma on every side, so the sheet's own cell
+ * boundary is `GUTTER / 2` px of guaranteed-green margin away from where Seedance actually cropped.
+ * Gating the padded cell would never fire — the pad adds margin regardless of whether the source
+ * frame itself starved the figure. So this un-pads each cell back to exactly the region ffmpeg
+ * extracted before measuring, which is the one boundary the model could have actually cropped
+ * against.
+ *
+ * Fails the build rather than letting a cropped clip reach `assets:build` and be packed — that is
+ * where the defect was found, by eye, after money had already been spent on the clip.
+ */
+function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight) {
+  const cellW = clipWidth + GUTTER;
+  const cellH = clipHeight + GUTTER;
+  const keyed = keyOut(decodePng(readFileSync(sheetPath)));
+  for (let i = 0; i < cellCount; i += 1) {
+    const inner = crop(keyed, i * cellW + GUTTER / 2, GUTTER / 2, clipWidth, clipHeight);
+    const edge = gateEdgeBleed(inner);
+    if (edge.status === 'FAIL') {
+      throw new Error(
+        `assets:clips: "${action}" frame ${i} of ${cellCount} fails G6 edge bleed — ${edge.reason}. ` +
+          `This clip must be re-shot, not packed (vault: no gate looked at frame edges before G6).`,
+      );
+    }
+  }
+}
+
 function main() {
   mkdirSync(SHEET_DIR, { recursive: true });
   const report = [];
@@ -214,6 +250,7 @@ function main() {
 
     const out = join(SHEET_DIR, `${action}-clip.png`);
     extract(clip, indices, out);
+    gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height));
 
     report.push({
       action,
