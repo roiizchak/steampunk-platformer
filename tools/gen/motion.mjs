@@ -297,6 +297,7 @@ export const VIDEO_MOTIONS = Object.freeze({
    */
   jump: {
     cyclic: false,
+    airborne: true,
     frames: 6,
     motion:
       'is airborne, caught in the middle of a leap.\n' +
@@ -316,6 +317,7 @@ export const VIDEO_MOTIONS = Object.freeze({
   },
   fall: {
     cyclic: false,
+    airborne: true,
     frames: 6,
     motion:
       'is airborne, caught in the middle of a fall.\n' +

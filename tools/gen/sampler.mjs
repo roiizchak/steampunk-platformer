@@ -192,6 +192,52 @@ export function motionOnset(diff, sourceFrames, fraction = ONSET_FRACTION) {
 }
 
 /**
+ * Where a NON-CYCLIC (one-shot) clip's sampling window begins.
+ *
+ * Airborne-vs-grounded is read off `spec.airborne` — a property of the motion spec declared in
+ * `motion.mjs` / `motionCombat.mjs` — never a hardcoded action-name list. `jump` and `fall` are
+ * airborne; Phase 5's `attack`, `hurt` and the three `death`s are grounded, and grounded is the
+ * default (`spec.airborne` is simply absent for them).
+ *
+ * - **Airborne**: the onset is when the FEET leave the ground (`liftOffOnset`) — a silhouette-onset
+ *   metric is the wrong axis for a clip that crouches or leans before it actually leaves the ground;
+ *   see `liftOffOnset`'s own header for the sheet that finding cost.
+ * - **Grounded**: there is no foot-lift to measure, so the onset is when the silhouette first starts
+ *   changing (`motionOnset`) — every clip still opens holding the anchor pose for a stretch.
+ *
+ * Both axes throw rather than fall back to frame 0 when they cannot find an onset — an honest
+ * INDETERMINATE *(vault 4.18)*, not a licence to sample the standing anchor pose as if it were the
+ * motion. `motionOnset` returning 0 is that case, not "motion from the first frame": `diff(0, 0)` is
+ * always 0 by construction (`differ`'s `i === j` case) and `motionOnset`'s threshold is strictly
+ * positive whenever it found any motion at all, so a genuine onset can never land on frame 0 itself —
+ * 0 out of `motionOnset` always means "no motion found anywhere in the clip", the grounded twin of
+ * `liftOffOnset` returning `null`.
+ */
+export function oneShotOnset(action, spec, { diff, sourceFrames, footRows, headRows }) {
+  if (spec.airborne) {
+    const lift = liftOffOnset(footRows, headRows);
+    if (lift === null) {
+      throw new Error(
+        `assets:clips: "${action}" is an airborne one-shot but its feet never leave the ground — ` +
+          `no frame has them ${Math.round(LIFT_OFF_FRACTION * 100)}% of a standing height above ` +
+          `where they started. That is an INDETERMINATE, not a licence to sample from frame 0 ` +
+          `(vault 4.18); the clip did not perform the motion and must be regenerated.`,
+      );
+    }
+    return lift;
+  }
+  const onset = motionOnset(diff, sourceFrames);
+  if (onset <= 0) {
+    throw new Error(
+      `assets:clips: "${action}" is a grounded one-shot but its silhouette never moves away from ` +
+        `frame 0 — no motion onset was found. That is an INDETERMINATE, not a licence to sample ` +
+        `from frame 0 (vault 4.18); the clip did not perform the motion and must be regenerated.`,
+    );
+  }
+  return onset;
+}
+
+/**
  * The shortest window that closes, scanning length ascending.
  *
  * `start` is searched too: a clip does not necessarily begin at a clean phase, and starting mid-step

@@ -31,18 +31,12 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { VIDEO_MOTIONS } from './motion.mjs';
-import {
-  LIFT_OFF_FRACTION,
-  chooseCycleWindow,
-  liftOffOnset,
-  motionOnset,
-  windowIndices,
-} from './sampler.mjs';
+import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
+import { findClip } from './clipSource.mjs';
 
-const VIDEO_DIR = '_generated/video';
 const SHEET_DIR = '_generated/sheets';
 
 /**
@@ -86,36 +80,6 @@ function ffprobe(path) {
       .split(/\r?\n/)
       .map((line) => line.split('=')),
   );
-}
-
-function findClip(action) {
-  if (!existsSync(VIDEO_DIR)) {
-    throw new Error(
-      `assets:clips: ${VIDEO_DIR} does not exist. Raw model output is gitignored by design — ` +
-        `re-fetch it from the request ids in docs/generations/ (indexed by ` +
-        `docs/GENERATION-LOG.md). This build does NOT ` +
-        `substitute a placeholder (vault 4.16).`,
-    );
-  }
-  const files = readdirSync(VIDEO_DIR).filter(
-    (f) => f === `${action}.mp4` || (f.startsWith(`${action}-`) && f.endsWith('.mp4')),
-  );
-  if (files.length === 0) {
-    throw new Error(
-      `assets:clips: no clip for declared animation "${action}" in ${VIDEO_DIR}. A declared input ` +
-        `that cannot be found fails the build; it is never substituted (vault 4.16).`,
-    );
-  }
-  // An ambiguous prefix is a silent way to ship a superseded generation — the same trap `raw()` in
-  // build-world.mjs hit on its first run. Refuse rather than pick.
-  if (files.length > 1) {
-    throw new Error(
-      `assets:clips: "${action}" matches ${files.length} clips in ${VIDEO_DIR} ` +
-        `(${files.join(', ')}). Delete the superseded ones — picking the first would silently ` +
-        `ship whichever the directory happened to list first.`,
-    );
-  }
-  return join(VIDEO_DIR, files[0]);
 }
 
 /**
@@ -230,29 +194,21 @@ function main() {
     } else {
       // One-shot motions never return to their starting pose, so there is no cycle to find. But the
       // clip is NOT the animation either: it opens on the anchor pose, because the anchor is the
-      // start image, so the courier stands still for the first stretch of it. Six frames spread
-      // across the whole clip spend one or two on a standing figure, which inside an 18-tick jump
-      // is a third of the animation. Sampling runs from the measured motion onset to the end.
-      /**
-       * Take-off is measured from the FEET, not from the silhouette — see `liftOffOnset`.
-       * `motionOnset` remains the fallback for a one-shot that is not airborne at all (there are
-       * none today, but `attack` in Phase 5 will be exactly that).
-       */
-      const masks = silhouettes(clip);
-      const bands = masks.map((m) => maskRows(m));
-      const lift = liftOffOnset(
-        bands.map((b) => b.foot),
-        bands.map((b) => b.head),
-      );
-      if (lift === null) {
-        throw new Error(
-          `assets:clips: "${action}" is an airborne one-shot but its feet never leave the ground — ` +
-            `no frame has them ${Math.round(LIFT_OFF_FRACTION * 100)}% of a standing height above ` +
-            `where they started. That is an INDETERMINATE, not a licence to sample from frame 0 ` +
-            `(vault 4.18); the clip did not perform the motion and must be regenerated.`,
-        );
+      // start image, so the character stands or stands still for the first stretch of it. Sampling
+      // runs from the measured motion onset to the end — take-off is measured from the FEET for an
+      // airborne one-shot (`jump`, `fall`) and from the silhouette for a grounded one (`attack`,
+      // `hurt`, `death`); `spec.airborne` is what decides, never the action's name. See
+      // `oneShotOnset` for both axes and why each throws rather than falling back to frame 0.
+      const footRows = [];
+      const headRows = [];
+      if (spec.airborne) {
+        for (const mask of silhouettes(clip)) {
+          const { foot, head } = maskRows(mask);
+          footRows.push(foot);
+          headRows.push(head);
+        }
       }
-      onset = lift;
+      onset = oneShotOnset(action, spec, { diff, sourceFrames, footRows, headRows });
       indices = windowIndices(onset, sourceFrames - 1 - onset, frames);
     }
 

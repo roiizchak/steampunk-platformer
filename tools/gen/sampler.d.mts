@@ -49,3 +49,14 @@ export declare function motionOnset(
   sourceFrames: number,
   fraction?: number,
 ): number;
+
+export declare function oneShotOnset(
+  action: string,
+  spec: { airborne?: boolean; [key: string]: unknown },
+  deps: {
+    diff: (i: number, j: number) => number;
+    sourceFrames: number;
+    footRows: readonly number[];
+    headRows: readonly number[];
+  },
+): number;
