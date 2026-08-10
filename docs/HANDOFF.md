@@ -344,3 +344,86 @@ still recurs after every re-shoot) and archiving them out of the glob path (a ha
 it must be remembered after each round, which is exactly the failure mode this phase already has).
 
 The test must assert every declared filename actually exists, or a record can name a missing file.
+
+---
+
+## 9. Session 3 — 2026-08-10. **W2b is CLEARED. A new blocker took its place.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-quirky-graham.md` (revision 2, approved).
+Its Codex plan review — **BLOCK, 22 findings, 3 blockers, all three re-verified and CONFIRMED** — is
+appended to [reviews/phase-05-plan.md](reviews/phase-05-plan.md).
+
+### 🔴 THE NEW BLOCKER — G6 false-positives on clean Phase 4 art
+
+**`assets:clips` still cannot complete, but the reason has changed and the new reason is a gate bug.**
+
+W2b worked: `findClip` no longer throws on ambiguity. Execution therefore reached **G6 for the first
+time in the project's history** — it was added last session (W3) and `findClip` had been throwing
+before control ever got to it. G6 immediately failed the **shipped Phase 4 `idle` clip**:
+
+```
+"idle" frame 0 of 12 fails G6 edge bleed — subject mask comes within 3px of the frame on the
+right edge(s) (margins: left 30px, right 0px, top 46px, bottom 14px)
+```
+
+**This is a false positive, and it was proven by looking, not by arguing.** The rightmost 90 px of
+that frame is **pure chroma green with no subject in it** — verified by cropping and viewing it.
+
+**Root cause, pinned to the constant:** `tools/gen/edgeGate.mjs:43` `DEFAULT_MIN_ALPHA = 8`. G6 counts
+any pixel with `alpha >= 8` as subject. But `keyOut` (`chroma.mjs:202-222`) is a **soft** key: pixels
+between `CHROMA.LOW` and `CHROMA.HIGH` are spill-suppressed and keep a **small non-zero alpha**. That
+band is *background*, and G6 is counting it. Measured per column on the true source region:
+
+| region | rows flagged subject (of 1280) |
+|---|---|
+| leftmost 6 columns | 2, 2, 18, 18, 18, 18 |
+| **rightmost 6 columns** | **142, 142, 186, 170, 212, 204** |
+| mid-frame (real body) | ~1074 |
+
+Right-edge pixel `[4,231,11]` vs mid-frame **background** `[3,228,6]` — the same colour. The
+left/right asymmetry is a faint luminance gradient in the generated background, not a subject.
+
+> ⚠️ **The fix is NOT to raise `minAlpha` until it goes green.** That is the forbidden move — it
+> would blind the gate to the real crop it was built for. Whatever is changed must be **re-validated
+> against the historical cropped `brass-sentry-fire` frame**, exactly how G6 was validated originally.
+> **This is a STOP-and-ask and has not been done.**
+
+### What session 3 landed — verified by the orchestrator, not by agent report
+
+`npm test` → **`Test Files 47 passed (47)`, `Tests 706 passed (706)`** (baseline was 669/42).
+`npm run typecheck` clean. **Nothing committed by any subagent — `git log` checked each time.**
+
+| | What | Where |
+|---|---|---|
+| **W2b** | Winning clip filename is **declared data**, not a glob. `CLIP_JOBS[key].file`; `findClip` takes `declaredFile`. **The dependency is INVERTED from the plan** — `clipSource` stays a leaf importing only `node:fs`, and `build-clips.mjs` passes the value down, because `clipJobs.mjs:32` already imports *from* `clipSource`. | `clipJobs.mjs`, `clipSource.mjs`, `build-clips.mjs:208` |
+| **W2b+** | **Two real bugs Codex found, both fixed.** Flat sheet name via `clipStem` (the nested dir was never created); and `submit-clips.mjs` now picks the next free `-rN` and **refuses to overwrite** a paid clip. | `build-clips.mjs:251`, `submit-clips.mjs:20-33` |
+| **W7a** | `slugConfig.mjs` — `SLUGS` + `configFor(slug)`, per-slug `reportPath` so one slug cannot overwrite another's evidence. `build-assets.mjs` **373 lines**, under the ceiling. | `tools/gen/slugConfig.mjs` |
+| **W7c** | `GymScene` split into `gymConfigLoader.ts` / `gymGeometry.ts` / `gymPixels.ts`, still **399 lines**, now multi-slug. | `src/render/gym*.ts` |
+| **W7d** | **G1 has a CLI at last.** Validated on the real historical anchors: original **FAILs at 59 px**, corrected **PASSes at 0**, exit codes 1 and 0. | `tools/gen/anchorGate.mjs` |
+| **W8** | Enemy Rectangles → **Sprites** behind `anims.exists()`, with the player's exact `getName()` frame-0 guard. Expiry test uses an **all-six-row** fixture. | `src/scenes/enemyLayer.ts` (137) |
+
+### Traps session 3 added — read before continuing
+
+- **Two parallel agents invented two different names for the same file, and each one's tests passed.**
+  The build wrote `character-bounds-brass-sentry.json` while the Gym fetched `brass-sentry-bounds.json`
+  — the Gym would have loaded a file the build never wrote. Classic vault 5.3. **Fixed, producer wins,
+  and pinned by `tests/unit/gym-bounds-config-path.test.ts`** which asserts the two definitions agree
+  for every slug. A third site (`gym-config.test.ts`) had pinned the *wrong* convention. **When
+  dispatching parallel agents, any shared artifact name must be fixed in the brief up front.**
+- **`enemyLayer.ts:1` changed to `import type Phaser`.** The value import threw `window is not defined`
+  under vitest's `node` environment, which is why no prior test imported any `src/scenes/*` file.
+  Type-only, elided at build — but it is what makes the file unit-testable at all.
+- **W8's frame-0 guard is tested against a mock scene, not a live Phaser `AnimationState`.** The test
+  proves the *guard logic* (one `play()` on a real key change, zero on repeats). Proving the animation
+  actually advances past frame 0 on screen still needs Playwright — that is criterion 5.4 and it is
+  **still unrun**.
+- **W7c's positive acceptance is unit-level only.** Nobody drove the Gym in a live browser.
+
+### Where to pick up
+
+**Answer the G6 question first — nothing packs until it is resolved.** Then W7b (namespace
+`build-assets.mjs`; it depends on `assets:clips` having produced sheets), then W10/W11, then the
+**STOP** before W12 Batch 1 ($3.57). **$0 spent this session. $13.99 total, unchanged.**
+
+**Not started:** W7b, W12–W20, the entire §6 QA gate (every agent owner, two briefs each), and the
+Codex **implementation** review (5.14). **Phase 5 is failing and must be reported failing.**

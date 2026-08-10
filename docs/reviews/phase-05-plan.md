@@ -400,3 +400,61 @@ One finding was recorded with a reason. Nothing was silently dropped.
 **Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
 diff, saved to `docs/reviews/phase-05-impl.md`. The phase cannot be reported done until it has run
 and every finding of *its* is applied or recorded.
+
+---
+---
+
+# Phase 5 — Codex plan review of the SESSION-3 execution plan
+
+**Ran:** 2026-08-10, session 3, **before any code and before any further spend.**
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` / `fs.readFileSync`
+instruction. **Reviewed:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-quirky-graham.md`
+(revision 1) against HANDOFF.md, the phase plan of record, both reviews above, the §6 gate, and the
+source each claim named.
+
+**Still a PLAN review, not the implementation review.** Criterion 5.14 remains **UNRUN**.
+
+**Scope split.** Codex again had no network and again could not spawn a process
+(`CreateProcessAsUserW failed: 5`), so it ran no typecheck, test or build and verified no fal claim.
+File evidence only, stated by Codex itself. **Verdict: BLOCK — 22 findings, 3 blockers.**
+
+## The three blockers, verbatim and re-verified locally
+
+> **Blocker 1** — the plan claims no circular import is created because *"`clipJobs` does not import
+> `clipSource`."* But `tools/gen/clipJobs.mjs:32` imports `NAMESPACED_VIDEO_DIR` from
+> `clipSource.mjs` and uses it at `:181`. Making `clipSource.mjs` import `CLIP_JOBS` would create
+> `clipSource → clipJobs → clipSource`.
+>
+> **Blocker 5** — `submit-clips.mjs:45` always sets the download path to `${stem}.mp4`, and the plan
+> does not include that file. The prescribed re-shoot command can **overwrite the existing canonical
+> round-one file** instead of creating `-r3`.
+>
+> **Blocker 6** — `build-clips.mjs:203-204` creates only `_generated/sheets`, then writes to
+> `join(SHEET_DIR, "${action}-clip.png")` at `:251-252`. A namespaced action such as
+> `brass-courier/attack` targets `_generated/sheets/brass-courier/attack-clip.png`, but nothing
+> creates that subdirectory. **The acceptance can pass immediately before failing at this next
+> obstruction.**
+
+Codex also **overturned a claim the plan's author had made**: that a Phaser `Group`'s children Set is
+unordered. `node_modules/phaser/src/gameobjects/group/Group.js:106` uses a native JS `Set`, which
+**is** insertion-ordered. The accurate objection is *no index-based access*. Corrected, not defended.
+
+## Local re-verification — 3 of 3 blockers CONFIRMED
+
+| Claim | Verdict | Decisive local evidence |
+|---|---|---|
+| Circular import | **CONFIRMED** | `clipJobs.mjs:32` reads `import { NAMESPACED_VIDEO_DIR } from './clipSource.mjs';`. `clipJobs.mjs:34-39` documents this exact TDZ hazard in its own comment. |
+| Paid-clip overwrite | **CONFIRMED** | `submit-clips.mjs:45`: `` const downloadPath = `${VIDEO_OUT_DIR}/${stem}.mp4`; `` — no collision check. Would destroy ~$1.19 of non-regenerable input. |
+| Nested output dir | **CONFIRMED** | `build-clips.mjs:204` `mkdirSync(SHEET_DIR…)` only; `:251` `join(SHEET_DIR, \`${action}-clip.png\`)`. |
+
+## Triage
+
+Full disposition table for all 22 findings is in the session-3 plan file. Summary: **21 applied, 1
+partly applied with the remainder recorded** (finding 8 — `build-world.mjs:47-73` carries the same
+latent glob-ambiguity defect as `findClip` did; it is Phase 3 territory and out of this session's
+appetite, recorded here rather than silently left). Nothing was silently dropped.
+
+**Net effect:** the design was inverted (`clipSource` stays a leaf; the declared filename is passed
+in at the call site), two files were added to the blocking work item's scope, one work item gained a
+hard dependency on another, and six acceptance checks were rewritten because they could have gone
+green on broken work.
