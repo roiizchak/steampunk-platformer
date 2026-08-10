@@ -38,9 +38,31 @@
 
 import { FAIL, PASS } from './gates.mjs';
 
-/** Alpha at or above this counts as subject. Matches `figureMetrics`'s default in `sheets.mjs` —
- * low enough to be inside a real anti-aliased edge, high enough to exclude the keying ramp's tail. */
-const DEFAULT_MIN_ALPHA = 8;
+/**
+ * Alpha at or above this counts as subject: **255, fully opaque, and not a tuning knob.**
+ *
+ * `chroma.mjs`'s `keyOut` is a SOFT key (see that module's own header). A pixel between `CHROMA.LOW`
+ * and `CHROMA.HIGH` is spill-suppressed BACKGROUND — despilled and given a small non-zero alpha on
+ * purpose, so a faint green-tinted rim survives instead of a hard cutout edge — not a faint or
+ * partially-drawn piece of the figure. `keyOut` only ever leaves a pixel's alpha genuinely UNTOUCHED
+ * when its key-distance clears `CHROMA.HIGH` outright (`chroma.mjs:221-223`); every pixel the ramp
+ * band touches comes out strictly below its original alpha. Because every frame this gate measures
+ * started out fully opaque (raw video/PNG, no pre-existing transparency), "untouched by the ramp"
+ * and "alpha == 255" are the same condition for this pipeline. That is the whole test this module
+ * needs to make: not "how faint is this pixel" but "did the key decide this pixel is background".
+ *
+ * The old value, 8, measured that faint band instead of the subject, and it was a false positive:
+ * the shipped, clean Phase 4 `idle` clip has a **pure chroma-green run of 90+ px at its right edge**,
+ * yet a slight luminance gradient inside that green kept a few of those columns' key-distance just
+ * under `CHROMA.HIGH`, so at `minAlpha` 8 it read as a subject touching the edge (measured margins:
+ * left 30px, right 0px). Raising the floor to the ramp's ceiling made the same clip clear every edge
+ * by 13px+ (worst side; left 30, right 41, top 13, bottom 6 — see
+ * `tests/fixtures/edges/idle-clean-frame.png`), while the real cropped `brass-sentry-fire` defect
+ * stayed at 0px on both left and right at EVERY threshold from 8 up to 255 (see
+ * `tests/fixtures/edges/brass-sentry-fire-frame.png`). That is a categorical gap between the two
+ * clips' margins, not a knife-edge — 255 sits on the safe side of it by construction, not by trial.
+ */
+const DEFAULT_MIN_ALPHA = 255;
 
 /**
  * How close the subject may come to the canvas edge before it reads as cropped rather than merely

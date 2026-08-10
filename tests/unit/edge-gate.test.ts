@@ -111,3 +111,36 @@ describe('G6 against the REAL Phase 5 defect', () => {
     expect(value.margins.right).toBe(0);
   });
 });
+
+/**
+ * **The false-positive lock, against real shipped bytes.**
+ *
+ * `idle-clean-frame.png` is the un-padded, un-keyed frame 0 of the real, shipped, clean Phase 4
+ * `idle` sheet (`_generated/sheets/idle-clip.png`, gitignored, hence this small derived PNG —
+ * downscaled 4x from the extracted frame, same "small derived PNG beside a gitignored source"
+ * pattern `brass-sentry-fire-frame.png` uses above). At the OLD `minAlpha` of 8 this frame FAILED —
+ * the false positive `edgeGate.mjs`'s header documents. It must now PASS, by a solid margin on every
+ * edge, which is the change this whole gate revision exists to prove.
+ */
+describe('G6 no longer fails the clean Phase 4 idle clip', () => {
+  it('passes the historical false-positive frame with margin to spare on every edge', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/idle-clean-frame.png`));
+    const keyed = keyOut(raw);
+    const result = gateEdgeBleed(keyed);
+
+    expect(result.status).toBe('PASS');
+    const value = result.value as EdgeBleed;
+    expect(value.margins.left).toBeGreaterThan(DEFAULT_MARGIN_PX);
+    expect(value.margins.right).toBeGreaterThan(DEFAULT_MARGIN_PX);
+    expect(value.margins.top).toBeGreaterThan(DEFAULT_MARGIN_PX);
+    expect(value.margins.bottom).toBeGreaterThan(DEFAULT_MARGIN_PX);
+  });
+
+  it('would have failed this same frame at the old, spill-counting minAlpha of 8', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/idle-clean-frame.png`));
+    const keyed = keyOut(raw);
+    const result = gateEdgeBleed(keyed, { minAlpha: 8 });
+
+    expect(result.status).toBe('FAIL');
+  });
+});
