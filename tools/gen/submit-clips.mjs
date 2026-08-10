@@ -12,10 +12,28 @@
  * renders only those.
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { styleTemplate, templateBlock } from './prompt.mjs';
 import { VIDEO_MOTIONS, videoPrompt } from './motion.mjs';
 import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, VIDEO_OUT_DIR, clipStem } from './clipJobs.mjs';
+
+/**
+ * The next filename in `dir` for `stem` that does not already exist on disk. A re-shoot's rendered
+ * `--download` flag must never overwrite a paid, non-regenerable round-1 clip (vault 4.16) — this is
+ * what stops `brass-courier-attack.mp4` being clobbered instead of producing `-r2`/`-r3`.
+ */
+function nextFreeDownloadPath(dir, stem) {
+  const base = `${dir}/${stem}.mp4`;
+  if (!existsSync(base)) return base;
+  for (let n = 2; n <= 99; n += 1) {
+    const candidate = `${dir}/${stem}-r${n}.mp4`;
+    if (!existsSync(candidate)) return candidate;
+  }
+  throw new Error(
+    `submit-clips: every "${stem}[-r2..-r99].mp4" already exists in ${dir} — clear out a stale one ` +
+      `before rendering another command for it.`,
+  );
+}
 
 const requested = process.argv.slice(2);
 const keys = requested.length > 0 ? requested : Object.keys(CLIP_JOBS);
@@ -42,7 +60,7 @@ for (const key of keys) {
   const promptPath = `${PROMPT_OUT_DIR}/${stem}.txt`;
   writeFileSync(promptPath, prompt);
 
-  const downloadPath = `${VIDEO_OUT_DIR}/${stem}.mp4`;
+  const downloadPath = nextFreeDownloadPath(VIDEO_OUT_DIR, stem);
   // A loop needs `--end_image_url` set back to the anchor (ASSET-PIPELINE.md §2); a one-shot needs
   // it omitted, because its end pose deliberately differs from its start pose.
   const endImageUrl = spec.cyclic ? job.anchorUrl : null;

@@ -27,7 +27,10 @@ export function videoDirFor(action) {
  * lives under `tests/`, which is `tsconfig`-strict with no `@types/node`) no `node:fs` import in the
  * test file itself.
  */
-export function findClip(action, { dirExists = existsSync, listFiles = readdirSync } = {}) {
+export function findClip(
+  action,
+  { dirExists = existsSync, listFiles = readdirSync, declaredFile = null } = {},
+) {
   const dir = videoDirFor(action);
   if (!dirExists(dir)) {
     throw new Error(
@@ -37,6 +40,22 @@ export function findClip(action, { dirExists = existsSync, listFiles = readdirSy
         `substitute a placeholder (vault 4.16).`,
     );
   }
+
+  // `CLIP_JOBS[action].file` can declare the exact winning filename — e.g. when a re-shoot left a
+  // superseded `-r2` sibling on disk (vault 4.16: paid input is deleted never, only superseded).
+  // Declared, this skips the glob (and `listFiles`) entirely, so the NEXT re-shoot's `-r3` cannot
+  // reintroduce the ambiguity below.
+  if (declaredFile !== null) {
+    const path = `${dir}/${declaredFile}`;
+    if (!dirExists(path)) {
+      throw new Error(
+        `assets:clips: CLIP_JOBS declares "${action}" as "${declaredFile}", but ${path} does not ` +
+          `exist. Fix the declared filename in CLIP_JOBS — it is never substituted (vault 4.16).`,
+      );
+    }
+    return path;
+  }
+
   // A namespaced action's clip is named on disk with the slash swapped for a hyphen — a filename
   // cannot hold a `/` — e.g. `brass-courier/attack` -> `brass-courier-attack.mp4`.
   const stem = action.replace('/', '-');
@@ -49,13 +68,17 @@ export function findClip(action, { dirExists = existsSync, listFiles = readdirSy
         `that cannot be found fails the build; it is never substituted (vault 4.16).`,
     );
   }
-  // An ambiguous prefix is a silent way to ship a superseded generation — the same trap `raw()` in
-  // build-world.mjs hit on its first run. Refuse rather than pick.
+  // An ambiguous, UNDECLARED prefix is a silent way to ship a superseded generation — the same trap
+  // `raw()` in build-world.mjs hit on its first run. Refuse rather than pick, and refuse for good:
+  // declare the winner in CLIP_JOBS's `file` field rather than deleting the loser (paid,
+  // non-regenerable input stays on disk) — a future re-shoot's `-r3` will hit this same throw until
+  // it does.
   if (files.length > 1) {
     throw new Error(
       `assets:clips: "${action}" matches ${files.length} clips in ${dir} ` +
-        `(${files.join(', ')}). Delete the superseded ones — picking the first would silently ` +
-        `ship whichever the directory happened to list first.`,
+        `(${files.join(', ')}) and CLIP_JOBS has no declared "file" for it. Declare the winner as ` +
+        `CLIP_JOBS["${action}"].file instead of picking one — the next re-shoot only adds another ` +
+        `candidate.`,
     );
   }
   // A plain `/` join, not `node:path`'s `join` — deterministic across platforms, and this string is

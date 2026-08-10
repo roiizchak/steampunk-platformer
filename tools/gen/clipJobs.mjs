@@ -27,7 +27,7 @@
  * `COMBAT_MOTIONS` directly — see `combatKeys` below for why that specific choice matters.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { VIDEO_MOTIONS } from './motion.mjs';
 import { NAMESPACED_VIDEO_DIR } from './clipSource.mjs';
 
@@ -102,6 +102,18 @@ const ANCHOR_URLS = Object.freeze({
   'rust-scavenger': 'https://v3b.fal.media/files/b/0aa5ad07/nJzWf6JtlGVoDoXkLfuYV_anchor.png',
 });
 
+/**
+ * The winning filename for a key whose round-1 clip was re-shot, declared as data rather than
+ * picked by `findClip`'s glob (vault 4.16). Round 1's `brass-courier-attack.mp4` and
+ * `brass-courier-hurt.mp4` are paid, non-regenerable input and stay on disk, superseded but never
+ * deleted — this is what lets `findClip` return the winner without them being ambiguous. Every
+ * other key has exactly one clip on disk, so it is absent here (`file` falls back to `null` below).
+ */
+const CLIP_FILES = Object.freeze({
+  'brass-courier/attack': 'brass-courier-attack-r2.mp4',
+  'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
+});
+
 /** `brass-courier/attack` -> `brass-courier` — a filename/URL lookup key never carries a `/`. */
 function slugOf(key) {
   return key.split('/')[0];
@@ -167,6 +179,7 @@ export const CLIP_JOBS = Object.freeze(
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl,
+        file: CLIP_FILES[key] ?? null,
       });
       const problems = validateClipJob(key, job);
       if (problems.length > 0) {
@@ -181,3 +194,19 @@ export const CLIP_JOBS = Object.freeze(
 export const VIDEO_OUT_DIR = NAMESPACED_VIDEO_DIR;
 export const PROMPT_OUT_DIR = '_generated/phase05/prompts';
 export const PARAMS_OUT_DIR = '_generated/phase05/params';
+
+/**
+ * Whether `_generated/phase05/video/` exists on this machine. `_generated/` is gitignored by
+ * design (vault 4.16), so it is absent on a fresh clone — callers use this to skip disk-dependent
+ * assertions there rather than failing on the expected absence.
+ */
+export function videoDirExists() {
+  return existsSync(NAMESPACED_VIDEO_DIR);
+}
+
+/** Every declared `CLIP_JOBS[key].file` that is not actually present in `NAMESPACED_VIDEO_DIR`. */
+export function missingClipFiles() {
+  return Object.values(CLIP_JOBS)
+    .map((job) => job.file)
+    .filter((file) => file !== null && !existsSync(`${NAMESPACED_VIDEO_DIR}/${file}`));
+}

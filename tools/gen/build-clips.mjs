@@ -36,6 +36,7 @@ import { join } from 'node:path';
 import { VIDEO_MOTIONS } from './motion.mjs';
 import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
 import { findClip } from './clipSource.mjs';
+import { CLIP_JOBS, clipStem } from './clipJobs.mjs';
 import { decodePng } from './png.mjs';
 import { keyOut } from './chroma.mjs';
 import { crop } from './resize.mjs';
@@ -205,7 +206,7 @@ function main() {
   const report = [];
 
   for (const [action, spec] of Object.entries(VIDEO_MOTIONS)) {
-    const clip = findClip(action);
+    const clip = findClip(action, { declaredFile: CLIP_JOBS[action]?.file ?? null });
     const probe = ffprobe(clip);
     const sourceFrames = Number(probe.nb_read_frames);
     const { frames, cyclic } = spec;
@@ -248,7 +249,10 @@ function main() {
       indices = windowIndices(onset, sourceFrames - 1 - onset, frames);
     }
 
-    const out = join(SHEET_DIR, `${action}-clip.png`);
+    // A flat name, not `${action}-clip.png`: a namespaced action (`brass-courier/attack`) would
+    // resolve to a `brass-courier/` subdirectory nothing creates, and extraction would fail. The
+    // flat `<stem>-clip.png` prefix shape is also depended on downstream.
+    const out = join(SHEET_DIR, `${clipStem(action)}-clip.png`);
     extract(clip, indices, out);
     gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height));
 

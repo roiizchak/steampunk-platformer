@@ -21,8 +21,11 @@ import {
   DURATION,
   ENDPOINT_ID,
   RESOLUTION,
+  clipStem,
+  missingClipFiles,
   readPrescribedAspectRatio,
   validateClipJob,
+  videoDirExists,
 } from '../../tools/gen/clipJobs.mjs';
 import { COMBAT_MOTIONS } from '../../tools/gen/motionCombat.mjs';
 import { VIDEO_MOTIONS } from '../../tools/gen/motion.mjs';
@@ -84,6 +87,26 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
     expect(Object.keys(CLIP_JOBS).length).toBeGreaterThanOrEqual(9);
   });
 
+  it("every record's file is null or an .mp4 whose stem starts with clipStem(key) (W2b: the declared winner of an ambiguous glob)", () => {
+    for (const [key, job] of Object.entries(CLIP_JOBS)) {
+      if (job.file === null) continue;
+      expect(job.file.endsWith('.mp4'), `${key}: file "${job.file}" must end .mp4`).toBe(true);
+      expect(
+        job.file.startsWith(clipStem(key)),
+        `${key}: file "${job.file}" does not start with stem "${clipStem(key)}"`,
+      ).toBe(true);
+    }
+  });
+
+  describe('missingClipFiles — declared files that are not actually on disk', () => {
+    it('is empty when the video directory exists', () => {
+      // `_generated/` is gitignored by design (vault 4.16) and absent on a fresh clone — an
+      // unconditional assertion here would go red on a clean checkout, not on a real defect.
+      if (!videoDirExists()) return;
+      expect(missingClipFiles()).toEqual([]);
+    });
+  });
+
   describe('validateClipJob — a committed failing fixture (vault C2: a gate that cannot go red is decoration)', () => {
     it('REJECTS a record submitting aspect_ratio "9:16"', () => {
       const bad = {
@@ -92,6 +115,7 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl: 'https://example.test/anchor.png',
+        file: null,
       };
       const problems = validateClipJob('fixture/bad-aspect-ratio', bad);
       expect(problems.length).toBeGreaterThan(0);
@@ -105,6 +129,7 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl: 'https://example.test/anchor.png',
+        file: null,
       };
       expect(validateClipJob('fixture/good', good)).toEqual([]);
     });

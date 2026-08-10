@@ -111,3 +111,61 @@ describe('findClip resolves the source directory from the action, not one hardco
     );
   });
 });
+
+describe('findClip declaredFile — CLIP_JOBS data replaces the glob, so a re-shoot cannot reintroduce the ambiguity', () => {
+  it('declaredFile set: returns it directly and never calls listFiles', () => {
+    const dirExists = (path: string) =>
+      path === NAMESPACED_VIDEO_DIR || path === `${NAMESPACED_VIDEO_DIR}/brass-courier-attack-r2.mp4`;
+    const listFiles = (): string[] => {
+      throw new Error('listFiles must not be called when declaredFile is set');
+    };
+
+    expect(
+      findClip('brass-courier/attack', {
+        dirExists,
+        listFiles,
+        declaredFile: 'brass-courier-attack-r2.mp4',
+      }),
+    ).toBe(`${NAMESPACED_VIDEO_DIR}/brass-courier-attack-r2.mp4`);
+  });
+
+  it('declaredFile set but absent from the directory: throws, naming the file', () => {
+    const dirExists = (path: string) => path === NAMESPACED_VIDEO_DIR;
+    const listFiles = (): string[] => {
+      throw new Error('listFiles must not be called when declaredFile is set');
+    };
+
+    expect(() =>
+      findClip('brass-courier/attack', {
+        dirExists,
+        listFiles,
+        declaredFile: 'brass-courier-attack-r3.mp4',
+      }),
+    ).toThrow(/brass-courier-attack-r3\.mp4/);
+  });
+
+  it('declaredFile null + ambiguous listing: throws the "declare the winner" message', () => {
+    const dirExists = (dir: string) => dir === NAMESPACED_VIDEO_DIR;
+    const listFiles = () => ['brass-courier-attack.mp4', 'brass-courier-attack-r2.mp4'];
+
+    expect(() => findClip('brass-courier/attack', { dirExists, listFiles })).toThrow(
+      /declare the winner/i,
+    );
+  });
+
+  it('declaredFile null + single match: unchanged', () => {
+    const dirExists = (dir: string) => dir === NAMESPACED_VIDEO_DIR;
+    const listFiles = () => ['brass-sentry-idle.mp4'];
+
+    expect(findClip('brass-sentry/idle', { dirExists, listFiles })).toBe(
+      `${NAMESPACED_VIDEO_DIR}/brass-sentry-idle.mp4`,
+    );
+  });
+
+  it('legacy bare key with no CLIP_JOBS record: unchanged glob behaviour', () => {
+    const dirExists = (dir: string) => dir === VIDEO_DIR;
+    const listFiles = (dir: string) => (dir === VIDEO_DIR ? ['walk.mp4'] : []);
+
+    expect(findClip('walk', { dirExists, listFiles })).toBe(`${VIDEO_DIR}/walk.mp4`);
+  });
+});

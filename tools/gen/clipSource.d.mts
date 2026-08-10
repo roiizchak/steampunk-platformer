@@ -16,5 +16,6 @@ export declare function findClip(
   deps?: {
     dirExists?: (dir: string) => boolean;
     listFiles?: (dir: string) => string[];
+    declaredFile?: string | null;
   },
 ): string;
