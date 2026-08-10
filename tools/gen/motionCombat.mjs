@@ -24,6 +24,25 @@
 
 import { poseSpan } from './motion.mjs';
 
+/**
+ * Appended to every courier IDENTITY block. Malformed, missing and fused hands recur across the
+ * combat batch, worst at peak extension — there is no gate for this, so the prompt is the only
+ * lever, weak as it is.
+ */
+const HAND_CLAUSE =
+  ' Both hands are always fully visible and correctly formed, with five fingers, and are never ' +
+  'merged into the tool or into the body.';
+
+/**
+ * Appended to every one-shot combat motion's `motion` clause. `HOLD_CAMERA` in `motion.mjs`
+ * already says "is never cropped by any edge" and it did not stop clipping at full extension — so
+ * this is phrased as a positive requirement about where the subject sits, not another prohibition.
+ */
+const FRAME_MARGIN =
+  ' At its point of furthest extension, the subject and anything it holds stays entirely inside ' +
+  'the middle 70% of the frame width, with clear green margin visible at both the left and right ' +
+  'edges of the frame.';
+
 export const COMBAT_MOTIONS = Object.freeze({
   /* ---------------------------------------------------------------- *
    * Phase 5. Namespaced `slug/action`, because `idle` now means two different
@@ -50,25 +69,29 @@ export const COMBAT_MOTIONS = Object.freeze({
   'brass-courier/attack': {
     cyclic: false,
     frames: 8,
-    identity: 'IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
+    identity: ('IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
       'same hair, same brass goggles pushed up on the forehead, same riveted brass pauldron, same ' +
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
       'Nothing is added, removed or recoloured at any point. He has EXACTLY two arms and two legs ' +
-      'in every single frame and grows no extra limb.',
+      'in every single frame and grows no extra limb.') + HAND_CLAUSE,
     span: poseSpan(
-      'the heavy spanner is drawn back and up behind his right shoulder, both boots planted, ' +
-        'shoulders coiled away from the direction he will strike.',
-      'the spanner has been driven all the way FORWARD and DOWN and his right arm is extended ' +
-        'straight out horizontally in front of him at chest height, elbow locked, the spanner at ' +
-        'its single furthest point from his body, shoulders square to the strike. This is the ' +
-        'moment of impact.',
-      'the spanner has swung on through and down past his knee and his arm has settled back ' +
-        'toward his side, shoulders returning to a neutral stance.',
+      'he has just drawn the small silver spanner from the tool loop on his belt and holds it low ' +
+        'and back at hip height in a closed right fist, thumb over the top, all five fingers ' +
+        'visible and correctly formed, both boots planted, shoulders coiled away from the ' +
+        'direction he will strike.',
+      'his right arm is extended straight forward at chest height, elbow locked, the small ' +
+        'spanner still gripped in that same closed fist with the thumb over the top and all five ' +
+        'fingers visible, at its single furthest point from his body, shoulders square to the ' +
+        'strike. This is the moment of impact.',
+      'his arm has settled back toward his belt and the small spanner, still held in his closed ' +
+        'fist, is returning to its tool loop.',
     ),
     motion:
-      'swings a heavy spanner through one committed horizontal strike. His boots stay planted on ' +
+      ('draws a small spanner from the tool loop on his belt and swings it through one committed ' +
+      'horizontal strike at chest height, then returns it to the loop. His boots stay planted on ' +
       'the same spot the whole time and he does NOT step, walk or travel - only the upper body ' +
-      'and arms move. He NEVER lifts the spanner above his own head and NEVER holds it overhead.',
+      'and arms move. The strike arcs forward at chest height and settles back to his hip; it ' +
+      'never climbs toward his shoulder or head.') + FRAME_MARGIN,
   },
 
   /**
@@ -82,11 +105,11 @@ export const COMBAT_MOTIONS = Object.freeze({
   'brass-courier/hurt': {
     cyclic: false,
     frames: 6,
-    identity: 'IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
+    identity: ('IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
       'same hair, same brass goggles pushed up on the forehead, same riveted brass pauldron, same ' +
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
       'Nothing is added, removed or recoloured at any point. He has EXACTLY two arms and two legs ' +
-      'in every single frame and grows no extra limb.',
+      'in every single frame and grows no extra limb.') + HAND_CLAUSE,
     span: poseSpan(
       'he is standing upright in his normal stance, unhurt, in strict side profile facing RIGHT.',
       'he has been struck: his head and shoulders are snapped sharply BACKWARD away from the ' +
@@ -97,9 +120,10 @@ export const COMBAT_MOTIONS = Object.freeze({
         'facing RIGHT, still on both feet.',
     ),
     motion:
-      'takes a heavy blow and recoils from it. He stays ON HIS FEET the whole time and NEVER ' +
+      ('takes a heavy blow and recoils from it. He stays ON HIS FEET the whole time and NEVER ' +
       'falls, NEVER kneels and NEVER lies down. His boots stay on the same spot; he does not step ' +
-      'or travel. He stays in STRICT SIDE PROFILE facing RIGHT and never turns toward the viewer.',
+      'or travel. He stays in STRICT SIDE PROFILE facing RIGHT and never turns toward the viewer.') +
+      FRAME_MARGIN,
   },
 
   /**
@@ -112,20 +136,22 @@ export const COMBAT_MOTIONS = Object.freeze({
   'brass-courier/death': {
     cyclic: false,
     frames: 10,
-    identity: 'IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
+    identity: ('IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
       'same hair, same brass goggles pushed up on the forehead, same riveted brass pauldron, same ' +
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
       'Nothing is added, removed or recoloured at any point. He has EXACTLY two arms and two legs ' +
-      'in every single frame and grows no extra limb.',
+      'in every single frame and grows no extra limb.') + HAND_CLAUSE,
     span: poseSpan(
-      'he is standing upright on both boots in his normal stance, unhurt.',
-      'his knees have buckled and he is down on one knee, doubled forward, one hand on the ' +
-        'ground taking his weight, head dropped.',
+      'he is already reacting to the fatal blow: his knees are buckling under him, his weight ' +
+        'dropping fast, one boot sliding to try to catch his balance, head snapping forward.',
+      'he is well into the collapse: both knees have given way, his torso has folded forward and ' +
+        'down, one shoulder dropping toward the ground, his arms falling loose.',
       'he is lying collapsed and completely still on his side on the ground, limbs slack, head ' +
         'down, not moving.',
     ),
     motion:
-      'collapses and dies. He does not travel sideways; he goes down on the spot where he stands.',
+      ('collapses and dies. He does not travel sideways; he goes down on the spot where he stands.') +
+      FRAME_MARGIN,
   },
 
   /** The turret at rest. Cyclic, and the ONLY things that may move are the barrel and the gauges. */
@@ -168,7 +194,35 @@ export const COMBAT_MOTIONS = Object.freeze({
       'the flash is gone, a thin plume of smoke drifts from the muzzle, and the barrel has ' +
         'settled back to level.',
     ),
-    motion: 'fires a single shot from its barrel. Its three feet never leave the spot.',
+    motion: 'fires a single shot from its barrel. Its three feet never leave the spot.' + FRAME_MARGIN,
+  },
+
+  /**
+   * Identical to `brass-sentry/fire` in every respect except the barrel angle: the sim aims its
+   * projectile in 2D and the renderer picks this sheet when the shot is steeply angled, so the
+   * barrel is raised roughly 35 degrees above horizontal throughout - including at rest and at
+   * recoil, never returning to level.
+   */
+  'brass-sentry/fire-elevated': {
+    cyclic: false,
+    frames: 6,
+    identity: 'IDENTITY: this is the same MACHINE throughout - a squat brass and blue-grey steel sentry ' +
+      'turret, no face, no person, seen from the side facing RIGHT. Same riveted drum housing, ' +
+      'same glass lens, same two pressure gauges, same stencilled number plate, same finned ' +
+      'barrel, same palette. It has EXACTLY THREE legs in every single frame and grows no extra ' +
+      'leg, no arm and no head. It never becomes a person or a creature.',
+    span: poseSpan(
+      'the barrel is raised at a steep angle, about 35 degrees above horizontal, and still, the ' +
+        'muzzle dark and empty.',
+      'a bright muzzle flash bursts from the mouth of the raised barrel and the whole drum ' +
+        'housing has kicked backward on its legs from the recoil, the barrel still held at that ' +
+        'same steep upward angle.',
+      'the flash is gone, a thin plume of smoke drifts from the muzzle, and the barrel has ' +
+        'settled back to its steady raised angle of about 35 degrees above horizontal.',
+    ),
+    motion:
+      'fires a single shot from its barrel, held raised at a steep upward angle throughout, at ' +
+      'rest and in recoil alike. Its three feet never leave the spot.' + FRAME_MARGIN,
   },
 
   /** The turret destroyed. One-shot, and it must end as obvious wreckage. */
@@ -181,13 +235,15 @@ export const COMBAT_MOTIONS = Object.freeze({
       'barrel, same palette. It has EXACTLY THREE legs in every single frame and grows no extra ' +
       'leg, no arm and no head. It never becomes a person or a creature.',
     span: poseSpan(
-      'it is intact and upright on all three legs.',
-      'the drum housing is split open along its seam, sparks and steam are venting hard from the ' +
-        'break, and one leg has buckled so it leans heavily.',
+      'it is already failing: sparks are spitting from a seam along the drum housing and one leg ' +
+        'is beginning to buckle under it.',
+      'it has come apart much further: the drum housing is torn wide open, sparks and steam are ' +
+        'venting hard from the break, and it has toppled sideways with two legs collapsed under ' +
+        'it and only one still bearing any weight.',
       'it is a collapsed heap of broken plates on the ground, all three legs folded under it, ' +
         'dark and still, with only a last wisp of smoke.',
     ),
-    motion: 'is destroyed. It does not travel sideways; it comes apart where it stands.',
+    motion: ('is destroyed. It does not travel sideways; it comes apart where it stands.') + FRAME_MARGIN,
   },
 
   /** The patrol. Cyclic, limb mechanics named BEFORE the count - Phase 4's rule 2. */
@@ -243,12 +299,14 @@ export const COMBAT_MOTIONS = Object.freeze({
       'stack, same rusted palette. It has EXACTLY two arms and two legs in every single frame and ' +
       'grows no extra limb. It stays hunched and forward-leaning and never stands fully upright.',
     span: poseSpan(
-      'it is hunched and upright on both clawed feet, intact.',
-      'its head has snapped back, its scavenged chest plates are flying loose off their wire ' +
-        'lashings, and it is sagging hard onto one buckling leg.',
+      'it is already reeling from the blow: its head is snapping back and its scavenged plates ' +
+        'are starting to shake loose from their wire lashings.',
+      'it is buckling hard: most of its plates have torn free and are scattering, one leg has ' +
+        'fully given way, and its body is dropping toward the ground.',
       'it is a collapsed pile of scrap on the ground, completely still, its bucket head fallen to ' +
         'one side and both amber lamps dark.',
     ),
-    motion: 'comes apart and collapses. It does not travel sideways; it goes down on the spot.',
+    motion: ('comes apart and collapses. It does not travel sideways; it goes down on the spot.') +
+      FRAME_MARGIN,
   },
 });
