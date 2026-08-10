@@ -38,8 +38,9 @@
  * Converting it to a pass to keep a run green is the failure this gate exists to prevent.
  */
 
+import { pathToFileURL } from 'node:url';
 import { CHROMA, components, keyOut } from './chroma.mjs';
-import { decodePng } from './png.mjs';
+import { decodePng, readBytes } from './png.mjs';
 import { FAIL, INDETERMINATE, PASS } from './gates.mjs';
 
 /**
@@ -190,4 +191,29 @@ export function gateContactGeometry(buffer, options = {}) {
     value,
     `${soles.length} contact limbs, soles within ${value.spreadPx}px of ${value.limitPx}px allowed`,
   );
+}
+
+/**
+ * CLI: `node tools/gen/anchorGate.mjs <anchor.png> [more.png ...]` — run G1 against real files.
+ * Not exercised by the unit suite (that imports `gateContactGeometry` directly); this is the piece
+ * criterion 4.27 was missing, since without it a real verdict could only be produced out of band.
+ */
+function main(paths) {
+  if (paths.length === 0) {
+    console.error('usage: node tools/gen/anchorGate.mjs <anchor.png> [more.png ...]');
+    process.exit(1);
+  }
+  let anyFailed = false;
+  for (const path of paths) {
+    const result = gateContactGeometry(readBytes(path));
+    const spread = result.value ? `${result.value.spreadPx}px` : 'n/a';
+    const limit = result.value ? `${result.value.limitPx}px` : 'n/a';
+    console.log(`${result.status}\t${path}\tsole-spread=${spread} limit=${limit}\t${result.reason}`);
+    if (result.status === FAIL) anyFailed = true;
+  }
+  process.exit(anyFailed ? 1 : 0);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(process.argv.slice(2));
 }

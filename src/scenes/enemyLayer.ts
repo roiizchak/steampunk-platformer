@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 
 import { healthBarDesc, type BarSubject } from '../render/enemyHealthBar';
 import { scavengerRenderDesc, sentryRenderDesc, type EnemyRenderDesc } from '../render/enemyView';
@@ -16,19 +16,27 @@ import type { World } from '../sim/types';
  * `src/render/`: what colour, which animation key, how wide the fill. This file is the hand that
  * applies them, and it holds no rule of its own worth testing.
  *
- * ## Rectangles, not sprites, until the art exists
+ * ## Sprite when the art exists, Rectangle otherwise
  *
  * `enemyView` already decides an `animKey` for every state and `enemy-view.test.ts` pins them, but
  * playing a key whose texture has not been generated throws at `create()` — which lands as a hang
  * with `ready:false` and `bootError:null`, the one outcome the refuse-to-route design exists to
- * prevent *(vault 1.4)*. So the grey box draws `Rectangle`s and reads `desc.colour`; step 6 swaps
- * in `Sprite`s and starts reading `desc.animKey`, which is already correct and already tested.
+ * prevent *(vault 1.4)*. So `addBody` asks `scene.anims.exists(desc.animKey)`: true draws a
+ * `Sprite` and plays it, false falls back to the `Rectangle` grey box. The fallback is a dated
+ * temporary — `tests/unit/enemy-layer-catalog.test.ts` asserts today's shipped catalog has no enemy
+ * sheets (making it legitimately reachable now) and fails once all six `enemyAnimKeys()` are
+ * registered but a `Rectangle` is still drawn.
  *
- * The swap is also where criterion 5.4's frame-0 guard lands: `sprite.play(key, true)` with
- * `ignoreIfPlaying`, comparing against the key `enemyView` returns.
+ * `isSprite` runs parallel to `bodies` rather than an `instanceof` check in `sync()`, because the
+ * unit test drives `EnemyLayer` against a plain mock scene, not a real `Phaser.GameObjects.Sprite`.
+ *
+ * The frame-0 guard (criterion 5.4) matches `GameScene.ts`'s player render exactly: `play()` only on
+ * a CHANGE of `anims.getName()`, never unconditionally — two implementations of that one rule is
+ * where the bug lives.
  */
 export class EnemyLayer {
-  private readonly bodies: Phaser.GameObjects.Rectangle[] = [];
+  private readonly bodies: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite)[] = [];
+  private readonly isSprite: boolean[] = [];
   private bars!: Phaser.GameObjects.Graphics;
   private shots!: Phaser.GameObjects.Graphics;
 
@@ -53,12 +61,23 @@ export class EnemyLayer {
   }
 
   private addBody(desc: EnemyRenderDesc): void {
+    if (this.scene.anims.exists(desc.animKey)) {
+      const sprite = this.scene.add.sprite(desc.x, desc.y, desc.animKey);
+      sprite.setOrigin(desc.originX, desc.originY);
+      sprite.setDepth(9);
+      sprite.setFlipX(desc.flipX);
+      sprite.play(desc.animKey);
+      this.bodies.push(sprite);
+      this.isSprite.push(true);
+      return;
+    }
     this.bodies.push(
       this.scene.add
         .rectangle(desc.x, desc.y, desc.w, desc.h, desc.colour)
         .setOrigin(desc.originX, desc.originY)
         .setDepth(9),
     );
+    this.isSprite.push(false);
   }
 
   /**
@@ -88,7 +107,17 @@ export class EnemyLayer {
         continue;
       }
       body.setPosition(desc.x, desc.y);
-      body.setFillStyle(desc.colour);
+      if (this.isSprite[i]) {
+        const sprite = body as Phaser.GameObjects.Sprite;
+        sprite.setFlipX(desc.flipX);
+        // Restart only on a CHANGE of animation — see the class doc. Calling play() every tick
+        // would reset a looping cycle to frame 0 on every render.
+        if (sprite.anims.getName() !== desc.animKey) {
+          sprite.play(desc.animKey);
+        }
+      } else {
+        (body as Phaser.GameObjects.Rectangle).setFillStyle(desc.colour);
+      }
       // A dead enemy stops being drawn as a threat, but its body stays: a corpse that vanishes on
       // the frame it dies gives no feedback that the kill landed.
       body.setAlpha(subject.hp > 0 ? 1 : 0.35);
