@@ -386,7 +386,52 @@ left/right asymmetry is a faint luminance gradient in the generated background, 
 > ⚠️ **The fix is NOT to raise `minAlpha` until it goes green.** That is the forbidden move — it
 > would blind the gate to the real crop it was built for. Whatever is changed must be **re-validated
 > against the historical cropped `brass-sentry-fire` frame**, exactly how G6 was validated originally.
-> **This is a STOP-and-ask and has not been done.**
+
+### ✅ RESOLVED — and the corrected gate immediately caught a real defect
+
+**User approved "Option A, opaque-only mask" after being shown the measurement.** `DEFAULT_MIN_ALPHA`
+is now **255** (`edgeGate.mjs:65`). The threshold is **not tuned**: `keyOut` leaves alpha untouched
+only where `d >= CHROMA.HIGH`, and every source frame starts fully opaque, so *"untouched by the
+ramp"* is exactly `alpha == 255`. Re-validated **both directions** — the real cropped
+`brass-sentry-fire` frame still FAILs, clean Phase 4 `idle` PASSes with 144 px of margin, and all five
+pre-existing synthetic fixtures kept their verdicts. `Tests 708 passed (708)`, 47 files.
+
+**The measurement, kept so nobody re-runs it:**
+
+| threshold | real cropped `brass-sentry-fire` | clean Phase 4 `idle` |
+|---|---|---|
+| `>= 8` (old) | 0px / 0px | 30px / **0px** ← the false positive |
+| `>= 32` | 0px / 0px | 114px / 144px |
+| `>= 255` (opaque) | **0px / 0px** | 120px / 164px |
+
+A categorical gap, not a knife-edge — which is what made this a correction rather than a tuning.
+
+### 🔴 THE NEW REAL FINDING — shipped Phase 4 `jump` art is genuinely cropped
+
+With `idle` no longer failing first, `assets:clips` reaches `jump` and G6 **correctly** fails it.
+**This is not a false positive.** Measured at the opaque threshold, per frame of `jump-clip.png`:
+
+```
+frame 0: left=104px right= 82px          <- fine
+frame 1: left= 64px right=  0px   col 719 occupied rows 472..524  (53px)
+frame 2: left= 54px right=  0px   col 719 occupied rows 404..497  (94px)
+frame 3: left= 34px right=  0px   col 719 occupied rows 386..475  (89px)
+frame 4: left=  0px right=  0px   col 719 occupied rows 234..1040 (167px)
+frame 5: left=  0px right=  0px   col 719 occupied rows 210..291  (82px)
+```
+
+**Confirmed by eye at 3× magnification:** it is the character's **hand**, sheared flat by the right
+frame edge — no outline on its right side, fingers cut mid-stroke. **5 of 6 frames.** *(The subagent
+reported this as a cropped "boot"; the body part was wrong, the conclusion right. Verify agent claims.)*
+
+This was invisible for the whole of Phase 4 and all of Phase 5 so far, because `idle` threw first.
+It belongs on the **Phase 4 debt ledger** — that phase was merged *reported failing* — and it is a
+**STOP-and-ask**: re-shooting it is Phase 4 art and costs money. **Not decided, not worked around.**
+
+**Note the leverage question this raises:** the five Phase 4 sheets are **already packed and shipped**
+in `public/assets/`. Phase 5 does not need to re-pack them — `assets:clips` re-processes them only
+because it iterates all of `VIDEO_MOTIONS`. Whether to scope the run per-slug is a live option and is
+cheaper than a re-shoot.
 
 ### What session 3 landed — verified by the orchestrator, not by agent report
 
