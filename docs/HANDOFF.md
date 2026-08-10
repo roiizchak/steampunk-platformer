@@ -320,3 +320,27 @@ Batch 1 — 3 clips, $3.57.** That is a STOP-and-ask boundary and the user must 
 
 **Not started:** W7, W8, W12–W20, the entire §6 QA gate (every agent owner, two briefs each), and the
 Codex **implementation** review (criterion 5.14). **Phase 5 is failing and must be reported failing.**
+
+### ⚠️ DO THIS FIRST — W2b, the blocker between here and any spend
+
+`assets:clips` **cannot run at all today.** `findClip` (`tools/gen/clipSource.mjs:41-44`) matches both
+`<stem>.mp4` and `<stem>-*.mp4`, so `brass-courier/attack` matches **two** files
+(`brass-courier-attack.mp4` and `-r2.mp4`) and it throws by design rather than pick — vault 4.16, the
+same trap `raw()` in `build-world.mjs` hit. `brass-courier/hurt` is ambiguous the same way.
+
+**Re-shooting does NOT fix this — it makes it worse.** Batch 1 adds `-r3`, taking `attack` to three
+candidates; and `hurt` is a **KEEP**, never re-shot, so its ambiguity is permanent. This must be
+cleared *before* Batch 1, or $3.57 is spent with the blocker still in place.
+
+**Decision taken 2026-08-10, user unsure and deferred the call:** **declare the winning filename in
+`CLIP_JOBS`** and have `findClip` read it from the record instead of globbing the directory. Chosen
+because it is the safe option under uncertainty — **nothing is deleted**, every non-regenerable paid
+input is kept, it is trivially reversible, and it is the identical pattern that closed the
+`aspect_ratio` defect: stop inferring a decision from a filesystem listing, write it down where it
+can be reviewed, diffed and tested. It also makes each future re-shoot a one-line record change.
+
+Rejected: deleting the round-1 files (irreversible, ~$2.38 of non-regenerable paid input, and it
+still recurs after every re-shoot) and archiving them out of the glob path (a habit, not a gate —
+it must be remembered after each round, which is exactly the failure mode this phase already has).
+
+The test must assert every declared filename actually exists, or a record can name a missing file.
