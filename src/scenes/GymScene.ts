@@ -2,18 +2,22 @@ import Phaser from 'phaser';
 import { CATALOG_KEY, type AssetCatalog, type SheetEntry } from '../game/assetCatalog';
 import { RENDER_SCALE } from '../game/constants';
 import {
-  boundsRect,
   actionFromKey,
+  configFilenameFor,
   editsFromConfig,
   emptyEdits,
   frameCells,
   measureCellBounds,
   readoutLines,
   serialiseBounds,
+  slugFromSheetKey,
   slugOf,
   type Bounds,
   type BoundsEdits,
 } from '../render/gymBounds';
+import { loadBoundsConfig } from '../render/gymConfigLoader';
+import { computeGymGeometry } from '../render/gymGeometry';
+import { readRgba } from '../render/gymPixels';
 import { PLAYER_BOX } from '../sim/player';
 
 /**
@@ -87,6 +91,9 @@ export class GymScene extends Phaser.Scene {
   private measured = new Map<string, (Bounds | null)[]>();
   private rawConfig: unknown = null;
   private edits: BoundsEdits = emptyEdits();
+  /** The character `rawConfig` is FOR, tracked separately so a sheet-slug change (`stepSheet`) can
+   *  be detected and reloaded before `rawConfig` goes stale — see `slugFromSheetKey`. */
+  private slug = '';
 
   constructor() {
     super('Gym');
@@ -102,6 +109,7 @@ export class GymScene extends Phaser.Scene {
     this.elapsedMs = 0;
     this.measured = new Map();
     this.edits = emptyEdits();
+    this.slug = '';
   }
 
   create(): void {
@@ -110,6 +118,9 @@ export class GymScene extends Phaser.Scene {
       throw new Error('GymScene: the asset catalog is missing after boot approved it');
     }
     this.sheets = catalog.sheets;
+    // Best-effort guess for the first fetch; a wrong guess just fails the fetch rather than
+    // mis-editing anything, since `get action()` still validates through `slugOf`/`actionFromKey`.
+    this.slug = slugFromSheetKey(this.sheets[0].key) ?? this.sheets[0].key;
 
     this.cameras.main.setBackgroundColor('#1b1a17');
 
@@ -132,24 +143,20 @@ export class GymScene extends Phaser.Scene {
   }
 
   /**
-   * The config is fetched rather than imported so the Gym reads the SHIPPED bytes — the same file
-   * the build reads — and so a save round-trips every provenance note in it untouched.
+   * Fetch `this.slug`'s config (`gymConfigLoader.loadBoundsConfig`) and apply the result. Per-slug:
+   * `stepSheet` re-points `this.slug` and calls this again when the selected sheet's character
+   * changes.
    */
   private async loadConfig(): Promise<void> {
-    try {
-      const response = await fetch('assets/config/character-bounds.json');
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      this.rawConfig = await response.json();
-      this.edits = editsFromConfig(this.rawConfig);
-      this.refresh();
-    } catch (error) {
-      // Not fatal: measuring and looking are the Gym's main jobs and neither needs the config.
-      // Saving is refused explicitly rather than writing a guess (vault 4.16).
-      this.rawConfig = null;
-      this.note.setText(`character-bounds.json unreadable (${String(error)}) — S will refuse to save`);
+    const result = await loadBoundsConfig(this.slug);
+    this.rawConfig = result.rawConfig;
+    this.edits = result.edits;
+    if (result.error) {
+      this.note.setText(
+        `${configFilenameFor(this.slug)} unreadable (${result.error}) — S will refuse to save`,
+      );
     }
+    this.refresh();
   }
 
   private bindKeys(): void {
@@ -219,6 +226,16 @@ export class GymScene extends Phaser.Scene {
     this.index = (this.index + delta + this.sheets.length) % this.sheets.length;
     this.frame = 0;
     this.elapsedMs = 0;
+    const nextSlug = slugFromSheetKey(this.sheet.key) ?? this.sheet.key;
+    if (nextSlug !== this.slug) {
+      // A different character's sheet: the old config would either mis-derive its action
+      // (`actionFromKey` throwing) or, on a colliding action name, silently edit the wrong file.
+      // Drop it and reload for the new slug — `get action()` falls back safely while this is null.
+      this.slug = nextSlug;
+      this.rawConfig = null;
+      this.edits = emptyEdits();
+      void this.loadConfig();
+    }
     this.refresh();
   }
 
@@ -253,13 +270,13 @@ export class GymScene extends Phaser.Scene {
   private revert(): void {
     // Back to the FILE's values, not to zero — see `editsFromConfig`.
     this.edits = editsFromConfig(this.rawConfig);
-    this.note.setText('edits reverted to the values in character-bounds.json');
+    this.note.setText(`edits reverted to the values in ${configFilenameFor(this.slug)}`);
     this.refresh();
   }
 
   private save(): void {
     if (this.rawConfig === null) {
-      this.note.setText('save refused: character-bounds.json was not readable (vault 4.16)');
+      this.note.setText(`save refused: ${configFilenameFor(this.slug)} was not readable (vault 4.16)`);
       return;
     }
     try {
@@ -267,7 +284,7 @@ export class GymScene extends Phaser.Scene {
       const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = 'character-bounds.json';
+      anchor.download = configFilenameFor(this.slug);
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -277,7 +294,7 @@ export class GymScene extends Phaser.Scene {
       // that — but the diff is larger than the edit, and a reviewer should know before reading it
       // as damage.
       this.note.setText(
-        'saved character-bounds.json — move it into public/assets/config/ ' +
+        `saved ${configFilenameFor(this.slug)} — move it into public/assets/config/ ` +
           '(values unchanged; blank-line grouping is not preserved)',
       );
     } catch (error) {
@@ -301,65 +318,50 @@ export class GymScene extends Phaser.Scene {
     const source = this.textures.get(sheet.key).getSourceImage() as
       | HTMLImageElement
       | HTMLCanvasElement;
-    const canvas = document.createElement('canvas');
-    canvas.width = source.width;
-    canvas.height = source.height;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) {
-      throw new Error('GymScene: no 2d context — the visual footprint cannot be measured');
-    }
-    context.drawImage(source, 0, 0);
-    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
-
-    const result = frameCells(
-      canvas.width,
-      sheet.frameWidth,
-      sheet.frameHeight,
-      sheet.frameCount,
-    ).map((cell) => measureCellBounds(data, canvas.width, cell));
+    const { data, width } = readRgba(source);
+    const result = frameCells(width, sheet.frameWidth, sheet.frameHeight, sheet.frameCount).map((cell) =>
+      measureCellBounds(data, width, cell),
+    );
     this.measured.set(sheet.key, result);
     return result;
   }
 
   private refresh(): void {
     const sheet = this.sheet;
-    // Clamp to the largest zoom whose whole cell fits above the ground line — see ZOOMS.
-    const asked = ZOOMS[this.zoomStep];
-    const fits = ZOOMS.filter((z) => sheet.frameHeight * z <= GROUND_Y);
-    const zoom = asked <= (fits[fits.length - 1] ?? 1) ? asked : (fits[fits.length - 1] ?? 1);
     const bounds = this.boundsFor(sheet)[this.frame];
     const offset = this.edits.footOffsetPx[this.action] ?? 0;
     const active = this.edits.activeFrames[this.action] ?? [];
 
-    // The cell's LAST ROW is the contact line, so putting it on the ground line is what makes the
-    // drawn feet and the drawn floor comparable by eye — the thing two rounds of green numbers got
-    // wrong. `footOffsetPx` is applied here exactly as the renderer would apply it.
-    const groundY = GROUND_Y;
-    const cellLeft = CENTRE_X - (sheet.frameWidth * zoom) / 2;
-    const cellTop = groundY - sheet.frameHeight * zoom - offset * zoom;
+    // Geometry — zoom clamp, cell placement, footprint and collision rects, all in screen space —
+    // is computed once by `computeGymGeometry` (vault 2.12: pull the decision out of the scene).
+    const { zoom, cellLeft, cellTop, screenRect, boxRect } = computeGymGeometry({
+      frameWidth: sheet.frameWidth,
+      frameHeight: sheet.frameHeight,
+      zooms: ZOOMS,
+      zoomStep: this.zoomStep,
+      groundY: GROUND_Y,
+      centreX: CENTRE_X,
+      offsetPx: offset,
+      bounds,
+      collisionW: PLAYER_BOX.w * RENDER_SCALE,
+      collisionH: PLAYER_BOX.h * RENDER_SCALE,
+    });
 
     this.sprite.setTexture(sheet.key, this.frame);
     this.sprite.setScale(zoom);
-    this.sprite.setPosition(CENTRE_X, groundY - offset * zoom);
+    this.sprite.setPosition(CENTRE_X, GROUND_Y - offset * zoom);
 
     this.overlay.clear();
 
     // The ground line, drawn across the whole view: a box is only convincing against a floor.
     this.overlay.lineStyle(2, GROUND, 1).beginPath();
-    this.overlay.moveTo(0, groundY);
-    this.overlay.lineTo(1920, groundY);
+    this.overlay.moveTo(0, GROUND_Y);
+    this.overlay.lineTo(1920, GROUND_Y);
     this.overlay.strokePath();
 
     // WHITE — source frame bounds (the cell itself).
     this.overlay.lineStyle(1, WHITE, 0.55);
     this.overlay.strokeRect(cellLeft, cellTop, sheet.frameWidth * zoom, sheet.frameHeight * zoom);
-
-    // The footprint in screen space, computed ONCE. Blue draws it, red re-draws it on an active
-    // frame, and the readout reports it — three consumers that must not be able to disagree.
-    const rect = bounds ? boundsRect(bounds) : null;
-    const screenRect: [number, number, number, number] | null = rect
-      ? [cellLeft + rect.x * zoom, cellTop + rect.y * zoom, rect.w * zoom, rect.h * zoom]
-      : null;
 
     // BLUE — visual footprint, measured. Absent when the metric returns INDETERMINATE.
     if (screenRect) {
@@ -368,10 +370,8 @@ export class GymScene extends Phaser.Scene {
     }
 
     // GREEN — collision, straight off the sim's own box. Read-only: see the class docstring.
-    const boxW = PLAYER_BOX.w * RENDER_SCALE * zoom;
-    const boxH = PLAYER_BOX.h * RENDER_SCALE * zoom;
     this.overlay.lineStyle(2, GREEN, 1);
-    this.overlay.strokeRect(CENTRE_X - boxW / 2, groundY - boxH, boxW, boxH);
+    this.overlay.strokeRect(...boxRect);
 
     // RED — attack hitbox. Phase 5 owns the geometry; what ships now is the per-frame toggle, drawn
     // as the marked frame's own footprint so a toggle is visibly a toggle rather than a number.
