@@ -85,6 +85,9 @@ export interface Sentry {
    * anything an id.
    */
   lastHitSwing: number;
+  /** Shot-time aim, integer px, muzzle->chest at the tick fired. `null` before the first shot. */
+  lastFireDx: number | null;
+  lastFireDy: number | null;
 }
 
 export interface SentryOptions {
@@ -110,6 +113,8 @@ export function createSentry(options: SentryOptions): Sentry {
     hp,
     maxHp: hp,
     lastHitSwing: -1,
+    lastFireDx: null,
+    lastFireDy: null,
   };
 }
 

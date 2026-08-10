@@ -48,6 +48,10 @@ export function stepEnemies(world: World): void {
     // all, and no test asking "did a projectile spawn" would have noticed it could not.
     const muzzleY = sentry.y - (SENTRY_BOX.h / 2) * world.scale;
     const chestY = player.y - (PLAYER_BOX.h / 2) * world.scale;
+    // Frozen HERE, the same tick and the same numbers `fireProjectile` aims with — a renderer that
+    // recomputed this from the player's later position would swing the barrel after the shot left.
+    sentry.lastFireDx = Math.round(player.x - sentry.x);
+    sentry.lastFireDy = Math.round(chestY - muzzleY);
     world.projectiles.push(
       fireProjectile(sentry.x, muzzleY, player.x, chestY, SENTRY.projectileSpeed, SENTRY.damage),
     );
