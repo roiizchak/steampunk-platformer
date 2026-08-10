@@ -153,6 +153,76 @@ measures. Written down before the measurement so the answer cannot be quietly ro
 
 ---
 
+## §6 gate — agent owners, run 2026-08-10 (session 3)
+
+**Protocol:** each owner ran **two briefs** *(A7)*, dispatched in parallel so **brief 2 never saw
+brief 1's findings** — a second pass that has read the first confirms it instead of attacking it.
+Every finding below is **applied or recorded with a one-line reason** *(C11)*. Subagents were
+forbidden from writing here; the orchestrator recorded these after verifying the decisive claims.
+
+### `voltagent-qa-sec:qa-expert` — brief 1 (verify the stated criteria)
+
+| # | Verdict | Note |
+|---|---|---|
+| 5.1 | **PASS** | Negative + positive control through the real `tick()`, `tick-world-damage.test.ts:223-241`; radius tunability measured as **shots fired**, not a readout. |
+| 5.2 | **PASS, but not by the test that claims to** | ⚠️ `enemy-ai.test.ts:107-123` is titled *"patrol and chase speeds are independently tunable"* and **only sweeps `patrolSpeed`**; `:126-129` compares `chaseSpeed` against two constants with no live entity. The criterion is met **elsewhere** — `enemy-tuning.test.ts:93-109` sweeps `chaseSpeed` on the live field and measures travel. **Codex C4 called this exact risk and it is half-real: the knob is honest, the named test is not.** |
+| 5.5 | **PASS** | Both active-window endpoints pinned **by name** (`combat.test.ts:92-114`), plus measured hp change, once-per-swing and facing. |
+| 5.6 | **PASS** | Fixture runs `IFRAME_TICKS * 2` = 90 ticks against a 45-tick window; **both endpoints pinned** and the length asserted. |
+| 5.9 | **PASS** | `enemyTuning.ts:43-59` writes the live entity's own field — the stale-readout failure mode is **structurally excluded**, not merely untested. |
+| 5.10 | **PASS, with a caveat** | Two genuinely different entities, real constants. But it proves the **ratio** (`ceil(maxHp/damage)` = 2 vs 3), not a simulated kill sequence — **no test actually swings twice and asserts death**. |
+| 5.15 | **PASS** | Kill plane pins the **crossing tick**; the tunnelling case derives the band from the real trajectory and asserts both halves — no tick sampled inside, damage landed anyway. |
+
+### `voltagent-qa-sec:code-reviewer` — brief 1
+
+| # | Verdict | Note |
+|---|---|---|
+| 5.3 | **PASS** | Commitment is real, not just determinism: one exported asymmetric predicate (detect 480 / release 720) plus a 30-tick commit floor. The flap test **oscillates ±10 px** rather than parking on the boundary — the parked version passed with hysteresis deleted. Reviewer reproduced the mutation independently: single-threshold → **36 state changes**, correct → **0**. |
+| 5.12 | **FAIL** | See finding **R2** below. |
+
+### Findings — every one applied or recorded
+
+| ID | Sev | Finding | Disposition |
+|---|---|---|---|
+| **A1** | **HIGH** | **The recorded "9b ordering is masked by i-frames" rationale is geometrically false.** Limitation 1 above argues the swing/contact-damage ordering is untestable because being in contact range implies already holding 45 ticks of i-frames. But `ATTACK_BOX` reaches ~26 units **beyond** contact-overlap distance, so a **dead zone** exists where a swing lands with **zero** contact damage and therefore no i-frames. `player-attack.test.ts:44-58` *builds a fixture at exactly that gap*. **Worse: `worldDamage.ts:77-87`'s contact loop only iterates `scavengers`** — a sentry never deals contact damage at all, so the premise never applies to a sentry kill. | **RECORDED, NOT FIXED — and limitation 1 above is now WRONG and must not be relied on.** The numeric premise (45 > 20) holds; the **geometric** premise does not. Fixing it is a sim change to gated combat code and belongs to a planned work item, not an ad-hoc edit late in a session. **Raised to a blocker-class item for session 4.** |
+| **A2** | MED | **Two raw reimplementations of `windowOpen`** — `enemies.ts:144` sits six lines below a correct `windowOpen(...)` call; `enemyView.ts:52` restates the same shape. Both agree today. | **RECORDED.** Exactly the vault 5.3 drift class Codex C3 fixed once already. Import-not-restate is the fix; deferred to session 4 because it touches `src/sim/enemies.ts`, which is at **exactly 400 lines**. |
+| **R1** | **CRITICAL** | **Producer/consumer filename collision, self-inflicted this session.** W2b changed `build-clips.mjs:255` to write `<slug>-<action>-clip.png`, but `build-assets.mjs:80` still globs `` f.startsWith(`${action}-`) ``. `slugConfig.mjs` then added `attack, hurt, death` to brass-courier. `assets:build` will throw *"no source sheet for declared animation attack"* while the sheet sits there under the namespaced name. **Both test suites pass because neither crosses the seam.** | **VERIFIED LOCALLY, RECORDED.** Confirmed: files on disk are `idle-clip.png` (legacy stems unchanged) but a namespaced action yields `brass-courier-attack-clip.png`, which `startsWith('attack-')` cannot match. **Latent until W7b runs, and W7b rewrites that exact scan** — so it is W7b's first test case, not a separate fix. `slugConfig.mjs:6`'s claim that nothing changes for brass-courier is **now false** and must be corrected there. |
+| **R2** | **CRITICAL (latent)** | All three slugs share `generated: '_generated/sheets'` **with bare action names**. Once `build-assets` runs for `rust-scavenger`, `findSource('walk')` matches the **courier's** `walk-clip.png` and packs it as the scavenger's walk — **silently, not as a throw.** | **RECORDED as W7b's defining requirement.** This is precisely why the source scan must become slug-aware rather than prefix-based. Wrong-character art shipping silently is worse than a build failure. |
+| **R3** | **HIGH** | **G6's new `minAlpha = 255` is fragile against an off-key background.** `build-clips.mjs:191` calls `keyOut()` with the **default** key while `build-assets.mjs:117` calls `estimateKeyColour` first. `chroma.mjs:88-93` records a real clip whose background came back `(0,195,64)` — key-distance **above** `HIGH`, so `keyOut` leaves it **fully opaque**, and at `minAlpha 255` the whole cell reads as subject: margins 0 on all four sides, G6 throws on a perfectly framed clip. **The `255` floor makes this failure mode worse than `8` did, and its remedy is fal spend.** | **RECORDED, NOT FIXED — highest-value follow-up.** The G6 correction this session is right for the measured case but is **not robust to background drift**. The fix is to key with the **estimated** colour, as `build-assets` already does. Not changed now because it is a second gate change in one session and needs its own both-directions re-validation. |
+| **R4** | **HIGH** | **`enemyLayer` checks `anims.exists()` at CREATE time for ONE key**, then plays any later state's key. With a partial catalog (walk packed, death gate-failed), killing a scavenger calls `play()` on a missing key: Phaser no-ops, `getName()` never changes, so it **re-fires every frame forever and the corpse keeps walking**. | **RECORDED.** A real hole in this session's W8. The guard must be **per-key at play time**, not per-body at create time. Deferred to session 4; harmless today because **zero** enemy sheets are catalogued, so no body takes the Sprite path at all. |
+| **R5** | MED | `submit-clips.mjs` versions the download `-rN` but **not** the sidecars (`${stem}.txt`, `${stem}.params.json`), so a re-render overwrites the params of the round that was actually paid for. | **RECORDED.** Undermines the very provenance `CLIP_JOBS` exists to create. Cheap to fix; belongs with the next generation work. |
+| **R6** | MED | The overwrite guard is **render-time, not run-time**: `nextFreeDownloadPath` reads disk when the command is *printed*. Print twice → same path; run a printed command twice → the paid file is clobbered anyway. | **RECORDED.** It reduces the window rather than closing it. Honest framing: this is a speed bump, not the atomic guard the commit message implies. |
+| **R7** | MED | `videoDirExists()` guards one directory while `missingClipFiles()` spans two; `submit-clips.mjs:68` `mkdirSync`s the namespaced dir, so merely *rendering a command* on a fresh clone flips the guard true and reds the test with no defect present. | **RECORDED.** A false-red generator in the exact test written to avoid false greens. |
+| **R8** | MED | **`declaredFile` bypasses the stem check.** A copy-paste in `CLIP_FILES` (`attack` → `…hurt-r2.mp4`) packs the wrong animation; the glob path's stem filter would have caught it. `clipSource.mjs:61` also restates `action.replace('/','-')` instead of importing `clipStem`. | **RECORDED.** The structural test asserts the stem rule, but `findClip` itself does not enforce it — the guard lives beside the data rather than in the code path. |
+| **R9** | LOW | **Three independent action lists** — `enemyView.ANIMS_BY_SLUG` (what the game plays), `slugConfig.actions` (what the build makes), `slug-config.test.ts:EXPECTED_ACTIONS` (a third literal). Add an anim to one and no sheet is ever built; `enemyLayer` silently falls back to a Rectangle. `gymBounds.KNOWN_ACTIONS` is a fourth. | **RECORDED.** Assert `configFor(slug).actions` against `enemyAnimKeys()` — the two that must agree are currently pinned to nothing. |
+| **R10** | LOW | Frame-0 guard implemented **twice** — `enemyLayer.ts:115-117` and `GameScene.ts:437-440`. `enemyLayer.ts:33-35` says *"two implementations of that one rule is where the bug lives"* and then writes the second. | **RECORDED.** One `playIfChanged(sprite, key)` helper closes it. My W8 brief caused this by saying "match the player's form" without saying "extract it". |
+| **R11** | LOW | `enemy-ai.test.ts:151-152`'s comment claims the mutation goes *"from 1 state change to ~20"*; measured **0 → 36**. | **RECORDED.** A stale recorded baseline in a mutation note — wrong in both directions. |
+| **R12** | LOW | `enemyLayer.ts:134` draws shots as radius-8 circles; `projectiles.ts:112-124` sweeps them as a **point**. The drawn threat is 8 px larger than the real one on every side. | **RECORDED.** A fairness/readability mismatch the player can feel. Relevant to W16's bolt art, which replaces this circle anyway. |
+| **A3 / R13** | LOW | Sentry projectiles have no line-of-sight or solid collision; nothing gates that a future `level-01` placement puts a wall between sentry and player. | **ALREADY RECORDED** as limitation 3 above. No change. |
+
+### What this run proves about the protocol itself
+
+**The adversarial brief did the work again.** Brief 1 returned seven PASSes; brief 2 — which never saw
+them — found that the **9b masking rationale in this very document is false (A1)**, that the G6 fix
+landed this session is **fragile to background drift (R3)**, and a **critical filename collision the
+orchestrator introduced himself (R1)**. A checklist pass confirms; an adversarial pass attacks. *(A7)*
+
+**Criterion 5.12 is FAILING and is reported failing.** Ten files exceed 400 lines, `docs/qa/` contains
+no Phase 5 file-size record at all, and the Phase 4 entry that names them explicitly calls itself
+*"an open violation of a non-negotiable, not a justified exception."* A green `file-size.test.ts`
+proves *"≤10 over-limit files, each name-dropped somewhere"* — **not** the criterion.
+
+| file | lines | | file | lines |
+|---|---:|---|---|---:|
+| `tools/gen/gates.mjs` | 726 | | `tests/unit/tilemap-data.test.ts` | 466 |
+| `src/scenes/GameScene.ts` | 613 | | `tests/e2e/phase-01-boot.spec.ts` | 449 |
+| `tools/gen/prompt.mjs` | 586 | | `tools/gen/sheets.mjs` | 442 |
+| `tools/gen/chroma.mjs` | 542 | | `src/scenes/BootScene.ts` | 438 |
+| `tests/e2e/phase-03-tilemap.spec.ts` | 496 | | `tests/unit/sheet-packing.test.ts` | 405 |
+
+`src/sim/enemies.ts` sits at **exactly 400** — one line from turning the 10/10 ceiling red.
+
+---
+
 ## Vault-out — Phase 5
 
 *(Written at the end of the phase.)*
