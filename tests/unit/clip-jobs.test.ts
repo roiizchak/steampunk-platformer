@@ -1,0 +1,112 @@
+/**
+ * W2 — fal submission parameters, checked into version control.
+ *
+ * Every generated Phase 5 clip came back cropped left and right because one submitted parameter,
+ * `aspect_ratio`, was typed by a human into a `genmedia` command line and recorded nowhere:
+ * `docs/ASSET-PIPELINE.md` prescribes `"1:1"` for `bytedance/seedance-2.0/image-to-video`, and the
+ * session that shot these clips submitted `"9:16"` instead. `tools/gen/clipJobs.mjs` is the fix —
+ * `CLIP_JOBS` carries the submission parameters as data, one record per generated clip, and this
+ * file is the gate that keeps them honest.
+ *
+ * `CLIP_JOBS` is built directly from `COMBAT_MOTIONS`'s own keys (see `clipJobs.mjs`), so it is
+ * automatically exact — never one entry ahead or behind — regardless of when the concurrently
+ * developed `brass-sentry/fire-elevated` motion lands. The last `it` below asserts that
+ * relationship instead of a fixed count.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  ASPECT_RATIO,
+  CLIP_JOBS,
+  DURATION,
+  ENDPOINT_ID,
+  RESOLUTION,
+  readPrescribedAspectRatio,
+  validateClipJob,
+} from '../../tools/gen/clipJobs.mjs';
+import { COMBAT_MOTIONS } from '../../tools/gen/motionCombat.mjs';
+import { VIDEO_MOTIONS } from '../../tools/gen/motion.mjs';
+
+describe('CLIP_JOBS — fal submission parameters checked into version control', () => {
+  it('the prescribed aspect_ratio is READ from ASSET-PIPELINE.md, not retyped, and is "1:1"', () => {
+    const prescribed = readPrescribedAspectRatio();
+    // Assert the type before the value (C5) — a parser that silently returns undefined must not
+    // pass by accident.
+    expect(typeof prescribed).toBe('string');
+    expect(prescribed.length).toBeGreaterThan(0);
+    expect(prescribed).toBe('1:1');
+    expect(ASPECT_RATIO).toBe(prescribed);
+  });
+
+  it('never submits aspect_ratio "9:16" — the specific defect that cropped every sentry clip left and right', () => {
+    for (const [key, job] of Object.entries(CLIP_JOBS)) {
+      expect(job.aspectRatio, `${key}: aspect_ratio must never be "9:16" (the sentry-cropping defect)`).not.toBe(
+        '9:16',
+      );
+    }
+  });
+
+  it("every record's aspect_ratio matches ASSET-PIPELINE.md's prescribed value", () => {
+    const prescribed = readPrescribedAspectRatio();
+    for (const [key, job] of Object.entries(CLIP_JOBS)) {
+      expect(job.aspectRatio, key).toBe(prescribed);
+    }
+  });
+
+  it('every record matches the recorded known-good resolution, duration and endpoint', () => {
+    for (const [key, job] of Object.entries(CLIP_JOBS)) {
+      expect(job.resolution, key).toBe(RESOLUTION);
+      expect(job.duration, key).toBe(DURATION);
+      expect(job.endpoint, key).toBe(ENDPOINT_ID);
+    }
+    expect(RESOLUTION).toBe('720p');
+    expect(DURATION).toBe('4');
+    expect(ENDPOINT_ID).toBe('bytedance/seedance-2.0/image-to-video');
+  });
+
+  it('every record key corresponds to a real declared motion entry', () => {
+    for (const key of Object.keys(CLIP_JOBS)) {
+      expect(VIDEO_MOTIONS[key], `"${key}" has a job record but no motion entry in VIDEO_MOTIONS`).toBeDefined();
+    }
+  });
+
+  it('every non-cyclic combat motion has a job record', () => {
+    for (const [key, spec] of Object.entries(COMBAT_MOTIONS)) {
+      if (!spec.cyclic) {
+        expect(CLIP_JOBS[key], `non-cyclic combat motion "${key}" has no CLIP_JOBS record`).toBeDefined();
+      }
+    }
+  });
+
+  it('has exactly one job record per COMBAT_MOTIONS key — correct whenever fire-elevated lands, not just tolerant of it', () => {
+    expect(Object.keys(CLIP_JOBS).sort()).toEqual(Object.keys(COMBAT_MOTIONS).sort());
+    // The nine clips this phase already shot are a floor, whether or not fire-elevated has landed.
+    expect(Object.keys(CLIP_JOBS).length).toBeGreaterThanOrEqual(9);
+  });
+
+  describe('validateClipJob — a committed failing fixture (vault C2: a gate that cannot go red is decoration)', () => {
+    it('REJECTS a record submitting aspect_ratio "9:16"', () => {
+      const bad = {
+        endpoint: ENDPOINT_ID,
+        aspectRatio: '9:16',
+        resolution: RESOLUTION,
+        duration: DURATION,
+        anchorUrl: 'https://example.test/anchor.png',
+      };
+      const problems = validateClipJob('fixture/bad-aspect-ratio', bad);
+      expect(problems.length).toBeGreaterThan(0);
+      expect(problems.some((p: string) => p.includes('9:16'))).toBe(true);
+    });
+
+    it('accepts a well-formed record', () => {
+      const good = {
+        endpoint: ENDPOINT_ID,
+        aspectRatio: ASPECT_RATIO,
+        resolution: RESOLUTION,
+        duration: DURATION,
+        anchorUrl: 'https://example.test/anchor.png',
+      };
+      expect(validateClipJob('fixture/good', good)).toEqual([]);
+    });
+  });
+});
