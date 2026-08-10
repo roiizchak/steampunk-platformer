@@ -16,7 +16,6 @@ export declare const ENDPOINT_ID: string;
 export declare const RESOLUTION: string;
 export declare const DURATION: string;
 export declare const ASPECT_RATIO: string;
-export declare const VIDEO_OUT_DIR: string;
 export declare const PROMPT_OUT_DIR: string;
 export declare const PARAMS_OUT_DIR: string;
 

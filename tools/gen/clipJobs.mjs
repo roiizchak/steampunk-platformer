@@ -1,10 +1,11 @@
 /**
- * The fal submission parameters for every Phase 5 combat/enemy clip — checked into version
- * control, one record per generated clip, keyed exactly as `VIDEO_MOTIONS` keys them (`slug/action`).
+ * The fal submission parameters for every clip this project generates — Phase 5 combat/enemy AND
+ * the five legacy Phase 4 bare-key motions — checked into version control, one record per key,
+ * keyed exactly as `VIDEO_MOTIONS` keys them (`slug/action` or a bare `idle`/`walk`/`run`/`jump`/`fall`).
  *
  * ## Why this file exists
  *
- * Every clip this phase generated came back cropped at the left and right edges.
+ * Every clip Phase 5 generated came back cropped at the left and right edges.
  * `docs/ASSET-PIPELINE.md` prescribes `--aspect_ratio "1:1"` for
  * `bytedance/seedance-2.0/image-to-video` — the sentry's anchor is square — and the session that
  * shot these clips typed `"9:16"` instead. That value existed in no file: it was typed into a
@@ -12,40 +13,48 @@
  * `CLIP_JOBS` is that missing record. `submit-clips.mjs` reads it and prints the command; nothing
  * here calls fal or spends money.
  *
+ * ## Why the five legacy bare keys are covered too
+ *
+ * The shipped `jump.mp4` has the identical defect (a square anchor forced into 9:16, sheared left
+ * and right — see `docs/HANDOFF.md` §8), and it was submitted with **no CLIP_JOBS record at all**:
+ * the legacy keys were out of scope for the first version of this file. That gap is exactly why
+ * nothing caught the bad aspect ratio before it shipped. Covering every `VIDEO_MOTIONS` key, not
+ * only the namespaced combat ones, closes it.
+ *
  * ## Why `ASPECT_RATIO` is parsed out of the doc rather than retyped
  *
  * Two definitions of one concept is where the bug lives (vault 5.3) — the exact failure mode that
  * put `"9:16"` into a real submission while the doc said `"1:1"`. `readPrescribedAspectRatio` reads
  * the doc's own fenced command block, so this module and the doc cannot drift apart again.
  *
- * ## Why `CLIP_JOBS` is built FROM the combat motion keys, not typed out separately
+ * ## Why `CLIP_JOBS` is built FROM the motion keys, not typed out separately
  *
  * A second concurrent session is adding `brass-sentry/fire-elevated` to `COMBAT_MOTIONS`. Deriving
- * `CLIP_JOBS` from the declared combat/enemy keys means it is always exactly in sync with whatever
- * motions are declared — never one entry ahead or behind — rather than a second hand-maintained
- * list that could disagree with the first. Those keys are read off `VIDEO_MOTIONS` rather than
- * `COMBAT_MOTIONS` directly — see `combatKeys` below for why that specific choice matters.
+ * `CLIP_JOBS` from the declared motion keys means it is always exactly in sync with whatever motions
+ * are declared — never one entry ahead or behind — rather than a second hand-maintained list that
+ * could disagree with the first. Those keys are read off `VIDEO_MOTIONS` rather than
+ * `COMBAT_MOTIONS` directly — see `allMotionKeys` below for why that specific choice matters.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import { VIDEO_MOTIONS } from './motion.mjs';
-import { NAMESPACED_VIDEO_DIR } from './clipSource.mjs';
+import { NAMESPACED_VIDEO_DIR, videoDirFor } from './clipSource.mjs';
 
 /**
- * Combat/enemy keys only, derived from `VIDEO_MOTIONS` rather than importing `COMBAT_MOTIONS` from
- * `motionCombat.mjs` directly. `motion.mjs` and `motionCombat.mjs` import each other — `motion.mjs`
- * spreads `COMBAT_MOTIONS` into `VIDEO_MOTIONS` at its own module top level, and `motionCombat.mjs`
- * calls `poseSpan` (a hoisted function, safe) from `motion.mjs` at ITS top level. Whichever of the
- * two is touched FIRST by an importer evaluates correctly; touching `motionCombat.mjs` first makes
- * `motion.mjs`'s own `...COMBAT_MOTIONS` spread run while `COMBAT_MOTIONS` is still in its
- * temporal dead zone, silently producing an incomplete `VIDEO_MOTIONS`. Every existing consumer
- * (`write-prompts.mjs`, `build-clips.mjs`) already imports `motion.mjs` first for this reason; this
- * file does the same rather than opening a second, riskier entry point into the cycle. The
- * `slug/action` naming convention (`videoPrompt`'s own `namespaced` check) is what tells combat
- * keys apart from the five legacy bare ones.
+ * Every generated-clip key: the ten namespaced `slug/action` combat/enemy ones AND the five legacy
+ * bare ones (`idle`, `walk`, `run`, `jump`, `fall`). Read off `VIDEO_MOTIONS` rather than importing
+ * `COMBAT_MOTIONS` from `motionCombat.mjs` directly, because `motion.mjs` and `motionCombat.mjs`
+ * import each other — `motion.mjs` spreads `COMBAT_MOTIONS` into `VIDEO_MOTIONS` at its own module
+ * top level, and `motionCombat.mjs` calls `poseSpan` (a hoisted function, safe) from `motion.mjs` at
+ * ITS top level. Whichever of the two is touched FIRST by an importer evaluates correctly; touching
+ * `motionCombat.mjs` first makes `motion.mjs`'s own `...COMBAT_MOTIONS` spread run while
+ * `COMBAT_MOTIONS` is still in its temporal dead zone, silently producing an incomplete
+ * `VIDEO_MOTIONS`. Every existing consumer (`write-prompts.mjs`, `build-clips.mjs`) already imports
+ * `motion.mjs` first for this reason; this file does the same rather than opening a second, riskier
+ * entry point into the cycle.
  */
-function combatKeys() {
-  return Object.keys(VIDEO_MOTIONS).filter((key) => key.includes('/'));
+function allMotionKeys() {
+  return Object.keys(VIDEO_MOTIONS);
 }
 
 /** The one endpoint this project uses for character animation. */
@@ -103,20 +112,33 @@ const ANCHOR_URLS = Object.freeze({
 });
 
 /**
- * The winning filename for a key whose round-1 clip was re-shot, declared as data rather than
- * picked by `findClip`'s glob (vault 4.16). Round 1's `brass-courier-attack.mp4` and
- * `brass-courier-hurt.mp4` are paid, non-regenerable input and stay on disk, superseded but never
- * deleted — this is what lets `findClip` return the winner without them being ambiguous. Every
- * other key has exactly one clip on disk, so it is absent here (`file` falls back to `null` below).
+ * The winning filename for every key, declared as data rather than picked by `findClip`'s glob
+ * (vault 4.16). `brass-courier/attack` and `brass-courier/hurt` were actually re-shot — round 1's
+ * `brass-courier-attack.mp4`/`-hurt.mp4` are paid, non-regenerable input and stay on disk,
+ * superseded but never deleted — this is what lets `findClip` return the winner without them being
+ * ambiguous. The five legacy bare keys have exactly one clip on disk today, but are declared here
+ * too rather than left to fall back to `null`+glob: `jump` is about to be re-shot (W2c), and once
+ * `jump-r2.mp4` lands beside it, an undeclared `file` would make the glob ambiguous exactly the same
+ * way. `idle`/`walk`/`run`/`fall` are declared now for the same reason, pre-emptively.
  */
 const CLIP_FILES = Object.freeze({
   'brass-courier/attack': 'brass-courier-attack-r2.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
+  idle: 'idle.mp4',
+  walk: 'walk.mp4',
+  run: 'run.mp4',
+  jump: 'jump.mp4',
+  fall: 'fall.mp4',
 });
 
-/** `brass-courier/attack` -> `brass-courier` — a filename/URL lookup key never carries a `/`. */
+/**
+ * `brass-courier/attack` -> `brass-courier` — a filename/URL lookup key never carries a `/`. The
+ * five legacy bare keys (`idle`, `walk`, `run`, `jump`, `fall`) are also the brass-courier character
+ * — Phase 4 shot them before the `slug/action` naming convention existed — so a bare key resolves to
+ * that same slug rather than to itself.
+ */
 function slugOf(key) {
-  return key.split('/')[0];
+  return key.includes('/') ? key.split('/')[0] : 'brass-courier';
 }
 
 /** `brass-courier/attack` -> `brass-courier-attack` — the on-disk stem, matching `clipSource.mjs`. */
@@ -160,12 +182,26 @@ export function validateClipJob(key, job) {
 }
 
 /**
- * One record per `COMBAT_MOTIONS` key, self-validated at build time so a bad value can never live
- * in `CLIP_JOBS` even transiently — the module throws on import instead.
+ * One record per `VIDEO_MOTIONS` key — every combat key AND every legacy bare key — self-validated
+ * at build time so a bad value can never live in `CLIP_JOBS` even transiently — the module throws on
+ * import instead.
+ *
+ * The legacy bare keys' `aspectRatio`/`resolution`/`duration` here are the currently-**prescribed**
+ * pipeline values (`ASPECT_RATIO`/`RESOLUTION`/`DURATION`), not a reconstruction of what was
+ * actually submitted for `idle`/`walk`/`run`/`fall` — no machine-readable record of those four's
+ * real submission parameters exists (`_generated/video/{idle,walk,run,fall}.submit.json` carry only
+ * a `request_id`, no `aspect_ratio`). `docs/generations/phase-04-video.md:330-331` documents in
+ * prose that all five were actually shot at `9:16` from the Phase 4 "levelled anchor" — but
+ * `validateClipJob` forbids `"9:16"` by design (that IS the fix this file exists to make), so that
+ * historical value can never legitimately be a `CLIP_JOBS` entry. None of the four are being
+ * re-shot by this change, so their record is declarative (what the pipeline now prescribes), not
+ * historical — that gap is deliberate, not an oversight. `jump` is the one key where this matters
+ * for real: it IS being re-shot at the prescribed `1:1`, which is why it alone gets a fresh anchor
+ * URL and an as-yet-nonexistent `-r2` output rather than reusing Phase 4's history.
  */
 export const CLIP_JOBS = Object.freeze(
   Object.fromEntries(
-    combatKeys().map((key) => {
+    allMotionKeys().map((key) => {
       const slug = slugOf(key);
       const anchorUrl = ANCHOR_URLS[slug];
       if (!anchorUrl) {
@@ -190,8 +226,11 @@ export const CLIP_JOBS = Object.freeze(
   ),
 );
 
-/** Where `submit-clips.mjs` writes sidecars and where the resulting clip is expected to land. */
-export const VIDEO_OUT_DIR = NAMESPACED_VIDEO_DIR;
+/**
+ * Where `submit-clips.mjs` writes prompt/params sidecars. The clip itself downloads to
+ * `videoDirFor(key)` (`clipSource.mjs`) instead — a single directory here would be wrong for the
+ * five legacy bare keys, which live in `_generated/video`, not `_generated/phase05/video`.
+ */
 export const PROMPT_OUT_DIR = '_generated/phase05/prompts';
 export const PARAMS_OUT_DIR = '_generated/phase05/params';
 
@@ -204,9 +243,13 @@ export function videoDirExists() {
   return existsSync(NAMESPACED_VIDEO_DIR);
 }
 
-/** Every declared `CLIP_JOBS[key].file` that is not actually present in `NAMESPACED_VIDEO_DIR`. */
+/**
+ * Every declared `CLIP_JOBS[key].file` that is not actually present on disk. Checked in
+ * `videoDirFor(key)` — `_generated/video` for the five legacy bare keys, `_generated/phase05/video`
+ * for namespaced combat keys — the same split `findClip` uses, not a single hardcoded directory.
+ */
 export function missingClipFiles() {
-  return Object.values(CLIP_JOBS)
-    .map((job) => job.file)
-    .filter((file) => file !== null && !existsSync(`${NAMESPACED_VIDEO_DIR}/${file}`));
+  return Object.entries(CLIP_JOBS)
+    .filter(([key, job]) => job.file !== null && !existsSync(`${videoDirFor(key)}/${job.file}`))
+    .map(([, job]) => job.file);
 }

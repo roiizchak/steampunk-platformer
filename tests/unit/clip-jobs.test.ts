@@ -8,7 +8,8 @@
  * `CLIP_JOBS` carries the submission parameters as data, one record per generated clip, and this
  * file is the gate that keeps them honest.
  *
- * `CLIP_JOBS` is built directly from `COMBAT_MOTIONS`'s own keys (see `clipJobs.mjs`), so it is
+ * `CLIP_JOBS` is built directly from `VIDEO_MOTIONS`'s own keys — every combat motion AND the five
+ * legacy Phase 4 bare keys (`idle`, `walk`, `run`, `jump`, `fall`) — (see `clipJobs.mjs`), so it is
  * automatically exact — never one entry ahead or behind — regardless of when the concurrently
  * developed `brass-sentry/fire-elevated` motion lands. The last `it` below asserts that
  * relationship instead of a fixed count.
@@ -81,10 +82,16 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
     }
   });
 
-  it('has exactly one job record per COMBAT_MOTIONS key — correct whenever fire-elevated lands, not just tolerant of it', () => {
-    expect(Object.keys(CLIP_JOBS).sort()).toEqual(Object.keys(COMBAT_MOTIONS).sort());
-    // The nine clips this phase already shot are a floor, whether or not fire-elevated has landed.
-    expect(Object.keys(CLIP_JOBS).length).toBeGreaterThanOrEqual(9);
+  it('has exactly one job record per VIDEO_MOTIONS key — every generated clip, combat AND the five legacy bare ones', () => {
+    // Was: CLIP_JOBS keys equal COMBAT_MOTIONS keys exactly. That undercounted by design — the five
+    // legacy Phase 4 bare keys (idle, walk, run, jump, fall) had NO CLIP_JOBS record at all, which is
+    // exactly how `jump` got submitted at "9:16" with nothing in version control to catch it. The
+    // intended contract is broader: every key VIDEO_MOTIONS can generate a clip for has a reviewable
+    // record, whether or not it happens to carry a `slug/` namespace.
+    expect(Object.keys(CLIP_JOBS).sort()).toEqual(Object.keys(VIDEO_MOTIONS).sort());
+    // The nine combat clips already shot plus the five legacy bare ones are a floor, whether or not
+    // fire-elevated has landed.
+    expect(Object.keys(CLIP_JOBS).length).toBeGreaterThanOrEqual(14);
   });
 
   it("every record's file is null or an .mp4 whose stem starts with clipStem(key) (W2b: the declared winner of an ambiguous glob)", () => {

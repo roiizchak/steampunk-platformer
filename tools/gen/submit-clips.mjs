@@ -15,7 +15,8 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { styleTemplate, templateBlock } from './prompt.mjs';
 import { VIDEO_MOTIONS, videoPrompt } from './motion.mjs';
-import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, VIDEO_OUT_DIR, clipStem } from './clipJobs.mjs';
+import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, clipStem } from './clipJobs.mjs';
+import { videoDirFor } from './clipSource.mjs';
 
 /**
  * The next filename in `dir` for `stem` that does not already exist on disk. A re-shoot's rendered
@@ -60,7 +61,12 @@ for (const key of keys) {
   const promptPath = `${PROMPT_OUT_DIR}/${stem}.txt`;
   writeFileSync(promptPath, prompt);
 
-  const downloadPath = nextFreeDownloadPath(VIDEO_OUT_DIR, stem);
+  // Legacy bare keys (`jump`, ...) live in `_generated/video`; namespaced combat keys live in
+  // `_generated/phase05/video` — the same split `findClip` (clipSource.mjs) reads clips back from,
+  // so a rendered download path is never written somewhere the build can't find it.
+  const videoDir = videoDirFor(key);
+  mkdirSync(videoDir, { recursive: true });
+  const downloadPath = nextFreeDownloadPath(videoDir, stem);
   // A loop needs `--end_image_url` set back to the anchor (ASSET-PIPELINE.md §2); a one-shot needs
   // it omitted, because its end pose deliberately differs from its start pose.
   const endImageUrl = spec.cyclic ? job.anchorUrl : null;

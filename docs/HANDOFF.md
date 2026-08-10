@@ -433,6 +433,46 @@ in `public/assets/`. Phase 5 does not need to re-pack them — `assets:clips` re
 because it iterates all of `VIDEO_MOTIONS`. Whether to scope the run per-slug is a live option and is
 cheaper than a re-shoot.
 
+### 🔴🔴 THE SPEND PLAN'S PREMISE IS REFUTED — read before spending anything
+
+**User approved a $1.19 re-shoot of `jump` at `1:1`. It was run. Full log:
+[generations/phase-05-jump-reshoot.md](generations/phase-05-jump-reshoot.md).
+`request_id 019fecbf-9ad4-7f93-a134-003e743b0a82`. Spend is now $15.18 of $40.**
+
+It was a genuinely **single-variable** probe — same anchor (hash-verified byte-identical across two
+different fal URLs), same prompt, same resolution and duration; **only `9:16` → `1:1`.**
+
+**Result: the horizontal crop is fixed and a VERTICAL one replaced it.**
+
+```
+f0: left=178 right=192 top=  0 bottom=  0   figureHeight=960  <- fills frame, cut top AND bottom
+f3: left= 26 right= 36 top=  0 bottom=106
+f5: left=112 right= 16 top=  0 bottom=124
+```
+
+Left/right now 16–258 px, never 0. **Top is 0 on five of six frames** — confirmed by eye, the raised
+hand sheared flat at `y=0`.
+
+> **What this changes.** §8 recorded the crop as *"the sentry is wider than tall, so its square anchor
+> forced into 9:16 lost ~14 % off each side"* — which implies `1:1` restores the missing margin.
+> **It does not.** Seedance frames the subject to **fill whatever canvas it is given**; the ratio only
+> decides **which edge gets violated**. Framing is a separate axis from ratio, and no ratio value
+> controls it. §8's description is consistent with its data but incomplete, and this supersedes it.
+
+**The approved plan's own stop rule now fires.** Of Batch 1 it says: *"changes one variable (the ratio)
+so the root cause is actually isolated; if it still crops, **STOP and re-plan — do not spend Batch 2.**"*
+This probe **is** that experiment, run on another subject for the same $1.19, and **it still crops**.
+
+**→ Do not spend Batch 2 ($5.95). Re-examine Batch 1 ($3.57) before spending it.** Untested levers,
+all previously deferred: **anchor padding** (margin the model cannot frame away), the **margin clause**
+(W9 wrote one for combat motions; `jump` lives in `motion.mjs` and never received it), and the fact
+that `HOLD_CAMERA` already says *"is never cropped by any edge"* and was not honoured — twice.
+
+**`jump-r2.mp4` is NOT adopted.** `CLIP_JOBS`'s `jump.file` still declares `jump.mp4`, so `findClip`
+resolves the original and the new file causes no ambiguity — the W2b guard passing its first real
+test. **Neither clip passes G6** (original: right edge; re-shoot: top edge). `jump` is unresolved and
+stays on the Phase 4 debt ledger.
+
 ### What session 3 landed — verified by the orchestrator, not by agent report
 
 `npm test` → **`Test Files 47 passed (47)`, `Tests 706 passed (706)`** (baseline was 669/42).
