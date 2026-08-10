@@ -267,3 +267,56 @@ $13.99 spent. Plan spends **$9.67** — Batch 1 probe 3 clips $3.57, Batch 2 fiv
 Batch 3 one still $0.15 — ending at **$23.66 of $40**, leaving $16.34 of rework headroom.
 **No descope lever is pulled.** Batch 1's `brass-sentry/fire` changes **one variable** (the ratio) so
 the root cause is actually isolated; if it still crops, **STOP and re-plan — do not spend Batch 2.**
+
+### What session 2 actually landed — 6 of 20 work items, **$0 spent**
+
+`git log` from `d231212` to `dbfc206`. Verified after each: **`Tests 669 passed (669)`, 42 files,
+typecheck clean.** Every gate was watched go red first and its revert verified by count *(C1/C12)*.
+
+| | What | Where |
+|---|---|---|
+| **W1** | Grounded one-shots can be extracted at all. `airborne` is now a **data** flag on the motion spec, never an action-name list. Clips can live per slug. | `sampler.mjs` `oneShotOnset`, `clipSource.mjs` |
+| **W6** | `Sentry.lastFireDx/lastFireDy` — integer px, frozen at spawn, `null` until first shot. | `src/sim/enemies.ts`, `enemyTurn.ts` |
+| **W3** | **G6 edge-bleed.** Fails the real historical `brass-sentry-fire` frame at both edges. | `tools/gen/edgeGate.mjs` |
+| **W4** | **G4 vertical drift** + the `verticalAnchor` it derives. Airborne allowance is caller-supplied. | `tools/gen/driftGate.mjs` |
+| **W5** | **G5 reach vs active window** — the real thing, not a `gateReachBand` wrapper. | `tools/gen/reachGate.mjs` |
+| **W2** | `CLIP_JOBS` — submission parameters in version control. **10 records**, `aspect_ratio` read out of `ASSET-PIPELINE.md` at runtime, not retyped. | `tools/gen/clipJobs.mjs` |
+| **W9** | All five prompt corrections + `brass-sentry/fire-elevated`. `style-lock` stayed green. | `tools/gen/motionCombat.mjs` |
+
+**The single most valuable proof in the whole session:** G5's two fixtures share identical frame data,
+`peakFrame 3` and `peakTick 7` — yet `startup 6/active 4` **PASSes** and `startup 1/active 2` **FAILs**.
+Same data, different window, different verdict. That is what makes the tick mapping real rather than
+decoration, and it is the thing a wrapper could never have done.
+
+### Traps this session ADDED — read before continuing
+
+- **`src/sim/enemies.ts` is at exactly 400 lines. Zero headroom.** The rule is `> LIMIT`, proven
+  empirically by the suite staying green at 10/10 with the file at 400. **One added line turns the
+  whole suite red.** Split before touching it.
+- **Never run `npm run test:sim-isolated` while other agents work.** It uninstalls Phaser; a parallel
+  agent saw `Cannot find module 'phaser'` and mis-reported it as a `package.json` change by a sibling.
+  It self-healed. Recover with `npm i phaser@4.2.1 --save-exact`.
+- **`_generated/phase05/video/` holds BOTH round-1 and `-r2` clips for `attack` and `hurt`.**
+  `findClip` will correctly refuse them as ambiguous. The round-1 files are superseded, but **deleting
+  a file is a standing STOP-and-ask** — it has not been done.
+- **`motion.mjs` / `motionCombat.mjs` have a circular-import ordering fragility.** Importing
+  `motionCombat` first leaves the `...COMBAT_MOTIONS` spread silently incomplete under Vite — a TDZ
+  read that does not throw the way plain Node does. Always import `motion.mjs` first, as
+  `write-prompts.mjs`, `build-clips.mjs` and now `clipJobs.mjs` all do. **Flagged, not fixed.**
+- **`tools/gen/*.mjs` cannot import TypeScript** anywhere in this repo, and `tools/gen` is outside
+  `tsconfig`'s include. G5 therefore **mirrors** `PLAY_LAG_TICKS` and pins it equal to the real export
+  with a dedicated test, rather than importing it. That is the closest this boundary gets to
+  "derive, never hardcode", and it is a judgement call recorded rather than hidden.
+- **A subagent reported "commit" and had not committed.** Verify `git log` yourself, always.
+
+### Where to pick up
+
+**Next unpaid work:** W7 (multi-subject pipeline — `slugConfig.mjs`, namespace `build-assets.mjs`,
+split `GymScene.ts` which is at **399**, add a CLI to `anchorGate.mjs`) and W8 (swap `enemyLayer.ts`'s
+Rectangles for Sprites). Both are Phase A and cost nothing.
+
+**Then the first spend gate:** W10/W11 (reconcile the record, re-run `genmedia schema`) and **W12,
+Batch 1 — 3 clips, $3.57.** That is a STOP-and-ask boundary and the user must approve it.
+
+**Not started:** W7, W8, W12–W20, the entire §6 QA gate (every agent owner, two briefs each), and the
+Codex **implementation** review (criterion 5.14). **Phase 5 is failing and must be reported failing.**
