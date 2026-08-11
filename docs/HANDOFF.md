@@ -657,20 +657,37 @@ checked each time.**
 
 ### Where to pick up
 
-**Two clean groups, and only one of them is solved.**
+**Both groups were run. Spend is $23.51 of $40. Two levers are now proven, and one clip packs.**
 
-**Group A — reframe-cut, and the fix is proven and free.** Five clips whose anchors are `1:1` and which
-were all shot at `9:16`: `brass-sentry/fire`, `brass-sentry/death`, `rust-scavenger/walk`,
-`rust-scavenger/chase`, `rust-scavenger/death`. This is **exactly** the defect the probe just fixed on
-`brass-sentry/idle`, and `CLIP_JOBS` already submits `1:1`. Re-shooting them is 5 × $1.19 = **$5.95**,
-which lands at $22.32 of $40. **A batch over 5 generations is a STOP-and-ask; this is exactly 5.**
+**Ratio-matching is NECESSARY but NOT SUFFICIENT**, and the residual tracks motion magnitude:
 
-**Group B — motion-cut, and NOTHING here fixes it.** Four `brass-courier` clips cut with no reframe in
-play: `attack`, `attack-r2`, `death`, `hurt` — plus Phase 4's `jump` and `fall` on the debt ledger.
-The courier anchor is 0.558, so there is no reframe to remove. The untested levers are **padding it to
-1:1** (`padAnchor.mjs` exists and is gated) and the **two-axis margin clause** (`FRAME_MARGIN` is
-width-only and has never been submitted — it postdates every paid clip). **Do not spend on Group B
-until one of those is probed single-variable**, the same discipline that just paid off.
+| clip | motion | round 1 → `1:1` | state |
+|---|---|---|---|
+| `brass-sentry/idle` | lowest | 6/6 fail → **0/6** | **PACKS** |
+| `rust-scavenger/walk` | moderate cyclic | cut L,R → **0/6** | G6 clean, **fails extraction — no loop closes** |
+| `rust-scavenger/chase` | fast cyclic | cut L,R → 1/6 | gated, min L8 |
+| `brass-sentry/fire` | discharge at peak | 6/6 → 5/6 → **1/6 padded** | gated on the muzzle blast |
+| `brass-sentry/death` · `rust-scavenger/death` | large pose change | 4/6 fail | genuine — debris spans the frame |
+| `brass-courier/*` | limb extension | untouched | needs a **padded 1:1 courier anchor** |
+
+**Padding is the second lever and it is PROVEN** — `brass-sentry/fire` from a 3130² padded anchor went
+**5/6 fail → 1/6**, margins roughly doubled, single-variable against the unpadded `-r2` control. It
+costs subject resolution (~69 % → ~45 % of frame height) to buy margin.
+
+**Three things to do next, in this order, and only the third costs money.**
+
+1. **$0 — `rust-scavenger/walk` needs a STRIDE PROMPT FIX, not a re-shoot decision.** It passes G6 and
+   then fails extraction: *"declared cyclic but no window of it closes."* That is session 2's *"a sway,
+   not a gait"* verdict finally measured. **Its prompt was UNCHANGED by W9** — the five corrections
+   covered the courier's prop and grip, the deaths' back-loading and `fire-elevated`; the stride was
+   never among them. Fix the prompt first, then it re-shoots as part of the next batch.
+2. **$0 — decide what G6 should do about DISCHARGE.** `brass-sentry/fire`'s turret is complete in every
+   frame; what touches the edge is the muzzle blast. G6 measures an opaque mask and cannot tell a
+   sheared limb from a flash — the same blind spot recorded for G1. Either the gate learns the
+   difference or `fire` is accepted with a written reason. **Do not loosen a threshold to pass it.**
+3. **Then spend.** Padded re-shoots for `brass-sentry/death`, `rust-scavenger/death`,
+   `rust-scavenger/chase`, plus the courier set from a padded 1:1 anchor. That is ~6 clips ≈ **$7.14**,
+   landing near **$30.65 — which CROSSES the $30 STOP-and-ask.** Get approval with the number in hand.
 
 **Not started:** W12–W20, the entire §6 QA gate (every agent owner, two briefs each — 5.1 and 5.5 now
 *must* re-run because A-T6/A-T7 changed their code), and the Codex **implementation** review (5.14).
