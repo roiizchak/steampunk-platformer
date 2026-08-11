@@ -23,53 +23,12 @@
  */
 
 import { poseSpan } from './motion.mjs';
-
-/**
- * Appended to every courier IDENTITY block. Malformed, missing and fused hands recur across the
- * combat batch, worst at peak extension — there is no gate for this, so the prompt is the only
- * lever, weak as it is.
- */
-const HAND_CLAUSE =
-  ' Both hands are always fully visible and correctly formed, with five fingers, and are never ' +
-  'merged into the tool or into the body.';
-
-/**
- * Appended to every combat motion's `motion` clause. `HOLD_CAMERA` in `motion.mjs`
- * already says "is never cropped by any edge" and it did not stop clipping at full extension — so
- * this is phrased as a positive requirement about where the subject sits, not another prohibition.
- *
- * **Session 5 widened this from one-shots to the CYCLIC entries too.** It had never reached them:
- * it was appended by hand per record and every cyclic `motion` predated it, so `rust-scavenger`'s
- * `walk` and `chase` were the only combat clips shot with no margin clause at all — and `chase`
- * came back with one frame at 8 px of left margin. A longer stride throws a limb further than a
- * sway does, so widening the stride (see `walk` below) without widening this would have traded one
- * defect for the other.
- */
-const FRAME_MARGIN =
-  ' At its point of furthest extension, the subject and anything it holds stays entirely inside ' +
-  'the middle 70% of the frame width, with clear green margin visible at both the left and right ' +
-  'edges of the frame.';
-
-/**
- * Appended to the two `brass-sentry/fire*` records, and to nothing else.
- *
- * **G6 fails `fire` on a frame where the turret is COMPLETE.** What reaches the edge is the muzzle
- * flash and the smoke plume, not a sheared limb — confirmed by looking at the six-frame strip at
- * full resolution. G6 measures an opaque subject mask and reads one byte per pixel
- * (`edgeGate.mjs:91`, alpha only), so it cannot tell discharge from a crop. That is the same class
- * of blind spot already recorded for G1, which *"cannot tell a boot from a hand"*.
- *
- * **The user's decision was to constrain the effect rather than teach the gate** — so no threshold
- * in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255. `FRAME_MARGIN` alone does not cover
- * this: it binds "the subject and anything it holds", and a turret does not *hold* its own muzzle
- * flash. The flash needed its own ruler, and it is measured against the barrel — the one part of
- * the machine whose length the model has already committed to in the identity clause.
- */
-const DISCHARGE_MARGIN =
-  ' The muzzle flash and the smoke are SMALL and CONTAINED: the flash reaches no further from the ' +
-  'muzzle than the length of the barrel itself, and the smoke stays a thin wisp close to the ' +
-  'muzzle. Neither the flash nor the smoke ever reaches any edge of the frame, and clear green ' +
-  'margin stays visible on all four edges throughout.';
+import {
+  DEBRIS_MARGIN,
+  DISCHARGE_MARGIN,
+  FRAME_MARGIN,
+  HAND_CLAUSE,
+} from './motionClauses.mjs';
 
 export const COMBAT_MOTIONS = Object.freeze({
   /* ---------------------------------------------------------------- *
@@ -275,7 +234,10 @@ export const COMBAT_MOTIONS = Object.freeze({
       'it is a collapsed heap of broken plates on the ground, all three legs folded under it, ' +
         'dark and still, with only a last wisp of smoke.',
     ),
-    motion: ('is destroyed. It does not travel sideways; it comes apart where it stands.') + FRAME_MARGIN,
+    motion:
+      'is destroyed. It does not travel sideways; it comes apart where it stands.' +
+      FRAME_MARGIN +
+      DEBRIS_MARGIN,
   },
 
   /**
@@ -364,7 +326,9 @@ export const COMBAT_MOTIONS = Object.freeze({
       'it is a collapsed pile of scrap on the ground, completely still, its bucket head fallen to ' +
         'one side and both amber lamps dark.',
     ),
-    motion: ('comes apart and collapses. It does not travel sideways; it goes down on the spot.') +
-      FRAME_MARGIN,
+    motion:
+      'comes apart and collapses. It does not travel sideways; it goes down on the spot.' +
+      FRAME_MARGIN +
+      DEBRIS_MARGIN,
   },
 });
