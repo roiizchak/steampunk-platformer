@@ -5,7 +5,7 @@
   "renderHeightPx": 192,
   "scale": 0.28915663,
   "_scale": "Source pixels to game pixels. DERIVED 2026-08-11 (session 5) from `brass-sentry-idle-r2.mp4`, the ratio-match re-shoot and the first Phase 5 clip to survive extraction — 192 / 664 = 0.28915663. Pasted by hand from `node tools/gen/build-assets.mjs brass-sentry idle --derive-scale`, which PRINTS it and never writes it (vault A5's STOP: the build reads this number and never computes it, so regenerating the idle sheet moves nothing here). The eight idle frames span a mean standing height of 664 source px with a frame-to-frame spread of 0.3% — that spread IS the size-pop the scale exists to hold still, and 0.3% is tighter than the courier's 0.8%, which is what a machine at rest should look like against a breathing man. Note the provenance limitation this shares with the courier (Codex C5, recorded at docs/qa/phase-05-combat.md limitation 7): the source is a regenerable idle sheet, not the locked anchor. The anchor CANNOT supply it — the anchor is 2048 square while the clip is 960 square, so the anchor's figure height is not the sheet's. Re-deriving is therefore mandatory if the idle clip is ever re-shot, and `fire`/`death` must be packed against whatever value stands here, never the reverse.",
-  "_renderHeightPx": "SENTRY_BOX.h (32 sim px, src/sim/enemies.ts) x RENDER_SCALE (6, src/game/constants.ts) = 192 px = 2 tiles. Deliberately shorter than the courier's 288 px (3 tiles) and the scavenger's 240 px (2.5 tiles) — three distinct silhouette heights so the two enemies read apart from the player and from each other at true sprite size before any colour does (src/sim/enemies.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
+  "_renderHeightPx": "SENTRY_BOX.h (32 sim px, src/sim/enemyPlacement.ts) x RENDER_SCALE (6, src/game/constants.ts) = 192 px = 2 tiles. Deliberately shorter than the courier's 288 px (3 tiles) and the scavenger's 240 px (2.5 tiles) — three distinct silhouette heights so the two enemies read apart from the player and from each other at true sprite size before any colour does (src/sim/enemyPlacement.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
 
   "frameWidth": 288,
   "frameHeight": 384,
@@ -16,7 +16,7 @@
   "collisionBox": {
     "widthPx": 96,
     "heightPx": 192,
-    "_source": "SENTRY_BOX x RENDER_SCALE (src/sim/enemies.ts:383). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
+    "_source": "SENTRY_BOX x RENDER_SCALE (src/sim/enemyPlacement.ts:93). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
   },
 
   "animations": {

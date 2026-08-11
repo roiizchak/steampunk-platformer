@@ -5,7 +5,7 @@
   "renderHeightPx": 240,
   "scale": null,
   "_scale": "NOT YET DERIVED, and cannot be yet: rust-scavenger has NO packable clip today (no source sheet under `_generated/sheets/` for any of its declared actions), so `--derive-scale` (which needs a real `idle`-shaped neutral pose to measure) has nothing to run against. This is EXPECTED, not a failure to work around — see the brief for this work item. `--derive-scale` itself tolerates a null/missing scale here regardless, because the derive path only reads `renderHeightPx`, never `scale`.",
-  "_renderHeightPx": "SCAVENGER_BOX.h (40 sim px, src/sim/enemies.ts) x RENDER_SCALE (6, src/game/constants.ts) = 240 px = 2.5 tiles. Between the sentry's 192 px and the courier's 288 px on purpose — three distinct silhouette heights (src/sim/enemies.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
+  "_renderHeightPx": "SCAVENGER_BOX.h (40 sim px, src/sim/enemyPlacement.ts) x RENDER_SCALE (6, src/game/constants.ts) = 240 px = 2.5 tiles. Between the sentry's 192 px and the courier's 288 px on purpose — three distinct silhouette heights (src/sim/enemyPlacement.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
 
   "frameWidth": 288,
   "frameHeight": 384,
@@ -16,7 +16,7 @@
   "collisionBox": {
     "widthPx": 120,
     "heightPx": 240,
-    "_source": "SCAVENGER_BOX x RENDER_SCALE (src/sim/enemies.ts:384). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
+    "_source": "SCAVENGER_BOX x RENDER_SCALE (src/sim/enemyPlacement.ts:94). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
   },
 
   "stridePxPerCycle": { "walk": null, "chase": null },

@@ -11,8 +11,12 @@
  * be imported here — its write-path expression is pinned by reading its own source text instead of
  * being re-typed, so this test goes red the moment that script stops using it. The consumer side
  * imports the REAL `motionKeyFor` (`slugConfig.mjs`) and `clipStem` (`clipJobs.mjs`) — the same
- * functions `build-assets.mjs` calls — rather than a second reimplementation, per the instruction
- * that two definitions of one concept is where the bug lives (vault 5.3).
+ * functions `assetSources.mjs`'s `findSource` calls — rather than a second reimplementation, per the
+ * instruction that two definitions of one concept is where the bug lives (vault 5.3).
+ *
+ * `findSource` — the consumer's read path — was extracted out of `build-assets.mjs` into
+ * `assetSources.mjs` for line-count headroom; its filename expression is unchanged, just relocated,
+ * so the consumer-side pin below reads `assetSources.mjs`'s source text now instead.
  *
  * Source text comes from Vite's `import.meta.glob(..., { query: '?raw' })`, not `node:fs` — same
  * technique as `style-lock.test.ts`, and it needs no `@types/node` (dependencies are frozen).
@@ -36,7 +40,7 @@ function source(file: string): string {
 }
 
 const BUILD_CLIPS_SRC = source('build-clips.mjs');
-const BUILD_ASSETS_SRC = source('build-assets.mjs');
+const ASSET_SOURCES_SRC = source('assetSources.mjs');
 
 /** Every (slug, action) pair `slugConfig.mjs` declares, flattened — never a literal list. */
 function allPairs(): Array<{ slug: string; action: string }> {
@@ -53,10 +57,10 @@ describe('sheet filename contract — producer (build-clips.mjs) vs consumer (bu
     expect(BUILD_CLIPS_SRC).toContain('`${clipStem(action)}-clip.png`');
   });
 
-  it('build-assets.mjs reads the exact filename via motionKeyFor + clipStem, never a prefix scan (consumer pin)', () => {
-    expect(BUILD_ASSETS_SRC).toContain('`${clipStem(motionKeyFor(SLUG, action))}-clip.png`');
+  it('assetSources.mjs reads the exact filename via motionKeyFor + clipStem, never a prefix scan (consumer pin)', () => {
+    expect(ASSET_SOURCES_SRC).toContain('`${clipStem(motionKeyFor(slug, action))}-clip.png`');
     // R1's actual bug: a scan for files starting with `${action}-`. Must never come back.
-    expect(BUILD_ASSETS_SRC).not.toMatch(/startsWith\(`\$\{action\}-`\)/);
+    expect(ASSET_SOURCES_SRC).not.toMatch(/startsWith\(`\$\{action\}-`\)/);
   });
 
   it('every declared (slug, action) resolves to a real VIDEO_MOTIONS key', () => {

@@ -645,3 +645,213 @@ than patched, and the user re-confirmed the spend ordering with the new informat
 
 **Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
 diff, saved to `docs/reviews/phase-05-impl.md`.
+
+---
+---
+
+# Phase 5 — Codex plan review of the SESSION-6 execution plan
+
+**Ran:** 2026-08-11, session 6, **before any code and before any further spend.**
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` / `fs.readFileSync`
+instruction from [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
+**Reviewed:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-staged-mountain.md` (revision 1)
+against HANDOFF.md §11, the phase plan of record, the five reviews above, the §6 gate,
+`docs/qa/phase-05-combat.md`, `docs/generations/phase-05-ratio-match.md`, CLAUDE.md, and the source
+each claim named.
+
+**Still a PLAN review, not the implementation review.** Criterion 5.14 remains **UNRUN**.
+
+**Scope split.** Codex again had no network and again could not spawn a process
+(`CreateProcessAsUserW failed: 5`), so it ran no typecheck, test, build, ffmpeg, Playwright or fal
+command. File access through `node_repl` only — **but it again did more than read**, evaluating the
+repository's own job tables and the installed Phaser source in-process. Codex stated its own limits
+rather than being asked to.
+
+**Verdict: BLOCK — 6 blockers, 3 major. All re-verified locally. All CONFIRMED**, including two the
+plan's author had stated wrongly himself.
+
+## The review, verbatim
+
+> **BLOCK**
+>
+> Do not execute Task 2. The plan still has several pre-spend blockers, including one that makes all
+> seven new downloads resolve to the wrong—or no—input during extraction.
+>
+> **1. Task 3 catalog finding — verified, but the fix is incomplete**
+>
+> - Confirmed: `brass-courier/attack` and `/death` are silently skipped. `CATALOG_TIMING_SLUGS`
+>   contains only the keys of `FIXED_TIMINGS`, currently sentry and scavenger; `build-assets` only
+>   creates rows when that set contains the slug. `catalogTimings.mjs:34`, `build-assets.mjs:319`
+> - Confirmed: scavenger `walk` and `chase` enter the catalog path, then `timingFor()` throws because
+>   only scavenger `death` exists. `catalogTimings.mjs:40`, `catalogTimings.mjs:46`
+> - Downstream runtime accepts valid rows: catalog validation accepts the full `SheetEntry` shape,
+>   Boot loads and frame-count-checks them, and GameScene registers every catalog sheet.
+>   `assetCatalog.ts:132`, `BootScene.ts:102`, `GameScene.ts:467`
+> - Enemy action agreement is already correct and mechanically tested: sentry `idle/fire/death`,
+>   scavenger `walk/chase/death`. `enemyView.ts:69`, `slug-config.test.ts:73`
+>
+> Blocker: Task 3's proposed coverage test cannot pass as described. It says every action of every
+> slug must resolve, but courier has eight actions; the plan adds timings only for `attack/hurt/death`.
+> Its predicted failure list wrongly omits courier `idle/walk/run/jump/fall`. Worse, adding courier to
+> the slug-level `CATALOG_TIMING_SLUGS` while supporting only three actions makes a later bare courier
+> build throw partway through. `plan:185`, `slugConfig.mjs:23`
+>
+> Blocker: the clean existing `brass-courier/hurt` clip is never extracted or packed. Task 4 processes
+> only the seven purchased clips, but `hurt` remains required and pending. `plan:206`,
+> `asset-catalog.test.ts:103`
+>
+> **2. Spend ordering — still blocked**
+>
+> The submitted parameters will use the padded anchors after Task 1, and only `walk` and `chase`
+> correctly receive `--end_image_url`. That half is sound. `submit-clips.mjs:82`
+>
+> The fatal problem is filename resolution:
+>
+> | Key | New download selected from current disk | `CLIP_FILES` still declares |
+> |---|---|---|
+> | sentry/fire | `brass-sentry-fire-r4.mp4` | `-r3.mp4` |
+> | sentry/death | `brass-sentry-death-r3.mp4` | `-r2.mp4` |
+> | scavenger/walk | `rust-scavenger-walk-r3.mp4` | `-r2.mp4` |
+> | scavenger/chase | `rust-scavenger-chase-r3.mp4` | `-r2.mp4` |
+> | scavenger/death | `rust-scavenger-death-r3.mp4` | `-r2.mp4` |
+> | courier/attack | `brass-courier-attack-r3.mp4` | `-r2.mp4` |
+> | courier/death | `brass-courier-death-r2.mp4` | `null` |
+>
+> `submit-clips` computes the next free download independently of `job.file`; `findClip` later trusts
+> `job.file` exactly. Therefore six actions consume the superseded clip, while courier death becomes
+> ambiguous and throws once both files exist. `submit-clips.mjs:27`, `submit-clips.mjs:65`,
+> `clipJobs.mjs:170`, `clipSource.mjs:44`
+>
+> `validateClipJob()` never validates `file` against the rendered download path, so all seven commands
+> can look valid while producing files later work ignores. `clipJobs.mjs:235`
+>
+> Severity: Blocker. Catalog wiring does not alter submitted bytes, but the producer/consumer filename
+> contract must be closed before spending or explicitly updated immediately after each successful
+> download and before extraction.
+>
+> **3. Task 4 scale ordering — deadlocked**
+>
+> - `assets:clips` does not read the bounds config or scale, so `scale: null` does not structurally
+>   block extraction.
+> - Ordinary `assets:build -- rust-scavenger walk` fails because normal packing requires `scale > 0`.
+>   `build-assets.mjs:178`
+> - `--derive-scale` hardcodes `findSource('idle')`; it does not derive from the requested `walk`
+>   action. `build-assets.mjs:153`
+> - Scavenger deliberately has no `idle` action or sheet. `character-bounds-rust-scavenger.json:25`
+>
+> Thus even after extracting `walk`, `node ... rust-scavenger walk --derive-scale` searches for
+> `rust-scavenger-idle-clip.png` and throws.
+>
+> Severity: Blocker. The scale derivation must be made action-aware, and because that requires changing
+> the exactly-400-line `build-assets.mjs`, the file-size split must move ahead of this work.
+>
+> **4. Expected-failure lock and suite impact**
+>
+> No command in the written plan repacks `brass-sentry/idle`; its expected-failure lock remains intact.
+> `shipped-sheets.test.ts:137`
+>
+> But `npm test` will not pass when the new rows land:
+>
+> - `shipped-sheets.test.ts` requires the catalog keys to equal its current exact six-item list. Any
+>   new row breaks it.
+> - `asset-catalog.test.ts` still declares courier `attack/hurt/death` pending; adding attack/death
+>   without updating this test fails both count and pending-art assertions.
+> - `enemy-layer-catalog.test.ts` requires shipped enemy keys to remain a proper subset; completing all
+>   six intentionally expires and fails that assertion.
+> - `slug-config.test.ts` should remain green.
+>
+> Severity: Blocker — these are required expiry updates, not test loosening.
+>
+> **5. Tasks 6–7 — W19, 5.11 and 5.7**
+>
+> Blocker — the 5.7 fixture reopens a previously applied requirement. `createScavenger({ hp: 2 })` sets
+> both `hp` and `maxHp` to 2, producing a full 2/2 bar rather than a low-health 2/60 bar, so the
+> near-empty rendering can pass while broken. Construct at normal 60 HP and then set only `hp = 2`.
+> `enemies.ts:212`, `enemyHealthBar.ts:67`
+>
+> Major — the plan misstates the current growth failure. The `continue` occurs before bar drawing, so a
+> late enemy gets neither body nor bar. `enemyLayer.ts:104`
+>
+> Major — the 5.11 count remains underspecified. The shipped level already starts with two enemies. The
+> assertion must count the delta of enemy body sprites with enemy texture keys and name a fixed
+> positive N, or baseline bodies / shared Graphics can satisfy it vacuously.
+>
+> Installed Phaser finding: `commandBuffer` is public and readable in installed `phaser@4.2.1`;
+> `fillRect` appends `[FILL_RECT,x,y,w,h]`. `clear()` empties it, but both renderers only read it — they
+> do not consume/reset it — and `sync()` clears/redraws synchronously, so Playwright sees the completed
+> non-empty buffer between frames. `Graphics.js:133`
+>
+> `playIfChanged` is compatible with runtime growth: `addBody` starts the animation once and the
+> following sync sees the same key. No new `verify-dist` scene-key or prose entries are required; the
+> exported spawn-helper symbol belongs in the bare-symbol list.
+>
+> **6. Task 8 and criterion 5.12**
+>
+> Blocker — the ordering argument misses `clipJobs.mjs` at 372. Six new records add at least 30 lines,
+> taking it to roughly 402 — an eleventh over-limit file — and Task 3 runs full `npm test` before Task
+> 8, so it cannot produce its promised PASS. `clipJobs.mjs:145`, `file-size.test.ts:78`
+>
+> Fixing Task 4 also necessarily touches the exactly-400-line `build-assets.mjs`, so Task 8 cannot
+> remain at position 8.
+>
+> The barrel approach itself is viable and compatible with `sim-boundary.test.ts` and the
+> Phaser-uninstalled import check; a barrel under 400 lines needs no QA-log name. However: the current
+> tree has 18 direct importer files, not 22; the split design leaves
+> `EnemySpawn`/`EnemySet`/`spawnEnemies`/both boxes/`overlapsScavenger` (lines 299–400) without a stated
+> destination while `enemies.ts` is required to be re-exports only; and moving the boxes makes
+> provenance references in both character-bounds JSON files stale, which Task 8 doesn't account for.
+>
+> Severity: Major after the ordering blocker.
+>
+> **7. Most likely subtle shipment**
+>
+> The 5.7 browser proof will spawn a "2 HP" scavenger as 2/2 HP, observe a full bar, and report the
+> low-health bar correct without ever exercising it — reopening the phase's prior D10 finding. The stale
+> `CLIP_FILES` issue is more immediate but usually stops loudly during extraction; the 2/2 health-bar
+> fixture can survive the entire stated gate and ship unnoticed.
+>
+> **Could not check:** process spawning is permanently unavailable, so typecheck/Vitest/build/ffmpeg/
+> Playwright/asset commands could not be run; network access is unavailable, so fal.ai pricing, live
+> schema, licensing, and uploaded-byte hashes could not be verified; the seven new clips don't exist
+> yet, so their extraction/gate outcomes could not be inspected. Findings are source evidence plus
+> in-process evaluation of the repo's JS job tables and installed Phaser source; no files were modified.
+
+---
+
+## Local re-verification — all CONFIRMED
+
+Every claim was re-checked against the working tree before triage, because Codex could run nothing.
+
+| Claim | Verdict | Decisive local evidence |
+|---|---|---|
+| `CLIP_FILES` stale for all seven | **CONFIRMED, to the filename** | `brass-sentry-fire-r3.mp4` is on disk, so the next free path is `-r4`; the record declares `-r3`. The other five declare `-r2` while `-r2` already exists, so each new download becomes `-r3`. `brass-courier/death` declares `null` and two candidates would exist. |
+| `--derive-scale` hardcodes `idle` | **CONFIRMED** | `build-assets.mjs:157` — `const { keyed } = keySheet(findSource('idle'));` with the comment *"The canonical standing height comes from `idle`."* `character-bounds-rust-scavenger.json` states the scavenger has no `idle` **by design**. |
+| `createScavenger` sets `maxHp: hp` | **CONFIRMED** | `enemies.ts:213-229` — `const hp = options.hp ?? 60;` then `hp, maxHp: hp`. `healthBarFillWidth` returns the full `slotW` when `hp >= maxHp` (`enemyHealthBar.ts:74-76`). A "2 HP" scavenger draws a **full** bar. |
+| `clipJobs.mjs` would cross 400 | **CONFIRMED** | `wc -l` = **372**. Six records with the docstrings this file's convention requires add ~30 lines. |
+| The `continue` precedes the bar draw | **CONFIRMED** | `enemyLayer.ts:104` `this.bars.clear();` → `:107-109` `continue` → `:122-126` the bar draw. A late enemy gets **neither** body nor bar. Revision 1 said *"bar drawn, no body"* and was **wrong**. |
+
+## Triage
+
+`F1…F9`, applied or recorded with a reason *(C11)*.
+
+| ID | Severity | Disposition |
+|---|---|---|
+| **F1** | blocker | **APPLIED.** The `CLIP_FILES` contract becomes a tested invariant (new Task 1), and updating it to the ACTUAL downloaded filenames is a **hard gate** before any extraction (Task 2 step 4). |
+| **F2** | blocker | **APPLIED.** `--derive-scale` becomes action-aware (Task 4 step 1). |
+| **F3** | blocker | **APPLIED.** The 5.7 fixture constructs at 60 HP and sets `hp = 2` only, and asserts `0 < fillW < slotW` — the upper bound is what the `maxHp` trap would otherwise hide. **This reopened D10 and Codex was right to call it the most likely subtle shipment.** |
+| **F4** | blocker | **APPLIED.** The 5.12 split moved from position 8 to **Task 0**. |
+| **F5** | blocker | **APPLIED.** The coverage test is scoped to (slug, action) pairs this phase packs; catalog gating moves from per-slug to **per-(slug, action)**. |
+| **F6** | blocker | **APPLIED.** `shipped-sheets`, `asset-catalog` and `enemy-layer-catalog` assertions are updated as **required expiries, not loosening** (Task 4 step 6). |
+| **F7** | blocker | **APPLIED.** `brass-courier/hurt` added to the packing list. |
+| **F8** | major | **APPLIED.** The growth-bug rationale corrected in place rather than quietly fixed — a wrong rationale is exactly what finding A1 was about. |
+| **F9** | major | **APPLIED.** `enemyPlacement.ts` named as the destination for lines 299-400; importer count corrected to 18; both `character-bounds-*.json` provenance references updated. |
+
+**Net effect:** the review **moved the file-size split to the front of the session**, closed a
+producer/consumer contract that would have made all seven paid downloads invisible to the pipeline,
+un-deadlocked the scavenger's scale derivation, and caught a 5.7 fixture that would have passed the
+entire QA gate while proving nothing. **Revision 1 would have spent $8.33 and extracted the clips it
+was buying replacements for, silently, for six of seven keys.** The plan was rewritten as
+**revision 2** rather than patched. **9 of 9 applied, none rejected, nothing silently dropped.**
+
+**Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
+diff, saved to `docs/reviews/phase-05-impl.md`.

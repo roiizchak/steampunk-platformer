@@ -26,28 +26,16 @@
  * rebuild contract *(vault 4.15)* checkable at all.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { decodePng, encodePng } from './png.mjs';
-import {
-  dropCastShadow,
-  estimateKeyColour,
-  keyOut,
-  removeSpecks,
-  trimHalo,
-} from './chroma.mjs';
-import {
-  assertSingleRowLayout,
-  detectFrames,
-  figureMetrics,
-  packStrip,
-  deriveScale,
-} from './sheets.mjs';
+import { encodePng } from './png.mjs';
+import { dropCastShadow } from './chroma.mjs';
+import { figureMetrics, packStrip, deriveScale } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
-import { configFor, motionKeyFor, workListFor } from './slugConfig.mjs';
-import { clipStem } from './clipJobs.mjs';
+import { configFor, workListFor } from './slugConfig.mjs';
 import { CATALOG_TIMING_SLUGS, catalogRowFor } from './catalogTimings.mjs';
 import { upsertCatalogSheets } from './catalogWrite.mjs';
+import { findSource, loadConfig, keySheet, framesOf, sliceFrame } from './assetSources.mjs';
 
 /** Where `upsertCatalogSheets` merges this build's rows into. */
 const CATALOG_PATH = 'public/assets/index.json';
@@ -80,89 +68,19 @@ const LIFT_PROFILE_NOTE =
   'only place a test on a clean clone can learn what the source actually contained. Do not ' +
   'hand-edit — regenerate it, and read the diff.';
 
-function findSource(action) {
-  if (!existsSync(GENERATED)) {
-    throw new Error(
-      `assets:build: ${GENERATED} does not exist. Raw model output is gitignored by design — ` +
-        `run \`npm run assets:fetch\` to re-fetch it from the request ids in ` +
-        `docs/generations/ (indexed by docs/GENERATION-LOG.md). This build does NOT substitute ` +
-        `a placeholder (vault 4.16).`,
-    );
-  }
-  // Exact filename, not a prefix scan: the producer (`build-clips.mjs`) writes
-  // `${clipStem(motionKey)}-clip.png`, and resolving anything looser is R1/R2 (work item A-T4) —
-  // a namespaced action never matched its own prefix, and a bare action matched EVERY slug's sheet.
-  const file = `${clipStem(motionKeyFor(SLUG, action))}-clip.png`;
-  const path = join(GENERATED, file);
-  if (!existsSync(path)) {
-    throw new Error(
-      `assets:build: no source sheet for declared animation "${action}" — expected ${path}. ` +
-        `A declared input that cannot be found fails the build; it is never substituted ` +
-        `(vault 4.16).`,
-    );
-  }
-  return path;
-}
-
-function loadConfig() {
-  if (!existsSync(CONFIG)) {
-    // NOT "run with --derive-scale to produce one" — --derive-scale calls loadConfig() itself (see
-    // main(), below), so the config must already exist (renderHeightPx set, scale null) before it
-    // can print anything.
-    throw new Error(
-      `assets:build: ${CONFIG} not found. Author it by hand first (renderHeightPx set, scale ` +
-        `null), THEN run --derive-scale to print a value to paste in (vault A5).`,
-    );
-  }
-  return JSON.parse(readFileSync(CONFIG, 'utf8'));
-}
-
-/** Key a whole sheet and return it plus the measured key colour. */
-function keySheet(path) {
-  const decoded = decodePng(readFileSync(path));
-  const { key, agreement } = estimateKeyColour(decoded);
-  // `trimHalo` runs BEFORE `removeSpecks` and before anything measures the figure. The halo it
-  // removes is connected to the character, so component-area filtering cannot see it, and every
-  // downstream measurement — the packer's feet alignment, the derived scale, the stride — would
-  // otherwise be taken against a haze rather than against the boots.
-  const keyed = removeSpecks(trimHalo(keyOut(decoded, { key })));
-  return { decoded, keyed, key, agreement };
-}
-
-/**
- * Cut the detected frame rectangles out of the keyed sheet.
- *
- * Each cell is cropped to its own buffer and its original `y` is dropped, which is fine only while
- * every cell came from ONE row band — `packStrip` compares `maxY` across cells to find the sheet's
- * contact frame, and coordinates from two different rows are not comparable. `build-clips.mjs`
- * emits `N x 1` strips, so that holds; `assertSingleRowLayout` is what stops it holding silently.
- */
-function framesOf(keyed) {
-  const rects = detectFrames(keyed);
-  assertSingleRowLayout(rects);
-  return rects.map((r) => {
-    const data = new Uint8ClampedArray(r.w * r.h * 4);
-    for (let y = 0; y < r.h; y += 1) {
-      const from = ((r.y + y) * keyed.width + r.x) * 4;
-      data.set(keyed.data.subarray(from, from + r.w * 4), y * r.w * 4);
-    }
-    return { width: r.w, height: r.h, data };
-  });
-}
-
 function main() {
   const deriveOnly = process.argv.includes('--derive-scale');
 
   if (deriveOnly) {
     // The canonical standing height comes from `idle`, the only genuinely neutral upright pose.
-    const { keyed } = keySheet(findSource('idle'));
+    const { keyed } = keySheet(findSource(GENERATED, SLUG, 'idle'));
     const heights = framesOf(keyed).map((f) => figureMetrics(f)?.height ?? 0);
     const standing = Math.round(heights.reduce((a, b) => a + b, 0) / heights.length);
     // The target height is read from the config rather than written here. It was a literal `96`,
     // which went stale the moment RENDER_SCALE moved 2 -> 6 and `renderHeightPx` became 288 — and a
     // deriver that prints a number for the wrong target is worse than no deriver, because its output
     // is meant to be pasted straight into the file it disagrees with.
-    const renderHeight = loadConfig().renderHeightPx;
+    const renderHeight = loadConfig(CONFIG).renderHeightPx;
     const scale = deriveScale(standing, renderHeight);
     console.log(`idle frame heights: ${heights.join(', ')}`);
     const spread = Math.max(...heights) - Math.min(...heights);
@@ -175,7 +93,7 @@ function main() {
     return;
   }
 
-  const config = loadConfig();
+  const config = loadConfig(CONFIG);
   const { scale, frameWidth, frameHeight } = config;
   if (!(scale > 0) || !frameWidth || !frameHeight) {
     throw new Error(`assets:build: ${CONFIG} is missing scale/frameWidth/frameHeight`);
@@ -189,7 +107,7 @@ function main() {
   const catalogRows = [];
 
   for (const action of ACTIONS) {
-    const source = findSource(action);
+    const source = findSource(GENERATED, SLUG, action);
     const { keyed, key, agreement } = keySheet(source);
     /**
      * Per CELL, not per sheet — "below the figure" only means anything inside one frame.
@@ -385,16 +303,6 @@ function main() {
   console.log(
     `\nwrote ${rows.length} strips to ${OUT_DIR}, ${REPORT_PATH} and ${LIFT_PROFILE}${catalogNote}`,
   );
-}
-
-/** Pull frame `i` back out of a packed strip, for gating. */
-function sliceFrame(strip, index, frameWidth, frameHeight) {
-  const data = new Uint8ClampedArray(frameWidth * frameHeight * 4);
-  for (let y = 0; y < frameHeight; y += 1) {
-    const from = (y * strip.width + index * frameWidth) * 4;
-    data.set(strip.data.subarray(from, from + frameWidth * 4), y * frameWidth * 4);
-  }
-  return { width: frameWidth, height: frameHeight, data };
 }
 
 main();

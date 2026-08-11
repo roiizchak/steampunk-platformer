@@ -90,7 +90,7 @@ describe('brass-sentry — criterion 5.1', () => {
   });
 });
 
-describe('sentry fire guard — A2, enemies.ts:144', () => {
+describe('sentry fire guard — A2, enemySentry.ts:95', () => {
   /**
    * `stepSentry` has TWO `windowOpen` checks: one gates the counter increment, the other gates
    * firing. Deleting the fire guard makes every sighted tick fire (`cooldownCounter` resets to 0
