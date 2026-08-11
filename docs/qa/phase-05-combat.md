@@ -371,3 +371,40 @@ removed.
 ## Vault-out — Phase 5
 
 *(Written at the end of the phase.)*
+
+---
+
+## Session 6 — the spend ceiling was raised, and by whom
+
+**The $40 ceiling was raised to $45 by the user on 2026-08-11, mid-session, with the number named
+explicitly.** Recorded here because a ceiling that moves without a record is not a ceiling.
+
+The sequence matters. At **$36.60** spent, all four re-shoots of that round still failed G6, and the
+margins diagnosed the cause as **off-centre positioning rather than excessive motion** — `left 188 /
+right 0`, `left 160 / right 0`, `left 154 / right 0`, each of which has roughly 90 px a side if
+centred. `HOLD_CENTRED` was written against that diagnosis at $0 and remained unproven.
+
+The options put to the user were: spend the last $3.40 on two clips, spend $1.19 on one,
+spend nothing and hand off, or raise the ceiling. **The user chose to raise it, and was asked to name
+a figure rather than leave it open** — because the ceiling is a hard STOP agreed before any spend,
+and Phase 4's **$6.39 overrun against a $25 ceiling** is the reason this phase had one at all. An
+elastic ceiling is the Phase 4 failure with extra steps.
+
+**$45**, chosen for 4–5 clips of measured need plus 2–3 for a second round if `HOLD_CENTRED` only
+partly works.
+
+> ⚠️ **[prd/phase-05-combat.md](../prd/phase-05-combat.md) §1b still reads *"This phase's ceiling is
+> $40, and it is a hard STOP."* That line is now stale.** It is **not** edited here: `docs/prd/` is
+> outside this session's scope lock, and silently rewriting a phase's stated constraint from a
+> session that spent against it is exactly the move that makes a ceiling meaningless. Flagged for the
+> next session to correct deliberately, with this entry as the authority for who changed it and why.
+
+### What the money established, so the next session does not re-buy it
+
+| lever | verdict |
+|---|---|
+| **Ratio-matching** | **PROVEN.** Reframing cut 7 of 7 measured clips; matching removes it. The guard now measures anchor-vs-output ratio rather than banning the string `9:16`, which for the courier's 0.558 anchor is the *matched* value. |
+| **Padding** | **PROVEN for framing, and it costs the scale.** It fixes the crop and shrinks the subject in frame, so a per-slug `scale` (vault A5) cannot serve a padded and an unpadded generation of one subject. The padded courier `attack` packed at 114 px against `hurt`'s 288 px. |
+| **`DEBRIS_MARGIN`** | **WORKED.** `brass-sentry/death` went from `left 2 / right 0` to `left 226 / right 200`, its wreck compact rather than frame-spanning, **and it still ends broken rather than intact** — the anti-`SPAN_CLIP` sentence doing its job. |
+| **`DISCHARGE_MARGIN`** | **BACKFIRED.** Satisfied by the model very largely **not firing** — `fire-r4` returned a thin wisp of smoke and no flash. A constraint describing a SHAPE, met by not performing the action. The second instance of that failure after `SPAN_CLIP`, and the reason `DEBRIS_MARGIN` carries an explicit "this governs the scatter, not the destruction" sentence. |
+| **`HOLD_CENTRED`** | **UNPROVEN at the time of writing.** Authored at $0 against a measured diagnosis; the batch testing it is the one the raised ceiling paid for. |
