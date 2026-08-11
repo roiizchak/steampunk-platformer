@@ -152,7 +152,7 @@ const CLIP_FILES = Object.freeze({
   'brass-sentry/death': 'brass-sentry-death-r4.mp4',
   'rust-scavenger/walk': 'rust-scavenger-walk-r3.mp4',
   'rust-scavenger/chase': 'rust-scavenger-chase-r3.mp4',
-  'rust-scavenger/death': 'rust-scavenger-death-r4.mp4',
+  'rust-scavenger/death': 'rust-scavenger-death-r5.mp4',
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',

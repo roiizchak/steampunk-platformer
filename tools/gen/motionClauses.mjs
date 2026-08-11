@@ -34,40 +34,60 @@ export const HAND_CLAUSE =
  * sway does, so widening the stride (see `walk` below) without widening this would have traded one
  * defect for the other.
  */
-/**
- * Where in the frame the subject SITS. Diagnosed from the session-6 re-shoots.
- *
- * `HOLD_CAMERA` (`motion.mjs`) says the subject *"stays in the same place in the frame for the whole
- * clip, and is never cropped by any edge"*. That constrains **stability**, and it never says WHERE —
- * so a model can park the subject hard against one side, hold it perfectly still there, and satisfy
- * every word of it while pressing into that edge.
- *
- * Three of the four session-6 re-shoots failed G6 with exactly that signature:
- *
- * ```
- * rust-scavenger/death  f1/10   left 154   right 0
- * brass-courier/attack  f2/8    left 188   right 0
- * brass-courier/death   f2/10   left 160   right 0
- * ```
- *
- * **That is not a subject too large for the frame.** Centred, each of those has ~90 px a side. The
- * whole deficit is on one edge because the figure is off-centre, which is why more margin in
- * `FRAME_MARGIN` — a clause about how far a limb may extend — did not help: the extension was never
- * the problem.
- *
- * Stated as a positive requirement about the resting body rather than another prohibition, for the
- * reason `FRAME_MARGIN` records: `HOLD_CAMERA`'s *"never cropped by any edge"* was already a
- * prohibition and it did not hold.
- */
-export const HOLD_CENTRED =
-  ' The subject is CENTRED in the frame: at rest its body sits on the vertical centre line of the ' +
-  'frame, with the same amount of clear green margin to its left as to its right. It is never ' +
-  'pushed toward one side of the frame.';
-
 export const FRAME_MARGIN =
   ' At its point of furthest extension, the subject and anything it holds stays entirely inside ' +
   'the middle 70% of the frame width, with clear green margin visible at both the left and right ' +
   'edges of the frame.';
+
+/**
+ * ⚠️ **NOT APPLIED. Withdrawn as unattributable, NOT as disproven — and the difference matters.**
+ *
+ * The diagnosis was sound: three session-6 re-shoots failed G6 with the signature `left 188 /
+ * right 0`, `left 160 / right 0`, `left 154 / right 0` — a subject parked off-centre rather than one
+ * too large, since each clears comfortably if centred. `HOLD_CAMERA` (`motion.mjs`) constrains only
+ * that the subject *stays* in one place and never says WHERE, so a model can hold it hard against an
+ * edge and satisfy every word of it.
+ *
+ * **Four clips were shot to test it, $4.76, and the result is a coin flip:**
+ *
+ * ```
+ *                        without           with          verdict
+ * brass-courier/attack   L188 R0           L188 R0       unchanged
+ * brass-courier/death    L160 R0           L172 R0       unchanged
+ * brass-sentry/death     L226 R200 T0      L0 R0 T0      DESTROYED
+ * rust-scavenger/death   R0                PASSES G6     fixed
+ * ```
+ *
+ * One clear win, one clear loss, two no-change — from the same clause, on the same round, with the
+ * two extremes landing on the two clips that carried the *identical* pair of clauses.
+ *
+ * ## Why this is recorded as unattributable rather than as a verdict
+ *
+ * **This endpoint has no `seed` input** — `seed` is output-only, confirmed against the live schema,
+ * so it is not seed-deterministic and every generation carries irreducible run-to-run variance. Four
+ * samples split 1/1/2 cannot separate a clause's effect from that variance. An earlier draft of this
+ * comment called the clause "TESTED AND REJECTED" on the first three results; the fourth arrived and
+ * contradicted it. **That draft was wrong, and it was wrong in the direction this project keeps
+ * having to correct: a confident conclusion drawn before the last measurement landed.**
+ *
+ * It is left unapplied because a 1-in-4 chance of collapsing a near-passing clip is not worth an
+ * unproven upside — a risk judgement, which is a different thing from evidence that it does not work.
+ *
+ * ## What IS attributable
+ *
+ * `DEBRIS_MARGIN` moved `brass-sentry/death` from `left 2 / right 0` to `left 226 / right 200` and
+ * left it failing only on the steam plume. That is a large, single-variable effect in the intended
+ * direction, and it is the one prompt result from this round worth relying on.
+ *
+ * And the courier's framing is still not solved by any prompt: three clauses were tried on it.
+ * What demonstrably works there is **padding the anchor** — the padded `brass-courier/attack` passed
+ * G6 cleanly, and its only defect was scale, which is a number in a config file rather than art.
+ */
+const HOLD_CENTRED_REJECTED =
+  ' The subject is CENTRED in the frame: at rest its body sits on the vertical centre line of the ' +
+  'frame, with the same amount of clear green margin to its left as to its right. It is never ' +
+  'pushed toward one side of the frame.';
+void HOLD_CENTRED_REJECTED;
 
 /**
  * Appended to the two `brass-sentry/fire*` records, and to nothing else.

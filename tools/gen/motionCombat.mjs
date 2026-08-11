@@ -28,7 +28,6 @@ import {
   DISCHARGE_MARGIN,
   FRAME_MARGIN,
   HAND_CLAUSE,
-  HOLD_CENTRED,
 } from './motionClauses.mjs';
 
 export const COMBAT_MOTIONS = Object.freeze({
@@ -79,7 +78,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'horizontal strike at chest height, then returns it to the loop. His boots stay planted on ' +
       'the same spot the whole time and he does NOT step, walk or travel - only the upper body ' +
       'and arms move. The strike arcs forward at chest height and settles back to his hip; it ' +
-      'never climbs toward his shoulder or head.') + FRAME_MARGIN + HOLD_CENTRED,
+      'never climbs toward his shoulder or head.') + FRAME_MARGIN,
   },
 
   /**
@@ -111,7 +110,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       ('takes a heavy blow and recoils from it. He stays ON HIS FEET the whole time and NEVER ' +
       'falls, NEVER kneels and NEVER lies down. His boots stay on the same spot; he does not step ' +
       'or travel. He stays in STRICT SIDE PROFILE facing RIGHT and never turns toward the viewer.') +
-      FRAME_MARGIN + HOLD_CENTRED,
+      FRAME_MARGIN,
   },
 
   /**
@@ -139,7 +138,7 @@ export const COMBAT_MOTIONS = Object.freeze({
     ),
     motion:
       ('collapses and dies. He does not travel sideways; he goes down on the spot where he stands.') +
-      FRAME_MARGIN + HOLD_CENTRED,
+      FRAME_MARGIN,
   },
 
   /** The turret at rest. Cyclic, and the ONLY things that may move are the barrel and the gauges. */
@@ -157,7 +156,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'stillness it is subtly but CONTINUOUSLY alive as a MACHINE: the barrel swings very slightly ' +
       'up and back down again, exactly TWICE during the clip, one slow even cycle about every two ' +
       'seconds; the needles on both pressure gauges drift a little; a thin wisp of steam escapes ' +
-      'from a seam and rises. The drum housing itself does not move.' + FRAME_MARGIN + HOLD_CENTRED,
+      'from a seam and rises. The drum housing itself does not move.' + FRAME_MARGIN,
   },
 
   /**
@@ -184,8 +183,7 @@ export const COMBAT_MOTIONS = Object.freeze({
         'settled back to level.',
     ),
     motion: 'fires a single shot from its barrel. Its three feet never leave the spot.' +
-      FRAME_MARGIN +
-      HOLD_CENTRED + DISCHARGE_MARGIN,
+      FRAME_MARGIN + DISCHARGE_MARGIN,
   },
 
   /**
@@ -215,8 +213,7 @@ export const COMBAT_MOTIONS = Object.freeze({
     motion:
       'fires a single shot from its barrel, held raised at a steep upward angle throughout, at ' +
       'rest and in recoil alike. Its three feet never leave the spot.' +
-      FRAME_MARGIN +
-      HOLD_CENTRED + DISCHARGE_MARGIN,
+      FRAME_MARGIN + DISCHARGE_MARGIN,
   },
 
   /** The turret destroyed. One-shot, and it must end as obvious wreckage. */
@@ -240,7 +237,6 @@ export const COMBAT_MOTIONS = Object.freeze({
     motion:
       'is destroyed. It does not travel sideways; it comes apart where it stands.' +
       FRAME_MARGIN +
-      HOLD_CENTRED +
       DEBRIS_MARGIN,
   },
 
@@ -286,7 +282,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'still at the same moment. Its arms swing in opposition to its legs through the same wide ' +
       'arc. It completes exactly TWO full strides during the clip, at an unhurried plodding pace. ' +
       'It stays hunched. It does NOT travel across the frame - it walks on the spot, ' +
-      'staying in exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN + HOLD_CENTRED,
+      'staying in exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN,
   },
 
   /**
@@ -310,7 +306,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'reaching stride, both feet leave the ground briefly between strides, its arms pump hard and ' +
       'its head is thrust forward ahead of its shoulders. It completes exactly TWO full strides ' +
       'during the clip. It does NOT travel across the frame - it runs on the spot, staying in ' +
-      'exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN + HOLD_CENTRED,
+      'exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN,
   },
 
   /** The scavenger destroyed. One-shot; it must end unmistakably down. */
@@ -333,7 +329,6 @@ export const COMBAT_MOTIONS = Object.freeze({
     motion:
       'comes apart and collapses. It does not travel sideways; it goes down on the spot.' +
       FRAME_MARGIN +
-      HOLD_CENTRED +
       DEBRIS_MARGIN,
   },
 });

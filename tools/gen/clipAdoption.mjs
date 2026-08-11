@@ -47,6 +47,7 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'brass-sentry-death.mp4',
     'brass-sentry-death-r2.mp4',
     'brass-sentry-death-r3.mp4',
+    'brass-sentry-death-r5.mp4',
   ]),
   'rust-scavenger/walk': Object.freeze(['rust-scavenger-walk.mp4', 'rust-scavenger-walk-r2.mp4']),
   'rust-scavenger/chase': Object.freeze(['rust-scavenger-chase.mp4', 'rust-scavenger-chase-r2.mp4']),
@@ -54,6 +55,7 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'rust-scavenger-death.mp4',
     'rust-scavenger-death-r2.mp4',
     'rust-scavenger-death-r3.mp4',
+    'rust-scavenger-death-r4.mp4',
   ]),
   /**
    * `-r3` was the PADDED round: framed cleanly and packed at 114 px against hurt's 288 px,
