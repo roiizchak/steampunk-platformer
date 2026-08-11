@@ -512,3 +512,130 @@ stays on the Phase 4 debt ledger.
 
 **Not started:** W7b, W12–W20, the entire §6 QA gate (every agent owner, two briefs each), and the
 Codex **implementation** review (5.14). **Phase 5 is failing and must be reported failing.**
+
+---
+
+## 10. Session 4 — 2026-08-11. **The measurement refuted the probe, for $0. Nothing was spent.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-pure-crane.md` (revision 2, approved).
+Its Codex plan review — **BLOCK, 4 blockers, all four re-verified locally and CONFIRMED** — is appended
+to [reviews/phase-05-plan.md](reviews/phase-05-plan.md).
+
+**Spend: $15.18. Unchanged. $24.82 remains.**
+
+### 🔴 THE RESULT THAT MATTERS — 17 paid clips measured, and neither hypothesis survived intact
+
+`tools/gen/framingReport.mjs` measured every generation this project has paid for: 17 clips, 3
+anchors, 6 evenly-spaced frames each, keyed with the new `borderKey` so a cropped frame can be
+*measured* instead of throwing. Full data in `_generated/framing-report.json`.
+
+```
+REFRAMED (anchor ratio != output ratio), cut:  7 of 7   -- 100%
+NOT reframed, cut:                             6        fall jump attack attack-r2 death hurt
+NOT reframed, clean:                           4        idle run walk hurt-r2
+```
+
+**Two causes, and the split is clean:**
+
+1. **Reframing cuts the subject every single time — 7/7, two subjects, both directions of mismatch.**
+   Deterministic, not a tendency.
+2. **Without reframing, cutting is motion-dependent.** The four clean clips and the six cut ones come
+   from the **same anchor with the same margins**. What separates them is how far the motion throws a
+   limb: `idle`/`run`/`walk`/`hurt` stay inside the standing silhouette; `jump`/`fall`/`attack`/`death`
+   do not.
+
+### 🔴 The padding probe is CANCELLED. It was never submitted.
+
+**Margin is not the resource, at the scale actually available.** `brass-courier`'s clips are cut
+left/right where the anchor held **18.4 % / 20.6 %** of margin there; `rust-scavenger`'s against
+**20.0 % / 19.5 %**; `brass-sentry`'s on top against **18.8 %**. A fifth of the frame should absorb
+ordinary motion. It did not.
+
+The plan's own stop rule — *"a contradicting result CANCELS the probe rather than renegotiating it"* —
+fires here. **The padded anchor was built, inspected, gated and NOT submitted.** It cost **$0** to
+learn this, which is the entire reason the measurement ran before the spend.
+
+`tools/gen/padAnchor.mjs` is kept, working and tested: `brass-courier --fill 0.65` produces
+**3886 × 3886**, figure 91.8 % → **65.0 %** of height, headroom 5.1 % → **18.2 %**, sides → 37.5 %/38.4 %,
+and G1 returns an **identical** verdict on padded and unpadded (`PASS, sole-spread=0px of 39px`),
+proving the blit is a pure translation. Output goes to `_generated/anchors-padded/` and **never** to
+`public/`. It is available the moment a padding-based probe is worth running — but the measurement
+says 18 % of headroom is *comparable to margins that already failed*, so at `--fill 0.65` it is
+under-powered on the vertical axis.
+
+> **The one thing that makes the reframe finding cheap:** `CLIP_JOBS` already reads `1:1` out of
+> `ASSET-PIPELINE.md` and hard-rejects `9:16`. Every sentry and scavenger clip on disk was shot at
+> **9:16 from a 1:1 anchor** — session 1's error — so **the 7/7 deterministic cause is already fixed
+> for every future generation, at no cost.** No probe is needed to fix it. What is *not* yet answered
+> is whether removing the reframe is *sufficient* for a high-motion action.
+
+### 🔴 NO PHASE 5 CLIP IS PACKABLE. All three slugs fail G6.
+
+With action-level scoping in place, extraction reached Phase 5's own clips for the first time in the
+project's history. G6 fails all three:
+
+```
+brass-sentry/idle      frame  0 of  8   left 0, right 0, top 0
+rust-scavenger/walk    frame  0 of 12   left 0
+brass-courier/attack   frame  1 of  8   left 0
+```
+
+Not worked around, not tolerated. **Every Phase 5 clip needs re-shooting**, which is what makes the
+framing question the phase's whole critical path rather than a side quest.
+
+### What session 4 landed — 8 commits, verified by the orchestrator, not by agent report
+
+`npm run typecheck` clean · `npm test` **`Tests 757 passed (757)`, 52 files** (baseline 708/47) ·
+`npm run test:sim-isolated` **757/757** · `npm run build` + verify-dist ok · `npm run test:e2e`
+**44 passed (4.2m)** · dev servers killed by port. **Nothing committed by any subagent — `git log`
+checked each time.**
+
+| | What | Where |
+|---|---|---|
+| **A-T1** | **R3.** G6 keys with the **border median**, per cell, after the crop. Re-validated in **four** directions incl. the intersection case. `DEFAULT_MIN_ALPHA` stays 255. | `8b77638` · `chroma.mjs` `borderKey:150`, `build-clips.mjs` |
+| **A-T4** | **R1 + R2.** The sheet filename is an exact contract, not a prefix scan. R2 (cross-slug collision) is now **structurally impossible**. | `5ba301b` · `slugConfig.motionKeyFor`, `build-assets.findSource` |
+| **A-T6** | **A1.** The 9b ordering is gated. **No sim change** — the fixture the false rationale said could not exist. | `a5ccc56` · `tests/unit/tick-damage-order.test.ts` |
+| **A-T7** | **A2/R4/R9/R10.** Sentry fire guard preserved (see below), `playIfChanged` extracted, action lists pinned. | `9c4e76d` · `src/scenes/playAnim.ts` (26) |
+| **A-T8** | **W10a/W10b/W11.** Two record corrections + the live schema compared field by field. | `24f5dbc` |
+| **A-T3** | `padAnchor.mjs` — built, gated, **not submitted**. | `09e3624` |
+| **A-T5** | Action-level scoping of both asset scripts. `fire-elevated` no longer attempted. | `ccdd72e` |
+| **A-T2** | The 17-clip framing measurement. | `232278c` |
+
+### Traps session 4 added or confirmed — read before continuing
+
+- 🔴 **`src/sim/enemies.ts:138` and `:144` are NOT duplicates.** `:138` is a **saturating increment**,
+  `:144` is the **fire guard**. The session-4 plan said to delete `:144` as redundant; the Codex plan
+  review caught it first. **Deleting it makes every sighted sentry fire on every tick**, and
+  `play-anim.test.ts` stays green while it happens. It is now a `windowOpen` **replacement** — same
+  line count, so **`enemies.ts` stays at exactly 400 with zero headroom.** The earlier claim that this
+  fix bought a file-size slot is **withdrawn**.
+- 🔴 **`estimateKeyColour` throws on exactly the frames G6 must measure.** The real cropped fixture
+  scores **78.41 %** border agreement against a 90 % floor, because the subject occupies 21.6 % of the
+  border — *which is the crop*. Use **`borderKey(image)`** (`chroma.mjs:150`, `minAgreement: 0`), never
+  `estimateKeyColour` directly, anywhere a possibly-cropped frame is keyed.
+- **Agreement separates cleanly and is worth knowing:** a uniform background of **any** colour scores
+  **1.0000** (including the off-key `(0,195,64)` field); only subject-on-the-border drops it, to
+  0.78–0.93.
+- **`build-clips.mjs`'s `main()` is now guarded** by an `import.meta.url` check so tests can import
+  `gateSheetEdges`. It previously ran unconditionally at import. **Verify the script still actually
+  runs** after touching that guard — a wrong guard makes it a silent no-op, which is byte-identical to
+  success.
+- **`build-assets.mjs` writes inside its per-action loop** (`findSource` `:174` → `writeFileSync`
+  `:281`), so a throw on action *n* still leaves actions `0..n-1` rewritten. A "byte-identical" claim
+  must be paired with **mtimes** proving the write happened — a skipped write is byte-identical too.
+- **PowerShell here-string syntax (`@'...'@`) breaks inside the Bash tool** and silently corrupts a
+  commit message. Write the message to a file and use `git commit -F`.
+- **`_generated/` is gitignored**, so the padded anchor is not in git. It is regenerable from the
+  committed tool plus the committed anchor.
+
+### Where to pick up
+
+**The open question is now sharp and cheap to answer:** removing the reframe is already free
+(`CLIP_JOBS` = `1:1`, anchors are 1:1). What is unknown is whether that is **sufficient** for a
+high-motion action, or whether motion-induced extension still cuts. **One clip answers it**, and the
+cheapest informative subject is a **sentry** clip — anchor 1.000 → output 1.000, no reframe at all,
+against paid 9:16 controls that were cut on three edges.
+
+**Not started:** W12–W20, the entire §6 QA gate (every agent owner, two briefs each — 5.1 and 5.5 now
+*must* re-run because A-T6/A-T7 changed their code), and the Codex **implementation** review (5.14).
+**Phase 5 is failing and must be reported failing.**
