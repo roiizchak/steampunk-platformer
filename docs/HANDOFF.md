@@ -800,11 +800,14 @@ leaves 18.2 % headroom, and the 17-clip framing report shows courier clips alrea
 
 ### 🔴 USER-APPROVED SPEND — not yet submitted
 
-**8 clips ≈ $9.52, landing at $33.03 of $40, leaving $6.97.** Approved with both stop rules
-explicitly on the table (batch over 5; crossing $30). The 7 measured failures **plus**
-`brass-sentry/idle`, with the instruction: *"Do option one if needed. Do the 8 clip batch."* —
-i.e. run the **$0 investigation of idle's loop snap first** and do not waste $1.19 if it turns out to
-be a keying/sampler bug rather than art.
+**Approved up to 8 clips ≈ $9.52 / $33.03**, with both stop rules explicitly on the table (batch over
+5; crossing $30), and with the instruction *"Do option one if needed. Do the 8 clip batch."* — i.e.
+run the **$0 investigation of `idle`'s loop snap first** and do not waste $1.19 if it turns out to be
+a keying/sampler bug rather than art.
+
+**That investigation ran and exonerated the art (see "Where to pick up" item 1), so the batch is
+7 clips ≈ $8.33 → $31.84, leaving $8.16.** The authorisation covered 8; 7 is what the measurement
+justified, and the difference was not spent.
 
 **The idle investigation is the immediate next task and it is free.** Extraction reported a healthy
 `wrap/step 0.13`; `gateLoopWrap` fails the packed strip. **The two stages key the image
@@ -834,8 +837,28 @@ at import by design. `brass-courier/hurt` is **NOT** in the batch.
 
 ### Where to pick up
 
-1. **$0 — diagnose `brass-sentry/idle`'s loop snap.** Keying seam first (`borderKey` vs
-   `estimateKeyColour`), then the sampler's cycle boundary. Decides whether clip 8 is worth buying.
+1. ✅ **DONE, $0 — `brass-sentry/idle`'s loop snap is NOT an art defect, so clip 8 was NOT bought.**
+   **The batch is 7 clips ≈ $8.33 → $31.84, leaving $8.16.** Measured on the packed strip:
+
+   ```
+   consecutive steps  0.01355 0.01553 0.01672 0.01277 0.01267 0.00708 0.01890
+   wrap (f8 -> f1)    0.02437   against a budget of 0.02032
+   per-frame bbox     every frame y[193..382]; f8 alone y[192..382]
+   opaque px          23289 23559 23741 23843 23916 23883 23841 23600
+   ```
+
+   **Both original hypotheses were wrong.** Vertical alignment is clean to within 1 px, so it is not
+   packer drift; and the keying seam (`borderKey` vs `estimateKeyColour`) is not implicated either.
+   What the opaque count shows is a silhouette that swells 23289 → 23916 and comes back only to
+   23600 — **the cycle closes about one frame short.** Extraction reported `cycle 35 frames
+   (2.8 in clip)`: the prompt asked for **exactly TWO** cycles and the model delivered **2.8**, so the
+   detected 35-frame cycle is a fraction long and the wrap inherits the remainder.
+
+   **A re-shoot cannot be expected to fix a cycle-detection precision issue**, and it would not even
+   reliably change the cycle count — the endpoint has no seed input and is not deterministic. The
+   $1.19 was therefore not spent. **The fix, if one is wanted, is in cycle detection, not in art**,
+   and the expected-failure lock keeps the defect visible until then.
+
 2. **$0 — upload both padded anchors; record URL + sha256 in `PADDED_ANCHORS`.**
 3. **Then submit the approved batch** (≤ $9.52 → $33.03), log every `request_id`, build the
    six-frame contact strip for each and **LOOK at it** — `ffprobe` cannot see what a clip depicts and
