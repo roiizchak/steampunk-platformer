@@ -138,6 +138,20 @@ export function estimateKeyColour(image, { minAgreement = 0.9, tolerance = CHROM
 }
 
 /**
+ * The border median, unconditionally — bypasses `estimateKeyColour`'s 90% agreement floor.
+ *
+ * A crop that leaves the subject occupying part of the border (measured 78.4% agreement on a real
+ * cropped frame) is exactly what G6 exists to catch. Refusing to even MEASURE the key in that case
+ * would make G6 throw for the wrong reason — border disagreement is signal for the CALLER to act on
+ * (crop tighter, or fail the edge gate), not a reason for the key estimate itself to give up first.
+ * A uniform background still agrees at 1.0000 regardless of its colour, so the median remains the
+ * right key in both the clean and the border-crowded case; only the floor needed to go.
+ */
+export function borderKey(image) {
+  return estimateKeyColour(image, { minAgreement: 0 }).key;
+}
+
+/**
  * Estimate the key colour from the chroma FIELD itself, wherever it happens to sit in the frame.
  *
  * `estimateKeyColour` samples the one-pixel border, which is exactly right for a sprite isolated

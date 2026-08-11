@@ -33,12 +33,13 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { VIDEO_MOTIONS } from './motion.mjs';
 import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
 import { findClip } from './clipSource.mjs';
 import { CLIP_JOBS, clipStem } from './clipJobs.mjs';
 import { decodePng } from './png.mjs';
-import { keyOut } from './chroma.mjs';
+import { borderKey, keyOut } from './chroma.mjs';
 import { crop } from './resize.mjs';
 import { gateEdgeBleed } from './edgeGate.mjs';
 
@@ -54,8 +55,8 @@ const SHEET_DIR = '_generated/sheets';
 const PROBE_W = 120;
 const PROBE_H = 214;
 
-/** The gutter between sampled frames, in px of chroma green. */
-const GUTTER = 48;
+/** The gutter between sampled frames, in px of chroma green. Exported so the G6 wiring test can build a matching fixture. */
+export const GUTTER = 48;
 const CHROMA = '0x00FF00';
 
 /**
@@ -184,14 +185,22 @@ function extract(clip, indices, out) {
  *
  * Fails the build rather than letting a cropped clip reach `assets:build` and be packed — that is
  * where the defect was found, by eye, after money had already been spent on the clip.
+ *
+ * **Crop before keying, not the other way round.** `extract()` pads every cell with a literal
+ * `GUTTER` px of chroma `0x00FF00` (see `:59-64`) — so estimating the key on the padded sheet
+ * samples that gutter and returns pure green regardless of what colour the model actually rendered,
+ * defeating `borderKey` entirely (R3). Each cell's own background is only knowable from the cell
+ * ITSELF, so the crop to the un-padded region must happen first, and `borderKey` (which never
+ * refuses on low border agreement — a crop is exactly the condition that produces one) runs on that
+ * un-padded crop, not the sheet.
  */
-function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight) {
+export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight) {
   const cellW = clipWidth + GUTTER;
-  const cellH = clipHeight + GUTTER;
-  const keyed = keyOut(decodePng(readFileSync(sheetPath)));
+  const raw = decodePng(readFileSync(sheetPath));
   for (let i = 0; i < cellCount; i += 1) {
-    const inner = crop(keyed, i * cellW + GUTTER / 2, GUTTER / 2, clipWidth, clipHeight);
-    const edge = gateEdgeBleed(inner);
+    const inner = crop(raw, i * cellW + GUTTER / 2, GUTTER / 2, clipWidth, clipHeight);
+    const keyed = keyOut(inner, { key: borderKey(inner) });
+    const edge = gateEdgeBleed(keyed);
     if (edge.status === 'FAIL') {
       throw new Error(
         `assets:clips: "${action}" frame ${i} of ${cellCount} fails G6 edge bleed — ${edge.reason}. ` +
@@ -284,4 +293,8 @@ function main() {
   console.log(`\nwrote ${report.length} sheets to ${SHEET_DIR} and _generated/clip-report.json`);
 }
 
-main();
+// Guarded so the unit suite can import `gateSheetEdges` without running the whole CLI (vault: no
+// clips exist on a fresh clone, and `main()` would fail on the first `findClip`).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

@@ -10,10 +10,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { keyOut } from '../../tools/gen/chroma.mjs';
+import { borderKey, keyOut } from '../../tools/gen/chroma.mjs';
 import { DEFAULT_MARGIN_PX, gateEdgeBleed } from '../../tools/gen/edgeGate.mjs';
 import type { EdgeBleed } from '../../tools/gen/edgeGate.d.mts';
 import { decodePng, readBytes } from '../../tools/gen/png.mjs';
+import { gateSheetEdges, GUTTER } from '../../tools/gen/build-clips.mjs';
 
 const FIXTURES = 'tests/fixtures/edges';
 
@@ -142,5 +143,88 @@ describe('G6 no longer fails the clean Phase 4 idle clip', () => {
     const result = gateEdgeBleed(keyed, { minAlpha: 8 });
 
     expect(result.status).toBe('FAIL');
+  });
+});
+
+/**
+ * **G6 must key with the border MEDIAN, not the default chroma key (R3).**
+ *
+ * `keyOut(decodePng(...))` with no `key` option — the old `gateSheetEdges` — assumes the model
+ * returned pure `[0,255,0]`. A real generation measured `(0,195,64)`, key-distance 124-144 from
+ * pure green and *above* `CHROMA.HIGH`, so the default key left it fully opaque: at G6's
+ * `minAlpha 255` the whole cell reads as subject, margins are 0 on every side, and a perfectly
+ * well-framed clip fails. `borderKey` (median of the crop's own border, floor bypassed) fixes this
+ * without loosening `DEFAULT_MIN_ALPHA` or `DEFAULT_MARGIN_PX` — both stay untouched.
+ *
+ * Four directions, all required: a real crop keyed correctly still fails, a real clean frame keyed
+ * correctly still passes, an off-key clean frame now passes (the bug), and an off-key CROPPED frame
+ * still fails (the fix is not a loosened gate — it also has to catch the intersection).
+ */
+describe('G6 keys with the border median, not the default chroma key (R3)', () => {
+  it('direction 1: real cropped brass-sentry-fire frame still FAILs under borderKey', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/brass-sentry-fire-frame.png`));
+    const keyed = keyOut(raw, { key: borderKey(raw) });
+    const result = gateEdgeBleed(keyed);
+
+    expect(result.status).toBe('FAIL');
+    const value = result.value as EdgeBleed;
+    expect(value.margins).toEqual({ left: 0, right: 0, top: 43, bottom: 29 });
+  });
+
+  it('direction 2: real clean idle frame still PASSes under borderKey', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/idle-clean-frame.png`));
+    const key = borderKey(raw);
+    const keyed = keyOut(raw, { key });
+    const result = gateEdgeBleed(keyed);
+
+    expect(key).toEqual([3, 231, 8]);
+    expect(result.status).toBe('PASS');
+    const value = result.value as EdgeBleed;
+    expect(value.margins).toEqual({ left: 30, right: 41, top: 13, bottom: 6 });
+  });
+
+  it('direction 3 (R3): an off-key uniform background now PASSes a well-framed subject', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/offkey-clear.png`));
+    const key = borderKey(raw);
+    const keyed = keyOut(raw, { key });
+    const result = gateEdgeBleed(keyed);
+
+    expect(key).toEqual([0, 195, 64]);
+    expect(result.status).toBe('PASS');
+    const value = result.value as EdgeBleed;
+    expect(value.margins).toEqual({ left: 30, right: 30, top: 30, bottom: 30 });
+
+    // The bug, pinned: the DEFAULT key leaves this same image reading as fully cropped.
+    const buggy = gateEdgeBleed(keyOut(raw));
+    expect(buggy.status).toBe('FAIL');
+  });
+
+  it('direction 4 (R3 ∩ crop): off-key background AND a cropped subject still FAILs', () => {
+    const raw = decodePng(readBytes(`${FIXTURES}/offkey-crop.png`));
+    const key = borderKey(raw);
+    const keyed = keyOut(raw, { key });
+    const result = gateEdgeBleed(keyed);
+
+    expect(key).toEqual([0, 195, 64]);
+    expect(result.status).toBe('FAIL');
+    const value = result.value as EdgeBleed;
+    expect(value.margins).toEqual({ left: 60, right: 0, top: 30, bottom: 30 });
+  });
+
+  /**
+   * `gateSheetEdges` (`build-clips.mjs`) is the actual production call site, and it is NOT exercised
+   * above — `extract()` pads every cell with a literal `0x00FF00` gutter, so estimating the key on
+   * the padded sheet samples the gutter and returns pure green regardless of the cell's own
+   * background, defeating `borderKey` even though the direct calls above all pass. This fixture is a
+   * real two-cell sheet, gutter included, off-key background in both cells: cell 0 is well-framed,
+   * cell 1's subject touches the right edge. Only correct crop-before-estimate ordering reports
+   * "frame 1" — sampling the padded sheet miskeys the background and both cells read as fully
+   * cropped, which would fail on frame 0 instead.
+   */
+  it('gateSheetEdges crops each cell before estimating its key, not after', () => {
+    expect(() => gateSheetEdges(`${FIXTURES}/offkey-sheet.png`, 'test-action', 2, 40, 60)).toThrow(
+      /frame 1 of 2 fails G6.*right/,
+    );
+    expect(GUTTER).toBe(48);
   });
 });
