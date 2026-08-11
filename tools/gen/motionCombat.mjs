@@ -34,14 +34,42 @@ const HAND_CLAUSE =
   'merged into the tool or into the body.';
 
 /**
- * Appended to every one-shot combat motion's `motion` clause. `HOLD_CAMERA` in `motion.mjs`
+ * Appended to every combat motion's `motion` clause. `HOLD_CAMERA` in `motion.mjs`
  * already says "is never cropped by any edge" and it did not stop clipping at full extension — so
  * this is phrased as a positive requirement about where the subject sits, not another prohibition.
+ *
+ * **Session 5 widened this from one-shots to the CYCLIC entries too.** It had never reached them:
+ * it was appended by hand per record and every cyclic `motion` predated it, so `rust-scavenger`'s
+ * `walk` and `chase` were the only combat clips shot with no margin clause at all — and `chase`
+ * came back with one frame at 8 px of left margin. A longer stride throws a limb further than a
+ * sway does, so widening the stride (see `walk` below) without widening this would have traded one
+ * defect for the other.
  */
 const FRAME_MARGIN =
   ' At its point of furthest extension, the subject and anything it holds stays entirely inside ' +
   'the middle 70% of the frame width, with clear green margin visible at both the left and right ' +
   'edges of the frame.';
+
+/**
+ * Appended to the two `brass-sentry/fire*` records, and to nothing else.
+ *
+ * **G6 fails `fire` on a frame where the turret is COMPLETE.** What reaches the edge is the muzzle
+ * flash and the smoke plume, not a sheared limb — confirmed by looking at the six-frame strip at
+ * full resolution. G6 measures an opaque subject mask and reads one byte per pixel
+ * (`edgeGate.mjs:91`, alpha only), so it cannot tell discharge from a crop. That is the same class
+ * of blind spot already recorded for G1, which *"cannot tell a boot from a hand"*.
+ *
+ * **The user's decision was to constrain the effect rather than teach the gate** — so no threshold
+ * in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255. `FRAME_MARGIN` alone does not cover
+ * this: it binds "the subject and anything it holds", and a turret does not *hold* its own muzzle
+ * flash. The flash needed its own ruler, and it is measured against the barrel — the one part of
+ * the machine whose length the model has already committed to in the identity clause.
+ */
+const DISCHARGE_MARGIN =
+  ' The muzzle flash and the smoke are SMALL and CONTAINED: the flash reaches no further from the ' +
+  'muzzle than the length of the barrel itself, and the smoke stays a thin wisp close to the ' +
+  'muzzle. Neither the flash nor the smoke ever reaches any edge of the frame, and clear green ' +
+  'margin stays visible on all four edges throughout.';
 
 export const COMBAT_MOTIONS = Object.freeze({
   /* ---------------------------------------------------------------- *
@@ -169,7 +197,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'stillness it is subtly but CONTINUOUSLY alive as a MACHINE: the barrel swings very slightly ' +
       'up and back down again, exactly TWICE during the clip, one slow even cycle about every two ' +
       'seconds; the needles on both pressure gauges drift a little; a thin wisp of steam escapes ' +
-      'from a seam and rises. The drum housing itself does not move.',
+      'from a seam and rises. The drum housing itself does not move.' + FRAME_MARGIN,
   },
 
   /**
@@ -189,12 +217,14 @@ export const COMBAT_MOTIONS = Object.freeze({
       'leg, no arm and no head. It never becomes a person or a creature.',
     span: poseSpan(
       'the barrel is level and still, the muzzle dark and empty.',
-      'a bright muzzle flash bursts from the mouth of the barrel and the whole drum housing has ' +
+      'a small bright muzzle flash sits at the mouth of the barrel, reaching forward from the ' +
+        'muzzle no further than the length of the barrel itself, and the whole drum housing has ' +
         'kicked backward on its legs from the recoil.',
-      'the flash is gone, a thin plume of smoke drifts from the muzzle, and the barrel has ' +
+      'the flash is gone, a thin wisp of smoke hangs close to the muzzle, and the barrel has ' +
         'settled back to level.',
     ),
-    motion: 'fires a single shot from its barrel. Its three feet never leave the spot.' + FRAME_MARGIN,
+    motion: 'fires a single shot from its barrel. Its three feet never leave the spot.' +
+      FRAME_MARGIN + DISCHARGE_MARGIN,
   },
 
   /**
@@ -214,15 +244,17 @@ export const COMBAT_MOTIONS = Object.freeze({
     span: poseSpan(
       'the barrel is raised at a steep angle, about 35 degrees above horizontal, and still, the ' +
         'muzzle dark and empty.',
-      'a bright muzzle flash bursts from the mouth of the raised barrel and the whole drum ' +
+      'a small bright muzzle flash sits at the mouth of the raised barrel, reaching forward from ' +
+        'the muzzle no further than the length of the barrel itself, and the whole drum ' +
         'housing has kicked backward on its legs from the recoil, the barrel still held at that ' +
         'same steep upward angle.',
-      'the flash is gone, a thin plume of smoke drifts from the muzzle, and the barrel has ' +
+      'the flash is gone, a thin wisp of smoke hangs close to the muzzle, and the barrel has ' +
         'settled back to its steady raised angle of about 35 degrees above horizontal.',
     ),
     motion:
       'fires a single shot from its barrel, held raised at a steep upward angle throughout, at ' +
-      'rest and in recoil alike. Its three feet never leave the spot.' + FRAME_MARGIN,
+      'rest and in recoil alike. Its three feet never leave the spot.' +
+      FRAME_MARGIN + DISCHARGE_MARGIN,
   },
 
   /** The turret destroyed. One-shot, and it must end as obvious wreckage. */
@@ -246,7 +278,29 @@ export const COMBAT_MOTIONS = Object.freeze({
     motion: ('is destroyed. It does not travel sideways; it comes apart where it stands.') + FRAME_MARGIN,
   },
 
-  /** The patrol. Cyclic, limb mechanics named BEFORE the count - Phase 4's rule 2. */
+  /**
+   * The patrol. Cyclic, limb mechanics named BEFORE the count - Phase 4's rule 2.
+   *
+   * **Round 2 came back clean through G6 and then failed extraction outright:** *"declared cyclic
+   * but no window of it closes - no sampling of this clip yields a loop."* That is session 2's
+   * eyeball verdict - *"a sway, not a gait, stride under 15% of body height"* - finally measured
+   * rather than judged. **W9 never touched this prompt.** Its five corrections covered the
+   * courier's prop and grip, the deaths' back-loading and `fire-elevated`; the stride was never
+   * among them, so no amount of reframing was ever going to fix it.
+   *
+   * The cause is visible by diffing this record against `chase` below, which DOES produce a real
+   * gait (measured at 40-50% of body height). `chase` names three visual facts - "a long reaching
+   * stride", "both feet leave the ground briefly", "head thrust forward ahead of its shoulders".
+   * This record named none: "swings that leg forward" and "plants the foot down" describe an
+   * intention and contain no distance, and the model satisfied them with a sway. That is the same
+   * failure as `SPAN_CLIP` in a different costume - **a SHAPE the model can satisfy literally,
+   * where what was wanted was a GEOMETRY.**
+   *
+   * So every quantity here is now stated as a fraction of the creature's OWN body, which is the
+   * only ruler the model and the gate share - `poseSpan` is not available to a cyclic entry
+   * (`motion.mjs:376` gives cyclic records no span tail at all), so the geometry has to live in
+   * the motion clause itself.
+   */
   'rust-scavenger/walk': {
     cyclic: true,
     frames: 12,
@@ -256,13 +310,17 @@ export const COMBAT_MOTIONS = Object.freeze({
       'stack, same rusted palette. It has EXACTLY two arms and two legs in every single frame and ' +
       'grows no extra limb. It stays hunched and forward-leaning and never stands fully upright.',
     motion:
-      'walks forward to the RIGHT with a complete and clearly visible walking cycle, repeated ' +
-      'steadily for the whole clip: it lifts one clawed foot right off the ground, swings that ' +
-      'leg forward, plants the foot down, and pushes off with the trailing leg, then does the ' +
-      'same with the other leg. Its knees bend visibly and its arms swing in opposition to its ' +
-      'legs. It completes exactly TWO full strides during the clip, at an unhurried plodding ' +
-      'pace. It stays hunched. It does NOT travel across the frame - it walks on the spot, ' +
-      'staying in exactly the same place in the frame at exactly the same size.',
+      'walks forward to the RIGHT with a long, heavy, unmistakable plodding gait, repeated ' +
+      'steadily for the whole clip. Each step is BIG: the leading clawed foot swings forward and ' +
+      'lands a clear distance of about one third of the creature\'s own standing height ahead of ' +
+      'the trailing foot, so the two feet are wide apart on the ground at the moment of each ' +
+      'plant. At the top of its swing the lifted foot hangs about one tenth of the creature\'s ' +
+      'standing height clear of the ground, with the knee bent sharply. There is always exactly ' +
+      'one foot bearing weight and one foot travelling - the two feet are never both planted and ' +
+      'still at the same moment. Its arms swing in opposition to its legs through the same wide ' +
+      'arc. It completes exactly TWO full strides during the clip, at an unhurried plodding pace. ' +
+      'It stays hunched. It does NOT travel across the frame - it walks on the spot, ' +
+      'staying in exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN,
   },
 
   /**
@@ -286,7 +344,7 @@ export const COMBAT_MOTIONS = Object.freeze({
       'reaching stride, both feet leave the ground briefly between strides, its arms pump hard and ' +
       'its head is thrust forward ahead of its shoulders. It completes exactly TWO full strides ' +
       'during the clip. It does NOT travel across the frame - it runs on the spot, staying in ' +
-      'exactly the same place in the frame at exactly the same size.',
+      'exactly the same place in the frame at exactly the same size.' + FRAME_MARGIN,
   },
 
   /** The scavenger destroyed. One-shot; it must end unmistakably down. */
