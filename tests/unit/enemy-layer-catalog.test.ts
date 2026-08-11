@@ -148,10 +148,17 @@ function buildWorld() {
 }
 
 describe('the Rectangle fallback is a dated temporary, not permanent scaffolding', () => {
-  it('the shipped catalog carries zero enemy sheets today, so the fallback is legitimately reachable', () => {
+  it('the shipped catalog carries some, but not yet all, enemyAnimKeys() — the fallback stays legitimately reachable', () => {
+    // Was "zero enemy sheets today" — expired the moment `brass-sentry-idle` shipped (the first
+    // enemy row in public/assets/index.json). The fallback is legitimate exactly as long as the
+    // overlap is a real, non-empty, PROPER subset of enemyAnimKeys(): some registered (so the
+    // Sprite path below is exercised against real keys), some still missing (so Rectangle still has
+    // a reason to exist). Both halves going empty is the two tests below, each dated on its own.
     const shipped = new Set(shippedSheetKeys());
-    const overlap = enemyAnimKeys().filter((key) => shipped.has(key));
-    expect(overlap).toEqual([]);
+    const all = enemyAnimKeys();
+    const overlap = all.filter((key) => shipped.has(key));
+    expect(overlap.length, 'no shipped enemy sheet matches any enemyAnimKeys() — did a key rename?').toBeGreaterThan(0);
+    expect(overlap.length, 'every enemyAnimKeys() key is now shipped — the "zero sheets" test below has expired').toBeLessThan(all.length);
   });
 
   it('the fixture carries all six enemyAnimKeys() rows, or the expiry test below proves nothing', () => {

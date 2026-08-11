@@ -88,6 +88,17 @@
       "fps": 20,
       "loop": false,
       "derivedFrom": "sim"
+    },
+    {
+      "key": "brass-sentry-idle",
+      "url": "assets/characters/brass-sentry/sheets/idle.png",
+      "frameWidth": 288,
+      "frameHeight": 384,
+      "frameCount": 8,
+      "simTicks": 90,
+      "fps": 5.333333333333333,
+      "loop": true,
+      "derivedFrom": "authored"
     }
   ]
 }

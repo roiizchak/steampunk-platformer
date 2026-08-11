@@ -2,7 +2,10 @@
  * `npm run assets:build` — raw model output → shipped sprite strips + catalog entries.
  *
  * Reads `_generated/sheets/`, keys each sheet against its own measured background, detects the frame
- * layout from the pixels, packs a uniform-cell strip, and writes both the PNG and the catalog rows.
+ * layout from the pixels, packs a uniform-cell strip, and writes the PNG, the sheet report, the lift
+ * profile, and — for slugs `catalogTimings.mjs` has timing rules for (`brass-sentry`,
+ * `rust-scavenger`) — the catalog rows in `public/assets/index.json`. `brass-courier`'s rows predate
+ * this and are untouched; see `catalogTimings.mjs`'s header.
  *
  * ## What this script refuses to do
  *
@@ -43,6 +46,11 @@ import {
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
 import { configFor, motionKeyFor, workListFor } from './slugConfig.mjs';
 import { clipStem } from './clipJobs.mjs';
+import { CATALOG_TIMING_SLUGS, catalogRowFor } from './catalogTimings.mjs';
+import { upsertCatalogSheets } from './catalogWrite.mjs';
+
+/** Where `upsertCatalogSheets` merges this build's rows into. */
+const CATALOG_PATH = 'public/assets/index.json';
 
 /**
  * Path/action resolution lives in `slugConfig.mjs` — kept here as a single destructure so this
@@ -98,9 +106,12 @@ function findSource(action) {
 
 function loadConfig() {
   if (!existsSync(CONFIG)) {
+    // NOT "run with --derive-scale to produce one" — --derive-scale calls loadConfig() itself (see
+    // main(), below), so the config must already exist (renderHeightPx set, scale null) before it
+    // can print anything.
     throw new Error(
-      `assets:build: ${CONFIG} not found. Run with --derive-scale to produce one, then commit it. ` +
-        `The scale is deliberately NOT derived during a build (vault A5).`,
+      `assets:build: ${CONFIG} not found. Author it by hand first (renderHeightPx set, scale ` +
+        `null), THEN run --derive-scale to print a value to paste in (vault A5).`,
     );
   }
   return JSON.parse(readFileSync(CONFIG, 'utf8'));
@@ -173,6 +184,9 @@ function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   const rows = [];
   const liftProfile = {};
+  // Catalog rows this run packed, merged into public/assets/index.json once at the end — see
+  // catalogTimings.mjs's header for which slugs are covered.
+  const catalogRows = [];
 
   for (const action of ACTIONS) {
     const source = findSource(action);
@@ -302,6 +316,17 @@ function main() {
       summary: summary.status,
     });
 
+    if (CATALOG_TIMING_SLUGS.has(SLUG)) {
+      catalogRows.push(
+        catalogRowFor(SLUG, action, {
+          url: `assets/characters/${SLUG}/sheets/${action}.png`,
+          frameWidth,
+          frameHeight,
+          frameCount: frames.length,
+        }),
+      );
+    }
+
     liftProfile[action] = {
       anchor,
       deepestSourceY,
@@ -350,8 +375,15 @@ function main() {
     LIFT_PROFILE,
     `${JSON.stringify({ _comment: LIFT_PROFILE_NOTE, slug: SLUG, scale, animations: liftProfile }, null, 2)}\n`,
   );
+
+  let catalogNote = '';
+  if (catalogRows.length > 0) {
+    // One upsert for the whole run, not one per action — a single read-merge-write.
+    upsertCatalogSheets(CATALOG_PATH, catalogRows);
+    catalogNote = ` and ${catalogRows.length} row(s) into ${CATALOG_PATH}`;
+  }
   console.log(
-    `\nwrote ${rows.length} strips to ${OUT_DIR}, ${REPORT_PATH} and ${LIFT_PROFILE}`,
+    `\nwrote ${rows.length} strips to ${OUT_DIR}, ${REPORT_PATH} and ${LIFT_PROFILE}${catalogNote}`,
   );
 }
 

@@ -1,0 +1,30 @@
+{
+  "_comment": "Saved character configuration for brass-sentry. Modeled on character-bounds.json (the courier's) — see that file for the long-form rationale on every field below; this copy states only what differs for a stationary turret. THE SCALE LIVES HERE ON PURPOSE (vault A5): a global constant derived from a single regenerable frame means regenerating that frame silently rescales every other animation and moves every measured bound. `npm run assets:build` READS this and never computes it; `node tools/gen/build-assets.mjs brass-sentry idle --derive-scale` prints a new one for a human to paste in deliberately.",
+  "slug": "brass-sentry",
+
+  "renderHeightPx": 192,
+  "scale": 0.28915663,
+  "_scale": "Source pixels to game pixels. DERIVED 2026-08-11 (session 5) from `brass-sentry-idle-r2.mp4`, the ratio-match re-shoot and the first Phase 5 clip to survive extraction — 192 / 664 = 0.28915663. Pasted by hand from `node tools/gen/build-assets.mjs brass-sentry idle --derive-scale`, which PRINTS it and never writes it (vault A5's STOP: the build reads this number and never computes it, so regenerating the idle sheet moves nothing here). The eight idle frames span a mean standing height of 664 source px with a frame-to-frame spread of 0.3% — that spread IS the size-pop the scale exists to hold still, and 0.3% is tighter than the courier's 0.8%, which is what a machine at rest should look like against a breathing man. Note the provenance limitation this shares with the courier (Codex C5, recorded at docs/qa/phase-05-combat.md limitation 7): the source is a regenerable idle sheet, not the locked anchor. The anchor CANNOT supply it — the anchor is 2048 square while the clip is 960 square, so the anchor's figure height is not the sheet's. Re-deriving is therefore mandatory if the idle clip is ever re-shot, and `fire`/`death` must be packed against whatever value stands here, never the reverse.",
+  "_renderHeightPx": "SENTRY_BOX.h (32 sim px, src/sim/enemies.ts) x RENDER_SCALE (6, src/game/constants.ts) = 192 px = 2 tiles. Deliberately shorter than the courier's 288 px (3 tiles) and the scavenger's 240 px (2.5 tiles) — three distinct silhouette heights so the two enemies read apart from the player and from each other at true sprite size before any colour does (src/sim/enemies.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
+
+  "frameWidth": 288,
+  "frameHeight": 384,
+  "_frame": "The ONE global cell size (decision M3), 3 x 4 tiles at TILE_SIZE 96 — same as the courier's, NOT shrunk for a smaller subject. Every slug packs into this cell; a smaller renderHeightPx just leaves more transparent headroom, exactly the way the courier's own extra 48px of headroom already works (see character-bounds.json's `_frame` note).",
+
+  "_baseline": "Same per-SHEET contact-frame rule as the courier's file (see character-bounds.json's `_baseline` note) — the deepest frame of a sheet reaches the last row of its cell, every other frame keeps its own measured, scaled lift.",
+
+  "collisionBox": {
+    "widthPx": 96,
+    "heightPx": 192,
+    "_source": "SENTRY_BOX x RENDER_SCALE (src/sim/enemies.ts:383). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
+  },
+
+  "animations": {
+    "idle": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
+    "fire": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
+    "death": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] }
+  },
+  "_animations": "['idle','fire','death'] — must equal configFor('brass-sentry').actions in tools/gen/slugConfig.mjs and ANIMS_BY_SLUG['brass-sentry'] in src/render/enemyView.ts. `verticalAnchor` is 'feet' for all three: a sentry turret never leaves the ground, so there is no sim-owned altitude for `centroid` to protect against the way jump/fall need it on the courier — see character-bounds.json's `_verticalAnchor` note for when 'centroid' is the right choice instead.",
+
+  "_activeFrames": "Empty for every animation. `fire`'s active window rides the sim's existing cooldownCounter (SENTRY_FIRE_TICKS, src/render/enemyView.ts) rather than a per-frame hitbox toggle — the sentry has no swing to align a strike window against, so this field stays unused for this slug unless that changes."
+}

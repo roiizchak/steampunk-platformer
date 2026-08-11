@@ -1,0 +1,33 @@
+{
+  "_comment": "Saved character configuration for rust-scavenger. Modeled on character-bounds.json (the courier's) — see that file for the long-form rationale on every field below; this copy states only what differs for a ground patroller. THE SCALE LIVES HERE ON PURPOSE (vault A5): a global constant derived from a single regenerable frame means regenerating that frame silently rescales every other animation and moves every measured bound. `npm run assets:build` READS this and never computes it; `node tools/gen/build-assets.mjs rust-scavenger <action> --derive-scale` prints a new one for a human to paste in deliberately.",
+  "slug": "rust-scavenger",
+
+  "renderHeightPx": 240,
+  "scale": null,
+  "_scale": "NOT YET DERIVED, and cannot be yet: rust-scavenger has NO packable clip today (no source sheet under `_generated/sheets/` for any of its declared actions), so `--derive-scale` (which needs a real `idle`-shaped neutral pose to measure) has nothing to run against. This is EXPECTED, not a failure to work around — see the brief for this work item. `--derive-scale` itself tolerates a null/missing scale here regardless, because the derive path only reads `renderHeightPx`, never `scale`.",
+  "_renderHeightPx": "SCAVENGER_BOX.h (40 sim px, src/sim/enemies.ts) x RENDER_SCALE (6, src/game/constants.ts) = 240 px = 2.5 tiles. Between the sentry's 192 px and the courier's 288 px on purpose — three distinct silhouette heights (src/sim/enemies.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
+
+  "frameWidth": 288,
+  "frameHeight": 384,
+  "_frame": "The ONE global cell size (decision M3), 3 x 4 tiles at TILE_SIZE 96 — same as the courier's and the sentry's, NOT shrunk for a smaller subject.",
+
+  "_baseline": "Same per-SHEET contact-frame rule as the courier's file (see character-bounds.json's `_baseline` note).",
+
+  "collisionBox": {
+    "widthPx": 120,
+    "heightPx": 240,
+    "_source": "SCAVENGER_BOX x RENDER_SCALE (src/sim/enemies.ts:384). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
+  },
+
+  "stridePxPerCycle": { "walk": null, "chase": null },
+  "_stride": "NOT YET MEASURED — no packable clip exists for walk or chase (same blocker as `_scale` above). Needed once a clip lands: `walk`/`chase` are the 'measured' rows in src/render/animTiming.ts's enemyAnimTimings, so their catalog fps is derived from `strideTicks(stride, SCAVENGER.patrolSpeed|chaseSpeed)` the same way the courier's walk/run are, never authored.",
+
+  "animations": {
+    "walk": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
+    "chase": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
+    "death": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] }
+  },
+  "_animations": "['walk','chase','death'] — must equal configFor('rust-scavenger').actions in tools/gen/slugConfig.mjs and ANIMS_BY_SLUG['rust-scavenger'] in src/render/enemyView.ts. There is no `idle`: the scavenger patrols continuously (src/render/enemyView.ts's `scavengerAnim`), so a standing pose is never reached and a sheet for it would be money spent on a state the sim cannot enter. `verticalAnchor` is 'feet' for all three: the scavenger never leaves the ground, same reasoning as the sentry's file.",
+
+  "_activeFrames": "Empty for every animation. The scavenger has no attack state — its BODY is the hazard (contact damage, no swing, src/render/enemyView.ts's header) — so there is no strike window to align a per-frame hitbox against for this slug."
+}

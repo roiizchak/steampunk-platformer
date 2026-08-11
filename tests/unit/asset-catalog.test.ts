@@ -71,13 +71,21 @@ const bounds = only<{
   stridePxPerCycle: { walk: number; run: number };
 }>(BOUNDS, 'character-bounds file');
 
+/**
+ * `animTimings` builds ONE table — the PLAYER's (`bounds.slug`, e.g. `brass-courier`) — so every
+ * comparison against it must be scoped to that slug's rows only. `public/assets/index.json` now
+ * also carries enemy sheets (`brass-sentry-idle` and onward); an enemy key sliced against
+ * `bounds.slug`'s prefix is not even a valid `AnimName`, so it must never reach `catalogFrames`.
+ */
+const courierSheets = catalog.sheets.filter((s) => s.key.startsWith(`${bounds.slug}-`));
+
 /** `brass-courier-walk` -> `walk`. The catalog key carries the slug; the timing table does not. */
 function animOf(key: string): AnimName {
   return key.slice(`${bounds.slug}-`.length) as AnimName;
 }
 
 const catalogFrames = new Map<string, number>(
-  catalog.sheets.map((s) => [animOf(s.key), s.frameCount]),
+  courierSheets.map((s) => [animOf(s.key), s.frameCount]),
 );
 
 /**
@@ -109,9 +117,11 @@ const derived = animTimings(
 describe('the catalog records the timings the simulation derives (criterion 4.7, vault 4.22)', () => {
   it('found a non-empty catalog and a bounds file', () => {
     expect(catalog.sheets.length).toBeGreaterThan(0);
-    // Every derived row is either shipped or explicitly pending — no third category, so a row
-    // cannot go missing from the catalog by being quietly forgotten.
-    expect(derived.length).toBe(catalog.sheets.length + PENDING_ART.length);
+    // `derived` is the PLAYER's table only (see `courierSheets` above) — every derived row is
+    // either shipped for the player's slug or explicitly pending, no third category, so a player
+    // row cannot go missing from the catalog by being quietly forgotten. An enemy sheet (e.g.
+    // `brass-sentry-idle`) is neither: it is out of scope for this count on purpose.
+    expect(derived.length).toBe(courierSheets.length + PENDING_ART.length);
   });
 
   /**
@@ -130,7 +140,7 @@ describe('the catalog records the timings the simulation derives (criterion 4.7,
   });
 
   it.each(['walk', 'run', 'jump', 'fall', 'idle'])('%s agrees on simTicks, fps and loop', (name) => {
-    const row = catalog.sheets.find((s) => animOf(s.key) === name);
+    const row = courierSheets.find((s) => animOf(s.key) === name);
     const want = derived.find((d) => d.name === name);
     expect(row, `no catalog entry for ${name}`).toBeDefined();
     expect(want, `no derived timing for ${name}`).toBeDefined();
@@ -160,11 +170,21 @@ describe('the catalog records the timings the simulation derives (criterion 4.7,
     }
   });
 
-  it('idle is the only authored timing, and says so', () => {
-    // Vault 4.22 is satisfied for four of five clips and deliberately NOT for idle — no sim window
-    // governs a breathing loop. The exception is recorded in docs/qa/phase-04-art.md per C11; this
-    // asserts it cannot quietly spread to a clip that does have a window.
+  it('idle is the only authored timing, for every slug — and says so', () => {
+    // Vault 4.22 is satisfied for every non-idle clip and deliberately NOT for idle — no sim window
+    // governs a breathing loop, for the player OR an enemy. The player's exception is recorded in
+    // docs/qa/phase-04-art.md per C11; `brass-sentry-idle`'s matching one (its simTicks is also
+    // `IDLE_TICKS`, src/render/animTiming.ts) is recorded in docs/qa/phase-05-combat.md's timing
+    // table. `-idle` suffix rather than an exact key list is what lets a second slug's authored idle
+    // stay legitimate here without this test losing the ability to catch a non-idle clip acquiring
+    // an authored fps.
     const authored = catalog.sheets.filter((s) => s.derivedFrom === 'authored').map((s) => s.key);
-    expect(authored).toEqual([`${bounds.slug}-idle`]);
+    expect(authored.length).toBeGreaterThan(0);
+    for (const key of authored) {
+      expect(key.endsWith('-idle'), `${key} is authored but is not an idle animation`).toBe(true);
+    }
+    expect(authored, `the player's own idle (${bounds.slug}-idle) must be among the authored rows`).toContain(
+      `${bounds.slug}-idle`,
+    );
   });
 });
