@@ -43,12 +43,33 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * reframe defect that cut 7 of 7 reframed clips. Superseded by the `1:1` round, kept on disk.
    */
   'brass-sentry/idle': Object.freeze(['brass-sentry-idle.mp4']),
-  'brass-sentry/death': Object.freeze(['brass-sentry-death.mp4', 'brass-sentry-death-r2.mp4']),
+  'brass-sentry/death': Object.freeze([
+    'brass-sentry-death.mp4',
+    'brass-sentry-death-r2.mp4',
+    'brass-sentry-death-r3.mp4',
+  ]),
   'rust-scavenger/walk': Object.freeze(['rust-scavenger-walk.mp4', 'rust-scavenger-walk-r2.mp4']),
   'rust-scavenger/chase': Object.freeze(['rust-scavenger-chase.mp4', 'rust-scavenger-chase-r2.mp4']),
-  'rust-scavenger/death': Object.freeze(['rust-scavenger-death.mp4', 'rust-scavenger-death-r2.mp4']),
-  'brass-courier/attack': Object.freeze(['brass-courier-attack.mp4', 'brass-courier-attack-r2.mp4']),
-  'brass-courier/death': Object.freeze(['brass-courier-death.mp4']),
+  'rust-scavenger/death': Object.freeze([
+    'rust-scavenger-death.mp4',
+    'rust-scavenger-death-r2.mp4',
+    'rust-scavenger-death-r3.mp4',
+  ]),
+  /**
+   * `-r3` was the PADDED round: framed cleanly and packed at 114 px against hurt's 288 px,
+   * because scale is per-slug and was derived from an unpadded clip. Superseded by `-r4`, shot
+   * UNPADDED at 9:16 — the courier anchor's matched ratio — which restores full size AND keeps one
+   * scale per subject.
+   */
+  'brass-courier/attack': Object.freeze([
+    'brass-courier-attack.mp4',
+    'brass-courier-attack-r2.mp4',
+    'brass-courier-attack-r3.mp4',
+  ]),
+  'brass-courier/death': Object.freeze([
+    'brass-courier-death.mp4',
+    'brass-courier-death-r2.mp4',
+  ]),
   'brass-courier/hurt': Object.freeze(['brass-courier-hurt.mp4']),
 
   /**

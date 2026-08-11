@@ -116,8 +116,8 @@ export const ASPECT_RATIO = readPrescribedAspectRatio();
  * way. `idle`/`walk`/`run`/`fall` are declared now for the same reason, pre-emptively.
  */
 const CLIP_FILES = Object.freeze({
-  'brass-courier/attack': 'brass-courier-attack-r3.mp4',
-  'brass-courier/death': 'brass-courier-death-r2.mp4',
+  'brass-courier/attack': 'brass-courier-attack-r4.mp4',
+  'brass-courier/death': 'brass-courier-death-r3.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
   /**
    * The ratio-match re-shoot (`request_id 019fef56-67bf-7922-943c-417809ed8ba0`).
@@ -149,10 +149,10 @@ const CLIP_FILES = Object.freeze({
    * its one remaining failure is the muzzle blast leaving frame, not the turret.
    */
   'brass-sentry/fire': 'brass-sentry-fire-r4.mp4',
-  'brass-sentry/death': 'brass-sentry-death-r3.mp4',
+  'brass-sentry/death': 'brass-sentry-death-r4.mp4',
   'rust-scavenger/walk': 'rust-scavenger-walk-r3.mp4',
   'rust-scavenger/chase': 'rust-scavenger-chase-r3.mp4',
-  'rust-scavenger/death': 'rust-scavenger-death-r3.mp4',
+  'rust-scavenger/death': 'rust-scavenger-death-r4.mp4',
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',
