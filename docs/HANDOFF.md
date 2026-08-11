@@ -1,7 +1,8 @@
 # Session handoff — Phase 5 (combat, enemies, hazards)
 
-**Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), **amended 2026-08-10 (session 2)
-— see §8, which supersedes §4 and §6.** **Phase 5 is NOT complete and must not be reported complete.**
+**Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
+**§11 (session 5) supersedes §10, which supersedes §9, §8, §4 and §6.**
+**Phase 5 is NOT complete and must not be reported complete.**
 
 Read this first, then [PRD.md](PRD.md), then
 [prd/phase-05-combat.md](prd/phase-05-combat.md) §6 (the gate), then
@@ -691,4 +692,157 @@ costs subject resolution (~69 % → ~45 % of frame height) to buy margin.
 
 **Not started:** W12–W20, the entire §6 QA gate (every agent owner, two briefs each — 5.1 and 5.5 now
 *must* re-run because A-T6/A-T7 changed their code), and the Codex **implementation** review (5.14).
+**Phase 5 is failing and must be reported failing.**
+
+---
+
+## 11. Session 5 — 2026-08-11. **The spend was mis-ordered, and $0 of measurement proved it.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-glittery-sketch.md` (revision 2, approved).
+Its Codex plan review — **BLOCK, 4 blockers, 4 major, 1 minor** — is appended to
+[reviews/phase-05-plan.md](reviews/phase-05-plan.md). **8 confirmed, 1 partly refuted.**
+
+**Spend unchanged at $23.51 of $40 at the time of writing. Nothing was submitted.**
+
+### 🔴 The finding that reordered the session
+
+**Revision 1 would have spent $8.33 and produced nothing usable.** Three separate reasons, each
+confirmed locally rather than taken on Codex's word:
+
+| # | What | Decisive evidence |
+|---|---|---|
+| **A3a** | Every "padded re-shoot" would have submitted the **UNPADDED** anchor | `ANCHOR_URLS` (`clipJobs.mjs:108`) is keyed by **slug**, one URL each; `submit-clips.mjs:95` emits `job.anchorUrl` verbatim. No per-record override existed. |
+| **A3b** | No per-slug bounds config existed, so **no enemy sheet could pack at all** | `public/assets/config/` held two files, neither per-slug. `build-assets.mjs:99` throws without one. |
+| **A3c** | **Nothing wrote `public/assets/index.json`** | `build-assets.mjs` had three `writeFileSync` calls — strip PNG `:285`, report `:328`, lift profile `:349`. Its docstring `:5` claimed it wrote catalog rows. **The docstring was false**; HANDOFF §9 had already recorded the truth. |
+
+**A3c is the one that matters most.** Without a catalog row, Boot registers no enemy animation and
+`enemyLayer.ts` keeps drawing Rectangles — so **5.4, 5.4d, live 5.7, 5.8 and 5.11 were gated on the
+catalog, not on the art.** Those four criteria were the entire stated justification for spending
+early. All three are now fixed and committed.
+
+> **The padded anchor's URL was in no version-controlled file at all.** Its only copy sat inside
+> `_generated/phase05/video/brass-sentry-fire-r3.job.json`, and `_generated/` is gitignored — so the
+> project's copy of record did not contain the address of art it had paid $1.19 to use. That is the
+> **third** instance of one failure: `aspect_ratio` typed into a command line, the winning clip
+> inferred from a directory listing, and now this. `PADDED_ANCHORS` is the same fix each time.
+
+### ✅ Writing the first catalog row switched the Phase 4 gates on
+
+The moment `brass-sentry-idle` got a catalog row, the **existing** shipped-art gates began policing
+it and immediately failed it. They were never broken — nothing had been feeding them.
+
+Three of the four failures were a **test** defect: `shipped-sheets.test.ts` resolved every sheet as
+`characters/brass-courier/sheets/<key>.png`, the same single-slug assumption class as R1/R2. It now
+reads the path from the catalog row's own `url`.
+
+**The fourth is real: `brass-sentry/idle`'s loop seam SNAPS.** `wrap 0.02437` against a `0.02032`
+budget — and that budget is already the *larger* of the median step and the clip's own largest step,
+so the wrap genuinely exceeds anything inside the clip. Confirmed twice, by `build-assets` and by
+`gateLoopWrap` on the shipped strip. **The clip §10 calls *"the first Phase 5 clip ever to survive
+extraction"* produces a sheet that fails a shipped-art gate. Surviving extraction is not the same as
+being shippable.**
+
+It is held by an **expected-failure lock**, not an exclusion: a named assertion requires
+`gateLoopWrap` to keep returning FAIL on this sheet. **That goes red in both directions** — if the
+gate is ever weakened, and if the art is fixed without removing the key. No tolerance was touched.
+
+### 🔴 A4 — every action measured before a price was named
+
+Extraction stops at the first failure, so per-action runs were needed; session 4's knowledge was
+incomplete by construction.
+
+| clip | verdict | detail |
+|---|---|---|
+| `brass-sentry/idle` | extracts; **packed sheet fails loop wrap** | 8 frames from 97, cycle 35 |
+| `brass-courier/hurt` | ✅ **CLEAN — DO NOT BUY** | 6 frames, one-shot from motion onset at frame 8 |
+| `brass-sentry/fire` | G6 fail f0/6 | right 0, **top 0** — the *padded* `-r3` |
+| `brass-sentry/death` | G6 fail f1/8 | left 0 |
+| `rust-scavenger/walk` | **extraction fail** | *"no window of it closes"* — the stride, not the framing |
+| `rust-scavenger/chase` | G6 fail f3/12 | **top 0**, left 8 |
+| `rust-scavenger/death` | G6 fail f1/10 | top 0 |
+| `brass-courier/attack` | G6 fail f1/8 | left 0 |
+| `brass-courier/death` | G6 fail f7/10 | left 0 **and** right 0 |
+
+**`brass-courier/hurt` needing no purchase is a $1.19 saving that only the measurement could find** —
+§10's expected buy list had it as an open question. Note also that the scavenger failures have moved
+to the **top** edge, which §10 did not record.
+
+### ✅ Prompt fixes, both $0 (`c1d6f90`)
+
+- **`rust-scavenger/walk` had no distance in it.** Diffed against `chase`, which *does* produce a
+  40–50 % gait: `chase` names three visual facts, `walk` named an intention. Every quantity is now a
+  fraction of the creature's own body — the only ruler the model and the gate share. **`poseSpan` is
+  not the lever here**; a cyclic record gets no span tail at all (`motion.mjs:376`).
+- **`FRAME_MARGIN` had never reached ANY cyclic entry.** It was appended by hand per record and every
+  cyclic motion predated it, so `walk`, `chase` **and `brass-sentry/idle`** were shot with no margin
+  clause at all. `idle` was found by the new test, not by reading.
+- **`DISCHARGE_MARGIN`** measures the muzzle flash against the barrel and demands margin on **all
+  four** edges — `FRAME_MARGIN` speaks only about frame *width*, and `fire` is cut top and bottom.
+  **User decision: constrain the effect, not the gate.** No `edgeGate.mjs` threshold moved;
+  `DEFAULT_MIN_ALPHA` stays 255.
+
+### ✅ Both new padded anchors built and G1-verified ($0)
+
+Codex's in-process arithmetic was exact.
+
+| slug | canvas | figure h | margins T/B/L/R |
+|---|---|---|---|
+| `rust-scavenger` `--fill 0.45` | **3690²** | 81.1 % → **45.0 %** | 27.2 / 27.8 / 33.4 / 33.1 % |
+| `brass-courier` `--fill 0.50` | **5050²** | 91.8 % → **50.0 %** | **5.1 → 25.5** / **3.2 → 24.5** / 40.4 / 41.0 % |
+
+**G1 returns an IDENTICAL verdict on padded and unpadded** — scavenger `sole-spread 23px/23px`,
+courier `0px/0px`, same limits, same contact-limb counts — proving the blit is a pure translation.
+
+**The courier is the big one:** its anchor was 1536 × 2752 (ratio 0.558) with **3.2 % bottom margin**.
+Padding to square fixes the ratio **and** the margin in one move. `--fill 0.65` was rejected: it
+leaves 18.2 % headroom, and the 17-clip framing report shows courier clips already cut against
+18.4 %/20.6 %. `0.50` matches the sentry's **proven** ~25 % profile.
+
+### 🔴 USER-APPROVED SPEND — not yet submitted
+
+**8 clips ≈ $9.52, landing at $33.03 of $40, leaving $6.97.** Approved with both stop rules
+explicitly on the table (batch over 5; crossing $30). The 7 measured failures **plus**
+`brass-sentry/idle`, with the instruction: *"Do option one if needed. Do the 8 clip batch."* —
+i.e. run the **$0 investigation of idle's loop snap first** and do not waste $1.19 if it turns out to
+be a keying/sampler bug rather than art.
+
+**The idle investigation is the immediate next task and it is free.** Extraction reported a healthy
+`wrap/step 0.13`; `gateLoopWrap` fails the packed strip. **The two stages key the image
+differently** — `build-clips` uses `borderKey`, `build-assets` uses `estimateKeyColour`. That seam
+has produced a false verdict on this project once already (R3).
+
+**Before submitting anything:** upload both padded anchors, then add their URLs **and sha256** to
+`PADDED_ANCHORS` in `clipJobs.mjs`. A padded record whose URL equals its slug's unpadded URL throws
+at import by design. `brass-courier/hurt` is **NOT** in the batch.
+
+### Traps session 5 added or confirmed
+
+- **`build-assets.mjs` is now at exactly 400 lines**, a **second** zero-headroom file beside
+  `src/sim/enemies.ts`. Both are *at*, not over, the ceiling, so `file-size.test.ts` is green at
+  10 of 10 — but neither has room for one more line. Folded into the 5.12 work item.
+- **`--derive-scale` cannot bootstrap a config.** It calls `loadConfig()` (`build-assets.mjs:154`),
+  so the file must exist first — while the error message said *"Run with --derive-scale to produce
+  one"*. That was the **second** false message found in this one file. Both corrected.
+- **`tools/gen/*.d.mts`, not `.d.ts`.** A `find -name "*.d.ts"` returns nothing and will convince you
+  there are no typings. There are seventeen.
+- **`tsc` catches test bugs `vitest` cannot.** `motion-framing.test.ts` was passing the motion spec
+  where `videoPrompt` wants the STYLE.md `blocks`, rendering a prompt production would never send —
+  every assertion still passed, because the motion clause was intact.
+- **`validateClipJob`'s parameter is deliberately looser than `ClipJob`** (`ClipJobCandidate`).
+  Typing it as `ClipJob` makes the committed **failing** fixtures un-writable in TypeScript, which
+  silently deletes the negative half of the gate *(C2)*.
+
+### Where to pick up
+
+1. **$0 — diagnose `brass-sentry/idle`'s loop snap.** Keying seam first (`borderKey` vs
+   `estimateKeyColour`), then the sampler's cycle boundary. Decides whether clip 8 is worth buying.
+2. **$0 — upload both padded anchors; record URL + sha256 in `PADDED_ANCHORS`.**
+3. **Then submit the approved batch** (≤ $9.52 → $33.03), log every `request_id`, build the
+   six-frame contact strip for each and **LOOK at it** — `ffprobe` cannot see what a clip depicts and
+   G6 cannot tell discharge from a crop.
+4. Then pack, derive fps, run G4/G5, and only then Phase C/D.
+
+**Not started:** W19 spawn-N, `tests/e2e/phase-05-combat.spec.ts` (still does not exist; all 44 e2e
+are phases 1–4), the 5.12 splits, the 5.1/5.5 re-runs, the **entire §6 QA gate** (every agent owner,
+two briefs each) and the Codex **implementation** review (5.14).
 **Phase 5 is failing and must be reported failing.**
