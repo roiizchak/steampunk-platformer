@@ -560,3 +560,88 @@ parallel-safe.
 **Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
 diff, saved to `docs/reviews/phase-05-impl.md`. The phase cannot be reported done until it has run and
 every finding of *its* is applied or recorded.
+
+---
+---
+
+# Phase 5 — Codex plan review of the SESSION-5 execution plan
+
+**Ran:** 2026-08-11, session 5, **before any code and before any further spend.**
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` / `fs.readFileSync`
+instruction from [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
+**Reviewed:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-glittery-sketch.md` (revision 1)
+against HANDOFF.md §10, the phase plan of record, the four reviews above, the §6 gate,
+`docs/qa/phase-05-combat.md`, `docs/generations/phase-05-ratio-match.md`, and the source each claim
+named.
+
+**Still a PLAN review, not the implementation review.** Criterion 5.14 remains **UNRUN**.
+
+**Scope split.** Codex again had no network and again could not spawn a process
+(`CreateProcessAsUserW failed: 5`), so it ran no typecheck, test, build, ffmpeg, Playwright or fal
+command. File access through `node_repl` only — **but it again did more than read**, evaluating
+`padAnchor.mjs`'s geometry in-process to check the plan's canvas arithmetic. Branch confirmed as
+`phase-05-combat`. Codex stated its own limits rather than being asked to.
+
+**Verdict: BLOCK — 4 blockers, 4 major, 1 minor. All re-verified locally.
+8 CONFIRMED, 1 PARTLY REFUTED.**
+
+**Three user decisions were declared closed to redesign in the prompt** and Codex respected that:
+spend early; re-shoot `brass-sentry/fire` with less muzzle blast rather than modify G6; split only
+the files Phase 5 touches and report 5.12 failing.
+
+## The blockers, verbatim
+
+> **Blocker — 5.4d / catalog.** *"`enemyAnimTimings()` tests use invented fixture frame counts, not
+> shipped catalog rows; `build-assets.mjs` never writes `index.json` for enemies, while
+> `GameScene.ts` reads `sheet.fps` from that catalog."*
+>
+> **Blocker — dependencies.** *"No per-action padded-anchor job config exists — `CLIP_JOBS` assigns
+> one original anchor URL per slug; nothing routes padded anchor URLs into job records before
+> `submit-clips.mjs` fires."*
+>
+> **Blocker — dependencies.** *"`character-bounds-brass-sentry.json` and
+> `character-bounds-rust-scavenger.json` don't exist; `build-assets.mjs` throws without them, and
+> even `--derive-scale` needs `renderHeightPx` from the config first."*
+>
+> **Blocker — dependencies.** *"No catalog-writing path exists for enemy sheets — `build-assets`
+> writes PNGs/reports/lift profiles but nothing updates `index.json`; Boot never registers enemy
+> animations without it."*
+>
+> **Blocker — most likely wasted spend.** *"The `brass-sentry/fire` padded re-shoot would be
+> submitted with the **original unpadded anchor**, because `submit-clips.mjs` reads `anchorUrl` from
+> `CLIP_JOBS`, which the plan never updates to point at the padded/uploaded version. This would spend
+> $1.19 without exercising the padding treatment it's meant to test."*
+
+Codex also **confirmed the arithmetic revision 1 had guessed at**, evaluated in-process through
+`padAnchor.mjs:58-80`: courier **5050²** at `--fill 0.50` → ~25.5 % / 24.5 % margins; scavenger
+**3690²** at `--fill 0.45`. The prior session's review found this same arithmetic *impossible* and
+saved $1.19; this time it holds, and the measured canvases supersede the plan's estimates.
+
+## Local re-verification — 8 CONFIRMED, 1 PARTLY REFUTED
+
+| Claim | Verdict | Decisive local evidence |
+|---|---|---|
+| Padded re-shoot submits the **unpadded** anchor | **CONFIRMED** | `clipJobs.mjs:108` `ANCHOR_URLS` is keyed **by slug**, one URL each; `:240` `const anchorUrl = ANCHOR_URLS[slug]`; `submit-clips.mjs:95` emits `--image_url "${job.anchorUrl}"`. No per-record override exists. |
+| No per-slug bounds config | **CONFIRMED** | `public/assets/config/` contains exactly `character-bounds.json` and `lift-profile.json`. Neither is per-slug. |
+| **Nothing writes `index.json`** | **CONFIRMED, and the docstring is false** | `build-assets.mjs` has exactly three `writeFileSync` calls — `:285` the strip PNG, `:328` the report, `:349` the lift profile. Its own docstring `:5` claims it *"writes both the PNG and the catalog rows"*. HANDOFF.md:251 already recorded the truth. `index.json` carries **five** courier keys and **zero** enemy rows. |
+| One shared health-bar `Graphics` | **CONFIRMED** | `enemyLayer.ts:41` `private bars!: Phaser.GameObjects.Graphics`, `:60` one `this.scene.add.graphics()` for **all** enemies. |
+| `sync()` skips uncreated bodies | **CONFIRMED** | `enemyLayer.ts:49-56` creates sprites once in `create()`; `:91-109` `sync()` has no growth path. |
+| `verify-dist.mjs` checks a fixed list | **CONFIRMED** | `:82-111` enumerates literal scene keys, symbols and prose phrases. A new symbol is not covered until added. |
+| `fire-elevated` missing from the buy list | **PARTLY REFUTED** | `slugConfig.mjs:13` omits it **deliberately, with the reason written in place**: *"that art has not been bought yet."* The repository is self-consistent; **the plan's wording was not.** |
+
+## Triage
+
+`E1…E10`, applied or recorded with a reason *(C11)*.
+
+**8 applied, 1 partly refuted and applied as a wording correction, 1 recorded with a reason. Nothing
+silently dropped.** The full disposition table is in the session-5 plan file.
+
+**Net effect:** the review **moved three pieces of unbuilt pipeline in front of the spend** and
+corrected a padded-anchor path that would have burned the entire batch. Revision 1 would have spent
+**$8.33 shooting the unpadded anchors** — testing nothing — and then packed sheets that no catalog
+row would ever have registered, leaving `EnemyLayer` drawing Rectangles and criteria 5.4, 5.4d, live
+5.7, 5.8 and 5.11 exactly as unreachable as before. The plan was rewritten as **revision 2** rather
+than patched, and the user re-confirmed the spend ordering with the new information in hand.
+
+**Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
+diff, saved to `docs/reviews/phase-05-impl.md`.
