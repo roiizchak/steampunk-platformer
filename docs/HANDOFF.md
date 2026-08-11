@@ -1,7 +1,7 @@
 # Session handoff — Phase 5 (combat, enemies, hazards)
 
 **Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
-**§11 (session 5) supersedes §10, which supersedes §9, §8, §4 and §6.**
+**§12 (session 6) supersedes §11, which supersedes §10, §9, §8, §4 and §6.**
 **Phase 5 is NOT complete and must not be reported complete.**
 
 Read this first, then [PRD.md](PRD.md), then
@@ -868,4 +868,143 @@ at import by design. `brass-courier/hurt` is **NOT** in the batch.
 **Not started:** W19 spawn-N, `tests/e2e/phase-05-combat.spec.ts` (still does not exist; all 44 e2e
 are phases 1–4), the 5.12 splits, the 5.1/5.5 re-runs, the **entire §6 QA gate** (every agent owner,
 two briefs each) and the Codex **implementation** review (5.14).
+**Phase 5 is failing and must be reported failing.**
+
+---
+
+## 12. Session 6 — 2026-08-11. **The batch shipped. Padding turned out to break the sprite size.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-staged-mountain.md` (revision 2, approved).
+Its Codex plan review — **BLOCK, 6 blockers, 3 major** — is appended to
+[reviews/phase-05-plan.md](reviews/phase-05-plan.md). **All re-verified locally, all CONFIRMED**,
+including two the plan's author had stated wrongly himself.
+
+**Spend: $23.51 → $31.84 of $40. $8.16 remains.** Four commits: `15f3aad`, `26aa639`, `59d0e7c`,
+plus this. `Tests 847 passed (847)`, typecheck clean, build + verify-dist ok.
+
+### 🔴 The review finding that saved the batch
+
+**Revision 1 would have spent $8.33 and extracted the clips it was buying replacements for.**
+`submit-clips.mjs` picks a download filename from what is on disk (`nextFreeDownloadPath`);
+`findClip` resolves what to extract from `CLIP_FILES`. **Nothing connected the two.** Measured one
+step before submission: six of seven keys would have landed a new `-rN` and gone on packing the
+PREVIOUS round — silently, looking exactly like success — and the seventh (`brass-courier/death`,
+declared `null`) would have thrown on an ambiguous glob.
+
+Closed by `tools/gen/clipAdoption.mjs`: every `.mp4` on disk must be the declared winner or listed in
+`SUPERSEDED_CLIPS` as knowingly rejected. **Not "newest wins"** — `jump-r2.mp4` is the standing
+counter-example, kept as evidence and deliberately not adopted. Watched go red on the **live**
+assertion with a synthetic `-r99`, reverted, verified by count.
+
+### 🔴🔴 THE FINDING THAT MATTERS MOST — padding breaks the scale
+
+`brass-courier/attack` extracted, packed, catalogued, and drew **114 px tall against `hurt`'s
+288 px**. The character shrinks to 40 % the instant it swings.
+
+`scale` is per SLUG *(vault A5)*. The courier's `0.23723229` came from an **unpadded** idle where the
+figure stands 1214 px of 1280. The padded round puts it at ~480 px of 960. `480 × 0.23723229 = 114`.
+
+> **Padding is a property of a GENERATION, and so is the scale it implies.** This is session 5's own
+> lesson — padding is not a property of a *subject* — arriving one layer down, at packing instead of
+> submission. **A per-slug scale cannot serve both a padded and an unpadded generation of one
+> character.** Any future padding decision must be all-or-nothing per subject, or scale must become
+> per-generation too.
+
+**User decision: re-shoot courier `attack`/`death` UNPADDED.** Padded records removed.
+
+### The reframe guard now measures the defect instead of banning a string
+
+Un-padding the courier exposed that `validateClipJob` rejected the literal `"9:16"` as *"the specific
+defect"* — right about the evidence, wrong about the rule.
+
+**The courier anchor is 1536 × 2752 = 0.558, which IS 9:16.** So for the courier `9:16` is the
+*matched* ratio and `1:1` is the reframe — the opposite of the sentry and scavenger, whose anchors are
+square. Every clean courier sheet the project ships was shot at `9:16`. The blanket ban forbade the
+only correct ratio for one of three subjects.
+
+The guard now compares `anchorRatio` against the submitted ratio (`clipAnchors.expectedAspectRatio`).
+**Stricter, not looser** — it catches a reframe on any subject in either direction. Committed failing
+fixtures cover both directions. Same correction G6 has had twice: change what it MEASURES, never what
+it TOLERATES.
+
+### What the seven clips actually did
+
+Framing is **solved**: no subject crop in five of seven strips, on two anchors never ratio-matched
+before, confirmed by eye at full resolution. `rust-scavenger/walk` — which previously failed
+extraction outright — now closes at **exactly 2.0 cycles**.
+
+```
+PACK   rust-scavenger/walk   12 frames, cycle 2.0   (blocked at pack: needs a 296px cell vs 288 global)
+PACK   rust-scavenger/chase  12 frames, cycle 2.6   (blocked at catalog: stride not measured)
+PACK   brass-courier/attack   8 frames              (WRONG SCALE — re-shoot unpadded)
+PACK   brass-courier/death   10 frames              (WRONG SCALE; cell 7 of 10 flagged a fragment)
+FAIL   brass-sentry/fire     G6 f0/6   L232 R0 T278 B244
+FAIL   brass-sentry/death    G6 f1/8   L2   R0 T16  B244
+FAIL   rust-scavenger/death  G6 f7/10  L14  R0 T532 B228
+```
+
+**`brass-sentry/fire-r4` has almost no discharge.** `DISCHARGE_MARGIN` was satisfied by the model very
+largely **not firing** — a thin wisp of smoke, no flash. That is the `SPAN_CLIP` failure shape: a
+constraint describing a SHAPE, met by not performing the action. Declared as winner because it is the
+round the gates must judge, **not** because it is better art.
+
+### ✅ `brass-courier/hurt` SHIPS — the first Phase 5 combat sheet in the catalog
+
+It extracted clean from the **existing unpadded** clip, needed no purchase, and is now catalogued at
+288 px with fps 20 derived. Only the per-action sweep found it; it saved $1.19. `PENDING_ART` is down
+from three to two.
+
+### Traps session 6 added or confirmed
+
+- 🔴 **Per-action `assets:build` DESTROYED five lift-profile entries.** The write REPLACED the whole
+  file, so `assets:build brass-courier hurt` cut `animations` from `idle, walk, run, jump, fall` to
+  just `hurt`. That file is **tracked** and is the independent oracle for criterion 4.19. Found by a
+  test failing on a missing `run` key, not by anything watching the write. Fixed with
+  `upsertLiftProfile` — the same merge `upsertCatalogSheets` already used. **Per-action runs are not
+  a misuse; they are what extraction requires.**
+- **`build-assets` writes the sheet PNG BEFORE it can know the catalog row will resolve**, so a throw
+  leaves a packed sheet with no row. Third instance of the loop-write trap. Two orphans removed.
+- **`verify-dist`'s bare-symbol list cannot see a module-scope dev function.** esbuild minifies the
+  name away entirely — `spawnDevEnemies` and `DEV_FLEET_COUNT` are **absent from `dist/`**, so that
+  check can never fire either way. Proven by removing the guard, rebuilding, and watching
+  `verify-dist ok` print anyway. Class **method** names DO survive (as `spawnDevFleet(){}`, exactly
+  like `togglePlayground(){}`) but survive identically whether guarded or not, so they cannot
+  discriminate either. **The real protection for dev module-scope code is the guard discipline plus
+  review, not the build gate.** Recorded, not fixed — an empty-body assertion would discriminate and
+  is the obvious next move.
+- **`--derive-scale` hardcoded `findSource('idle')`** and the scavenger has no `idle` BY DESIGN, so it
+  threw while the config's error message told you to run it. Now action-aware. Scavenger scale
+  **0.56074766** from `walk`, spread **4.2 %** against the sentry's 0.3 % — because a gait is not a
+  neutral pose. Recorded in the config.
+- **An unescaped apostrophe in a test title** (`session 1's`) terminated a single-quoted string and
+  produced a brace error 100 lines away. Reword rather than escape.
+
+### Where to pick up
+
+**1. The four approved re-shoots — $4.76 → $36.60, leaving $3.40.** Already authorised:
+   - `brass-courier/attack` + `/death` **UNPADDED at 9:16** (the guard now resolves this automatically;
+     both carry `FRAME_MARGIN`, which round 1 lacked, so it is a genuine single-variable retry).
+   - `brass-sentry/death` + `rust-scavenger/death` **with a tighter debris clause** — NOT YET WRITTEN.
+     Write it in `motionCombat.mjs` first. ⚠️ The last containment clause (`DISCHARGE_MARGIN`) was
+     satisfied by the model not performing the action; a debris clause risks a flat death the same way.
+
+**2. `rust-scavenger/walk` needs a cell decision.** `packStrip` refuses it: frame 6 is 270 px wide and
+   its centroid sits 122 px from its left edge, so it needs **296 px** against the **288 px global
+   cell** (decision M3, ONE cell for every subject). Widening the cell touches every sheet; lowering
+   the scavenger's scale is "rescale one animation to fit", which vault 4.14 forbids. **This is a
+   STOP-and-ask, not a tuning.**
+
+**3. Then:** measure the scavenger stride off the packed walk/chase strips → paste into
+   `character-bounds-rust-scavenger.json` → their catalog rows resolve. `tools/gen/sheetGates.mjs`
+   (new, this session) runs G4/G5 on any packed sheet: `node tools/gen/sheetGates.mjs <slug> <action>`.
+
+**Not started:** `tests/e2e/phase-05-combat.spec.ts` (W18 — still does not exist; all 44 e2e are
+phases 1–4), the **entire §6 QA gate** (every agent owner, two briefs each), and the Codex
+**implementation** review (5.14).
+
+**Criterion 5.12 has NOT moved.** The over-limit count is still exactly **10**. The three files split
+this session sat *at* 400, never over it, so removing their zero-headroom risk removed nobody from the
+list. The ten genuine offenders (`gates.mjs` 726, `GameScene.ts` 611, `prompt.mjs` 586, `chroma.mjs`
+556, …) are untouched.
+
 **Phase 5 is failing and must be reported failing.**

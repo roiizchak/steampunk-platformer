@@ -158,3 +158,16 @@ save**; it is worth about six clips.
 Five paid generations remain **unattributable** — the orphaned job records above — so they are inside
 the $31.39 but cannot be traced to a prompt or a date. That is the practical cost of the vault 4.17
 violation, now denominated: **~$6 of spend with no provenance.**
+
+---
+
+## Session 6 — the padded round
+
+**7 clips, $8.33. Spend $23.51 → $31.84 of $40.** Full provenance, every `request_id`, the
+hash-verified anchor uploads and the per-clip verdicts:
+[generations/phase-05-padded-round.md](generations/phase-05-padded-round.md).
+
+The headline is not the framing (which is solved — no subject crop in five of seven strips, on two
+anchors never ratio-matched before). It is that **padding changes the subject's size in the output,
+and `scale` is stored per SLUG**, so the padded courier `attack` packed at 114 px against `hurt`'s
+288 px. Padding is a property of a GENERATION and so is the scale it implies. Recorded there in full.
