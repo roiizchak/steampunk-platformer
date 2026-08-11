@@ -124,6 +124,16 @@ const ANCHOR_URLS = Object.freeze({
 const CLIP_FILES = Object.freeze({
   'brass-courier/attack': 'brass-courier-attack-r2.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
+  /**
+   * The ratio-match re-shoot (`request_id 019fef56-67bf-7922-943c-417809ed8ba0`).
+   *
+   * Round 1 was submitted at `9:16` from a `1:1` anchor and every frame was cut at BOTH sides
+   * (G6: 6 of 6 fail, `left 0 / right 0`). This round changed **only** the aspect ratio, to the
+   * `1:1` that `ASSET-PIPELINE.md` already prescribed and `CLIP_JOBS` already reads — so anchor
+   * ratio equals output ratio and no reframing happens. G6: **0 of 6 fail**, margins 84-180px on
+   * all four edges. See `docs/generations/phase-05-ratio-match.md`.
+   */
+  'brass-sentry/idle': 'brass-sentry-idle-r2.mp4',
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',

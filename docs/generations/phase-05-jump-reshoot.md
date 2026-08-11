@@ -40,9 +40,13 @@ Phase 5 sentry clips.
 > `motion.mjs:286,291` already recorded cause (2) independently, describing a prior jump that
 > translated upward inside its frame until sampled frames had no head.
 >
-> **Both causes spend the same resource: margin in the anchor.** That, and not a single-axis
-> mechanism, is what justifies the anchor-padding probe. See
-> [phase-05-anchor-padding.md](phase-05-anchor-padding.md).
+> **The reframe cause was then confirmed by measurement and by a probe.** Across all 17 paid clips,
+> **7 of 7 reframed clips are cut** — deterministic. And a single-variable ratio-match re-shoot of
+> `brass-sentry/idle` took it from **6 of 6 frames cut to 0 of 6**. See
+> [phase-05-ratio-match.md](phase-05-ratio-match.md).
+>
+> `jump` itself is **not** fixed by that finding: the courier anchor is already ~9:16, so its Phase 4
+> shot had no reframe to remove, and it is the **motion** cause that cuts it. That remains unsolved.
 
 ## The probe was genuinely single-variable
 

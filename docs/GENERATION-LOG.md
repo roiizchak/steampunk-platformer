@@ -64,6 +64,10 @@ and nothing else moves.**
 | [generations/phase-04-video.md](generations/phase-04-video.md) | 4b/I · 4b/J · batch V | `bytedance/seedance-2.0/image-to-video` | 21 clips + 1 edit |
 | [generations/phase-05-anchors.md](generations/phase-05-anchors.md) | Phase 5 step 4b — enemy anchors, **G1-gated before any clip** | `fal-ai/nano-banana-pro` | 6 · $0.90 |
 | [generations/phase-05-clips.md](generations/phase-05-clips.md) | Phase 5 step 5 — combat + enemy clips, **generated and measured, not yet verified** | `bytedance/seedance-2.0/image-to-video` | 11 · ≈$13.09 |
+| [generations/phase-05-jump-reshoot.md](generations/phase-05-jump-reshoot.md) | Phase 5 — `jump` at `1:1`. Probe **REFUTED** its own hypothesis; clip kept as evidence, **not adopted** | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+| [generations/phase-05-ratio-match.md](generations/phase-05-ratio-match.md) | Phase 5 — `brass-sentry/idle` at `1:1`. Probe **CONFIRMED**: 6/6 frames cut → **0/6**. **Adopted** | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Phase 5 running total: 19 generations, $16.37 of the $40 ceiling. $23.63 remains.**
 
 **The cross-cutting entries below stay here.** The cost summary and the invoice reconciliation span
 every gate and have no single owner.
