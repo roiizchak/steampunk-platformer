@@ -101,6 +101,13 @@ export class EnemyLayer {
       subjects.push([scavenger, scavengerRenderDesc(scavenger, scale), 'rust-scavenger']);
     }
 
+    // Growth path: a dev spawn (or anything else that appends after `create()`) has no body yet.
+    // Building it here — rather than leaving the `continue` below to skip it forever — is what
+    // stops a late-appended enemy from silently missing both its body and its health bar.
+    for (let i = this.bodies.length; i < subjects.length; i++) {
+      this.addBody(subjects[i]![1]);
+    }
+
     this.bars.clear();
     for (const [i, [subject, desc, slug]] of subjects.entries()) {
       const body = this.bodies[i];

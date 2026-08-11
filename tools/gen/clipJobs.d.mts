@@ -10,6 +10,8 @@ export interface ClipJob {
   duration: string;
   /** The canvas actually submitted — the PADDED one where `anchorPadded` is true (A3a). */
   anchorUrl: string;
+  /** The anchor's measured width/height. The submitted ratio must not reframe it. */
+  anchorRatio: number;
   /** True where a per-key padded canvas overrides the slug's default anchor. */
   anchorPadded: boolean;
   /** sha256 of the local padded PNG, so an upload can be proven rather than assumed. */
@@ -29,6 +31,8 @@ export interface ClipJob {
 export interface ClipJobCandidate {
   endpoint?: unknown;
   aspectRatio?: unknown;
+  /** Deliberately loose, like every field here: the negative half of the gate must be writable. */
+  anchorRatio?: unknown;
   resolution?: unknown;
   duration?: unknown;
   anchorUrl?: unknown;

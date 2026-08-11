@@ -275,7 +275,7 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
 
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
-    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall']);
+    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt']);
   });
 
   it.each(actions)('%s: liftPx is re-derivable from the recorded source coordinates', (action) => {
@@ -328,6 +328,10 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       run: 'feet',
       jump: 'centroid',
       fall: 'centroid',
+      // Session 6. A struck courier recoils but stays on its feet — the recoil peaks around 20% and
+      // the boots never leave the floor, so `feet`, like the other grounded animations. `centroid`
+      // here would unmoor it from the ground for the 18 ticks it is drawn.
+      hurt: 'feet',
     });
   });
 
@@ -361,7 +365,7 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       expect(maxLift(action), `${action} packed flat — the per-sheet baseline is gone`).toBeGreaterThan(0);
     }
     // ...and the deepest frame of every animation, idle included, still reaches the final row.
-    for (const action of ['idle', 'walk', 'run', 'jump', 'fall'] as const) {
+    for (const action of ['idle', 'walk', 'run', 'jump', 'fall', 'hurt'] as const) {
       expect(minLift(action), `${action} never reaches its cell floor`).toBe(0);
     }
     // idle is flat BY DESIGN, stated so a future reader does not "fix" it into a bob.

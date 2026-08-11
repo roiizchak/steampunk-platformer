@@ -19,6 +19,54 @@ export const ANCHOR_URLS = Object.freeze({
 });
 
 /**
+ * Each anchor's MEASURED pixel ratio (width / height), declared rather than re-measured at runtime.
+ *
+ * Measured with this repository's own decoder; the courier's value was itself a correction — a
+ * generation log called that anchor *"a square 2048²"* and it is **1536 × 2752**, which a Codex
+ * review caught and which invalidated the recorded root cause of the whole crop problem.
+ *
+ * This is the input to the reframe guard in `clipJobs.mjs`. A padded anchor is square by
+ * construction (`padAnchor.mjs` writes an N × N canvas), so it is 1.0 and resolves to `1:1`.
+ */
+export const ANCHOR_RATIOS = Object.freeze({
+  'brass-courier': 1536 / 2752,
+  'brass-sentry': 1.0,
+  'rust-scavenger': 1.0,
+});
+
+/** Every `aspect_ratio` the endpoint accepts, as a number, from the live schema. */
+const LEGAL_RATIOS = Object.freeze({
+  '21:9': 21 / 9,
+  '16:9': 16 / 9,
+  '4:3': 4 / 3,
+  '1:1': 1,
+  '3:4': 3 / 4,
+  '9:16': 9 / 16,
+});
+
+/**
+ * The `aspect_ratio` string that does NOT reframe an anchor of this ratio — the nearest legal value.
+ *
+ * "Nearest" rather than "exact" because a generated anchor is never a perfect ratio: the courier's
+ * 1536 × 2752 is 0.5581 against 9:16's 0.5625, a 0.8 % difference that no model will reframe over.
+ * The gap to the next legal value (`3:4`, 0.75) is 34 %, so the choice is never ambiguous in
+ * practice — and if a future anchor ever lands between two values, that is a fact worth failing on
+ * rather than rounding, so the caller checks the margin.
+ */
+export function expectedAspectRatio(ratio) {
+  let best = null;
+  let bestErr = Infinity;
+  for (const [name, value] of Object.entries(LEGAL_RATIOS)) {
+    const err = Math.abs(Math.log(ratio / value));
+    if (err < bestErr) {
+      bestErr = err;
+      best = name;
+    }
+  }
+  return best;
+}
+
+/**
  * PER-KEY padded-anchor overrides. **This is the highest-value record in the file.**
  *
  * ## The defect it closes
@@ -116,30 +164,22 @@ export const PADDED_ANCHORS = Object.freeze({
   }),
 
   /**
-   * `brass-courier --fill 0.50` → **5050²**, figure 91.8 % → 50.0 % of height, margins
-   * **T5.1 → 25.5**, **B3.2 → 24.5**, L40.4 R41.0. G1 identical padded and unpadded
-   * (`sole-spread 0px/0px`).
+   * ⚠️ **`brass-courier/attack` and `/death` had padded records here and they were REMOVED in
+   * session 6, after the padded round was bought, packed and measured.**
    *
-   * **The courier is the big one.** Its anchor is 1536 × 2752 — ratio **0.558**, essentially 9:16 —
-   * with only 3.2 % bottom margin. Padding to square fixes the **ratio** and the **margin** in one
-   * move, and the ratio is the deterministic cause: 7 of 7 reframed clips were cut. Every prior
-   * courier clip was shot from a non-square anchor, so this is the first time the courier gets the
-   * treatment that took the sentry from 6/6 failing to 0/6.
+   * The padded courier clip framed cleanly — no crop on any edge, which is what padding is for.
+   * But `scale` is stored per SLUG (vault A5) and the courier's, 0.23723229, was derived from an
+   * UNPADDED idle in which the figure stands 1214 px of a 1280 px frame. In the padded round the
+   * figure fills ~480 px of a 960 px frame, so the same scale drew `attack` **114 px tall against
+   * `hurt`'s 288 px** — the character shrinking to 40 % the instant it swings.
    *
-   * Uploaded 2026-08-11 (session 6) and hash-verified by re-download.
+   * **Padding is a property of a GENERATION and so is the scale it implies; a per-slug scale cannot
+   * serve both.** That is this file's own opening lesson, arriving one layer further down.
+   *
+   * The courier is re-shot UNPADDED instead — and unpadded means **`9:16`**, not `1:1`, because
+   * this anchor is 0.558 and 9:16 is its MATCHED ratio. Every clean courier sheet the project
+   * ships was shot that way. See the reframe guard in `clipJobs.mjs`.
    */
-  'brass-courier/attack': Object.freeze({
-    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
-    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
-    source: '_generated/anchors-padded/brass-courier-padded.png',
-  }),
-
-  /** G6 f7/10, left 0 **and** right 0 — the collapse spans the frame width. */
-  'brass-courier/death': Object.freeze({
-    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
-    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
-    source: '_generated/anchors-padded/brass-courier-padded.png',
-  }),
 
   /**
    * **`brass-courier/hurt` is deliberately absent.** It extracts CLEAN — 6 frames, one-shot from

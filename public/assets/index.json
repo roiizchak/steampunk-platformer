@@ -99,6 +99,17 @@
       "fps": 5.333333333333333,
       "loop": true,
       "derivedFrom": "authored"
+    },
+    {
+      "key": "brass-courier-hurt",
+      "url": "assets/characters/brass-courier/sheets/hurt.png",
+      "frameWidth": 288,
+      "frameHeight": 384,
+      "frameCount": 6,
+      "simTicks": 18,
+      "fps": 20,
+      "loop": false,
+      "derivedFrom": "sim"
     }
   ]
 }

@@ -39,7 +39,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { VIDEO_MOTIONS } from './motion.mjs';
 import { NAMESPACED_VIDEO_DIR, videoDirFor } from './clipSource.mjs';
-import { ANCHOR_URLS, PADDED_ANCHORS } from './clipAnchors.mjs';
+import {
+  ANCHOR_RATIOS,
+  ANCHOR_URLS,
+  PADDED_ANCHORS,
+  expectedAspectRatio,
+} from './clipAnchors.mjs';
 
 /**
  * Every generated-clip key: the ten namespaced `slug/action` combat/enemy ones AND the five legacy
@@ -111,7 +116,8 @@ export const ASPECT_RATIO = readPrescribedAspectRatio();
  * way. `idle`/`walk`/`run`/`fall` are declared now for the same reason, pre-emptively.
  */
 const CLIP_FILES = Object.freeze({
-  'brass-courier/attack': 'brass-courier-attack-r2.mp4',
+  'brass-courier/attack': 'brass-courier-attack-r3.mp4',
+  'brass-courier/death': 'brass-courier-death-r2.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
   /**
    * The ratio-match re-shoot (`request_id 019fef56-67bf-7922-943c-417809ed8ba0`).
@@ -142,11 +148,11 @@ const CLIP_FILES = Object.freeze({
    * (`request_id 019ff0db-0597-7490-ae69-921c125fed29`). It is the best fire this project has, and
    * its one remaining failure is the muzzle blast leaving frame, not the turret.
    */
-  'brass-sentry/fire': 'brass-sentry-fire-r3.mp4',
-  'brass-sentry/death': 'brass-sentry-death-r2.mp4',
-  'rust-scavenger/walk': 'rust-scavenger-walk-r2.mp4',
-  'rust-scavenger/chase': 'rust-scavenger-chase-r2.mp4',
-  'rust-scavenger/death': 'rust-scavenger-death-r2.mp4',
+  'brass-sentry/fire': 'brass-sentry-fire-r4.mp4',
+  'brass-sentry/death': 'brass-sentry-death-r3.mp4',
+  'rust-scavenger/walk': 'rust-scavenger-walk-r3.mp4',
+  'rust-scavenger/chase': 'rust-scavenger-chase-r3.mp4',
+  'rust-scavenger/death': 'rust-scavenger-death-r3.mp4',
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',
@@ -177,17 +183,53 @@ export function clipStem(key) {
  */
 export function validateClipJob(key, job) {
   const problems = [];
-  if (job.aspectRatio === '9:16') {
+  /**
+   * **The defect is a REFRAME, not a string.**
+   *
+   * This used to reject the literal `"9:16"` as *"the specific defect"*. That was right about the
+   * evidence and wrong about the rule, and session 6 found the difference the expensive way.
+   *
+   * What the 17-clip framing report actually measured is that a clip is cut whenever the OUTPUT
+   * ratio differs from its ANCHOR's ratio — **7 of 7, two subjects, both directions of mismatch.**
+   * `9:16` was the defect for `brass-sentry` and `rust-scavenger` because their anchors are square.
+   * For `brass-courier` it is the opposite: that anchor is **1536 × 2752 = 0.558**, which IS 9:16,
+   * so `9:16` is the ratio-MATCHED choice and `1:1` is the reframe. Every clean courier sheet the
+   * project ships — `idle`, `walk`, `run`, `jump`, `fall`, `hurt` — was shot at `9:16`.
+   *
+   * A blanket ban therefore forbade the only correct ratio for one of the three subjects, and would
+   * have forced its re-shoots through the very reframe the ban exists to prevent.
+   *
+   * So the guard now measures **anchor ratio vs submitted ratio**, which is the thing that was
+   * always meant. This is the same correction G6 has had twice: change what it MEASURES, never what
+   * it TOLERATES. `ASPECT_RATIO` from `ASSET-PIPELINE.md` remains the prescribed default and is what
+   * a square anchor resolves to; it is no longer treated as the only legal value for every subject.
+   */
+  /**
+   * `anchorRatio` is checked for SHAPE before it is used, and a bad one is a problem string rather
+   * than a throw.
+   *
+   * `validateClipJob` takes a `ClipJobCandidate`, which is deliberately looser than `ClipJob` — the
+   * committed failing fixtures are hand-written partial objects, and that looseness is what keeps
+   * the negative half of this gate writable at all *(vault C2)*. The first version of this check
+   * called `job.anchorRatio.toFixed(4)` unguarded and threw `TypeError: Cannot read properties of
+   * undefined` on five existing fixtures — turning a gate that reports problems into one that
+   * crashes, which reports nothing.
+   */
+  if (typeof job.anchorRatio !== 'number' || !(job.anchorRatio > 0)) {
     problems.push(
-      `${key}: aspect_ratio "9:16" is the specific defect that cropped every generated sentry ` +
-        'clip left and right — the square anchor forced into a 9:16 frame. Never submit it again.',
+      `${key}: anchorRatio must be a positive number (got ${JSON.stringify(job.anchorRatio)}). ` +
+        'Without it there is no way to tell whether the submitted aspect_ratio reframes the anchor.',
     );
-  }
-  if (job.aspectRatio !== ASPECT_RATIO) {
-    problems.push(
-      `${key}: aspect_ratio "${job.aspectRatio}" does not match ASSET-PIPELINE.md's prescribed ` +
-        `"${ASPECT_RATIO}" for ${ENDPOINT_ID}.`,
-    );
+  } else {
+    const expected = expectedAspectRatio(job.anchorRatio);
+    if (job.aspectRatio !== expected) {
+      problems.push(
+        `${key}: aspect_ratio "${job.aspectRatio}" REFRAMES its anchor. The anchor's ratio is ` +
+          `${job.anchorRatio.toFixed(4)}, so it must be shot at "${expected}". Reframing cut 7 of 7 ` +
+          `measured clips — it is the one deterministic cause of the crop, and no prompt clause ` +
+          `overrides it.`,
+      );
+    }
   }
   if (job.resolution !== RESOLUTION) {
     problems.push(`${key}: resolution "${job.resolution}" does not match the known-good "${RESOLUTION}".`);
@@ -268,7 +310,10 @@ export const CLIP_JOBS = Object.freeze(
       }
       const job = Object.freeze({
         endpoint: ENDPOINT_ID,
-        aspectRatio: ASPECT_RATIO,
+        // A padded canvas is square by construction; an unpadded one keeps its own measured
+        // ratio. The submitted ratio is then whatever does NOT reframe it.
+        anchorRatio: padded ? 1 : ANCHOR_RATIOS[slug],
+        aspectRatio: expectedAspectRatio(padded ? 1 : ANCHOR_RATIOS[slug]),
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl: padded ? padded.url : slugAnchor,

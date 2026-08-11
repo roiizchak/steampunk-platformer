@@ -69,11 +69,14 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the six animations these assertions cover', () => {
+  it('the catalog declares the seven animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
       'brass-courier-fall',
+      // Session 6: extracted clean from the EXISTING unpadded clip — no purchase, found only by a
+      // per-action sweep. The first Phase 5 combat sheet to ship.
+      'brass-courier-hurt',
       'brass-courier-idle',
       'brass-courier-jump',
       'brass-courier-run',

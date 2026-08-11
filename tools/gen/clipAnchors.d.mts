@@ -23,3 +23,12 @@ export interface PaddedAnchor {
  * is why this is keyed by `slug/action` and `ANCHOR_URLS` is keyed by slug.
  */
 export declare const PADDED_ANCHORS: Readonly<Record<string, Readonly<PaddedAnchor>>>;
+
+/** Each anchor's measured width/height, declared rather than re-measured at runtime. */
+export declare const ANCHOR_RATIOS: Readonly<Record<string, number>>;
+
+/**
+ * The `aspect_ratio` string that does NOT reframe an anchor of this ratio — the nearest legal
+ * value. Reframing is the one deterministic cause of the crop (7 of 7 measured clips).
+ */
+export declare function expectedAspectRatio(ratio: number): string;

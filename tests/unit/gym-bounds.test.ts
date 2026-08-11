@@ -201,7 +201,16 @@ describe('the shipped character-bounds.json', () => {
   });
 
   it('declares every animation the Gym can select', () => {
-    expect(Object.keys(raw.animations).sort()).toEqual(['fall', 'idle', 'jump', 'run', 'walk']);
+    // `hurt` joined in session 6 — the first Phase 5 combat sheet to ship, and the Gym can select
+    // it like any other. `attack` and `death` are not here yet: both are pending a re-shoot.
+    expect(Object.keys(raw.animations).sort()).toEqual([
+      'fall',
+      'hurt',
+      'idle',
+      'jump',
+      'run',
+      'walk',
+    ]);
   });
 });
 

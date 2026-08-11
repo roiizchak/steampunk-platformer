@@ -43,19 +43,31 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * reframe defect that cut 7 of 7 reframed clips. Superseded by the `1:1` round, kept on disk.
    */
   'brass-sentry/idle': Object.freeze(['brass-sentry-idle.mp4']),
-  'brass-sentry/death': Object.freeze(['brass-sentry-death.mp4']),
-  'rust-scavenger/walk': Object.freeze(['rust-scavenger-walk.mp4']),
-  'rust-scavenger/chase': Object.freeze(['rust-scavenger-chase.mp4']),
-  'rust-scavenger/death': Object.freeze(['rust-scavenger-death.mp4']),
-  'brass-courier/attack': Object.freeze(['brass-courier-attack.mp4']),
+  'brass-sentry/death': Object.freeze(['brass-sentry-death.mp4', 'brass-sentry-death-r2.mp4']),
+  'rust-scavenger/walk': Object.freeze(['rust-scavenger-walk.mp4', 'rust-scavenger-walk-r2.mp4']),
+  'rust-scavenger/chase': Object.freeze(['rust-scavenger-chase.mp4', 'rust-scavenger-chase-r2.mp4']),
+  'rust-scavenger/death': Object.freeze(['rust-scavenger-death.mp4', 'rust-scavenger-death-r2.mp4']),
+  'brass-courier/attack': Object.freeze(['brass-courier-attack.mp4', 'brass-courier-attack-r2.mp4']),
+  'brass-courier/death': Object.freeze(['brass-courier-death.mp4']),
   'brass-courier/hurt': Object.freeze(['brass-courier-hurt.mp4']),
 
   /**
-   * `fire` has two superseded rounds, not one: round 1 at `9:16`, then `-r2`, the ratio-matched
-   * control for the padding probe. `-r3` (padded anchor, 3130²) is the declared winner and the best
-   * fire this project has.
+   * `fire` has THREE superseded rounds — the most re-shot clip in the project. Round 1 at `9:16`;
+   * `-r2`, the ratio-matched control for the padding probe; and `-r3`, the padding probe itself
+   * (3130² anchor), which took G6 from 5-of-6 failing to 1-of-6 and was the best fire this project
+   * had until session 6. `-r4` is the declared winner: same padded anchor, plus session 5's
+   * `DISCHARGE_MARGIN` clause.
+   *
+   * ⚠️ **`-r4`'s discharge is nearly absent** — see `docs/generations/`. The margin clause was
+   * satisfied by the model very largely not firing, which is the `SPAN_CLIP` failure shape (a
+   * constraint describing a SHAPE, met by not performing the action). It is declared because it is
+   * the round the gates must now judge, **not** because it is agreed to be better art.
    */
-  'brass-sentry/fire': Object.freeze(['brass-sentry-fire.mp4', 'brass-sentry-fire-r2.mp4']),
+  'brass-sentry/fire': Object.freeze([
+    'brass-sentry-fire.mp4',
+    'brass-sentry-fire-r2.mp4',
+    'brass-sentry-fire-r3.mp4',
+  ]),
 });
 
 /**

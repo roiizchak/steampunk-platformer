@@ -416,6 +416,60 @@
           "liftPx": 9
         }
       ]
+    },
+    "hurt": {
+      "anchor": "feet",
+      "deepestSourceY": 1211,
+      "frames": [
+        {
+          "index": 0,
+          "sourceMinY": 2,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 613.521,
+          "drawnHeight": 287,
+          "liftPx": 0
+        },
+        {
+          "index": 1,
+          "sourceMinY": 136,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 642.947,
+          "drawnHeight": 255,
+          "liftPx": 0
+        },
+        {
+          "index": 2,
+          "sourceMinY": 136,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 642.874,
+          "drawnHeight": 255,
+          "liftPx": 0
+        },
+        {
+          "index": 3,
+          "sourceMinY": 114,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 640.625,
+          "drawnHeight": 260,
+          "liftPx": 0
+        },
+        {
+          "index": 4,
+          "sourceMinY": 28,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 633.153,
+          "drawnHeight": 281,
+          "liftPx": 0
+        },
+        {
+          "index": 5,
+          "sourceMinY": 0,
+          "sourceMaxY": 1211,
+          "sourceCentroidY": 607.547,
+          "drawnHeight": 288,
+          "liftPx": 0
+        }
+      ]
     }
   }
 }

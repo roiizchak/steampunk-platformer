@@ -28,6 +28,7 @@ import {
   validateClipJob,
   videoDirExists,
 } from '../../tools/gen/clipJobs.mjs';
+import { expectedAspectRatio } from '../../tools/gen/clipAnchors.mjs';
 import { COMBAT_MOTIONS } from '../../tools/gen/motionCombat.mjs';
 import { VIDEO_MOTIONS } from '../../tools/gen/motion.mjs';
 
@@ -42,19 +43,54 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
     expect(ASPECT_RATIO).toBe(prescribed);
   });
 
-  it('never submits aspect_ratio "9:16" — the specific defect that cropped every sentry clip left and right', () => {
+  /**
+   * **The rule is "no record REFRAMES its anchor", not "no record says 9:16".**
+   *
+   * This assertion used to ban the literal string. That was right about the evidence and wrong
+   * about the rule. What the 17-clip framing report measured is that a clip is cut whenever the
+   * OUTPUT ratio differs from its ANCHOR's ratio — 7 of 7, two subjects, both directions. `9:16`
+   * was the defect for `brass-sentry` and `rust-scavenger`, whose anchors are square. For
+   * `brass-courier` it is the reverse: that anchor is 1536 x 2752 = 0.558, so `9:16` is its MATCHED
+   * ratio and `1:1` is the reframe — and every clean courier sheet the project ships (idle, walk,
+   * run, jump, fall, hurt) was shot at `9:16`.
+   *
+   * The blanket ban therefore forbade the only correct ratio for one of three subjects. The
+   * replacement is STRICTER, not looser: it catches a reframe on any subject in either direction,
+   * where the string ban caught one value on one anchor shape.
+   */
+  it('no record reframes its anchor — the one deterministic cause of the crop', () => {
     for (const [key, job] of Object.entries(CLIP_JOBS)) {
-      expect(job.aspectRatio, `${key}: aspect_ratio must never be "9:16" (the sentry-cropping defect)`).not.toBe(
-        '9:16',
+      expect(job.aspectRatio, `${key} reframes an anchor of ratio ${job.anchorRatio}`).toBe(
+        expectedAspectRatio(job.anchorRatio),
       );
     }
   });
 
-  it("every record's aspect_ratio matches ASSET-PIPELINE.md's prescribed value", () => {
+  it('a square anchor resolves to exactly the ratio ASSET-PIPELINE.md prescribes', () => {
+    // The doc's prescribed value is the SQUARE case — which is what the sentry, the scavenger and
+    // every padded canvas are. It is no longer asserted over records whose anchor is not square.
     const prescribed = readPrescribedAspectRatio();
+    expect(expectedAspectRatio(1)).toBe(prescribed);
     for (const [key, job] of Object.entries(CLIP_JOBS)) {
-      expect(job.aspectRatio, key).toBe(prescribed);
+      if (job.anchorRatio === 1) {
+        expect(job.aspectRatio, key).toBe(prescribed);
+      }
     }
+  });
+
+  it('catches a reframe in BOTH directions, on committed failing fixtures (C2)', () => {
+    // A square anchor shot at 9:16 — session 1's actual error, which cut every sentry clip.
+    expect(validateClipJob('fixture/square-at-9:16', {
+      ...CLIP_JOBS['brass-sentry/idle'],
+      anchorRatio: 1,
+      aspectRatio: '9:16',
+    }).join(' ')).toContain('REFRAMES its anchor');
+    // A 9:16 anchor shot at 1:1 — the mirror case, which cut jump-r2 at the top instead.
+    expect(validateClipJob('fixture/tall-at-1:1', {
+      ...CLIP_JOBS['brass-courier/hurt'],
+      anchorRatio: 1536 / 2752,
+      aspectRatio: '1:1',
+    }).join(' ')).toContain('REFRAMES its anchor');
   });
 
   it('every record matches the recorded known-good resolution, duration and endpoint', () => {
@@ -115,10 +151,11 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
   });
 
   describe('validateClipJob — a committed failing fixture (vault C2: a gate that cannot go red is decoration)', () => {
-    it('REJECTS a record submitting aspect_ratio "9:16"', () => {
+    it('REJECTS a SQUARE anchor submitted at "9:16" — the error session 1 actually made', () => {
       const bad = {
         endpoint: ENDPOINT_ID,
         aspectRatio: '9:16',
+        anchorRatio: 1,
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl: 'https://example.test/anchor.png',
@@ -126,13 +163,28 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
       };
       const problems = validateClipJob('fixture/bad-aspect-ratio', bad);
       expect(problems.length).toBeGreaterThan(0);
-      expect(problems.some((p: string) => p.includes('9:16'))).toBe(true);
+      expect(problems.some((p: string) => p.includes('REFRAMES its anchor'))).toBe(true);
+    });
+
+    it('REJECTS a record carrying no anchorRatio at all — the reframe cannot be judged without it', () => {
+      const problems = validateClipJob('fixture/no-ratio', {
+        endpoint: ENDPOINT_ID,
+        aspectRatio: ASPECT_RATIO,
+        resolution: RESOLUTION,
+        duration: DURATION,
+        anchorUrl: 'https://example.test/anchor.png',
+        file: null,
+      });
+      expect(problems.some((p: string) => p.includes('anchorRatio must be a positive number'))).toBe(
+        true,
+      );
     });
 
     it('accepts a well-formed record', () => {
       const good = {
         endpoint: ENDPOINT_ID,
         aspectRatio: ASPECT_RATIO,
+        anchorRatio: 1,
         resolution: RESOLUTION,
         duration: DURATION,
         anchorUrl: 'https://example.test/anchor.png',
@@ -160,7 +212,7 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
 
     it('brass-sentry/fire submits the PADDED canvas, matching the clip it declares', () => {
       const fire = CLIP_JOBS['brass-sentry/fire'];
-      expect(fire.file).toBe('brass-sentry-fire-r3.mp4');
+      expect(fire.file).toBe('brass-sentry-fire-r4.mp4');
       expect(fire.anchorPadded).toBe(true);
       // The decisive assertion: not merely "an anchor is set", but "not the one that was replaced".
       expect(fire.anchorUrl).not.toBe(SENTRY_UNPADDED);
@@ -219,6 +271,7 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
         validateClipJob('fixture/plain', {
           endpoint: ENDPOINT_ID,
           aspectRatio: ASPECT_RATIO,
+          anchorRatio: 1,
           resolution: RESOLUTION,
           duration: DURATION,
           anchorUrl: 'https://example.test/anchor.png',

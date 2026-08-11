@@ -3,9 +3,9 @@
  *
  * Reads `_generated/sheets/`, keys each sheet against its own measured background, detects the frame
  * layout from the pixels, packs a uniform-cell strip, and writes the PNG, the sheet report, the lift
- * profile, and — for slugs `catalogTimings.mjs` has timing rules for (`brass-sentry`,
- * `rust-scavenger`) — the catalog rows in `public/assets/index.json`. `brass-courier`'s rows predate
- * this and are untouched; see `catalogTimings.mjs`'s header.
+ * profile, and — for every `(slug, action)` pair `catalogTimings.mjs` has a timing rule for
+ * (`hasCatalogTiming`) — the catalog row in `public/assets/index.json`. Gated per action, not per
+ * slug, because a slug can have timings for only some of its declared actions.
  *
  * ## What this script refuses to do
  *
@@ -33,8 +33,8 @@ import { dropCastShadow } from './chroma.mjs';
 import { figureMetrics, packStrip, deriveScale } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
 import { configFor, workListFor } from './slugConfig.mjs';
-import { CATALOG_TIMING_SLUGS, catalogRowFor } from './catalogTimings.mjs';
-import { upsertCatalogSheets } from './catalogWrite.mjs';
+import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
+import { upsertCatalogSheets, upsertLiftProfile } from './catalogWrite.mjs';
 import { findSource, loadConfig, keySheet, framesOf, sliceFrame } from './assetSources.mjs';
 
 /** Where `upsertCatalogSheets` merges this build's rows into. */
@@ -72,8 +72,24 @@ function main() {
   const deriveOnly = process.argv.includes('--derive-scale');
 
   if (deriveOnly) {
-    // The canonical standing height comes from `idle`, the only genuinely neutral upright pose.
-    const { keyed } = keySheet(findSource(GENERATED, SLUG, 'idle'));
+    /**
+     * The canonical standing height comes from `idle` — the only genuinely neutral upright pose —
+     * **where the subject has one.**
+     *
+     * `rust-scavenger` does not, and that is a deliberate design decision, not an omission: it
+     * patrols continuously, so a standing pose is a state the sim can never enter and a sheet for
+     * it would be money spent on an unreachable frame. This branch nonetheless hardcoded
+     * `findSource(..., 'idle')`, so `--derive-scale` for the scavenger searched for
+     * `rust-scavenger-idle-clip.png` and threw — while the scavenger's own bounds config carried
+     * `"scale": null` and its error message told you to run this exact command. A deadlock, caught
+     * by the session-6 Codex plan review before it was hit.
+     *
+     * So the action is now taken from argv, defaulting to `idle` where one exists. Whichever action
+     * is used, its name is printed beside the number: the scale is pasted in BY HAND (vault A5),
+     * and a human pasting it must be able to see what it was measured from.
+     */
+    const deriveAction = ACTIONS[0] ?? 'idle';
+    const { keyed } = keySheet(findSource(GENERATED, SLUG, deriveAction));
     const heights = framesOf(keyed).map((f) => figureMetrics(f)?.height ?? 0);
     const standing = Math.round(heights.reduce((a, b) => a + b, 0) / heights.length);
     // The target height is read from the config rather than written here. It was a literal `96`,
@@ -82,7 +98,7 @@ function main() {
     // is meant to be pasted straight into the file it disagrees with.
     const renderHeight = loadConfig(CONFIG).renderHeightPx;
     const scale = deriveScale(standing, renderHeight);
-    console.log(`idle frame heights: ${heights.join(', ')}`);
+    console.log(`${deriveAction} frame heights: ${heights.join(", ")}`);
     const spread = Math.max(...heights) - Math.min(...heights);
     console.log(
       `mean standing height: ${standing} source px  (spread ${spread} px, ` +
@@ -234,14 +250,22 @@ function main() {
       summary: summary.status,
     });
 
-    if (CATALOG_TIMING_SLUGS.has(SLUG)) {
+    // Per-(slug, action), not per-slug: brass-courier only has timings for three of its eight
+    // actions, so gating on the slug alone would throw PARTWAY through a bare `assets:build
+    // brass-courier` run, after actions earlier in the loop had already been written.
+    if (hasCatalogTiming(SLUG, action)) {
       catalogRows.push(
-        catalogRowFor(SLUG, action, {
-          url: `assets/characters/${SLUG}/sheets/${action}.png`,
-          frameWidth,
-          frameHeight,
-          frameCount: frames.length,
-        }),
+        catalogRowFor(
+          SLUG,
+          action,
+          {
+            url: `assets/characters/${SLUG}/sheets/${action}.png`,
+            frameWidth,
+            frameHeight,
+            frameCount: frames.length,
+          },
+          { stridePxPerCycle: config.stridePxPerCycle?.[action] },
+        ),
       );
     }
 
@@ -289,10 +313,12 @@ function main() {
    * catch a bad regeneration by itself. It is committed and carries its inputs precisely so the
    * lift profile is reviewable in a diff when that happens.
    */
-  writeFileSync(
-    LIFT_PROFILE,
-    `${JSON.stringify({ _comment: LIFT_PROFILE_NOTE, slug: SLUG, scale, animations: liftProfile }, null, 2)}\n`,
-  );
+  upsertLiftProfile(LIFT_PROFILE, {
+    comment: LIFT_PROFILE_NOTE,
+    slug: SLUG,
+    scale,
+    animations: liftProfile,
+  });
 
   let catalogNote = '';
   if (catalogRows.length > 0) {

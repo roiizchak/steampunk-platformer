@@ -100,7 +100,12 @@ const catalogFrames = new Map<string, number>(
  * missing sheet into `deriveFps(undefined, …)` and a thrown error deep inside the table — an
  * unhelpful failure for a legitimate intermediate state.
  */
-const PENDING_ART: readonly AnimName[] = ['attack', 'hurt', 'death'];
+// `hurt` LANDED in session 6 — it extracted clean from the existing unpadded clip and needed no
+// purchase at all, which only a per-action sweep found. `attack` and `death` remain pending: their
+// session-6 rounds were shot from the PADDED courier anchor and pack at 114 px against hurt's
+// 288 px, because `scale` is per-slug and was derived from an unpadded clip. Both are being
+// re-shot unpadded at 9:16, the courier anchor's matched ratio.
+const PENDING_ART: readonly AnimName[] = ['attack', 'death'];
 
 const derived = animTimings(
   derivedFeel(DEFAULT_TUNING, ticksToMs),

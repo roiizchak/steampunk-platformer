@@ -90,7 +90,14 @@ for (const [label, path] of scanned) {
       }
     }
   }
-  for (const symbol of ['ElementEditorScene', 'PlaygroundScene', 'GymScene', '__game', '__phaserGame']) {
+  for (const symbol of [
+    'ElementEditorScene',
+    'PlaygroundScene',
+    'GymScene',
+    '__game',
+    '__phaserGame',
+    'spawnDevEnemies',
+  ]) {
     if (src.includes(symbol)) {
       problems.push(`${label} contains the DEV-only symbol ${symbol}`);
     }

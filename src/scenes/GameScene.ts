@@ -14,6 +14,7 @@ import {
 } from '../render/groundTiles';
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
 import { playerRenderDesc } from '../render/playerView';
+import { spawnDevEnemies } from './devSpawn';
 import { EnemyLayer } from './enemyLayer';
 import { playIfChanged } from './playAnim';
 import { createSnapshot, latchAttackPress, latchJumpPress } from '../sim/input';
@@ -32,6 +33,22 @@ import type { InputSnapshot, Rect, World } from '../sim/types';
 
 /** Seed for the sim's RNG. Fixed so an e2e run and a hands-on run are the same run (vault 2.3). */
 const SIM_SEED = 20260806;
+
+/**
+ * DEV-only spawn constants for criteria 5.11 and 5.7 — the two things combat itself cannot produce
+ * (see `docs/qa/` for why). Every value here is a fixed constant, never dragged or typed, which is
+ * what keeps `N`/`M` a QA fixture instead of a cheat menu.
+ *
+ * `DEV_FLEET_COUNT` 20: the shipped level places 2 enemies total (1 sentry, 1 scavenger), so 20 is a
+ * deliberate 10x stress multiple — comfortably a "worst case" no authored level approaches, while
+ * staying small enough to reason about and cheap to eyeball in Playwright.
+ */
+const DEV_FLEET_COUNT = 20;
+const DEV_FLEET_HP = 60;
+const DEV_FLEET_OFFSET_X = 200;
+/** 2 of 60: below the 3-swing floor (60 hp / 20 dmg per swing) combat can ever land on. */
+const DEV_LOW_HP = 2;
+const DEV_LOW_HP_OFFSET_X = 200;
 
 /**
  * Re-exported so the e2e specs can derive the drawn player's size instead of hardcoding it.
@@ -230,7 +247,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, Z, J } = Phaser.Input.Keyboard.KeyCodes;
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, Z, J, N, M } =
+      Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
     // second; with repeats enabled every one would latch a fresh jump edge, and holding the
@@ -277,6 +295,34 @@ export class GameScene extends Phaser.Scene {
       addKey(P).on('down', () => this.togglePlayground());
       addKey(O).on('down', () => this.toggleElementEditor());
       addKey(G).on('down', () => this.toggleGym());
+      // Criterion 5.11: a worst-case fleet at full hp.
+      addKey(N).on('down', () => this.spawnDevFleet());
+      // Criterion 5.7: one scavenger at 2/60 hp, below anything combat itself can land on.
+      addKey(M).on('down', () => this.spawnDevLowHpEnemy());
+    }
+  }
+
+  /** DEV ONLY (5.11 fixture). Guard repeated inside the body — see `togglePlayground`'s docstring. */
+  protected spawnDevFleet(): void {
+    if (import.meta.env.DEV) {
+      spawnDevEnemies(this.world, {
+        count: DEV_FLEET_COUNT,
+        hp: DEV_FLEET_HP,
+        x: this.world.player.x + DEV_FLEET_OFFSET_X,
+        y: this.world.player.y,
+      });
+    }
+  }
+
+  /** DEV ONLY (5.7 fixture). Guard repeated inside the body — see `togglePlayground`'s docstring. */
+  protected spawnDevLowHpEnemy(): void {
+    if (import.meta.env.DEV) {
+      spawnDevEnemies(this.world, {
+        count: 1,
+        hp: DEV_LOW_HP,
+        x: this.world.player.x + DEV_LOW_HP_OFFSET_X,
+        y: this.world.player.y,
+      });
     }
   }
 

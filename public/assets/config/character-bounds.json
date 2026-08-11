@@ -29,7 +29,8 @@
     "walk": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
     "run": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
     "jump": { "loop": false, "verticalAnchor": "centroid", "footOffsetPx": 0, "activeFrames": [] },
-    "fall": { "loop": false, "verticalAnchor": "centroid", "footOffsetPx": 0, "activeFrames": [] }
+    "fall": { "loop": false, "verticalAnchor": "centroid", "footOffsetPx": 0, "activeFrames": [] },
+    "hurt": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] }
   },
 
   "_verticalAnchor": "Which landmark packStrip aligns a sheet's frames on. `feet` tracks the lowest opaque row and is right whenever the ART is what puts the character on the floor - the contact frame defines the line, and a lifted boot or a flight phase reads as exactly the lift the model drew. `centroid` tracks the vertical centre of mass instead, and is right for jump and fall because the SIM owns altitude there: stepVertical already moves the sprite every tick, so art that also rises adds a second uncorrelated motion. Measured on these clips, feet-anchoring gave the jump 51 px of climb of its own and put a 48 px balloon in the middle of the fall, while centroid holds both inside ~11 px and lets only the pose change. The choice was made by LOOKING at the three candidates side by side against a ground line, which is the only way it could be made - foot and head ranges discard direction and correlation, so they cannot separate pose deformation from whole-figure drift. Codex plan review blocker 1.",
