@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SLUGS, configFor } from '../../tools/gen/slugConfig.mjs';
+import { enemyAnimKeys } from '../../src/render/enemyView';
 
 const EXPECTED_ACTIONS: Record<string, string[]> = {
   'brass-courier': ['idle', 'walk', 'run', 'jump', 'fall', 'attack', 'hurt', 'death'],
@@ -67,5 +68,20 @@ describe('slugConfig — per-slug build paths', () => {
 
   it('throws on an unknown slug', () => {
     expect(() => configFor('brass-butler')).toThrow();
+  });
+
+  /**
+   * R9: what the build makes (`slugConfig.mjs`'s `actions`) must agree with what the game plays
+   * (`enemyView.ts`'s `ANIMS_BY_SLUG`, via `enemyAnimKeys()`), or an anim gets played that no sheet
+   * was ever built for and `enemyLayer` silently falls back to a Rectangle.
+   */
+  it('agrees with enemyView.ts on the two enemy slugs\' action lists', () => {
+    const keys = enemyAnimKeys();
+    for (const slug of ['brass-sentry', 'rust-scavenger'] as const) {
+      const fromView = keys
+        .filter((k) => k.startsWith(`${slug}-`))
+        .map((k) => k.slice(slug.length + 1));
+      expect(configFor(slug).actions, slug).toEqual(fromView);
+    }
   });
 });

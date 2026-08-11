@@ -141,7 +141,7 @@ export function stepSentry(sentry: Sentry, at: Sighting): SentryStep {
   if (!sentrySees(sentry, at)) {
     return { fired: false };
   }
-  if (sentry.cooldownCounter < sentry.cooldown) {
+  if (windowOpen(sentry.cooldownCounter, sentry.cooldown)) {
     return { fired: false };
   }
   sentry.cooldownCounter = 0;

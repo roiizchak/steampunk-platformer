@@ -4,6 +4,7 @@ import { healthBarDesc, type BarSubject } from '../render/enemyHealthBar';
 import { scavengerRenderDesc, sentryRenderDesc, type EnemyRenderDesc } from '../render/enemyView';
 import type { EnemySlug } from '../sim/enemies';
 import type { World } from '../sim/types';
+import { playIfChanged } from './playAnim';
 
 /**
  * Draws the enemies, their health bars and the shots in flight.
@@ -30,9 +31,9 @@ import type { World } from '../sim/types';
  * `isSprite` runs parallel to `bodies` rather than an `instanceof` check in `sync()`, because the
  * unit test drives `EnemyLayer` against a plain mock scene, not a real `Phaser.GameObjects.Sprite`.
  *
- * The frame-0 guard (criterion 5.4) matches `GameScene.ts`'s player render exactly: `play()` only on
- * a CHANGE of `anims.getName()`, never unconditionally — two implementations of that one rule is
- * where the bug lives.
+ * `sync()`'s state-change play (criterion 5.4) routes through `playAnim.ts`'s `playIfChanged`, which
+ * `GameScene.ts`'s player render also uses — ONE implementation of the frame-0 guard AND the R4
+ * missing-key guard, rather than the two copies that used to drift here (R10).
  */
 export class EnemyLayer {
   private readonly bodies: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite)[] = [];
@@ -110,11 +111,7 @@ export class EnemyLayer {
       if (this.isSprite[i]) {
         const sprite = body as Phaser.GameObjects.Sprite;
         sprite.setFlipX(desc.flipX);
-        // Restart only on a CHANGE of animation — see the class doc. Calling play() every tick
-        // would reset a looping cycle to frame 0 on every render.
-        if (sprite.anims.getName() !== desc.animKey) {
-          sprite.play(desc.animKey);
-        }
+        playIfChanged(sprite, desc.animKey);
       } else {
         (body as Phaser.GameObjects.Rectangle).setFillStyle(desc.colour);
       }

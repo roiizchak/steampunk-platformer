@@ -29,6 +29,7 @@
 
 import type { EnemySlug, Scavenger, Sentry } from '../sim/enemies';
 import { SCAVENGER_BOX, SENTRY_BOX } from '../sim/enemies';
+import { windowOpen } from '../sim/windows';
 
 /**
  * How long the muzzle animation plays after a shot leaves, in ticks.
@@ -49,7 +50,7 @@ export function sentryAnim(sentry: Sentry): SentryAnim {
   if (sentry.hp <= 0) {
     return 'death';
   }
-  return sentry.cooldownCounter < SENTRY_FIRE_TICKS ? 'fire' : 'idle';
+  return windowOpen(sentry.cooldownCounter, SENTRY_FIRE_TICKS) ? 'fire' : 'idle';
 }
 
 /**

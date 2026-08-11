@@ -49,6 +49,9 @@ interface MockSprite {
   playCalls: string[];
   flipXCalls: boolean[];
   anims: { getName: () => string };
+  // `playIfChanged` (R4/R10) reads `sprite.scene.anims.exists`, exactly as a real
+  // `Phaser.GameObjects.Sprite` does — the mock carries it back for the same reason.
+  scene: unknown;
   setOrigin: (x: number, y: number) => MockSprite;
   setDepth: (d: number) => MockSprite;
   setFlipX: (f: boolean) => MockSprite;
@@ -57,11 +60,12 @@ interface MockSprite {
   play: (key: string) => MockSprite;
 }
 
-function makeMockSprite(initialKey: string): MockSprite {
+function makeMockSprite(initialKey: string, scene: unknown): MockSprite {
   const sprite: MockSprite = {
     animKey: initialKey,
     playCalls: [],
     flipXCalls: [],
+    scene,
     anims: { getName: () => sprite.animKey },
     setOrigin: () => sprite,
     setDepth: () => sprite,
@@ -122,7 +126,7 @@ function makeMockScene(existsKeys: ReadonlySet<string>) {
         return r;
       },
       sprite: (_x: number, _y: number, key: string) => {
-        const s = makeMockSprite(key);
+        const s = makeMockSprite(key, scene);
         sprites.push(s);
         return s;
       },

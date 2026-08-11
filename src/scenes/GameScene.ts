@@ -15,6 +15,7 @@ import {
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
 import { playerRenderDesc } from '../render/playerView';
 import { EnemyLayer } from './enemyLayer';
+import { playIfChanged } from './playAnim';
 import { createSnapshot, latchAttackPress, latchJumpPress } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
 import type { InputSnapshot, Rect, World } from '../sim/types';
@@ -436,12 +437,9 @@ export class GameScene extends Phaser.Scene {
     // one-for-one replacement rather than new behaviour.
     this.playerSprite.setFlipX(desc.flipX);
 
-    // Restart only on a CHANGE of animation. Calling play() every frame with the same key would
-    // reset the clip to frame 0 on every render, so a looping walk cycle would freeze on its
-    // first pose while `__game` cheerfully reported the right state.
-    if (this.playerSprite.anims.getName() !== desc.animKey) {
-      this.playerSprite.play(desc.animKey);
-    }
+    // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
+    // used to reimplement inline (R10).
+    playIfChanged(this.playerSprite, desc.animKey);
   }
 
   /**

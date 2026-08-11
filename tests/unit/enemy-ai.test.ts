@@ -90,6 +90,33 @@ describe('brass-sentry — criterion 5.1', () => {
   });
 });
 
+describe('sentry fire guard — A2, enemies.ts:144', () => {
+  /**
+   * `stepSentry` has TWO `windowOpen` checks: one gates the counter increment, the other gates
+   * firing. Deleting the fire guard makes every sighted tick fire (`cooldownCounter` resets to 0
+   * the instant it is seen, with nothing stopping the reset from happening every tick) — this test
+   * is what catches that; the cadence test above happens to catch it too, but this one states the
+   * property directly: fire on entry, then never again until a full cooldown has elapsed.
+   */
+  it('fires the tick the player enters radius, then exactly every SENTRY.cooldown ticks — not every tick', () => {
+    const sentry = sentryAt(1000);
+    const enterTick = 5;
+    const shotTicks: number[] = [];
+    for (let i = 0; i < SENTRY.cooldown * 3; i += 1) {
+      const inRange = i >= enterTick;
+      const playerX = inRange ? 1000 : 1000 + SENTRY.radius + 100;
+      if (stepSentry(sentry, { playerX, playerY: 0 }).fired) {
+        shotTicks.push(i);
+      }
+    }
+    expect(shotTicks[0]).toBe(enterTick);
+    expect(shotTicks.length).toBeGreaterThanOrEqual(2);
+    const gaps = shotTicks.slice(1).map((t, i) => t - shotTicks[i]);
+    expect(new Set(gaps).size).toBe(1);
+    expect(gaps[0]).toBe(SENTRY.cooldown);
+  });
+});
+
 describe('rust-scavenger — criterion 5.2', () => {
   it('patrols between its bounds and turns at them, without drifting out', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
