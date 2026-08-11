@@ -22,6 +22,60 @@ export function videoDirFor(action) {
 }
 
 /**
+ * The on-disk filename stem for an action. A filename cannot hold a `/`, so a namespaced action's
+ * clip swaps it for a hyphen — `brass-courier/attack` -> `brass-courier-attack`.
+ */
+export function clipStemOf(action) {
+  return action.replace('/', '-');
+}
+
+/**
+ * EVERY `.mp4` on disk that could be this action's clip — the declared winner, its superseded
+ * rounds, and anything a re-shoot has just landed. Sorted, so a caller's error message is stable.
+ *
+ * Extracted so the glob expression exists ONCE. `findClip` below used to carry its own copy of this
+ * filter, and the adoption contract in `clipJobs.mjs` needed the same one — two definitions of
+ * "which files could be this clip" is precisely the drift vault 5.3 is about, and this module has
+ * already paid for that lesson once (R8, where `findClip` restated `action.replace('/','-')`
+ * instead of importing the stem helper).
+ */
+export function clipCandidates(action, { dirExists = existsSync, listFiles = readdirSync } = {}) {
+  const dir = videoDirFor(action);
+  if (!dirExists(dir)) {
+    return [];
+  }
+  const stem = clipStemOf(action);
+  return listFiles(dir)
+    .filter((f) => f === `${stem}.mp4` || (f.startsWith(`${stem}-`) && f.endsWith('.mp4')))
+    .sort();
+}
+
+/**
+ * The next filename in `dir` for `stem` that does not already exist on disk. A re-shoot's rendered
+ * `--download` flag must never overwrite a paid, non-regenerable round-1 clip (vault 4.16) — this is
+ * what stops `brass-courier-attack.mp4` being clobbered instead of producing `-r2`/`-r3`.
+ *
+ * **Moved here from `submit-clips.mjs` so it can be tested and, more importantly, so the adoption
+ * contract can ask what filename a submission WOULD produce.** That question is the whole of the
+ * session-6 review's blocker: `submit-clips` computed this path independently of `CLIP_JOBS`'s
+ * declared `file`, and `findClip` trusts the declared `file` exactly — so six of seven paid
+ * re-shoots would have downloaded correctly and then been ignored in favour of the very clips they
+ * were bought to replace, silently.
+ */
+export function nextFreeDownloadPath(dir, stem, { fileExists = existsSync } = {}) {
+  const base = `${dir}/${stem}.mp4`;
+  if (!fileExists(base)) return base;
+  for (let n = 2; n <= 99; n += 1) {
+    const candidate = `${dir}/${stem}-r${n}.mp4`;
+    if (!fileExists(candidate)) return candidate;
+  }
+  throw new Error(
+    `submit-clips: every "${stem}[-r2..-r99].mp4" already exists in ${dir} — clear out a stale one ` +
+      `before rendering another command for it.`,
+  );
+}
+
+/**
  * `dirExists`/`listFiles` are injectable so `tests/unit/clip-extraction.test.ts` can exercise this
  * on synthetic directory listings — no real `_generated/`, no temp directories, and (since the test
  * lives under `tests/`, which is `tsconfig`-strict with no `@types/node`) no `node:fs` import in the
@@ -56,12 +110,9 @@ export function findClip(
     return path;
   }
 
-  // A namespaced action's clip is named on disk with the slash swapped for a hyphen — a filename
-  // cannot hold a `/` — e.g. `brass-courier/attack` -> `brass-courier-attack.mp4`.
-  const stem = action.replace('/', '-');
-  const files = listFiles(dir).filter(
-    (f) => f === `${stem}.mp4` || (f.startsWith(`${stem}-`) && f.endsWith('.mp4')),
-  );
+  // One definition of "which files could be this clip", shared with the adoption contract in
+  // `clipJobs.mjs`. This used to be a second copy of the filter now in `clipCandidates`.
+  const files = clipCandidates(action, { dirExists, listFiles });
   if (files.length === 0) {
     throw new Error(
       `assets:clips: no clip for declared animation "${action}" in ${dir}. A declared input ` +

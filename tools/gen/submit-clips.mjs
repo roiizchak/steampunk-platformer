@@ -12,30 +12,12 @@
  * renders only those.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { styleTemplate, templateBlock } from './prompt.mjs';
 import { VIDEO_MOTIONS, videoPrompt } from './motion.mjs';
 import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, clipStem } from './clipJobs.mjs';
-import { videoDirFor } from './clipSource.mjs';
-
-/**
- * The next filename in `dir` for `stem` that does not already exist on disk. A re-shoot's rendered
- * `--download` flag must never overwrite a paid, non-regenerable round-1 clip (vault 4.16) — this is
- * what stops `brass-courier-attack.mp4` being clobbered instead of producing `-r2`/`-r3`.
- */
-function nextFreeDownloadPath(dir, stem) {
-  const base = `${dir}/${stem}.mp4`;
-  if (!existsSync(base)) return base;
-  for (let n = 2; n <= 99; n += 1) {
-    const candidate = `${dir}/${stem}-r${n}.mp4`;
-    if (!existsSync(candidate)) return candidate;
-  }
-  throw new Error(
-    `submit-clips: every "${stem}[-r2..-r99].mp4" already exists in ${dir} — clear out a stale one ` +
-      `before rendering another command for it.`,
-  );
-}
+import { nextFreeDownloadPath, videoDirFor } from './clipSource.mjs';
 
 const requested = process.argv.slice(2);
 const keys = requested.length > 0 ? requested : Object.keys(CLIP_JOBS);
@@ -98,5 +80,31 @@ for (const key of keys) {
       `  --duration ${job.duration} --resolution ${job.resolution} --aspect_ratio "${job.aspectRatio}" \\\n` +
       `  --generate_audio false --download "./${downloadPath}" --json`,
   );
-  console.log(`  # wrote ${promptPath} and ${paramsPath}\n`);
+  console.log(`  # wrote ${promptPath} and ${paramsPath}`);
+
+  /**
+   * 🔴 The adoption reminder, printed where a human can still act on it.
+   *
+   * `nextFreeDownloadPath` picks the download filename from what is on disk; `findClip` resolves the
+   * clip to extract from `CLIP_JOBS[key].file`. **Nothing connected the two.** Every re-shoot
+   * therefore lands a new `-rN` that the build ignores, and the previous round keeps being packed —
+   * silently, and looking exactly like success. The session-6 Codex plan review measured this at six
+   * of seven keys for a batch about to be paid for.
+   *
+   * `tests/unit/clip-adoption.test.ts` is the gate; this line is the courtesy that stops you
+   * discovering it there.
+   */
+  const declared = job.file;
+  const willLand = basename(downloadPath);
+  if (declared !== willLand) {
+    console.log(
+      `  # ⚠️  ADOPTION: this command lands "${willLand}", but CLIP_JOBS declares ` +
+        `${declared === null ? 'no file (glob)' : `"${declared}"`}.\n` +
+        `  #     If you run it and keep the result, set CLIP_FILES["${key}"] = '${willLand}'\n` +
+        `  #     and move the old name into SUPERSEDED_CLIPS["${key}"]. Until you do, the build\n` +
+        `  #     keeps extracting the OLD clip and nothing tells you.\n`,
+    );
+  } else {
+    console.log('');
+  }
 }
