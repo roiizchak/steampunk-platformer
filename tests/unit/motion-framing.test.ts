@@ -25,7 +25,7 @@
  * way for the same reason.
  */
 import { describe, expect, it } from 'vitest';
-import { VIDEO_MOTIONS, videoPrompt } from '../../tools/gen/motion.mjs';
+import { videoPrompt } from '../../tools/gen/motion.mjs';
 import { COMBAT_MOTIONS } from '../../tools/gen/motionCombat.mjs';
 import { styleTemplate, templateBlock } from '../../tools/gen/prompt.mjs';
 
@@ -35,9 +35,17 @@ const blocks = {
   forbid: templateBlock(template, 'DO NOT INCLUDE'),
 };
 
-/** Render exactly as production does, so a clause that never reaches the string cannot pass. */
+/**
+ * Render exactly as production does, so a clause that never reaches the string cannot pass.
+ *
+ * ⚠️ The third argument is the STYLE.md `blocks`, not the motion spec — `videoPrompt` looks the
+ * spec up from `VIDEO_MOTIONS` itself. Passing the spec here renders a prompt whose RENDERING and
+ * DO-NOT-INCLUDE tails are wrong while the motion clause still reads correctly, so every assertion
+ * below would keep passing against a prompt production would never send. `tsc` caught that; vitest
+ * did not.
+ */
 function renderedPrompt(key: string): string {
-  return String(videoPrompt(template, key, (VIDEO_MOTIONS as Record<string, unknown>)[key]));
+  return String(videoPrompt(template, key, blocks));
 }
 
 const COMBAT_KEYS = Object.keys(COMBAT_MOTIONS);

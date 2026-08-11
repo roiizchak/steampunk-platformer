@@ -141,4 +141,89 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
       expect(validateClipJob('fixture/good', good)).toEqual([]);
     });
   });
+
+  /**
+   * A3a — the padded-anchor override.
+   *
+   * `ANCHOR_URLS` is keyed by SLUG, but padding is a property of a GENERATION. Before this there
+   * was no way to say "this clip was shot from the padded canvas" and no way for `submit-clips.mjs`
+   * to submit one — it reads `job.anchorUrl` and nothing else. Every planned padded re-shoot would
+   * have gone out against the unpadded anchor, testing the treatment by not applying it: a 7-clip
+   * batch is $8.33.
+   *
+   * The record was already self-contradictory when this was found. `CLIP_FILES` declares
+   * `brass-sentry/fire` as `-r3` and says in prose that it came from *"the anchor padded to 3130²"*,
+   * while the `anchorUrl` beside it resolved to the 2048² original. **Data is what gets submitted.**
+   */
+  describe('padded anchors are declared per key, not inferred', () => {
+    const SENTRY_UNPADDED = 'https://v3b.fal.media/files/b/0aa5ad07/eTruVD1130OxBEzbPfi0G_anchor.png';
+
+    it('brass-sentry/fire submits the PADDED canvas, matching the clip it declares', () => {
+      const fire = CLIP_JOBS['brass-sentry/fire'];
+      expect(fire.file).toBe('brass-sentry-fire-r3.mp4');
+      expect(fire.anchorPadded).toBe(true);
+      // The decisive assertion: not merely "an anchor is set", but "not the one that was replaced".
+      expect(fire.anchorUrl).not.toBe(SENTRY_UNPADDED);
+      expect(fire.anchorUrl).toContain('padded');
+    });
+
+    it('carries a verifiable digest for the padded bytes', () => {
+      // Anchor identity has been assumed once on this project and it cost a probe.
+      expect(CLIP_JOBS['brass-sentry/fire'].anchorSha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(CLIP_JOBS['brass-sentry/fire'].anchorSource).toContain('anchors-padded');
+    });
+
+    it('leaves every other sentry action on the unpadded slug anchor', () => {
+      // Padding is per-generation. A slug-wide override would silently re-shoot `idle`, which
+      // already packs, from a canvas it was never measured against.
+      expect(CLIP_JOBS['brass-sentry/idle'].anchorUrl).toBe(SENTRY_UNPADDED);
+      expect(CLIP_JOBS['brass-sentry/idle'].anchorPadded).toBe(false);
+      expect(CLIP_JOBS['brass-sentry/idle'].anchorSha256).toBeNull();
+    });
+
+    it('rejects a padded record whose digest is missing or malformed', () => {
+      const base = {
+        endpoint: ENDPOINT_ID,
+        aspectRatio: ASPECT_RATIO,
+        resolution: RESOLUTION,
+        duration: DURATION,
+        anchorUrl: 'https://example.test/padded.png',
+      };
+      for (const bad of [undefined, null, '', 'not-a-digest', 'ABC123']) {
+        const problems = validateClipJob('fixture/padded', {
+          ...base,
+          anchorPadded: true,
+          anchorSha256: bad,
+        });
+        expect(problems.some((p: string) => p.includes('64-character hex digest'))).toBe(true);
+      }
+    });
+
+    it('rejects a digest on a record that does not claim padding', () => {
+      // A dangling digest describes bytes that were never submitted.
+      const problems = validateClipJob('fixture/dangling', {
+        endpoint: ENDPOINT_ID,
+        aspectRatio: ASPECT_RATIO,
+        resolution: RESOLUTION,
+        duration: DURATION,
+        anchorUrl: 'https://example.test/anchor.png',
+        anchorPadded: false,
+        anchorSha256: 'a'.repeat(64),
+      });
+      expect(problems.some((p: string) => p.includes('without declaring anchorPadded'))).toBe(true);
+    });
+
+    it('tolerates a record that simply omits the padding fields', () => {
+      // An absent digest on an unpadded record is an ordinary record, not a malformed one.
+      expect(
+        validateClipJob('fixture/plain', {
+          endpoint: ENDPOINT_ID,
+          aspectRatio: ASPECT_RATIO,
+          resolution: RESOLUTION,
+          duration: DURATION,
+          anchorUrl: 'https://example.test/anchor.png',
+        }),
+      ).toEqual([]);
+    });
+  });
 });
