@@ -515,13 +515,40 @@ Codex **implementation** review (5.14). **Phase 5 is failing and must be reporte
 
 ---
 
-## 10. Session 4 — 2026-08-11. **The measurement refuted the probe, for $0. Nothing was spent.**
+## 10. Session 4 — 2026-08-11. **The measurement killed the planned probe; a better one confirmed the cause.**
 
 Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-pure-crane.md` (revision 2, approved).
 Its Codex plan review — **BLOCK, 4 blockers, all four re-verified locally and CONFIRMED** — is appended
 to [reviews/phase-05-plan.md](reviews/phase-05-plan.md).
 
-**Spend: $15.18. Unchanged. $24.82 remains.**
+**Spend: $15.18 → $16.37 of $40. $23.63 remains.** One generation, user-approved, and it was **not**
+the one the plan budgeted for — see the two blocks below in order.
+
+> ### ✅ THE PROBE THAT DID RUN — and it worked
+>
+> After the padding probe was cancelled (next block), the data pointed at **reframing** instead, and
+> a single-variable ratio-match re-shoot of `brass-sentry/idle` confirmed it.
+> **`request_id 019fef56-67bf-7922-943c-417809ed8ba0`**, full log in
+> [generations/phase-05-ratio-match.md](generations/phase-05-ratio-match.md).
+>
+> Same anchor, same 720p/4 s, **prompt byte-identical by md5**; only `aspect_ratio` moved, `9:16` →
+> `1:1`, so anchor ratio equals output ratio and nothing reframes.
+>
+> ```
+> CONTROL 9:16   6 of 6 frames FAIL G6, left 0 / right 0 on every one
+> PROBE   1:1    0 of 6 frames FAIL G6, margins 84-180px on all four edges
+> ok  brass-sentry/idle 8 frames from 97 — cycle 35 frames (2.8 in clip)
+> ```
+>
+> **The first Phase 5 clip ever to survive extraction.** Adopted — `CLIP_JOBS` declares
+> `brass-sentry-idle-r2.mp4`; round 1 kept, not deleted.
+>
+> **What it does NOT show:** that ratio-matching is enough for **high-motion** actions. `idle` is the
+> lowest-motion clip in the phase, picked deliberately to isolate reframe from motion. The four
+> `brass-courier` clips cut with **no reframe at all** are cut by motion and remain unsolved.
+>
+> **`padAnchor.mjs` is not dead — this is what gives it its real job.** The courier anchor is 0.558,
+> so the courier can only be ratio-matched by **padding it to 1:1** and shooting square.
 
 ### 🔴 THE RESULT THAT MATTERS — 17 paid clips measured, and neither hypothesis survived intact
 
@@ -630,11 +657,20 @@ checked each time.**
 
 ### Where to pick up
 
-**The open question is now sharp and cheap to answer:** removing the reframe is already free
-(`CLIP_JOBS` = `1:1`, anchors are 1:1). What is unknown is whether that is **sufficient** for a
-high-motion action, or whether motion-induced extension still cuts. **One clip answers it**, and the
-cheapest informative subject is a **sentry** clip — anchor 1.000 → output 1.000, no reframe at all,
-against paid 9:16 controls that were cut on three edges.
+**Two clean groups, and only one of them is solved.**
+
+**Group A — reframe-cut, and the fix is proven and free.** Five clips whose anchors are `1:1` and which
+were all shot at `9:16`: `brass-sentry/fire`, `brass-sentry/death`, `rust-scavenger/walk`,
+`rust-scavenger/chase`, `rust-scavenger/death`. This is **exactly** the defect the probe just fixed on
+`brass-sentry/idle`, and `CLIP_JOBS` already submits `1:1`. Re-shooting them is 5 × $1.19 = **$5.95**,
+which lands at $22.32 of $40. **A batch over 5 generations is a STOP-and-ask; this is exactly 5.**
+
+**Group B — motion-cut, and NOTHING here fixes it.** Four `brass-courier` clips cut with no reframe in
+play: `attack`, `attack-r2`, `death`, `hurt` — plus Phase 4's `jump` and `fall` on the debt ledger.
+The courier anchor is 0.558, so there is no reframe to remove. The untested levers are **padding it to
+1:1** (`padAnchor.mjs` exists and is gated) and the **two-axis margin clause** (`FRAME_MARGIN` is
+width-only and has never been submitted — it postdates every paid clip). **Do not spend on Group B
+until one of those is probed single-variable**, the same discipline that just paid off.
 
 **Not started:** W12–W20, the entire §6 QA gate (every agent owner, two briefs each — 5.1 and 5.5 now
 *must* re-run because A-T6/A-T7 changed their code), and the Codex **implementation** review (5.14).
