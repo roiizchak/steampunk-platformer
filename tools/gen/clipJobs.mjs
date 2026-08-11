@@ -134,6 +134,30 @@ const CLIP_FILES = Object.freeze({
    * all four edges. See `docs/generations/phase-05-ratio-match.md`.
    */
   'brass-sentry/idle': 'brass-sentry-idle-r2.mp4',
+
+  /**
+   * The rest of the `1:1` re-shoot round (session 4). Each names the **best candidate measured so
+   * far**, not necessarily a passing one — the record's job is to say which file a build should
+   * resolve, and G6 remains the arbiter of whether it may be packed.
+   *
+   * Ratio-matching is **necessary but not sufficient**, and the residual tracks motion magnitude:
+   *
+   *   brass-sentry/idle    -r2  lowest motion       6/6 fail -> 0/6   PACKS
+   *   rust-scavenger/walk  -r2  moderate cyclic     cut L,R  -> 0/6   PACKS
+   *   rust-scavenger/chase -r2  fast cyclic         cut L,R  -> 1/6   still gated
+   *   brass-sentry/fire    -r3  discharge at peak   6/6 -> 5/6 -> 1/6 with a PADDED anchor
+   *   brass-sentry/death   -r2  wreckage spread     4/6 fail
+   *   rust-scavenger/death -r2  debris spans frame  4/6 fail
+   *
+   * `fire` is `-r3`, the padding probe: same `1:1`, same prompt, only the anchor padded to 3130²
+   * (`request_id 019ff0db-0597-7490-ae69-921c125fed29`). It is the best fire this project has, and
+   * its one remaining failure is the muzzle blast leaving frame, not the turret.
+   */
+  'brass-sentry/fire': 'brass-sentry-fire-r3.mp4',
+  'brass-sentry/death': 'brass-sentry-death-r2.mp4',
+  'rust-scavenger/walk': 'rust-scavenger-walk-r2.mp4',
+  'rust-scavenger/chase': 'rust-scavenger-chase-r2.mp4',
+  'rust-scavenger/death': 'rust-scavenger-death-r2.mp4',
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',

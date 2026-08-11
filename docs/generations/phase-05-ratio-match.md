@@ -124,3 +124,136 @@ Still cropped and still needing a decision: `brass-sentry/fire`, `brass-sentry/d
 `rust-scavenger/walk`, `rust-scavenger/chase`, `rust-scavenger/death` — five clips whose anchors are
 `1:1` and which were all shot at `9:16`, i.e. **exactly the defect this probe just fixed**, at
 5 × $1.19 = **$5.95**. The four `brass-courier` clips cut by motion are a separate, unsolved problem.
+
+---
+---
+
+# The full `1:1` round — 6 more generations, $7.14
+
+**Ran:** 2026-08-11, session 4, user-approved ("do group A then group B").
+**Phase 5 spend: $16.37 → $23.51 of $40. $16.49 remains.**
+
+## Group A — the five reframe-cut clips, ratio-matched. $5.95
+
+All five had `1:1` anchors and were shot at `9:16` in session 1. Each was re-shot at the `1:1`
+`CLIP_JOBS` already prescribes. **Anchors unpadded**, so the only change from round 1 is the ratio —
+except for three whose prompts W9 also rewrote in session 2, which is recorded per row rather than
+glossed.
+
+| clip | `request_id` | seed | prompt vs round 1 |
+|---|---|---:|---|
+| `brass-sentry/fire` | `019ff0ca-52da-7cd1-87b3-3cfee97b55f6` | 1088495999 | **changed by W9** (FRAME_MARGIN, grip) |
+| `brass-sentry/death` | `019ff0cc-8161-7983-866b-9dc73d30d212` | 1141874549 | **changed by W9** (back-loading fix) |
+| `rust-scavenger/walk` | `019ff0cf-7b19-71f0-ab46-26626794e8df` | 941388860 | **unchanged** — ratio only |
+| `rust-scavenger/chase` | `019ff0d2-bfba-7cc0-b3c1-ad4f011d9a7c` | 1841205082 | **unchanged** — ratio only |
+| `rust-scavenger/death` | `019ff0d4-6905-7371-aa54-9c40122fd2f4` | 1433317132 | **changed by W9** (back-loading fix) |
+
+*(Determined from git at the spec level — `git show dbfc206^:tools/gen/motionCombat.mjs` against HEAD —
+not from the on-disk prompt `.txt` files, which are regenerated on every `submit-clips` run and
+therefore prove nothing about what round 1 submitted. That regeneration was itself finding **R5**,
+fixed earlier this session.)*
+
+### Result — the ratio fix is NECESSARY but NOT SUFFICIENT
+
+```
+rust-scavenger/walk    PASS  0/6 fail   min L154 R154 T 59 B 96
+rust-scavenger/chase   FAIL  1/6 fail   min L  8 R132 T  0 B 82
+brass-sentry/fire      FAIL  5/6 fail   min L102 R  0 T  0 B  0
+brass-sentry/death     FAIL  4/6 fail   min L  0 R  0 T  0 B100
+rust-scavenger/death   FAIL  4/6 fail   min L  0 R  0 T 60 B 66
+```
+
+**The residual tracks motion magnitude, cleanly ordered** — which is the two-cause model holding up:
+
+| clip | motion | outcome |
+|---|---|---|
+| `brass-sentry/idle` | lowest — a machine at rest | 6/6 fail → **0/6** |
+| `rust-scavenger/walk` | moderate cyclic | cut L,R → **0/6** |
+| `rust-scavenger/chase` | fast cyclic | cut L,R → 1/6 |
+| `brass-sentry/fire`, both deaths | large one-shot pose change | still 4–5 of 6 |
+
+**And what is at the edge is not always a cropped subject.** Confirmed by looking at the six-frame
+strips, which is why that rule exists:
+
+- **`brass-sentry/fire`: the turret is COMPLETE in every frame.** What touches the edge is the muzzle
+  flash and the smoke plume. G6 measures an opaque subject mask and cannot tell discharge from a
+  sheared limb — the same class of blind spot already recorded for G1 ("cannot tell a boot from a hand").
+- **Both deaths are genuine.** The collapsed debris field really does span the frame width by frame 5.
+  (W9's back-loading fix did work — collapse now begins at frame 3, not frame 4.)
+
+### A separate defect surfaced, and it is not about framing at all
+
+`rust-scavenger/walk` **passes G6 and then fails extraction**:
+
+```
+"rust-scavenger/walk" is declared cyclic but no window of it closes — no sampling of this
+clip yields a loop. That is an INDETERMINATE, not a licence to fall back to even sampling.
+```
+
+This is session 2's *"a sway, not a gait — stride ≲15 % of body height"* verdict finally **measured**
+rather than eyeballed. Decisively: **its prompt was UNCHANGED by W9.** The five W9 corrections covered
+the courier's prop and grip, the deaths' back-loading, and `fire-elevated` — the scavenger's stride was
+never among them. So the sway defect was never actually addressed, and no amount of reframing will fix
+it. It needs a stride prompt correction and a re-shoot.
+
+---
+
+## Group B — the padding probe. $1.19. **CONFIRMED.**
+
+With ratio matched, margin became testable single-variable for the first time: the sentry anchor is
+already `1:1`, so padding it changes **nothing else**.
+
+`node tools/gen/padAnchor.mjs brass-sentry --fill 0.45`:
+
+```
+before  2048x2048   figure 77.1% w, 68.8% h   T18.8 B12.5 L10.7 R12.1
+after   3130x3130   figure 50.5% w, 45.0% h   T29.6 B25.5 L24.3 R25.2
+```
+
+G1 identical on both (`PASS, sole-spread=0px of 21px, 3 contact limbs`), proving the blit is a pure
+translation. **The uploaded bytes were hash-verified against the local file** —
+sha256 `4c6ec48b1d810568a2c30e7e7ab7c0b2e58437c7f40b78910e7644c165569e08` — because anchor identity has
+been assumed once before on this project and it cost a probe.
+
+| | control `fire-r2` | probe `fire-r3` |
+|---|---|---|
+| `request_id` | `019ff0ca-…` | **`019ff0db-0597-7490-ae69-921c125fed29`** |
+| anchor | 2048², unpadded | **3130², padded** |
+| `aspect_ratio` | `1:1` | `1:1` — unchanged |
+| prompt | `brass-sentry-fire-r2.txt` | **the same file** |
+| G6 | **5 of 6 fail** | **1 of 6 fail** |
+| margins f1 | L102 R116 T180 B120 | **L232 R242 T282 B244** |
+
+**Margins roughly doubled and the failures dropped from five to one.** The survivor is the discharge
+frame — a bright muzzle blast reaching the right edge — with the turret itself comfortably framed.
+
+**Padding works.** It is the second real lever, and unlike the first it costs a canvas rebuild rather
+than a parameter. **The trade-off, stated:** padding shrinks the subject in the output (the sentry now
+fills ~45 % of a 960 px frame instead of ~69 %), so it spends resolution to buy margin. At the 288×384
+cell size that is still oversampled, but it is not free.
+
+---
+
+## Cost
+
+| item | qty | cost |
+|---|---:|---:|
+| Group A — five clips ratio-matched to `1:1` | 5 | **$5.95** |
+| Group B — `brass-sentry/fire` from a padded anchor | 1 | **$1.19** |
+
+**Phase 5 spend: $16.37 → $23.51 of the $40 ceiling. $16.49 remains.**
+
+## Disposition
+
+`CLIP_JOBS` now declares the best measured candidate for every enemy clip. **A declared file is not a
+passing file** — G6 remains the arbiter, and only `brass-sentry/idle` currently packs.
+
+**Still open, and none of it is a framing problem any more:**
+
+| clip | what it needs |
+|---|---|
+| `brass-sentry/fire` | a G6 that separates discharge from a cropped subject, **or** a re-shoot with less muzzle blast |
+| `brass-sentry/death`, `rust-scavenger/death` | a padded anchor — the debris spread genuinely exceeds the frame |
+| `rust-scavenger/chase` | one frame at L8; a padded anchor should clear it |
+| `rust-scavenger/walk` | **a stride prompt correction** — it is a sway, not a gait, and W9 never touched it |
+| `brass-courier/*` | a padded 1:1 courier anchor; the anchor is 0.558 so padding also matches the ratio |
