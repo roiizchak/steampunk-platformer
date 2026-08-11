@@ -65,10 +65,12 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'brass-courier-attack.mp4',
     'brass-courier-attack-r2.mp4',
     'brass-courier-attack-r3.mp4',
+    'brass-courier-attack-r4.mp4',
   ]),
   'brass-courier/death': Object.freeze([
     'brass-courier-death.mp4',
     'brass-courier-death-r2.mp4',
+    'brass-courier-death-r3.mp4',
   ]),
   'brass-courier/hurt': Object.freeze(['brass-courier-hurt.mp4']),
 

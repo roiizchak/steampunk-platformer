@@ -116,8 +116,8 @@ export const ASPECT_RATIO = readPrescribedAspectRatio();
  * way. `idle`/`walk`/`run`/`fall` are declared now for the same reason, pre-emptively.
  */
 const CLIP_FILES = Object.freeze({
-  'brass-courier/attack': 'brass-courier-attack-r4.mp4',
-  'brass-courier/death': 'brass-courier-death-r3.mp4',
+  'brass-courier/attack': 'brass-courier-attack-r5.mp4',
+  'brass-courier/death': 'brass-courier-death-r4.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
   /**
    * The ratio-match re-shoot (`request_id 019fef56-67bf-7922-943c-417809ed8ba0`).
