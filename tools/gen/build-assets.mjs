@@ -23,7 +23,7 @@
  * rebuild contract *(vault 4.15)* checkable at all.
  */
 
-import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePng, encodePng } from './png.mjs';
 import {
@@ -41,14 +41,15 @@ import {
   deriveScale,
 } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
-import { configFor } from './slugConfig.mjs';
+import { configFor, motionKeyFor } from './slugConfig.mjs';
+import { clipStem } from './clipJobs.mjs';
 
 /**
  * Path/action resolution lives in `slugConfig.mjs` — kept here as a single destructure so this
  * script's own behaviour for `brass-courier` is unchanged, just re-sourced. A later task points
  * this at more than one slug; that rewiring is out of scope here (see `slugConfig.mjs`'s header).
  */
-const SLUG = 'brass-courier';
+const SLUG = process.argv[2] ?? 'brass-courier';
 const {
   generated: GENERATED,
   outDir: OUT_DIR,
@@ -76,29 +77,19 @@ function findSource(action) {
         `a placeholder (vault 4.16).`,
     );
   }
-  const files = readdirSync(GENERATED).filter(
-    (f) => f.startsWith(`${action}-`) && f.endsWith('.png'),
-  );
-  if (files.length === 0) {
+  // Exact filename, not a prefix scan: the producer (`build-clips.mjs`) writes
+  // `${clipStem(motionKey)}-clip.png`, and resolving anything looser is R1/R2 (work item A-T4) —
+  // a namespaced action never matched its own prefix, and a bare action matched EVERY slug's sheet.
+  const file = `${clipStem(motionKeyFor(SLUG, action))}-clip.png`;
+  const path = join(GENERATED, file);
+  if (!existsSync(path)) {
     throw new Error(
-      `assets:build: no source sheet for declared animation "${action}" in ${GENERATED}. ` +
+      `assets:build: no source sheet for declared animation "${action}" — expected ${path}. ` +
         `A declared input that cannot be found fails the build; it is never substituted ` +
         `(vault 4.16).`,
     );
   }
-  // **An ambiguous prefix is refused, never resolved by picking the first.** This was `.find()`,
-  // which silently returns whichever entry `readdirSync` happened to list first — so a directory
-  // holding both a superseded generation and its replacement builds one of them at random, and
-  // `idle-preview.png` is a match for `idle-` too. `raw()` in build-world.mjs had the identical bug
-  // and caught a `-preview.png` on its first run after being hardened. Same fix, same reason.
-  if (files.length > 1) {
-    throw new Error(
-      `assets:build: "${action}" matches ${files.length} sheets in ${GENERATED} ` +
-        `(${files.join(', ')}). Move the superseded ones into ${GENERATED}/superseded/ — picking ` +
-        `the first would silently ship whichever the filesystem listed first.`,
-    );
-  }
-  return join(GENERATED, files[0]);
+  return path;
 }
 
 function loadConfig() {

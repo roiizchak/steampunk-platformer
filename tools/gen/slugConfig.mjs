@@ -2,8 +2,9 @@
  * Per-slug build paths and declared actions for `build-assets.mjs`.
  *
  * Extracted so a later task can namespace `build-assets.mjs` for three subjects without pushing it
- * past the 400-line ceiling (`tests/unit/file-size.test.ts`) — this file does the extraction only;
- * it does not change what `build-assets.mjs` builds for `brass-courier` today.
+ * past the 400-line ceiling (`tests/unit/file-size.test.ts`). `motionKeyFor` below is that
+ * namespacing: it maps a (slug, action) pair to its `VIDEO_MOTIONS`/clip-filename key, bare for the
+ * five legacy `brass-courier` actions and `slug/action` for everything else (work item A-T4, R1/R2).
  *
  * `reportPath` is per-slug on purpose. Today's single shared `_generated/sheet-report.json` means
  * a second slug's build would silently overwrite the first slug's evidence — see the header note
@@ -55,4 +56,20 @@ export function configFor(slug) {
     throw new Error(`slugConfig: unknown slug "${slug}". Known slugs: ${SLUGS.join(', ')}`);
   }
   return entry;
+}
+
+/** The five legacy actions shot before the `slug/action` naming convention existed (Phase 4). */
+const LEGACY_BARE_ACTIONS = new Set(['idle', 'walk', 'run', 'jump', 'fall']);
+
+/**
+ * `(slug, action)` -> the matching `VIDEO_MOTIONS` key (`motion.mjs`/`motionCombat.mjs`), which is
+ * also the key `clipStem` (`clipJobs.mjs`) turns into the on-disk `-clip.png` stem. `brass-courier`'s
+ * five legacy actions map to their own bare key; everything else is namespaced `slug/action` — no
+ * exceptions, so a newly declared action never needs a new case here (work item A-T4, R1/R2).
+ */
+export function motionKeyFor(slug, action) {
+  if (slug === 'brass-courier' && LEGACY_BARE_ACTIONS.has(action)) {
+    return action;
+  }
+  return `${slug}/${action}`;
 }

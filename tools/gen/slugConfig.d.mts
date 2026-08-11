@@ -16,3 +16,5 @@ export interface SlugConfig {
 export declare const SLUGS: string[];
 
 export declare function configFor(slug: string): SlugConfig;
+
+export declare function motionKeyFor(slug: string, action: string): string;
