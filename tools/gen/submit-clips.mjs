@@ -13,6 +13,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
 import { styleTemplate, templateBlock } from './prompt.mjs';
 import { VIDEO_MOTIONS, videoPrompt } from './motion.mjs';
 import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, clipStem } from './clipJobs.mjs';
@@ -58,20 +59,31 @@ for (const key of keys) {
   const stem = clipStem(key);
   const prompt = videoPrompt(template, key, blocks);
 
-  const promptPath = `${PROMPT_OUT_DIR}/${stem}.txt`;
-  writeFileSync(promptPath, prompt);
-
   // Legacy bare keys (`jump`, ...) live in `_generated/video`; namespaced combat keys live in
   // `_generated/phase05/video` — the same split `findClip` (clipSource.mjs) reads clips back from,
   // so a rendered download path is never written somewhere the build can't find it.
   const videoDir = videoDirFor(key);
   mkdirSync(videoDir, { recursive: true });
   const downloadPath = nextFreeDownloadPath(videoDir, stem);
+
+  /**
+   * The sidecars are versioned WITH the download, not with the key (finding R5).
+   *
+   * `nextFreeDownloadPath` already refuses to clobber a paid `.mp4`, but the prompt and params were
+   * written to `${stem}.txt` / `${stem}.params.json` regardless — so rendering a re-shoot silently
+   * overwrote the provenance of the round that was actually paid for, which is the exact record
+   * `CLIP_JOBS` exists to create. A round's clip, its prompt and its parameters now share one stem.
+   */
+  const roundStem = basename(downloadPath, '.mp4');
+
+  const promptPath = `${PROMPT_OUT_DIR}/${roundStem}.txt`;
+  writeFileSync(promptPath, prompt);
+
   // A loop needs `--end_image_url` set back to the anchor (ASSET-PIPELINE.md §2); a one-shot needs
   // it omitted, because its end pose deliberately differs from its start pose.
   const endImageUrl = spec.cyclic ? job.anchorUrl : null;
 
-  const paramsPath = `${PARAMS_OUT_DIR}/${stem}.params.json`;
+  const paramsPath = `${PARAMS_OUT_DIR}/${roundStem}.params.json`;
   writeFileSync(
     paramsPath,
     JSON.stringify({ key, ...job, endImageUrl, promptPath, downloadPath }, null, 2),
