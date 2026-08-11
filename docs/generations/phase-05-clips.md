@@ -84,6 +84,24 @@ nowhere near sufficient. What has **not** happened:
 
 ### Eyeball triage, recorded so a later measurement can contradict it
 
+> 🔴 **A later measurement DID contradict it. Recorded 2026-08-11 (session 4), W10a.**
+>
+> This table rates `brass-sentry/fire` and `brass-sentry/death` **good**. Session 2's clip audit,
+> working from the **same** six-frame strips, judged **every sentry clip cropped at the left and right
+> edges**, and session 3's corrected G6 confirmed a real edge violation on the historical
+> `brass-sentry-fire` frame (`tests/fixtures/edges/brass-sentry-fire-frame.png`, margins
+> `left 0 / right 0`).
+>
+> **The resolution: both readings are honest and they answered different questions.** This table read
+> **motion** — does the flash and recoil land on the specified pose? It does; that verdict stands. It
+> did not read **framing**, and nothing in the row headings asked it to. The section's own status was
+> *"EYEBALLED, NOT YET MEASURED"*, and this is what that caveat was for.
+>
+> The verdicts above are **left as written** rather than edited, because overwriting a dated reading
+> with a later one destroys exactly the record that makes this contradiction visible. The lesson is
+> the cheap one: **an eye reading a contact strip sees motion and does not see the frame edge.** That
+> is why G6 exists, and why it is run on extracted frames rather than on strips.
+
 | Clip | Read | Note |
 |---|---|---|
 | `brass-courier/attack` r2 | **good** | Real strike. Reach peaks late — flagged for G5 above. |

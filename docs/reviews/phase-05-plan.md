@@ -458,3 +458,105 @@ appetite, recorded here rather than silently left). Nothing was silently dropped
 in at the call site), two files were added to the blocking work item's scope, one work item gained a
 hard dependency on another, and six acceptance checks were rewritten because they could have gone
 green on broken work.
+
+---
+---
+
+# Phase 5 — Codex plan review of the SESSION-4 execution plan
+
+**Ran:** 2026-08-11, session 4, **before any code and before any further spend.**
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` / `fs.readFileSync`
+instruction from [PRD.md § The Codex review protocol](../PRD.md#the-codex-review-protocol).
+**Reviewed:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-pure-crane.md` (revision 1) against
+HANDOFF.md §9, the phase plan of record, the three reviews above, the §6 gate,
+`docs/qa/phase-05-combat.md`'s agent-owner findings, `docs/generations/phase-05-jump-reshoot.md`, and
+the source each claim named.
+
+**Still a PLAN review, not the implementation review.** Criterion 5.14 remains **UNRUN**.
+
+**Scope split.** Codex again had no network and again could not spawn a process
+(`CreateProcessAsUserW failed: 5`), so it ran no typecheck, test or build and verified no fal claim.
+**But it did more than read this time:** it executed the repository's own pure PNG/chroma functions
+in-process through `node_repl`, which is what produced the decisive 78.4 % measurement in blocker 2.
+
+**Verdict: BLOCK — 4 blockers. All four re-verified locally. All four CONFIRMED.**
+
+## The four blockers, verbatim
+
+> **Blocker 1** — *"The padded anchor cannot have the promised geometry. The source is 1536×2752 with
+> a 2525 px-high subject (91.8%). Placing it byte-identically into a 2752×2752 canvas leaves its height
+> and vertical margins unchanged: it remains 91.8% tall, not ~51%, with 5.1% top headroom — not ~24%.
+> The plan simultaneously requires a translation-only, byte-identical blit and an impossible vertical
+> reduction."*
+>
+> **Blocker 2** — *"A-T1's proposed crop→estimate path fails its own historical regression fixture.
+> `estimateKeyColour` requires 90% agreement over the one-pixel border. Fresh in-process evaluation of
+> `brass-sentry-fire-frame.png` returned only **78.4%** and threw before G6 could report the promised
+> left/right failure."*
+>
+> **Blocker 3** — *"A-T5 does not bypass the five shipped courier motions.
+> `configFor('brass-courier').actions` begins `idle, walk, run, jump, fall` before the Phase-5 actions.
+> Therefore the proposed work list still re-extracts all five and reaches the known-failing `jump`."*
+>
+> **Blocker 4** — *"A-T7's 'delete the redundant block' breaks sentry cadence. The first check
+> increments the cooldown; the second check prevents firing while it remains open. Deleting lines
+> 144–146 makes every visible sentry fire on every tick."*
+
+## Local re-verification — 4 of 4 CONFIRMED
+
+| Claim | Verdict | Decisive local evidence |
+|---|---|---|
+| Padding geometry impossible | **CONFIRMED** | The anchor is 1536×2752, measured with the repo's own decoder. Padding to 2752² adds **width only**; fill stays 91.8 %, headroom stays 5.1 %. Reaching 65 % fill by translation alone needs a **3884²** canvas. Revision 1 would have spent $1.19 on an anchor without the property under test. |
+| `estimateKeyColour` throws at 78.4 % | **CONFIRMED, to the digit** | `estimateKeyColour: only 78.4% of border pixels are within 120 of the median (0,245,4)`. Measured 0.7841. |
+| Courier work list still contains `jump` | **CONFIRMED** | `slugConfig.mjs:28` — `actions: ['idle','walk','run','jump','fall','attack','hurt','death']`. |
+| `enemies.ts:144` is load-bearing | **CONFIRMED** | `:138` `if (windowOpen(...)) counter += 1` is a **saturating increment**; `:144` `if (counter < cooldown) return {fired:false}` is the **fire guard**. Different jobs, same expression. |
+
+**Blocker 2's resolution is better than the plan it replaced, and Codex forced it.** Border agreement
+turns out to *separate* the two cases cleanly, measured across every committed fixture: a uniform
+background of **any** colour agrees at **1.0000** — including the off-key `(0,195,64)` field that R3 is
+about — while subject-on-the-border drops it to **0.78–0.93**. So the border **median** is the right
+key in both cases, and the **agreement floor** is what must be bypassed, not the alpha threshold.
+`borderKey(image) = estimateKeyColour(image, { minAgreement: 0 })`.
+
+**The four-direction re-validation, run before the plan was rewritten:**
+
+| direction | with `borderKey` | today (default key) |
+|---|---|---|
+| real cropped `brass-sentry-fire` | **FAIL** `{left:0,right:0,top:43,bottom:29}` | FAIL |
+| real clean Phase 4 `idle` | **PASS** `{30,41,13,6}` key `[3,231,8]` | PASS |
+| **R3:** off-key `(0,195,64)`, well framed | **PASS** `{30,30,30,30}` key `[0,195,64]` | **FAIL** ← the false positive |
+| **R3 ∩ crop** *(Codex §5)*: off-key **and** at the edge | **FAIL** `{60,0,30,30}` | FAIL |
+
+The fourth row is the one Codex demanded, and it is the one that proves the gate was not loosened: a
+clean off-key PASS plus a pure-green cropped FAIL does not cover their intersection.
+
+## A correction Codex forced to the repository record
+
+Codex noticed that `docs/generations/phase-05-jump-reshoot.md:22` calls the courier anchor
+*"a **square 2048²** anchor"*. **It is 1536×2752 — ratio 0.558, which is essentially 9:16.**
+
+That is load-bearing. HANDOFF §8 recorded the crop's root cause as *"its square anchor forced into
+9:16 lost ~14 % off each side"* — a description that **never applied to the courier at all**. Phase 4's
+`jump` was shot at 9:16 **from a 9:16 anchor**, so no reframing occurred, and it still cropped on the
+right. The plan's single-axis mechanism was therefore correlation dressed as mechanism, exactly as
+Codex said, and it has been replaced with **two** causes: reframing, and motion-induced extension
+beyond the anchor's static silhouette — the latter already recorded independently at
+`motion.mjs:286,291`, which describes a prior jump translating upward inside its frame until sampled
+frames had no head.
+
+## Triage
+
+Full disposition for all four blockers and the eight section findings (§1–§8) is in the session-4 plan
+file. Summary: **12 of 12 applied, none rejected, none silently dropped.** The plan was rewritten as
+revision 2 rather than patched.
+
+**Net effect:** the probe's canvas arithmetic was corrected (it would have tested nothing), the G6 key
+seam was redesigned around a measurement Codex produced, scoping moved from slug-level to action-level,
+a proposed "cleanup" that would have shipped a live combat regression was reversed, the mechanism claim
+was withdrawn and replaced, eight omitted §6 criteria and the whole §1b debt ledger were restored to the
+status table, and the task DAG was corrected for a file collision between two items the plan had called
+parallel-safe.
+
+**Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
+diff, saved to `docs/reviews/phase-05-impl.md`. The phase cannot be reported done until it has run and
+every finding of *its* is applied or recorded.

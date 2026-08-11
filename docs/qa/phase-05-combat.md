@@ -143,7 +143,7 @@ measures. Written down before the measurement so the answer cannot be quietly ro
 
 | # | What | Why it is not fixed here |
 |---|---|---|
-| 1 | **The 9b ordering between the player's swing and the enemies' damage is ungated.** Swapping the two calls fails no test. | Not a missing test — a masked effect. Being in contact range means having already taken contact damage, which grants 45 ticks of i-frames, longer than the whole 20-tick swing. A test that only passed because of how it was posed would be worse. **Becomes reachable if `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`.** |
+| 1 | ~~**The 9b ordering between the player's swing and the enemies' damage is ungated.** Swapping the two calls fails no test.~~ **WITHDRAWN 2026-08-11 — the rationale below is FALSE. See the correction under it.** | ~~Not a missing test — a masked effect. Being in contact range means having already taken contact damage, which grants 45 ticks of i-frames, longer than the whole 20-tick swing. A test that only passed because of how it was posed would be worse. **Becomes reachable if `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`.**~~ |
 | 2 | **`HUD_SLOT` is measured from the shipped `hud-health.png`.** | Uncomfortably close to what vault A5 forbids. Declared in one place with its provenance instead of re-measured at runtime. **If the HUD art is regenerated, re-measure those four numbers** — no gate can see a stale slot, the fill just sits slightly off inside the frame. |
 | 3 | **The sentry's projectile does not collide with solids.** | It would need the solid list, an ordering decision against the player's own motion, and a second swept test. The sentry has clear line of sight in `level-01`, so the case does not arise. |
 | 4 | **`enemyKnobs` uses a named field list, not enumeration.** | An enemy's `x`, `hp` and counters are state, not tuning; a panel that let you drag `hp` would be a cheat menu. Cost: adding a knob means adding it there too. |
@@ -220,6 +220,151 @@ proves *"≤10 over-limit files, each name-dropped somewhere"* — **not** the c
 | `tests/e2e/phase-03-tilemap.spec.ts` | 496 | | `tests/unit/sheet-packing.test.ts` | 405 |
 
 `src/sim/enemies.ts` sits at **exactly 400** — one line from turning the 10/10 ceiling red.
+
+---
+
+## Session 4 — 2026-08-11. The framing mechanism, and the findings session 3 recorded
+
+### 🔴 Limitation 1 is WITHDRAWN — the "masked by i-frames" rationale was geometrically false
+
+Finding **A1**, raised by `code-reviewer`'s adversarial brief in session 3 and confirmed here.
+
+The withdrawn rationale argued the step-9b ordering between the player's swing and the enemies'
+contact damage was untestable, because being in contact range implies already holding 45 ticks of
+i-frames (`IFRAME_TICKS` 45 > `attackTotalTicks(ATTACK)` 20). **The numeric premise holds. The
+geometric premise does not.**
+
+- `ATTACK_BOX` is `{ x: 11, y: 12, w: 26, h: 24 }` (`src/sim/playerAttack.ts:50`) and reaches well past
+  contact-overlap distance, so a **dead zone** exists where a swing lands with **zero** contact damage
+  and therefore grants no i-frames. `tests/unit/player-attack.test.ts:89` already builds a fixture at
+  exactly that gap (`IN_REACH = 1200`, doc block at `:83-88`).
+- **`src/sim/worldDamage.ts:77-87` iterates `world.enemies.scavengers` only.** A sentry never deals
+  contact damage at all, so the premise never applied to a sentry in the first place.
+
+**Now gated** by `tests/unit/tick-damage-order.test.ts`, driven through the real `tick()`.
+
+**And a decision that had never been written down is now written down:** the sentry's damage is
+**projectile-only by design**. `SENTRY.damage` is spent by `src/sim/projectiles.ts`; a static turret is
+something you can stand next to without being hurt, and the bolt's travel time is what makes it fair.
+That was an *absence* in the code and is now an asserted fact.
+
+### W10a — an eyeball verdict was contradicted by a measurement, and both are kept
+
+`docs/generations/phase-05-clips.md` rates `brass-sentry/fire` and `/death` **good**; session 2's audit
+and session 3's corrected G6 found every sentry clip cropped at the left and right edges. **Both
+readings are honest and answered different questions** — the table read *motion* (does the flash land
+on the specified pose? it does) and did not read *framing*. The verdicts are **left as written** rather
+than edited, because overwriting a dated reading destroys the record that makes the contradiction
+visible. Recorded in place at that file. The transferable lesson: **an eye reading a contact strip sees
+motion and does not see the frame edge.**
+
+### W10b / W11 — the live schema, compared field by field rather than pasted
+
+`genmedia schema "bytedance/seedance-2.0/image-to-video"`, run 2026-08-11 and compared
+programmatically against `CLIP_JOBS` (a pasted quote proves nothing):
+
+```
+OK     endpoint      CLIP_JOBS=bytedance/seedance-2.0/image-to-video   live: same
+OK     aspect_ratio  CLIP_JOBS=1:1     live: auto|21:9|16:9|4:3|1:1|3:4|9:16
+OK     resolution    CLIP_JOBS=720p    live: 480p|720p|1080p|4k
+OK     duration      CLIP_JOBS=4       live: auto|4|5|6|7|8|9|10|11|12|13|14|15
+records in CLIP_JOBS: 15
+```
+
+**No drift on any submitted parameter.** Three further facts, and they bound the whole framing problem:
+
+| fact | consequence |
+|---|---|
+| `aspect_ratio: auto` is documented live as **"infer from the input image"** | The answer W10b was owed. `docs/FAL-MODELS.md:183-197` tabulates `auto` and never says what it does. |
+| **No `negative_prompt` field exists** | Every framing instruction must go in the positive prompt. The forbid tail (`cropped limbs`) is prompt text, not a model-level negative. |
+| **No `seed` INPUT field exists** — `seed` is output-only | The endpoint is **not seed-deterministic**. Any single generation carries irreducible run-to-run variance, so one output can never attribute an outcome to one treatment with confidence. This is now stated wherever a probe is designed. |
+| `end_user_id` and `bitrate_mode` are live and unused | `bitrate_mode` (`standard`/`high`) is absent from the documented snapshot. |
+
+**`docs/FAL-MODELS.md` is outside this session's scope lock.** The `bitrate_mode` addition and the
+missing `auto` semantics are **flagged, not fixed**.
+
+### 🔴 The anchor measurement, and the correction it forced to the recorded root cause
+
+Measured with the repository's own decoder and `estimateKeyColour`:
+
+| anchor | canvas | ratio | figure fills | L / R | T / B |
+|---|---|---:|---:|---|---|
+| `brass-courier` | **1536 × 2752** | **0.558 ≈ 9:16** | **91.8 % of height** (2525 px), 61.1 % of width | 18.4 % / 20.6 % | **5.1 % / 3.2 %** |
+| `brass-sentry` | 2048 × 2048 | 1.000 | 68.8 % h, 77.1 % w | **10.7 % / 12.1 %** | 18.8 % / 12.5 % |
+| `rust-scavenger` | 2048 × 2048 | 1.000 | 81.1 % h, 60.5 % w | 20.0 % / 19.5 % | 9.0 % / 10.0 % |
+
+Agreement was `1.000` on all three; keys `[4,249,6]` and `[1,252,3]` — **not pure green**, the same
+finding `chroma.mjs:88-93` already records, now confirmed on all three shipped anchors.
+
+**`docs/generations/phase-05-jump-reshoot.md:22` said the courier anchor was "square 2048²". It is
+1536 × 2752 — already 9:16.** Found by the session-4 Codex plan review, re-verified locally, corrected
+in place. HANDOFF §8's root cause — *"its square anchor forced into 9:16 lost ~14 % off each side"* —
+**never applied to the courier at all.**
+
+**There are two causes of crop, not one:**
+
+| cause | evidence |
+|---|---|
+| **Reframing** — anchor ratio ≠ output ratio, so the model refits and eats margin on the squeezed axis | `jump-r2` (0.558 → 1:1) cut at the **top**, `figureHeight` = the whole canvas on f0; the three sentry clips (1.0 → 9:16) cut at **both sides** |
+| **Motion-induced extension** — the subject moves outside its anchor's static silhouette and spends whatever margin existed | Phase 4 `jump` (0.558 → 9:16, **no reframe at all**) cut on the **right**. Already recorded independently at `motion.mjs:286,291`, describing a prior jump translating upward until sampled frames had no head |
+
+**Both spend the same resource: margin in the anchor.** That — not a single-axis mechanism — is what
+justifies the anchor-padding probe. The earlier single-axis claim ("the crop lands on the anchor's
+tightest axis") was correlation dressed as mechanism and is **withdrawn**.
+
+### R3 — G6 now keys with the border median, and the fix is validated in FOUR directions
+
+`build-clips.mjs` keyed with the **default** `[0,255,0]` while `build-assets.mjs` estimated first.
+`chroma.mjs:88-93` records a real generation whose background came back `(0,195,64)` — above
+`CHROMA.HIGH` — leaving it fully opaque, so at `minAlpha 255` the whole cell reads as subject and G6
+throws on a well-framed clip.
+
+**The obvious fix does not work, and the Codex plan review caught it before it was written.**
+`crop → estimateKeyColour → keyOut` **throws** on the very fixture G6 must fail:
+`brass-sentry-fire-frame.png` measures **78.41 %** border agreement against a 90 % floor — because the
+subject occupies 21.6 % of the border, **which is the crop**.
+
+Agreement turns out to *separate* the two cases cleanly:
+
+| fixture | agreement |
+|---|---:|
+| synthetic uniform background, any colour (incl. off-key `(0,195,64)`) | **1.0000** |
+| real clean Phase 4 `idle` frame, key `[3,231,8]` | **1.0000** |
+| `touching-left` / `touching-right` (subject on an edge) | 0.9265 |
+| real cropped `brass-sentry-fire` | **0.7841** |
+
+So the border **median** is the correct key in both cases, and the **agreement floor** is what must be
+bypassed — **not the alpha threshold**. `borderKey(image) = estimateKeyColour(image, { minAgreement: 0 })`.
+`DEFAULT_MIN_ALPHA` stays **255** and `DEFAULT_MARGIN_PX` stays **3**; no threshold was touched.
+
+**Re-validated in four directions, the fourth demanded by the Codex review:**
+
+| direction | with `borderKey` | today (default key) |
+|---|---|---|
+| real cropped `brass-sentry-fire` | **FAIL** `{left:0,right:0,top:43,bottom:29}` | FAIL |
+| real clean Phase 4 `idle` | **PASS** `{30,41,13,6}` | PASS |
+| **R3:** off-key `(0,195,64)`, well framed | **PASS** `{30,30,30,30}` | **FAIL** ← the false positive |
+| **R3 ∩ crop:** off-key **and** at the edge | **FAIL** `{60,0,30,30}` | FAIL |
+
+The fourth row is what proves the gate was not loosened: a clean off-key PASS plus a pure-green cropped
+FAIL does not cover their intersection. **This is the second time a G6 change has been made by changing
+what it MEASURES rather than what it TOLERATES, and re-validated in both directions.**
+
+### 🔴 A2 — the two `windowOpen` restatements were NOT both redundant
+
+Session 3 recorded `enemies.ts:144` as a redundant restatement six lines below a correct `windowOpen`
+call at `:138`. **They are not redundant, and deleting `:144` would have shipped a live combat
+regression.** Caught by the session-4 Codex plan review, confirmed by reading `:137-149`:
+
+- `:138` `if (windowOpen(counter, cooldown)) counter += 1` — a **saturating increment**
+- `:144` `if (counter < cooldown) return { fired: false }` — the **fire guard**
+
+Same expression, different jobs. Removing `:144` makes **every sighted sentry fire on every tick**.
+The correct deduplication is a **replacement** with `windowOpen(...)`, not a deletion — so it buys
+**no** file-size headroom, and `src/sim/enemies.ts` stays at **exactly 400 lines with zero headroom**.
+The sentry cadence was **unguarded** until this session; it now has a test that goes red if `:144` is
+removed.
+
 
 ---
 

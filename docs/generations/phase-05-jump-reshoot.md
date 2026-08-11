@@ -24,6 +24,26 @@ anchor. [ASSET-PIPELINE.md](../ASSET-PIPELINE.md) prescribes `--aspect_ratio "1:
 9:16 was submitted against the project's own documented pipeline. The same mistake is recorded for the
 Phase 5 sentry clips.
 
+> 🔴 **CORRECTION, 2026-08-11 (session 4). The sentence above is wrong, and it was load-bearing.**
+> The `brass-courier` anchor is **1536 × 2752**, not square 2048². Measured with the repository's own
+> decoder: ratio **0.558**, against 9:16's 0.5625 — it is **already a 9:16 image**.
+>
+> Found by the session-4 Codex plan review and re-verified locally. It matters because HANDOFF §8
+> recorded the crop's root cause as *"its square anchor forced into 9:16 lost ~14 % off each side"* —
+> **a description that never applied to the courier at all.** Phase 4's `jump` was shot at 9:16 **from
+> a 9:16 anchor**, so **no reframing occurred**, and it cropped on the right anyway.
+>
+> The consequence is that there are **two** causes of crop in this project, not one:
+> **(1) reframing** — anchor ratio ≠ output ratio, which is what cut `jump-r2` at the top and the
+> sentry clips at the sides; and **(2) motion-induced extension** — the subject moving outside its
+> anchor's static silhouette, which is what cut Phase 4's `jump` on the right with no reframe in play.
+> `motion.mjs:286,291` already recorded cause (2) independently, describing a prior jump that
+> translated upward inside its frame until sampled frames had no head.
+>
+> **Both causes spend the same resource: margin in the anchor.** That, and not a single-axis
+> mechanism, is what justifies the anchor-padding probe. See
+> [phase-05-anchor-padding.md](phase-05-anchor-padding.md).
+
 ## The probe was genuinely single-variable
 
 An earlier plan revision was rejected by Codex review for changing three variables at once and
