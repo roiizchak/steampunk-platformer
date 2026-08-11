@@ -38,6 +38,7 @@ import { VIDEO_MOTIONS } from './motion.mjs';
 import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
 import { findClip } from './clipSource.mjs';
 import { CLIP_JOBS, clipStem } from './clipJobs.mjs';
+import { SLUGS, workListFor } from './slugConfig.mjs';
 import { decodePng } from './png.mjs';
 import { borderKey, keyOut } from './chroma.mjs';
 import { crop } from './resize.mjs';
@@ -210,11 +211,27 @@ export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeig
   }
 }
 
+/**
+ * `<slug> [action...]` from argv -> the ordered `{ slug, action, motionKey }` work list `main()`
+ * walks. No slug: today's behaviour — every slug in `SLUGS` across all of ITS declared actions, the
+ * union of the per-slug lists (work item A-T5). That union is not `Object.keys(VIDEO_MOTIONS)`:
+ * `brass-sentry/fire-elevated` is a real `VIDEO_MOTIONS` key with no clip file and no slugConfig
+ * entry, so driving from this list is what keeps `main()` from ever attempting it. Exported so the
+ * unit suite can assert what `main()` ACTUALLY iterates rather than re-testing `workListFor` in
+ * isolation, which would stay green even if `main()` reverted to walking `VIDEO_MOTIONS` directly.
+ */
+export function resolveWorkList(argv = process.argv.slice(2)) {
+  const [slug, ...actions] = argv;
+  return slug ? workListFor(slug, actions) : SLUGS.flatMap((s) => workListFor(s));
+}
+
 function main() {
   mkdirSync(SHEET_DIR, { recursive: true });
   const report = [];
 
-  for (const [action, spec] of Object.entries(VIDEO_MOTIONS)) {
+  for (const { motionKey } of resolveWorkList()) {
+    const spec = VIDEO_MOTIONS[motionKey];
+    const action = motionKey;
     const clip = findClip(action, { declaredFile: CLIP_JOBS[action]?.file ?? null });
     const probe = ffprobe(clip);
     const sourceFrames = Number(probe.nb_read_frames);

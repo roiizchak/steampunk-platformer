@@ -41,7 +41,7 @@ import {
   deriveScale,
 } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
-import { configFor, motionKeyFor } from './slugConfig.mjs';
+import { configFor, motionKeyFor, workListFor } from './slugConfig.mjs';
 import { clipStem } from './clipJobs.mjs';
 
 /**
@@ -50,15 +50,19 @@ import { clipStem } from './clipJobs.mjs';
  * this at more than one slug; that rewiring is out of scope here (see `slugConfig.mjs`'s header).
  */
 const SLUG = process.argv[2] ?? 'brass-courier';
+// `process.argv.slice(3)` is the action filter (work item A-T5) — `--derive-scale` (read again at
+// `main()`, line ~148) is a flag, not an action, so it is dropped here rather than fed to
+// `workListFor`, which would throw on an unknown action.
+const ACTION_ARGS = process.argv.slice(3).filter((a) => !a.startsWith('--'));
 const {
   generated: GENERATED,
   outDir: OUT_DIR,
   config: CONFIG,
   liftProfile: LIFT_PROFILE,
   reportPath: REPORT_PATH,
-  actions: ACTIONS,
   looping: LOOPING,
 } = configFor(SLUG);
+const ACTIONS = workListFor(SLUG, ACTION_ARGS).map((item) => item.action);
 
 /** Tracked, and the independent oracle for criterion 4.19 — see where it is written, at the end. */
 const LIFT_PROFILE_NOTE =

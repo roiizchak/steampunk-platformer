@@ -44,8 +44,12 @@ function allPairs(): Array<{ slug: string; action: string }> {
 }
 
 describe('sheet filename contract — producer (build-clips.mjs) vs consumer (build-assets.mjs)', () => {
-  it('build-clips.mjs still writes `${clipStem(action)}-clip.png` for every VIDEO_MOTIONS key (producer pin)', () => {
-    expect(BUILD_CLIPS_SRC).toContain('for (const [action, spec] of Object.entries(VIDEO_MOTIONS))');
+  it('build-clips.mjs still writes `${clipStem(action)}-clip.png` for every motionKey in its work list (producer pin)', () => {
+    // A-T5: the loop now walks `resolveWorkList()` (per-slug, per-action, never a bare
+    // `Object.entries(VIDEO_MOTIONS)`) but `action` is still bound to the resolved `motionKey` before
+    // the write path below, so the filename expression itself is unchanged.
+    expect(BUILD_CLIPS_SRC).toContain('for (const { motionKey } of resolveWorkList())');
+    expect(BUILD_CLIPS_SRC).toContain('const action = motionKey;');
     expect(BUILD_CLIPS_SRC).toContain('`${clipStem(action)}-clip.png`');
   });
 

@@ -73,3 +73,24 @@ export function motionKeyFor(slug, action) {
   }
   return `${slug}/${action}`;
 }
+
+/**
+ * The ordered `{ slug, action, motionKey }` work list for one slug — what `build-clips.mjs` and
+ * `build-assets.mjs` actually iterate, instead of every `VIDEO_MOTIONS` key or every declared action
+ * unconditionally (work item A-T5). Defaults to `configFor(slug).actions` when `actions` is omitted
+ * or empty; an explicit list is validated against that same array so a typo THROWS rather than
+ * silently doing nothing. Stays a leaf: no import of `motion.mjs` here, so `VIDEO_MOTIONS` is never
+ * consulted — a caller that needs the motion spec looks it up itself via `motionKey`.
+ */
+export function workListFor(slug, actions) {
+  const declared = configFor(slug).actions;
+  const requested = actions && actions.length > 0 ? actions : declared;
+  return requested.map((action) => {
+    if (!declared.includes(action)) {
+      throw new Error(
+        `slugConfig: "${slug}" has no action "${action}". Declared actions: ${declared.join(', ')}`,
+      );
+    }
+    return { slug, action, motionKey: motionKeyFor(slug, action) };
+  });
+}

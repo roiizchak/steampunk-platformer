@@ -20,6 +20,9 @@
 import { describe, expect, it } from 'vitest';
 import { motionOnset, oneShotOnset, windowIndices } from '../../tools/gen/sampler.mjs';
 import { NAMESPACED_VIDEO_DIR, VIDEO_DIR, findClip } from '../../tools/gen/clipSource.mjs';
+import { SLUGS, configFor, workListFor } from '../../tools/gen/slugConfig.mjs';
+import { VIDEO_MOTIONS } from '../../tools/gen/motion.mjs';
+import { resolveWorkList } from '../../tools/gen/build-clips.mjs';
 
 /** `diff(0, t)`, obeying the one contract every real `differ()` output honours: `diff(i, i) === 0`. */
 const from0 =
@@ -167,5 +170,113 @@ describe('findClip declaredFile — CLIP_JOBS data replaces the glob, so a re-sh
     const listFiles = (dir: string) => (dir === VIDEO_DIR ? ['walk.mp4'] : []);
 
     expect(findClip('walk', { dirExists, listFiles })).toBe(`${VIDEO_DIR}/walk.mp4`);
+  });
+});
+
+/**
+ * `workListFor` / `resolveWorkList` — action-level scoping (work item A-T5), so `assets:clips`
+ * never attempts `jump` (fails G6) or `brass-sentry/fire-elevated` (no clip file, no slugConfig
+ * entry) just because a slug's OTHER actions were wanted.
+ *
+ * The `resolveWorkList` block is the critical one: a prior review flagged that a pure `workListFor`
+ * test passes even while `main()` still walks `Object.entries(VIDEO_MOTIONS)` unchanged.
+ * `resolveWorkList` is the exact function `build-clips.mjs`'s `main()` calls to get its loop's work
+ * list, so asserting against it is asserting against production, not a parallel reimplementation.
+ */
+describe('workListFor — per-slug, per-action scoping', () => {
+  it('with no explicit actions, matches configFor(slug).actions exactly, for all three slugs', () => {
+    for (const slug of SLUGS) {
+      const actions = workListFor(slug).map((w) => w.action);
+      expect(actions, slug).toEqual(configFor(slug).actions);
+    }
+  });
+
+  it('the three slugs\' work lists are disjoint by resolved motionKey', () => {
+    const seen = new Set<string>();
+    for (const slug of SLUGS) {
+      for (const { motionKey } of workListFor(slug)) {
+        expect(seen.has(motionKey), motionKey).toBe(false);
+        seen.add(motionKey);
+      }
+    }
+  });
+
+  it('fire-elevated is a real VIDEO_MOTIONS key but is in NO slug\'s work list', () => {
+    expect(Object.keys(VIDEO_MOTIONS)).toContain('brass-sentry/fire-elevated');
+    for (const slug of SLUGS) {
+      const keys = workListFor(slug).map((w) => w.motionKey);
+      expect(keys, slug).not.toContain('brass-sentry/fire-elevated');
+    }
+  });
+
+  it('throws on an action not declared for the slug', () => {
+    expect(() => workListFor('brass-courier', ['fly'])).toThrow(/no action "fly"/);
+    expect(() => workListFor('brass-sentry', ['jump'])).toThrow(/no action "jump"/);
+  });
+
+  it('an explicit action filter returns exactly those actions, in the order given', () => {
+    const list = workListFor('brass-courier', ['attack', 'hurt', 'death']);
+    expect(list.map((w) => w.action)).toEqual(['attack', 'hurt', 'death']);
+    expect(list.map((w) => w.motionKey)).toEqual([
+      'brass-courier/attack',
+      'brass-courier/hurt',
+      'brass-courier/death',
+    ]);
+    expect(list.every((w) => w.slug === 'brass-courier')).toBe(true);
+  });
+});
+
+/**
+ * `resolveWorkList` above is a correct, independently-testable function — and that alone is NOT
+ * proof `main()` calls it. A prior review flagged exactly this: a pure `workListFor`/`resolveWorkList`
+ * test stays green even if `main()`'s loop reverts to `Object.entries(VIDEO_MOTIONS)`, because that
+ * mutation never touches the exported function itself, only main()'s own loop header. `main()` runs
+ * `ffprobe`/`ffmpeg` so it cannot be invoked from a synthetic-fixture unit test; its source text is
+ * pinned instead, the same technique `sheet-name-contract.test.ts` already uses for this exact file.
+ */
+const BUILD_CLIPS_SRC = (
+  import.meta.glob('../../tools/gen/build-clips.mjs', {
+    query: '?raw',
+    import: 'default',
+    eager: true,
+  }) as Record<string, string>
+)['../../tools/gen/build-clips.mjs'];
+
+describe('main() actually walks resolveWorkList() — not a re-test of the function in isolation', () => {
+  it('main()\'s loop header reads `for (const { motionKey } of resolveWorkList())`', () => {
+    expect(BUILD_CLIPS_SRC).toContain('for (const { motionKey } of resolveWorkList())');
+  });
+
+  it('main() no longer walks `Object.entries(VIDEO_MOTIONS)` directly', () => {
+    expect(BUILD_CLIPS_SRC).not.toContain('for (const [action, spec] of Object.entries(VIDEO_MOTIONS))');
+  });
+});
+
+describe('resolveWorkList — asserted against build-clips.mjs\'s actual main() work list, not a copy', () => {
+  it('no argv: the union of every slug\'s own actions — never Object.keys(VIDEO_MOTIONS)', () => {
+    const list = resolveWorkList([]);
+    const expectedCount = SLUGS.reduce((n, slug) => n + configFor(slug).actions.length, 0);
+    expect(list.length).toBe(expectedCount);
+    expect(list.length).toBeLessThan(Object.keys(VIDEO_MOTIONS).length);
+    expect(list.map((w) => w.motionKey)).not.toContain('brass-sentry/fire-elevated');
+  });
+
+  it('a bare slug argv resolves that slug\'s full action list, excluding jump for brass-courier is NOT assumed — but explicit filters are honoured', () => {
+    const list = resolveWorkList(['brass-courier', 'attack', 'hurt', 'death']);
+    expect(list.map((w) => w.motionKey)).toEqual([
+      'brass-courier/attack',
+      'brass-courier/hurt',
+      'brass-courier/death',
+    ]);
+    expect(list.map((w) => w.motionKey)).not.toContain('jump');
+  });
+
+  it('brass-sentry with no action filter never includes fire-elevated', () => {
+    const list = resolveWorkList(['brass-sentry']);
+    expect(list.map((w) => w.motionKey)).toEqual([
+      'brass-sentry/idle',
+      'brass-sentry/fire',
+      'brass-sentry/death',
+    ]);
   });
 });
