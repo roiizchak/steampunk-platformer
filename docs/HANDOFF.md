@@ -1008,3 +1008,79 @@ list. The ten genuine offenders (`gates.mjs` 726, `GameScene.ts` 611, `prompt.mj
 556, …) are untouched.
 
 **Phase 5 is failing and must be reported failing.**
+
+---
+
+## 12b. Session 6, second half — the ceiling moved, and the prompt lever ran out
+
+**Spend: $36.60 → $41.36. The user raised the ceiling from $40 to $45**, naming the figure explicitly
+after being asked to; the reasoning and who decided it are in
+[qa/phase-05-combat.md](qa/phase-05-combat.md). **⚠️ `prd/phase-05-combat.md` §1b still says "$40,
+and it is a hard STOP" — that line is stale and was deliberately not edited from the session that
+spent against it.** Correct it deliberately.
+
+### What eight more clips established
+
+| clip | state | detail |
+|---|---|---|
+| `rust-scavenger/death` | ✅ **PASSES G6** | 10 frames, onset f11 — but **will not pack**, see below |
+| `brass-courier/hurt` | ✅ **SHIPS** | catalogued, 288 px, fps 20 derived. No purchase; the sweep found it |
+| `brass-sentry/death` | FAIL `top 0` only | `-r4` is the best: `L226 R200 T0 B244`. The failure is the **steam plume** |
+| `brass-courier/attack` | FAIL `R0` | `L188 R0` — unchanged across three prompt clauses |
+| `brass-courier/death` | FAIL `R0` | `L172 R0` |
+| `brass-sentry/fire` | FAIL `R0` | and its **discharge is nearly absent** — a separate problem |
+| `rust-scavenger/walk` | extracts, cycle **2.0** | blocked at pack — cell width |
+| `rust-scavenger/chase` | extracts, cycle 2.6 | fits 288; blocked at catalog — stride unmeasured |
+
+### 🔴 The cell decision was taken on incomplete data — reopen it
+
+**User chose to widen the global cell 288 → 320×384**, keeping M3's one-cell rule, on the strength of
+`rust-scavenger/walk` needing **296 px**. Then `rust-scavenger/death` turned out to need **358 px** —
+a collapsed scavenger lying flat is genuinely wider than it is tall. **320 does not cover it.**
+Measured requirements: `chase` fits 288 · `walk` 296 · `death` **358**. The courier and sentry sheets
+all fit 288 today.
+
+**Nothing has been repacked.** 288 → 384 is a ~33 % atlas increase against the ~11 % that was agreed,
+which is a materially different decision, so it goes back to the user rather than being rounded up
+quietly.
+
+### 🔴 The prompt lever is exhausted for the courier, and padding is the proven answer
+
+Three containment clauses have now been tried against `brass-courier/attack`'s `right 0`, and its
+margins did not move: `L188 R0` before and after. **What demonstrably works is padding** — the padded
+`brass-courier/attack` (`-r3`, already bought and on disk) **passed G6 cleanly**. Its only defect was
+that it packed at **114 px against `hurt`'s 288 px**, because `scale` is per-slug and was derived from
+an unpadded clip.
+
+> **So the courier's framing is already solved on disk, and what remains is a number in a config
+> file.** The $0 path is a declared per-`(slug, action)` scale, pasted by hand with provenance exactly
+> as A5 requires, letting a padded generation and an unpadded one coexist. That was the option
+> originally recommended and not taken; the $4.76 spent since is what established that the
+> alternative — re-shooting unpadded — does not fix the framing.
+
+### `HOLD_CENTRED`: withdrawn as UNATTRIBUTABLE, not disproven
+
+One win, one loss, two no-change across four clips (`rust-scavenger/death` fixed;
+`brass-sentry/death` destroyed from `L226 R200` to `L0 R0`). **The endpoint has no `seed` input**, so
+four samples split 1/1/2 cannot separate a clause from run-to-run variance. Left unapplied as a risk
+judgement. `DEBRIS_MARGIN`, by contrast, IS attributable: `L2 → L226`, single-variable.
+
+### 🔴 5.11's frame budget is measured and it is not comfortable
+
+`tests/e2e/phase-05-combat.spec.ts` now exists (46 e2e pass). Under **22 drawn enemy bodies**:
+**90 frames, median 55.70 ms, max 63.30 ms — roughly 18 fps against a 60 fps target.** The spec
+asserts a loose `<100 ms` sanity ceiling because no baseline exists (PRD §7: the vault has nothing on
+performance). **Interpreting this is criterion 5.11's owner's job** and it should not be waved through
+— though headless Playwright plus 34.5 MB of parallax PNG per boot is a known confound.
+
+### Traps added
+
+- **A summary line is not evidence, demonstrated live.** A regex rewrote an `import {}` list; seven
+  suites died at parse and vitest printed **`PASS (745) FAIL (0)`** — zero failures while 102 tests
+  never ran. Every count since is taken from the JSON reporter (`--reporter=json --outputFile`).
+- **Do not measure the tree while an agent is mutating it.** A run showed `enemy-view` and
+  `player-hud` failing with `healthBarFillWidth` returning full width; the source was correct and the
+  tree matched HEAD — it was a subagent's deliberate C1 mutation, mid-revert. Generalises the existing
+  "never run `test:sim-isolated` while others work".
+- **An unescaped apostrophe in a test title** terminated a string and produced a brace error 100 lines
+  away.
