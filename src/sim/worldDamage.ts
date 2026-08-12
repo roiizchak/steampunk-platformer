@@ -34,9 +34,31 @@
 import { HAZARD_DAMAGE, belowKillPlane, hazardHit } from './hazards';
 import { SCAVENGER, overlapsScavenger } from './enemies';
 import { damagePlayer, killPlayer } from './combat';
-import { PLAYER_BOX, toWorld } from './player';
+import { DEFAULT_TUNING, PLAYER_BOX, toWorld } from './player';
 import { projectileHit } from './projectiles';
-import type { World } from './types';
+import type { PlayerSim, World } from './types';
+
+/**
+ * Knockback speed on a landed, non-lethal hit, px/tick.
+ *
+ * Reuses `DEFAULT_TUNING.walkMax` (Phase 2's walk cap) rather than authoring a new number — one
+ * measured constant, a second consumer. Lives here rather than in `combat.ts` because `combat.ts`
+ * exports `isCombatState`, which `player.ts` imports; a knockback constant sourced FROM `player.ts`
+ * and consumed IN `combat.ts` would close that into a cycle. `worldDamage.ts` already imports from
+ * both `combat.ts` and `player.ts` and feeds neither, so it is the seam without one.
+ */
+export const KNOCKBACK_SPEED = DEFAULT_TUNING.walkMax;
+
+/**
+ * Shove the player away from `sourceX`, horizontally only — knockback never touches `vy`.
+ *
+ * `sign === 0` (a dead-centre contact) resolves to the player's own `facing` rather than leaving a
+ * zero-impulse hole: a hit landed exactly on-centre must still shove *somewhere*.
+ */
+function applyKnockback(player: PlayerSim, sourceX: number): void {
+  const dir = Math.sign(player.x - sourceX) || player.facing;
+  player.vx = KNOCKBACK_SPEED * dir;
+}
 
 /**
  * Apply every world damage source to the player, in a fixed order.
@@ -61,13 +83,27 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
 
   const box = toWorld(PLAYER_BOX, player.x, player.y, player.facing, world.scale);
 
-  if (hazardHit(previousX, previousY, player.x, player.y, world.hazards) !== null) {
+  const hazard = hazardHit(previousX, previousY, player.x, player.y, world.hazards);
+  if (hazard !== null) {
+    // Hazard knockback is deliberately EXEMPT, not merely unimplemented. `hazardHit` returns the
+    // rectangle the player's feet swept through, not a point of origin — there is no "the hazard is
+    // over there" to shove away from. Neither candidate rule survives contact: the rectangle's
+    // nearest edge is arbitrary for a spike strip the player is usually falling THROUGH rather than
+    // walking INTO, and reversing the player's own travel double-counts a wall or floor collision
+    // that has already stopped them this same tick. Decided rather than left to fall out of the
+    // code by accident (Codex plan review correction 3).
     damagePlayer(player, HAZARD_DAMAGE);
   }
 
   const shot = projectileHit(world.projectiles, box);
   if (shot !== null) {
-    damagePlayer(player, shot.damage);
+    // The guard is both conditions, and both are load-bearing: `damagePlayer`'s boolean return is
+    // what tells a refused hit (i-frames, already dead) from a landed one, and `player.hp > 0` is
+    // "no shove on a corpse" — `combat.ts`'s step-4 ordering exists so a lethal hit does not also
+    // move the body it just killed (Codex plan review correction 1).
+    if (damagePlayer(player, shot.damage) && player.hp > 0) {
+      applyKnockback(player, shot.x);
+    }
     // Consumed on impact, whether or not it actually cost hp. A shot left flying through an
     // invulnerable player re-hits the moment the window lapses, which reads as one bullet doing
     // damage twice from the same position.
@@ -81,7 +117,9 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
       continue;
     }
     if (overlapsScavenger(scavenger, box, world.scale)) {
-      damagePlayer(player, SCAVENGER.damage);
+      if (damagePlayer(player, SCAVENGER.damage) && player.hp > 0) {
+        applyKnockback(player, scavenger.x);
+      }
       break;
     }
   }
