@@ -1066,3 +1066,74 @@ does not slow down, **it drops poses**. That is precisely the reported symptom, 
 letting the cycle run *slow*, which is **vault 4.22 foot-slide** — a worse defect because it is
 invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.** Full
 measurement and the H1/H2 separation are recorded below once taken.
+
+## S1 and S2 — CLOSED, and fixing S2 blinded criterion 5.9's sweep
+
+`deadZone` is a **per-scavenger field**, not a module constant, because criterion 5.9's sweep runs
+through `enemyKnobs()` over **live entity fields** and a constant is invisible to it — Codex plan
+review 8, finding 5. It follows the exact shape `detectRadius` and `releaseRadius` already use, and
+`enemyTuning.ts`'s own docstring at `:17-23` already stated that adding a tunable field means adding
+it there. The chase clamp is now positional-only and shared by both paths; `facing` is decided per
+path, so a chaser pinned at its bound still faces the player.
+
+> 🔴 **Adding the knob turned `enemy-tuning.test.ts` RED — and the cause was this session's own S2
+> fix.** `scav0.deadZone moved no observable output in either placement`. Not a dead knob: a blind
+> fixture. In the `near` placement the scavenger chases the retreating player straight into
+> `patrolMin` and **clamps**, so total travel saturates at `3000 - 2600 = 400` px for *every* value
+> of `deadZone`. The clamp is S2's fix. **A gate can be made blind by a correct change to the thing
+> it measures**, and only a knob that happened to need close range revealed it.
+>
+> Repaired by adding a third placement, `contact`, with patrol bounds wider than the scavenger can
+> cross in 240 ticks — travel becomes speed-limited rather than clamp-limited — and the player
+> starting inside the dead zone. The assertion is `some()` across placements, so a third placement
+> can only make the sweep **more** sensitive: **broadening what the gate MEASURES, never loosening
+> what it TOLERATES.** Watched red by mutating the dead-zone check to `if (true)`, restored from a
+> fresh temp copy, revert verified **by count** (1 → 0 → 1, zero `if (true)` remaining).
+
+> 🔴 **The parity coincidence struck TWICE in one session**, in W1 and again in W2, and both times in
+> a test written to catch a false negative. A fixture with the player at the scavenger's own x makes
+> a *live* scavenger oscillate `500 → 508 → 500`, so on an **even** tick count it lands home and the
+> test passes with the bug present. **"The number did not change" is not evidence unless you know
+> the bug would have changed it.**
+
+## Phase 4 debt — 4.10 and 4.12 are RUN, and both PASS
+
+Both were on the §1b ledger and both were confirmed still unrun by the Codex implementation review.
+Closed with throwaway scratchpad probes; **no tracked file was changed to close either.**
+
+**4.10 — `gateReachBand` against the REAL shipped sheets.** All nine catalogued sheets swept, each
+with its own fresh call, and the gate's internal loop tracks a `best` across every frame rather than
+breaking on the first failure (`tools/gen/gates.mjs:211-244`) — so this is a sweep, not an instance,
+which is the standing correction to this phase's six stop-at-first-failure incidents. **Re-run
+independently by the orchestrator; every number below reproduced exactly.**
+
+| sheet | cell | frame | reachX | band y | movedPx |
+|---|---|---:|---:|---|---:|
+| `brass-courier-idle` | 288×384 | 7/12 | 199 | 242–254 | 14678 |
+| `brass-courier-walk` | 288×384 | 5/12 | 215 | 232–244 | 20455 |
+| `brass-courier-run` | 288×384 | 4/12 | 219 | 195–207 | 22741 |
+| `brass-courier-jump` | 288×384 | 1/6 | 227 | 216–232 | 22250 |
+| `brass-courier-fall` | 288×384 | 1/6 | 230 | 217–233 | 16687 |
+| `brass-courier-hurt` | 288×384 | 1/6 | 216 | 237–247 | 21707 |
+| `brass-courier-attack` | 288×384 | 3/8 | 269 | 148–152 | 23765 |
+| `brass-sentry-idle` | 288×384 | 3/8 | 260 | 237–248 | 19650 |
+| `rust-scavenger-walk` | **512**×384 | 6/12 | 403 | 288–293 | 33926 |
+
+**Nine PASS, zero FAIL, zero INDETERMINATE.** The per-slug cell is confirmed live in the audit — the
+scavenger is measured at 512, not at a global 288. **G5 does not substitute for this** (Codex impl
+finding 6): different audit, different question, and this is the one that had never produced a number.
+
+**4.12 — `findSource`'s deliberate-removal red run *(C1)*.** `_generated/sheets/brass-courier-attack-clip.png`
+(1,210,555 bytes) backed up to a fresh temp copy, `findSource` confirmed working on the positive case
+first, then the input removed. It threw, from `tools/gen/assetSources.mjs:36`:
+
+```
+assets:build: no source sheet for declared animation "attack" — expected
+C:\Claude\Steampunk Platformer\_generated\sheets\brass-courier-attack-clip.png.
+A declared input that cannot be found fails the build; it is never substituted (vault 4.16).
+```
+
+Restored and verified **by count (1 → 0 → 1)**, `cmp` byte-identical, and `findSource` resolving
+again afterwards. `_generated/` is gitignored, and `git status --porcelain` stayed empty throughout —
+which is exactly why the backup went to the scratchpad and **not** to `git stash`: the tree held two
+other agents' uncommitted work at the time.
