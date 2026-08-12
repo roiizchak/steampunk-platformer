@@ -25,6 +25,8 @@ import {
   stepScavenger,
   stepSentry,
 } from '../../src/sim/enemies';
+import { stepEnemies } from '../../src/sim/enemyTurn';
+import { createWorld } from '../../src/sim/tick';
 
 /** The sentry sits at x=1000; the player is placed relative to it. */
 function sentryAt(x: number) {
@@ -245,5 +247,55 @@ describe('detects — the imported predicate, never restated (5.3)', () => {
 
     stepScavenger(s, { playerX: inside, playerY: 0 });
     expect(s.chasing).toBe(true);
+  });
+});
+
+describe('dead enemies stop acting — stepEnemies must filter hp <= 0', () => {
+  const SCALE = 6;
+  const BOUNDS = { widthPx: 8000, heightPx: 1080 };
+
+  it('a dead sentry pushes zero projectiles and its cooldownCounter does not advance', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: SCALE,
+      bounds: BOUNDS,
+      spawn: { x: 1000, y: 960 },
+      enemies: [{ slug: 'brass-sentry', x: 1000, y: 960, patrolMin: 1000, patrolMax: 1000 }],
+    });
+    const sentry = world.enemies.sentries[0]!;
+    sentry.hp = 0;
+    const counterBefore = sentry.cooldownCounter;
+
+    for (let i = 0; i < 60; i += 1) {
+      stepEnemies(world);
+    }
+
+    expect(world.projectiles.length).toBe(0);
+    expect(sentry.cooldownCounter).toBe(counterBefore);
+  });
+
+  it('a dead scavenger with real patrol bounds does not move, turn or start chasing', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: SCALE,
+      bounds: BOUNDS,
+      // Player kept well outside detectRadius (480) so a live scavenger would only PATROL, not
+      // chase — patrol drift is monotonic and deterministic, so `x` changing is never a coincidence
+      // the way an oscillating chase could be.
+      spawn: { x: 99999, y: 960 },
+      enemies: [{ slug: 'rust-scavenger', x: 500, y: 960, patrolMin: 400, patrolMax: 900 }],
+    });
+    const scavenger = world.enemies.scavengers[0]!;
+    scavenger.hp = 0;
+    const xBefore = scavenger.x;
+    const facingBefore = scavenger.facing;
+
+    for (let i = 0; i < 60; i += 1) {
+      stepEnemies(world);
+    }
+
+    expect(scavenger.x).toBe(xBefore);
+    expect(scavenger.facing).toBe(facingBefore);
+    expect(scavenger.chasing).toBe(false);
   });
 });

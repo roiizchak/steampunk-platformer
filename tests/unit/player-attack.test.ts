@@ -199,15 +199,21 @@ describe('enemies die, and the comparison uses two DIFFERENT entities (criterion
       scale: SCALE,
       solids: FLOOR,
       bounds: BOUNDS,
-      spawn: { x: 1000, y: 960 },
-      enemies: [{ slug: 'rust-scavenger', x: 1000, y: 960, patrolMin: 1000, patrolMax: 1000 }],
+      // Player kept outside the 480px detectRadius, so a live scavenger would only PATROL, not
+      // chase — patrol drift is monotonic, so `x` changing is never a same-x coincidence the way an
+      // oscillating chase (player exactly at the corpse's spawn x) could be.
+      spawn: { x: 400, y: 960 },
+      enemies: [{ slug: 'rust-scavenger', x: 1000, y: 960, patrolMin: 700, patrolMax: 1300 }],
     });
-    world.enemies.scavengers[0]!.hp = 0;
+    const corpse = world.enemies.scavengers[0]!;
+    corpse.hp = 0;
+    const xBefore = corpse.x;
 
     for (let i = 0; i < 30; i += 1) {
       tick(world, { ...IDLE });
     }
     expect(world.player.hp).toBe(PLAYER_MAX_HP);
+    expect(corpse.x).toBe(xBefore);
   });
 
   it('the two enemies do different damage as well as having different hp', () => {

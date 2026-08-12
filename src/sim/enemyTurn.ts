@@ -28,7 +28,9 @@ export function stepEnemies(world: World): void {
   const sighting = { playerX: player.x, playerY: player.y };
 
   for (const scavenger of world.enemies.scavengers) {
-    stepScavenger(scavenger, sighting);
+    if (scavenger.hp > 0) {
+      stepScavenger(scavenger, sighting);
+    }
   }
 
   world.projectiles = stepProjectiles(
@@ -38,6 +40,9 @@ export function stepEnemies(world: World): void {
   );
 
   for (const sentry of world.enemies.sentries) {
+    if (sentry.hp <= 0) {
+      continue;
+    }
     if (!stepSentry(sentry, sighting).fired) {
       continue;
     }

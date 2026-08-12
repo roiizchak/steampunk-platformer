@@ -979,3 +979,90 @@ own author had made — the same pattern as sessions 4 and 6.
 
 **Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
 diff, saved to `docs/reviews/phase-05-impl.md`.
+
+> ⚠️ That line was written in session 7 and is now historical: **5.14 ran**, returned BLOCK with 6
+> blockers, and is recorded in [phase-05-impl.md](phase-05-impl.md).
+
+---
+
+# Plan review 8 — session 8, 2026-08-12
+
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` + `fs.readFileSync`
+instruction (the sandboxed shell cannot spawn processes on this machine — `CreateProcessAsUserW
+failed: 5`, permanent), and **naming `docs/HANDOFF.md` §13 and `docs/qa/phase-05-combat.md` as
+known-stale** so the reviewer would not spend findings on them. That instruction is itself an
+application of session 7's lesson: *a handoff document is stale from the first commit of the session
+that will rewrite it*, and two of session 7's six blockers were Codex correctly reporting exactly that.
+
+**Target:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-whimsical-lightning.md`, against
+HEAD `b37ccf9`.
+**Verdict: BLOCK — 2 blockers, 4 major, 2 minor.**
+
+**Every finding was re-verified locally and every one was confirmed.** That keeps this phase's record
+unbroken: **eight plan reviews plus one implementation review, and not one checkable finding has ever
+been refuted.**
+
+---
+
+## The review, verbatim
+
+> BLOCK
+>
+> 1. **Blocker — W4's prescribed knockback ordering is impossible against the current API and can shove lethal or refused hits.** The plan says to apply knockback "after damage and before the combat-state write," but `damagePlayer()` performs HP reduction and the `hurt`/`death` transition atomically before returning. Applying knockback afterward without checking both its boolean result and surviving HP would also shove during i-frames or after lethal damage. The rule must be `damagePlayer(...) === true && player.hp > 0`, with an i-frame/refused-hit regression added. [plan:218-231] [combat.ts:191-212] [worldDamage.ts:64-85]
+>
+> 2. **Blocker — W4 voids criterion 5.15, but the rerun matrix omits it.** Criterion 5.15 signs off hazard and kill-plane timing through `applyWorldDamage`; W4 edits that exact step-9b path. The plan's owner list and explicit invalidation list omit 5.15. [phase-05-combat.md:155-159] [worldDamage.ts:54-85] [plan:402-414]
+>
+> 3. **Major — W4 neither defines nor tests its promised three-source behavior.** Its three planned tests could all exercise one source while projectile, contact, or hazard knockback remains untested. Hazard direction is unspecified since `hazardHit()` returns a rectangle, not an origin. The plan's claim that `hazards.ts:85,88` already stops hazard motion is false — those lines stop bodies at world bounds, not on hazard contact. [plan:223-234] [worldDamage.ts:64-85] [hazards.ts:79-89] [hazards.ts:143-161]
+>
+> 4. **Major — the proposed knockback can pass while being effectively invisible on the ground.** Damage lands at step 9b, so the next tick runs friction before integration; a 5.54 impulse is cut by 3.69 ground friction to 1.85 px before its first movement and hits zero the following tick. Air friction (0.51) behaves very differently. Plan tests should pin grounded/airborne displacement over the lock window, not just `vx` sign. [player.ts:79-85] [player.ts:211-241] [tick.ts:257-282] [plan:218-238]
+>
+> 5. **Major — W2's claimed criterion-5.9 sweep cannot be performed as designed.** W2 adds `CHASE_DEAD_ZONE` as a module constant, but 5.9's sweep machinery goes through `enemyKnobs()` over live entity fields; the proposed W2 tests never probe either side of the 96 px boundary either. [plan:179-188] [enemyTuning.ts:17-23] [enemyTuning.ts:68-93]
+>
+> 6. **Major — `TUNING.walkMax` does not exist.** The Phase 2 default is `DEFAULT_TUNING.walkMax`; live worlds carry `world.tuning` instead. The plan's exact implementation instruction as written does not typecheck; it must pick one of the two. [plan:228-231] [player.ts:79-85] [index.ts:44-54]
+>
+> 7. **Minor — W2 does not test the facing-preservation part of its refactor.** A test that only asserts the positional clamp can pass even if the two facing assignments remain shared, leaving the scavenger facing away from the player at the chase boundary. [plan:174-185] [enemyScavenger.ts:117-133]
+>
+> 8. **Minor — W10 asserts a stale comment that the tree already fixed.** The current e2e header already states the walk sheet exists and 5.4 has hands-on evidence; this work item should be dropped or narrowed to just the automated regression addition. [plan:369-377] [phase-05-combat.spec.ts:1-13]
+>
+> Positive checks that held up:
+>
+> - All four stated corrections are supported by the tree: `canAct` blocks attacks in combat states, the corpse test is vacuous for movement, rendering already selects death and retains the body at reduced alpha, and `isSprite` is reachable via the existing dev-only `__phaserGame` seam.
+> - W2's control-flow refactor is patrol-preserving and fixes chase clamping, provided the facing assignments are genuinely patrol-only.
+> - W3's predicate placement respects the tick order: it evaluates before step 4, counters 0–5 lock the six following movement ticks, counter 6 releases control, and attacks stay blocked through `hurt`.
+> - W4 correctly places damage at 9b with knockback movement beginning the following tick; "no lethal knockback" is consistent with the documented principle, but finding 1 must define how it's enforced.
+> - Criterion 5.16's proposed row would pass `docs-contract.test.ts`.
+>
+> No files were modified; no processes or tests were run.
+
+---
+
+## Local re-verification and triage — 8 of 8 dispositioned, 8 of 8 CONFIRMED
+
+| ID | Sev | Disposition |
+|---|---|---|
+| **1** | blocker | ✅ **CONFIRMED AND APPLIED.** `damagePlayer` (`combat.ts:201-213`) reduces `hp` **and** calls `enterCombatState` in one body before returning, so the seam the plan described does not exist. Its own docstring says the **boolean return is the point** and that *"refusal is a normal outcome here, not an error."* The plan would have shoved the player on every hit refused during i-frames — **a free repositioning tool granted by a defensive omission.** Guard corrected to `damagePlayer(...) && player.hp > 0`, and a refused-hit regression added. |
+| **2** | blocker | ✅ **CONFIRMED AND APPLIED.** 5.15 signs off hazard and kill-plane timing through `applyWorldDamage`, which is the exact function W4 edits. It was absent from the plan's void list. Added. **This is the second time this phase that the void list was found incomplete** — session 7 had to re-run 5.1 and 5.5 for the same reason. |
+| **3** | major | ✅ **CONFIRMED AND APPLIED, and one clause was flatly wrong.** `hazards.ts:79-89` is **`clampToBounds`** — a world-bounds clamp that zeroes `vx` at the left and right edges. It has nothing to do with hazard contact, and the plan cited it as if it did. `hazardHit()` returning a **rectangle rather than an origin** means hazard knockback direction is genuinely undefined and must be stated, not derived. Plan now requires **one test per damage source**. |
+| **4** | major | ✅ **CONFIRMED AND APPLIED — and it re-opens a user decision.** Ground friction 3.69 against a 5.54 impulse leaves **1.85 px** before the first integration and zero after; air friction is 0.51, a 7× difference. So `walkMax` buys roughly **2 px** of visible ground knockback. The user chose `walkMax` **before this was known**. Tests now assert **displacement over the lock window, grounded and airborne separately**, and the measured number goes back to the user rather than being silently changed. |
+| **5** | major | ✅ **CONFIRMED AND APPLIED.** `enemyKnobs` (`src/render/enemyTuning.ts:68-93`) builds knobs over **live entity fields**; a module constant is invisible to it, so `CHASE_DEAD_ZONE` could never have satisfied 5.9. `deadZone` becomes a per-scavenger field defaulted in `SCAVENGER`, exactly as `detectRadius` and `releaseRadius` already are. Codex additionally caught that the proposed tests **never probed either side of the threshold** — a wrong constant would have passed all of them. Boundary probes at 95 px and 97 px added. |
+| **6** | major | ✅ **CONFIRMED AND APPLIED.** The export is `DEFAULT_TUNING` (`player.ts:79`); there is no `TUNING`. The plan's instruction would not have typechecked. |
+| **7** | minor | ✅ **CONFIRMED AND APPLIED.** The refactor lifts two `facing` assignments into the patrol branch, and nothing proposed would have failed if they were left shared. A facing-preservation test at the chase boundary added. |
+| **8** | minor | ✅ **CONFIRMED AND NARROWED.** `tests/e2e/phase-05-combat.spec.ts:1-13` was already corrected in session 7 and now says so explicitly, including that it misled the previous Codex review. W10 reduced to the automated guard alone. |
+
+### What this review is worth
+
+**Six of the eight findings landed on a single work item — W4, the knockback — and W4 is the only
+item in the plan building something that does not exist yet.** The five items repairing known defects
+drew two minor findings between them. That is a usable signal: **the reviews are most valuable
+against new construction, and least valuable against a fix whose target has already been measured.**
+
+**Finding 1 is the one worth remembering.** The plan's guard was wrong by *omission* — it said what to
+do on a successful hit and never said what to do on a refused one, and `damagePlayer` returns a
+boolean precisely because refusal is normal. A reviewer reading the plan alone could not have caught
+it; it needed the function's own docstring. **A plan that names a function without reading its
+contract is guessing**, however carefully the rest of it is argued.
+
+**Finding 4 is the one worth acting on beyond this phase.** A knockback that satisfies
+`expect(vx).toBeGreaterThan(0)` while moving the player 2 px is the same failure shape as vault 4.22 —
+a number that is correct in the sim and invisible on screen. **Assert the observable, not the
+intermediate.**
