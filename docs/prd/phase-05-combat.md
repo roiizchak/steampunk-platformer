@@ -69,13 +69,31 @@ rate was. Two rules follow, and they are why 4.27 is at the top of this list:
    absent.** `genmedia pricing` was wrong by ~21×, cheap. It is not a price; do not project on it.
 2. **A gate that prevents a re-shoot is worth more than a cheaper endpoint.**
 
-**This phase's ceiling is $40, and it is a hard STOP.** Agreed with the user before any spend: halt
-mid-batch and ask rather than finishing a sheet through the line. It was the one number Phase 5 had
-recorded nowhere in the repo. First-pass cost is ≈$16.67 across ~15 clips and ~8 stills, leaving
-≈$23 of rework headroom — at Phase 4's 77 % rework rate that lands over the line, at 50 % it lands
-near $32. Named descope levers, in the order they get pulled: `rust-scavenger/hurt` (tint flash
-instead), `brass-sentry/death` (last `fire` frame plus a particle), `rust-scavenger/chase` (reuse
-`walk` and accept the foot-slide, recorded). The number goes to the user before any lever is pulled.
+**This phase's ceiling is $55, and it is a hard STOP.** Halt mid-batch and ask rather than finishing a
+sheet through the line. Named descope levers, in the order they get pulled: `rust-scavenger/hurt`
+(tint flash instead), `brass-sentry/death` (last `fire` frame plus a particle), `rust-scavenger/chase`
+(reuse `walk` and accept the foot-slide, recorded). The number goes to the user before any lever is
+pulled.
+
+> ### The ceiling has moved twice. Both moves are recorded, with who made them.
+>
+> **A ceiling that moves without a record is not a ceiling**, and Phase 4's **$6.39 overrun against a
+> $25 ceiling** is the reason this phase has one at all. So the chain is kept in full rather than
+> overwritten:
+>
+> | | figure | who, when | why |
+> |---|---:|---|---|
+> | original | **$40** | agreed with the user **before any spend** | First-pass cost was ≈$16.67 across ~15 clips and ~8 stills, leaving ≈$23 of rework headroom — at Phase 4's 77 % rework rate that lands over the line, at 50 % near $32 |
+> | first move | **$45** | **user, 2026-08-11, session 6**, mid-session, figure named explicitly on request | At $36.60 all four re-shoots of that round still failed G6. Options put: spend the last $3.40, spend $1.19, hand off, or raise. Chosen for 4–5 clips of measured need plus 2–3 for a second round |
+> | second move | **$55** | **user, 2026-08-12, session 7**, figure named explicitly on request | Asked with the honest note that **nothing in the remaining QA gate needs money** and the prompt lever is exhausted for the courier. Chosen for the named deferred list (~$4.91) plus a genuine second round (~$8.33) |
+>
+> **Spend at the time of the second move: $41.36.** The full reasoning for both, and the options that
+> were on the table each time, are in [qa/phase-05-combat.md](../qa/phase-05-combat.md).
+>
+> ⚠️ This line read *"$40, and it is a hard STOP"* until session 7. It was **deliberately not edited by
+> session 6**, which raised the ceiling — silently rewriting a phase's stated constraint from the
+> session that spent against it is exactly the move that makes a ceiling meaningless. It was corrected
+> here as a distinct, deliberate act, with the authority above.
 
 ### 2. Required skills
 `groups-and-containers` · `events-system` · `animations` · `data-manager` ·

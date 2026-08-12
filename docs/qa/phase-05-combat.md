@@ -408,3 +408,138 @@ partly works.
 | **`DEBRIS_MARGIN`** | **WORKED.** `brass-sentry/death` went from `left 2 / right 0` to `left 226 / right 200`, its wreck compact rather than frame-spanning, **and it still ends broken rather than intact** — the anti-`SPAN_CLIP` sentence doing its job. |
 | **`DISCHARGE_MARGIN`** | **BACKFIRED.** Satisfied by the model very largely **not firing** — `fire-r4` returned a thin wisp of smoke and no flash. A constraint describing a SHAPE, met by not performing the action. The second instance of that failure after `SPAN_CLIP`, and the reason `DEBRIS_MARGIN` carries an explicit "this governs the scatter, not the destruction" sentence. |
 | **`HOLD_CENTRED`** | **UNPROVEN at the time of writing.** Authored at $0 against a measured diagnosis; the batch testing it is the one the raised ceiling paid for. |
+
+---
+
+## Session 7 — 2026-08-12. Four decisions, and the measurements behind them
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-vectorized-hanrahan.md`. Its Codex plan
+review — the **seventh** for this phase — returned **BLOCK, 4 blockers, 3 major, 1 minor**; the two
+decisive blockers were re-verified locally and **CONFIRMED**, and all eight were applied. Appended to
+[reviews/phase-05-plan.md](../reviews/phase-05-plan.md).
+
+**Verified baseline before any change**, taken from the JSON reporter rather than a summary line:
+
+```
+suites passed 255  failed 0  total 255
+tests  passed 847  failed 0  total 847
+```
+
+### D1 — the global cell goes 288×384 → 384×384. Decision M3 stays intact.
+
+**Taken by the user, 2026-08-12, after being shown every measurement rather than one.** Session 6
+asked with a single data point (`walk` needs 296) and got an answer — 320×384 — that the next
+measurement invalidated. The full set, at the scavenger's scale `0.56074766`:
+
+| sheet | width required | fits 288? | fits 320? | fits 384? |
+|---|---:|---|---|---|
+| `rust-scavenger/chase` | 288 | ✅ | ✅ | ✅ |
+| `rust-scavenger/walk` | **296** | ❌ | ✅ | ✅ |
+| `rust-scavenger/death` | **358** | ❌ | ❌ | ✅ |
+| every `brass-courier/*` | 288 | ✅ | ✅ | ✅ |
+| every `brass-sentry/*` | 288 | ✅ | ✅ | ✅ |
+
+**A collapsed scavenger lying flat is genuinely wider than it is tall** — that is why `death` is the
+outlier and why it was not predictable from `walk`. 384 covers it with **26 px spare**.
+
+**The cost was stated before the choice, not after:** 288 → 384 is a **~33 % atlas area increase**
+against the **~11 %** that was agreed in session 6. That is a materially different decision, so it went
+back to the user rather than being rounded up quietly. The alternatives offered were a **per-slug cell**
+(smallest atlas, but amends M3 so one subject gets special treatment) and **320 with
+`rust-scavenger/death` shelved** (cheapest, but discards paid art that already passes G6).
+
+> **Why one global cell is worth 33 %.** M3 exists so that no subject silently gets its own geometry.
+> The turret's wasted area is a recorded, measurable number; a per-slug cell is an invisible
+> divergence that every consumer must then carry.
+
+### D2 — `scale` becomes declarable per `(slug, action)`
+
+**Taken by the user, 2026-08-12.** The courier's framing was already solved on disk and what remained
+was a number in a config file.
+
+`brass-courier-attack-r3.mp4` is padded, **passed G6 cleanly**, and packed — and drew **114 px against
+`hurt`'s 288 px**. The arithmetic, so nobody re-derives it:
+
+```
+courier slug scale      0.23723229   derived from an UNPADDED idle,
+                                     figure fills 1214 px of 1280
+padded round            figure fills  ~480 px of 960
+480 x 0.23723229      = 114 px drawn                (hurt, unpadded: 288 px)
+```
+
+**Padding is a property of a GENERATION, and so is the scale it implies.** A per-slug scale cannot
+serve a padded and an unpadded generation of one subject. The declared per-action scale is **pasted by
+hand with provenance and never computed by the build** — which is what vault A5 actually protects.
+
+**This reverses a decision session 6 took, and the reversal is legitimate for a stated reason.**
+Session 6 chose to re-shoot the courier unpadded, keeping one scale per slug. That was correct *given
+its premise* — that per-slug scale could not serve both. **D2 removes the premise.** And the
+alternative it chose has since been measured and failed: **three containment clauses were tried and
+`brass-courier/attack`'s margins never moved off `L188 R0`** (`/death`: `L172 R0`). The $4.76 spent
+since is what established that the prompt lever is exhausted for this subject.
+
+> **What this costs, stated plainly.** The one-scale rule in `upsertLiftProfile` now binds only
+> **slug-sourced** entries. That is a **narrowing**, not a strengthening, and the Codex review caught
+> an earlier draft of the plan describing it as "strictly stronger". Three genuinely new checks are
+> added alongside it — every entry must carry a finite scale and a known source, and a **cross-slug
+> merge now throws where it was silently accepted** — but the narrowing is real, deliberate, and is
+> this decision.
+
+### D3 — the ceiling goes $45 → $55
+
+**Taken by the user, 2026-08-12, figure named explicitly on request.** Recorded in full, with the
+whole chain from $40, at [prd/phase-05-combat.md §1b](../prd/phase-05-combat.md) — which was also
+corrected this session, since it still read "$40, and it is a hard STOP".
+
+The user was asked with the honest framing that **nothing in the remaining QA gate needs money**: the
+gate, the file splits and the Codex review are all $0, and the only remaining art problem with an
+unattempted fix is `brass-sentry/fire`'s missing muzzle flash. Spend at the time: **$41.36**.
+
+### D4 — config and gate first, at $0; art last
+
+**Taken by the user, 2026-08-12.** Art bought after the gate is art the gate has not reviewed. The
+Codex review then sharpened this into a hard rule rather than a preference: the implementation review
+(criterion 5.14) runs on the final diff, so **any art spend afterwards invalidates it**. Art work is
+therefore **explicitly post-phase** — either a future session with its own gate, or a knowing re-run of
+5.14 and the full verification.
+
+### What the money has already established — do not re-buy any of it
+
+| lever | verdict |
+|---|---|
+| **Ratio-matching** | **PROVEN.** Reframing cut 7 of 7 measured clips. The guard now compares anchor ratio against submitted ratio rather than banning the string `9:16` — which, for the courier's **1536 × 2752 = 0.558** anchor, is the *matched* value and not the defect |
+| **Padding** | **PROVEN for framing, and it costs the scale.** That cost is what D2 pays |
+| **`DEBRIS_MARGIN`** | **WORKED**, single-variable: `brass-sentry/death` `L2 → L226`, wreck compact, **and it still ends broken**. Its "this governs the SCATTER, not the destruction" sentence is load-bearing |
+| **`DISCHARGE_MARGIN`** | **BACKFIRED** — satisfied by the model very largely **not firing**. Second instance of the `SPAN_CLIP` failure: a constraint describing a SHAPE, met by not performing the action |
+| **`HOLD_CENTRED`** | **Withdrawn as UNATTRIBUTABLE, not disproven.** 1 win, 1 loss, 2 no-change over four clips. **The endpoint has no `seed` input**, so four samples cannot separate a clause from run-to-run variance. Kept in `motionClauses.mjs`, applied nowhere. **Do not re-apply it** |
+
+### A correction the Codex review forced to the repository record
+
+**Every handoff since session 4 has described `rust-scavenger/walk` as blocked on cell width and
+`chase` as blocked on its stride, as if these were different problems.** They are not.
+`character-bounds-rust-scavenger.json:22` reads:
+
+```
+"stridePxPerCycle": { "walk": null, "chase": null },
+```
+
+**Both are null.** `walk` hits the pack blocker first, so no session ever reached its catalog blocker.
+This is the **fourth** time in this phase that *"extraction stops at the first failure"* has hidden a
+second defect behind the first — after the G6/`idle` false positive hiding the real `jump` crop, the
+per-action sweep finding `brass-courier/hurt` already clean, and `--derive-scale`'s hardcoded
+`findSource('idle')` deadlocking on a subject with no idle by design.
+
+**The generalisable rule, since it now has four instances:** when a pipeline stops at the first
+failure, a clean verdict on stage N is evidence about stage N **only**. Any statement of the form
+"X is blocked on Y" is provisional until X has actually reached the end.
+
+### A render risk that was checked and cleared, not assumed
+
+Widening the cell moves a Sprite's `displayOriginX` from 144 to 192, because the constructor runs
+`setSizeToFrame` → `setOriginFromFrame`. That would shift every drawn figure by 48 px **if any renderer
+used a horizontal origin other than the frame centre**.
+
+**Checked: none does.** `enemyView.ts:113`, `enemyView.ts:129`, `playerView.ts:112` and
+`GymScene.ts:127` all use **originX 0.5** — which is exactly where `packStrip` centres the figure's
+centroid (`sheets.mjs:353-354`). Vertically `frameHeight` is unchanged and `baselineY = frameHeight`,
+so an `originY` of 1 still lands on the contact line. **The repack is render-safe, and this is why.**

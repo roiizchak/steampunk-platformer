@@ -855,3 +855,127 @@ was buying replacements for, silently, for six of seven keys.** The plan was rew
 
 **Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
 diff, saved to `docs/reviews/phase-05-impl.md`.
+
+---
+
+# Phase 5 — Codex plan review of the SESSION-7 execution plan
+
+**Reviewed:** `C:\Users\royko\.claude\plans\resume-phase-5-combat-vectorized-hanrahan.md`, against
+`docs/prd/phase-05-combat.md` §1b and §6, and `docs/PRD.md` Global Constraints.
+**Invocation:** `/codex:rescue --wait --fresh`, carrying the `node_repl` + `fs.readFileSync`
+instruction (the sandboxed shell cannot spawn processes on this machine — `CreateProcessAsUserW
+failed: 5`, permanent).
+**Run:** 2026-08-12, before `ExitPlanMode`, per CLAUDE.md §4 and criterion 5.13.
+**Verdict: BLOCK — 4 blockers, 3 major, 1 minor.**
+
+**This is the seventh plan review of this phase.** The plan under review proposed: the global cell
+288×384 → 384×384 (decision D1), a declarable per-`(slug, action)` scale (D2), the ceiling raised
+$45 → $55 (D3), and config-then-gate ordering with art last (D4).
+
+## The review, verbatim
+
+> # BLOCK — revise the plan before implementation
+>
+> ## Findings
+>
+> 1. **BLOCKER — Task 2 cannot reach its promised green commit because `rust-scavenger/walk` also lacks a stride.**
+>
+>    The plan says only `chase` is blocked on `stridePxPerCycle`, then requires `walk` to be packed, the orphan-coverage test to pass, and Task 2 to commit before Task 4 measures the strides (plan:31, plan:245, plan:249). In fact, both `walk` and `chase` are `null` (`character-bounds-rust-scavenger.json:22`), and the timing tests explicitly classify both as unmeasured (`catalog-timings.test.ts:152`).
+>
+>    `build-assets` writes the PNG first, then asks `catalogRowFor` for timing (`build-assets.mjs:232`, `build-assets.mjs:256`); missing timing throws (`catalogTimings.mjs:121`). That leaves a PNG without a catalog row, precisely what `catalog-completeness.test.ts` rejects (`catalog-completeness.test.ts:37`).
+>
+>    Measure/set both strides before writing shipped `walk`/`chase`, or pack them only to scratch until Task 4. As ordered, Task 2 cannot pass its own gate.
+>
+> 2. **BLOCKER — the proposed scale guard is not executable against the existing profiles, and RED-B is logically false.**
+>
+>    Existing lift profiles store one root `scale`; their animation entries have neither `scale` nor `scaleSource` (`lift-profile.json:3`, `lift-profile.json:6`). The proposed guard requires every merged entry to have both fields (plan:268), while the writer preserves all old animation entries during a per-action merge (`catalogWrite.mjs:57`). Therefore the first Task-3 build will reject the legacy entries unless the plan explicitly migrates them.
+>
+>    Separately, removing `attack`'s override does **not** produce the claimed collision. The proposed resolution falls back to `config.scale`; that produces another valid `'slug'` entry with the same scale as every existing slug entry (plan:269, plan:284). The guard has no information from which to infer that this particular action required an override.
+>
+>    The redesign adds useful finite/source/cross-slug checks, but it is not strictly stronger: it deliberately accepts multi-scale profiles that the current guard rejects (`catalogWrite.mjs:50`). Add explicit legacy migration and tests for every stated invariant, including cross-slug merge and unknown source.
+>
+> 3. **BLOCKER — Task 5 still leaves criterion 5.12 failing.**
+>
+>    The phase criterion says "No file > 400 lines" (`docs/prd/phase-05-combat.md:138`). The plan splits four files and accepts merely "strictly below 10," with remaining offenders justified (plan:375, plan:417). That leaves six over-limit files. The existing QA log explicitly warns that a green result does not satisfy 5.12 (`docs/qa/phase-05-combat.md:209`).
+>
+> 4. **BLOCKER — optional Task 9 invalidates the implementation review.**
+>
+>    The plan says art after the gate is art the gate has not reviewed (plan:51), runs the implementation review in Task 7 (plan:455), then allows new art in Task 9 (plan:489). If Task 9 runs, review 2 and full verification must rerun on the phase's final diff — otherwise Task 9 must be made explicitly post-phase.
+>
+> 5. **MAJOR — criterion 5.4 has no durable "advanced past frame 0" procedure** — a screenshot cannot prove frame advancement; needs e2e or Playwright sampling of multiple `currentFrame.index` values.
+>
+> 6. **MAJOR — the adoption-reversal checklist omits durable supersession records and a courier-specific anchor contract** — `GENERATION-LOG.md:170` and `docs/generations/phase-05-padded-round.md:66,71` still declare the padded courier clips unusable and need a dated supersession entry; `SUPERSEDED_CLIPS` needs `attack-r5`/`death-r4` added explicitly.
+>
+> 7. **MAJOR — Task 2 can pass without proving its named pure-padding behaviour** — the catalog metadata test compares frame dimensions only, not figure placement, so centroid-alignment could regress silently.
+>
+> 8. **MINOR — the claimed lift-profile `_comment` diff is unsupported** — for a width-only repack, the expected profile diff is no diff at all; the comment is a constant unrelated to frame width.
+>
+> ## Claims that check out
+>
+> - Global width is data in the three bounds files (currently 288), mirrored via `catalogTimings.mjs:146`.
+> - The pure-padding claim holds: crop/scale happen before centroid-aligned placement in `sheets.mjs:341-352`; widening by 96 adds exactly 48 to each cell-relative `left`.
+> - `frameDifference` scales by exactly 0.75; `gateLoopWrap` is invariant; `gateMotionFloor`'s worst existing peak (0.02046) leaves 7.67x headroom — supports "no shipped verdict flips," not new sheets.
+> - Literal disagreement resolved: only `sheet-packing.test.ts:269` is a real shipped-width literal; the 288/384 values in `catalog-timings.test.ts` and `gym-geometry.test.ts` are synthetic/independent fixtures and should stay unchanged.
+> - File-size inventory (exactly 10 over 400, `GymScene.ts` at 399) and the `<= 10` cap are accurate.
+> - No Phaser/`Date`/`Math.random`/DOM in `src/sim/`; no fractional-second durations; no authored fps (all derived via `deriveFps`).
+>
+> ## Could not check
+>
+> Codex could not execute any test suite, build, or Playwright run; could not diff against `main` or check working-tree cleanliness; could not validate fal.ai URLs/prices/schemas or visually judge contact strips; and could not independently establish freshness of gitignored `_generated` snapshot values. No files were modified — this was read-only via `node_repl`/`fs.readFileSync`.
+
+## Local re-verification — the two decisive blockers CONFIRMED
+
+Re-verified by the orchestrator before triage, not taken on Codex's word.
+
+**Blocker 1 — CONFIRMED.** `character-bounds-rust-scavenger.json:22` reads verbatim:
+
+```
+"stridePxPerCycle": { "walk": null, "chase": null },
+```
+
+**Both are null.** Every prior handoff records `walk` as blocked on cell width and `chase` as blocked
+on the stride, as though they were different problems. `walk` hits the pack blocker first, so nobody
+ever reached its catalog blocker. **This is the fourth time in this phase that "extraction stops at
+the first failure" has hidden a second defect behind the first.**
+
+**Blocker 2 — CONFIRMED.** `lift-profile.json:3` carries a root `"scale": 0.23723229`, and its
+animation entries begin `"idle": { "anchor": "feet", …` — **no `scale`, no `scaleSource`.** Since
+`upsertLiftProfile` preserves old animation entries on a per-action merge (`catalogWrite.mjs:57`), the
+proposed clause-1 check would reject every legacy entry on its first run. Codex's second point is also
+correct on inspection: removing an override falls back to `config.scale` and yields a valid
+slug-sourced entry, so the plan's RED-B red-run **could not have fired**.
+
+**Blockers 3 and 4 and majors 5–7 are judgement calls about the plan's own claims, not repository
+facts, and are accepted as stated.**
+
+## Triage — 8 of 8 applied, none rejected, nothing silently dropped
+
+| ID | Sev | Disposition |
+|---|---|---|
+| **1** | blocker | **APPLIED.** A stride prerequisite is added to Task 2 with the `build-assets.mjs:232` → `:256` → `catalogTimings.mjs:121` → `catalog-completeness.test.ts:37` chain spelled out, and two legal orders offered (fold Task 4's measurement in, preferred; or pack to scratch only). **The plan's own state table was corrected — `walk` now reads "296 px cell AND a null stride".** |
+| **2** | blocker | **APPLIED.** An explicit legacy-migration step is added ahead of the guard change, stamping every existing entry with the root scale and `scaleSource: 'slug'` and verifying the numbers are unchanged. **RED-B was replaced** (`scale: null` / omitted source) and **RED-C added** (cross-slug merge, impossible to trigger today). The false RED-B claim is called out in place rather than deleted. |
+| **2b** | blocker | **APPLIED, and this is the important half.** The plan's "strictly stronger" framing is **withdrawn**. The redesign is stronger on three axes and **deliberately narrower on one** — the one-scale rule now binds only slug-sourced entries. That narrowing **is decision D2**, and it must be recorded in the guard's own comment as a deliberate scope reduction with its reason. Disguising a narrowing as a strengthening is exactly the move this project's gate rule exists to prevent. |
+| **3** | blocker | **APPLIED.** Task 5's acceptance is rewritten. **Criterion 5.12 is reported FAILING at the end of this session** unless the count reaches zero; four splits are progress on a criterion that has not moved in three sessions, not closure. Closing it fully (three e2e specs plus `BootScene.ts`) is escalated to the user as a scope decision rather than absorbed silently. |
+| **4** | blocker | **APPLIED.** Task 9 is made **explicitly post-phase**. Two legal paths, no third: a future session with its own gate, or re-running 5.14 **and** the entire Task 8 verification on the resulting diff, knowingly. |
+| **5** | major | **APPLIED.** 5.4 gets a written-out procedure. The `animations` skill, invoked during planning, supplied a better instrument than the polling Codex suggested: **the `animationupdate` event fires on every frame change carrying `frame.index`**, so the spec collects a Set in-page and asserts ≥2 distinct values. It also confirmed the root cause mechanically — `play()` restarts, `play(key, true)` is the guard — which is this phase's own vault-in note *(5.1)*. |
+| **6** | major | **APPLIED.** `docs/GENERATION-LOG.md:170` and `docs/generations/phase-05-padded-round.md:66,71` added to the reversal checklist as **dated supersessions, not edits**, and `attack-r5` / `death-r4` are now named explicitly for `SUPERSEDED_CLIPS`. |
+| **7** | major | **APPLIED.** Task 2 gains an explicit before/after assertion on the drawn figure's bounding box **relative to its own cell**, because the catalog test compares frame dimensions only. Without it the task's headline claim was untested. |
+| **8** | minor | **APPLIED.** Corrected: a width-only repack should produce **no** `lift-profile.json` diff at all. `_comment` is a constant unrelated to frame width. The earlier wrong claim is noted in place. |
+
+**A ninth finding came from the planning skills rather than Codex, and is recorded here because it
+would have been a live render bug.** The `sprites-and-images` skill flags that a Sprite constructor
+runs `setSizeToFrame` → `setOriginFromFrame`, so widening the frame moves `displayOriginX` from 144 to
+192. Checked and **cleared**: `enemyView.ts:113,129`, `playerView.ts:112` and `GymScene.ts:127` all use
+**originX 0.5** — the frame centre, which is exactly where `packStrip` puts the figure's centroid — so
+the figure does not shift. Vertically `frameHeight` is unchanged and `baselineY = frameHeight`, so an
+`originY` of 1 still lands on the contact line.
+
+**Net effect:** the review **reordered Task 2** around a null stride that six sessions of handoffs had
+misdescribed, **made an unexecutable guard executable** by forcing a legacy migration, **stopped a
+scope narrowing from being presented as a strengthening**, **prevented criterion 5.12 from being
+quietly downgraded from "no file over 400 lines" to "fewer than ten"**, and **stopped optional art
+spend from invalidating criterion 5.14**. Two of the eight findings contradicted claims this plan's
+own author had made — the same pattern as sessions 4 and 6.
+
+**Still to run:** criterion 5.14, the Codex **implementation** review (`--wait --resume`) against the
+diff, saved to `docs/reviews/phase-05-impl.md`.
