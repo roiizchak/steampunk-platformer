@@ -79,6 +79,7 @@ export {
   hitWindowOpen,
   invulnerable,
   isCombatState,
+  knockbackSettling,
   movementLocked,
   stepCombat,
 } from './combat';

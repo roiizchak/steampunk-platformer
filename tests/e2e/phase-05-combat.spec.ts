@@ -8,9 +8,10 @@
  * sampling `frame.index` in-page off the `animationupdate` event: 12 distinct indices during patrol.
  * Evidence in `docs/qa/phase-05-combat.md`.
  *
- * **5.4 still has no automated spec, and that is the honest state** — a `play`-owned criterion has
- * hands-on evidence and no regression guard. Adding one here is the obvious next move; a placeholder
- * that always passes would still be worse than no test.
+ * **5.4 now has an automated spec below**, sampling `anims.currentFrame.index` inside the page once
+ * per `requestAnimationFrame` (never off `animationupdate` — see that test's own comment) across a
+ * fixed window, and asserting the animation key is `rust-scavenger-walk` before trusting the frame
+ * spread at all.
  *
  * Both dev fixtures come from `src/scenes/devSpawn.ts` via the keys `GameScene.bindKeys()` binds
  * under `import.meta.env.DEV` (~L294): `M` for one scavenger at 2/60 hp (5.7), `N` for the
@@ -72,13 +73,14 @@ interface BarRect {
 interface SceneSnapshot {
   scavengers: EnemySnapshot[];
   bodyCount: number;
+  spriteCount: number;
   barRects: BarRect[];
 }
 
 type PhaserGameHandle = { scene: { getScene(key: string): unknown } };
 type GameSceneHandle = {
   world: { enemies: { scavengers: EnemySnapshot[] } };
-  enemies: { bodies: unknown[]; bars: { commandBuffer: number[] } };
+  enemies: { bodies: unknown[]; isSprite: boolean[]; bars: { commandBuffer: number[] } };
 };
 
 /**
@@ -108,6 +110,9 @@ async function snapshot(page: Page): Promise<SceneSnapshot> {
     return {
       scavengers: scene.world.enemies.scavengers.map((s) => ({ x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp })),
       bodyCount: scene.enemies.bodies.length,
+      // `isSprite` runs parallel to `bodies` (`enemyLayer.ts:39-40`) so criterion 5.11 can tell a
+      // real Sprite from the Rectangle grey-box fallback — a body count alone cannot (vault 9.4).
+      spriteCount: scene.enemies.isSprite.filter(Boolean).length,
       barRects,
     };
   });
@@ -196,6 +201,12 @@ test.describe('Phase 5 — combat', () => {
     // count on their own, and "fast because nothing new was drawn" is the failure this excludes.
     expect(after.bodyCount - before.bodyCount).toBe(DEV_FLEET_COUNT);
 
+    // Type before value (vault C1). Without this, replacing all 20 fleet sprites with the cheaper
+    // Rectangle fallback would still satisfy the body-count assertion above — and would make the
+    // frame budget look BETTER, so the render-path check and the perf number must travel together.
+    expect(typeof after.spriteCount).toBe('number');
+    expect(after.spriteCount - before.spriteCount).toBe(DEV_FLEET_COUNT);
+
     // Sampled inside the page, once per rAF, over a FIXED frame count — never `waitTicks`, which
     // only bounds "at least N ticks" and cannot bound a sampling window.
     const SAMPLE_FRAMES = 90;
@@ -238,5 +249,69 @@ test.describe('Phase 5 — combat', () => {
     // sanity ceiling meant to catch a hang or an O(n^2) regression, not a tuned budget, and it does
     // not flake this gate on a loaded CI box.
     expect(budget.medianMs).toBeLessThan(100);
+    // A median at or near 0 means the sampler never actually ran across real frames — a false
+    // green, not a fast one.
+    expect(budget.medianMs).toBeGreaterThan(0);
+  });
+
+  test('5.4 rust-scavenger walk animation advances past frame 0 during patrol', async ({ page }) => {
+    await bootToGame(page);
+
+    const SAMPLE_FRAMES = 90;
+    const result = await page.evaluate(
+      (frameCount) =>
+        new Promise<{ isSprite: boolean; animKey: string; frames: number; distinctFrames: number }>(
+          (resolve) => {
+            const scene = (
+              window as unknown as { __phaserGame: PhaserGameHandle }
+            ).__phaserGame.scene.getScene('Game') as unknown as GameSceneHandle;
+            // The last body is always the last scavenger: `addBody` appends sentries then
+            // scavengers, in both `create()` and the growth path (enemyLayer.ts:51-56,107-109), so
+            // the shipped level's own baseline scavenger — already patrolling at boot, no keypress
+            // needed — is `bodies[bodies.length - 1]`.
+            const i = scene.enemies.bodies.length - 1;
+            // Rectangle fallback has no `anims` — checked before it is ever read (vault, see header).
+            const isSprite = scene.enemies.isSprite[i] === true;
+            if (!isSprite) {
+              resolve({ isSprite: false, animKey: '', frames: 0, distinctFrames: 0 });
+              return;
+            }
+            const sprite = scene.enemies.bodies[i] as unknown as {
+              anims: { currentAnim: { key: string } | null; currentFrame: { index: number } | null };
+            };
+            const indices = new Set<number>();
+            let n = 0;
+            const step = () => {
+              const frame = sprite.anims.currentFrame;
+              if (frame !== null) {
+                indices.add(frame.index);
+              }
+              n++;
+              if (n < frameCount) {
+                requestAnimationFrame(step);
+              } else {
+                resolve({
+                  isSprite: true,
+                  animKey: sprite.anims.currentAnim?.key ?? '',
+                  frames: n,
+                  distinctFrames: indices.size,
+                });
+              }
+            };
+            requestAnimationFrame(step);
+          },
+        ),
+      SAMPLE_FRAMES,
+    );
+
+    expect(result.isSprite).toBe(true);
+    // Assert the key BEFORE trusting the frame spread — a test that silently sampled `idle` or
+    // `chase` must not be able to pass by accident.
+    expect(result.animKey).toBe('rust-scavenger-walk');
+    // The sample loop ran the whole window — cannot pass by measuring nothing.
+    expect(result.frames).toBe(SAMPLE_FRAMES);
+    // More than one distinct DISPLAYED frame index: the frame-0 bug (enemyView.ts Guard G3) is a
+    // walk cycle that never leaves frame 0.
+    expect(result.distinctFrames).toBeGreaterThan(1);
   });
 });

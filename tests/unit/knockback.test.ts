@@ -94,11 +94,14 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
   });
 
   /**
-   * The grounded number is the one worth writing down: **1.85 px**, one tick of
-   * `KNOCKBACK_SPEED - groundFriction` and then nothing. Pinned exactly, because the whole reason
-   * this test exists is that a sign assertion would have called it a success.
+   * The grounded number is the one worth writing down: **7.39 px** (FIX 2) — up from 1.85 px.
+   * `knockbackSettling` (`combat.ts`) exempts the ONE tick immediately after the hit from ground
+   * friction, so the full `KNOCKBACK_SPEED` impulse survives to move the player that tick; the
+   * second tick then decelerates by `groundFriction` as before, and friction eats the rest before
+   * a third tick can contribute. Pinned exactly, because the whole reason this test exists is that
+   * a sign assertion would have called the old, invisible 1.85 px a success.
    */
-  it('grounded displacement is one tick of impulse minus ground friction, and that is all', () => {
+  it('grounded displacement is one un-friction-ed tick plus one decelerated tick, and that is all', () => {
     const world = contactWorld(700, 706);
     const before = world.player.x;
 
@@ -108,9 +111,34 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     }
 
     const moved = world.player.x - before;
-    expect(moved).toBeCloseTo(KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction, 5);
-    // Two pixels. Recorded so nobody later reads "knockback ships" as "knockback is visible".
-    expect(moved).toBeLessThan(2);
+    const expected = KNOCKBACK_SPEED + (KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction);
+    expect(moved).toBeCloseTo(expected, 5);
+    // 7.39 px, not 1.85. Recorded so nobody later reads "knockback ships" as "knockback is visible".
+    expect(moved).toBeGreaterThan(7);
+    expect(moved).toBeLessThan(8);
+  });
+
+  /**
+   * The friction exemption is ONE tick, not a permanent state — the second tick after a hit must
+   * decelerate normally, or `knockbackSettling` has silently become `movementLocked`'s twin instead
+   * of the single tick its own docstring claims.
+   */
+  it('friction resumes on the SECOND tick after the hit, not just the first', () => {
+    const world = contactWorld(700, 706);
+
+    tick(world, { ...IDLE }); // hit lands at 9b, vx set, position unmoved this tick
+    const atImpact = world.player.x;
+
+    tick(world, { ...IDLE }); // settling tick: exempt, full impulse moves the player
+    const afterSettlingTick = world.player.x;
+    expect(afterSettlingTick - atImpact).toBeCloseTo(KNOCKBACK_SPEED, 5);
+
+    tick(world, { ...IDLE }); // second tick: friction resumes
+    const afterSecondTick = world.player.x;
+    expect(afterSecondTick - afterSettlingTick).toBeCloseTo(
+      KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction,
+      5,
+    );
   });
 
   /**
@@ -143,8 +171,13 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     const moved = world.player.x - before;
     // Air friction 0.51 against ground's 3.69, so the impulse survives the whole window instead of
-    // dying in tick one. The gap is why "does knockback work" is not one question.
-    expect(moved).toBeGreaterThan(KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction);
+    // dying after two ticks: **25.59 px**, up from **20.05 px** before the friction exemption.
+    // It decomposes exactly — 5.54 for the newly exempt settling tick, plus the five ticks that
+    // already bled at `airFriction` (5.03 + 4.52 + 4.01 + 3.50 + 2.99 = 20.05). That arithmetic is
+    // how the number was checked: two agents reported different pre-fix figures and only one of
+    // them adds up. The gap against 7.39 grounded is why "does knockback work" is not one question.
+    expect(moved).toBeCloseTo(25.59, 1);
+    expect(moved).toBeGreaterThan(KNOCKBACK_SPEED + (KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction));
   });
 
   it('a PROJECTILE hit shoves the player away from the shot', () => {

@@ -13,7 +13,7 @@
  * order is the contract, and a contract buried inside 200 lines of arithmetic is not one.
  */
 
-import { isCombatState } from './combat';
+import { isCombatState, knockbackSettling } from './combat';
 import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './types';
 
 /**
@@ -219,6 +219,13 @@ export function stepHorizontal(
   const cap = walkHeld ? tuning.walkMax : tuning.runMax;
 
   if (dir === 0) {
+    // FIX 2: the tick immediately after a hit lands, `movementLocked` has already forced `dir` to
+    // 0 — skip ONLY the friction decel, so the knockback impulse `damagePlayer` just wrote to
+    // `vx` survives to reach step 8's integration instead of being eaten before it ever moves the
+    // player. See `knockbackSettling`'s docstring for why this is exactly one tick.
+    if (knockbackSettling(player)) {
+      return;
+    }
     // Decelerate toward zero and STOP there. Without the clamp the player creeps forever at a
     // speed too small to see but large enough to slide off a ledge while apparently standing.
     if (player.vx > 0) {

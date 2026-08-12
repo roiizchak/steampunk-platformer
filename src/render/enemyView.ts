@@ -95,6 +95,18 @@ export interface EnemyRenderDesc {
   /** Grey-box fill, `0xRRGGBB`. Kept past the art for the same reason `playerView` keeps its. */
   colour: number;
   animKey: string;
+  /**
+   * The slug's always-shipped base action — `walk` for the scavenger, `idle` for the sentry —
+   * FIX 1. `addBody` decides Sprite-vs-Rectangle from `desc.animKey` alone, and `animKey` is
+   * transient (a scavenger mid-chase asks for `chase`). If `chase` is not yet catalogued, a body
+   * created on that tick became a Rectangle forever — `addBody` runs once, so it never upgrades
+   * when the enemy stops chasing. A body must be a Sprite whenever the slug has ANY catalogued
+   * sheet; which action it happens to be performing at birth must not decide its representation
+   * for the rest of its life. `playIfChanged` already no-ops on a missing key, so a Sprite created
+   * on this fallback and later asked for `chase` simply keeps playing `walk` — the existing,
+   * intended partial-catalog behaviour, unchanged.
+   */
+  fallbackAnimKey: string;
 }
 
 /**
@@ -117,6 +129,7 @@ export function sentryRenderDesc(sentry: Sentry, scale: number): EnemyRenderDesc
     flipX: false,
     colour: SENTRY_COLOUR,
     animKey: enemyAnimKey('brass-sentry', sentryAnim(sentry)),
+    fallbackAnimKey: enemyAnimKey('brass-sentry', 'idle'),
   };
 }
 
@@ -133,5 +146,6 @@ export function scavengerRenderDesc(scavenger: Scavenger, scale: number): EnemyR
     flipX: scavenger.facing === -1,
     colour: SCAVENGER_COLOUR,
     animKey: enemyAnimKey('rust-scavenger', scavengerAnim(scavenger)),
+    fallbackAnimKey: enemyAnimKey('rust-scavenger', 'walk'),
   };
 }

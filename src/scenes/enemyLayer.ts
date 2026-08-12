@@ -62,12 +62,18 @@ export class EnemyLayer {
   }
 
   private addBody(desc: EnemyRenderDesc): void {
-    if (this.scene.anims.exists(desc.animKey)) {
-      const sprite = this.scene.add.sprite(desc.x, desc.y, desc.animKey);
+    // FIX 1: `desc.animKey` is transient (an enemy's current action), so a chasing scavenger
+    // created while `chase` is uncatalogued must not become a Rectangle forever. Try the slug's
+    // always-shipped `fallbackAnimKey` before giving up — a body is a Sprite whenever the slug has
+    // ANY catalogued sheet. `playIfChanged` (sync) still no-ops on the missing key, so the sprite
+    // just keeps playing whichever key it was actually created on.
+    const key = this.scene.anims.exists(desc.animKey) ? desc.animKey : desc.fallbackAnimKey;
+    if (this.scene.anims.exists(key)) {
+      const sprite = this.scene.add.sprite(desc.x, desc.y, key);
       sprite.setOrigin(desc.originX, desc.originY);
       sprite.setDepth(9);
       sprite.setFlipX(desc.flipX);
-      sprite.play(desc.animKey);
+      sprite.play(key);
       this.bodies.push(sprite);
       this.isSprite.push(true);
       return;

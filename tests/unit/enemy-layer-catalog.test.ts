@@ -187,6 +187,22 @@ describe('the Rectangle fallback is a dated temporary, not permanent scaffolding
   });
 });
 
+describe('a chasing enemy is not a Rectangle forever (FIX 1)', () => {
+  it('a scavenger asking for chase falls back to the catalogued walk key — real shipped shape has only walk', () => {
+    const world = buildWorld();
+    world.enemies.scavengers[0]!.chasing = true;
+    // Mirrors the shipped catalog exactly: brass-sentry-idle and rust-scavenger-walk only.
+    const { scene, rectangles, sprites } = makeMockScene(new Set(['brass-sentry-idle', 'rust-scavenger-walk']));
+    const layer = new EnemyLayer(scene, world);
+    layer.create();
+
+    expect(rectangles.length, 'a chasing scavenger with a walk sheet must not fall back to a grey box').toBe(0);
+    expect(sprites.length).toBe(2);
+    // sentries are added before scavengers in create() (see class doc), so index 1 is the scavenger.
+    expect(sprites[1]!.playCalls[0]).toBe('rust-scavenger-walk');
+  });
+});
+
 describe('the Sprite path (criterion 5.4)', () => {
   it("applies the scavenger's flipX, which nothing drew before this swap", () => {
     const fixtureKeys = new Set(fixtureCatalog.sheets.map((sheet) => sheet.key));

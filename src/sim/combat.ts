@@ -344,3 +344,18 @@ export const HURT_LOCK_TICKS = ATTACK.startup;
 export function movementLocked(player: PlayerSim): boolean {
   return player.state === 'hurt' && windowOpen(player.combatCounter, HURT_LOCK_TICKS);
 }
+
+/**
+ * Is this the ONE tick a knockback impulse needs friction skipped, so it can actually move the
+ * player? FIX 2.
+ *
+ * Knockback writes `player.vx` at step 9b of the hit tick. On the *next* tick, `movementLocked`
+ * zeroes `dir`, so `stepHorizontal`'s `dir === 0` branch decelerates `vx` by `groundFriction`
+ * (3.69) BEFORE step 8 integrates it — a 5.54 px/tick impulse moved the player under 2 px and was
+ * gone. `damagePlayer` sets `combatCounter = 0` at step 9b, and step 4b of the very next tick
+ * advances it to 1 before step 5 runs — so `state === 'hurt' && combatCounter === 1` identifies
+ * exactly, and only, that one tick. No new counter: this reads the same one `movementLocked` does.
+ */
+export function knockbackSettling(player: PlayerSim): boolean {
+  return player.state === 'hurt' && player.combatCounter === 1;
+}
