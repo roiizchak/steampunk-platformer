@@ -543,3 +543,144 @@ used a horizontal origin other than the frame centre**.
 `GymScene.ts:127` all use **originX 0.5** — which is exactly where `packStrip` centres the figure's
 centroid (`sheets.mjs:353-354`). Vertically `frameHeight` is unchanged and `baselineY = frameHeight`,
 so an `originY` of 1 still lands on the contact line. **The repack is render-safe, and this is why.**
+
+### 🔴 D1 is AMENDED, and the reason is that the number it was decided on was wrong
+
+**D1 as first recorded above — one global 384×384 cell — was taken on a figure that does not survive
+measurement.** It was applied, went green, and was then withdrawn the same session. The record is kept
+rather than rewritten, because the mistake is the lesson.
+
+**`rust-scavenger/death` does not need 358 px. It needs 510.** A full per-frame sweep, using the same
+`figureMetrics` the packer uses:
+
+```
+f0 170  f1 179  f2 243  f3 236  f4 358  f5 505  f6 507  f7 510  f8 508  f9 508
+                        ^^^^^^                          ^^^^^^
+                    the recorded figure               the actual maximum
+```
+
+**358 is frame 4.** `packStrip` throws on the FIRST clipped frame, so at the 288 cell it reported
+frame 4's requirement and **frames 5–9 were never evaluated**. HANDOFF §12b recorded that number as
+though it were the maximum, and a user decision was taken on it.
+
+> **Fifth instance of one pattern, and the first that cost a decision.** *"Extraction stops at the
+> first failure"* has now hidden a second defect behind the first five times in this phase: G6's
+> `idle` false positive hid the real `jump` crop · the per-action sweep found `brass-courier/hurt`
+> already clean · `--derive-scale`'s hardcoded `findSource('idle')` deadlocked on a subject with no
+> idle by design · `rust-scavenger/walk`'s null stride sat behind its pack failure · and now this.
+>
+> **The rule, now that it has five instances:** when a pipeline stops at the first failure, a verdict
+> about stage N is evidence about stage N **only**. Any statement of the form *"X is blocked on Y"* is
+> provisional until X has actually reached the end. **Prefer instruments that sweep and report a
+> maximum over instruments that stop and report an instance** — which is exactly what was done to
+> `packStrip` below.
+
+### The instrument was fixed, not just the number
+
+`packStrip` now **sweeps every frame on both axes** and reports the true maximum, naming every clipped
+frame and which is widest. Horizontal (`sheets.mjs:378`) and vertical (`:399`) both had the defect;
+both are fixed.
+
+**The verdict is unchanged — any clipped frame still fails the build.** What changed is what the gate
+*measures*, never what it tolerates: it now reports complete information instead of the first
+instance. Watched go red *(C1)* against a committed fixture, and the revert verified **by count**
+*(C12)*: the single-frame-throw literal went 1 → 0 on both axes with content confirmed changed.
+New test: `tests/unit/sheet-packing-clip-report.test.ts`.
+
+### D1-revised — the cell is PER SLUG. Decision M3 is amended.
+
+**Taken by the user, 2026-08-12, on the complete sweep.**
+
+| slug | cell | why |
+|---|---|---|
+| `brass-courier` | **288 × 384** | every courier sheet fits 288 — pays nothing |
+| `brass-sentry` | **288 × 384** | every sentry sheet fits 288 — pays nothing |
+| `rust-scavenger` | **512 × 384** | `death` frame 7 requires **510**; `walk` 296; `chase` 273 |
+
+**This required no code change.** `frameWidth` was already per-slug data in
+`character-bounds-<slug>.json`, already per-row in `index.json`, and `src/render/gymGeometry.ts` and
+`gymBounds.ts` already read it per row. **M3 was a policy, not a structural constraint** — a fact
+nobody had checked, and which made the amendment far cheaper than the options put to the user in the
+first round implied. *(That first round's option C was described as "the packer, catalog and every
+consumer must carry a per-slug cell". That was wrong.)*
+
+**What M3 actually protects is that special-casing be VISIBLE.** It is satisfied here by recording, in
+the open and with the measurement, that one subject's cell differs and exactly why. Each bounds file's
+`_frame` note now states its own slug's number; none still claims to be "the ONE global cell size".
+
+**Why not the alternatives:**
+
+- **512 global** was rejected as **+78 % atlas area** over the 288 baseline, against the ~33 % that had
+  just been approved and the ~11 % before that — and it argues against itself: criterion **5.11 is
+  already uncomfortable** at median 55.70 ms ≈ 18 fps, is **unrun**, and the project carries a recorded
+  34.5 MB parallax-per-boot debt that already pins Playwright to `workers: 1`. Inflating every atlas by
+  78 % for one animation's debris, immediately before a performance criterion is assessed, is a finding
+  waiting to happen.
+- **320 global, death deferred** was the runner-up and remains the fallback if per-slug ever proves
+  troublesome.
+
+### 🔴 And `rust-scavenger/death` STILL does not ship — for a sixth-instance reason
+
+**The 512 cell is correct and `packStrip` now succeeds on death for the first time. A different gate
+then throws:**
+
+```
+assets:build: "death" cell 5 of 12 is 36x9 against a median height of 229
+  — that is a fragment, not a frame. Same cause as an empty cell, caught one step earlier.
+```
+
+`detectFrames` segments the extraction by content, not by even division, and finds **12** islands where
+the clip has 10 real frames: indices **5 and 7 are 64 × 16 debris flecks**, detected as separate frames.
+**This was masked the entire time by the clipping throw that fired first** — the sixth instance of the
+pattern, surfaced by fixing the fifth.
+
+> ⚠️ **Note for anyone measuring this clip:** an even `width / height` split gives 10 frames and is the
+> WRONG splitter. `detectFrames` gives 12. Both readings appear in this session's working notes; the
+> 510 px width figure is unaffected, because it comes from the real collapse frames either way.
+
+**Not fixed here, and deliberately so.** Fixing it means tuning `minGap` / segmentation, which is a
+gate change with its own both-directions revalidation, in a session already carrying the cell change,
+the per-action scale and the guard redesign. **It is also plausibly the wrong fix:** the figure goes
+**169 px drawn at f0 to 476 px at f7**, which is debris scatter, not anatomy. `DEBRIS_MARGIN` is proven
+single-variable on `brass-sentry/death` (`L2 → L226`, wreck compact, still ends broken) and **was never
+applied to the scavenger**. The likely correct answer is art, and art is post-phase this session.
+
+**`rust-scavenger/death` is therefore DEFERRED with its paid clip kept on disk**, and the 512 cell
+stands ready for it. `rust-scavenger/chase` is also deferred — its stride is genuinely
+**INDETERMINATE**, swept at band heights 16/24/32 px with every sweep showing one peak and one trough
+across the 12-frame sheet instead of two: the same trailing-leg-airborne failure vault 4.18 names for
+the courier's `run`. **No stride was guessed.** A guessed stride is the specific failure
+`catalogTimings.mjs` exists to prevent.
+
+### What DID ship from this work
+
+**`rust-scavenger/walk` — the first scavenger sheet in the catalog.** Packs at 512, gates PASS/PASS,
+stride **312 game px** measured by the courier's own documented foot-band method (24 px band, spans
+`121,153,156,134,98,66,61,62,69,127,46,45`, peak 156 doubled), re-confirmed unchanged after the cell
+moved from 384 to 512 — which it must be, since the cell change is pure padding.
+
+⚠️ **The scavenger's slug scale `0.56074766` came from a GAIT, not a neutral pose** — spread 4.2 %
+against the sentry's 0.3 %. Recorded in its config. **Re-derive it if `walk` is ever re-shot.**
+
+### A latent single-slug assumption the amendment exposed
+
+`tests/unit/asset-catalog.test.ts` globbed **only** the courier's bounds file and checked **every**
+catalog row — enemy rows included — against it. That held only while all three slugs happened to share
+one width. **Same class as R1/R2 and the `shipped-sheets.test.ts` path bug: correct by coincidence,
+silent when the coincidence ends.**
+
+**Scoping the loop to courier rows would have made it pass by checking LESS**, which is the forbidden
+move — enemy rows would have stopped being checked at all. It now resolves each row against **its own
+slug's** bounds, which catches everything the old form caught **plus** a row disagreeing with the file
+that actually cut it. An unresolvable row is an explicit failure, not a skip. Watched go red *(C1)* by
+setting `rust-scavenger-walk`'s row to 288 against its slug's 512 —
+`AssertionError: rust-scavenger-walk frameWidth vs rust-scavenger: expected 288 to be 512` — restored
+from a fresh temp copy, revert verified **by count** *(C12)*.
+
+**Verified after all of the above**, from the JSON reporter:
+
+```
+suites 258/258  failed 0
+tests  853/853  failed 0
+typecheck clean · build + verify-dist ok
+```

@@ -338,7 +338,9 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY, an
    */
   const lifts = frameLifts(cells, metrics, scale, anchor);
 
-  cells.forEach((cell, index) => {
+  // Placement is computed for EVERY frame first, and the clipping checks below sweep the whole
+  // array before anything throws — see the checks' own header for why. Nothing is drawn yet.
+  const placements = cells.map((cell, index) => {
     const m = metrics[index];
     const liftPx = lifts[index];
 
@@ -354,57 +356,77 @@ export function packStrip(cells, { scale, frameWidth, frameHeight, baselineY, an
     const left = Math.round(index * frameWidth + frameWidth / 2 - centroidInFigure);
     const top = Math.round(baselineY - sh - liftPx);
 
-    /**
-     * CLIPPING CHECK — and note what it is checking.
-     *
-     * The obvious guard, `drawnWidth > frameWidth`, is the WRONG measurement and it passed while
-     * the art was visibly broken: a run frame drawn 78 px wide inside a 96 px cell still lost its
-     * trailing boot, because centroid alignment puts the centre of MASS on the cell's centre line
-     * and a fully extended leg reaches much further from the centre of mass than half the figure's
-     * width. What has to fit is the distance from the centroid to each edge, doubled — not the
-     * width. Vault **4.19**: enumerate the axes your metric measures, then ask which axis the
-     * failure lives on. This one lived on an axis the width check did not have.
-     *
-     * It throws rather than silently cropping, because a cropped sprite still looks like a sprite.
-     */
-    const cellLeft = index * frameWidth;
-    const overflowLeft = cellLeft - left;
-    const overflowRight = left + sw - (cellLeft + frameWidth);
-    if (overflowLeft > 0 || overflowRight > 0) {
+    return { index, m, liftPx, scaled, sw, sh, left, top, centroidInFigure };
+  });
+
+  /**
+   * CLIPPING CHECK — and note what it is checking.
+   *
+   * The obvious guard, `drawnWidth > frameWidth`, is the WRONG measurement and it passed while
+   * the art was visibly broken: a run frame drawn 78 px wide inside a 96 px cell still lost its
+   * trailing boot, because centroid alignment puts the centre of MASS on the cell's centre line
+   * and a fully extended leg reaches much further from the centre of mass than half the figure's
+   * width. What has to fit is the distance from the centroid to each edge, doubled — not the
+   * width. Vault **4.19**: enumerate the axes your metric measures, then ask which axis the
+   * failure lives on. This one lived on an axis the width check did not have.
+   *
+   * It throws rather than silently cropping, because a cropped sprite still looks like a sprite.
+   *
+   * **Every frame is swept before throwing, and this is a fix, not a style choice.** Throwing on
+   * the FIRST clipped frame reports that frame's own requirement and never evaluates the rest —
+   * that is how a sheet's true widest frame went unmeasured while an earlier, narrower one's
+   * figure got recorded as "the" requirement. The verdict is unchanged (any clipped frame still
+   * fails the build); what changes is that the message names every clipped frame and the true
+   * maximum.
+   */
+  const horizontalClips = placements
+    .map((p) => {
+      const cellLeft = p.index * frameWidth;
+      const overflowLeft = cellLeft - p.left;
+      const overflowRight = p.left + p.sw - (cellLeft + frameWidth);
+      if (overflowLeft <= 0 && overflowRight <= 0) return null;
       const needed = Math.max(
-        Math.ceil(2 * centroidInFigure),
-        Math.ceil(2 * (sw - centroidInFigure)),
+        Math.ceil(2 * p.centroidInFigure),
+        Math.ceil(2 * (p.sw - p.centroidInFigure)),
       );
-      throw new Error(
-        `packStrip: frame ${index} is clipped by the ${frameWidth}px cell ` +
-          `(${Math.max(0, overflowLeft)}px off the left, ${Math.max(0, overflowRight)}px off the ` +
-          `right). It is ${sw}px wide but its centroid sits ${Math.round(centroidInFigure)}px from ` +
-          `its left edge, so a cell of at least ${needed}px is required. Widen frameWidth in ` +
-          `character-bounds.json — do NOT rescale this animation to fit (vault 4.14).`,
-      );
-    }
+      return { index: p.index, needed };
+    })
+    .filter((c) => c !== null);
+  if (horizontalClips.length > 0) {
+    const worst = horizontalClips.reduce((a, b) => (b.needed > a.needed ? b : a));
+    const list = horizontalClips.map((c) => `frame ${c.index} needs ${c.needed}px`).join(', ');
+    throw new Error(
+      `packStrip: ${horizontalClips.length} frame(s) clipped by the ${frameWidth}px cell — ${list}. ` +
+        `MAX REQUIRED: ${worst.needed}px (frame ${worst.index}). Widen frameWidth in ` +
+        `character-bounds.json — do NOT rescale this animation to fit (vault 4.14).`,
+    );
+  }
 
-    /**
-     * VERTICAL CLIPPING CHECK — the counterpart to the horizontal one above, and it was missing.
-     *
-     * The copy loop below skips any row outside the cell, so an over-tall or highly-lifted frame
-     * was silently decapitated instead of failing the build. A cropped sprite still looks like a
-     * sprite, which is exactly how the last two defects on this animation reached the screen. It
-     * matters more now than it did: a frame's placement is no longer bounded by its own height,
-     * because `liftPx` pushes it upward as well.
-     */
-    const overflowTop = -top;
-    const overflowBottom = top + sh - frameHeight;
-    if (overflowTop > 0 || overflowBottom > 0) {
-      throw new Error(
-        `packStrip: frame ${index} is clipped by the ${frameHeight}px cell vertically ` +
-          `(${Math.max(0, overflowTop)}px off the top, ${Math.max(0, overflowBottom)}px off the ` +
-          `bottom). It is ${sh}px tall and sits ${liftPx}px above the sheet's contact line, so a ` +
-          `cell of at least ${sh + liftPx}px is required. Raise frameHeight in ` +
-          `character-bounds.json — do NOT rescale this animation to fit (vault 4.14).`,
-      );
-    }
+  /**
+   * VERTICAL CLIPPING CHECK — the counterpart to the horizontal one above, and it shared the same
+   * first-frame defect: the copy loop below skips any row outside the cell, so an over-tall or
+   * highly-lifted frame was silently decapitated instead of failing the build, and throwing on the
+   * first offender hid every later, taller one the same way the horizontal check did.
+   */
+  const verticalClips = placements
+    .map((p) => {
+      const overflowTop = -p.top;
+      const overflowBottom = p.top + p.sh - frameHeight;
+      if (overflowTop <= 0 && overflowBottom <= 0) return null;
+      return { index: p.index, needed: p.sh + p.liftPx };
+    })
+    .filter((c) => c !== null);
+  if (verticalClips.length > 0) {
+    const worst = verticalClips.reduce((a, b) => (b.needed > a.needed ? b : a));
+    const list = verticalClips.map((c) => `frame ${c.index} needs ${c.needed}px`).join(', ');
+    throw new Error(
+      `packStrip: ${verticalClips.length} frame(s) clipped by the ${frameHeight}px cell vertically ` +
+        `— ${list}. MAX REQUIRED: ${worst.needed}px (frame ${worst.index}). Raise frameHeight in ` +
+        `character-bounds.json — do NOT rescale this animation to fit (vault 4.14).`,
+    );
+  }
 
+  placements.forEach(({ index, m, liftPx, scaled, sw, sh, left, top }) => {
     for (let y = 0; y < sh; y += 1) {
       const ty = top + y;
       if (ty < 0 || ty >= frameHeight) continue;

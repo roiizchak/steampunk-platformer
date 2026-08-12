@@ -82,6 +82,10 @@ describe('the shipped character sheets, read from the files the player loads', (
       'brass-courier-run',
       'brass-courier-walk',
       'brass-sentry-idle',
+      // D1 (session 7): the frame cell widened 288 -> 384 and rust-scavenger/walk's stride was
+      // measured, so its catalog row now resolves. chase and death remain unresolved — see
+      // character-bounds-rust-scavenger.json's `_stride` note.
+      'rust-scavenger-walk',
     ]);
   });
 

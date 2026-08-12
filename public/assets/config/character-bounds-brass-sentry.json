@@ -9,7 +9,7 @@
 
   "frameWidth": 288,
   "frameHeight": 384,
-  "_frame": "The ONE global cell size (decision M3), 3 x 4 tiles at TILE_SIZE 96 — same as the courier's, NOT shrunk for a smaller subject. Every slug packs into this cell; a smaller renderHeightPx just leaves more transparent headroom, exactly the way the courier's own extra 48px of headroom already works (see character-bounds.json's `_frame` note).",
+  "_frame": "3 x 4 tiles at TILE_SIZE 96. BACK TO 288 (M3 amended, 2026-08-12): the cell is now PER-SLUG, not one global size — every sentry sheet fits 288, so this slug never needed the 384 that was widened for `rust-scavenger/death` alone (see character-bounds-rust-scavenger.json's `_frame` note). A smaller `renderHeightPx` just leaves more transparent headroom, exactly the way the courier's own extra headroom already works (see character-bounds.json's `_frame` note).",
 
   "_baseline": "Same per-SHEET contact-frame rule as the courier's file (see character-bounds.json's `_baseline` note) — the deepest frame of a sheet reaches the last row of its cell, every other frame keeps its own measured, scaled lift.",
 

@@ -266,7 +266,7 @@ describe('assertSingleRowLayout — the assumption the sheet baseline rests on',
  */
 describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   const SHEETS = 'public/assets/characters/brass-courier/sheets';
-  const FRAME_WIDTH = 288;
+  const FRAME_WIDTH = bounds.frameWidth;
   const actions = Object.keys(liftProfile.animations) as (keyof typeof liftProfile.animations)[];
   const liftsOf = (a: string) =>
     liftProfile.animations[a as keyof typeof liftProfile.animations].frames.map((f) => f.liftPx);

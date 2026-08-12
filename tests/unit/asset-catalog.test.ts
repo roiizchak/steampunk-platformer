@@ -40,6 +40,27 @@ const BOUNDS = import.meta.glob('../../public/assets/config/character-bounds.jso
   eager: true,
 }) as Record<string, string>;
 
+/**
+ * EVERY slug's bounds file, not just the player's — because the frame cell is **per slug** as of
+ * session 7's amendment to decision M3, and the courier's file can no longer answer for a sheet it
+ * does not describe.
+ *
+ * The frame-size assertion below used to compare every row in the catalog — including enemy rows —
+ * against the single courier bounds file. That held only while all three slugs happened to share one
+ * global width, and it is the same latent single-slug assumption as R1/R2 and the
+ * `shipped-sheets.test.ts` path bug: correct by coincidence, silent when the coincidence ends.
+ *
+ * Scoping the loop to courier rows would have made it pass again by **checking less**, which is the
+ * forbidden move. Resolving each row against its OWN slug checks strictly more: it still catches
+ * everything the old form caught, and it additionally catches a row whose width disagrees with the
+ * file that actually cut it.
+ */
+const ALL_BOUNDS = import.meta.glob('../../public/assets/config/character-bounds*.json', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 interface SheetRow {
   key: string;
   frameWidth: number;
@@ -70,6 +91,17 @@ const bounds = only<{
   frameHeight: number;
   stridePxPerCycle: { walk: number; run: number };
 }>(BOUNDS, 'character-bounds file');
+
+/**
+ * slug → its own declared cell. Keyed off each file's `slug` FIELD rather than its filename, so a
+ * file renamed or a slug retyped shows up as a missing key instead of a silent mismatch.
+ */
+const boundsBySlug = new Map<string, { frameWidth: number; frameHeight: number }>(
+  Object.values(ALL_BOUNDS).map((raw) => {
+    const b = JSON.parse(raw) as { slug: string; frameWidth: number; frameHeight: number };
+    return [b.slug, { frameWidth: b.frameWidth, frameHeight: b.frameHeight }];
+  }),
+);
 
 /**
  * `animTimings` builds ONE table — the PLAYER's (`bounds.slug`, e.g. `brass-courier`) — so every
@@ -165,13 +197,23 @@ describe('the catalog records the timings the simulation derives (criterion 4.7,
     }
   });
 
-  it('every sheet declares the frame size the bounds file cut it at', () => {
+  it('every sheet declares the frame size ITS OWN slug bounds file cut it at', () => {
     // A sheet loaded with the wrong frameWidth registers a texture with correct DIMENSIONS and the
     // wrong number of frames — the single most likely way this phase ships something subtly wrong.
     // `BootScene.verifySheets` catches it at runtime; this catches it before the browser is opened.
+    //
+    // Per slug since session 7: `rust-scavenger` is cut at 512 for its death debris while the
+    // courier and sentry stay at 288, so "every row matches the courier" is no longer the question.
+    expect(boundsBySlug.size, 'slug bounds files found').toBeGreaterThan(1);
+
     for (const row of catalog.sheets) {
-      expect(row.frameWidth, `${row.key} frameWidth`).toBe(bounds.frameWidth);
-      expect(row.frameHeight, `${row.key} frameHeight`).toBe(bounds.frameHeight);
+      const slug = [...boundsBySlug.keys()].find((s) => row.key.startsWith(`${s}-`));
+      // An unresolvable row is a FAILURE, not a skip — silently passing over a row nobody owns is
+      // how a sheet would escape this assertion entirely.
+      expect(slug, `${row.key} resolves to a known slug`).toBeDefined();
+      const own = boundsBySlug.get(slug!)!;
+      expect(row.frameWidth, `${row.key} frameWidth vs ${slug}`).toBe(own.frameWidth);
+      expect(row.frameHeight, `${row.key} frameHeight vs ${slug}`).toBe(own.frameHeight);
     }
   });
 

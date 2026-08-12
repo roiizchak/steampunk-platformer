@@ -110,6 +110,17 @@
       "fps": 20,
       "loop": false,
       "derivedFrom": "sim"
+    },
+    {
+      "key": "rust-scavenger-walk",
+      "url": "assets/characters/rust-scavenger/sheets/walk.png",
+      "frameWidth": 512,
+      "frameHeight": 384,
+      "frameCount": 12,
+      "simTicks": 125,
+      "fps": 5.76,
+      "loop": true,
+      "derivedFrom": "measured"
     }
   ]
 }
