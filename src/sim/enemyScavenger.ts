@@ -21,12 +21,18 @@ export const CHASE_COMMIT_TICKS = 30;
  * escapable.** A chaser faster than the player's run means fleeing is never an option, and with no
  * stamina system that is not tension, it is a tax. `releaseRadius` is strictly greater than
  * `detectRadius`; that gap IS the hysteresis and `enemy-ai.test.ts` pins the relationship.
+ *
+ * `deadZone` 96 px is one grid tile (`GRID` in `src/game/constants.ts`), and also 12x `chaseSpeed`
+ * (8 px/tick) — a straddling player within it is closer than the chaser could close in one tick
+ * anyway, so holding `facing` and `x` there costs nothing chase-wise and stops the sprite strobing
+ * when the player is off-axis and unreachable (gate finding S1).
  */
 export const SCAVENGER = {
   patrolSpeed: 2.5,
   chaseSpeed: 8,
   detectRadius: 480,
   releaseRadius: 720,
+  deadZone: 96,
   damage: 15,
   contactCooldown: 45,
 } as const;
@@ -40,6 +46,7 @@ export interface Scavenger {
   chaseSpeed: number;
   detectRadius: number;
   releaseRadius: number;
+  deadZone: number;
   facing: 1 | -1;
   /** ONE flag (vault 5.1). */
   chasing: boolean;
@@ -60,6 +67,7 @@ export interface ScavengerOptions {
   chaseSpeed?: number;
   detectRadius?: number;
   releaseRadius?: number;
+  deadZone?: number;
   hp?: number;
 }
 
@@ -74,6 +82,7 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     chaseSpeed: options.chaseSpeed ?? SCAVENGER.chaseSpeed,
     detectRadius: options.detectRadius ?? SCAVENGER.detectRadius,
     releaseRadius: options.releaseRadius ?? SCAVENGER.releaseRadius,
+    deadZone: options.deadZone ?? SCAVENGER.deadZone,
     facing: 1,
     chasing: false,
     chaseCounter: 0,
@@ -115,20 +124,31 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting): void {
   }
 
   if (scavenger.chasing) {
-    const dir: 1 | -1 = at.playerX >= scavenger.x ? 1 : -1;
-    scavenger.facing = dir;
-    scavenger.x += dir * scavenger.chaseSpeed;
-    return;
+    // Inside the dead zone the player is closer than the chaser could close in one tick anyway
+    // (gate finding S1) — hold facing AND position, so an off-axis unreachable player (above, across a gap)
+    // does not strobe the sprite by flipping `facing` every tick.
+    if (Math.abs(at.playerX - scavenger.x) >= scavenger.deadZone) {
+      const dir: 1 | -1 = at.playerX >= scavenger.x ? 1 : -1;
+      scavenger.facing = dir;
+      scavenger.x += dir * scavenger.chaseSpeed;
+    }
+  } else {
+    scavenger.x += scavenger.facing * scavenger.patrolSpeed;
+    // Turn AT the bound, patrol-only: a chasing scavenger pinned at the bound must keep facing the
+    // player, not the direction the patrol would have turned (gate finding S2).
+    if (scavenger.x >= scavenger.patrolMax) {
+      scavenger.facing = -1;
+    } else if (scavenger.x <= scavenger.patrolMin) {
+      scavenger.facing = 1;
+    }
   }
 
-  scavenger.x += scavenger.facing * scavenger.patrolSpeed;
-  // Turn AT the bound and clamp to it, so the patrol never drifts outside the strip it was authored
-  // with — a scavenger that overshoots by a fraction each lap walks off its own platform.
+  // Clamp to the patrol bounds on BOTH paths — a chase that ignored this let the scavenger leave
+  // its ledge and float over a gap with no ground under it (gate finding S2). Positional only; facing is
+  // decided above, per path.
   if (scavenger.x >= scavenger.patrolMax) {
     scavenger.x = scavenger.patrolMax;
-    scavenger.facing = -1;
   } else if (scavenger.x <= scavenger.patrolMin) {
     scavenger.x = scavenger.patrolMin;
-    scavenger.facing = 1;
   }
 }

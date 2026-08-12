@@ -87,6 +87,7 @@ export function enemyKnobs(world: World): Knob[] {
       knob(`${name}.chaseSpeed`, target, 'chaseSpeed', STEP.speed, STEP.speed),
       knob(`${name}.detectRadius`, target, 'detectRadius', STEP.distance, 0),
       knob(`${name}.releaseRadius`, target, 'releaseRadius', STEP.distance, 0),
+      knob(`${name}.deadZone`, target, 'deadZone', STEP.distance, 0),
     );
   });
 

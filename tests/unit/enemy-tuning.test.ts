@@ -28,7 +28,7 @@ import type { World } from '../../src/sim/types';
 const RETREAT = { ...createSnapshot(), left: true };
 
 /**
- * Two placements, because no single one makes every knob live.
+ * THREE placements, because no single one makes every knob live.
  *
  * `near` puts the player inside both radii, so detection, chasing and firing are all happening —
  * which is where `chaseSpeed`, `cooldown` and shrinking a radius are observable. `far` puts them
@@ -36,17 +36,39 @@ const RETREAT = { ...createSnapshot(), left: true };
  * GROWING a radius are observable. The first version of this file used one fixture and reported
  * four knobs dead; they were not dead, they were out of range. A sweep that cannot put the knob in
  * play is measuring the fixture.
+ *
+ * 🔴 `contact` was added in session 8 and the reason is worth keeping, because the fixture went
+ * blind through no fault of its own. `deadZone` only gates behaviour when the player is CLOSE, and
+ * in `near` the scavenger chases the retreating player straight into `patrolMin` and clamps there —
+ * so total travel saturates at `3000 - 2600 = 400` for **every** value of `deadZone`, and the knob
+ * reads dead. The clamp is the new S2 fix, so **this session's own sim change is what cost the
+ * sweep its sensitivity.** `contact` gives the scavenger bounds far wider than it can cross in the
+ * run, making travel speed-limited rather than clamp-limited, and starts the player inside the dead
+ * zone so the knob is in play from tick 0.
+ *
+ * A third placement can only make the sweep MORE sensitive — the assertion is `some()` across
+ * placements, so nothing that passed before can start failing. That is broadening what the gate
+ * MEASURES, never loosening what it TOLERATES.
  */
-function freshWorld(placement: 'near' | 'far' = 'near'): World {
+function freshWorld(placement: 'near' | 'far' | 'contact' = 'near'): World {
+  const spawnX = { near: 2800, far: 400, contact: 3000 }[placement];
+  // Wide enough that 240 ticks at `chaseSpeed` 8 (1920 px) cannot reach either bound from 3000.
+  const scavBounds = placement === 'contact' ? { min: 800, max: 5200 } : { min: 2600, max: 3400 };
   return createWorld({
     seed: 1,
     scale: 6,
     solids: [{ x: 0, y: 960, w: 9000, h: 120 }],
     bounds: { widthPx: 9000, heightPx: 1080 },
-    spawn: { x: placement === 'near' ? 2800 : 400, y: 960 },
+    spawn: { x: spawnX, y: 960 },
     enemies: [
       { slug: 'brass-sentry', x: 3200, y: 960, patrolMin: 3190, patrolMax: 3210 },
-      { slug: 'rust-scavenger', x: 3000, y: 960, patrolMin: 2600, patrolMax: 3400 },
+      {
+        slug: 'rust-scavenger',
+        x: 3000,
+        y: 960,
+        patrolMin: scavBounds.min,
+        patrolMax: scavBounds.max,
+      },
     ],
   });
 }
@@ -93,7 +115,7 @@ describe('every enemy knob is live (criterion 5.9, vault A6)', () => {
   it.each(enemyKnobs(freshWorld()).map((k) => k.label))(
     '%s changes what the enemies actually do, not just what the panel says',
     (label) => {
-      const observed = (['near', 'far'] as const).some((placement) => {
+      const observed = (['near', 'far', 'contact'] as const).some((placement) => {
         const baseline = behaviourSignature(freshWorld(placement), 240);
         return [Number.NaN, 0].some((_, i) => {
           const world = freshWorld(placement);

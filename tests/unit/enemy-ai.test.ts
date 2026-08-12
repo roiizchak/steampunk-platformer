@@ -250,6 +250,98 @@ describe('detects — the imported predicate, never restated (5.3)', () => {
   });
 });
 
+describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => {
+  it('does not flip facing when the player is unreachable straight up and barely off-axis', () => {
+    const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
+    stepScavenger(s, { playerX: 504, playerY: 660 });
+    expect(s.chasing).toBe(true);
+
+    const facings: Array<1 | -1> = [];
+    for (let i = 0; i < 40; i += 1) {
+      stepScavenger(s, { playerX: 504, playerY: 660 });
+      facings.push(s.facing);
+    }
+    let flips = 0;
+    for (let i = 1; i < facings.length; i += 1) {
+      if (facings[i] !== facings[i - 1]) flips += 1;
+    }
+    expect(flips).toBe(0);
+  });
+
+  it('does not move while the player sits at the same x, inside the dead zone', () => {
+    const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
+    stepScavenger(s, { playerX: 500, playerY: 960 });
+    expect(s.chasing).toBe(true);
+
+    // Assert EVERY tick, not just the last — an even tick count would land back home by
+    // oscillation coincidence even with the bug present, exactly the parity trap that produced a
+    // false green in W1.
+    const xBefore = s.x;
+    for (let i = 0; i < 41; i += 1) {
+      stepScavenger(s, { playerX: 500, playerY: 960 });
+      expect(s.x).toBe(xBefore);
+    }
+  });
+
+  it('boundary probe: 95px offset holds, 97px offset moves and turns', () => {
+    const hold = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 });
+    expect(hold.chasing).toBe(true);
+    const holdX = hold.x;
+    const holdFacing = hold.facing;
+    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 });
+    expect(hold.x).toBe(holdX);
+    expect(hold.facing).toBe(holdFacing);
+
+    // A chaser closing distance is self-stabilising (it can enter its own dead zone after moving),
+    // so this measures the FIRST tick only — detection and the dead-zone check both evaluate on the
+    // tick chasing begins, per the existing single-call pattern above.
+    const move = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    const moveXBefore = move.x;
+    stepScavenger(move, { playerX: 500 + move.deadZone + 1, playerY: 960 });
+    expect(move.chasing).toBe(true);
+    expect(move.x).not.toBe(moveXBefore);
+    expect(move.facing).toBe(1);
+  });
+
+  it('the chase never exceeds patrolMax, and release never single-tick teleports', () => {
+    const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
+    // Drive the player far to the right so the scavenger chases past its patrol bound.
+    for (let i = 0; i < 60; i += 1) {
+      stepScavenger(s, { playerX: 900, playerY: 960 });
+      expect(s.x).toBeLessThanOrEqual(700);
+    }
+    expect(s.chasing).toBe(true);
+    expect(s.x).toBe(700);
+
+    // Release the chase by moving the player far away, past releaseRadius, and hold there.
+    let maxDelta = 0;
+    let prevX = s.x;
+    for (let i = 0; i < 200; i += 1) {
+      stepScavenger(s, { playerX: 99999, playerY: 960 });
+      const delta = Math.abs(s.x - prevX);
+      if (delta > maxDelta) maxDelta = delta;
+      prevX = s.x;
+    }
+    expect(maxDelta).toBeLessThanOrEqual(s.chaseSpeed);
+  });
+
+  it('preserves facing toward the player when pinned at the chase boundary', () => {
+    const s = createScavenger({ x: 690, y: 960, patrolMin: 400, patrolMax: 700 });
+    // Enter the chase from within detectRadius first (99999 alone would never be sighted), then
+    // push the player far to the right — chase pushes the scavenger to its patrolMax bound and it
+    // must still face right, toward the player, not left as a patrol-branch clamp would leave it.
+    stepScavenger(s, { playerX: 790, playerY: 960 });
+    expect(s.chasing).toBe(true);
+    for (let i = 0; i < 10; i += 1) {
+      stepScavenger(s, { playerX: 99999, playerY: 960 });
+    }
+    expect(s.x).toBe(700);
+    expect(s.chasing).toBe(true);
+    expect(s.facing).toBe(1);
+  });
+});
+
 describe('dead enemies stop acting — stepEnemies must filter hp <= 0', () => {
   const SCALE = 6;
   const BOUNDS = { widthPx: 8000, heightPx: 1080 };
