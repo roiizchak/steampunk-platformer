@@ -6,8 +6,13 @@
  * disk, so this runs on a fresh clone and under `npm run test:sim-isolated` with Phaser
  * uninstalled.
  *
- * `selfTest()` and `fill()` are re-exported from `gates.mjs`, which is the only import path
- * `tests/unit/art-gates.test.ts` uses — moving the code here does not move the import site.
+ * **This module imports FROM `gates.mjs` and nothing imports back**, deliberately. The first cut of
+ * this split had `gates.mjs` re-export `selfTest` and `fill` from here, which made the two mutually
+ * dependent — safe only for as long as this file happened to declare no top-level `const`, one edit
+ * away from a TDZ crash, and the same fragility already recorded for `motion.mjs`/`motionCombat.mjs`.
+ * `fill` therefore lives in `gates.mjs` beside the gates that use it; `selfTest` is imported from
+ * here directly by `tests/unit/art-gates.test.ts`. Raised by the `voltagent-qa-sec:code-reviewer`
+ * gate owner, session 7.
  */
 
 import { blank, encodePng } from './png.mjs';
@@ -24,27 +29,11 @@ import {
   gateMotionFloor,
   gateReachBand,
   gateSeam,
+  fill,
   summarise,
+  verdict,
 } from './gates.mjs';
 
-function verdict(status, value, reason) {
-  return { status, value, reason };
-}
-
-/** Paint a filled rectangle into an RGBA image. Fixture helper. */
-export function fill(image, x0, y0, w, h, rgba) {
-  for (let y = y0; y < y0 + h; y += 1) {
-    for (let x = x0; x < x0 + w; x += 1) {
-      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
-      const i = (y * image.width + x) * 4;
-      image.data[i] = rgba[0];
-      image.data[i + 1] = rgba[1];
-      image.data[i + 2] = rgba[2];
-      image.data[i + 3] = rgba[3];
-    }
-  }
-  return image;
-}
 
 /**
  * Every gate, run against a synthetic fixture built to FAIL it, and one built to pass.

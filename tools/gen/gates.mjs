@@ -29,7 +29,22 @@ export const PASS = 'PASS';
 export const FAIL = 'FAIL';
 export const INDETERMINATE = 'INDETERMINATE';
 
-function verdict(status, value, reason) {
+/** Paint a filled rectangle into an RGBA image. Fixture helper. */
+export function fill(image, x0, y0, w, h, rgba) {
+  for (let y = y0; y < y0 + h; y += 1) {
+    for (let x = x0; x < x0 + w; x += 1) {
+      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
+      const i = (y * image.width + x) * 4;
+      image.data[i] = rgba[0];
+      image.data[i + 1] = rgba[1];
+      image.data[i + 2] = rgba[2];
+      image.data[i + 3] = rgba[3];
+    }
+  }
+  return image;
+}
+
+export function verdict(status, value, reason) {
   return { status, value, reason };
 }
 
@@ -535,4 +550,13 @@ export function summarise(results) {
  * point of vault 4.21 — nothing under `tools/` calls it at build time; `art-gates.test.ts` is its
  * only caller, so this re-export exists for that one import site, not for the build.
  */
-export { fill, selfTest } from './gatesSelfTest.mjs';
+/**
+ * `fill` and `selfTest` are NOT re-exported from here.
+ *
+ * They live in `gatesSelfTest.mjs`, which imports the gates FROM this file. Re-exporting them
+ * back out of here made the two modules mutually dependent — safe only for as long as
+ * `gatesSelfTest.mjs` happened to declare no top-level `const`, which is one edit away from a
+ * TDZ crash and is exactly the `motion.mjs`/`motionCombat.mjs` fragility already on record.
+ * Import them from `./gatesSelfTest.mjs` directly.
+ */
+

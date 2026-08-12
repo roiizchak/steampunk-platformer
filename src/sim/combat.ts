@@ -20,11 +20,17 @@
  * kill plane and an attack resolve on the same tick:
  *
  *   1. i-frame expiry      — first, so a hazard cannot re-trigger inside its own grace window
- *   2. hazard / kill plane — environmental damage
- *   3. attack windows      — who is swinging, and on which tick
- *   4. damage
- *   5. knockback           — after damage, so a lethal hit does not also shove a corpse
- *   6. death
+ *   2. attack windows      — who is swinging, and on which tick
+ *   3. damage
+ *   4. knockback           — after damage, so a lethal hit does not also shove a corpse
+ *   5. death
+ *
+ * ⚠️ **World-geometry damage is NOT in this list, and used to be.** The kill plane, hazards,
+ * projectiles and enemy contact resolve at step **9b**, after collision — see `tick.ts:21,40-46`,
+ * which is the authority. A swept hazard test needs BOTH endpoints of this tick's motion, so it
+ * cannot run before integration. This docstring listed it here as step-4 item 2 long after the code
+ * moved, which is the "prose is not the authority" trap in the one file least allowed to carry it.
+ * Found by the `voltagent-qa-sec:qa-expert` gate owner, session 7.
  *
  * ## The windows are not restated here
  *

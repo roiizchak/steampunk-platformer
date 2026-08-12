@@ -35,9 +35,11 @@ import {
   gateReachBand,
   gateSeam,
   regionStats,
-  selfTest,
   summarise,
 } from '../../tools/gen/gates.mjs';
+// `fill` and `selfTest` come from the self-test module directly. They used to be re-exported by
+// `gates.mjs`, which made the two files mutually dependent; that cycle was removed in session 7.
+import { selfTest } from '../../tools/gen/gatesSelfTest.mjs';
 import { blank, decodePng, encodePng } from '../../tools/gen/png.mjs';
 
 const solid = (w: number, h: number, rgba: [number, number, number, number]) =>
