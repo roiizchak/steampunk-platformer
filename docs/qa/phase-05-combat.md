@@ -803,7 +803,7 @@ explanation, which `file-size.test.ts:22-26` names as the failure mode to fear m
 | file | lines | | file | lines |
 |---|---:|---|---|---:|
 | `src/scenes/GameScene.ts` | **657** | | `tools/gen/sheets.mjs` | 464 |
-| `tools/gen/gates.mjs` | 538 | | `tests/e2e/phase-01-boot.spec.ts` | 449 |
+| `tools/gen/gates.mjs` | 562 | | `tests/e2e/phase-01-boot.spec.ts` | 449 |
 | `tests/e2e/phase-03-tilemap.spec.ts` | 496 | | `src/scenes/BootScene.ts` | 438 |
 | `tests/unit/tilemap-data.test.ts` | 466 | | `tests/unit/sheet-packing.test.ts` | 419 |
 
@@ -826,3 +826,60 @@ dev-only scene guarding.
 
 **Splits recorded for the name-drop check and for the record** *(S15)*: `tools/gen/gatesSelfTest.mjs`,
 `tools/gen/promptData.mjs`, `tools/gen/chromaKey.mjs`, `tools/gen/chromaComponents.mjs`.
+
+### `play`-owned criteria — 5.4 and 5.8, run 2026-08-12
+
+`play` is **not an agent**. Both were driven by hand in a live browser with `playwright-cli` against
+the dev server, after the sheets that unblock them shipped this session. **Neither had ever been run
+against real art**; 5.4 was excluded from the e2e spec on the grounds that `rust-scavenger-walk` did
+not exist, and 5.8's only prior evidence was a grey-box screenshot.
+
+#### 5.4 — enemy walk animation advances past frame 0 during patrol — **PASS**
+
+**A screenshot cannot prove this.** It is a *timing* claim, and CLAUDE.md's own rule is that an
+existence assertion cannot verify one. Sampled **inside the page** via Phaser's `animationupdate`
+event, which fires on **every frame change** and carries `frame.index` — a strictly better instrument
+than polling per animation frame, and it satisfies *"sample inside the page and return an aggregate"*
+without a wait expressed in ticks, which cannot bound a sampling window.
+
+```
+sprites with a live animation : brass-sentry-idle, rust-scavenger-walk, brass-courier-idle
+animationupdate events        : 41
+
+rust-scavenger-walk   distinct frame indices [1..12] of 12   everLeftFrame0: true
+brass-courier-idle    distinct frame indices [1..12] of 12   everLeftFrame0: true
+brass-sentry-idle     distinct frame indices [1..8]  of 8    everLeftFrame0: true
+```
+
+**The scavenger walked through all twelve of its frames during patrol.** This is the criterion, and it
+is the first time it has been answerable — `enemyLayer` drew `Rectangle`s until this phase, and the
+frame-0 guard was only ever tested against a **mock scene, never a live Phaser `AnimationState`**.
+
+**Why the criterion exists, confirmed mechanically:** this phase's vault-in *(5.1)* records *"Phaser
+restarts a looping animation on every state change, which is how a walk cycle never left frame 0."*
+That is exactly `play()`'s documented behaviour — it stops and restarts — and `playIfChanged`
+(`src/scenes/playAnim.ts`) is the guard, skipping when `getName()` already matches. The 12 distinct
+indices are that guard working in a live scene rather than in a unit fixture.
+
+#### 5.8 — health bar legible at true sprite size against a cool background — **PASS, with a caveat**
+
+Driven to a genuine low-HP state rather than screenshotted full: a live scavenger set to **2/60**, at
+camera zoom 1 and true sprite size, against `level-01`'s cool blue-grey boiler wall. **Judged by eye at
+3× magnification**, because a downscaled view cannot settle a legibility question.
+
+**Verdict: legible.** The fill reads as a saturated red sliver on a black field — high contrast both
+against the bar interior and against the cool background behind it — and it is **visibly non-empty at
+2/60**, which is criterion 5.7's `BAR_MIN_FILL_PX` floor confirmed *visually* rather than only as a
+predicate. A bar this size at 3.3 % HP would be invisible without that floor.
+
+> ⚠️ **Caveat, and it is a real readability finding.** By capture time the scavenger had closed to
+> ~120 px of the player, so the two sprites overlap at true size and the enemy bar renders **across the
+> player's head**. At a glance it is ambiguous which entity the bar belongs to. It is not a blocker —
+> the bar itself is legible and correctly positioned above its own body — but "legible" and
+> "unambiguous" are different properties, and only the first is currently gated. Worth an offset or an
+> ownership cue when enemy art is finished.
+
+**Recorded here, not only in the session, because the repository had no record of either run and the
+Codex implementation review correctly reported both as UNRUN on that basis.** See
+[reviews/phase-05-impl.md](../reviews/phase-05-impl.md) findings 1 and 2, and the note there about a
+handoff document being stale from the first commit of the session that will rewrite it.

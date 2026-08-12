@@ -94,3 +94,22 @@ export function workListFor(slug, actions) {
     return { slug, action, motionKey: motionKeyFor(slug, action) };
   });
 }
+
+/**
+ * Resolve the scale a `(slug, action)` pair packs at, and say WHERE the number came from.
+ *
+ * `null` is not an override. It is this project's "not measured yet" convention — the same one
+ * `stridePxPerCycle` uses — so it falls back to the slug default and is labelled `'slug'`, which
+ * keeps it bound by the one-scale rule in `catalogWrite.mjs`. An earlier cut tested
+ * `!== undefined`, so a `null` resolved to the slug's number and was then labelled `'action'`,
+ * silently exempting it from the rule it should still obey. Found by the Codex implementation
+ * review, session 7; it is why this lives in a testable leaf instead of inline in the build script.
+ */
+export function resolveActionScale(config, action) {
+  const declared = config?.animations?.[action]?.scale;
+  const hasOverride = declared !== undefined && declared !== null;
+  return {
+    scale: hasOverride ? declared : config?.scale,
+    scaleSource: hasOverride ? 'action' : 'slug',
+  };
+}

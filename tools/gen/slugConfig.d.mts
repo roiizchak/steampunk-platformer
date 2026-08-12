@@ -26,3 +26,13 @@ export interface WorkItem {
 }
 
 export declare function workListFor(slug: string, actions?: string[]): WorkItem[];
+
+export declare function resolveActionScale(
+  config: {
+    scale?: number;
+    // An animation record carries verticalAnchor/footOffsetPx/activeFrames too; only `scale` is
+    // read here, and `null` means "not measured yet" rather than an override.
+    animations?: Record<string, { scale?: number | null } & Record<string, unknown>>;
+  },
+  action: string,
+): { scale: number | undefined; scaleSource: 'action' | 'slug' };

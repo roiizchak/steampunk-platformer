@@ -1,7 +1,10 @@
 # Session handoff — Phase 5 (combat, enemies, hazards)
 
 **Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
-**§12 (session 6) supersedes §11, which supersedes §10, §9, §8, §4 and §6.**
+**§13 (session 7) supersedes §12b, §12 and everything above them.**
+> ⚠️ **This document is stale from the first commit of any session that will rewrite it.**
+> Two Codex blockers and one QA brief in session 7 were caused by reading it mid-flight.
+> If you are reviewing during a session, ask which sections are known stale.
 **Phase 5 is NOT complete and must not be reported complete.**
 
 Read this first, then [PRD.md](PRD.md), then
@@ -1084,3 +1087,163 @@ performance). **Interpreting this is criterion 5.11's owner's job** and it shoul
   "never run `test:sim-isolated` while others work".
 - **An unescaped apostrophe in a test title** terminated a string and produced a brace error 100 lines
   away.
+
+---
+
+## 13. Session 7 — 2026-08-12. **This section supersedes §12b, and everything above it.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-vectorized-hanrahan.md`. Its Codex plan
+review — the **seventh** — returned **BLOCK, 4 blockers, 3 major, 1 minor**, all applied
+([reviews/phase-05-plan.md](reviews/phase-05-plan.md)). The Codex **implementation** review
+(criterion 5.14) ran for the first time in this phase and returned **BLOCK, 6 blockers, 2 major,
+2 minor** ([reviews/phase-05-impl.md](reviews/phase-05-impl.md)).
+
+**Spend: $41.36. Not one cent spent this session.** The ceiling was raised **$45 → $55** by the user
+before it was clear nothing would need it.
+
+```
+267 unit suites / 870 tests / 0 failed   (JSON reporter, never a summary line)
+46 e2e passed (5.3m) · typecheck clean · build + verify-dist ok · dev servers killed by port
+```
+
+**Phase 5 is FAILING and must be reported failing.**
+
+### The whole session in one paragraph
+
+Everything that shipped was **$0 config work on art already bought**. Two sheets entered the catalog —
+`rust-scavenger/walk` (the first scavenger sheet the project has ever had) and `brass-courier/attack`
+— by fixing two *numbers*, not by generating anything. The rest of the session was the §6 QA gate,
+deferred across six sessions, and the two Codex reviews. **The gate found two real gameplay bugs that
+every checklist verdict had just called PASS**, and the implementation review found a hole in a guard
+written the same day.
+
+### Four user decisions, all recorded in [qa/phase-05-combat.md](qa/phase-05-combat.md)
+
+| | decision |
+|---|---|
+| **D1** | The frame cell is **PER SLUG** — courier 288, sentry 288, **scavenger 512**. Decision M3 amended in the open |
+| **D2** | `scale` is declarable per **`(slug, action)`**, pasted by hand with provenance |
+| **D3** | Ceiling **$45 → $55**, figure named on request. `prd/phase-05-combat.md` §1b corrected, with the whole `$40 → $45 → $55` chain |
+| **D4** | Config and gate first at $0; **art is explicitly post-phase** — spending after 5.14 would invalidate it |
+
+### 🔴 D1 was decided TWICE, because the first number was wrong
+
+**`rust-scavenger/death` needs 510 px, not the 358 this document recorded in §12b. 358 is frame 4.**
+`packStrip` threw on the first clipped frame and frames 5–9 were never evaluated. A user decision
+(384 global) was taken on that number and had to be withdrawn.
+
+**Fifth instance in this phase of one pattern**, and the first that cost a decision:
+
+> **When a pipeline stops at the first failure, a verdict about stage N is evidence about stage N
+> ONLY.** Any statement of the form *"X is blocked on Y"* is provisional until X has reached the end.
+> **Prefer an instrument that sweeps and reports a maximum over one that stops and reports an
+> instance.**
+
+So the instrument was fixed, not just the number: **`packStrip` now sweeps every frame on both axes**
+and reports the true maximum. Verdict unchanged — any clipped frame still fails.
+
+**Fixing it immediately surfaced a sixth instance.** Both `death` clips now clear the clipping gate and
+hit a **fragment gate** instead: `detectFrames` segments debris flecks as separate frames
+(`"death" cell 5 of 12 is 36x9 against a median height of 229`). **A wider cell does not help** —
+probed at 384 for the courier, same gate. Both deaths are an art problem, and art is post-phase.
+
+### What ships, and what does not
+
+| clip | state |
+|---|---|
+| `brass-courier/hurt` | ✅ ships, 288 px, fps 20 |
+| **`brass-courier/attack`** | ✅ **NEW** — padded round adopted, per-action scale **0.6**, draws 289 px, fps **24** derived as `8 × 60 / 20` |
+| **`rust-scavenger/walk`** | ✅ **NEW** — packs at 512, stride **312** game px measured by the courier's own foot-band method |
+| `brass-sentry/idle` | ships, held by the expected-failure lock on loop wrap |
+| `rust-scavenger/chase` | ❌ stride **INDETERMINATE** — one peak and one trough across 12 frames at band heights 16/24/32, the trailing-leg-airborne failure vault 4.18 names for the courier's `run`. **No stride was guessed** |
+| `rust-scavenger/death` · `brass-courier/death` | ❌ both hit the **fragment gate** |
+| `brass-sentry/fire` · `/death` | ❌ unchanged; `fire`'s discharge is still nearly absent |
+
+### 🔴 TWO CONFIRMED GAMEPLAY BUGS — unfixed, and the phase fails on them
+
+Found by the **adversarial** `code-reviewer` brief, re-measured by the orchestrator against the real
+sim, and **escalated by the Codex implementation review from "defer to session 8" to "these block the
+phase"** — a judgement adopted over the orchestrator's.
+
+- **S1 — the scavenger chase has no dead zone.** `enemyScavenger.ts:118-120` is
+  `dir = playerX >= x ? 1 : -1` with no tolerance, so a player it cannot reach — standing above it —
+  flips `facing` **every tick**. **Measured: 39 flips in 40 ticks.** `enemyView.ts` reads `facing` for
+  `flipX`, so **the sprite strobes.** The flap test re-pins `s.x` every tick and its own docstring
+  names *"the player is above it"* as the real in-game case — **it pins out exactly the case it names.**
+- **S2 — the chase ignores the patrol bounds.** `:121` returns before the clamp at `:127-133`.
+  **Measured: patrolMax 700, chased to x=900, snapped back to 700 on release — a 200 px teleport.**
+
+Both need a design call (dead-zone width; whether a chase should leave its ledge), which is why they
+were raised rather than patched. **Fix these first in session 8.**
+
+### The gate, honestly
+
+15 findings in [qa/phase-05-combat.md](qa/phase-05-combat.md), every one applied or given a one-line
+reason *(C11)*, each agent's "could not check" preserved *(9.3)*. **5.1 and 5.5 were re-run from
+scratch** — their session-3 sign-offs were void. **5.7 turned out never to have been run by its owner
+at all**, despite being listed. **5.4c PASSED for the first time**, now that `attack` ships:
+`G4 drift 0px within budget 3px`, `G5 frame 3 (tick 9) lands inside the active window [6, 10)`.
+
+**5.4 and 5.8 were both run by hand** with `playwright-cli` and are recorded with their evidence —
+5.4 by sampling `frame.index` in-page off the `animationupdate` event (**12 distinct indices** during
+patrol), 5.8 by driving a scavenger to **2/60** and judging the screenshot **at 3× magnification**.
+
+### 🔴 5.11 — measured, and it is bad
+
+**Three runs now, and they do not agree:**
+
+```
+55.70 ms median   session 6 — the 20-strong fleet drew as RECTANGLES, no scavenger sheet existed
+82.10 ms median   session 7 — after rust-scavenger/walk shipped
+73.40 ms median   session 7, final verification
+```
+
+**≈ 12–18 fps against a 60 fps target.** Part of the 55.70 → 73–82 movement is very likely **not noise
+but the cost of this session's own art landing** — those 20 bodies now animate. **That is a hypothesis,
+not a measurement**; isolating it needs a run with the catalog row removed. **Do not report the swing
+as pure variance.**
+
+The spec asserts only `<100 ms` because **no baseline exists** (PRD §7, vault §B1) — and the measured
+values are now 73–89 % of that ceiling, so it can fire on noise while still passing a 2× regression.
+**`bodyCount` also cannot tell a real Sprite from the `Rectangle` fallback** — `EnemyLayer` tracks
+`isSprite` for exactly that and the spec never reads it. **Vault 9.4, and it is the first thing to fix.**
+
+### Traps this session added or proved
+
+- 🔴 **A handoff document is stale from the first commit of the session that will rewrite it.** This
+  cost real review time twice: a `qa-expert` brief reported 5.4c/5.4d as never run, and **two of
+  Codex's six blockers were it correctly reporting that the REPOSITORY had no record of work that had
+  been done.** Record evidence as it is produced, and tell any mid-session reviewer which documents
+  are known stale.
+- 🔴 **A probe that quietly does nothing looks exactly like a probe that found nothing.**
+  `createScavenger` takes `y` with **no default**; omitting it made `withinRadius` compare against
+  `undefined`, detection returned `false`, and the scavenger never chased — so the first run looked
+  like a clean refutation of S1. The second put the player outside the 480 px detect radius and failed
+  the same way. **Check the fixture entered the state it is meant to test.**
+- **Two agent reports were flatly WRONG** and were caught only by re-verifying: the performance
+  checklist brief claimed zero enemy keys in `index.json`; the qa adversarial brief claimed 5.4c had
+  never run. Both false. Its own adversarial counterpart contradicted the first one and was right.
+- **`file-size.test.ts`'s globs cannot see** `.agents/skills/**` — two files there exceed 400. Judged
+  out of scope (vendored skill runtime, not project source), so the honest count stays **8**.
+- **A guard can be watched go red three ways and still have a hole**, if part of the path is
+  unreachable from a test. `scale: null` resolved to the slug value but was labelled `'action'`,
+  buying an exemption it had not earned. The logic moved out of the build script into
+  `slugConfig.mjs` so a test could reach it.
+- **`gates.mjs` grew 538 → 562** while fixing the split's circular import, and **the evidence table
+  drifted inside the very session that corrected it for drifting.**
+
+### Where to pick up
+
+1. **Fix S1 and S2.** They block the phase. Both need a design call from the user first.
+2. **Make 5.11's spec assert `isSprite`, not just `bodies.length`**, and add a lower bound on
+   `medianMs`. Then isolate whether the 55.70 → 73–82 shift is the sprite path.
+3. **4.10 and 4.12 are still unrun** — Phase 4 debt from §1b, confirmed by the Codex implementation
+   review. **G5 does not substitute for 4.10**; different audit, different question.
+4. **5.12**: 8 files over 400, none justified. `gates.mjs` needs gate logic moved, not fixtures —
+   its non-self-test body is 529 lines on its own. `GameScene.ts` (657) is the big one and is
+   subclassed, so it is the risky split.
+5. **Then art**, post-phase, with $13.64 available: `brass-sentry/fire`'s missing muzzle flash is the
+   one problem with an unattempted fix, and `DEBRIS_MARGIN` has never been applied to the scavenger.
+
+**Not started:** an automated spec for 5.4 (hands-on evidence only, no regression guard).
+**Phase 5 is failing and must be reported failing.**

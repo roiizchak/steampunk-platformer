@@ -32,7 +32,7 @@ import { encodePng } from './png.mjs';
 import { dropCastShadow } from './chroma.mjs';
 import { figureMetrics, packStrip, deriveScale } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
-import { configFor, workListFor } from './slugConfig.mjs';
+import { configFor, workListFor, resolveActionScale } from './slugConfig.mjs';
 import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
 import { upsertCatalogSheets, upsertLiftProfile } from './catalogWrite.mjs';
 import { findSource, loadConfig, keySheet, framesOf, sliceFrame } from './assetSources.mjs';
@@ -184,9 +184,13 @@ function main() {
      * knows which entries the one-scale rule (vault A5) still binds — see that file's header for
      * why the rule now applies only to `scaleSource: 'slug'` entries (user decision D2, 2026-08-12).
      */
-    const actionScale = config.animations?.[action]?.scale;
-    const resolvedScale = actionScale ?? scale;
-    const scaleSource = actionScale !== undefined ? 'action' : 'slug';
+    /**
+     * `null` is NOT an override — it is this project's "not measured yet" convention, the same one
+     * `stridePxPerCycle` uses. Testing `!== undefined` treated it as one, so `"scale": null` resolved
+     * to the SLUG's number and was then labelled `'action'`, silently exempting it from the one-scale
+     * rule it should still be bound by. Found by the Codex implementation review, session 7.
+     */
+    const { scale: resolvedScale, scaleSource } = resolveActionScale(config, action);
     if (!(resolvedScale > 0)) {
       throw new Error(
         `assets:build: "${action}" resolved to a non-positive scale (${resolvedScale}) — check ` +

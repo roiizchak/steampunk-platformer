@@ -1,7 +1,16 @@
 /**
- * Phase 5 combat, in a real browser. Covers exactly two criteria — 5.4 (enemy walk animation)
- * is deliberately NOT here: it needs a catalogued `rust-scavenger-walk` sheet that does not exist
- * yet, and a placeholder that always passes would be worse than no test.
+ * Phase 5 combat, in a real browser. Covers 5.7 and 5.11.
+ *
+ * ⚠️ **The claim that used to be here — that 5.4 could not be tested because
+ * `rust-scavenger-walk` "does not exist yet" — went stale in session 7 when that sheet shipped as a
+ * 12-frame looping catalog row.** The Codex implementation review read this comment and correctly
+ * reported 5.4 as unrun on the strength of it. 5.4 has since been run by hand with `playwright-cli`,
+ * sampling `frame.index` in-page off the `animationupdate` event: 12 distinct indices during patrol.
+ * Evidence in `docs/qa/phase-05-combat.md`.
+ *
+ * **5.4 still has no automated spec, and that is the honest state** — a `play`-owned criterion has
+ * hands-on evidence and no regression guard. Adding one here is the obvious next move; a placeholder
+ * that always passes would still be worse than no test.
  *
  * Both dev fixtures come from `src/scenes/devSpawn.ts` via the keys `GameScene.bindKeys()` binds
  * under `import.meta.env.DEV` (~L294): `M` for one scavenger at 2/60 hp (5.7), `N` for the
