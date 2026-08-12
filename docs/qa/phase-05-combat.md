@@ -883,3 +883,106 @@ predicate. A bar this size at 3.3 % HP would be invisible without that floor.
 Codex implementation review correctly reported both as UNRUN on that basis.** See
 [reviews/phase-05-impl.md](../reviews/phase-05-impl.md) findings 1 and 2, and the note there about a
 handoff document being stale from the first commit of the session that will rewrite it.
+
+---
+
+## Playtest, 2026-08-12 — three defects found by hand that the whole gate missed
+
+**Source:** `Recording 2026-08-12 173100.mp4`, 27.7 s of live play, reported by the user after the
+§6 gate, both Codex reviews and 46 e2e had all been run and reported. **Every one of the three was
+then confirmed in the code**, so these are not impressions — they are located defects with a line
+number. None is fixed; all three are session-8 work.
+
+> **This is vault C4 again, and more sharply than Phase 2 recorded it.** The gate had just finished:
+> 4 owners × 2 briefs, 15 findings, two Codex reviews, 870 unit tests and 46 e2e green. **Two minutes
+> of hands-on play found three defects, two of them one-line root causes.** A criterion is a question
+> someone thought to ask; playing the game is what asks the questions nobody wrote down.
+
+### P1 — dead enemies keep acting. **One missing condition, two visible symptoms.**
+
+`src/sim/enemyTurn.ts:29-41` — `stepEnemies` iterates **every** scavenger and **every** sentry with
+**no `hp > 0` filter**:
+
+```js
+for (const scavenger of world.enemies.scavengers) stepScavenger(scavenger, sighting);
+...
+for (const sentry of world.enemies.sentries) { if (!stepSentry(sentry, sighting).fired) continue; ... }
+```
+
+And `stepSentry` itself never reads `hp` — confirmed, the only occurrences of `hp` in
+`src/sim/enemySentry.ts` are the interface (`:31`), the options type (`:49`) and the constructor
+(`:55,64,65`). The fire path at `:89-99` gates on the cooldown window alone.
+
+**So a sentry at 0 hp keeps counting its cooldown and keeps firing**, which is exactly what the user
+saw. The same missing guard means **a dead scavenger keeps patrolling and chasing** — the
+"corpse keeps walking" symptom that finding R4 predicted from the render side and that
+`playIfChanged`'s missing-key no-op was only ever a partial mitigation for.
+
+**Why no test caught it:** every combat test asserts hp reaching 0, and none steps the world
+*afterwards*. `5.10`'s known caveat — *"no test actually swings twice and asserts death"* — is the
+same blind spot seen from the other end. Death is asserted as a **number**, never as a **state the
+world then has to behave correctly in**.
+
+### P2 — the death animation never plays, for either enemy
+
+Reported as "misses the animation of death", and it is a direct consequence of the catalog:
+**neither `brass-sentry/death` nor `rust-scavenger/death` ships.** Both are blocked at the fragment
+gate. `playIfChanged` (`src/scenes/playAnim.ts`) deliberately **no-ops on a missing key so the
+previous animation keeps running** — documented as "the intended fallback while the catalog is
+partial". Combined with **P1**, a killed enemy therefore keeps playing its *idle* or *walk* cycle and
+keeps acting. The two defects compound: the fallback was designed for a body that had **stopped**.
+
+### P3 — hitstun is COSMETIC. Being hit does not interrupt the player.
+
+Reported as "even when he touched me, [it] broke the animation ... and I can actually move and can
+attack him." Confirmed:
+
+- `HURT_TICKS = 18` (`src/sim/combat.ts:71`) and `enterCombatState(player, 'hurt')` (`:211`).
+- `COMBAT_STATES` (`:156`) and `isCombatState` (`:166`) are consumed in **exactly one place** —
+  `src/sim/player.ts:185`, inside `resolveState`, whose only job is to stop **step 11 overwriting the
+  state label**.
+- **Nothing in the tick order suspends input, movement or the attack edge during `hurt`.** Step 5
+  (horizontal accel) and step 4b (the attack edge) run unconditionally; neither consults
+  `player.state`. `grep` for any movement gate on `hurt` returns nothing.
+
+**So `hurt` reserves a label for 18 ticks and changes no behaviour.** The player slides and swings
+through their own hitstun, which is also why the animation "breaks" — the sheet plays while the
+character is being driven by live input.
+
+⚠️ **This is a design decision that was never taken.** Whether hitstun should lock movement, lock
+attack, or neither is a **balance call for the user**, not something to patch in. But the current
+state is not a considered choice — it is an absence, and the criteria never asked.
+
+### How this lands against the criteria
+
+| criterion | status before | what the playtest shows |
+|---|---|---|
+| 5.5 | PASS | still true — the *attack window* is correct. It never asked what happens to the **defender** |
+| 5.6 | PASS | still true — i-frames span their window. i-frames gate **damage**, not **control**; nobody noticed those are different |
+| 5.10 | PASS, caveated | the caveat is now a defect. "No test swings twice and asserts death" is why P1 shipped |
+| 5.4 | PASS | the walk cycle does advance — on a **live** enemy. It also advances on a dead one, which is P1/P2 |
+
+**None of these verdicts was wrong. The gate simply had no criterion for "what does the world do
+after something dies."** That is the gap to write into Phase 5's vault-out.
+
+### P4 — the run cycle drops frames, and it is 5.11 made visible
+
+Reported as "when the character is running, it is missing frames ... not using the whole 12 frames."
+
+**The sheet is complete.** `brass-courier-run` is catalogued with **12 frames**, `simTicks 27`, and
+**fps 26.67** derived as `12 × 60 / 27`. Nothing is missing from the art or the catalog.
+
+**The renderer cannot keep up with it.** Criterion 5.11 measured **12–18 fps** actual. A 26.67 fps
+animation sampled by a 12–18 fps render loop **must** skip: at 15 fps each drawn frame advances the
+animation by ~1.8 frames, so roughly every other pose is never displayed. `run` is the fastest
+animation in the game and therefore the first place the frame budget becomes visible as an art defect.
+
+> **This is the most valuable thing in the playtest.** 5.11's number was abstract — "12–18 fps against
+> a 60 fps target" — and the honest question was how much it actually mattered. **It matters enough to
+> destroy a 12-frame animation the project paid to generate.** The frame budget is not a
+> nice-to-have; it is already costing shipped art. It should be treated as the phase's top
+> non-blocking priority, above further art spend.
+
+**Do not "fix" this by lowering the run fps.** The fps is *derived* (`renderFrames × TICK_HZ /
+simTicks`) and authoring it down to match a slow renderer would reintroduce vault 4.22's foot-slide —
+trading a visible defect for a worse invisible one. **Fix the frame rate, not the number.**

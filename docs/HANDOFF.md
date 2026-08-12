@@ -1232,8 +1232,34 @@ values are now 73–89 % of that ceiling, so it can fire on noise while still pa
 - **`gates.mjs` grew 538 → 562** while fixing the split's circular import, and **the evidence table
   drifted inside the very session that corrected it for drifting.**
 
+### 🔴 A PLAYTEST AFTER THE GATE FOUND FOUR MORE — read this before the list below
+
+The user played the build for 27 seconds **after** the gate, both Codex reviews and 46 e2e had all
+been run and reported green. Full write-up, with the confirming line numbers, in
+[qa/phase-05-combat.md](qa/phase-05-combat.md). **All four confirmed in code. None fixed.**
+
+| | defect | root cause |
+|---|---|---|
+| **P1** | **Dead enemies keep acting** — a killed sentry keeps firing; a killed scavenger keeps patrolling | `enemyTurn.ts:29-41` iterates every enemy with **no `hp > 0` filter**, and `stepSentry` never reads `hp` at all |
+| **P2** | **No death animation, either enemy** | neither `death` sheet ships (fragment gate), so `playIfChanged` no-ops and the previous cycle keeps playing — **which only looks right if the body has also stopped, and P1 means it has not** |
+| **P3** | **Hitstun is COSMETIC** — the player moves and attacks through being hit | `HURT_TICKS` reserves a state label for 18 ticks; `isCombatState` is consumed **only** in `resolveState` (`player.ts:185`) to stop step 11 overwriting the label. **Nothing gates input, movement or the attack edge.** Needs a design call, not a patch |
+| **P4** | **The run cycle visibly drops frames** | the sheet is fine — 12 frames, fps **26.67** derived. **The renderer runs at 12–18 fps (criterion 5.11), so it physically cannot show them.** Do NOT lower the fps to match; it is derived, and authoring it down reintroduces vault 4.22 foot-slide |
+
+**P4 is the one that changes a priority.** 5.11's number was abstract. It is now known to be
+**destroying a 12-frame animation the project paid to generate.** Fix the frame rate before spending
+another cent on art.
+
+**And P1 is one missing condition causing two of the four symptoms** — the cheapest fix on the list.
+
+> **Vault C4, harder than Phase 2 recorded it.** 4 owners x 2 briefs, 15 findings, two Codex reviews,
+> 870 unit tests and 46 e2e — all green — and two minutes of play found four defects. **The gate had
+> no criterion for "what does the world do after something dies."** 5.10's standing caveat, *"no test
+> actually swings twice and asserts death"*, was the same blind spot seen from the other end.
+
 ### Where to pick up
 
+0. **P1 first — it is one `hp > 0` guard and it kills two symptoms.** Then P3 and P4, both of which
+   need a decision from the user before any code.
 1. **Fix S1 and S2.** They block the phase. Both need a design call from the user first.
 2. **Make 5.11's spec assert `isSprite`, not just `bodies.length`**, and add a lower bound on
    `medianMs`. Then isolate whether the 55.70 → 73–82 shift is the sprite path.
