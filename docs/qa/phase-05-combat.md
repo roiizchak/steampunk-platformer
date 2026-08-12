@@ -986,3 +986,83 @@ animation in the game and therefore the first place the frame budget becomes vis
 **Do not "fix" this by lowering the run fps.** The fps is *derived* (`renderFrames × TICK_HZ /
 simTicks`) and authoring it down to match a slow renderer would reintroduce vault 4.22's foot-slide —
 trading a visible defect for a worse invisible one. **Fix the frame rate, not the number.**
+
+---
+
+# Session 8 — 2026-08-12. **This section supersedes the playtest section above.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-whimsical-lightning.md`, reviewed by the
+**eighth** Codex plan review (BLOCK, 2 blockers / 4 major / 2 minor, **all eight confirmed locally**
+— [reviews/phase-05-plan.md](../reviews/phase-05-plan.md)).
+
+## Four corrections to the inherited brief, all verified in the tree before any code was written
+
+The session-7 handoff and the session-8 prompt built on it were **wrong in four places**. Each was
+checked against the code, and each changed the work:
+
+| | the brief said | the tree says |
+|---|---|---|
+| **C1** | *"step 4b (the attack edge) runs unconditionally"* during `hurt`, so P3 needed to gate both movement and attack | **False.** `canAct` (`combat.ts:298-300`) is `!isCombatState(state)` and already gates the edge at `:286`. **Attacking during `hurt` was never possible.** P3 is movement-only — one condition, not two. |
+| **C2** | *"That test does not exist today, and its absence is exactly why P1 shipped"* | **It exists, and it is worse than absent.** `player-attack.test.ts` *"a dead enemy stops threatening"* stepped **30 ticks past hp=0** and asserted only the **player's** hp, on a fixture authored `patrolMin === patrolMax === 1000` so the clamp pinned the corpse. **A false negative, not a gap** — the test ran, passed, and could not see the defect it was named for. |
+| **C3** | *"a corpse still needs to be drawn … check what `enemyLayer`/`enemyView` expect of a 0-hp body before choosing"* | **Already resolved; the render side needed no change at all.** `enemyView.ts:49-54` and `:62-67` return `'death'` at `hp <= 0`, and `enemyLayer.ts:125-127` alphas the body to 0.35 with a comment explaining that a corpse vanishing on the frame it dies gives no feedback. Nothing splices or destroys a body anywhere in `src/`. **P1 was purely a sim fix.** |
+| **C4** | 5.11's spec needs a `window.__game` field to reach `isSprite` | **No.** TypeScript `private` is erased at runtime, so `__phaserGame.scene.getScene('Game').enemies.isSprite` is reachable through the seam the spec already uses for `bodies`. **The nine-field surface stays closed** and no STOP-and-ask was needed. |
+
+**The lesson is C2's.** A handoff that says *"no test covers this"* is a claim about the repository,
+and it was checked and found false. The dangerous case is not the missing test — it is **the test
+that exists, runs green, and is structurally incapable of failing.**
+
+## Two things the brief did not know
+
+- 🔴 **Knockback was never built.** Phase 5 §1 names it as scope, `tick.ts:245` and `combat.ts:15,25`
+  place step 4 before integration **specifically so knockback reaches the same tick's movement** —
+  and nothing has ever written `player.vx` on a hit. The only `vx` writes in `src/sim/` are
+  friction/accel in `player.ts` and the world-bounds clamp in `hazards.ts`. **The seam was built and
+  left empty for a whole phase**, and no criterion asked.
+- **Enemy `y` is frozen at spawn.** `enemyScavenger.ts:70` sets it and nothing writes it again; there
+  is no gravity or ground collision for enemies. So a scavenger that chases past its patrol bound
+  does not fall — **it floats at ledge height over the gap.** This is what made S2's clamp the
+  correct answer rather than merely the conservative one, and it was not visible from the defect
+  report.
+
+## User decisions, 2026-08-12
+
+| | decision | note |
+|---|---|---|
+| **E1** | Attack moves **`Z`/`J` → `F`/`L`** | The user reported the old placement as unnatural. No e2e spec pressed either key, so the rebind was free. |
+| **E2** | Hitstun hard-locks movement for **`ATTACK.startup` (6 ticks)**, then control returns while the `hurt` label runs its remaining 12 | Chosen over an authored 8 so the number **reuses a measured constant** rather than inventing one *(vault 5.3)*. |
+| **E3** | **Knockback ships**, impulse `walkMax` — **provisionally re-opened** | Codex finding 4 showed ground friction 3.69 cuts a 5.54 impulse to 1.85 px before its first integration, so `walkMax` buys ~2 px. The user chose it **before that was known**; the measured displacement goes back to them. |
+| **E4** | Scavenger dead zone **96 px**, holding facing **and** movement | One tile, 12× one tick of `chaseSpeed`. |
+| **E5** | **The chase clamps to the patrol bounds** | Makes both the 200 px teleport and the floating scavenger structurally impossible. |
+| **E6** | **New criterion 5.16** | Wording and rationale in [prd/phase-05-combat.md](../prd/phase-05-combat.md) §6. |
+| **E7** | Full scope, **including the 5.12 splits** | Splits run last, so nothing is split while it is also being edited. |
+
+## P1 — CLOSED
+
+`stepEnemies` now filters `hp > 0` on both loops (`enemyTurn.ts:31`, `:43-45`); `stepProjectiles`
+stays **outside** the guard so shots already in flight keep travelling. The guard is at the **call
+site**, not inside `stepSentry`/`stepScavenger`, which keeps both step functions pure and stops a
+corpse's `cooldownCounter` advancing — `sentryAnim` reads that counter, so a corpse whose counter
+kept moving would compete a `fire` pose against its own death pose.
+
+**Watched RED first**, as the whole point of the item: `expected 1 to be +0` on projectile count,
+`expected 650 to be 500` on the corpse's `x`.
+
+> 🔴 **A parity coincidence nearly produced a false green, in the very test written to catch a false
+> negative.** The first fixture put the player at the corpse's own x. A *live* scavenger there
+> oscillates around the player, so on an **even** tick count it lands back where it started — and the
+> test passed with the bug present. Both fixtures now keep the player outside the 480 px
+> `detectRadius`, so a live scavenger would only **patrol**, and patrol drift is monotonic. **"The
+> number did not change" is not evidence unless you know the bug would have changed it.**
+
+## P4 — H3 found, and it is a default nobody chose
+
+`GameScene.ts:522-529` registers every animation with `key`, `frames`, `frameRate` and `repeat` —
+and **never sets `skipMissedFrames`**, so it takes Phaser's default of **`true`**. That flag makes the
+engine **skip frames when playback lags wall-clock**: a 26.67 fps `run` cycle under a slow renderer
+does not slow down, **it drops poses**. That is precisely the reported symptom, and it explains why
+`run` — the fastest animation in the game — is where the frame budget first showed as an art defect.
+
+⚠️ **This does not license flipping the flag.** `skipMissedFrames: false` would show every pose while
+letting the cycle run *slow*, which is **vault 4.22 foot-slide** — a worse defect because it is
+invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.** Full
+measurement and the H1/H2 separation are recorded below once taken.

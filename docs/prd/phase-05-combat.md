@@ -157,6 +157,17 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 | 5.13 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-05-plan.md` | — |
 | 5.14 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-05-impl.md` | codex |
 | 5.15 | **Hazard and kill-plane timing** — a hazard thinner than one tick of travel at `maxFallSpeed` still registers, and the kill plane fires on the tick the player crosses it | unit, committed fixture at the tunnelling speed *(C2)* | `voltagent-qa-sec:qa-expert` |
+| 5.16 | **A dead enemy stops acting** — the world is stepped for N ticks **after** `hp` reaches 0 and the sentry fires zero shots, the scavenger's `x` does not change, and neither deals contact damage | unit, fixture stepped past death *(C4)* | `voltagent-qa-sec:qa-expert` |
+
+> **Why 5.16 exists, added in session 8 with the user's approval.** A 27-second playtest found four
+> defects **after** this gate, both Codex reviews and 46 e2e had all passed. The gate's blind spot was
+> that **nothing asked what the world does after something dies** — 5.5 asked whether the attack
+> window is correct and never asked what happens to the defender. 5.10's standing caveat, *"no test
+> actually swings twice and asserts death"*, was the same hole seen from the other end. The one test
+> that existed (`player-attack.test.ts`, *"a dead enemy stops threatening"*) stepped 30 ticks past
+> death and asserted only the **player's** hp, on a fixture whose patrol bounds pinned the corpse in
+> place — so the defect was **unobservable to the test named for it**. This criterion is the vault C4
+> lesson written as a gate.
 
 **Regression set:** Phases 1–4, specs 01–04.
 

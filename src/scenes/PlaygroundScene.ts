@@ -23,9 +23,10 @@ import { GameScene } from './GameScene';
  * Rebinding movement to tune movement would make the scene useless for its one job.
  *
  * Adjust was `Z`/`X` until Phase 5 bound **`Z` to attack**, at which point one keypress both swung
- * the sword and decremented a knob. The same argument that moved these off the arrows moves them
- * off `Z`: you tune combat while attacking, so the attack key has to stay free too. `,`/`.` are
- * adjacent, unshifted, and outside the movement and combat sets.
+ * the sword and decremented a knob. Attack has since moved to `F`/`L` — session 8, on the user's
+ * report that the old placement was awkward to reach — so that collision no longer exists. `,`/`.`
+ * stayed rather than moving back: they are clear of every production binding, and churning a dev
+ * binding twice costs more than it saves.
  */
 
 /** Knobs measured in whole 60 Hz ticks (vault 2.1) rather than pixels. */
@@ -103,7 +104,7 @@ export class PlaygroundScene extends GameScene {
   }
 
   protected helpText(): string {
-    return 'ARROWS / WASD move · SPACE jump · Z/J attack · Q/E select knob · ,/. adjust · R reset · P back';
+    return 'ARROWS / WASD move · SPACE jump · F/L attack · Q/E select knob · ,/. adjust · R reset · P back';
   }
 
   protected togglePlayground(): void {

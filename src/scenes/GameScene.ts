@@ -168,7 +168,7 @@ export class GameScene extends Phaser.Scene {
 
   protected helpText(): string {
     // SHIFT is a PRODUCTION control, so it belongs in `base` and not behind the DEV branch below.
-    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  Z / J attack';
+    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack';
     // The dev-scene keys are bound only under `import.meta.env.DEV`, so advertising them in a
     // production build offers the player two keys that do nothing. Vite folds this to `base`.
     // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
@@ -247,7 +247,7 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, Z, J, N, M } =
+    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M } =
       Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
@@ -265,8 +265,8 @@ export class GameScene extends Phaser.Scene {
 
     // Attack is an EDGE with the same latch/consume pair as jump, for the same reason: holding the
     // key must not swing repeatedly, and a frame that drained zero ticks must not eat the press.
-    // `Z` and `J`; jump stays on SPACE so every Phase 2 spec keeps working unchanged.
-    this.heldAttack = [addKey(Z), addKey(J)];
+    // `F` and `L`; jump stays on SPACE so every Phase 2 spec keeps working unchanged.
+    this.heldAttack = [addKey(F), addKey(L)];
 
     for (const key of this.heldJump) {
       key.on('down', () => {
