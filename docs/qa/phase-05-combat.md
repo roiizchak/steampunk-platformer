@@ -1064,8 +1064,54 @@ does not slow down, **it drops poses**. That is precisely the reported symptom, 
 
 ⚠️ **This does not license flipping the flag.** `skipMissedFrames: false` would show every pose while
 letting the cycle run *slow*, which is **vault 4.22 foot-slide** — a worse defect because it is
-invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.** Full
-measurement and the H1/H2 separation are recorded below once taken.
+invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.**
+
+### 🔴 P4 SOLVED — the parallax layers are 64 % of the frame budget
+
+A controlled A/B in the identical harness, the fleet spawned exactly as criterion 5.11 spawns it,
+`brass-courier-run` sampled while the player held a sustained run:
+
+| | median frame | max | **run frames PAINTED per cycle** |
+|---|---:|---:|---|
+| parallax **ON** (shipped) | **70.30 ms** | 80.60 ms | **[12, 12, 7, 5, 7]** |
+| parallax **OFF** (probe) | **25.50 ms** | 30.20 ms | **[12, 12, 12]** |
+
+**The three background layers cost ~45 ms per frame.** With them removed the frame time drops by
+**64 %** and **every one of the twelve run frames is painted, every cycle.** That is P4, start to
+finish: the user's *"missing frames … not using the whole 12"* is 5–7 of 12 reaching the screen.
+
+They are three **5092 × 1080 RGBA** `TileSprite`s (`GameScene.ts:546-560`) drawn into a 1920 × 1080
+view — 21.3 MB of the 27.9 MB boot payload, and ~66 MB of texture sampled every frame.
+
+**H2 is REFUTED.** The animation is not restarting: its state machine passes through 11–12 of 12
+frames per cycle even at 70 ms. Nothing is wrong with the sheet, the catalog, the fps, or
+`playIfChanged`. **H3 is the mechanism, not the cause** — `skipMissedFrames: true` is why the cycle
+stays in time while dropping poses instead of running slow, which is the correct trade and must not
+be flipped.
+
+> 🔴 **Three metrics, and the first two both said "no defect". This is the finding under the finding.**
+>
+> 1. **Distinct frame indices over the whole sample → 12/12.** Useless: the sample spans ~19 cycles,
+>    so the UNION reaches 12 even if every single cycle drops half. It reported perfect coverage.
+> 2. **Distinct indices per cycle, off the `animationupdate` event → 11–12 of 12.** Still wrong, and
+>    much more convincingly: **the event fires when the animation STATE advances, and Phaser can
+>    advance several frames inside one rAF.** Every one fires the event; only the last is drawn.
+> 3. **The current frame sampled once per rAF, at paint time → 5–7 of 12.** The truth.
+>
+> **An event that fires when state advances is not evidence a frame was drawn.** The first two
+> metrics would each have closed P4 as "not reproducible" against a defect the user could see with
+> their own eyes.
+
+**Not measured:** whether real Chrome with a GPU holds 60 fps. The harness is headless with no
+`launchOptions`, therefore SwiftShader, and the interactive-browser run was not available. The A/B
+above is valid regardless — both arms ran in the identical environment — but the absolute
+millisecond figures are a software-rasteriser number and **must not be quoted as the shipped frame
+rate**.
+
+**The fix is not applied**, because every candidate changes shipped art bytes and that is the user's
+call: downscale the three sources to something nearer the 1920 px view; or split each into a smaller
+tile the `TileSprite` repeats; or drop a layer. **Do NOT lower the run fps** — it is derived, and
+authoring it down trades a visible defect for vault 4.22 foot-slide.
 
 ## S1 and S2 — CLOSED, and fixing S2 blinded criterion 5.9's sweep
 
