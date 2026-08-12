@@ -20,72 +20,27 @@
  */
 
 import { expect, test } from '@playwright/test';
-import { RENDER_SCALE } from '../../src/game/constants';
-import { parseLevel, type LevelData } from '../../src/game/tilemap';
 import { cameraSetup, tracksTarget, viewFits } from '../../src/render/cameraRig';
-import { PLAYER_BOX } from '../../src/sim/player';
-import type { Rect } from '../../src/sim/types';
 import { BOOT_TIMEOUT, bootToGame, readPlayer, waitTicks } from './gameHarness';
-
-const HALF_BODY = (PLAYER_BOX.w * RENDER_SCALE) / 2;
-
-/**
- * The level, fetched over HTTP from the running dev server and parsed with the REAL parser.
- *
- * Deliberately not a copy of the numbers: this is the same file the browser loads, so an edit to
- * the level moves the expectations with it rather than turning six specs red.
- */
-async function shippedLevel(page: import('@playwright/test').Page): Promise<LevelData> {
-  const response = await page.request.get('/assets/levels/level-01.tmj');
-  expect(response.ok(), 'the shipped level did not load over HTTP').toBe(true);
-  return parseLevel('level-01', await response.json());
-}
-
-/** The strip the player spawns on, found by geometry rather than by authoring order. */
-function groundAtSpawn(level: LevelData): Rect {
-  const strip = level.solids.find(
-    (s) => s.y === level.spawn.y && level.spawn.x > s.x && level.spawn.x < s.x + s.w,
-  );
-  expect(strip, 'no collision strip under the spawn point').toBeDefined();
-  return strip!;
-}
-
-/** The first strip to the right of spawn that stands above the ground — the wall. */
-function wallRightOfSpawn(level: LevelData): Rect {
-  const candidates = level.solids
-    .filter((s) => s.x > level.spawn.x && s.y < level.spawn.y)
-    .sort((a, b) => a.x - b.x);
-  expect(candidates.length, 'no wall to the right of spawn').toBeGreaterThan(0);
-  return candidates[0]!;
-}
-
-/** The drawn tile at a world point, read off the real TilemapLayer. `null` if nothing is drawn. */
-async function drawnTileAt(
-  page: import('@playwright/test').Page,
-  worldX: number,
-  worldY: number,
-): Promise<{ pixelX: number; pixelY: number; index: number } | null> {
-  return page.evaluate(
-    ({ x, y }) => {
-      const scene = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as {
-        children: { list: { type?: string; getTileAtWorldXY?: unknown }[] };
-      };
-      const layer = scene.children.list.find(
-        (o) => typeof (o as { getTileAtWorldXY?: unknown }).getTileAtWorldXY === 'function',
-      ) as
-        | { getTileAtWorldXY(x: number, y: number): { pixelX: number; pixelY: number; index: number } | null }
-        | undefined;
-      if (!layer) {
-        return null;
-      }
-      const tile = layer.getTileAtWorldXY(x, y);
-      return tile ? { pixelX: tile.pixelX, pixelY: tile.pixelY, index: tile.index } : null;
-    },
-    { x: worldX, y: worldY },
-  );
-}
+// Fixtures and page-driving helpers extracted to a sibling module when this file crossed 400
+// lines — DATA and SETUP only, every `test()`/`expect` verifying a criterion stays here. Not
+// named `*.spec.ts` so Playwright's testMatch does not collect it as an empty spec. See
+// tilemapHelpers.ts.
+import {
+  drawnTileAt,
+  groundAtSpawn,
+  HALF_BODY,
+  readCameraView,
+  readClampedCorners,
+  readDrawnLayerStats,
+  readScrollY,
+  sampleCameraTrack,
+  sampleHorizontalRun,
+  sampleJumpArc,
+  sampleLowestScrollY,
+  shippedLevel,
+  wallRightOfSpawn,
+} from './tilemapHelpers';
 
 test.describe('Phase 3 — tilemap collision and camera', () => {
   test('3.1 the player lands on the collision layer and never falls through it', async ({ page }) => {
@@ -102,20 +57,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     // Standing still proves nothing about falling THROUGH. Jump, then watch the whole arc: the
     // deepest y ever observed must be the strip's top, never past it.
     await page.keyboard.down('Space');
-    const arc = await page.evaluate(async () => {
-      let lowest = Number.NEGATIVE_INFINITY;
-      let highest = Number.POSITIVE_INFINITY;
-      let samples = 0;
-      for (let frame = 0; frame < 120; frame += 1) {
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-        const p = window.__game?.player as { y?: number } | null | undefined;
-        if (typeof p?.y !== 'number') continue;
-        samples += 1;
-        lowest = Math.max(lowest, p.y);
-        highest = Math.min(highest, p.y);
-      }
-      return { lowest, highest, samples };
-    });
+    const arc = await sampleJumpArc(page);
     await page.keyboard.up('Space');
 
     expect(arc.samples).toBeGreaterThan(60);
@@ -142,22 +84,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
 
     // Run until x stops changing, sampling per frame. The aggregate is the final x plus how many
     // consecutive frames it held — a player still creeping forward has not been stopped.
-    const run = await page.evaluate(async () => {
-      let last = Number.NaN;
-      let stableFrames = 0;
-      let maxX = Number.NEGATIVE_INFINITY;
-      let samples = 0;
-      for (let frame = 0; frame < 400; frame += 1) {
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-        const p = window.__game?.player as { x?: number } | null | undefined;
-        if (typeof p?.x !== 'number') continue;
-        samples += 1;
-        maxX = Math.max(maxX, p.x);
-        stableFrames = p.x === last ? stableFrames + 1 : 0;
-        last = p.x;
-      }
-      return { finalX: last, maxX, stableFrames, samples };
-    });
+    const run = await sampleHorizontalRun(page);
     await page.keyboard.up('ArrowRight');
 
     expect(run.samples).toBeGreaterThan(200);
@@ -184,24 +111,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     await waitTicks(page, 10);
     await page.keyboard.down('ArrowRight');
 
-    const track = await page.evaluate(async () => {
-      const views: { x: number; y: number; w: number; h: number }[] = [];
-      const targets: { x: number; y: number }[] = [];
-      for (let frame = 0; frame < 200; frame += 1) {
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-        const scene = (
-          window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-        ).__phaserGame.scene.getScene('Game') as {
-          cameras: { main: { worldView: { x: number; y: number; width: number; height: number } } };
-        };
-        const v = scene.cameras.main.worldView;
-        const p = window.__game?.player as { x?: number; y?: number } | null | undefined;
-        if (typeof p?.x !== 'number' || typeof p?.y !== 'number') continue;
-        views.push({ x: v.x, y: v.y, w: v.width, h: v.height });
-        targets.push({ x: p.x, y: p.y });
-      }
-      return { views, targets };
-    });
+    const track = await sampleCameraTrack(page);
     await page.keyboard.up('ArrowRight');
 
     expect(track.views.length).toBeGreaterThan(100);
@@ -251,40 +161,13 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     await bootToGame(page);
     await waitTicks(page, 30);
 
-    const readScrollY = () =>
-      page.evaluate(() => {
-        const scene = (
-          window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-        ).__phaserGame.scene.getScene('Game') as { cameras: { main: { scrollY: number } } };
-        return scene.cameras.main.scrollY;
-      });
-
-    const grounded = await readScrollY();
+    const grounded = await readScrollY(page);
     expect(typeof grounded).toBe('number');
 
     // Sample INSIDE the page, once per animation frame, across the whole arc and return an
     // aggregate — a tick-expressed wait cannot bound this window (see the file header).
     await page.keyboard.down('Space');
-    const lowest = await page.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          const scene = (
-            window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-          ).__phaserGame.scene.getScene('Game') as { cameras: { main: { scrollY: number } } };
-          let min = Number.POSITIVE_INFINITY;
-          let frames = 0;
-          const step = () => {
-            min = Math.min(min, scene.cameras.main.scrollY);
-            frames += 1;
-            if (frames >= 90) {
-              resolve(min);
-              return;
-            }
-            requestAnimationFrame(step);
-          };
-          requestAnimationFrame(step);
-        }),
-    );
+    const lowest = await sampleLowestScrollY(page);
     await page.keyboard.up('Space');
 
     // The camera rose. Asserted as a strict inequality against the grounded clamp, because
@@ -303,15 +186,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     const { bounds } = cameraSetup(level, 1920, 1080);
 
     await waitTicks(page, 10);
-    const view = await page.evaluate(() => {
-      const scene = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as {
-        cameras: { main: { worldView: { x: number; y: number; width: number; height: number } } };
-      };
-      const v = scene.cameras.main.worldView;
-      return { x: v.x, y: v.y, w: v.width, h: v.height };
-    });
+    const view = await readCameraView(page);
 
     expect(typeof view.x).toBe('number');
     expect(viewFits(bounds, view)).toBe(true);
@@ -336,34 +211,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     const level = await shippedLevel(page);
     const { bounds } = cameraSetup(level, 1920, 1080);
 
-    const corners = await page.evaluate(async () => {
-      const camera = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as {
-        cameras: {
-          main: {
-            stopFollow(): void;
-            setScroll(x: number, y: number): void;
-            worldView: { x: number; y: number; width: number; height: number };
-          };
-        };
-      };
-      const main = camera.cameras.main;
-      main.stopFollow();
-
-      const read = async (x: number, y: number) => {
-        main.setScroll(x, y);
-        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-        const v = main.worldView;
-        return { x: v.x, y: v.y, w: v.width, h: v.height };
-      };
-
-      // Far past every edge, in both directions. Phaser must clamp all four.
-      return {
-        bottomRight: await read(999_999, 999_999),
-        topLeft: await read(-999_999, -999_999),
-      };
-    });
+    const corners = await readClampedCorners(page);
 
     expect(viewFits(bounds, corners.bottomRight)).toBe(true);
     expect(viewFits(bounds, corners.topLeft)).toBe(true);
@@ -385,17 +233,7 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     const view = await page.evaluate(() => window.__game);
     expect(view?.levelId).toBe(level.id);
 
-    const drawn = await page.evaluate(() => {
-      const scene = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as {
-        children: { list: { width?: number; height?: number; tilesTotal?: number }[] };
-      };
-      const layer = scene.children.list.find(
-        (o) => typeof (o as { tilesTotal?: number }).tilesTotal === 'number',
-      );
-      return layer ? { w: layer.width, h: layer.height, total: layer.tilesTotal } : null;
-    });
+    const drawn = await readDrawnLayerStats(page);
 
     expect(drawn, 'no tilemap layer was added to the scene').not.toBeNull();
     expect(drawn!.w).toBe(level.widthPx);

@@ -24,53 +24,20 @@ import { describeLevelProblem, parseLevel } from '../../src/game/tilemap';
 import { ticksToMs } from '../../src/sim/index';
 import { derivedFeel } from '../../src/sim/derived';
 import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
-
-const SHIPPED = import.meta.glob('../../public/assets/levels/*.tmj', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-
-const BAD_LEVELS = import.meta.glob('../fixtures/bad-levels/*.fixture', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-
-const CATALOG = import.meta.glob('../../public/assets/index.json', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-
-const PIPELINE_DOC = import.meta.glob('../../docs/ASSET-PIPELINE.md', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
-
-/** `../../public/assets/levels/level-01.tmj` -> `level-01`. */
-function idOf(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1).replace(/\.tmj$/, '');
-}
-
-const SHIPPED_ENTRIES = Object.keys(SHIPPED).map((path) => [idOf(path), SHIPPED[path]!] as const);
-
-/**
- * The one rejection reason the vault 3.3 tests are about.
- *
- * Pinned this precisely because mutation M20 survived a `/solid/i` assertion: a parser that
- * invented solidity from object names produced a DIFFERENT rejection ("solid #6 has a non-positive
- * size", from the zero-size spawn point it had just decided was solid) which also contains the
- * word. An assertion that accepts the right answer for the wrong reason is not a gate.
- */
-const NO_SOLID_PROPERTY = /no object carries the `solid` property/;
-
-/** The shipped level, parsed once, so published-number checks can be derived rather than typed. */
-const LEVEL_01 = parseLevel(
-  'level-01',
-  JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown,
-);
+// Fixtures extracted to a sibling module when this file crossed 400 lines — DATA and SETUP only,
+// every `expect` stays here. See tilemap-data-fixtures.ts.
+import {
+  BAD_LEVELS,
+  CATALOG,
+  idOf,
+  LEVEL_01,
+  NO_SOLID_PROPERTY,
+  PIPELINE_DOC,
+  SHIPPED,
+  SHIPPED_ENTRIES,
+  TINY_MAP,
+  docExpectations,
+} from './tilemap-data-fixtures';
 
 describe('shipped level data (criterion 3.3, vault 3.1 — blocker)', () => {
   it('the sweep is not vacuous: shipped levels and bad fixtures were both found', () => {
@@ -159,38 +126,7 @@ describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => 
    * one, so a synthetic map with different dimensions is exactly right.
    */
   it('derives the extent from the data, rather than returning a constant', () => {
-    const tiny = {
-      width: 7,
-      height: 5,
-      tilewidth: 16,
-      tileheight: 16,
-      layers: [
-        { type: 'tilelayer', name: 'g', data: [...new Array(34).fill(0), 1] },
-        {
-          type: 'objectgroup',
-          name: 'c',
-          objects: [
-            {
-              x: 0,
-              y: 64,
-              width: 112,
-              height: 16,
-              properties: [{ name: 'solid', type: 'bool', value: true }],
-            },
-            {
-              x: 56,
-              y: 64,
-              width: 0,
-              height: 0,
-              point: true,
-              properties: [{ name: 'spawn', type: 'bool', value: true }],
-            },
-          ],
-        },
-      ],
-    };
-
-    const level = parseLevel('tiny', tiny);
+    const level = parseLevel('tiny', TINY_MAP);
     expect(level.widthPx).toBe(112);
     expect(level.heightPx).toBe(80);
     expect(level.tileWidth).toBe(16);
@@ -358,21 +294,9 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
   // editorial reflow of the document reads as a contract change.
   const doc = Object.values(PIPELINE_DOC)[0]!.replace(/[*|`]/g, ' ').replace(/\s+/g, ' ');
 
-  it.each([
-    ['grid cell size', `Grid cell size ${TILE_SIZE} × ${TILE_SIZE} px`],
-    ['camera zoom', `Camera zoom ${CAMERA_ZOOM}`],
-    ['viewport', `Viewport / world view ${GAME_WIDTH} × ${GAME_HEIGHT} px`],
-    // Derived from the shipped level, not hand-typed. The other rows all interpolate a runtime
-    // constant; this one used to be a bare string, so the doc and the literal could agree with
-    // each other while both drifted from the file that actually loads (qa-expert brief 2).
-    ['world extent', `World extent (level-01) ${LEVEL_01.widthPx} × ${LEVEL_01.heightPx} px`],
-    [
-      'character collision box',
-      `Character collision box ${PLAYER_BOX.w * RENDER_SCALE} × ${PLAYER_BOX.h * RENDER_SCALE} px`,
-    ],
-    ['character render height', `Character render height ${PLAYER_BOX.h * RENDER_SCALE} px`],
-    ['render scale', `Render scale RENDER_SCALE ${RENDER_SCALE}`],
-  ])('publishes the %s', (_what, needle) => {
+  // Table extracted to docExpectations() (tilemap-data-fixtures.ts): built from the same runtime
+  // constants the doc is checked against, so the other rows interpolate rather than hand-type.
+  it.each(docExpectations())('publishes the %s', (_what, needle) => {
     expect(doc).toContain(needle);
   });
 
