@@ -5,6 +5,8 @@
   "animations": {
     "idle": {
       "anchor": "feet",
+      "scale": 0.28915663,
+      "scaleSource": "slug",
       "deepestSourceY": 665,
       "frames": [
         {

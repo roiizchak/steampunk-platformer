@@ -116,3 +116,31 @@ back-loading fix was for; its smoke column reaches the top edge, but that is smo
 
 **Approved and not yet run:** four more clips — courier `attack`/`death` unpadded at `9:16`, and
 `brass-sentry/death` + `rust-scavenger/death` with a tighter debris clause. **$4.76 → $36.60.**
+
+---
+
+## 🔵 SUPERSEDED 2026-08-12 (session 7, user decision D2) — the re-shoot-unpadded decision above
+
+**The premise the 2026-08-11 decision rested on — "a per-slug scale cannot serve both" — is gone,
+not the measurement.** `114 px against hurt's 288 px` is still exactly what a padded `attack` draws
+at the courier's SLUG scale (`0.23723229`); that arithmetic is untouched and correct. What changed
+is that `build-assets.mjs` now resolves `scale` per `(slug, action)` — an action override in
+`character-bounds.json` when one is declared, the slug default otherwise — and `catalogWrite.mjs`'s
+`upsertLiftProfile` guard was narrowed to bind its one-scale rule (vault A5) only to entries sourced
+from the slug default, not to a declared per-action override. A per-slug scale genuinely could not
+serve both a padded and an unpadded generation; a per-*action* scale can, and now does.
+
+The four "approved and not yet run" unpadded re-shoots above (`attack`/`death` at `9:16`) **were
+run** in session 6's second half and did not fix the crop — `attack`'s `right 0` margin stayed at
+`L188 R0` across three prompt clauses, unmoved. That is what re-opened this decision: the prompt
+lever was demonstrably exhausted while the padded round, already bought and already passing G6, sat
+on disk unused for want of a place to declare its own scale.
+
+**Reversed:** `brass-courier/attack` now resolves to `-r3.mp4` (padded, this document) and
+`brass-courier/death` to `-r2.mp4` (padded, this document) — see `tools/gen/clipJobs.mjs`'s
+`CLIP_FILES` and `tools/gen/clipAdoption.mjs`'s `SUPERSEDED_CLIPS`, both updated. The unpadded
+`-r5`/`-r4` rounds this document's decision produced are superseded in turn, kept on disk (paid,
+non-regenerable input, never deleted). `attack` packs at **289 px** against `hurt`'s 288 (1 px
+rounding, not a defect) with its own declared `scale: 0.6` in `character-bounds.json`. `death` still
+does not pack — it needs a **332 px** cell against the shared 288 px one, a distinct, newly-measured
+requirement for the M3 cell decision `docs/HANDOFF.md` §12b already reopened; it was not widened.

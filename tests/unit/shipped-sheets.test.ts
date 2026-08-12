@@ -69,10 +69,13 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the seven animations these assertions cover', () => {
+  it('the catalog declares the eight animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
+      // Session 7: the padded round, packed at its OWN per-action scale (0.6) instead of the slug
+      // default — draws 289px against hurt's 288, not the 114px the slug-default scale produced.
+      'brass-courier-attack',
       'brass-courier-fall',
       // Session 6: extracted clean from the EXISTING unpadded clip — no purchase, found only by a
       // per-action sweep. The first Phase 5 combat sheet to ship.

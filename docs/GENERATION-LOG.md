@@ -171,3 +171,13 @@ The headline is not the framing (which is solved — no subject crop in five of 
 anchors never ratio-matched before). It is that **padding changes the subject's size in the output,
 and `scale` is stored per SLUG**, so the padded courier `attack` packed at 114 px against `hurt`'s
 288 px. Padding is a property of a GENERATION and so is the scale it implies. Recorded there in full.
+
+> 🔵 **SUPERSEDED 2026-08-12 (session 7, user decision D2).** The 114px arithmetic above is
+> unchanged and correct — what changed is the premise that a per-slug scale had to hold it. Scale
+> now resolves per `(slug, action)` (`tools/gen/build-assets.mjs`, `tools/gen/catalogWrite.mjs`), so
+> a padded generation can declare its own number instead of sharing the slug default. The padded
+> `brass-courier/attack`/`death` rounds this session bought are adopted after all — the unpadded
+> re-shoot this session's decision commissioned did not fix the crop (`L188 R0`, unmoved across
+> three prompt clauses) — and `attack` now ships at 289px. Full account:
+> [generations/phase-05-padded-round.md](generations/phase-05-padded-round.md)'s own dated
+> supersession entry.

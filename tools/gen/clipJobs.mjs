@@ -116,8 +116,15 @@ export const ASPECT_RATIO = readPrescribedAspectRatio();
  * way. `idle`/`walk`/`run`/`fall` are declared now for the same reason, pre-emptively.
  */
 const CLIP_FILES = Object.freeze({
-  'brass-courier/attack': 'brass-courier-attack-r5.mp4',
-  'brass-courier/death': 'brass-courier-death-r4.mp4',
+  /**
+   * Reversed 2026-08-12 (D2): back to the PADDED rounds. `-r5`/`-r4` were the unpadded re-shoots
+   * session 6 ordered on the premise that a per-slug scale could not serve a padded generation —
+   * `build-assets.mjs` now resolves scale per `(slug, action)`, which removes that premise, and
+   * the unpadded rounds spent three prompt clauses without moving `attack`'s `right 0` crop at all.
+   * `-r3`/`-r2` PASS G6 cleanly. See `clipAdoption.mjs`'s `SUPERSEDED_CLIPS` for the full history.
+   */
+  'brass-courier/attack': 'brass-courier-attack-r3.mp4',
+  'brass-courier/death': 'brass-courier-death-r2.mp4',
   'brass-courier/hurt': 'brass-courier-hurt-r2.mp4',
   /**
    * The ratio-match re-shoot (`request_id 019fef56-67bf-7922-943c-417809ed8ba0`).

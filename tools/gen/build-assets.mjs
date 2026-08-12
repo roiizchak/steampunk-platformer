@@ -170,8 +170,32 @@ function main() {
      * is what made the torso sink while the legs pumped. See `sheets.mjs`'s header.
      */
     const anchor = config.animations?.[action]?.verticalAnchor ?? 'feet';
+
+    /**
+     * **Per-(slug, action) scale override, resolved here.**
+     *
+     * Padding is a property of a GENERATION, not of a subject, so the scale it implies is too — a
+     * padded and an unpadded generation of the same character cannot share one number (session 6,
+     * `brass-courier/attack` drew 114px against `hurt`'s 288px on the slug default). An action MAY
+     * declare its own `scale` in `character-bounds.json`'s `animations[action]`; everything else
+     * falls back to the slug default, unchanged from before this override existed.
+     *
+     * `scaleSource` travels with the number into the lift profile so `catalogWrite.mjs`'s guard
+     * knows which entries the one-scale rule (vault A5) still binds — see that file's header for
+     * why the rule now applies only to `scaleSource: 'slug'` entries (user decision D2, 2026-08-12).
+     */
+    const actionScale = config.animations?.[action]?.scale;
+    const resolvedScale = actionScale ?? scale;
+    const scaleSource = actionScale !== undefined ? 'action' : 'slug';
+    if (!(resolvedScale > 0)) {
+      throw new Error(
+        `assets:build: "${action}" resolved to a non-positive scale (${resolvedScale}) — check ` +
+          `animations.${action}.scale in ${CONFIG}.`,
+      );
+    }
+
     const { strip, frames, deepestSourceY } = packStrip(cells, {
-      scale,
+      scale: resolvedScale,
       frameWidth,
       frameHeight,
       baselineY: frameHeight,
@@ -271,6 +295,8 @@ function main() {
 
     liftProfile[action] = {
       anchor,
+      scale: resolvedScale,
+      scaleSource,
       deepestSourceY,
       frames: frames.map((f) => ({
         index: f.index,

@@ -202,8 +202,13 @@ describe('the shipped character-bounds.json', () => {
 
   it('declares every animation the Gym can select', () => {
     // `hurt` joined in session 6 — the first Phase 5 combat sheet to ship, and the Gym can select
-    // it like any other. `attack` and `death` are not here yet: both are pending a re-shoot.
+    // it like any other. `attack` and `death` join here (session 7) with their own per-(slug,
+    // action) `scale` override — see `_actionScale` — even though `death`'s sheet has not packed
+    // yet (it needs a 332px cell against the shared 288px one; the config declaration and the
+    // shipped sheet are two different gates, and this one is about the config).
     expect(Object.keys(raw.animations).sort()).toEqual([
+      'attack',
+      'death',
       'fall',
       'hurt',
       'idle',

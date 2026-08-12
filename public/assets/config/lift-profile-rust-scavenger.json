@@ -5,6 +5,8 @@
   "animations": {
     "walk": {
       "anchor": "feet",
+      "scale": 0.56074766,
+      "scaleSource": "slug",
       "deepestSourceY": 443,
       "frames": [
         {

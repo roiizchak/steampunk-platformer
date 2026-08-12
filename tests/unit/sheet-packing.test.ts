@@ -275,7 +275,9 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
 
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
-    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt']);
+    // `attack` joined last (session 7): merged in after the six that already shipped, so it lands
+    // at the end of insertion order rather than sorted with the rest.
+    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt', 'attack']);
   });
 
   it.each(actions)('%s: liftPx is re-derivable from the recorded source coordinates', (action) => {
@@ -317,8 +319,13 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   it('each animation uses the anchor its config declares', () => {
     // The anchor is a decision, not an accident, so the manifest records it and this pins the two
     // together. `centroid` on a grounded animation would silently unmoor it from the floor.
+    //
+    // Scoped to `actions` (what actually SHIPPED, i.e. `liftProfile.animations`' own keys) rather
+    // than every key `bounds.animations` declares — `death` has a config declaration (session 7)
+    // but no packed sheet yet, so it would otherwise make `declared` and `used` disagree on a key
+    // that is legitimately absent from one of them for a reason this test does not cover.
     const declared = Object.fromEntries(
-      Object.entries(bounds.animations).map(([k, v]) => [k, v.verticalAnchor]),
+      actions.map((a) => [a, bounds.animations[a as keyof typeof bounds.animations].verticalAnchor]),
     );
     const used = Object.fromEntries(actions.map((a) => [a, liftProfile.animations[a].anchor]));
     expect(used).toEqual(declared);
@@ -332,6 +339,9 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       // the boots never leave the floor, so `feet`, like the other grounded animations. `centroid`
       // here would unmoor it from the ground for the 18 ticks it is drawn.
       hurt: 'feet',
+      // Session 7: the swing stays upright throughout (2.1% frame-to-frame height spread) — grounded,
+      // like every other combat action so far.
+      attack: 'feet',
     });
   });
 

@@ -58,21 +58,23 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'rust-scavenger-death-r4.mp4',
   ]),
   /**
-   * `-r3` was the PADDED round: framed cleanly and packed at 114 px against hurt's 288 px,
-   * because scale is per-slug and was derived from an unpadded clip. Superseded by `-r4`, shot
-   * UNPADDED at 9:16 — the courier anchor's matched ratio — which restores full size AND keeps one
-   * scale per subject.
+   * REVERSED 2026-08-12 (D2). `-r3` is the PADDED round: passed G6 cleanly and is now the winner
+   * (`clipJobs.mjs`'s `CLIP_FILES`) now that `scale` resolves per `(slug, action)` instead of one
+   * number per slug. `-r4` was the UNPADDED 9:16 re-shoot ordered on the premise that a per-slug
+   * scale could not serve both — it never fixed the crop (`L188 R0`, unmoved across three prompt
+   * clauses) and is superseded here alongside `-r5`, a further unpadded retry with the same result.
    */
   'brass-courier/attack': Object.freeze([
     'brass-courier-attack.mp4',
     'brass-courier-attack-r2.mp4',
-    'brass-courier-attack-r3.mp4',
     'brass-courier-attack-r4.mp4',
+    'brass-courier-attack-r5.mp4',
   ]),
+  /** REVERSED 2026-08-12 (D2), same reasoning as `attack` above: `-r2` is the padded winner. */
   'brass-courier/death': Object.freeze([
     'brass-courier-death.mp4',
-    'brass-courier-death-r2.mp4',
     'brass-courier-death-r3.mp4',
+    'brass-courier-death-r4.mp4',
   ]),
   'brass-courier/hurt': Object.freeze(['brass-courier-hurt.mp4']),
 

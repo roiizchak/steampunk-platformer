@@ -133,11 +133,12 @@ const catalogFrames = new Map<string, number>(
  * unhelpful failure for a legitimate intermediate state.
  */
 // `hurt` LANDED in session 6 — it extracted clean from the existing unpadded clip and needed no
-// purchase at all, which only a per-action sweep found. `attack` and `death` remain pending: their
-// session-6 rounds were shot from the PADDED courier anchor and pack at 114 px against hurt's
-// 288 px, because `scale` is per-slug and was derived from an unpadded clip. Both are being
-// re-shot unpadded at 9:16, the courier anchor's matched ratio.
-const PENDING_ART: readonly AnimName[] = ['attack', 'death'];
+// purchase at all, which only a per-action sweep found. `attack` LANDED here (session 7): scale now
+// resolves per (slug, action) — build-assets.mjs, catalogWrite.mjs — so the padded round that
+// already passed G6 packs at 289 px against hurt's 288 px instead of 114. `death` remains pending:
+// the same padded round needs a 332 px cell against the shared 288 px one (decision M3's reopened
+// cell question — see docs/HANDOFF.md) and was deliberately not widened to fit.
+const PENDING_ART: readonly AnimName[] = ['death'];
 
 const derived = animTimings(
   derivedFeel(DEFAULT_TUNING, ticksToMs),

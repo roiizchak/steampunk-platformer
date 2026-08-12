@@ -5,6 +5,8 @@
   "animations": {
     "idle": {
       "anchor": "feet",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1217,
       "frames": [
         {
@@ -107,6 +109,8 @@
     },
     "walk": {
       "anchor": "feet",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1239,
       "frames": [
         {
@@ -209,6 +213,8 @@
     },
     "run": {
       "anchor": "feet",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1199,
       "frames": [
         {
@@ -311,6 +317,8 @@
     },
     "jump": {
       "anchor": "centroid",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1239,
       "frames": [
         {
@@ -365,6 +373,8 @@
     },
     "fall": {
       "anchor": "centroid",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1259,
       "frames": [
         {
@@ -419,6 +429,8 @@
     },
     "hurt": {
       "anchor": "feet",
+      "scale": 0.23723229,
+      "scaleSource": "slug",
       "deepestSourceY": 1211,
       "frames": [
         {
@@ -467,6 +479,78 @@
           "sourceMaxY": 1211,
           "sourceCentroidY": 607.547,
           "drawnHeight": 288,
+          "liftPx": 0
+        }
+      ]
+    },
+    "attack": {
+      "anchor": "feet",
+      "scale": 0.6,
+      "scaleSource": "action",
+      "deepestSourceY": 481,
+      "frames": [
+        {
+          "index": 0,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 236.84,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 1,
+          "sourceMinY": 8,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 229.628,
+          "drawnHeight": 284,
+          "liftPx": 0
+        },
+        {
+          "index": 2,
+          "sourceMinY": 10,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 229.764,
+          "drawnHeight": 283,
+          "liftPx": 0
+        },
+        {
+          "index": 3,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 232.175,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 4,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 232.032,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 5,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 237.381,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 6,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 226.646,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 7,
+          "sourceMinY": 0,
+          "sourceMaxY": 481,
+          "sourceCentroidY": 229.837,
+          "drawnHeight": 289,
           "liftPx": 0
         }
       ]

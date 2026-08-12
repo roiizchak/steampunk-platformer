@@ -164,22 +164,40 @@ export const PADDED_ANCHORS = Object.freeze({
   }),
 
   /**
-   * ⚠️ **`brass-courier/attack` and `/death` had padded records here and they were REMOVED in
-   * session 6, after the padded round was bought, packed and measured.**
+   * ⚠️ **RESTORED 2026-08-12 (user decision D2), after being REMOVED in session 6.**
    *
-   * The padded courier clip framed cleanly — no crop on any edge, which is what padding is for.
-   * But `scale` is stored per SLUG (vault A5) and the courier's, 0.23723229, was derived from an
-   * UNPADDED idle in which the figure stands 1214 px of a 1280 px frame. In the padded round the
-   * figure fills ~480 px of a 960 px frame, so the same scale drew `attack` **114 px tall against
-   * `hurt`'s 288 px** — the character shrinking to 40 % the instant it swings.
+   * The padded courier clip framed cleanly — no crop on any edge, which is what padding is for. It
+   * was pulled because `scale` was a single per-SLUG number (vault A5 read literally), and the
+   * courier's, 0.23723229, was derived from an UNPADDED idle in which the figure stands 1214 px of
+   * a 1280 px frame. Against the padded round's ~480 px of 960, the same scale drew `attack`
+   * **114 px tall against `hurt`'s 288 px** — the character shrinking to 40 % the instant it swings.
+   * Session 6 concluded a per-slug scale could not serve both and re-shot UNPADDED instead; that
+   * re-shoot then spent three prompt clauses against `attack`'s own `right 0` crop with the margin
+   * never moving (`L188 R0` before and after) — the prompt lever ran out.
    *
-   * **Padding is a property of a GENERATION and so is the scale it implies; a per-slug scale cannot
-   * serve both.** That is this file's own opening lesson, arriving one layer further down.
+   * `build-assets.mjs` now resolves `scale` per `(slug, action)` — an action override in
+   * `character-bounds.json`, the slug default otherwise — which removes the premise session 6's
+   * decision rested on. The padded round (already bought, already passing G6) is adopted instead:
+   * see `docs/GENERATION-LOG.md` and `docs/generations/phase-05-padded-round.md` for the dated
+   * supersession entries, and `clipAdoption.mjs`'s `SUPERSEDED_CLIPS` for which round is now which.
    *
-   * The courier is re-shot UNPADDED instead — and unpadded means **`9:16`**, not `1:1`, because
-   * this anchor is 0.558 and 9:16 is its MATCHED ratio. Every clean courier sheet the project
-   * ships was shot that way. See the reframe guard in `clipJobs.mjs`.
+   * `--fill 0.50` → **5050²**, figure 91.8 % → 50.0 % of height, margins **T5.1→25.5 B3.2→24.5
+   * L40.4 R41.0**. G1 identical padded and unpadded (`sole-spread 0px/0px`), proving the blit is a
+   * pure translation. Uploaded 2026-08-11 (session 6) and hash-verified by re-download. One padded
+   * PNG serves both courier combat actions, same as the sentry and scavenger's single canvas each.
    */
+  'brass-courier/attack': Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
+    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
+    source: '_generated/anchors-padded/brass-courier-padded.png',
+  }),
+
+  /** The same padded courier canvas as `attack` above. G1 identical verdict, per the note there. */
+  'brass-courier/death': Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
+    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
+    source: '_generated/anchors-padded/brass-courier-padded.png',
+  }),
 
   /**
    * **`brass-courier/hurt` is deliberately absent.** It extracts CLEAN — 6 frames, one-shot from

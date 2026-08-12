@@ -121,6 +121,17 @@
       "fps": 5.76,
       "loop": true,
       "derivedFrom": "measured"
+    },
+    {
+      "key": "brass-courier-attack",
+      "url": "assets/characters/brass-courier/sheets/attack.png",
+      "frameWidth": 288,
+      "frameHeight": 384,
+      "frameCount": 8,
+      "simTicks": 20,
+      "fps": 24,
+      "loop": false,
+      "derivedFrom": "sim"
     }
   ]
 }
