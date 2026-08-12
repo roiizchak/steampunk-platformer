@@ -67,7 +67,11 @@ export interface CombatTiming {
  */
 export const ATTACK: CombatTiming = { startup: 6, active: 4, recovery: 10 };
 
-/** Hitstun: **18 ticks, 300 ms** of not being in control after taking a hit. */
+/**
+ * Hitstun: **18 ticks, 300 ms** total. The label persists for the full 18, but only the first
+ * `HURT_LOCK_TICKS` of that are "not being in control" — see `movementLocked` below. The remaining
+ * 12 ticks are animation tail only: input is free, the pose is still `hurt`.
+ */
 export const HURT_TICKS = 18;
 
 /**
@@ -297,4 +301,46 @@ export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep 
 /** Free to start a new action? Not while already committed to one. */
 export function canAct(player: PlayerSim): boolean {
   return !isCombatState(player.state);
+}
+
+/**
+ * How long hitstun locks movement: the knob is **6**, the same wind-up `ATTACK.startup` already
+ * spends being read as "the swing is coming". Reused deliberately rather than authoring an eighth
+ * number — one measured constant, two consumers.
+ *
+ * ⚠️ **The knob is 6; the observed lock is FIVE ticks.** `hurt` is armed at step 9b and read at
+ * step 5 of the next tick, so its `counter === 0` is never seen. `movementLocked`'s docstring
+ * derives this in full — read it before changing either number.
+ *
+ * The rest of `HURT_TICKS` is animation only: the `hurt` label and pose persist for all 18 ticks,
+ * but the player is free to move again after the lock, and the attack edge stays blocked for the
+ * whole 18 by `canAct`. **Three different windows, three different lengths — do not conflate them.**
+ */
+export const HURT_LOCK_TICKS = ATTACK.startup;
+
+/**
+ * Is movement locked this tick? Grounded or airborne alike. Mirrors `canAct`'s shape — one
+ * predicate, imported at the call site, never restated *(vault 5.3)*.
+ *
+ * ## The lock is FIVE ticks, not six, and that is not a bug — state it rather than round it
+ *
+ * `HURT_LOCK_TICKS` is 6 and `windowOpen` accepts `0 … 5`, so a naive reading says six locked
+ * ticks. It is five, and the reason is the same one the tick contract's header exists to state:
+ * **where in the tick a window is ARMED decides how much of it a later step can see.**
+ *
+ * - `attack` is armed at **step 4b**, by `enterCombatState` inside `stepCombat`, and
+ *   `hitWindowOpen` reads the counter later in that same call — so `counter === 0` **is** observed
+ *   and `ATTACK.startup` spans **six** ticks.
+ * - `hurt` is armed at **step 9b**, by `damagePlayer`, which is *after* step 4b has already run
+ *   this tick. The `counter === 0` instant is therefore never read by `movementLocked`, which is
+ *   called from step 5 of the *following* tick with the counter already advanced to 1. The lock
+ *   spans counters `1 … 5`: **five ticks, 83 ms.**
+ *
+ * The two are not symmetric because damage and attack entry sit on opposite sides of step 4b —
+ * exactly the shape of the buffered-jump asymmetry `tick.ts` documents. What the shared constant
+ * buys is still the useful property: **the movement lock ends on precisely the tick an attack's
+ * active frames would have begun.** One measured constant, two consumers, one stated asymmetry.
+ */
+export function movementLocked(player: PlayerSim): boolean {
+  return player.state === 'hurt' && windowOpen(player.combatCounter, HURT_LOCK_TICKS);
 }

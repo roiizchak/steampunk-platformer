@@ -93,7 +93,7 @@ import {
   stepHorizontal,
   stepVertical,
 } from './player';
-import { PLAYER_MAX_HP, IFRAME_TICKS, stepCombat } from './combat';
+import { PLAYER_MAX_HP, IFRAME_TICKS, movementLocked, stepCombat } from './combat';
 import { type EnemySpawn, spawnEnemies } from './enemies';
 import { stepEnemies } from './enemyTurn';
 import { type WorldBounds, clampToBounds } from './hazards';
@@ -239,8 +239,6 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
     player.ticksSinceJumpPressed = 0;
   }
 
-  const dir: -1 | 0 | 1 = input.left === input.right ? 0 : input.right ? 1 : -1;
-
   // 4. Enemies, then combat — Phase 5 filled the slot Phase 2 reserved, without moving anything.
   //    Placed BEFORE integration on purpose so knockback reaches this tick's movement.
   //
@@ -253,6 +251,17 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   const combat = stepCombat(player, input);
   events.attackStarted = combat.attackStarted;
   events.hitActive = combat.hitActive;
+
+  // `dir` is computed here, AFTER step 4b, so `movementLocked` reads this tick's post-advance
+  // `combatCounter` (W3) rather than last tick's. It is not itself a numbered step — only step 5,
+  // which consumes it, is — so moving the read does not reorder or renumber the contract above.
+  const dir: -1 | 0 | 1 = movementLocked(player)
+    ? 0
+    : input.left === input.right
+      ? 0
+      : input.right
+        ? 1
+        : -1;
 
   // 5. Horizontal.
   stepHorizontal(player, tuning, dir, input.walkHeld);

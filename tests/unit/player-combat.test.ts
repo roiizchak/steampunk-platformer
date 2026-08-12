@@ -16,14 +16,18 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTACK,
   DEATH_TICKS,
+  HURT_LOCK_TICKS,
   HURT_TICKS,
   IFRAME_TICKS,
   attackTotalTicks,
+  canAct,
   createSnapshot,
   createWorld,
   damagePlayer,
   invulnerable,
   latchAttackPress,
+  latchJumpPress,
+  movementLocked,
   tick,
 } from '../../src/sim';
 import type { InputSnapshot, World } from '../../src/sim';
@@ -168,6 +172,82 @@ describe('damage, hitstun and i-frames', () => {
     }
     expect(invulnerable(world.player)).toBe(false);
     expect(damagePlayer(world.player, 10)).toBe(true);
+  });
+});
+
+describe('hitstun locks movement — W3', () => {
+  it('vx stays 0 with a direction held through the lock, and moves once it opens', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    input.right = true;
+
+    for (let i = 0; i < HURT_LOCK_TICKS - 1; i += 1) {
+      tick(world, input);
+      expect(world.player.vx).toBe(0);
+    }
+    tick(world, input);
+    expect(world.player.vx).toBeGreaterThan(0);
+  });
+
+  /**
+   * Pins the exact tick control returns, not merely that it does — an existence check ("did it
+   * unlock") passed while a documented window was off by one elsewhere in this project. `dir` is
+   * read from `movementLocked` right after step 4b has advanced `combatCounter` (tick.ts), so on
+   * tick call `k` the counter the predicate sees is `k`; the lock covers `k` in `1..HURT_LOCK_TICKS
+   * - 1` and opens at `k === HURT_LOCK_TICKS` — one tick short of a naive "6 calls locked" reading,
+   * because `damagePlayer` sets `combatCounter = 0` OUTSIDE any tick, so the `counter === 0`
+   * instant of the window is never observed by a call inside `tick()`.
+   */
+  it('the last locked tick and the first free tick are adjacent, with no gap or overlap', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    input.right = true;
+
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
+      tick(world, input);
+      expect(world.player.vx).toBe(0); // last locked tick is k === HURT_LOCK_TICKS - 1
+    }
+    tick(world, input); // k === HURT_LOCK_TICKS — the first free tick
+    expect(world.player.vx).toBeGreaterThan(0);
+  });
+
+  it('the attack edge stays blocked for the full HURT_TICKS, not just the movement lock', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    // Latched ONCE: consumed and refused on the first tick below (canAct is false), so it cannot
+    // still be pending on the release tick and mask this test behind the pre-existing edge case
+    // where a press queued on the exact tick `hurt` releases is honoured that same tick — a
+    // different, already-shipped rule this item must not touch.
+    latchAttackPress(input);
+
+    for (let i = 0; i < HURT_TICKS - 1; i += 1) {
+      expect(canAct(world.player)).toBe(false);
+      tick(world, input);
+      expect(world.player.state).toBe('hurt');
+    }
+    tick(world, input);
+    expect(world.player.state).not.toBe('attack');
+    expect(canAct(world.player)).toBe(true);
+  });
+
+  it('locks movement the same way airborne', () => {
+    const { world, input } = grounded();
+    latchJumpPress(input);
+    tick(world, input); // leaves the ground
+    expect(world.player.grounded).toBe(false);
+
+    damagePlayer(world.player, 10);
+    input.right = true;
+
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
+      tick(world, input);
+      // Locked: horizontal velocity does not move toward the held direction while airborne either.
+      expect(movementLocked(world.player)).toBe(true);
+      expect(world.player.vx).toBe(0);
+    }
+    tick(world, input);
+    expect(movementLocked(world.player)).toBe(false);
+    expect(world.player.vx).toBeGreaterThan(0);
   });
 });
 

@@ -65,6 +65,7 @@ export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,
   DEATH_TICKS,
+  HURT_LOCK_TICKS,
   HURT_TICKS,
   IFRAME_TICKS,
   PLAYER_MAX_HP,
@@ -78,6 +79,7 @@ export {
   hitWindowOpen,
   invulnerable,
   isCombatState,
+  movementLocked,
   stepCombat,
 } from './combat';
 export type {
