@@ -326,7 +326,15 @@ function main() {
             frameHeight,
             frameCount: frames.length,
           },
-          { stridePxPerCycle: config.stridePxPerCycle?.[action] },
+          // Authored cadence + the packed frame count, not a stride (session 9). A looping
+          // animation's rate is now a number a human set by watching the character; see
+          // `catalogTimings.mjs`'s AUTHORED_LOOPS note for what deriving it from a measured stride
+          // actually cost. `frames.length` is the count the packer just wrote, so the cadence and
+          // the sheet cannot disagree about how many frames there are.
+          {
+            authoredFps: config.animations?.[action]?.fps,
+            renderFrames: frames.length,
+          },
         ),
       );
     }

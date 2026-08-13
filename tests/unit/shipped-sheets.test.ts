@@ -69,7 +69,7 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the ten animations these assertions cover', () => {
+  it('the catalog declares the eleven animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
@@ -85,6 +85,11 @@ describe('the shipped character sheets, read from the files the player loads', (
       'brass-courier-run',
       'brass-courier-walk',
       'brass-sentry-idle',
+      // Session 9: blocked for TWO sessions on an unmeasured stride, and it never needed one. A
+      // looping animation's cadence is authored now, so `chase` resolved the moment that rule
+      // changed — see character-bounds-rust-scavenger.json's `_loopFps`. Adopting it also dissolves
+      // finding T10, which recorded that 5.3's chase commitment was unobservable on screen.
+      'rust-scavenger-chase',
       // Session 9: the enemy KO animation, and the first sheet packed through the DECLARED cell
       // pitch rather than re-detected bands. It could not pack before for two independent reasons,
       // both fixed rather than tolerated: a 64px chunk of the dying scavenger flew clear of its
@@ -92,9 +97,7 @@ describe('the shipped character sheets, read from the files the player loads', (
       // frames), and the fragment guard then measured HEIGHT, which a collapsing figure loses
       // legitimately. $0 — the clip was bought in session 4 and had sat unadopted since.
       'rust-scavenger-death',
-      // D1 (session 7): the frame cell widened 288 -> 384 and rust-scavenger/walk's stride was
-      // measured, so its catalog row now resolves. chase remains unresolved — see
-      // character-bounds-rust-scavenger.json's `_stride` note.
+      // D1 (session 7): the frame cell widened 288 -> 384 and this sheet's row resolved.
       'rust-scavenger-walk',
     ]);
   });

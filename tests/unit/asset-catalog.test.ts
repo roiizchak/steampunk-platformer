@@ -90,6 +90,9 @@ const bounds = only<{
   frameWidth: number;
   frameHeight: number;
   stridePxPerCycle: { walk: number; run: number };
+  // Session 9: locomotion cadence is AUTHORED here, per animation, and `stridePxPerCycle` no longer
+  // feeds any timing. See `src/render/animTiming.ts`'s "A LOOP HAS NO WINDOW" header.
+  animations: Record<string, { fps?: number }>;
 }>(BOUNDS, 'character-bounds file');
 
 /**
@@ -149,7 +152,14 @@ const derived = animTimings(
     ...catalogFrames.entries(),
     ...PENDING_ART.map((name) => [name, 1] as const),
   ]) as Record<AnimName, number>,
-  bounds.stridePxPerCycle,
+  // 🔴 The AUTHORED cadence, not the stride. This argument used to be `bounds.stridePxPerCycle`,
+  // and when the parameter changed meaning TypeScript said nothing — `{walk, run}` is structurally
+  // identical either way, so the call silently began passing 254 px as "36 fps" and produced a
+  // 6-tick walk cycle. Read from the config so a hand-edit of the cadence goes red here.
+  {
+    walk: bounds.animations.walk?.fps ?? 0,
+    run: bounds.animations.run?.fps ?? 0,
+  },
 );
 
 describe('the catalog records the timings the simulation derives (criterion 4.7, vault 4.22)', () => {
@@ -218,21 +228,39 @@ describe('the catalog records the timings the simulation derives (criterion 4.7,
     }
   });
 
-  it('idle is the only authored timing, for every slug — and says so', () => {
-    // Vault 4.22 is satisfied for every non-idle clip and deliberately NOT for idle — no sim window
-    // governs a breathing loop, for the player OR an enemy. The player's exception is recorded in
-    // docs/qa/phase-04-art.md per C11; `brass-sentry-idle`'s matching one (its simTicks is also
-    // `IDLE_TICKS`, src/render/animTiming.ts) is recorded in docs/qa/phase-05-combat.md's timing
-    // table. `-idle` suffix rather than an exact key list is what lets a second slug's authored idle
-    // stay legitimate here without this test losing the ability to catch a non-idle clip acquiring
-    // an authored fps.
-    const authored = catalog.sheets.filter((s) => s.derivedFrom === 'authored').map((s) => s.key);
+  it('only LOOPS may be authored — every windowed animation is still derived (session 9)', () => {
+    // 🔴 This used to read "idle is the only authored timing". Session 9 widened it to every LOOP,
+    // by user decision, because a walk cycle has no simulation window to outrun either — the same
+    // argument that always exempted `idle`. Deriving a loop's rate from a measured stride made an
+    // unmeasurable number load-bearing and shipped as 13-17 % foot-slide ("moves like a ghost").
+    // Full reasoning: `src/render/animTiming.ts`'s header, `character-bounds.json`'s `_loopFps`.
+    //
+    // The test's TEETH are unchanged and are the point: vault 4.22 is still enforced for every clip
+    // that depicts a TIMED thing. An `attack`, `hurt`, `death`, `jump` or `fall` row acquiring an
+    // authored fps is exactly the Phase 4 defect ("0.43 s of art over a 0.25 s move, so the strike
+    // was never drawn"), and this still catches it. What is permitted is strictly `loop: true`.
+    const authored = catalog.sheets.filter((s) => s.derivedFrom === 'authored');
     expect(authored.length).toBeGreaterThan(0);
-    for (const key of authored) {
-      expect(key.endsWith('-idle'), `${key} is authored but is not an idle animation`).toBe(true);
+    for (const sheet of authored) {
+      expect(
+        sheet.loop,
+        `${sheet.key} is authored but is NOT a loop — a windowed animation must derive its fps ` +
+          `from the simulation (vault 4.22)`,
+      ).toBe(true);
     }
-    expect(authored, `the player's own idle (${bounds.slug}-idle) must be among the authored rows`).toContain(
-      `${bounds.slug}-idle`,
-    );
+    // Non-vacuity: at least one windowed row must still be deriving, or the assertion above could
+    // be satisfied by a catalog that authored everything.
+    const windowed = catalog.sheets.filter((s) => !s.loop);
+    expect(windowed.length).toBeGreaterThan(0);
+    for (const sheet of windowed) {
+      expect(
+        sheet.derivedFrom,
+        `${sheet.key} is a one-shot and must take its simTicks from the simulation`,
+      ).not.toBe('authored');
+    }
+    expect(
+      authored.map((s) => s.key),
+      `the player's own idle (${bounds.slug}-idle) must be among the authored rows`,
+    ).toContain(`${bounds.slug}-idle`);
   });
 });

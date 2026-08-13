@@ -194,6 +194,110 @@
           "liftPx": 1
         }
       ]
+    },
+    "chase": {
+      "anchor": "feet",
+      "scale": 0.56074766,
+      "scaleSource": "slug",
+      "deepestSourceY": 473,
+      "frames": [
+        {
+          "index": 0,
+          "sourceMinY": 0,
+          "sourceMaxY": 435,
+          "sourceCentroidY": 220.538,
+          "drawnHeight": 244,
+          "liftPx": 21
+        },
+        {
+          "index": 1,
+          "sourceMinY": 34,
+          "sourceMaxY": 467,
+          "sourceCentroidY": 256.653,
+          "drawnHeight": 243,
+          "liftPx": 3
+        },
+        {
+          "index": 2,
+          "sourceMinY": 50,
+          "sourceMaxY": 461,
+          "sourceCentroidY": 269.342,
+          "drawnHeight": 231,
+          "liftPx": 7
+        },
+        {
+          "index": 3,
+          "sourceMinY": 62,
+          "sourceMaxY": 464,
+          "sourceCentroidY": 273.815,
+          "drawnHeight": 226,
+          "liftPx": 5
+        },
+        {
+          "index": 4,
+          "sourceMinY": 38,
+          "sourceMaxY": 459,
+          "sourceCentroidY": 233.609,
+          "drawnHeight": 237,
+          "liftPx": 8
+        },
+        {
+          "index": 5,
+          "sourceMinY": 6,
+          "sourceMaxY": 459,
+          "sourceCentroidY": 205.127,
+          "drawnHeight": 255,
+          "liftPx": 8
+        },
+        {
+          "index": 6,
+          "sourceMinY": 6,
+          "sourceMaxY": 435,
+          "sourceCentroidY": 204.29,
+          "drawnHeight": 241,
+          "liftPx": 21
+        },
+        {
+          "index": 7,
+          "sourceMinY": 38,
+          "sourceMaxY": 473,
+          "sourceCentroidY": 248.204,
+          "drawnHeight": 244,
+          "liftPx": 0
+        },
+        {
+          "index": 8,
+          "sourceMinY": 46,
+          "sourceMaxY": 469,
+          "sourceCentroidY": 265.834,
+          "drawnHeight": 238,
+          "liftPx": 2
+        },
+        {
+          "index": 9,
+          "sourceMinY": 52,
+          "sourceMaxY": 467,
+          "sourceCentroidY": 259.514,
+          "drawnHeight": 233,
+          "liftPx": 3
+        },
+        {
+          "index": 10,
+          "sourceMinY": 20,
+          "sourceMaxY": 467,
+          "sourceCentroidY": 232.271,
+          "drawnHeight": 251,
+          "liftPx": 3
+        },
+        {
+          "index": 11,
+          "sourceMinY": 0,
+          "sourceMaxY": 447,
+          "sourceCentroidY": 218.977,
+          "drawnHeight": 251,
+          "liftPx": 15
+        }
+      ]
     }
   }
 }

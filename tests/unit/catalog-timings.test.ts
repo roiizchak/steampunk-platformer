@@ -93,8 +93,10 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
     });
   });
 
-  it('throws rather than guessing for a measured (stride-based) row with no stride wired up', () => {
-    expect(() => timingFor('rust-scavenger', 'walk')).toThrow(/no fixed timing/);
+  it('throws rather than guessing for a looping row with no cadence wired up', () => {
+    // Same teeth, new required input (session 9): a declared animation with a missing input FAILS
+    // and is never substituted (vault 4.16). It used to demand a stride; it now demands a cadence.
+    expect(() => timingFor('rust-scavenger', 'walk')).toThrow(/needs an authored cadence/);
   });
 
   it('timingFor(brass-courier, attack|hurt|death) is sim-derived and does not loop', () => {
@@ -115,17 +117,37 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
     });
   });
 
-  it('timingFor(rust-scavenger, walk|chase) resolves once a stride is supplied via context', () => {
-    expect(timingFor('rust-scavenger', 'walk', { stridePxPerCycle: 180 })).toEqual({
-      simTicks: mirrorStrideTicks(180, MIRROR_SCAVENGER_PATROL_SPEED),
+  /**
+   * 🔴 Session 9: these two rows take an AUTHORED cadence, not a stride.
+   *
+   * They were "known pair, but throws until someone measures a stride" — correctly, because a
+   * guessed stride is exactly what shipped as the player's 13-17 % foot-slide. The fix was not to
+   * measure harder (four methods disagree by ~20 %, vault 4.18) but to stop a LOOP needing a stride
+   * at all. `chase` became packable for the first time the same afternoon.
+   */
+  it('timingFor(rust-scavenger, walk|chase) resolves from an authored cadence and a frame count', () => {
+    expect(timingFor('rust-scavenger', 'walk', { authoredFps: 18, renderFrames: 12 })).toEqual({
+      // 12 frames at 18 fps = 0.667 s = 40 ticks. Hand-computed, not via the production helper (C2).
+      simTicks: 40,
       loop: true,
-      derivedFrom: 'measured',
+      derivedFrom: 'authored',
     });
-    expect(timingFor('rust-scavenger', 'chase', { stridePxPerCycle: 64 })).toEqual({
-      simTicks: mirrorStrideTicks(64, MIRROR_SCAVENGER_CHASE_SPEED),
+    expect(timingFor('rust-scavenger', 'chase', { authoredFps: 24, renderFrames: 12 })).toEqual({
+      simTicks: 30,
       loop: true,
-      derivedFrom: 'measured',
+      derivedFrom: 'authored',
     });
+  });
+
+  it('still refuses to invent a cadence when none is authored', () => {
+    // The teeth that survive: a missing declared input FAILS, it is never substituted (vault 4.16).
+    // Only WHICH input is required changed.
+    expect(() => timingFor('rust-scavenger', 'walk', { renderFrames: 12 })).toThrow(
+      /needs an authored cadence/,
+    );
+    expect(() => timingFor('rust-scavenger', 'chase', { authoredFps: 24 })).toThrow(
+      /packed frame count/,
+    );
   });
 
   /**
@@ -149,10 +171,20 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
       ['brass-courier', 'hurt'],
       ['brass-courier', 'death'],
     ];
-    const KNOWN_BUT_UNMEASURED: Array<[string, string]> = [
-      ['rust-scavenger', 'walk'],
-      ['rust-scavenger', 'chase'],
-    ];
+    /**
+     * 🔴 Session 9: EMPTY, and that is the headline.
+     *
+     * `rust-scavenger`'s `walk` and `chase` lived here for two sessions as "known pair, cannot
+     * resolve — no stride measured". Authoring loop cadences dissolved the category: a loop needs
+     * no stride, so there is no longer such a thing as a known-but-unresolvable locomotion row.
+     * `chase` packed for the first time the same afternoon.
+     *
+     * Kept rather than deleted, with the loops below still asserting emptiness, because the
+     * DISTINCTION it draws is real and worth keeping alive: `hasCatalogTiming` answers "is this a
+     * known pair", `catalogRowFor` answers "can it resolve right now", and blurring them is how a
+     * missing input would start reading as an unknown one.
+     */
+    const KNOWN_BUT_UNMEASURED: Array<[string, string]> = [];
     const FAKE_SHEET = {
       url: 'assets/characters/fake/sheets/fake.png',
       frameWidth: 288,
@@ -171,10 +203,16 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
       expect(() => catalogRowFor(slug, action, FAKE_SHEET)).not.toThrow();
     });
 
-    it.each(KNOWN_BUT_UNMEASURED)(
-      'catalogRowFor(%s, %s) is a known pair but still THROWS — no stride measured yet',
+    it('no locomotion row is known-but-unresolvable any more', () => {
+      expect(KNOWN_BUT_UNMEASURED).toEqual([]);
+    });
+
+    it.each([['rust-scavenger', 'walk'], ['rust-scavenger', 'chase']] as Array<[string, string]>)(
+      'catalogRowFor(%s, %s) resolves once its cadence is authored',
       (slug, action) => {
-        expect(() => catalogRowFor(slug, action, FAKE_SHEET)).toThrow(/no fixed timing/);
+        expect(() =>
+          catalogRowFor(slug, action, FAKE_SHEET, { authoredFps: 18, renderFrames: 6 }),
+        ).not.toThrow();
       },
     );
 

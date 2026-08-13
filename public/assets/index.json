@@ -51,10 +51,10 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 24,
-      "simTicks": 46,
-      "fps": 31.304347826086957,
+      "simTicks": 40,
+      "fps": 36,
       "loop": true,
-      "derivedFrom": "measured"
+      "derivedFrom": "authored"
     },
     {
       "key": "brass-courier-run",
@@ -62,10 +62,10 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 27,
-      "fps": 26.666666666666668,
+      "simTicks": 23,
+      "fps": 31.304347826086957,
       "loop": true,
-      "derivedFrom": "measured"
+      "derivedFrom": "authored"
     },
     {
       "key": "brass-courier-jump",
@@ -117,10 +117,10 @@
       "frameWidth": 512,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 125,
-      "fps": 5.76,
+      "simTicks": 40,
+      "fps": 18,
       "loop": true,
-      "derivedFrom": "measured"
+      "derivedFrom": "authored"
     },
     {
       "key": "brass-courier-attack",
@@ -143,6 +143,17 @@
       "fps": 13.333333333333334,
       "loop": false,
       "derivedFrom": "sim"
+    },
+    {
+      "key": "rust-scavenger-chase",
+      "url": "assets/characters/rust-scavenger/sheets/chase.png",
+      "frameWidth": 512,
+      "frameHeight": 384,
+      "frameCount": 12,
+      "simTicks": 30,
+      "fps": 24,
+      "loop": true,
+      "derivedFrom": "authored"
     }
   ]
 }

@@ -72,15 +72,23 @@ const FIXED_TIMINGS = {
 };
 
 /**
- * Measured (stride-based) timing rows: known pairs whose `simTicks` needs a stride this session
- * does not have yet — see `character-bounds-rust-scavenger.json`'s `_stride` note. Declared here so
- * `hasCatalogTiming` can say "known pair" even while `timingFor` still throws for it.
+ * 🔴 **Looping locomotion rows, whose cadence is AUTHORED (session 9).**
+ *
+ * These used to be "measured": `simTicks = round(stridePxPerCycle / speed)`. That made a number
+ * nobody can measure load-bearing, and it shipped as visible foot-slide — the user's report was
+ * "moves too fast, like a ghost", and the planted foot was slipping 17 % of every step on the
+ * player's run. Four independent methods put the true strides 20 % apart, which is vault 4.18's
+ * INDETERMINATE condition. Full reasoning in `src/render/animTiming.ts`'s header and in
+ * `character-bounds.json`'s `_loopFps`.
+ *
+ * A loop has no simulation window to outrun, which is the same reason `idle` has always been
+ * authored. The cadence now comes from `animations.<action>.fps` in the slug's bounds file, set by
+ * a human watching the character. **`chase` becomes packable for the first time because of this**:
+ * it was blocked for two sessions purely on an unmeasured stride.
  */
-const MEASURED_TIMINGS = {
-  'rust-scavenger': {
-    walk: SCAVENGER_PATROL_SPEED,
-    chase: SCAVENGER_CHASE_SPEED,
-  },
+const AUTHORED_LOOPS = {
+  'brass-courier': ['walk', 'run'],
+  'rust-scavenger': ['walk', 'chase'],
 };
 
 /**
@@ -91,7 +99,7 @@ const MEASURED_TIMINGS = {
  * thrown PARTWAY through a build that gated on the slug alone.
  */
 export function hasCatalogTiming(slug, action) {
-  return Boolean(FIXED_TIMINGS[slug]?.[action]) || Boolean(MEASURED_TIMINGS[slug]?.[action]);
+  return Boolean(FIXED_TIMINGS[slug]?.[action]) || Boolean(AUTHORED_LOOPS[slug]?.includes(action));
 }
 
 /**
@@ -105,24 +113,44 @@ export function timingFor(slug, action, context = {}) {
     return fixed;
   }
 
-  const speed = MEASURED_TIMINGS[slug]?.[action];
-  if (speed !== undefined) {
-    const stridePx = context.stridePxPerCycle;
-    if (stridePx == null) {
+  if (AUTHORED_LOOPS[slug]?.includes(action)) {
+    const { authoredFps, renderFrames } = context;
+    if (authoredFps == null) {
       throw new Error(
-        `catalogTimings: no fixed timing for "${slug}/${action}" yet — its stride has not been ` +
-          `measured (character-bounds-${slug}.json's stridePxPerCycle.${action} is still null). ` +
-          `A guessed number is the exact failure this module was written to prevent.`,
+        `catalogTimings: "${slug}/${action}" is a looping locomotion row and needs an authored ` +
+          `cadence — set animations.${action}.fps in character-bounds-${slug}.json. It is a ` +
+          `number a human picks by WATCHING the character, not one derived from the art; see this ` +
+          `module's AUTHORED_LOOPS note for why that changed.`,
       );
     }
-    return { simTicks: strideTicks(stridePx, speed), loop: true, derivedFrom: 'measured' };
+    if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+      throw new Error(
+        `catalogTimings: "${slug}/${action}" needs its packed frame count to turn an authored ` +
+          `cadence into simTicks, got ${renderFrames}.`,
+      );
+    }
+    return { simTicks: cadenceTicks(renderFrames, authoredFps), loop: true, derivedFrom: 'authored' };
   }
 
   throw new Error(
-    `catalogTimings: no fixed timing for "${slug}/${action}". If this is a 'measured' ` +
-      `locomotion row (walk/chase), it needs a stride measurement wired up first — see this ` +
+    `catalogTimings: no fixed timing for "${slug}/${action}". If this is a looping locomotion ` +
+      `row (walk/chase), it needs an authored cadence in the slug's bounds file — see this ` +
       `module's header.`,
   );
+}
+
+/**
+ * Ticks a LOOPING cycle occupies, from an authored cadence. Mirrors `cadenceTicks` in
+ * `src/render/animTiming.ts`, and `catalog-timings.test.ts` pins the two equal.
+ */
+export function cadenceTicks(renderFrames, authoredFps) {
+  if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+    throw new Error(`cadenceTicks: renderFrames must be a positive integer, got ${renderFrames}`);
+  }
+  if (!(authoredFps > 0) || !Number.isFinite(authoredFps)) {
+    throw new Error(`cadenceTicks: authored fps must be a finite number > 0, got ${authoredFps}`);
+  }
+  return Math.max(1, Math.round((renderFrames * TICK_HZ) / authoredFps));
 }
 
 /** `renderFrames * TICK_HZ / simTicks`. Mirrors `deriveFps` in `src/render/animTiming.ts`. */

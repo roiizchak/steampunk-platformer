@@ -18,12 +18,23 @@ export type CatalogTiming = {
 };
 
 export interface TimingContext {
+  /**
+   * ⚠️ Session 9: no longer read. A LOOPING animation's cadence is authored, not derived from a
+   * stride — see `catalogTimings.mjs`'s AUTHORED_LOOPS note. Kept in the type so a caller still
+   * passing it is a compile error at the call site rather than a silently ignored argument.
+   */
   stridePxPerCycle?: number | null;
+  /** Authored loop cadence, fps, from `animations.<action>.fps` in the slug's bounds file. */
+  authoredFps?: number | null;
+  /** Frames the packer actually wrote, used to turn a cadence into an integer tick count. */
+  renderFrames?: number;
 }
 
 export declare function hasCatalogTiming(slug: string, action: string): boolean;
 
 export declare function timingFor(slug: string, action: string, context?: TimingContext): CatalogTiming;
+
+export declare function cadenceTicks(renderFrames: number, authoredFps: number): number;
 
 export declare function deriveFps(renderFrames: number, simTicks: number): number;
 

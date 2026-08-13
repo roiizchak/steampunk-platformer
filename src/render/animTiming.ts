@@ -18,8 +18,8 @@
  * |--------|---------------------------------|------------|
  * | `jump` | ticks published as `jump`       | `sim`      |
  * | `fall` | ticks published as `fall`       | `sim`      |
- * | `run`  | `round(stridePx / topSpeed)`    | `measured` |
- * | `walk` | `round(stridePx / walkTopSpeed)`| `measured` |
+ * | `run`  | `round(frames * TICK_HZ / fps)`  | `authored` |
+ * | `walk` | `round(frames * TICK_HZ / fps)`  | `authored` |
  * | `idle` | `IDLE_TICKS`                    | `authored` |
  *
  * **`jump` and `fall` are COUNTED, never subtracted.** `airtimeTicks` includes the landing tick,
@@ -28,23 +28,53 @@
  * review finding 9 predicted this before the code existed; `derived.ts` counts published states so
  * the number cannot be wrong by one.
  *
- * **`run` and `walk` are measured, not authored.** `stridePx` is how far one foot travels per
- * cycle, read off the generated sheet in the Gym. Dividing it by the speed the sim actually reaches
- * is what makes **foot-slide** the observable defect if the derivation is wrong — and it means
- * retuning `runMax` re-derives the run frame rate automatically, which is the whole point of 4.22.
+ * ## 🔴 A LOOP HAS NO WINDOW — why `walk` and `run` stopped being stride-derived (session 9)
  *
- * **`idle` is authored, and that is a recorded exception rather than a satisfied case.** There is no
- * simulation window governing a breathing loop. 4.22 exists to stop art outrunning a *timed* move;
- * `idle` has no such window to outrun. The exception is recorded in `docs/qa/phase-04-art.md` with
- * its reason *(C11)*, and `derivedFrom` carries it into the catalog so it cannot quietly read as
- * derived.
+ * **`idle` was already authored, and this file argued the case for it three paragraphs before
+ * applying the opposite rule to its two neighbours:** *"There is no simulation window governing a
+ * breathing loop. 4.22 exists to stop art outrunning a TIMED move; `idle` has no such window to
+ * outrun."* **A walk cycle has no window either.** Nothing in the simulation says a stride must take
+ * 46 ticks. That constraint was invented here, by deriving it from `stridePxPerCycle`.
+ *
+ * **What that cost.** The user reported the character "moves too fast, like a ghost". Measured on
+ * the shipped sheets by tracking the planted foot: on `run` it travels **-22.4 px per frame** while
+ * the body advances **+27.0**, so **17 % of every step is slip**; `walk` slips 13 %. The declared
+ * stride was simply larger than the stride the art draws — and it is not fixable by measuring
+ * harder, because four independent methods disagree by ~20 % (walk 156-250, run 214-285 against
+ * declared 254 and 320). Vault **4.18**'s INDETERMINATE condition, on the number this file had made
+ * load-bearing.
+ *
+ * **Where the rule came from, and what it actually said.** 4.22's evidence is entirely about
+ * ATTACKS — *"every light attack had 0.43 s of art over a 0.25-0.27 s move, so the strike was never
+ * drawn"* — plus aligning the contact frame to the active window. Both are properties of a move with
+ * a duration. **The sibling project that lesson came from does not apply it to walking**: its own
+ * timing module says *"Looping states (idle/walk) have no duration to match and keep their authored
+ * fps"*, and its `walkF` is 8 frames at an authored 12 fps with the speed tuned live in a dev
+ * playground. Extending 4.22 to loops was an over-application, and it hard-wired an unmeasurable
+ * quantity into how the game looks.
+ *
+ * **4.22 is NOT weakened.** `fps = renderFrames * TICK_HZ / simTicks` still governs every animation,
+ * including these two — `cadenceTicks` derives `simTicks` from the authored cadence and the fps is
+ * then re-derived from the ROUNDED `simTicks`, so criterion 5.4d holds unchanged. Every animation
+ * with a real window — `attack`, `hurt`, `death`, `jump`, `fall` — still takes its `simTicks` from
+ * the simulation and still goes red in `asset-catalog.test.ts` when a window is retuned. What
+ * changed is only where a LOOP's cadence comes from: a number a human set by watching the
+ * character, instead of one measured off generated art to a precision the art does not carry.
+ *
+ * **Foot-slide is still the observable** — it is now tuned against directly, in the Gym, instead of
+ * being predicted by an arithmetic chain whose input was unknowable.
+ *
+ * *(User decision, 2026-08-13, after comparing against the sibling project. Recorded in
+ * `docs/qa/phase-05-combat.md` with its reasoning (C11).)*
  */
 
 import { TICK_HZ } from '../game/constants';
 import { ATTACK, DEATH_TICKS, HURT_TICKS, attackTotalTicks } from '../sim/combat';
 import type { DerivedFeel } from '../sim/derived';
 import type { EnemySlug } from '../sim/enemies';
-import { SCAVENGER } from '../sim/enemies';
+// `SCAVENGER` is no longer imported: the scavenger's loop cadences are authored, so its patrol and
+// chase SPEEDS no longer decide its frame rate. Retuning them now changes how far it travels and
+// nothing else — which is the separation of concerns this change was for.
 import type { PlayerState } from '../sim/types';
 import { SENTRY_FIRE_TICKS, type EnemyAnim } from './enemyView';
 
@@ -116,8 +146,45 @@ export function strideTicks(stridePx: number, speedPxPerTick: number): number {
   return Math.max(1, Math.round(stridePx / speedPxPerTick));
 }
 
-/** Stride lengths measured off the generated sheets, in world pixels, keyed by animation. */
+/**
+ * Ticks a LOOPING cycle occupies, from an authored cadence.
+ *
+ * 🔴 **This replaces `strideTicks` for locomotion, and the reason is the whole of session 9's
+ * ghosting report.** See the header's "A loop has no window" section.
+ *
+ * The fps is authored; `simTicks` is derived FROM it and then the fps is re-derived from the
+ * rounded `simTicks`, so `fps = renderFrames * TICK_HZ / simTicks` stays exactly true and criterion
+ * 5.4d is untouched. What changes is only where `simTicks` comes from — a cadence a human chose by
+ * watching the character, instead of a stride nobody can measure.
+ */
+export function cadenceTicks(renderFrames: number, authoredFps: number): number {
+  if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+    throw new Error(`cadenceTicks: renderFrames must be a positive integer, got ${renderFrames}`);
+  }
+  if (!(authoredFps > 0) || !Number.isFinite(authoredFps)) {
+    throw new Error(`cadenceTicks: authored fps must be a finite number > 0, got ${authoredFps}`);
+  }
+  return Math.max(1, Math.round((renderFrames * TICK_HZ) / authoredFps));
+}
+
+/**
+ * Stride lengths measured off the generated sheets, in world pixels, keyed by animation.
+ *
+ * ⚠️ **No longer used for timing.** Kept because `character-bounds.json` still records the
+ * measurements and `strideTicks` is still exported and tested — but locomotion cadence is authored
+ * now, so a wrong stride can no longer reach the screen. See the header.
+ */
 export interface MeasuredStrides {
+  run: number;
+  walk: number;
+}
+
+/**
+ * Authored locomotion cadences, in frames per second, read from `character-bounds.json`.
+ *
+ * Street-Fighter's `walkF` is 8 frames at an authored 12 fps — the same shape.
+ */
+export interface AuthoredCadence {
   run: number;
   walk: number;
 }
@@ -138,12 +205,14 @@ export type MeasuredFrames = Record<PlayerState, number>;
 export function animTimings(
   feel: DerivedFeel,
   frames: MeasuredFrames,
-  strides: MeasuredStrides,
+  cadence: AuthoredCadence,
 ): AnimTiming[] {
   const rows: { name: PlayerState; simTicks: number; loop: boolean; from: TimingProvenance }[] = [
     { name: 'idle', simTicks: IDLE_TICKS, loop: true, from: 'authored' },
-    { name: 'walk', simTicks: strideTicks(strides.walk, feel.walkTopSpeed), loop: true, from: 'measured' },
-    { name: 'run', simTicks: strideTicks(strides.run, feel.topSpeed), loop: true, from: 'measured' },
+    // Authored cadence, not `strideTicks`. Both loops, same reasoning as `idle` directly above:
+    // there is no simulation window for a walk cycle to outrun.
+    { name: 'walk', simTicks: cadenceTicks(frames.walk, cadence.walk), loop: true, from: 'authored' },
+    { name: 'run', simTicks: cadenceTicks(frames.run, cadence.run), loop: true, from: 'authored' },
     { name: 'jump', simTicks: feel.riseTicks, loop: false, from: 'sim' },
     { name: 'fall', simTicks: feel.fallTicks, loop: false, from: 'sim' },
     /**
@@ -178,8 +247,18 @@ export function animTimings(
  * Enemy timings — guard G2 extended to the subjects Phase 5 adds.
  * ------------------------------------------------------------------ */
 
-/** Stride lengths measured off an ENEMY sheet, world px per cycle. */
+/**
+ * Stride lengths measured off an ENEMY sheet, world px per cycle.
+ *
+ * ⚠️ No longer used for timing — see the header. Kept as the recorded measurement.
+ */
 export interface EnemyStrides {
+  walk: number;
+  chase: number;
+}
+
+/** Authored loop cadences for an enemy's locomotion, frames per second. */
+export interface EnemyCadence {
   walk: number;
   chase: number;
 }
@@ -204,7 +283,7 @@ export type EnemyFrames = Partial<Record<EnemyAnim, number>>;
 export function enemyAnimTimings(
   slug: EnemySlug,
   frames: EnemyFrames,
-  strides: EnemyStrides,
+  cadence: EnemyCadence,
 ): AnimTiming[] {
   const rows: { name: EnemyAnim; simTicks: number; loop: boolean; from: TimingProvenance }[] =
     slug === 'brass-sentry'
@@ -216,8 +295,15 @@ export function enemyAnimTimings(
           { name: 'death', simTicks: DEATH_TICKS, loop: false, from: 'sim' },
         ]
       : [
-          { name: 'walk', simTicks: strideTicks(strides.walk, SCAVENGER.patrolSpeed), loop: true, from: 'measured' },
-          { name: 'chase', simTicks: strideTicks(strides.chase, SCAVENGER.chaseSpeed), loop: true, from: 'measured' },
+          // Authored cadence, same rule as the player's loops — see the header. `chase` keeps its
+          // own number rather than reusing `walk`'s, which is what stops a chase animation
+          // flip-booking at patrol pace; that reasoning survives the change of input unaltered.
+          //
+          // This is also what UNBLOCKS `chase`. It could never be catalogued before: its stride was
+          // unmeasured, so `catalogTimings` threw rather than guess — correctly, given a guessed
+          // stride is exactly what shipped as the player's ghosting. A loop needs no stride now.
+          { name: 'walk', simTicks: cadenceTicks(frames.walk ?? 1, cadence.walk), loop: true, from: 'authored' },
+          { name: 'chase', simTicks: cadenceTicks(frames.chase ?? 1, cadence.chase), loop: true, from: 'authored' },
           { name: 'death', simTicks: DEATH_TICKS, loop: false, from: 'sim' },
         ];
 
