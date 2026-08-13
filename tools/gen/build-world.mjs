@@ -199,7 +199,19 @@ function buildParallax() {
     // THEN mirror. Mirroring first would double the work for an identical result.
     const target = 1080;
     const scaled = downscale(image, Math.round((image.width * target) / image.height), target);
-    const looped = mirrorLoop(scaled);
+
+    // Crop to half the viewport width (960) BEFORE mirroring, so `mirrorLoop` yields exactly one
+    // screen (1920x1080) instead of ~2.65 screens. The TileSprite this feeds draws at 1:1 into a
+    // 1920-wide window (GameScene.ts ~548-554), so the sharpness-preserving move is a crop, never
+    // a second resample. Centred on the scaled strip: nothing about the crop's *width* is
+    // scene-specific, so there is no principled edge to prefer over the middle. This throws away
+    // ~62% of each layer's horizontal content (2546 -> 960 px, roughly) to cut the shipped texture
+    // from 5092x1080 to 1920x1080 — the trade the 64%-of-frame-budget measurement calls for, not
+    // an accident of a round number.
+    const cropWidth = 960;
+    const cropX = Math.floor((scaled.width - cropWidth) / 2);
+    const cropped = crop(scaled, cropX, 0, cropWidth, scaled.height);
+    const looped = mirrorLoop(cropped);
     const after = gateSeam(looped);
     if (after.status !== PASS) {
       throw new Error(
