@@ -1,7 +1,7 @@
 # Session handoff — Phase 5 (combat, enemies, hazards)
 
 **Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
-**§13 (session 7) supersedes §12b, §12 and everything above them.**
+**§14 (session 8, 2026-08-13) supersedes §13 and everything above it. Read §14 first.**
 > ⚠️ **This document is stale from the first commit of any session that will rewrite it.**
 > Two Codex blockers and one QA brief in session 7 were caused by reading it mid-flight.
 > If you are reviewing during a session, ask which sections are known stale.
@@ -1090,7 +1090,9 @@ performance). **Interpreting this is criterion 5.11's owner's job** and it shoul
 
 ---
 
-## 13. Session 7 — 2026-08-12. **This section supersedes §12b, and everything above it.**
+## 13. Session 7 — 2026-08-12. ~~**This section supersedes §12b, and everything above it.**~~
+
+> ⚠️ **Superseded by §14 (session 8, 2026-08-13). Read §14 first.**
 
 Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-vectorized-hanrahan.md`. Its Codex plan
 review — the **seventh** — returned **BLOCK, 4 blockers, 3 major, 1 minor**, all applied
@@ -1273,3 +1275,115 @@ another cent on art.
 
 **Not started:** an automated spec for 5.4 (hands-on evidence only, no regression guard).
 **Phase 5 is failing and must be reported failing.**
+
+---
+
+## 14. Session 8 — 2026-08-13. **This section supersedes §13 and everything above it.**
+
+**Phase 5 is still FAILING, and it is much closer than it was.** Every defect the session opened
+with is closed. What is left is two criteria that do not measure what they claim, and one that needs
+your eyes.
+
+HEAD `b988e66` on `phase-05-combat`. **275 suites / 900 tests / 0 failed · 64 test files · e2e 47
+passed · sim-isolated 900 with Phaser uninstalled · typecheck clean · verify-dist ok · port 5173
+clear · $41.36 of $55, no spend this session.**
+
+### What closed
+
+| | was | now |
+|---|---|---|
+| **P1** dead enemies kept acting | shipped defect | guard at the **call site** in `stepEnemies`, so `stepProjectiles` stays outside it and shots in flight keep travelling. `0466b9a` |
+| **P3** hitstun was cosmetic | no lock at all | locks horizontal **and** the jump **and** the jump-cut. Five ticks, not six — the asymmetry is derived in the docstring. `7a63f13`, `8bfeee5`, `ea0c6e4` |
+| **S1/S2** the chase | 200 px teleports, floating scavengers | `deadZone` 96 as a **per-entity field** (a module constant cannot satisfy 5.9's sweep), clamp on both paths. `dca73f1` |
+| **Knockback** | scoped in Phase 5 §1, **never built** | shipped at step 9b. Grounded **7.39 px**, airborne **25.59 px**. `5765227`, `626f8b3` |
+| **Grey-box enemy** | a chasing scavenger was a permanent `Rectangle` | `fallbackAnimKey`. The 5.11 spec reads **20/20** where it read 12/20. `626f8b3` |
+| **5.12** | 8 files over 400 | **0 over 400.** `49a7d30`, `4eb08f3`, `ea0c6e4` |
+| **P4** the frame budget | "the parallax is 64% of it" | **a software-rasteriser artifact.** See below. `f370a48` |
+
+### 🔴 P4 was never a defect on real hardware, and every number before this session was wrong about it
+
+Real Chrome, **RTX 4080** (D3D11/ANGLE, confirmed in-page off `WEBGL_debug_renderer_info`, not
+assumed), same sampling method, **reproduced identically three times**:
+
+| | headless (SwiftShader) | real GPU |
+|---|---:|---:|
+| median frame | 90.10 ms | **4.2 ms** |
+| sustained | ~11 fps | **240 fps**, vsync-locked |
+| poses painted per cycle | 4–6 of 12 | **12, 12, 10, 12, 12, 12** |
+
+Every P4 number that existed before — 5.11's 12–18 fps, the 70.30/25.50 A/B, "64 % of the frame
+budget", the 5-of-12 drop — came from headless Chromium with no `launchOptions`. **The harness was
+measuring itself.**
+
+**A parallax retile was built on the strength of those numbers and then reverted.** Its own
+interleaved A/B refuted the texture-size hypothesis (ratio **2.42** against 2.76 before), and a
+playtest showed the crop put a **duplicated gauge panel in every single frame** — because the
+cropped texture was exactly the view width, so the mirror pair is permanently on screen. `ca84554`.
+The reasoning is written into `build-world.mjs` **at the point of temptation**, because the 21.4 MB
+payload will tempt someone to try it again.
+
+⚠️ **Your original dropped-frames report is still unexplained.** It was a real browser. Either this
+session's fixes changed it or it was something else. **It needs your hands, not another probe.**
+
+### The gate — honest per-criterion status at `b988e66`
+
+| # | status | note |
+|---|---|---|
+| 5.1 5.3 5.4c 5.4d 5.5 5.6 5.9 5.15 | **PASS** | owner-verified, this session, evidence in `docs/qa/phase-05-combat.md` |
+| 5.2 5.7 5.10 5.12 5.16 | **PASS**, named caveats | 5.16 ran for the first time and passed |
+| 5.4 | **PASS** | scavenger walk, **11 distinct poses**, sampled per-rAF at paint time on real hardware |
+| 5.13 5.14 | **PASS** | both Codex reviews ran; **all 4 implementation findings confirmed and dispositioned** |
+| **5.8** | 🔴 **UNRESOLVED — needs you** | the health bar renders as a **small red sliver** at true sprite size. "Legible" is a human judgement *(C4)* and no agent may assert it. Screenshot is in the QA log's playtest section. |
+| **5.11** | 🔴 **FAILING as a measurement** | the number is real; it is not measuring what the criterion says |
+
+### Why 5.11 fails, and do not "fix" it by changing the tolerance
+
+Three independent problems, all recorded with evidence:
+
+1. **The gated spec has never once run on anything but a software rasteriser.** The 4.2 ms figure
+   came from a separate manual probe, not from the test that gates the criterion.
+2. **The "worst-case" fleet spawns entirely outside the viewport.** `DEV_FLEET_OFFSET_X` 200 sim
+   units × `RENDER_SCALE` 6 = **1200 screen px**; the visible half-width is **960 px**. **0 of 20**
+   on screen; exactly **8 of 20** inside `detectRadius`. That 8 is the same geometry that produced
+   the 12 grey Rectangles — two unrelated findings confirming each other.
+3. **`medianMs < 100` was never a budget.** No baseline exists (S4, PRD §7). Quiet-machine
+   re-measure: **82.4 / 82.5 / 82.9 ms**, spread 0.5 ms, matching session 7's 82.10 — so the
+   95–97 ms the owner saw was machine load, **not** a regression. One run's `maxMs` hit **99.80**.
+
+**Cross-session comparison of absolute ms from this harness is not evidence in either direction.**
+Four times this session those numbers moved with background load. The one A/B that decided anything
+was run **interleaved**, A,B,A,B,A,B, in a single session.
+
+### Do this next, in this order
+
+1. **Play it.** 5.8 is yours, and your dropped-frames report needs confirming or retiring. While
+   you are in there: the player **wedges against terrain at `x: 3198`** with a scavenger in contact
+   and drains **100 → 35 hp** with no way past. Not diagnosed, not a Phase 5 criterion, and it did
+   not read as a fight.
+2. **Redesign 5.11** — it needs a decision from you, not a patch. Options in the QA log under P1–P4.
+3. **The cheapest real improvements**, in order: `withinRadius`'s vertical term is untested
+   (**T6** — every sentry fixture is `y:0`/`playerY:0`, so deleting `dy*dy` reds nothing); nothing
+   swings an attack to an actual kill (**T2** — *the gap that let P1 ship past the whole gate*); the
+   six extracted `GameScene` modules have no tests (**T13**).
+4. **`verify-dist`'s four identifier greps cannot go red** under minification (**T8**). Codex's fix
+   is better than more greps: a Vite `generateBundle` assertion that DEV-only modules contribute
+   **zero rendered bytes**.
+
+### Things you will not work out from the code
+
+- **`window.__game` has EIGHT top-level fields, not nine.** CLAUDE.md, PRD.md, `GameScene.ts:150`
+  and several of this session's own commit messages all say nine. Caught by Codex. The surface is
+  closed either way and nothing leaked into it — **the count is wrong, the invariant is not.** Both
+  files are outside this session's scope lock, so it is recorded and not edited.
+- **`file-size.test.ts` asserts `over.length <= 10`, not `0`** — with 0 over it now has ten free
+  slots and cannot go red. **You declined tightening it** (2026-08-13); it is recorded as **T7**.
+  `GymScene.ts` sits at **399**.
+- **Two agents destroyed uncommitted work with `git stash` in session 7.** Every brief since carries
+  an explicit ban, and nothing was lost this session. Keep the ban.
+- **The QA log's 5.12 record has now been wrong three times** — twice stale, and once, in this
+  session, **false when written**: I ran the sweep, then fixed a file that grew `tick.ts` by 21
+  lines, then wrote the sweep's result down. **A measurement written down after later edits is not a
+  measurement of the tree it claims to describe.**
+- **Hand your reviewers your own conclusions, not just the diff.** The prompt for Codex review 8
+  listed the gate's known findings and asked it to say if any were wrong. **Both corrections came
+  from that section**, including the blocker.

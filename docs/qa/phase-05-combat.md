@@ -1459,3 +1459,31 @@ optimisation that someone reading the payload size will propose again.
   this is terrain plus contact damage. **Not diagnosed, and not a Phase 5 criterion** — recorded
   because it is the kind of thing only playing finds, and because "took 65 damage standing still"
   did not read as a fight. First candidate for the next playtest.
+
+## 5.11 re-measured on a QUIET machine — P1's open question is closed
+
+Finding **P1** left one question open: the perf owner measured **95.5 / 96.4 / 97.0 / 95.6 ms**
+against session 7's recorded **55.70 / 82.10**, while six agents were loading this machine. It was
+recorded as *"needs a re-measure on a quiet machine before anyone calls it a regression."*
+
+Re-measured at `b988e66`, nothing else running, parallax back at full 5092 px:
+
+```
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.40ms, max 99.80ms
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.50ms, max 94.30ms
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.90ms, max 95.50ms
+```
+
+**Not a regression.** 82.4–82.9 ms, spread **0.5 ms** across three runs, and it lands on session 7's
+**82.10**. The 95–97 ms reading was machine load, exactly as the confound predicted. This is the
+**fourth** time this session that absolute milliseconds from the headless harness moved with
+background load — the first killed the original parallax A/B, and it is why the decisive A/B was run
+**interleaved**.
+
+**Margin against the 100 ms ceiling is ~17 ms**, and one run's `maxMs` reached **99.80**. `maxMs` is
+not asserted, but a ceiling a quiet machine approaches on a single frame is worth stating plainly.
+
+> The rule this earns: **an absolute millisecond threshold in this harness is only meaningful against
+> a same-session control.** Cross-session comparison of these numbers is not evidence in either
+> direction — which is finding P1's real content, and it survives the re-measure rather than being
+> dissolved by it.
