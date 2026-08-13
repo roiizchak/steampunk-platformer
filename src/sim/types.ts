@@ -212,6 +212,15 @@ export interface PlayerSim {
    * while still invulnerable. One counter could not represent that.
    */
   iFrameCounter: number;
+  /**
+   * FIX 2 (QA gate, session 8): did an actual knockback IMPULSE land this hit, not merely "is the
+   * player `hurt`"? `knockbackSettling` (`combat.ts`) used to key on `state === 'hurt' &&
+   * combatCounter === 1` alone, so a hazard hit — which deliberately writes no `vx` shove — got the
+   * friction exemption anyway and bought one free tick of preserved momentum for nothing. Set true
+   * where `applyKnockback` actually writes `vx` (`worldDamage.ts`), read and cleared exactly once
+   * by `stepHorizontal`'s `knockbackSettling` branch (`player.ts`) so the exemption stays ONE tick.
+   */
+  knockbackPending: boolean;
 }
 
 /** Per-tick event edges (vault 2.5). Emitted, never reconstructed from a state comparison. */

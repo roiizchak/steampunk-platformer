@@ -40,6 +40,7 @@ function playerAt(overrides: Partial<PlayerSim> = {}): PlayerSim {
     maxHp: PLAYER_MAX_HP,
     combatCounter: 0,
     iFrameCounter: IFRAME_TICKS,
+    knockbackPending: false,
     ...overrides,
   };
 }

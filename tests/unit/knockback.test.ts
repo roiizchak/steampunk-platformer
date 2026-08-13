@@ -246,6 +246,33 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
    * refusal is a normal outcome, and dropping that half of the guard turns knockback into a free
    * repositioning tool: stand in a scavenger and get shoved every tick while taking damage once.
    */
+  /**
+   * FIX 2 (QA gate, session 8): `knockbackSettling` used to key on `state === 'hurt' &&
+   * combatCounter === 1` alone, with no test that an impulse actually landed — measured against the
+   * real sim as `vxBefore: -12, vxAfterOneTick: -12` (unchanged) where `wouldBeWithFriction: -8.31`.
+   * Hazards are deliberately exempt from the SHOVE (`worldDamage.ts`), but that must not also buy
+   * them the friction exemption. This is the test that would have caught the defect.
+   */
+  it('a HAZARD hit does NOT get the friction exemption — vx decays by groundFriction the tick after', () => {
+    const world = worldWith({ hazards: [{ x: 300, y: 900, w: 100, h: 100 }] });
+
+    let vxAtImpact: number | null = null;
+    for (let i = 0; i < 60 && world.player.hp === PLAYER_MAX_HP; i += 1) {
+      tick(world, { ...LEFT });
+    }
+    expect(world.player.hp).toBe(PLAYER_MAX_HP - HAZARD_DAMAGE);
+    expect(world.player.state).toBe('hurt');
+    vxAtImpact = world.player.vx;
+
+    tick(world, { ...LEFT }); // the tick immediately after the hit — friction must apply
+    expect(world.player.vx).toBeCloseTo(vxAtImpact + DEFAULT_TUNING.groundFriction, 5);
+  });
+
+  it('a fresh world starts with no knockback impulse pending', () => {
+    const world = worldWith();
+    expect(world.player.knockbackPending).toBe(false);
+  });
+
   it('a hit refused during i-frames produces zero displacement', () => {
     const world = contactWorld(700, 706);
 

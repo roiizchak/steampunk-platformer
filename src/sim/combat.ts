@@ -355,7 +355,16 @@ export function movementLocked(player: PlayerSim): boolean {
  * gone. `damagePlayer` sets `combatCounter = 0` at step 9b, and step 4b of the very next tick
  * advances it to 1 before step 5 runs — so `state === 'hurt' && combatCounter === 1` identifies
  * exactly, and only, that one tick. No new counter: this reads the same one `movementLocked` does.
+ *
+ * ⚠️ **That alone is not enough.** Hazards deliberately apply no shove (`worldDamage.ts` — a swept
+ * rectangle has no origin to shove away from), but a hazard hit still sets `state === 'hurt'` and
+ * still passes through `combatCounter === 1` on the following tick — so it was buying the friction
+ * exemption for an impulse that was never written, one free tick of preserved momentum for nothing.
+ * `knockbackPending` (`PlayerSim`) is set only where `applyKnockback` actually runs, so this now
+ * requires a REAL impulse landed, not merely that the player is `hurt`. The flag is cleared by
+ * `stepHorizontal` (`player.ts`) the one time it is consumed, which is what keeps the exemption to
+ * one tick rather than letting it become a second, permanent name for `movementLocked`.
  */
 export function knockbackSettling(player: PlayerSim): boolean {
-  return player.state === 'hurt' && player.combatCounter === 1;
+  return player.state === 'hurt' && player.combatCounter === 1 && player.knockbackPending;
 }

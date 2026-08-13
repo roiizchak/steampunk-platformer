@@ -58,6 +58,11 @@ export const KNOCKBACK_SPEED = DEFAULT_TUNING.walkMax;
 function applyKnockback(player: PlayerSim, sourceX: number): void {
   const dir = Math.sign(player.x - sourceX) || player.facing;
   player.vx = KNOCKBACK_SPEED * dir;
+  // FIX 2: this is the ONE place an impulse actually lands. `knockbackSettling` (`combat.ts`) reads
+  // this so the friction exemption is gated on a real shove, not merely on being `hurt` — a hazard
+  // hit calls neither this function nor sets the flag, so it gets no exemption. Cleared exactly
+  // once by `stepHorizontal` (`player.ts`) so the exemption cannot outlive its one tick.
+  player.knockbackPending = true;
 }
 
 /**

@@ -230,6 +230,72 @@ describe('hitstun locks movement — W3', () => {
     expect(canAct(world.player)).toBe(true);
   });
 
+  /**
+   * FIX 1 (QA gate, session 8): hitstun locked `dir` (step 5) but never gated step 7's jump
+   * resolution, so a jump pressed on the first locked tick fired anyway — measured against the
+   * real sim as `vy: -48.6, grounded: false` while `state: 'hurt'`. Movement returns at the same
+   * tick horizontal control does, so the jump gate is the same `movementLocked` predicate.
+   */
+  it('a jump pressed during hitstun does not fire — vy and grounded stay put through the lock', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    latchJumpPress(input);
+
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
+      tick(world, input);
+      expect(world.player.vy).toBe(0);
+      expect(world.player.grounded).toBe(true);
+    }
+  });
+
+  /**
+   * Pins WHICH tick the jump becomes available again — an existence check ("did a jump happen")
+   * cannot verify a timing claim (project rule, see `tick.ts` header). The lock opens at
+   * `k === HURT_LOCK_TICKS`, the same tick horizontal control returns (test above this describe
+   * block), so the jump must not fire before it and must be free to fire from it.
+   */
+  it('the jump becomes available on exactly the tick the lock lifts, not before', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    latchJumpPress(input);
+
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
+      tick(world, input);
+      expect(movementLocked(world.player)).toBe(true);
+      expect(world.player.vy).toBe(0);
+    }
+    tick(world, input); // k === HURT_LOCK_TICKS — the first free tick
+    expect(movementLocked(world.player)).toBe(false);
+    expect(world.player.vy).toBeLessThan(0);
+    expect(world.player.grounded).toBe(false);
+  });
+
+  /**
+   * DECISION (b): the jump edge is consumed and the buffer window armed at step 2/3 exactly as
+   * always — hitstun gates only step 7's EXECUTION, not the latch. So a press made during the lock
+   * is not discarded; it survives in the buffer and fires the instant the lock lifts, same as any
+   * other jump the player is not yet able to take (grounded/coyote already work this way). Option
+   * (a) — consuming and discarding the press during the lock — was rejected: it would silently eat
+   * a buffered jump, contradicting the buffer's own documented purpose (`tick.ts`: "a press is
+   * remembered ... and fires the moment the player is next able to jump"). This test pins (b): the
+   * press from the first locked tick is still alive HURT_LOCK_TICKS ticks later.
+   */
+  it('a buffered press made during hitstun fires when the lock lifts, not discarded', () => {
+    const { world, input } = grounded();
+    damagePlayer(world.player, 10);
+    latchJumpPress(input); // pressed on the very first locked tick
+    tick(world, input); // k === 1, locked — the press must NOT fire yet (rules out no gate at all)
+    expect(world.player.vy).toBe(0);
+    expect(world.player.grounded).toBe(true);
+
+    for (let k = 2; k < HURT_LOCK_TICKS; k += 1) {
+      tick(world, input);
+    }
+    tick(world, input); // k === HURT_LOCK_TICKS — the buffer must still hold it (rules out option (a))
+    expect(world.player.vy).toBeLessThan(0);
+    expect(world.player.grounded).toBe(false);
+  });
+
   it('locks movement the same way airborne', () => {
     const { world, input } = grounded();
     latchJumpPress(input);

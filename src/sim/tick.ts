@@ -202,6 +202,8 @@ export function createWorld({
       // CLOSED, for the same reason as the two windows above: seeding at 0 would spawn the player
       // invulnerable for three quarters of a second.
       iFrameCounter: IFRAME_TICKS,
+      // FIX 2: no impulse has landed yet.
+      knockbackPending: false,
     },
   };
 }
@@ -252,10 +254,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   events.attackStarted = combat.attackStarted;
   events.hitActive = combat.hitActive;
 
-  // `dir` is computed here, AFTER step 4b, so `movementLocked` reads this tick's post-advance
-  // `combatCounter` (W3) rather than last tick's. It is not itself a numbered step — only step 5,
-  // which consumes it, is — so moving the read does not reorder or renumber the contract above.
-  const dir: -1 | 0 | 1 = movementLocked(player)
+  // `dir` and the jump gate below are both read here, AFTER step 4b, so `movementLocked` reads
+  // this tick's post-advance `combatCounter` (W3) rather than last tick's. Neither is itself a
+  // numbered step — only step 5 (which consumes `dir`) and step 7 (which consumes the gate) are —
+  // so caching the read does not reorder or renumber the contract above.
+  const hitstunLocked = movementLocked(player);
+  const dir: -1 | 0 | 1 = hitstunLocked
     ? 0
     : input.left === input.right
       ? 0
@@ -271,9 +275,26 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 
   // 7. Jump resolution. Both windows are tested BEFORE step 13 advances them, which is what makes
   //    the definition above true rather than one tick optimistic.
+  //
+  //    FIX 1 (QA gate, session 8): hitstun locked `dir` at step 5 but never gated a jump's
+  //    EXECUTION here, so a jump pressed on the first locked tick fired anyway. `hitstunLocked` is
+  //    ANDed into this condition only — the latch and buffer arming at steps 2-3 are untouched.
+  //
+  //    DECISION (b), not (a): a press made during the lock is consumed into the buffer exactly as
+  //    always and stays alive there; it is not discarded. It fires the instant the lock lifts (or
+  //    expires on its own by the ordinary `jumpBufferTicks` window, same as any other press made
+  //    while "not yet able to jump"). This is consistent with how `grounded`/`coyoteOpen` already
+  //    work — the buffer's own documented purpose is to remember a press and "fire the moment the
+  //    player is next able to jump" (see the header's window definitions above), and hitstun is
+  //    just one more reason the player is not yet able. Option (a) — clearing
+  //    `ticksSinceJumpPressed` here to silently eat the press — was rejected: it would turn a
+  //    forgiveness mechanic into a punishment for pressing jump at the wrong moment, which
+  //    contradicts that documented purpose. Pinned by
+  //    `tests/unit/player-combat.test.ts` — "a buffered press made during hitstun fires when the
+  //    lock lifts, not discarded".
   const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
   const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
-  if (bufferOpen && (player.grounded || coyoteOpen)) {
+  if (bufferOpen && !hitstunLocked && (player.grounded || coyoteOpen)) {
     player.vy = -tuning.jumpVelocity;
     player.jumpCutPending = true;
     player.grounded = false;

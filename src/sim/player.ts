@@ -224,6 +224,12 @@ export function stepHorizontal(
     // `vx` survives to reach step 8's integration instead of being eaten before it ever moves the
     // player. See `knockbackSettling`'s docstring for why this is exactly one tick.
     if (knockbackSettling(player)) {
+      // Consumed HERE, the one place it is read for real (vault 2.6-style single door). Clearing on
+      // use — not on a timer, not where it was set — is what keeps the exemption to exactly the one
+      // tick `knockbackSettling`'s docstring promises: left set, the very next `combatCounter === 1`
+      // read (impossible while still in the same `hurt` state, since that counter only equals 1
+      // once) would otherwise be the only thing standing between one tick and a permanent one.
+      player.knockbackPending = false;
       return;
     }
     // Decelerate toward zero and STOP there. Without the clamp the player creeps forever at a
