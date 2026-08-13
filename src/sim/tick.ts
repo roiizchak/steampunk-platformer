@@ -85,128 +85,18 @@
  */
 
 import { consumeJumpPress } from './input';
-import {
-  PLAYER_BOX,
-  createTuning,
-  resolveCollisions,
-  resolveState,
-  stepHorizontal,
-  stepVertical,
-} from './player';
-import { PLAYER_MAX_HP, IFRAME_TICKS, movementLocked, stepCombat } from './combat';
-import { type EnemySpawn, spawnEnemies } from './enemies';
+import { PLAYER_BOX, resolveCollisions, resolveState, stepHorizontal, stepVertical } from './player';
+import { movementLocked, stepCombat } from './combat';
 import { stepEnemies } from './enemyTurn';
-import { type WorldBounds, clampToBounds } from './hazards';
+import { clampToBounds } from './hazards';
 import { applyPlayerAttack } from './playerAttack';
 import { applyWorldDamage } from './worldDamage';
-import { createRng, nextFloat } from './rng';
-import type { AdvanceEvents, InputSnapshot, Rect, TickEvents, World } from './types';
+import { nextFloat } from './rng';
+import type { AdvanceEvents, InputSnapshot, TickEvents, World } from './types';
 import { advanceWindow, windowOpen } from './windows';
 
-/**
- * Grey-box collision geometry: a floor and two raised platforms with a gap between them.
- *
- * The gap is not decoration. Coyote time can only be observed by walking OFF something, so a world
- * with no ledge makes criterion 2.3 testable only through an artificial "force ungrounded" hook —
- * and a hook that fakes the precondition cannot prove the real one works.
- *
- * Phase 3 replaces the SOURCE of these rects with Tiled collision data. The resolver does not
- * change, which is the point of keeping them plain data.
- */
-export const GREY_BOX_SOLIDS: Rect[] = [
-  { x: 0, y: 960, w: 1920, h: 120 },
-  { x: 420, y: 780, w: 280, h: 32 },
-  { x: 980, y: 640, w: 240, h: 32 },
-];
-
-/**
- * Where the player starts: on the left platform's surface, with its right edge to walk off.
- *
- * `SPAWN_Y` is the platform's top, not a height above it. Spawning in mid-air would mean every
- * fixture had to know how many ticks the drop takes before it could assert anything about a
- * grounded player — a constant that changes whenever gravity is retuned, silently turning
- * fixtures vacuous. Placed on the surface, the player is grounded after exactly one tick.
- */
-const SPAWN_X = 470;
-const SPAWN_Y = 780;
-
-/**
- * The grey-box world's extent.
- *
- * Measured from `GREY_BOX_SOLIDS` rather than typed: the floor spans 0..1920 and its underside is
- * at 1080, so those ARE the edges. Typing them separately is how a level and its bounds drift.
- */
-const GREY_BOX_BOUNDS: WorldBounds = { widthPx: 1920, heightPx: 1080 };
-
-export interface CreateWorldOptions {
-  seed: number;
-  /** Art and collision scale (vault 2.11). Required — a forgetful call site is a typecheck error. */
-  scale: number;
-  solids?: Rect[];
-  /** Defaults to the grey-box extent, so Phase 2's fixtures keep the world they were written in. */
-  bounds?: WorldBounds;
-  hazards?: Rect[];
-  /** Level placements. `spawnEnemies` turns each into the live entity its slug names. */
-  enemies?: readonly EnemySpawn[];
-  /**
-   * The player's feet at level start. Defaults to the grey-box spawn above.
-   *
-   * Optional on purpose: Phase 3 feeds this from the shipped `.tmj`'s spawn object, while every
-   * Phase 2 unit fixture keeps the grey-box default it was written against. A required field here
-   * would have meant editing forty call sites to say "unchanged".
-   */
-  spawn?: { x: number; y: number };
-}
-
-export function createWorld({
-  seed,
-  scale,
-  solids,
-  spawn,
-  bounds,
-  hazards,
-  enemies,
-}: CreateWorldOptions): World {
-  if (!(scale > 0) || !Number.isFinite(scale)) {
-    throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
-  }
-
-  const tuning = createTuning();
-  return {
-    tickCount: 0,
-    rng: createRng(seed),
-    tickRoll: 0,
-    solids: solids ?? GREY_BOX_SOLIDS,
-    bounds: bounds ?? GREY_BOX_BOUNDS,
-    hazards: hazards ?? [],
-    enemies: spawnEnemies(enemies ?? []),
-    projectiles: [],
-    tuning,
-    scale,
-    player: {
-      x: spawn?.x ?? SPAWN_X,
-      y: spawn?.y ?? SPAWN_Y,
-      vx: 0,
-      vy: 0,
-      facing: 1,
-      grounded: false,
-      state: 'fall',
-      // Both windows start CLOSED. Seeding them at 0 would mean "the window just opened", and the
-      // player would get a free coyote jump out of thin air on the first tick of the game.
-      ticksSinceGrounded: tuning.coyoteTicks,
-      ticksSinceJumpPressed: tuning.jumpBufferTicks,
-      jumpCutPending: false,
-      hp: PLAYER_MAX_HP,
-      maxHp: PLAYER_MAX_HP,
-      combatCounter: 0,
-      // CLOSED, for the same reason as the two windows above: seeding at 0 would spawn the player
-      // invulnerable for three quarters of a second.
-      iFrameCounter: IFRAME_TICKS,
-      // FIX 2: no impulse has landed yet.
-      knockbackPending: false,
-    },
-  };
-}
+export { GREY_BOX_SOLIDS, createWorld } from './world';
+export type { CreateWorldOptions } from './world';
 
 function noEvents(): TickEvents {
   return {
@@ -271,7 +161,15 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   stepHorizontal(player, tuning, dir, input.walkHeld);
 
   // 6. Vertical.
-  stepVertical(player, tuning, input.jumpHeld);
+  //
+  //    Codex implementation review 5.14 (MAJOR): this ran unconditionally, before step 7's
+  //    `hitstunLocked` gate even exists, so releasing jump during the hard lock still cut the
+  //    player's own ascent — trajectory control inside a window that is supposed to mean "not
+  //    being in control". Treat jump as held while locked so the cut branch in `stepVertical`
+  //    (player.ts) can never see `!jumpHeld`. Gravity still runs — it is the same unconditional
+  //    call — and `jumpCutPending` is untouched, so the cut is still available the instant the
+  //    lock lifts, still rising and still holding: `hitstun-jump-cut.test.ts` pins that too.
+  stepVertical(player, tuning, hitstunLocked || input.jumpHeld);
 
   // 7. Jump resolution. Both windows are tested BEFORE step 13 advances them, which is what makes
   //    the definition above true rather than one tick optimistic.
