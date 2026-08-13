@@ -87,3 +87,117 @@ that will rewrite it**, and a reviewer reading it mid-flight is reading a lie of
 thing misled a `qa-expert` brief earlier the same day. Both are recorded in
 `docs/qa/phase-05-combat.md`; the mitigation is to record evidence as it is produced rather than at
 the end, and to say plainly in any review prompt which documents are known stale.
+
+---
+
+# Implementation review — session 8, 2026-08-13, at `78932a0`
+
+`/codex:rescue --wait --resume`, carrying the `node_repl` + `fs.readFileSync` instruction (Codex's
+sandbox cannot spawn processes on this machine — `CreateProcessAsUserW failed: 5`, permanent).
+
+**Verdict: BLOCK — 1 blocker, 1 major, plus two corrections to invariants the prompt supplied.**
+
+The prompt listed the already-known gate findings and explicitly asked Codex to tell me if I had got
+any of them wrong. **It had, twice.** That is the single most valuable thing this review produced,
+and it is an argument for always handing the reviewer your own conclusions to attack rather than
+only the diff.
+
+## The review, verbatim
+
+### Blocker
+
+> 1. **Criterion 5.12 is still failing: `tick.ts` is 409 lines.** The file ends at line 409,
+>    exceeding the unconditional 400-line invariant: `src/sim/tick.ts:409`. The test correctly counts
+>    physical lines and selects files over 400, but only requires the total to remain at most ten, so
+>    one offender stays green: `tests/unit/file-size.test.ts:48`, `:62`, `:85`.
+>
+>    This corrects the known T7 record: the count at `78932a0` is **one**, not zero, and the ceiling
+>    has nine free slots rather than ten. The QA log's "ZERO" and "170 files scanned, 0 over" claims
+>    are false at this commit: `docs/qa/phase-05-combat.md:1321`, `:1331`, `:1363`. Git-object
+>    comparison pins the regression to `8bfeee5`: `tick.ts` grew from 388 to 409 lines. A safe repair
+>    is to extract `createWorld` rather than deleting the authoritative tick-order explanation.
+
+### Major
+
+> 2. **Hitstun still permits vertical control through early jump release.** The chosen contract says
+>    hitstun "hard-locks movement": `docs/qa/phase-05-combat.md:1038`. Session 8 gates horizontal
+>    direction and step-7 jump execution, but still passes live `input.jumpHeld` unconditionally into
+>    `stepVertical`: `src/sim/tick.ts:261`, `:274`, `:297`. `stepVertical` treats releasing that
+>    button as control input and divides upward velocity by `jumpCutDivisor`: `src/sim/player.ts:258`,
+>    `:260`.
+>
+>    Therefore, if the player is hit while rising and releases jump during the lock, the first locked
+>    tick changes `vy` from `-48.6` to `-13.5`: divide by 3, then add 2.7 gravity, using the shipped
+>    knobs at `src/sim/player.ts:86` and `:89`. Holding jump instead produces `-45.9`. That is
+>    substantial trajectory control while supposedly "not being in control."
+>
+>    The airborne regression test misses it because it asserts only `vx`, despite leaving `jumpHeld`
+>    false during the locked ascent: `tests/unit/player-combat.test.ts:299`, `:308`. Gate only the
+>    jump-cut input while locked — gravity should continue — and add an exact airborne-`vy` test.
+
+### Attack points the prompt named — Codex's conclusions
+
+> - **Buffered jump:** The new execution gate is otherwise consistent with the documented window. The
+>   latch is armed before the lock check, locked ticks consume the ordinary eight-tick buffer, and a
+>   first-locked-tick grounded press remains open when the five-tick lock ends. It does not extend
+>   the buffer or coyote window.
+> - **`knockbackPending`:** I found no reachable leak. It starts false, is set only after a landed
+>   nonlethal impulse, and the following hurt tick forces `dir = 0`, consumes, and clears it before
+>   later step-9b death handling. There is currently no respawn path.
+> - **GameScene split:** I found no captured-by-value behavior regression. `playerInputEnabled` is
+>   read live through a callback, subclass methods are dynamically dispatched through arrow
+>   callbacks, and HUD/parallax values are supplied afresh each frame. The Phaser input skill
+>   directed me to the installed 4.2.1 source; its scene shutdown destroys all Keys and listeners,
+>   eliminating the suspected stale-snapshot listener across restarts: `KeyboardPlugin.js:880`, `:883`.
+> - **Dead enemies:** Correct. Both enemy decision loops are hp-gated while projectile advancement
+>   remains outside either guard.
+> - **Scavenger clamp:** Correct for valid authored bounds. Chase-facing is written only outside the
+>   dead zone, patrol-facing changes only in the patrol branch, and both paths hit the final clamp.
+
+### Corrections to supplied invariants
+
+> - `knockbackPending` did **not** leak into `window.__game`; player publication remains the five
+>   selected fields: `src/scenes/GameScene.ts:365`. However, `window.__game` has **eight top-level
+>   fields, not nine** — both source and E2E declarations enumerate `sceneKey`, `tick`, `player`,
+>   `score`, `health`, `levelId`, `ready`, and `bootError`: `src/debug/globals.ts:23`,
+>   `tests/e2e/debugView.ts:14`. The "nine-field" comments are already inaccurate:
+>   `src/scenes/GameScene.ts:150`.
+> - Your `verify-dist` correction is right for the current build. Quoted scene-key checks and
+>   property-name checks are meaningful; the three class-name checks plus `spawnDevEnemies` cannot
+>   prove absence after minification, and `spawnDevFleet` is absent from the list:
+>   `tools/gen/verify-dist.mjs:84`, `:93`. The robust fix is a Rollup/Vite `generateBundle` assertion
+>   that DEV-only source modules contribute zero rendered bytes, rather than adding more identifier
+>   greps. Keep the stable scene-key, user-facing-prose, `__game`, and `__phaserGame` checks as
+>   defense in depth.
+
+### What Codex could not check
+
+> I could not run unit tests, typecheck, the build, Playwright, or a browser playtest because all of
+> those require process creation. I did not retry the shell. File and Git-object inspection through
+> `node_repl` succeeded. The working tree contains follow-up modifications, so this report is
+> deliberately pinned to the requested `78932a0` commit objects and does not assess those later edits.
+
+## Local re-verification and triage — 4 of 4 dispositioned *(C11)*
+
+Every finding re-verified locally before being applied. **All four confirmed**, continuing this
+phase's unbroken record.
+
+| | sev | re-verified how | disposition |
+|---|---|---|---|
+| 1 | blocker | `wc -l src/sim/tick.ts` → **409**. `git show 8bfeee5^:src/sim/tick.ts \| wc -l` → **388**; `git show 8bfeee5:…` → **409**. Full sweep confirmed exactly one file over. | **APPLIED**, `ea0c6e4`. `createWorld` + `GREY_BOX_SOLIDS` extracted to `src/sim/world.ts` (120 lines), re-exported so all 17 importers are untouched. `tick.ts` **409 → 307**. Sweep: **0 over 400**. The numbered step order and its explanation were not touched. |
+| 2 | major | Read the path directly: step 6 calls `stepVertical(player, tuning, input.jumpHeld)` unconditionally and runs **before** step 7's `hitstunLocked` gate; `player.ts` cuts on `jumpCutPending && !jumpHeld && vy < 0`. The agent's red run reproduced Codex's figures exactly — `expected -13.5 to be close to -45.9`. | **APPLIED**, `ea0c6e4`. Now `stepVertical(player, tuning, hitstunLocked \|\| input.jumpHeld)`. Gravity still runs; `jumpCutPending` is **not** cleared, so the cut is still available after the lock lifts — pinned by a test, because a permanent immunity would trade one defect for another. |
+| 3 | correction | Counted `GameDebugView` in `src/debug/globals.ts`: `sceneKey, tick, player, score, health, levelId, ready, bootError` = **8**. | **CONFIRMED.** The "nine-field" figure is wrong in CLAUDE.md, PRD.md, `GameScene.ts:150` and several of this session's own commit messages. **Recorded, not fixed:** CLAUDE.md and PRD.md are outside this session's scope lock. The surface is closed either way and nothing leaked into it — the count is wrong, the invariant is not. |
+| 4 | correction | Already verified independently before Codex ran: `stepScavenger` and `createScavenger` both grep **0** in the bundle while unquestionably shipping; `` `Game` `` ×3 and `` `Boot` `` ×1 survive backtick-quoted. | **CONFIRMED, and Codex improved the fix.** Rather than adding more identifier greps, assert in a Vite `generateBundle` hook that DEV-only modules contribute **zero rendered bytes**, keeping the scene-key, prose and `__game` checks as defence in depth. **Recorded for the next session** — it is a new build-gate mechanism, not a gate-time edit. |
+
+## What this review says about the process
+
+**Hand the reviewer your own conclusions, not just the diff.** The prompt listed the gate's known
+findings and asked Codex to say if any were wrong. Both corrections came from that section, and one
+of them — the 409-line blocker — was a **false claim I had written into the QA log myself**, in the
+same section where I criticised that log for carrying a stale one. A review given only the diff would
+have had no reason to check it.
+
+**The failure was a sequencing error, and it is worth naming exactly.** I ran the 400-line sweep,
+*then* fixed F1 (which grew `tick.ts` by 21 lines), *then* wrote the sweep's result into the log. Each
+step was sound; the order made the record false. **A measurement written down after later edits is
+not a measurement of the tree it claims to describe.**

@@ -1307,7 +1307,7 @@ Owners: `voltagent-qa-sec:qa-expert` (5.1, 5.2, 5.4c, 5.4d, 5.5, 5.6, 5.7, 5.9, 
 | 5.9 | **PASS** | `enemy-tuning.test.ts` 12/12 including `scav0.deadZone`, asserting a behaviour signature computed by stepping the sim, not a knob readout. Weakness recorded as **T4**. |
 | 5.10 | **PASS** on what is asserted | Two genuinely different entities, not a symmetric fixture. Standing gap unchanged — see **T2**. |
 | 5.11 | **FAILING as a measurement** | The number is real; what it measures is not what the criterion claims. See **P1–P4**. |
-| 5.12 | **PASS on the line count** | **0 project files over 400** — see the correction below. Gate weaknesses recorded as **T7–T9**. |
+| 5.12 | **PASS at `ea0c6e4`, and it was FAILING when this table was written** | The owner measured **0 over 400** and was right about the eight files it checked — but `tick.ts` was **409** at the time, grown by my own `8bfeee5`, and nobody re-swept. Caught by the **Codex implementation review**. Repaired in `ea0c6e4` (`tick.ts` 409 → 307). Gate weaknesses recorded as **T7–T9**. |
 | 5.15 | **PASS** | `hazards.ts` untouched. The one place knockback could have disturbed it was checked directly: `applyWorldDamage` still tests `belowKillPlane` **first** and returns before every branch that now carries knockback. |
 | 5.16 | **PASS, first run** | Owner hand-traced both fixtures for non-vacuity rather than trusting them: an unfiltered sentry *would* fire on tick 1 (`windowOpen(90,90)` is false, `sentrySees` true), and an unfiltered scavenger *would* patrol monotonically off `xBefore`. Real red/green splits, and the player sits at `x:99999` so the parity trap is avoided. Vacuity in one clause recorded as **T5**. |
 
@@ -1318,7 +1318,22 @@ The verdict row says `5.12 | FAIL`, one section says *"Ten files exceed 400 line
 *"FAILING — 8 files over 400"*, and the table that calls itself the correction lists
 `GameScene.ts` **657**.
 
-**All of those predate `49a7d30` and `4eb08f3`. The true count at HEAD is ZERO.**
+**All of those predate `49a7d30` and `4eb08f3`.**
+
+> 🔴 **And this paragraph was itself FALSE when written — third occurrence, and this one is mine.**
+> It said *"the true count at HEAD is ZERO"*. At `78932a0` the count was **ONE**: `src/sim/tick.ts`
+> was **409 lines**, having grown 388 → 409 in `8bfeee5`, my own hitstun fix. Caught by the **Codex
+> implementation review**, not by me and not by any of the six gate briefs.
+>
+> **The failure was a sequencing error and it is worth naming exactly:** I ran the 400-line sweep,
+> *then* fixed F1 (+21 lines to `tick.ts`), *then* wrote the sweep's result into this log. Each step
+> was sound; the order made the record false. **A measurement written down after later edits is not
+> a measurement of the tree it claims to describe** — which is precisely the criticism this very
+> section levels at the two entries above it.
+>
+> Repaired in `ea0c6e4`: `createWorld` and `GREY_BOX_SOLIDS` extracted to `src/sim/world.ts` (120
+> lines), re-exported so all 17 importers are untouched, `tick.ts` **409 → 307**. The numbered step
+> order and its explanation were not touched. **Count re-swept at `ea0c6e4`: 0 over 400.**
 
 ```
 gates.mjs      562 -> 373   + gatesBrassCap.mjs 191
@@ -1329,7 +1344,7 @@ GameScene.ts   657 -> 378   + parallaxRig 34 - gameParallax 45 - gameInput 140
 ```
 
 Verified two ways: the owner reproduced `file-size.test.ts`'s own three globs and its own
-`lineCount()` (**170 files scanned, 0 over 400**), and a wider sweep across `.ts .mjs .js .mts .cjs`
+`lineCount()` (**170 files scanned, 0 over 400** — correct for the globs it ran, but run before `8bfeee5` grew `tick.ts` to 409; see the correction above), and a wider sweep across `.ts .mjs .js .mts .cjs`
 returns only the two vendored `.agents/skills/**` files already judged out of scope.
 
 Last time this log's 5.12 evidence rotted, the verdict was still honest. **This time the verdict
