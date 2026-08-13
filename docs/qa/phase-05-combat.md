@@ -177,7 +177,7 @@ forbidden from writing here; the orchestrator recorded these after verifying the
 | # | Verdict | Note |
 |---|---|---|
 | 5.3 | **PASS** | Commitment is real, not just determinism: one exported asymmetric predicate (detect 480 / release 720) plus a 30-tick commit floor. The flap test **oscillates ±10 px** rather than parking on the boundary — the parked version passed with hysteresis deleted. Reviewer reproduced the mutation independently: single-threshold → **36 state changes**, correct → **0**. |
-| 5.12 | **FAIL** | See finding **R2** below. |
+| 5.12 | ~~**FAIL**~~ → **PASS at HEAD** | Was FAIL, correctly, when written. **Superseded 2026-08-13: 0 project files over 400** — see § *The 5.12 record earlier in this log is STALE* in the session-8 gate section. Left in place rather than rewritten, because the row was true when it was written; the pointer is the fix. |
 
 ### Findings — every one applied or recorded
 
@@ -795,6 +795,12 @@ and it is bad. It is reported as measured-and-failing, not as passed.**
 
 ### 5.12 — FAILING, with the evidence table corrected (supersedes the stale one above)
 
+> ⚠️ **This section is itself now stale, 2026-08-13.** Its eight-file table was accurate when
+> written and every file in it is now under 400 lines. **The count at HEAD is 0.** See § *The 5.12
+> record earlier in this log is STALE* in the session-8 gate section — this is the second time this
+> criterion's evidence has rotted in this file, which is why the correction is a pointer at each
+> stale claim rather than one note at the end.
+
 **Eight files exceed 400 lines.** The three splits this session were real — export surfaces verified
 identical (gates 19/19, prompt 13/13, chroma 15/15, nothing missing or added), and a multiset line
 diff showed **zero lines lost** for prompt and chroma, so nothing was "shortened" by deleting
@@ -1273,3 +1279,120 @@ Restored and verified **by count (1 → 0 → 1)**, `cmp` byte-identical, and `f
 again afterwards. `_generated/` is gitignored, and `git status --porcelain` stayed empty throughout —
 which is exactly why the backup went to the scratchpad and **not** to `git stash`: the tree held two
 other agents' uncommitted work at the time.
+
+---
+
+## §6 gate — agent owners, run 2026-08-13 (session 8)
+
+Three owners, **two blind briefs each** *(A7)*. All six were dispatched **simultaneously**, which is
+what actually guarantees brief 2 never saw brief 1 — trusting the orchestrator not to leak it is a
+weaker guarantee than making the leak impossible. Every finding below is **applied or recorded with a
+reason** *(C11)*.
+
+Owners: `voltagent-qa-sec:qa-expert` (5.1, 5.2, 5.4c, 5.4d, 5.5, 5.6, 5.7, 5.9, 5.10, 5.15, 5.16) ·
+`voltagent-qa-sec:code-reviewer` (5.3, 5.12) · `voltagent-qa-sec:performance-engineer` (5.11).
+
+### Verdicts
+
+| # | verdict | the evidence that decides it |
+|---|---|---|
+| 5.1 | **PASS** | `enemySentry.ts` unchanged this session. Session 7's mutation stands: deleting the fire guard gives **265 shots in 270 ticks against 3**. Coverage gap recorded as **T6**. |
+| 5.2 | **PASS**, standing caveat | The criterion holds; the test *named* for it does not sweep `chaseSpeed` live. See **T1**. |
+| 5.3 | **PASS**, mutation-proven | Owner ran four mutations through a Vite alias (**no repo file edited**): commit floor → 2 red, hysteresis → 1 red, dead zone → 3 red, patrol clamp → 2 red; sentry cadence → 5 red across the full suite. The hysteresis failure reads `expected 36 to be less than or equal to 1` — **36 reproduces sessions 3 and 4 exactly**, from an independent harness. Also: `rollChance` has **zero production callers**, so there is no per-tick roll to commit in the first place. |
+| 5.4c | **PASS**, re-measured | Owner re-ran the real tool rather than inheriting the log: `node tools/gen/sheetGates.mjs brass-courier attack` → `G5 frame 3 (tick 9) lands inside the active window [6, 10)`. |
+| 5.4d | **PASS** | `enemy-view.test.ts` hand-computes `(4*60)/18` independently of the production formula *(C2)*, plus a non-vacuity check that a different `simTicks` yields a different fps. |
+| 5.5 | **PASS** | `combat.test.ts` walks **every** tick of the 20-tick swing and pins both boundary ticks by name. Three independent mutation classes each have their own assertion. |
+| 5.6 | **PASS** | Fixture runs `IFRAME_TICKS * 2` = 90 ticks and pins length, first index **and** last index separately. A length-only check would pass a window shifted by one tick. |
+| 5.7 | **PASS** on the unit half | Bar-fill math untouched this session. **Visual half NOT re-observed** — see **T3**. |
+| 5.9 | **PASS** | `enemy-tuning.test.ts` 12/12 including `scav0.deadZone`, asserting a behaviour signature computed by stepping the sim, not a knob readout. Weakness recorded as **T4**. |
+| 5.10 | **PASS** on what is asserted | Two genuinely different entities, not a symmetric fixture. Standing gap unchanged — see **T2**. |
+| 5.11 | **FAILING as a measurement** | The number is real; what it measures is not what the criterion claims. See **P1–P4**. |
+| 5.12 | **PASS on the line count** | **0 project files over 400** — see the correction below. Gate weaknesses recorded as **T7–T9**. |
+| 5.15 | **PASS** | `hazards.ts` untouched. The one place knockback could have disturbed it was checked directly: `applyWorldDamage` still tests `belowKillPlane` **first** and returns before every branch that now carries knockback. |
+| 5.16 | **PASS, first run** | Owner hand-traced both fixtures for non-vacuity rather than trusting them: an unfiltered sentry *would* fire on tick 1 (`windowOpen(90,90)` is false, `sentrySees` true), and an unfiltered scavenger *would* patrol monotonically off `xBefore`. Real red/green splits, and the player sits at `x:99999` so the parity trap is avoided. Vacuity in one clause recorded as **T5**. |
+
+### The 5.12 record earlier in this log is STALE and its verdict is BACKWARDS
+
+Finding **F2**, and this is the **second** occurrence of the S10 defect class in this same file.
+The verdict row says `5.12 | FAIL`, one section says *"Ten files exceed 400 lines"*, another says
+*"FAILING — 8 files over 400"*, and the table that calls itself the correction lists
+`GameScene.ts` **657**.
+
+**All of those predate `49a7d30` and `4eb08f3`. The true count at HEAD is ZERO.**
+
+```
+gates.mjs      562 -> 373   + gatesBrassCap.mjs 191
+sheets.mjs     464 -> 254   + sheetsPack.mjs    231
+BootScene.ts   438 -> 200   + bootAssets.ts     284
+GameScene.ts   657 -> 378   + parallaxRig 34 - gameParallax 45 - gameInput 140
+                              - gameLevelDraw 129 - gameAnimations 47 - gameHud 38
+```
+
+Verified two ways: the owner reproduced `file-size.test.ts`'s own three globs and its own
+`lineCount()` (**170 files scanned, 0 over 400**), and a wider sweep across `.ts .mjs .js .mts .cjs`
+returns only the two vendored `.agents/skills/**` files already judged out of scope.
+
+Last time this log's 5.12 evidence rotted, the verdict was still honest. **This time the verdict
+itself was wrong, in the opposite direction.** A stale FAIL is not the safe direction to be wrong in:
+it is what a reviewer reads and believes.
+
+### Findings — every one applied or recorded *(C11)*
+
+**Applied this session:**
+
+| | sev | finding | what was done |
+|---|---|---|---|
+| **F1** | HIGH | **The player could jump out of hitstun.** `movementLocked` gated `dir`, which feeds step 5 only; step 7's jump had no hitstun test. Measured: `vy -48.6, grounded false` on the **first locked tick**, while both docstrings called the window *"not being in control"*. Jumping also took the player off the ground-friction path, partly cancelling knockback. | **FIXED**, `8bfeee5`. Re-probed after: `vy 0, grounded true`. Buffer decision **(b)**, deliberate: step 7's *execution* is gated, the latch untouched, so a press made during hitstun survives and fires the tick the lock lifts. Eating it would have been a balance change to a tuned forgiveness mechanic. A test pins **which tick** the jump returns. |
+| **F5** | MED | **`knockbackSettling` skipped friction for hits that applied no impulse.** It keyed on `state === 'hurt' && combatCounter === 1` — every hit. Hazards deliberately apply no knockback, yet collected the exemption: measured `vx -12.00 -> -12.00` where friction gives `-8.31`. | **FIXED**, `8bfeee5`. Gated on `knockbackPending`, one boolean on `PlayerSim`, cleared exactly once so the exemption stays one tick. `window.__game` untouched, still nine fields. Shipped numbers did not move: grounded **7.39 px**, airborne **25.59 px**. |
+| **F2** | HIGH | The 5.12 record was stale and its verdict backwards. | **FIXED** — the correction above. |
+
+**Recorded, not fixed — each with its reason:**
+
+| | sev | finding | why not fixed now |
+|---|---|---|---|
+| **P1** | HIGH | **5.11's `medianMs < 100` has never once been run on anything but a software rasteriser.** The 4.2 ms real-hardware figure came from a separate manual probe, not the spec that gates the criterion. The owner's four fresh runs: **95.5 / 96.4 / 97.0 / 95.6 ms** — passing with 3–5 ms of margin, against session 7's recorded 55.70 / 82.10 on the identical assertion. Two runs had `maxMs` over 100. | The criterion needs redesigning, not patching, and no baseline exists to redesign it against (S4, PRD §7). Six agents were loading this machine during those runs — the same confound that made the first parallax A/B meaningless — so **the 95–97 figure needs a re-measure on a quiet machine before anyone calls it a regression.** |
+| **P2** | HIGH | **The dev fleet spawns entirely outside the viewport.** `DEV_FLEET_OFFSET_X` 200 sim units × `RENDER_SCALE` 6 = **1200 screen px**; the visible half-width is 960 px = 160 sim units. **0 of 20** fleet members are on screen at spawn, and exactly **8 of 20** fall inside `detectRadius` 480. Verified independently by arithmetic. | Cross-confirms from an unrelated direction: 20 − 8 = **12**, exactly the Rectangle count the `isSprite` assertion caught earlier this session. The same geometry explains both findings. Changing the fixture changes what every recorded 5.11 number means, so it is a deliberate next-session decision, not a late edit. |
+| **P3** | MED | "Worst case" is **asserted, not derived**, and is **scavengers only** — no sentries, no projectiles in flight. `GameScene.ts`'s own comment concedes it is a design claim. Already recorded as S5. | Same reason as P2. |
+| **P4** | MED | The criterion ties its number to *enemy count*, but the dominant headless cost is parallax — 64%, and it does not vary with enemy count at all. No A/B has ever isolated what 20 scavengers alone cost. | Same reason as P2. |
+| **T1** | MED | **5.2's named tunability test doesn't test its title.** `enemy-ai.test.ts` sweeps only `patrolSpeed`; `chaseSpeed` is compared against two hardcoded constants. The real live sweep is in `enemy-tuning.test.ts` under 5.9's name. | Pre-existing, recorded by sessions 3 and 7, unchanged by this session's diff. The criterion *is* satisfied — by a different file than the one named. |
+| **T2** | MED | **Nothing swings the player's attack repeatedly against a live enemy and asserts death.** Both 5.10's and 5.16's tests set `hp = 0` directly. Found independently by **both** qa-expert briefs. | Pre-existing since session 3. Worth stating plainly: **this is the gap that let P1 ship past the entire gate.** First item for whoever next touches death handling. |
+| **T3** | LOW | 5.7's visual half (a live scavenger at 2/60 hp against `level-01`) was not re-observed — the owner was barred from binding port 5173 while other agents ran. | Coverage gap in the re-verification, not a suspected regression: the bar-drawing path is untouched this session. |
+| **T4** | MED | **5.9's sweep uses `.some()` across only two set-points** — the floor and roughly double. A knob whose only observable effect is at the *floor* passes even if it does nothing in the mid-range a designer would actually use. Saturating a knob to an extreme is not evidence the knob works. | Same shape as the `deadZone` clamp blind spot this session already hit and fixed by adding a third placement. A real weakness; the fix is a mid-range assertion, which is a criterion change. |
+| **T5** | MED | **5.16's "neither deals contact damage" is vacuous for the sentry** — `applyWorldDamage` has no sentry-contact path at all, so it is true by construction. Only the "zero shots" half is a real assertion for that enemy type. | Recorded rather than reworded: the criterion's other clauses are non-vacuous and were hand-traced. Reword when a sentry contact path exists, not before. |
+| **T6** | MED | **Criterion 5.1's vertical term is untested.** Every sentry fixture in `enemy-ai.test.ts` uses `y: 0` with `playerY: 0`, so `dy` in `withinRadius` is always 0. Delete `dy * dy` — collapsing detection to 1-D — and **not one test goes red**. Verified: 13 non-zero `playerY` fixtures exist and every one is `stepScavenger`; none is a sentry. | `withinRadius` is correct today, so this is missing coverage rather than a defect. Adding the fixture is a one-test change and the cheapest real improvement on this list — first item next session. |
+| **T7** | MED | **`file-size.test.ts`'s ceiling is now vacuous.** It asserts `over.length <= 10`; with 0 over it has ten free slots and cannot go red for the next ten regressions. The only remaining guard is a bare-basename `String.includes` across every `docs/qa/*.md` — and this log names all eight formerly-over files, pre-approving them. `GymScene.ts` sits at **399**, `phase-01-boot.spec.ts` at **398**. | **User decision, 2026-08-13: leave the ceiling at 10 and record the weakness.** Tightening to `toBe(0)` changes a gate's tolerance, which is a STOP-and-ask; it was asked and declined. |
+| **T8** | MED | **`verify-dist`'s identifier checks cannot go red under minification.** Measured against the shipped bundle: `stepScavenger` **0** and `createScavenger` **0** — both unquestionably ship — proving the four identifier greps (`PlaygroundScene`, `ElementEditorScene`, `GymScene`, `spawnDevEnemies`) return 0 whether the code shipped or not. `spawnDevFleet` **does** survive (1 occurrence) and is **not** on the list. | **Partly a correction to the reviewer:** the scene-KEY check *is* real — `verify-dist` iterates backtick, single and double quotes, and the bundle carries backtick-quoted `Game` ×3 and `Boot` ×1, so a shipped `Playground` key would be caught. `__game`/`__phaserGame` are property names and survive minification, so those are real too. Only the four identifier greps are decoration. Benign today (`spawnDevFleet(){}` is an empty stub), so this is a **C2 defect in the gate, not in the bundle** — put to the Codex implementation review rather than changed at gate time. |
+| **T9** | MED | **The splits relocated complexity rather than reducing it**, and all 13 new modules have exactly one importer — literally the gaming vector `file-size.test.ts`'s own docstring names. | Recorded in the same breath as "0 over 400", per S9's precedent, because both facts are true. Mitigating and verified: the seams are cohesive, behaviour was preserved (multiset line-diff, **zero executable lines lost**), and **comment/doc lines grew in every split** — BootScene +29, gates +4, sheets +21, GameScene +58, tests +59 — so explanation was not deleted to hit the number, which is the failure mode the rule most fears. |
+| **T10** | MED | **5.3's commitment is not observable on screen.** `rust-scavenger-chase` is not in the catalog and `playIfChanged` no-ops on a missing key, so a scavenger committed to a 30-tick chase and one flapping every tick both draw `walk`. `window.__game` carries no enemy state, so no e2e can tell them apart either. | Genuine, and it means any *observational* evidence for 5.3 is vacuous. The criterion's method is **code review**, which was satisfied by mutation runs — so 5.3 stands. Resolved by shipping the chase sheet (post-phase art), not by a code change. |
+| **T11** | MED | `releaseRadius > detectRadius` is asserted on the **module constant**, never on the instance; `createScavenger` validates neither, and the only repair lives in a DEV-only scene behind a keypress. An instance with inverted radii is constructible and would strobe. | Not reachable from shipped content — `level-01` uses the defaults. A constructor invariant is the right fix and is a sim change; recorded for next session. |
+| **T12** | LOW | `deadZone` has `min: 0` and no invariant. At 0 the facing assignment becomes a genuine per-tick decision. The boundary probe writes its offsets as `deadZone ± 1`, so it tests the knob against itself and cannot express a floor. | Sound as tuned (96 px exceeds anything reachable in one tick), unsound as *tunable*. Same class as T11. |
+| **T13** | LOW | The six modules extracted from `GameScene.ts` have **no tests**. `parallaxRig.ts` returning `100 + i` instead of `-100 + i` would draw all three backgrounds *over* the player and every gate would stay green. | The same defect class as "deleting `renderPlayer()` left every Phase 2 test green" — reintroduced by a split. `parallaxRig.ts` is engine-free and directly unit-testable, which is exactly why it was extracted; the test is a next-session item. |
+| **T14** | LOW | `isSprite` is recorded once at creation and never re-derived from live visibility. A future `setVisible(false)` would keep `spriteCount` at 20/20 while drawing nothing. | Not present today (no `setVisible` anywhere in `enemyLayer.ts`). Vault 9.4 one layer deeper; recorded as a blind spot. |
+| **T15** | LOW | `NO_KEYS` (`gameInput.ts`) is a shared mutable module singleton returned to every keyboard-less scene; the pre-split code gave each scene its own `[]`. | Safe today — nothing mutates the arrays in place — but a footgun the split created. One-line fix, folded into the next touch of that file. |
+| **T16** | LOW | `build-world.mjs` cites *"(GameScene.ts ~548-554)"*; that file is now 378 lines. Same doc-rot class as F2, in a file this session touched. | Cosmetic; batched with the next `tools/gen/` edit. |
+| **T17** | LOW | `GameScene.ts` `protected groundLayer` is assigned and read nowhere. Pre-existing, but the split was the moment to drop it. | Deliberately not removed mid-gate: deleting a `protected` member touches two subclasses for zero behavioural gain. |
+| **T18** | LOW | Mixed line endings inside `src/sim/` — `combat.ts` is CRLF, its neighbours LF. Cost the reviewer one failed mutation batch to discover. | Harmless to `lineCount()`; it will bite the next exact-anchor edit. Recorded so it is diagnosed in seconds rather than minutes. |
+| **T19** | LOW | The e2e log carries an unhandled `TypeError: Cannot read properties of null (reading 'glTexture')` from `SubmitterTileSprite.run`. | **Found by me, diagnosed, not a defect.** It is the scene-restart fixture (`phase-01-boot.spec.ts:311`): the page boots fully, GameScene's parallax `TileSprite`s exist, then the spec deliberately invalidates a texture and restarts Boot, so live layers draw one frame against a cleared texture. Confirmed pre-existing — the parallax creation path is behaviourally identical before and after the split. Not adding production guards for a state only a fixture reaches. |
+
+### What the owners could not check
+
+Preserved verbatim, because a gate's blind spots are part of its result *(vault 9.3)*.
+
+- **No e2e was run by any owner** — port 5173 was reserved while six agents were live. The two split
+  spec files (`bootHelpers.ts`, `tilemapHelpers.ts`) are verified only by "no `test()` title was
+  lost"; they are **unproven at runtime by this gate**. This is the largest blind spot in the 5.12
+  result. *(The full suite — **47 passed** — was run by me separately, before the owners were
+  dispatched.)*
+- **`npm run test:sim-isolated` was forbidden** to every owner (it uninstalls Phaser), so criterion
+  1.3's regression was not re-confirmed by them after the sim changes. *(Run by me separately: 892
+  tests with Phaser uninstalled, `phaser@4.2.1` restored afterwards.)*
+- **No live-browser verification of the split scenes.** The five extracted `GameScene` modules are
+  verified by typecheck, the unit suite, static reading and the production bundle — **none of which
+  draws a frame.**
+- **The `medianMs > 0` floor was not mutation-tested.** The perf owner was barred from modifying
+  files, so "it is a real but weak guard" is reasoning from code, not an observed red.
+- **Real-hardware behaviour** was not reproducible by any owner; their environment is headless-only.
+  The 4.2 ms figure rests on my probe, cited, not on their measurement.
+- One owner disclosed that an analysis script wrote a stray zero-byte `nul` into the repo root, and
+  that it deleted it. Verified independently: `git status --porcelain` shows only the pre-existing
+  untracked `.claude/settings.json`.
