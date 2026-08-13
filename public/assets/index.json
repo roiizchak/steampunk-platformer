@@ -50,9 +50,9 @@
       "url": "assets/characters/brass-courier/sheets/walk.png",
       "frameWidth": 288,
       "frameHeight": 384,
-      "frameCount": 12,
+      "frameCount": 24,
       "simTicks": 46,
-      "fps": 15.652173913043478,
+      "fps": 31.304347826086957,
       "loop": true,
       "derivedFrom": "measured"
     },

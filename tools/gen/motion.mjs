@@ -236,7 +236,7 @@ export const VIDEO_MOTIONS = Object.freeze({
    */
   walk: {
     cyclic: true,
-    frames: 12,
+    frames: 24,
     motion:
       'walks forward to the RIGHT with a complete and clearly visible walking cycle, repeated ' +
       'steadily for the whole clip: he lifts one boot right off the ground, swings that leg ' +
