@@ -108,3 +108,79 @@ describe('the frozen-vector defect itself', () => {
     expect(sentry.lastFireDx).toBeLessThan(0); // player is now to the sentry's left
   });
 });
+
+/**
+ * The shot is born at the CANNON, not inside the machine.
+ *
+ * Reported by the user from a screen recording: the sentry "fires from its belly". It did — the
+ * spawn was `(sentry.x, sentry.y - SENTRY_BOX.h / 2 * scale)`, i.e. the body's horizontal centre at
+ * its vertical middle, with no muzzle offset anywhere. The two defects were linked: there was no
+ * `facing` on a sentry until session 8, so there was no direction to offset ALONG.
+ *
+ * **The expected offsets here are hardcoded on purpose** *(C2)*. They are an independent
+ * measurement of the shipped `brass-sentry/idle` sheet — the centroid of the outermost 14 columns
+ * of the barrel, averaged over all 8 frames, in cell pixels against the sprite's `(0.5, 1)` origin:
+ * `+106.8 x`, `-135.8 y`, spread 3.5 and 9.3 px. Deriving them from `SENTRY_MUZZLE` instead would
+ * assert the production constant against itself and could never go red.
+ *
+ * `addBody` (`enemyLayer.ts`) never calls `setDisplaySize`, so the sprite draws at its native
+ * 288x384 cell and one cell pixel IS one world pixel — which is what makes a sheet measurement a
+ * legitimate source for a sim constant.
+ */
+describe('where the shot is actually born (the belly-shot defect)', () => {
+  const MUZZLE_DX = 106.8; // world px forward of the feet, at scale 6
+  const MUZZLE_DY = -135.6; // world px above the feet (`+y` is down in world space)
+  const TOLERANCE = 6; // one local unit — the frame-to-frame spread is smaller than this
+
+  it('spawns at the muzzle, not the body centre, when firing right', () => {
+    const world = worldWith(1300, 960); // player to the right, so `facing` is 1
+    tick(world, { ...IDLE });
+    const shot = world.projectiles[0]!;
+    expect(shot.x).toBeCloseTo(SENTRY_X + MUZZLE_DX, -0.5);
+    expect(Math.abs(shot.x - (SENTRY_X + MUZZLE_DX))).toBeLessThan(TOLERANCE);
+  });
+
+  it('spawns at muzzle HEIGHT, not the vertical middle of the body', () => {
+    const world = worldWith(1300, 960);
+    tick(world, { ...IDLE });
+    const shot = world.projectiles[0]!;
+    expect(Math.abs(shot.y - (SENTRY_Y + MUZZLE_DY))).toBeLessThan(TOLERANCE);
+    // The defect this pins: mid-body is `SENTRY_Y - 96`, a full 39px below the barrel. An x-only
+    // test would let the shot keep coming out of the belly and still pass.
+    expect(shot.y).not.toBeCloseTo(SENTRY_Y - 96, 0);
+  });
+
+  it('mirrors the muzzle onto the other side when firing left', () => {
+    const world = worldWith(700, 960); // player to the left, so `facing` is -1
+    tick(world, { ...IDLE });
+    const sentry = world.enemies.sentries[0]!;
+    expect(sentry.facing).toBe(-1);
+    const shot = world.projectiles[0]!;
+    expect(Math.abs(shot.x - (SENTRY_X - MUZZLE_DX))).toBeLessThan(TOLERANCE);
+    // Not merely "left of centre" — a barrel that failed to mirror would sit BEHIND the turret.
+    expect(shot.x).toBeLessThan(SENTRY_X);
+  });
+
+  it('freezes lastFireDx and lastFireDy from the MUZZLE, not from the body centre', () => {
+    const world = worldWith(1300, 650);
+    // Sampled BEFORE the tick, deliberately. Enemies take their turn at step 4a, which runs before
+    // the player integrates at step 8 — so the sighting the sentry aims with is the player's
+    // position as of the END OF LAST TICK, and reading `world.player.y` afterwards is off by one
+    // tick of gravity (2px here). Asserting against the post-tick value would not have been a
+    // weaker test, it would have been a WRONG one.
+    const playerXAtFire = world.player.x;
+    const chestYAtFire = world.player.y - (48 / 2) * SCALE; // PLAYER_BOX.h is 48, hand-substituted
+
+    tick(world, { ...IDLE });
+    const sentry = world.enemies.sentries[0]!;
+    const shot = world.projectiles[0]!;
+    // The stored vector must describe the shot that actually left. Its own docstring says
+    // "muzzle->chest"; measuring dx from `sentry.x` while spawning at the muzzle desynchronises
+    // the two silently, and every other assertion in this file is sign-only with 300px of margin.
+    expect(sentry.lastFireDx).toBe(Math.round(playerXAtFire - shot.x));
+    expect(sentry.lastFireDy).toBe(Math.round(chestYAtFire - shot.y));
+    // Non-vacuity: the old code measured dx from `sentry.x`, so pin that these now DIFFER by the
+    // muzzle offset rather than happening to agree.
+    expect(sentry.lastFireDx).not.toBe(Math.round(playerXAtFire - SENTRY_X));
+  });
+});

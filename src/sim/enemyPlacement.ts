@@ -94,6 +94,32 @@ export const SENTRY_BOX: LocalBox = { x: -8, y: 0, w: 16, h: 32 };
 export const SCAVENGER_BOX: LocalBox = { x: -10, y: 0, w: 20, h: 40 };
 
 /**
+ * Where the sentry's shot is born — the cannon's muzzle, authored in the same local space.
+ *
+ * **A zero-size box on purpose.** It is a POINT, not a body, and `toWorld` handles that correctly:
+ * with `w: 0` the forward reflection collapses to `facing === 1 ? x : -x`, which is exactly the
+ * mirror a barrel needs. Going through `toWorld` rather than multiplying here is vault 2.10 — the
+ * spawn was already the third place in this file's neighbourhood doing its own `* scale`.
+ *
+ * **Measured, not designed.** Off the shipped `brass-sentry/idle` sheet: the centroid of the
+ * outermost 14 columns of the barrel, per frame, against the sprite's `(0.5, 1)` origin, averaged
+ * over all 8 frames — `+106.8 px` forward and `135.8 px` above the feet, with a frame-to-frame
+ * spread of 3.5 and 9.3 px (the turret breathes). At `RENDER_SCALE` 6 that is `17.8` and `22.6`
+ * local units. `addBody` never calls `setDisplaySize`, so the sprite draws at its native 288x384
+ * cell and one cell pixel is one world pixel — which is what makes a sheet measurement a legitimate
+ * source for a sim constant rather than a coincidence.
+ *
+ * The value it replaces was `(sentry.x, sentry.y - SENTRY_BOX.h / 2 * scale)`: the body's centre,
+ * 106.8 px behind the barrel and 39.6 px below it. The user reported it as "the sentry fires from
+ * its belly" off a screen recording, and no test asking "did a projectile spawn" could have seen it.
+ *
+ * ⚠️ **This is art-derived, so re-measure it if `brass-sentry/idle` is ever re-shot** — and note
+ * that `brass-sentry/fire` is not in the catalog yet. When it lands, the muzzle should be measured
+ * against the FIRING pose, not the idle one, if the two disagree.
+ */
+export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
+
+/**
  * Does the player's world box touch this scavenger's?
  *
  * Goes through `toWorld` — THE single local→world conversion (vault 2.10) — rather than doing the
