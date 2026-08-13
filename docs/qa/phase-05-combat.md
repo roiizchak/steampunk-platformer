@@ -1066,7 +1066,14 @@ does not slow down, **it drops poses**. That is precisely the reported symptom, 
 letting the cycle run *slow*, which is **vault 4.22 foot-slide** — a worse defect because it is
 invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.**
 
-### 🔴 P4 SOLVED — the parallax layers are 64 % of the frame budget
+### 🔴 P4 DIAGNOSED — the parallax layers are 64 % of the frame budget *(headless)*
+
+> ⚠️ **This section said "SOLVED" and it was overstated. Read
+> [P4 on real hardware](#-p4-on-real-hardware--the-defect-is-a-software-rasteriser-artifact) below
+> before acting on anything here.** Every number in this section is headless SwiftShader. On a real
+> GPU the frame budget is **4.2 ms and 12/12 poses**, and the defect this section attributes to the
+> parallax layers **does not occur at all**. The A/B remains a correct measurement of the headless
+> harness; it is not a measurement of the shipped game.
 
 A controlled A/B in the identical harness, the fleet spawned exactly as criterion 5.11 spawns it,
 `brass-courier-run` sampled while the player held a sustained run:
@@ -1112,6 +1119,89 @@ rate**.
 call: downscale the three sources to something nearer the 1920 px view; or split each into a smaller
 tile the `TileSprite` repeats; or drop a layer. **Do NOT lower the run fps** — it is derived, and
 authoring it down trades a visible defect for vault 4.22 foot-slide.
+
+### The retile was attempted, and it REFUTED the texture-size hypothesis
+
+User-approved, 2026-08-13: crop each layer to 960 px before the existing `mirrorLoop`, so it wraps at
+**1920 × 1080** instead of 5092 × 1080. The `TileSprite` already draws at 1:1 into a 1920-wide window,
+so the sharpness-preserving move is a crop and never a second resample. Shipped as `e1aaa92`.
+
+A same-session **interleaved** A/B — A,B,A,B,A,B in one Playwright session, so a load drift partway
+through cannot land entirely on one arm:
+
+| | median of medians | run frames PAINTED per cycle |
+|---|---:|---|
+| retiled parallax **ON** | **90.10 ms** | mostly 4–6 of 12 |
+| parallax **OFF** | **37.20 ms** | mostly 8–12 of 12 |
+
+**Ratio 2.42, against 2.76 before the retile.** Shrinking the texture 2.65× moved essentially
+nothing. **Texture size was never the mechanism** — the cost is three full-screen alpha-blended
+1920 × 1080 draws, and cropping the *source* removes not one *drawn* pixel. The earlier reading of
+"the layers are 64 % of the budget" was correct about *the layers*; it was silently assumed to be
+about *their size*, and that assumption is now dead.
+
+> The interleaving is why this comparison means anything. The first attempt measured the retiled
+> build at 85.80 ms and compared it to the 70.30 ms recorded a day earlier — on a machine that then
+> had ~24 concurrent `node.exe` processes on it. **That compares nothing**, and the agent that ran it
+> flagged its own confound rather than reporting a regression. Absolute ms figures from this harness
+> are not comparable across sessions; only within-session ratios are.
+
+**Kept anyway, on the payload win alone** (user decision, 2026-08-13): 21.4 MB → 7.5 MB of boot
+payload, 2.9× smaller, which also relieves the e2e serialization pressure. The cost is real and is
+recorded here rather than buried: each layer now holds only 960 px of unique art, so **the background
+repeats ~2.65× more often**. That is a visible art change, and it is a hands-on judgement no gate
+makes — it belongs in the next playtest.
+
+### 🔴 P4 on real hardware — the defect is a software-rasteriser artifact
+
+Run 2026-08-13, user-approved, in **real Chrome with a real GPU**: `ANGLE (NVIDIA, NVIDIA GeForce RTX
+4080 (0x00002704) Direct3D11 vs_5_0 ps_5_0, D3D11)`, confirmed in-page off
+`WEBGL_debug_renderer_info` before sampling rather than assumed. Dev build, `window.__game.ready`
+waited on, dev fleet spawned, `brass-courier-run` held, 4-second window, the **same** sampling method
+as the headless probe: the current animation frame index read once per `requestAnimationFrame` at
+paint time, aggregated in-page.
+
+| | headless (SwiftShader) | **real Chrome, RTX 4080** |
+|---|---:|---:|
+| median frame | 90.10 ms | **4.2 ms** |
+| p95 | — | **4.4 ms** |
+| max frame | ~95 ms | **4.8 ms** |
+| sustained | ~11 fps | **240 fps**, vsync-locked |
+| poses painted per cycle | 4–6 of 12 | **12, 12, 10, 12, 12, 12** |
+
+**Reproduced identically three times**, each after a page reload, with `runSamples` 745 and
+`completeCycles` 6 every run — not one number moved between runs.
+
+**P4, as measured, does not occur on real hardware.** The renderer never misses a 240 Hz vsync with
+three parallax layers, a 20-scavenger fleet and the player running. Five of six cycles paint all
+twelve poses; the worst paints ten.
+
+> **What this costs us in confidence, stated plainly.** Every P4 number that existed before today —
+> the 12–18 fps in criterion 5.11, the 70.30/25.50 A/B, the "64 % of the frame budget", the
+> 5-of-12 pose drop — came from headless Chromium with no `launchOptions`, therefore SwiftShader.
+> Three blended full-screen quads is punishing work for a CPU rasteriser and near-free for a GPU, so
+> the harness was measuring **itself**, not the game. The W7 plan called for exactly this real-browser
+> arm and it was skipped because the browser launch was unavailable; the whole retile was designed,
+> executed and shipped against a number that the very first real-hardware reading contradicts by
+> **21×**.
+>
+> The lesson is not "the headless harness is useless" — it is a fine *relative* instrument, and the
+> ON/OFF ratio it reports is real. The lesson is that **a performance criterion with an absolute
+> threshold cannot be owned by a software rasteriser.** 5.11's `medianMs < 100` was never a budget;
+> it was a sanity ceiling on a renderer nobody ships.
+
+**Open questions this does NOT close**, and they must not be quietly folded into the good news:
+
+1. **The user's original report was a real browser.** It was *"missing frames … not using the whole
+   12"* on their own machine, which is where the 4080 reading comes from. Either the retile and the
+   grey-box fix changed it, or the original observation was of something else — a state flicker, the
+   dev fleet, a different scene. **Not resolved. It needs a hands-on playtest, not another probe.**
+2. **One cycle in six painted 10 of 12, not 12.** Small, reproducible, and unexplained. It is not the
+   5-of-12 catastrophe, and it is not nothing.
+3. **240 Hz flatters the result.** A 240 Hz display samples a 26.67 fps animation ~9× per pose. On a
+   60 Hz display that margin is 4× smaller. Untested.
+4. **This was the DEV build over the Vite dev server**, not `dist/`. The production bundle is
+   smaller and drops the dev scenes, so it should only be faster — but "should" is not measured.
 
 ## S1 and S2 — CLOSED, and fixing S2 blinded criterion 5.9's sweep
 
