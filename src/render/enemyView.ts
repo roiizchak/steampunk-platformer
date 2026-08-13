@@ -124,9 +124,9 @@ export function sentryRenderDesc(sentry: Sentry, scale: number): EnemyRenderDesc
     h: SENTRY_BOX.h * scale,
     originX: 0.5,
     originY: 1,
-    // A turret does not turn. Mirroring it on the player's position would make the muzzle swap
-    // sides between two shots with no animation covering the flip.
-    flipX: false,
+    // Read from `facing`, never re-derived from velocity — the same rule as the player and the
+    // scavenger (`enemyView.ts:144`). A sentry that cannot see the player holds its last facing.
+    flipX: sentry.facing === -1,
     colour: SENTRY_COLOUR,
     animKey: enemyAnimKey('brass-sentry', sentryAnim(sentry)),
     fallbackAnimKey: enemyAnimKey('brass-sentry', 'idle'),

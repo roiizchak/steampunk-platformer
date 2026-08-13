@@ -36,6 +36,12 @@ export interface Sentry {
    * anything an id.
    */
   lastHitSwing: number;
+  /**
+   * Toward the player while the sentry can see them; HELD otherwise — same rule and same shape as
+   * `Scavenger.facing` (`enemyScavenger.ts`), read by the render layer and never re-derived from
+   * velocity, because a stationary turret has no velocity to read a direction from.
+   */
+  facing: 1 | -1;
   /** Shot-time aim, integer px, muzzle->chest at the tick fired. `null` before the first shot. */
   lastFireDx: number | null;
   lastFireDy: number | null;
@@ -64,6 +70,7 @@ export function createSentry(options: SentryOptions): Sentry {
     hp,
     maxHp: hp,
     lastHitSwing: -1,
+    facing: 1,
     lastFireDx: null,
     lastFireDy: null,
   };
@@ -90,8 +97,11 @@ export function stepSentry(sentry: Sentry, at: Sighting): SentryStep {
     sentry.cooldownCounter += 1;
   }
   if (!sentrySees(sentry, at)) {
+    // Cannot see the player: HOLD facing, don't snap back — the same anti-flap rule as the
+    // scavenger's dead zone (vault 5.1).
     return { fired: false };
   }
+  sentry.facing = at.playerX >= sentry.x ? 1 : -1;
   if (windowOpen(sentry.cooldownCounter, sentry.cooldown)) {
     return { fired: false };
   }

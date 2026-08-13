@@ -27,6 +27,7 @@ import {
 } from '../../src/sim/enemies';
 import { stepEnemies } from '../../src/sim/enemyTurn';
 import { createWorld } from '../../src/sim/tick';
+import { sentryRenderDesc } from '../../src/render/enemyView';
 
 /** The sentry sits at x=1000; the player is placed relative to it. */
 function sentryAt(x: number) {
@@ -89,6 +90,40 @@ describe('brass-sentry — criterion 5.1', () => {
     const gaps = shotTicks.slice(1).map((t, i) => t - shotTicks[i]);
     expect(new Set(gaps).size).toBe(1);
     expect(gaps[0]).toBe(SENTRY.cooldown);
+  });
+});
+
+describe('brass-sentry facing — the 2026-08-13 playtest defect (no facing at all)', () => {
+  it('faces -1 (left) when the player is to its left', () => {
+    const sentry = sentryAt(1000);
+    stepSentry(sentry, { playerX: 500, playerY: 0 });
+    expect(sentry.facing).toBe(-1);
+  });
+
+  it('faces +1 (right) when the player is to its right', () => {
+    const sentry = sentryAt(1000);
+    stepSentry(sentry, { playerX: 1500, playerY: 0 });
+    expect(sentry.facing).toBe(1);
+  });
+
+  it('HOLDS its last facing when it loses sight, rather than snapping back', () => {
+    const sentry = sentryAt(1000);
+    stepSentry(sentry, { playerX: 500, playerY: 0 }); // in range, to the left
+    expect(sentry.facing).toBe(-1);
+
+    // Now far outside the radius, on the RIGHT — a re-derive-from-position bug would flip to +1.
+    stepSentry(sentry, { playerX: 1000 + SENTRY.radius + 500, playerY: 0 });
+    expect(sentry.facing).toBe(-1);
+  });
+
+  it('the render descriptor flipX follows facing, not a hardcoded value', () => {
+    const left = sentryAt(1000);
+    stepSentry(left, { playerX: 500, playerY: 0 });
+    expect(sentryRenderDesc(left, 6).flipX).toBe(true);
+
+    const right = sentryAt(1000);
+    stepSentry(right, { playerX: 1500, playerY: 0 });
+    expect(sentryRenderDesc(right, 6).flipX).toBe(false);
   });
 });
 

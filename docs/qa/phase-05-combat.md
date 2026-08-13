@@ -1487,3 +1487,89 @@ not asserted, but a ceiling a quiet machine approaches on a single frame is wort
 > a same-session control.** Cross-session comparison of these numbers is not evidence in either
 > direction — which is finding P1's real content, and it survives the re-measure rather than being
 > dissolved by it.
+
+## User video playtest, 2026-08-13 — "missing frames" is LOW FRAME RATE, and the sentry fires from its belly
+
+A 6.5 s screen recording (2560x1392, 30 fps) supplied by the user. Frames extracted at full rate
+and analysed; the recording is in the session scratchpad, not the repo.
+
+### 🔴 Nothing is dropping frames. The animations do not HAVE enough frames.
+
+A 24-frame montage of consecutive captures during a run shows the pose advancing on essentially
+every captured frame — no stalls, no held poses. What is wrong is the rate each animation plays at:
+
+| animation | frames | fps | ms per pose |
+|---|---:|---:|---:|
+| **walk** | 12 | **15.65** | 63.9 |
+| **jump / fall** | 6 | **20.00** | 50.0 |
+| run | 12 | 26.67 | 37.5 |
+| idle | 12 | 8.00 | 125.0 |
+| attack | 8 | 24.00 | 41.7 |
+
+**Cinema is 24 fps.** Walk at 15.65 and jump at 20 sit below the rate at which motion fuses, so the
+eye resolves individual poses — which is exactly what "missing frames" describes. The user reported
+them in the order **walk, run, jump**, and the table matches: walk is worst.
+
+It falls out of the derivation rather than a bug. `simTicks` is stride-locked — a walk cycle must
+span 46 ticks to match ground speed — and there are only 12 frames to spread over it:
+`12 x 60 / 46 = 15.65`. Nothing is broken; there is not enough art per cycle.
+
+### The fix is FREE for walk, jump and fall — the frames are already paid for
+
+Every source clip is **97 frames, 24 fps, 4.04 s**, on disk under `_generated/video/`. The sampler
+(`tools/gen/sampler.mjs`, `chooseCycleWindow`) takes the frame count as a **parameter**, so a denser
+sample is a re-run, not a regeneration. Cycle periods measured by autocorrelation of frame-to-frame
+distance over the stable middle of each clip:
+
+| | now | source | achievable | verdict |
+|---|---|---|---|---|
+| **walk** | 12 fr, 15.65 fps | **28 fr/cycle** | **24 fr → 31.3 fps** | **free, and the biggest win** |
+| **jump / fall** | 6 fr, 20 fps | 97 fr clip (one-shot) | **12 fr → 40.0 fps** | **free** |
+| run | 12 fr, 26.67 fps | **13 fr/cycle** | 13 fr → 28.9 fps | **at the ceiling — needs new art** |
+
+`run`'s source clip holds only ~13 distinct frames per cycle and the sheet already uses 12, so
+sampling denser would duplicate poses. Improving it means a fresh generation, i.e. **spend**. At
+26.67 fps it is already above the fusion threshold and is the least broken of the three.
+
+⚠️ Check the texture width before choosing 28 over 24 for walk: at a 288 px cell, 24 frames is
+6912 px and 28 is 8064 px, which is close to the 8192 px limit some GPUs still enforce.
+
+### 🔴 The sentry fires from the centre of its body, not from the cannon
+
+`src/sim/enemyTurn.ts:61`:
+
+```js
+fireProjectile(sentry.x, muzzleY, player.x, chestY, SENTRY.projectileSpeed, SENTRY.damage)
+```
+
+`sentry.x` is the body's **centre** and `muzzleY` is `sentry.y - (SENTRY_BOX.h / 2) * scale`, the
+vertical **middle**. **There is no muzzle offset anywhere.** The shot is born inside the machine.
+
+Three defects compound into the one thing the user saw:
+
+1. **No muzzle offset** — the above.
+2. **No facing** — the sentry had none until `facing` was added this session, so there was no
+   direction to offset *along*. The two defects were linked, which is why the muzzle offset could
+   not have been written earlier.
+3. **No firing animation** — `brass-sentry-fire` was generated and **never adopted**, so the sentry
+   plays `idle` while shooting. `enemyView.ts:35` documents "how long the muzzle animation plays
+   after a shot leaves" for a sheet that is not in the catalog.
+
+The sim already stores `lastFireDx` / `lastFireDy` with a comment saying they are frozen at fire
+time **"so a renderer that recomputed this would not swing the barrel after the shot left"** — and
+**no renderer reads either field.** The aiming data exists; the barrel does not.
+
+**Recorded, not fixed — user decision, 2026-08-13.** Fixing it changes sim behaviour after the
+Codex 5.14 review signed off, and the user chose to keep this session's gate results intact.
+
+### Four enemy sheets are already paid for and unadopted
+
+`brass-sentry-fire`, `brass-sentry-death`, `rust-scavenger-chase` and `rust-scavenger-death` all
+have logged request IDs, surviving `.mp4` sources with retries (3–5 takes each) and 6 extracted
+frames each under `_generated/framing-frames/`. **Adopting them costs $0** — extraction, chroma key
+and packing are local tooling. The generation log notes an audit judged the sentry clips *"cropped
+at the left and right"*, which is where adoption appears to have stopped; that must be re-checked
+against the pipeline's own gates before forcing them through.
+
+This also **dissolves finding T10**, which recorded that 5.3's chase commitment is unobservable and
+"resolves by shipping the chase sheet (post-phase art)". The chase sheet was already bought.

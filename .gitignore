@@ -12,3 +12,6 @@ test-results/
 # in docs/GENERATION-LOG.md; never shipped. Vault 4.16 depends on this being absent on a fresh
 # clone: a declared input that cannot be found must fail the build, not substitute.
 _generated/
+
+# The user's own screen recordings, kept out of the repo
+Recording*.mp4
