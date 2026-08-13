@@ -130,7 +130,18 @@ export class EnemyLayer {
       }
       // A dead enemy stops being drawn as a threat, but its body stays: a corpse that vanishes on
       // the frame it dies gives no feedback that the kill landed.
-      body.setAlpha(subject.hp > 0 ? 1 : 0.35);
+      //
+      // 🔴 The fade must not start until the death animation has FINISHED. It used to key on `hp`
+      // alone, which meant the fade began on the exact frame the death clip started — so the whole
+      // ten-frame KO played at 35 % opacity and was very nearly invisible against `level-01`'s
+      // background. Found by watching it, not by a test: the frame sampler happily reported 10 of
+      // 10 poses painted, because they WERE painted, just barely visible. Vault 9.4 one layer over
+      // — "drawn" and "seen" are not the same measurement.
+      //
+      // Keyed on the death animation still running, NOT merely on something running: a dead sentry
+      // has no `death` sheet in the catalog, so `playIfChanged` no-ops and it keeps playing its
+      // looping `idle`. Testing `isPlaying` alone would hold that corpse at full alpha forever.
+      body.setAlpha(subject.hp > 0 || this.playingDeath(i, desc) ? 1 : 0.35);
 
       const bar = healthBarDesc(subject, slug, scale);
       this.bars.fillStyle(0x1a1512, 1).fillRect(bar.x, bar.y, bar.w, bar.h);
@@ -143,5 +154,24 @@ export class EnemyLayer {
     for (const shot of this.world.projectiles) {
       this.shots.fillCircle(shot.x, shot.y, 8);
     }
+  }
+
+  /**
+   * Is body `i` currently playing its own death clip?
+   *
+   * Both halves are load-bearing. `getName() === desc.animKey` pins it to the DEATH key rather
+   * than to "an animation is running" — a dead enemy whose death sheet is not in the catalog keeps
+   * its previous looping animation, and that must still fade. `isPlaying` goes false when a
+   * one-shot completes (`loop: false` packs as `repeat: 0`), which is what ends the window.
+   *
+   * A Rectangle fallback has no `anims` at all and reports false, so it fades immediately — the
+   * behaviour before this existed, which is right: there is no death animation to wait for.
+   */
+  private playingDeath(i: number, desc: EnemyRenderDesc): boolean {
+    if (!this.isSprite[i]) {
+      return false;
+    }
+    const anims = (this.bodies[i] as Phaser.GameObjects.Sprite).anims;
+    return anims.getName() === desc.animKey && anims.isPlaying;
   }
 }

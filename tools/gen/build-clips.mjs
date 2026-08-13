@@ -282,6 +282,36 @@ function main() {
     extract(clip, indices, out);
     gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height));
 
+    /**
+     * Declare the geometry this strip was written with, beside the strip.
+     *
+     * The pitch is known exactly here — `ffmpeg` was just told to pad every frame by `GUTTER / 2`
+     * on each side and tile them — and it was being thrown away, leaving `build-assets` to guess it
+     * back from pixels with `detectFrames`. That guess cannot tell a cell boundary from a detached
+     * limb, which is what stopped `rust-scavenger/death` packing: 12 bands for 10 frames, because
+     * a 64 px chunk of the dying scavenger flew clear of its body by 46 px.
+     *
+     * Written AFTER `gateSheetEdges`, so a strip that fails G6 never gains a sidecar and cannot be
+     * packed by the new path either. Consumers treat a missing sidecar as "use the old detection",
+     * so every sheet packed before this existed is untouched.
+     */
+    writeFileSync(
+      out.replace(/\.png$/, '.json'),
+      `${JSON.stringify(
+        {
+          _comment:
+            'Cell geometry as WRITTEN by build-clips.mjs. build-assets.mjs splits at cellWidth ' +
+            'rather than re-detecting bands, because band detection cannot tell a cell boundary ' +
+            'from a detached limb (rust-scavenger/death). Delete this file to fall back.',
+          cellWidth: Number(probe.width) + GUTTER,
+          cellHeight: Number(probe.height) + GUTTER,
+          cells: indices.length,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
     report.push({
       action,
       clip,

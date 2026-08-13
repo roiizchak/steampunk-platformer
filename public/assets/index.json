@@ -132,6 +132,17 @@
       "fps": 24,
       "loop": false,
       "derivedFrom": "sim"
+    },
+    {
+      "key": "rust-scavenger-death",
+      "url": "assets/characters/rust-scavenger/sheets/death.png",
+      "frameWidth": 512,
+      "frameHeight": 384,
+      "frameCount": 10,
+      "simTicks": 45,
+      "fps": 13.333333333333334,
+      "loop": false,
+      "derivedFrom": "sim"
     }
   ]
 }

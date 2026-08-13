@@ -35,7 +35,14 @@ import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
 import { configFor, workListFor, resolveActionScale } from './slugConfig.mjs';
 import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
 import { upsertCatalogSheets, upsertLiftProfile } from './catalogWrite.mjs';
-import { findSource, loadConfig, keySheet, framesOf, sliceFrame } from './assetSources.mjs';
+import {
+  findSource,
+  loadConfig,
+  keySheet,
+  framesOf,
+  sliceFrame,
+  cellPitchFor,
+} from './assetSources.mjs';
 
 /** Where `upsertCatalogSheets` merges this build's rows into. */
 const CATALOG_PATH = 'public/assets/index.json';
@@ -89,8 +96,11 @@ function main() {
      * and a human pasting it must be able to see what it was measured from.
      */
     const deriveAction = ACTIONS[0] ?? 'idle';
-    const { keyed } = keySheet(findSource(GENERATED, SLUG, deriveAction));
-    const heights = framesOf(keyed).map((f) => figureMetrics(f)?.height ?? 0);
+    const deriveSource = findSource(GENERATED, SLUG, deriveAction);
+    const { keyed } = keySheet(deriveSource);
+    const heights = framesOf(keyed, cellPitchFor(deriveSource)).map(
+      (f) => figureMetrics(f)?.height ?? 0,
+    );
     const standing = Math.round(heights.reduce((a, b) => a + b, 0) / heights.length);
     // The target height is read from the config rather than written here. It was a literal `96`,
     // which went stale the moment RENDER_SCALE moved 2 -> 6 and `renderHeightPx` became 288 — and a
@@ -134,7 +144,10 @@ function main() {
      * ellipse stayed visible in the output. Measuring across a boundary the concept does not cross
      * is the same error `assertSingleRowLayout` guards on the other axis.
      */
-    let cells = framesOf(keyed).map((cell) => dropCastShadow(cell));
+    // `cellPitchFor` returns null for any strip extracted before build-clips started declaring its
+    // geometry, which keeps those on the original `detectFrames` path — so introducing this cannot
+    // repack shipped art behind anyone's back.
+    let cells = framesOf(keyed, cellPitchFor(source)).map((cell) => dropCastShadow(cell));
 
     /**
      * **Ping-pong: play the poses out and back, so the wrap is a real step by construction.**
@@ -229,8 +242,28 @@ function main() {
      * asks the question directly. The height test catches the near-miss too: a cell holding only a
      * detached boot is not empty, but it is not a frame either.
      */
-    const drawnHeights = frames.map((f) => f.drawnHeight);
-    const medianHeight = [...drawnHeights].sort((a, b) => a - b)[drawnHeights.length >> 1];
+    /**
+     * 🔴 **The fragment test measures AREA, not height, and the difference is a death animation.**
+     *
+     * It used to compare `drawnHeight` against half the median height. That is a sound proxy for a
+     * walk cycle, where every pose is the same height, and it is simply WRONG for a collapse: a
+     * dying figure ends up lying down. `rust-scavenger/death` packs its corpse at **476x109**
+     * against a median of 241 and was rejected as a fragment — and `character-bounds.json` already
+     * records the same shape for the courier, whose ten death frames fall `476,428,358,228,240,
+     * 220,142,106,106,106`, a 153 % spread. Any height rule rejects both.
+     *
+     * Opaque AREA survives a collapse, because the figure does not lose pixels by toppling — it
+     * redistributes them. Measured on the real sheets: `rust-scavenger/death` spans **0.89-1.49x**
+     * its median area across all ten frames, and `walk` **0.91-1.03x**. A genuine fragment is three
+     * orders of magnitude away — the 36x9 chunk that first exposed this is ~0.003x. So a quarter of
+     * the median separates them with enormous margin in both directions.
+     *
+     * This changes WHAT the check measures, never what it tolerates: it still fails a fragment, and
+     * it now stops failing a legitimate pose. `f.pixels` is the opaque count `figureMetrics`
+     * already returns, so nothing new is measured to get it.
+     */
+    const areas = frames.map((f) => f.pixels);
+    const medianArea = [...areas].sort((a, b) => a - b)[areas.length >> 1];
     frames.forEach((f, i) => {
       if (f.drawnHeight <= 0 || f.drawnWidth <= 0) {
         throw new Error(
@@ -239,11 +272,12 @@ function main() {
             `than there are figures — usually a limb split off by detectFrames' minGap.`,
         );
       }
-      if (f.drawnHeight < medianHeight / 2) {
+      if (f.pixels < medianArea / 4) {
         throw new Error(
-          `assets:build: "${action}" cell ${i} of ${frames.length} is ${f.drawnWidth}x` +
-            `${f.drawnHeight} against a median height of ${medianHeight} — that is a fragment, ` +
-            `not a frame. Same cause as an empty cell, caught one step earlier.`,
+          `assets:build: "${action}" cell ${i} of ${frames.length} draws ${f.pixels} opaque px ` +
+            `against a median of ${medianArea} — that is a fragment, not a frame. Same cause as an ` +
+            `empty cell, caught one step earlier. (Measured as AREA on purpose: a collapsing ` +
+            `figure loses HEIGHT legitimately, so a height rule rejects every death animation.)`,
         );
       }
     });
