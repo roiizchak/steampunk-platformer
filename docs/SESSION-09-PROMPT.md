@@ -92,6 +92,49 @@ was never adopted. G6's own message says such a clip **"must be re-shot, not pac
 
 **Any re-shoot is fal spend and needs a fresh STOP-and-ask with a price first.** $13.64 remains.
 
+## Work item 4b — the user thinks the character simply moves too fast. TEST IT.
+
+Raised by the user, 2026-08-13, after the walk resample: *"Maybe we just slow down the character.
+Maybe he just moves too fast."*
+
+**This is a legitimate preference and does NOT contradict session 8's correction.** Session 8's error
+was the *arithmetic* — claiming the speed was 6× off its documented target. It is not: measured top
+speed is **2.50 body heights/sec, exactly the Phase 4 target**. But that target was a *choice*, and
+the user is entitled to change it. Treat this as tuning, not as a bug, and **do not re-run the
+6× retune** — see the trap at the end of this file.
+
+🔴 **The trade, and it cuts against the smoothness complaint.** `simTicks = round(stridePx / topSpeed)`
+and `fps = frameCount * 60 / simTicks`, so **a slower character takes more ticks per cycle and the
+same frames spread thinner. Slowing down makes the animation CHOPPIER.** Derived stride is fixed by
+the art: run **324 px**, walk **255 px**.
+
+| speed | run ticks | run fps | walk ticks | walk fps (24 fr) | body heights/sec |
+|---|---:|---:|---:|---:|---:|
+| **×1 (shipped)** | 27 | **26.7** | 46 | **31.3** | **2.50** |
+| ×0.85 | 32 | 22.5 | 54 | 26.7 | 2.13 |
+| ×0.75 | 36 | **20.0** | 61 | 23.6 | 1.88 |
+| ×0.6 | 45 | **16.0** | 77 | **18.7** | 1.50 |
+| ×0.5 | 54 | **13.3** | 92 | **15.7** | 1.25 |
+
+Cinema is 24 fps. **A 25 % slowdown puts run back under the fusion threshold** the user just
+complained about.
+
+Three ways out — **have the user judge them in the running game, do not pick one by argument:**
+
+1. **Slow down and accept choppier run** until run gets new art. Cheapest; makes the complaint the
+   user just raised worse.
+2. **Slow down AND raise run's frame count.** The only option that satisfies both — and run's source
+   clip holds only ~13 frames per cycle, so **it needs a re-shoot: fal spend, fresh STOP-and-ask.**
+3. **Slow down and hold `simTicks` fixed** (stop re-deriving it). The animation rate is preserved and
+   the stride stops matching ground travel — **that is vault 4.22 foot-slide**, the exact failure this
+   project paid to avoid. **Measure the slide** so the user judges a number, not a vibe.
+
+Also worth putting in front of the user: **jump height and airtime do NOT scale with horizontal
+speed.** Airtime is fixed at 37 ticks (rise 18 / fall 18) because `tick.ts`'s order is authoritative
+and Phase 5's combat windows are written against it. So slowing horizontal movement **shortens jump
+distance proportionally** — at ×0.75 the 3-tile gap in `level-01` goes from a 27.8-tile capability to
+~20.8, still fine, but check the level at whatever value is chosen. **Do not touch the `.tmj`.**
+
 ## Work item 5 — a real hole in the asset pipeline
 
 `build-assets.mjs` writes a catalog row **only** when `hasCatalogTiming(slug, action)` is true, and
@@ -142,7 +185,9 @@ what makes brief 2 actually blind. Every finding **applied or recorded with a on
 - 🔴 **`player.x`, `vx` and `runMax` are ALREADY in world pixels.** `toWorld` scales only the *box*
   (`x: feetX + forward * scale`). I multiplied by `RENDER_SCALE` a second time, concluded the game
   was 6× too fast, and got a full retune approved on it. It was wrong. Top speed is **2.50 body
-  heights/sec**, exactly the documented target. **Do not retune speed.**
+  heights/sec**, exactly the documented target — and `tests/unit/tilemap-data.test.ts` pins that
+  contract, which is what caught it. **Never re-derive a body-heights figure by multiplying a sim
+  speed by `RENDER_SCALE`.** Work item 4b is a deliberate *preference* change and is not this.
 - 🔴 **Absolute milliseconds from the headless harness are not comparable across sessions.** They
   moved four times in session 8 with background load alone (70.30 → 85.80 → 95.5 → 82.4) on
   unchanged or reverted code. **Only a same-session interleaved A/B (A,B,A,B,A,B) decides anything.**
