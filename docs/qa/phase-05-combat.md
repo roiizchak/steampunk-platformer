@@ -1396,3 +1396,51 @@ Preserved verbatim, because a gate's blind spots are part of its result *(vault 
 - One owner disclosed that an analysis script wrote a stray zero-byte `nul` into the repo root, and
   that it deleted it. Verified independently: `git status --porcelain` shows only the pre-existing
   untracked `.claude/settings.json`.
+
+## Playtest, 2026-08-13 — real Chrome, real GPU, and the retile is REVERTED
+
+Driven with `playwright-cli` against the dev build in **real Chrome** (RTX 4080, D3D11/ANGLE),
+`window.__game.ready` waited on, never a sleep-to-pass.
+
+### 🔴 The retile is reverted, and the reason is one I got wrong when I proposed it
+
+When the crop was proposed I costed it as *"the background repeats ~2.65× more often"*. **That
+understated it, and the playtest showed why in the first screenshot.**
+
+Cropping to 960 makes `mirrorLoop` yield exactly **1920 — the view width**. The entire texture,
+the unique half *and* its mirror, is therefore on screen in **every frame**: the same three-dial
+gauge panel is visible twice at once, permanently, in the shipped level. At the full 2546 the same
+1920 view shows only **~38 %** of the texture, so a mirrored pair can appear near a seam rather
+than always.
+
+**User decision: revert.** `ca84554`. The three PNGs came back **byte-identical** to their
+pre-retile versions, which also demonstrates `build-world.mjs` is deterministic. Payload returns
+21.4 MB.
+
+Nothing performance-related was given up, because the crop never bought any: the interleaved A/B
+put it at ratio **2.42** against **2.76** before, and the defect it targeted **does not exist on
+real hardware**. The full reasoning is now written into `build-world.mjs` **at the point of
+temptation**, not only in the QA log — "crop the parallax to the viewport" is an obvious-looking
+optimisation that someone reading the payload size will propose again.
+
+> **The lesson, and it is mine rather than the reviewers':** I costed a visible art change in the
+> abstract ("repeats more often") and shipped it on that estimate. One screenshot showed the real
+> cost. A trade against *look* cannot be approved from arithmetic — the approval needs the picture.
+
+### `play`-owned criteria
+
+| # | evidence | verdict |
+|---|---|---|
+| **5.4** | Sampled the **scavenger's drawn frame index once per rAF at paint time** (never the `animationupdate` event, which fires when state advances and can advance several frames inside one rAF). `rust-scavenger-walk`, **11 distinct poses**, indices `[1,2,3,4,5,7,8,9,10,11,12]` — index 6 missing. | **PASS.** Advances far past frame 0. The one missing index matches the player-side real-GPU reading (12,12,10,12,12,12) and is recorded, not hidden. |
+| **5.8** | Screenshot at true sprite size against `level-01`'s cool background, scavenger at reduced hp. The bar renders as a **small red sliver** above the sprite — present and honest, but small. | **DEFERRED to the user.** This is a human judgement *(vault C4)* and an agent asserting "legible" would be reporting nothing. The screenshot is the evidence; the call is not mine. |
+
+### What playing it actually turned up
+
+- **Knockback reads correctly by hand.** Contact from a scavenger on the right gives `vx -1.85`,
+  state `hurt` — shove away from the source, as designed.
+- **A dead enemy stays dead and stays drawn.** No corpse activity observed, consistent with 5.16.
+- 🔴 **The player wedges against terrain at `x: 3198` with a scavenger in contact and drains
+  100 → 35 hp with no way past.** Movement is not blocked by the enemy (enemies have no push), so
+  this is terrain plus contact damage. **Not diagnosed, and not a Phase 5 criterion** — recorded
+  because it is the kind of thing only playing finds, and because "took 65 damage standing still"
+  did not read as a fight. First candidate for the next playtest.
