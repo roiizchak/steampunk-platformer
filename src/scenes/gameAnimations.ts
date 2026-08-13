@@ -25,7 +25,17 @@ import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
  * ASSET-MANIFEST section 4 documents. Deliberately not done inside a phase that is already
  * reported failing; recorded in `docs/qa/phase-04-art.md` instead.
  */
-export function registerCatalogAnimations(scene: Phaser.Scene): void {
+export function registerCatalogAnimations(
+  scene: Phaser.Scene,
+  /**
+   * Optional per-sheet frame-rate override, used ONLY by the DEV-only locomotion-feel variants
+   * (`src/game/feelVariants.ts`) so foot-slide and speed can be judged in an interleaved A/B rather
+   * than across three rebuilds. Absent in production, where `sheet.fps` from the catalog is the one
+   * source — the fps is still never authored, it is re-derived by the same `renderFrames * TICK_HZ
+   * / simTicks` rule against a scaled `simTicks`.
+   */
+  fpsFor?: (sheet: AssetCatalog['sheets'][number]) => number,
+): void {
   const catalog = scene.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
   if (!catalog) {
     throw new Error('GameScene: the asset catalog is missing after boot approved it');
@@ -40,7 +50,7 @@ export function registerCatalogAnimations(scene: Phaser.Scene): void {
         start: 0,
         end: sheet.frameCount - 1,
       }),
-      frameRate: sheet.fps,
+      frameRate: fpsFor ? fpsFor(sheet) : sheet.fps,
       repeat: sheet.loop ? -1 : 0,
     });
   }
