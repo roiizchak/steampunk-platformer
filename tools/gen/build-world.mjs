@@ -200,18 +200,25 @@ function buildParallax() {
     const target = 1080;
     const scaled = downscale(image, Math.round((image.width * target) / image.height), target);
 
-    // Crop to half the viewport width (960) BEFORE mirroring, so `mirrorLoop` yields exactly one
-    // screen (1920x1080) instead of ~2.65 screens. The TileSprite this feeds draws at 1:1 into a
-    // 1920-wide window (GameScene.ts ~548-554), so the sharpness-preserving move is a crop, never
-    // a second resample. Centred on the scaled strip: nothing about the crop's *width* is
-    // scene-specific, so there is no principled edge to prefer over the middle. This throws away
-    // ~62% of each layer's horizontal content (2546 -> 960 px, roughly) to cut the shipped texture
-    // from 5092x1080 to 1920x1080 — the trade the 64%-of-frame-budget measurement calls for, not
-    // an accident of a round number.
-    const cropWidth = 960;
-    const cropX = Math.floor((scaled.width - cropWidth) / 2);
-    const cropped = crop(scaled, cropX, 0, cropWidth, scaled.height);
-    const looped = mirrorLoop(cropped);
+    // 🔴 **Do NOT crop this to the viewport width.** It was tried on 2026-08-13 and reverted the
+    // same day, and the reason is not obvious enough to survive being rediscovered:
+    //
+    // Cropping to 960 makes `mirrorLoop` yield exactly 1920 — **the view width**. The whole
+    // texture, meaning the unique half AND its mirror, is then on screen in EVERY frame, so a
+    // duplicated feature is permanently visible: in the shipped level you could see the same
+    // three-dial gauge panel twice at once. At the full 2546 the same 1920 view shows only ~38 %
+    // of the texture, so a mirrored pair can appear near a seam rather than always.
+    //
+    // It bought 21.4 MB -> 7.5 MB of boot payload, and it was NOT worth it. It also did not do
+    // the thing it was built for: a same-session interleaved A/B measured the retiled layers at
+    // 90.10 ms against 37.20 ms with parallax off — ratio 2.42 against 2.76 before — so shrinking
+    // the texture 2.65x moved essentially nothing. The cost is three full-screen alpha-blended
+    // 1920x1080 draws, and cropping the SOURCE removes not one DRAWN pixel.
+    //
+    // And the defect that motivated all of it does not exist on real hardware: an RTX 4080 runs
+    // this at 4.2 ms median, 240 fps, 12/12 poses painted. Every number that argued for the crop
+    // came from headless SwiftShader. Full record in docs/qa/phase-05-combat.md.
+    const looped = mirrorLoop(scaled);
     const after = gateSeam(looped);
     if (after.status !== PASS) {
       throw new Error(
