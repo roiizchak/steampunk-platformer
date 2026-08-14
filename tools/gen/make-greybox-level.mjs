@@ -114,7 +114,28 @@ const TILESET_COLS = 4;
 const TILESET_ROWS = 4;
 
 const SPIKE_GID = 13;
-const SPIKES = [{ fromCol: 24, toCol: 27, row: GROUND_TOP_ROW - 1 }];
+/**
+ * 🔴 **Narrowed from four columns to two on 2026-08-14: 384 px was impassable at any speed.**
+ *
+ * `tests/unit/level-traversal.test.ts` measures this with the real sim over the shipped `.tmj`, and
+ * the sweep is unambiguous — at 384 px the run-up takes 20 hp and stops at x 2554, and no take-off
+ * point or approach speed clears it. It had been that way since Phase 4's 3x rescale, and nothing
+ * caught it because the only reach gate in the suite was **vertical** (`tilemap-data.test.ts` asks
+ * whether platforms are within the apex, which cannot see a gap too wide to cross).
+ *
+ * **This is the ONE place to change it.** The `hazard: true` rectangle below is derived from this
+ * array, which is what makes "the drawn spikes hurt" true by construction — Phase 4 shipped the run
+ * drawn and harmless from two lists that drifted. Editing the `.tmj` by hand puts that drift
+ * straight back: the first attempt at this narrowing did exactly that, and
+ * `level-entities.test.ts`'s gid-agreement test caught it immediately (gid 13 drawn both inside and
+ * outside the hazard, i.e. two columns of spikes you could walk through).
+ *
+ * 240 px was measured as the width where a run-up is REQUIRED but possible. It was not taken: the
+ * window is 12 px wide (252 already fails), which exists only at exactly top speed and would break
+ * silently on the next tuning pass. At 192 the strip costs a deliberate jump input and walking into
+ * it still hurts. Both facts are asserted in `level-traversal.test.ts`.
+ */
+const SPIKES = [{ fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 }];
 
 /**
  * Where the two enemies stand, and how far the patroller may walk.

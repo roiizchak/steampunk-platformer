@@ -1740,3 +1740,122 @@ animation frame, in-page, and require at least one non-zero.
 
 That second row is the entry worth keeping: **the unit gate alone would have passed a game with the
 bug still in it.** The e2e is not redundant coverage, it is the only thing watching the wiring.
+
+### W5 — level-01 traversal, proved by simulation. Two long-standing unknowns closed.
+
+Codex plan review finding 5 killed the hand arithmetic this was going to rest on — it had the pit at
+192 px (real: 288) and the airtime at 37 ticks (real: 35). `tests/unit/level-traversal.test.ts` runs
+the **real** `tick` over the **real** shipped `.tmj` rectangles with the **real** collider and
+acceleration curve, and reports what happened. Nothing in it is computed.
+
+It found more than it was aimed at.
+
+#### 🔴 The spike strip was impassable at any speed, and had been since Phase 4
+
+| width | run-up | standing jump |
+|---|---|---|
+| 96 – 216 | clear | clear |
+| **192 (now shipped)** | **clear** | **clear** |
+| 240 | clear | **hit** |
+| 252 – 384 | **hit** | **hit** |
+| **384 (was shipped)** | **hit, −20 hp, stops at x 2554** | hit |
+
+Nothing caught it because **the only reach gate in the suite was vertical**:
+`tilemap-data.test.ts` asks whether every platform is within the measured apex, which cannot see a
+gap too wide to cross.
+
+**240 px was measured as the width where a run-up is REQUIRED but possible, and was deliberately not
+taken.** That window is **12 px wide** — 252 already fails — so it exists only at exactly top speed
+and would break silently on the next tuning pass. 192 is the user's approved value: crossing costs a
+deliberate jump input, and walking into it still hurts. The test asserts the second fact rather than
+a knife-edge one it cannot honestly hold.
+
+**The narrowing was made in `make-greybox-level.mjs`, not in the `.tmj`.** The first attempt edited
+the level file by hand and `level-entities.test.ts` caught it within one run: gid 13 was suddenly
+drawn both inside and outside the hazard, i.e. two columns of spikes the player walks through. The
+hazard rectangle is *derived* from the `SPIKES` array precisely so drawn-and-harmless cannot happen
+again — Phase 4 shipped exactly that from two lists that drifted. Editing the output put the drift
+back.
+
+#### 🔴 `x: 3198` is DIAGNOSED. It is not a wedge and there is no bug.
+
+Recorded 2026-08-12 as *"the player wedges against terrain, 100 → 35 hp, no way past"*, never
+diagnosed, carried as an open unknown through two sessions. The first draft of the pit test reported
+the player stalling at **x 3198** — the same coordinate, reproduced by accident.
+
+`3198 + 66` (half the player's 132 px box) is **exactly 3264**: the left face of the level's 96 × 288
+pillar, a solid the player is meant to **jump**. Running right into it stops you dead, which is a
+collider working correctly. What made it read as a trap was taking contact damage there with no idea
+why forward movement had stopped. Pinned now, both halves — blocked on the ground, clearable with a
+run-up — so a future layout edit that makes the pillar genuinely unclimbable fails here instead of
+being re-reported as the same mystery.
+
+#### 🔴 The permanent-aggro blocker is SETTLED, and the answer is terrain
+
+The plan raised it and was right to: a scavenger that never gives up *and* leaves its patrol zone
+could turn the `x: 3198` stall into a guaranteed death.
+
+**It cannot.** `level-01` stands its scavenger on the floor section beginning at **x 4128**, and the
+pit at **3840–4128** separates that section from the pillar. Ground-following stops the chase at the
+pit's eastern lip, over **400 px** from the player. The terrain that makes the pit an obstacle for
+the player is the same terrain that makes it impassable for the enemy.
+
+Asserted, not reasoned — and red-proved: **with the ground veto removed the scavenger closes to
+92 px of the stall**, which is the blocker arriving exactly as predicted. The veto is what prevents
+it, and the test says so in its failure message.
+
+### W6 — criterion 5.8's health-bar block was measuring a width the game never draws
+
+`enemy-view.test.ts` hardcoded `SLOT = 120`. The shipped slot is `barSlotWidth(RENDER_SCALE)` =
+24 × 6 = **144**; 120 predates Phase 4's 3× rescale and nothing updated it because nothing connected
+it to `BAR_LOCAL`. An entire `describe` — including the premise the criterion rests on — was
+evaluated against a fiction. `barSlotWidth` is exported now and the test derives it.
+
+**Correcting it exposed a second, worse problem.** At the real 144 px against 60 max hp, the naive
+`Math.max(MIN, ratio × slot)` floor and the shipped compression behave **almost identically**: the
+floor only bites at 1 hp, so no two adjacent hp values are flattened onto each other. The test
+written specifically to distinguish the two implementations — *"1 hp and 2 hp are
+distinguishable"* — **passed against the naive floor.** Found by mutation, not by reading; all 17
+assertions stayed green.
+
+`healthBarFillWidth` is a pure function of three arguments, so it is now also exercised at a geometry
+where the difference lives (120 px / 100 max hp, the case it was designed for), with an explicit
+premise assertion that two adjacent living hp values really do round below the floor there. Both
+blocks are kept: the shipped one proves the criterion holds where the game runs, the dense one
+proves the implementation is the right one and can still go red.
+
+Stale prose in `enemyHealthBar.ts`'s header corrected too — it cited *"2 of 100 against a 120 px
+slot"*, and no enemy in the game has 100 max hp.
+
+### W7 / T6 — `withinRadius` had no direct test, and `dy` was decorative
+
+Every fixture that reached it did so through a sentry or a scavenger, and **every one placed the
+enemy and the player at the same `y`**. With `dy === 0` the vertical term contributes nothing, so
+deleting it from the distance entirely left the whole suite green — the radius was only ever tested
+as a horizontal one. That matters in the shipped level, which stands its sentry four tiles above the
+player.
+
+Direct tests added for both shared geometry predicates, including a 3-4-5 diagonal (each leg inside
+480, the hypotenuse outside) that a per-axis test cannot express. Red-proved: deleting `dy * dy`
+now fails two named assertions.
+
+### Red-proofs this pass *(C1/C12)*
+
+| mutation | result |
+|---|---|
+| spike strip back to 384 px | `Tests 2 failed` — the run-up and the pillar clearance |
+| hand-edit the `.tmj` instead of the generator | `Tests 1 failed` — gid 13 inside and outside the hazard |
+| remove the chase's ground veto | `Tests 1 failed` — scavenger reaches within 92 px of the x:3198 stall |
+| `healthBarFillWidth` → naive `Math.max` floor | `Tests 2 failed` (was: **0 failed**, before the dense-geometry block) |
+| delete `dy * dy` from `withinRadius` | `Tests 2 failed` (was: **0 failed**) |
+
+Two of those five previously turned nothing red at all.
+
+### A harness bug worth recording, because reading two failures together is what caught it
+
+`level-traversal.test.ts`'s first draft took a `runUpTicks` argument and every call passed `999`
+meaning *"jump whenever the trigger says"*. It actually meant *"wait 999 ticks"*, the loop runs 600,
+and the player therefore **never jumped in any test**. The tell was a run-up that failed and a
+standing hop that succeeded **in the same run** — impossible for any real geometry. The parameter is
+gone. A test harness that can produce a contradiction is worth more than one that quietly produces a
+plausible wrong answer.

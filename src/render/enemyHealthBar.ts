@@ -4,9 +4,15 @@
  * ## Criterion 5.7, and the vault note behind it
  *
  * Vault **6.4**: *gate on what is DRAWN.* The naive bar multiplies the hp ratio by the slot width,
- * which is correct arithmetic and a lie on screen. An enemy at **2 of 100** has a ratio of 0.02;
- * against a 120 px slot that is **2 px** — indistinguishable from empty at true sprite size. The
- * player reads "already dead", turns away, and is hit by it.
+ * which is correct arithmetic and a lie on screen. A scavenger at **1 of 60** has a ratio of 0.017;
+ * against the shipped **144 px** slot (`barSlotWidth`, 24 local × `RENDER_SCALE` 6) that rounds to
+ * **2 px** — indistinguishable from empty at true sprite size. The player reads "already dead",
+ * turns away, and is hit by it.
+ *
+ * > This paragraph said *"2 of 100 … against a 120 px slot"* until 2026-08-14. Both numbers were
+ * > stale: 120 predates Phase 4's 3× world rescale, and no enemy in the game has 100 max hp. The
+ * > figures above are the scavenger's real ones, and `enemy-view.test.ts` now derives the width from
+ * > `barSlotWidth` rather than retyping it.
  *
  * So a non-zero fill is **compressed into the upper part of the slot**: the range `(0, max]` maps
  * onto `[BAR_MIN_FILL_PX, slotW]` rather than onto `[0, slotW]`. Alive is always visible, full is
@@ -39,6 +45,23 @@ export const BAR_MIN_FILL_PX = 3;
 
 /** Slot geometry, in world pixels at scale 1 — multiplied by the world's `scale` like every box. */
 const BAR_LOCAL = { w: 24, h: 3, gap: 5 } as const;
+
+/**
+ * The slot's width in WORLD pixels at a given scale — 144 at the shipped `RENDER_SCALE` of 6.
+ *
+ * 🔴 Exported because `enemy-view.test.ts` hardcoded **120** and therefore spent an entire `describe`
+ * measuring a width the game has never drawn. 120 was the pre-Phase-4 figure, from before the 3×
+ * world rescale; nothing updated it, because nothing connected it to `BAR_LOCAL`. Every threshold in
+ * that block — including *"the naive ratio rounds to nothing"*, which is the premise the whole
+ * criterion rests on — was evaluated against a fiction.
+ *
+ * So the test derives it from here now. It is deliberately a function of `scale` rather than a
+ * second exported constant: a constant would be a **third** copy of the same number, which is the
+ * shape of the bug it exists to close *(vault 5.3)*.
+ */
+export function barSlotWidth(scale: number): number {
+  return BAR_LOCAL.w * scale;
+}
 
 export interface HealthBarDesc {
   /** Top-left of the slot, world space. */

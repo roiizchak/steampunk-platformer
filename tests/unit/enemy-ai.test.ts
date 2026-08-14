@@ -21,9 +21,11 @@ import {
   createScavenger,
   createSentry,
   detects,
+  groundUnder,
   scavengerFooting,
   stepScavenger,
   stepSentry,
+  withinRadius,
 } from '../../src/sim/enemies';
 import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
 import { DEFAULT_TUNING } from '../../src/sim/player';
@@ -588,5 +590,59 @@ describe('dead enemies stop acting — stepEnemies must filter hp <= 0', () => {
     expect(scavenger.x).toBe(xBefore);
     expect(scavenger.facing).toBe(facingBefore);
     expect(scavenger.chasing).toBe(false);
+  });
+});
+
+/**
+ * `withinRadius` and `groundUnder` — the two shared geometry predicates, tested directly.
+ *
+ * ## T6: deleting `dy * dy` used to turn nothing red
+ *
+ * `withinRadius` is the single definition BOTH enemies consult (vault 5.3) and it had no direct
+ * test. Every fixture that reached it did so through a sentry or a scavenger, and **every one of
+ * those placed the enemy and the player at the same `y`** — `y: 0` against `playerY: 0`. With
+ * `dy === 0` the vertical term contributes nothing, so removing it from the distance entirely left
+ * the whole suite green. The radius was, in effect, only ever tested as a horizontal one.
+ *
+ * That matters in the shipped level rather than in theory: `level-01` stands its sentry on a ledge
+ * four tiles above the player, which is the geometry `enemyTurn.ts` aims the muzzle for.
+ */
+describe('the shared geometry predicates, asserted directly', () => {
+  it('withinRadius measures TRUE distance — a purely vertical gap counts (T6)', () => {
+    const at = { playerX: 1000, playerY: 1000 - 500 };
+    // Directly above, 500 px up, against a 480 px radius. Out of range — and a predicate that
+    // ignored `dy` would compute a distance of 0 and report the player as sighted.
+    expect(withinRadius(1000, 1000, at, 480)).toBe(false);
+    // The same 500 px gap, now horizontal. Both must answer the same way, or the radius is an
+    // ellipse and the sentry can see further along one axis than the other.
+    expect(withinRadius(1000, 1000, { playerX: 1500, playerY: 1000 }, 480)).toBe(false);
+  });
+
+  it('a DIAGONAL player is judged on the hypotenuse, not on either leg', () => {
+    // 300 across and 400 up is exactly 500 by Pythagoras. Each leg alone is inside 480; the true
+    // distance is not. This is the case a per-axis test cannot express.
+    const diagonal = { playerX: 1000 + 300, playerY: 1000 - 400 };
+    expect(withinRadius(1000, 1000, diagonal, 480)).toBe(false);
+    expect(withinRadius(1000, 1000, diagonal, 500)).toBe(true); // `<=`, exactly on the boundary
+  });
+
+  it('the boundary is EXACT, because squares are compared rather than a square root', () => {
+    // `sqrt` returns a float, and comparing a float against an integer radius makes "exactly on
+    // the boundary" depend on rounding — which is precisely where the flap test parks the player.
+    expect(withinRadius(0, 0, { playerX: 480, playerY: 0 }, 480)).toBe(true);
+    expect(withinRadius(0, 0, { playerX: 481, playerY: 0 }, 480)).toBe(false);
+  });
+
+  it('groundUnder probes BELOW the feet, so a foot line on a surface reads as supported', () => {
+    const floor = [{ x: 0, y: 960, w: 1000, h: 120 }];
+    // Feet exactly on the top edge — the normal case, and a boundary comparison at `y` itself
+    // would be at the mercy of a level authored half a pixel out.
+    expect(groundUnder(500, 960, floor)).toBe(true);
+    // Past the right end, and before the left one.
+    expect(groundUnder(1001, 960, floor)).toBe(false);
+    expect(groundUnder(-1, 960, floor)).toBe(false);
+    // Standing at the right height for NO floor at all.
+    expect(groundUnder(500, 500, floor)).toBe(false);
+    expect(groundUnder(500, 960, [])).toBe(false);
   });
 });
