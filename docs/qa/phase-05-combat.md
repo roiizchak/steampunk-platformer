@@ -2239,3 +2239,92 @@ Restoring `death` to the shipped 0.34408602 and repacking turns the new gate red
 in the failure message: *"brass-sentry-death frame 0 has a 160px base against idle's 205px — −22.0 %
 … almost certainly a per-action scale derived from the SILHOUETTE."* The file also carries a
 sensitivity assertion, so a gate that could not tell that from correct would itself be red.
+
+### 🔴 Five one-shots juddered, and the reason recorded for two of them was wrong
+
+Session 9 fixed the ghosting by making every drawn frame of a **loop** occupy a whole number of
+60 Hz ticks. `tests/unit/loop-dwell.test.ts` gated that — and gated only loops, carrying a
+`KNOWN_UNEVEN_ONE_SHOTS` list which recorded `brass-courier-attack` (2.5 refreshes a frame) and
+`rust-scavenger-death` (4.5) as permanent, with this reason:
+
+> *"A one-shot's `simTicks` is a SIM WINDOW … Rounding one to suit the art would be a balance
+> change wearing an animation change's clothes … The honest fix is a frame count that divides the
+> window — which is a re-pack of the art, not an edit here."*
+
+**The first half is right and the second half is false.** The list named the fix and then called it
+out of reach, on a belief that a one-shot's frame count is detected from the art. It is not: it is
+**declared**, in `VIDEO_MOTIONS[key].frames`, and `build-clips.mjs:293` samples exactly that many
+source frames out of the clip. The window is the sim's and was never touched. The count was ours the
+whole time.
+
+Widening the gate to every row found **five**, not two — the flagged `fall` among them:
+
+| row | window | frames | refreshes/frame | now |
+|---|---|---|---|---|
+| `brass-courier-attack` | 20 | 8 | 2.500 | **10 frames, 2.000** |
+| `brass-courier-death` | 45 | 10 | 4.500 | **9 frames, 5.000** |
+| `rust-scavenger-death` | 45 | 10 | 4.500 | **9 frames, 5.000** |
+| `brass-sentry-death` | 45 | 8 | **5.625** | **9 frames, 5.000** |
+| `brass-courier-fall` | 18 | 8 | 2.250 | ⚠️ blocked — see below |
+
+All four re-extracted and repacked cleanly at $0; `brass-sentry/death` re-declared its existing
+`ACCEPTED_EDGE_BLEED` waiver on the way through, printed as it is designed to be. Deaths land on
+9 frames rather than 15 deliberately: 5 refreshes reads fine for a collapse and 15 would have added
+50 % to a sheet on a boot payload already pinned to `workers: 1`.
+
+#### `fall` is blocked on the ART, and the shipped sheet never passed G6
+
+Re-extracting `fall` at 9 frames throws:
+
+> `assets:clips: "fall" frame 0 of 9 fails G6 edge bleed — left 0px, right 0px, top 0px, bottom 76px`
+
+Measured across all nine sampled frames: **0–4 FAIL, 5–8 PASS** (margins 46–148 px). The failing
+edges carry contiguous opaque runs of 138 px (top), 60 px (left) and 50 px (right), so this is a
+real mask reaching the edge and not speckle — but the frame itself, looked at at full resolution,
+shows the courier with clean green on every side. What survives keying is green that differs enough
+from `borderKey`'s sample to stay opaque, on the highest-motion frames of the clip.
+
+**`windowIndices` starts every sampling at the measured motion onset**, so frame 0 is the same
+source frame whether 6, 8 or 9 frames are asked for. All three fail identically — which means:
+
+🔴 **The `fall` sheet that ships today never passed G6.** `build-clips.mjs:300-301` calls
+`extract()` and *then* `gateSheetEdges()`, so a failing extraction leaves a complete, usable strip
+on disk that `assets:build` will pack without complaint. Regenerating the 8-cell strip and repacking
+reproduced `public/assets/characters/brass-courier/sheets/fall.png` **byte for byte against HEAD**,
+which is how that path was confirmed rather than guessed. The file's own comment shows the hole was
+half-seen: the geometry sidecar is written after the gate *"so a strip that fails G6 … cannot be
+packed by the new path either"* — and the sentence continues *"consumers treat a missing sidecar as
+use the old detection"*, which is the path that packed this one.
+
+`brass-courier/jump` is the same batch and is already recorded as failing G6 on both rounds while
+shipping. **`fall` was not recorded, and now is.**
+
+**STOP-and-ask, not absorbed.** Three unblocks exist and each needs a decision: a chroma keying
+tolerance (a gate parameter — never to be loosened to clear a red), an `ACCEPTED_EDGE_BLEED` entry
+(which requires a reason someone can state, and "green that did not key" is not yet one), or a
+re-shoot (money). Until one is taken, `fall` holds 8 frames at 2.25 refreshes.
+
+#### A spec and its strip had silently drifted
+
+`motion.mjs` declared `fall: frames: 6`. `_generated/sheets/fall-clip.png` held **8** cells. The
+catalog shipped **8**. `assets:build` packs whatever the strip contains and never reads the spec, so
+`assets:clips` and `assets:build` can be run at different times against different declarations and
+nothing compares them. The spec now says 8, which is what actually ships.
+
+#### The two gates, and both watched red
+
+`tests/unit/loop-dwell.test.ts` now covers **every** row, not only loops, and its failure message
+names the right lever per kind — an authored cadence for a loop, a divisor frame count for a
+one-shot. `tests/unit/one-shot-divisor.test.ts` is new and checks the **head** of the chain: the
+declared count divides the window *before* ffmpeg is invoked, and the shipped `frameCount` equals
+the declared one, which is the assertion the drift above walked straight through.
+
+| mutation | result |
+|---|---|
+| widen `loop-dwell` to every row, against the catalog as it stood | **5 failed** — the exact five rows above, each naming its lever |
+| `brass-courier/attack` frames 10 → 8 | **3 failed** — divisor rule, spec-vs-catalog drift, *and* the "the blocked list must not grow quietly" cross-check |
+
+Restored and confirmed byte-identical with `cmp` *(C12)*. `BLOCKED_ON_ART` lives in
+`tests/unit/blockedDwell.ts` so both files skip the same row from one definition *(vault 5.3)*, and
+it is asserted in **both** directions: red if `fall` leaves the catalog, red if its dwell changes at
+all — including if the art is fixed and the row turns even — and red if any second row joins it.

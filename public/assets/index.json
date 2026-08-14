@@ -127,9 +127,9 @@
       "url": "assets/characters/brass-courier/sheets/attack.png",
       "frameWidth": 336,
       "frameHeight": 384,
-      "frameCount": 8,
+      "frameCount": 10,
       "simTicks": 20,
-      "fps": 24,
+      "fps": 30,
       "loop": false,
       "derivedFrom": "sim"
     },
@@ -138,9 +138,9 @@
       "url": "assets/characters/rust-scavenger/sheets/death.png",
       "frameWidth": 512,
       "frameHeight": 384,
-      "frameCount": 10,
+      "frameCount": 9,
       "simTicks": 45,
-      "fps": 13.333333333333334,
+      "fps": 12,
       "loop": false,
       "derivedFrom": "sim"
     },
@@ -171,9 +171,9 @@
       "url": "assets/characters/brass-sentry/sheets/death.png",
       "frameWidth": 512,
       "frameHeight": 384,
-      "frameCount": 8,
+      "frameCount": 9,
       "simTicks": 45,
-      "fps": 10.666666666666666,
+      "fps": 12,
       "loop": false,
       "derivedFrom": "sim"
     },
@@ -182,9 +182,9 @@
       "url": "assets/characters/brass-courier/sheets/death.png",
       "frameWidth": 336,
       "frameHeight": 384,
-      "frameCount": 10,
+      "frameCount": 9,
       "simTicks": 45,
-      "fps": 13.333333333333334,
+      "fps": 12,
       "loop": false,
       "derivedFrom": "sim"
     }

@@ -55,7 +55,13 @@ export const COMBAT_MOTIONS = Object.freeze({
    */
   'brass-courier/attack': {
     cyclic: false,
-    frames: 8,
+    // 🔴 8 -> 10 on 2026-08-14. **A one-shot's frame count must DIVIDE its sim window**, and this
+    // one did not: 20 ticks over 8 frames is 2.5 refreshes each, so the display served the swing as
+    // 3,2,3,2,3,2,3,2 — session 9's judder, on a combat move. The window is `attackTotalTicks`,
+    // imported from `src/sim/combat.ts` and never ours to round; the frame COUNT is ours, and 10
+    // divides 20 exactly at 2 ticks a frame. `tests/unit/loop-dwell.test.ts` now gates every row,
+    // and `one-shot-divisor.test.ts` gates this number against the window before anything is packed.
+    frames: 10,
     identity: ('IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
       'same hair, same brass goggles pushed up on the forehead, same riveted brass pauldron, same ' +
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
@@ -122,7 +128,10 @@ export const COMBAT_MOTIONS = Object.freeze({
    */
   'brass-courier/death': {
     cyclic: false,
-    frames: 10,
+    // 10 -> 9: `DEATH_TICKS` is 45, and 45/10 is 4.5 refreshes a frame. 9 divides it at exactly 5.
+    // One frame fewer rather than 15 — a collapse reads fine at 5 refreshes, and this is the sheet
+    // that already forced the courier's cell to 336 px, so payload is a live cost here.
+    frames: 9,
     identity: ('IDENTITY: this is the same man throughout, in strict side profile facing RIGHT - same face, ' +
       'same hair, same brass goggles pushed up on the forehead, same riveted brass pauldron, same ' +
       'bandolier of capped copper vials, same worn satchel, same forearm brace, same palette. ' +
@@ -219,7 +228,8 @@ export const COMBAT_MOTIONS = Object.freeze({
   /** The turret destroyed. One-shot, and it must end as obvious wreckage. */
   'brass-sentry/death': {
     cyclic: false,
-    frames: 8,
+    // 8 -> 9: 45 ticks over 8 was 5.625 refreshes a frame, the worst of the five. 9 divides at 5.
+    frames: 9,
     identity: 'IDENTITY: this is the same MACHINE throughout - a squat brass and blue-grey steel sentry ' +
       'turret, no face, no person, seen from the side facing RIGHT. Same riveted drum housing, ' +
       'same glass lens, same two pressure gauges, same stencilled number plate, same finned ' +
@@ -312,7 +322,8 @@ export const COMBAT_MOTIONS = Object.freeze({
   /** The scavenger destroyed. One-shot; it must end unmistakably down. */
   'rust-scavenger/death': {
     cyclic: false,
-    frames: 10,
+    // 10 -> 9: same 45-tick window, same 4.5-refresh judder, same divisor. See the courier's.
+    frames: 9,
     identity: 'IDENTITY: this is the same creature throughout, in strict side profile facing RIGHT - same ' +
       'riveted bucket head with a narrow slit and two amber lamps, same mismatched scavenged ' +
       'plates lashed on with wire, same counterweight on a chain at the hip, same bent exhaust ' +

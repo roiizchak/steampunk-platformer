@@ -135,69 +135,77 @@
       "anchor": "feet",
       "scale": 0.44081578,
       "scaleSource": "action",
-      "deepestSourceY": 739,
+      "deepestSourceY": 719,
       "frames": [
         {
           "index": 0,
-          "sourceMinY": 160,
-          "sourceMaxY": 717,
-          "sourceCentroidY": 446.398,
+          "sourceMinY": 140,
+          "sourceMaxY": 697,
+          "sourceCentroidY": 426.398,
           "drawnHeight": 246,
           "liftPx": 10
         },
         {
           "index": 1,
           "sourceMinY": 144,
-          "sourceMaxY": 717,
-          "sourceCentroidY": 429.558,
-          "drawnHeight": 253,
+          "sourceMaxY": 697,
+          "sourceCentroidY": 417.929,
+          "drawnHeight": 244,
           "liftPx": 10
         },
         {
           "index": 2,
-          "sourceMinY": 18,
-          "sourceMaxY": 717,
-          "sourceCentroidY": 405.168,
-          "drawnHeight": 309,
+          "sourceMinY": 16,
+          "sourceMaxY": 697,
+          "sourceCentroidY": 388.943,
+          "drawnHeight": 301,
           "liftPx": 10
         },
         {
           "index": 3,
           "sourceMinY": 0,
-          "sourceMaxY": 719,
-          "sourceCentroidY": 423.545,
-          "drawnHeight": 317,
+          "sourceMaxY": 699,
+          "sourceCentroidY": 387.499,
+          "drawnHeight": 309,
           "liftPx": 9
         },
         {
           "index": 4,
-          "sourceMinY": 0,
-          "sourceMaxY": 721,
-          "sourceCentroidY": 508.674,
-          "drawnHeight": 318,
-          "liftPx": 8
+          "sourceMinY": 48,
+          "sourceMaxY": 699,
+          "sourceCentroidY": 395.4,
+          "drawnHeight": 287,
+          "liftPx": 9
         },
         {
           "index": 5,
-          "sourceMinY": 186,
-          "sourceMaxY": 739,
-          "sourceCentroidY": 551.922,
-          "drawnHeight": 244,
-          "liftPx": 0
+          "sourceMinY": 4,
+          "sourceMaxY": 717,
+          "sourceCentroidY": 536.28,
+          "drawnHeight": 315,
+          "liftPx": 1
         },
         {
           "index": 6,
-          "sourceMinY": 146,
-          "sourceMaxY": 739,
-          "sourceCentroidY": 566.868,
-          "drawnHeight": 262,
+          "sourceMinY": 142,
+          "sourceMaxY": 719,
+          "sourceCentroidY": 537.873,
+          "drawnHeight": 255,
           "liftPx": 0
         },
         {
           "index": 7,
-          "sourceMinY": 124,
-          "sourceMaxY": 739,
-          "sourceCentroidY": 576.49,
+          "sourceMinY": 126,
+          "sourceMaxY": 719,
+          "sourceCentroidY": 547.085,
+          "drawnHeight": 262,
+          "liftPx": 0
+        },
+        {
+          "index": 8,
+          "sourceMinY": 102,
+          "sourceMaxY": 719,
+          "sourceCentroidY": 556.45,
           "drawnHeight": 272,
           "liftPx": 0
         }
