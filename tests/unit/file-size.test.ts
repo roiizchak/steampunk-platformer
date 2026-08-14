@@ -85,8 +85,19 @@ describe('the 400-line rule', () => {
       .filter((f) => f.lines > LIMIT)
       .sort((a, b) => b.lines - a.lines);
 
+    // 🔴 A basename fallback used to sit beside the path check:
+    //     `&& !allLogs.includes(f.path.split('/').pop()!)`
+    // It accepted a file whose BARE FILENAME appeared anywhere in any QA log, for any reason. That
+    // is not a record of a justification, it is a coincidence — and it had already masked a real
+    // one: `docs/qa/phase-05-combat.md:2495` records the 648-line `enemy-ai.test.ts` passing
+    // "only because the basename appeared in a log for an unrelated reason".
+    //
+    // Dropped 2026-08-14 (D6b) at ZERO cost: all 7 over-limit files already carry a full-path
+    // citation, verified file by file before the fallback was removed. See the reversal note in
+    // `docs/qa/phase-05-combat.md` — the ratchet half of this was declined on 2026-08-13 as
+    // finding T7 and has now been reopened and approved.
     const unrecorded = over
-      .filter((f) => !allLogs.includes(f.path) && !allLogs.includes(f.path.split('/').pop()!))
+      .filter((f) => !allLogs.includes(f.path))
       .map((f) => `${f.path} (${f.lines} lines)`);
 
     expect(
@@ -102,7 +113,18 @@ describe('the 400-line rule', () => {
       .filter((f) => f.lines > LIMIT);
 
     // A ceiling, not an assertion that everything is fine. It exists so that ADDING a new
-    // over-limit file is red even if a QA log happens to mention its name for another reason.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(10);
+    // over-limit file is red even if a QA log happens to mention it for another reason.
+    //
+    // Ratcheted 10 -> 7 on 2026-08-14 (D6b). At 10 there were three slots of silent headroom: two
+    // new over-limit files could land green. **Set to the actual count**, so the 8th is red.
+    //
+    // ⚠️ This REVERSES a recorded decision. `docs/qa/phase-05-combat.md` declined the ratchet on
+    // 2026-08-13 as finding T7 ("not reopened here"). It was reopened and approved by the user on
+    // 2026-08-14. Recorded as a reversal with its date rather than as a fresh decision, because a
+    // rule that flips silently is a rule the next reader argues with.
+    //
+    // Lower it again whenever a file comes off the list; never raise it to clear a red. The way
+    // past this gate is to split the file or write the justification, in that order of preference.
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(7);
   });
 });

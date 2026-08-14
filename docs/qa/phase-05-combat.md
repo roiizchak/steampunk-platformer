@@ -1498,7 +1498,7 @@ it is what a reviewer reads and believes.
 | **T4** | MED | **5.9's sweep uses `.some()` across only two set-points** — the floor and roughly double. A knob whose only observable effect is at the *floor* passes even if it does nothing in the mid-range a designer would actually use. Saturating a knob to an extreme is not evidence the knob works. | Same shape as the `deadZone` clamp blind spot this session already hit and fixed by adding a third placement. A real weakness; the fix is a mid-range assertion, which is a criterion change. |
 | **T5** | MED | **5.16's "neither deals contact damage" is vacuous for the sentry** — `applyWorldDamage` has no sentry-contact path at all, so it is true by construction. Only the "zero shots" half is a real assertion for that enemy type. | Recorded rather than reworded: the criterion's other clauses are non-vacuous and were hand-traced. Reword when a sentry contact path exists, not before. |
 | **T6** | MED | **Criterion 5.1's vertical term is untested.** Every sentry fixture in `enemy-ai.test.ts` uses `y: 0` with `playerY: 0`, so `dy` in `withinRadius` is always 0. Delete `dy * dy` — collapsing detection to 1-D — and **not one test goes red**. Verified: 13 non-zero `playerY` fixtures exist and every one is `stepScavenger`; none is a sentry. | `withinRadius` is correct today, so this is missing coverage rather than a defect. Adding the fixture is a one-test change and the cheapest real improvement on this list — first item next session. |
-| **T7** | MED | **`file-size.test.ts`'s ceiling is now vacuous.** It asserts `over.length <= 10`; with 0 over it has ten free slots and cannot go red for the next ten regressions. The only remaining guard is a bare-basename `String.includes` across every `docs/qa/*.md` — and this log names all eight formerly-over files, pre-approving them. `GymScene.ts` sits at **399**, `phase-01-boot.spec.ts` at **398**. | **User decision, 2026-08-13: leave the ceiling at 10 and record the weakness.** Tightening to `toBe(0)` changes a gate's tolerance, which is a STOP-and-ask; it was asked and declined. |
+| **T7** | MED | **`file-size.test.ts`'s ceiling is now vacuous.** It asserts `over.length <= 10`; with 0 over it has ten free slots and cannot go red for the next ten regressions. The only remaining guard is a bare-basename `String.includes` across every `docs/qa/*.md` — and this log names all eight formerly-over files, pre-approving them. `GymScene.ts` sits at **399**, `phase-01-boot.spec.ts` at **398**. | ~~**User decision, 2026-08-13: leave the ceiling at 10 and record the weakness.** Tightening to `toBe(0)` changes a gate's tolerance, which is a STOP-and-ask; it was asked and declined.~~ 🔄 **REVERSED 2026-08-14 (D6b): both halves tightened** — ceiling `10 → 7`, basename fallback removed. Red-proved both ways. Full record in *Criterion 5.12* below. |
 | **T8** | MED | **`verify-dist`'s identifier checks cannot go red under minification.** Measured against the shipped bundle: `stepScavenger` **0** and `createScavenger` **0** — both unquestionably ship — proving the four identifier greps (`PlaygroundScene`, `ElementEditorScene`, `GymScene`, `spawnDevEnemies`) return 0 whether the code shipped or not. `spawnDevFleet` **does** survive (1 occurrence) and is **not** on the list. | **Partly a correction to the reviewer:** the scene-KEY check *is* real — `verify-dist` iterates backtick, single and double quotes, and the bundle carries backtick-quoted `Game` ×3 and `Boot` ×1, so a shipped `Playground` key would be caught. `__game`/`__phaserGame` are property names and survive minification, so those are real too. Only the four identifier greps are decoration. Benign today (`spawnDevFleet(){}` is an empty stub), so this is a **C2 defect in the gate, not in the bundle** — put to the Codex implementation review rather than changed at gate time. |
 | **T9** | MED | **The splits relocated complexity rather than reducing it**, and all 13 new modules have exactly one importer — literally the gaming vector `file-size.test.ts`'s own docstring names. | Recorded in the same breath as "0 over 400", per S9's precedent, because both facts are true. Mitigating and verified: the seams are cohesive, behaviour was preserved (multiset line-diff, **zero executable lines lost**), and **comment/doc lines grew in every split** — BootScene +29, gates +4, sheets +21, GameScene +58, tests +59 — so explanation was not deleted to hit the number, which is the failure mode the rule most fears. |
 | **T10** | MED | **5.3's commitment is not observable on screen.** `rust-scavenger-chase` is not in the catalog and `playIfChanged` no-ops on a missing key, so a scavenger committed to a 30-tick chase and one flapping every tick both draw `walk`. `window.__game` carries no enemy state, so no e2e can tell them apart either. | Genuine, and it means any *observational* evidence for 5.3 is vacuous. The criterion's method is **code review**, which was satisfied by mutation runs — so 5.3 stands. Resolved by shipping the chase sheet (post-phase art), not by a code change. |
@@ -2488,7 +2488,7 @@ is that justification, and it is the first one this phase has actually had: the 
 
 | file | lines | why it is not split |
 |---|---|---|
-| `tests/unit/enemy-ai.test.ts` | 648 | One subject — the enemy AI — across five criteria (5.1, 5.2, 5.3, 5.9, 5.16). Splitting by criterion would put the same fixtures in five files; splitting by enemy would separate the sentry and scavenger tests that assert **against each other** (5.10's "two different entities"). The length is fixtures and their reasoning, not logic. |
+| `tests/unit/enemy-ai.test.ts` | ~~648~~ **701** | One subject — the enemy AI — across five criteria (5.1, 5.2, 5.3, 5.9, 5.16). Splitting by criterion would put the same fixtures in five files; splitting by enemy would separate the sentry and scavenger tests that assert **against each other** (5.10's "two different entities"). The length is fixtures and their reasoning, not logic. |
 | `src/scenes/GameScene.ts` | 515 | Already split five ways — `gameInput`, `gameHud`, `gameLevelDraw`, `gameParallax`, `devSpawn`. What remains is the seam itself: the accumulator, the tick drain, the render pass and the debug surface, which is the one thing that cannot be moved without moving the thing this file exists to be. Its own comment claiming the split *"keeps this file under the 400-line rule"* is now stale and is corrected. |
 | `src/sim/combat.ts` | 468 | Grew 448 → 468 with the respawn's window-closing fix. Every export is one step of the tick's step 4 plus the constants Phase 5's art is generated against; the docstrings are the balance record the art pipeline reads. Splitting the constants from the machine that consumes them is exactly the two-definitions risk *(vault 5.3)* this file's own header is about. |
 | `src/sim/player.ts` | 446 | The movement resolver and `DEFAULT_TUNING`. Same argument: the knobs and the code that reads them, together, one file, no second copy. |
@@ -2496,7 +2496,55 @@ is that justification, and it is the first one this phase has actually had: the 
 | `tests/e2e/phase-04-assets.spec.ts` | 407 | Phase 4's asset spec, untouched this phase. |
 | `tests/unit/sheet-packing.test.ts` | 402 | Crossed at 405 in Phase 4 when per-animation lift landed; recorded there, unchanged here. |
 
-⚠️ **The ceiling in `file-size.test.ts` is still `<= 10` with seven over.** Ratcheting it to seven
-was **declined on 2026-08-13** (finding T7) and is not reopened here; it is a STOP-and-ask that was
-already asked. What did change is that the path check now works, so the names above are load-bearing
-rather than accidental.
+#### 🔄 REVERSAL, 2026-08-14 — T7 was reopened and both halves are now tightened
+
+The paragraph that stood here said the ceiling was *"still `<= 10` with seven over"*, that ratcheting
+it *"was **declined on 2026-08-13** (finding T7) and is not reopened here"*. **That decision has been
+reversed by the user (D6b, 2026-08-14).** It is recorded as a reversal with its date rather than as a
+fresh decision, because a rule that flips silently is a rule the next reader argues with — the
+decline was itself a STOP-and-ask that was properly asked and answered, and so was the reopening.
+
+Both loose halves are now closed:
+
+| half | was | is | cost |
+|---|---|---|---|
+| basename fallback | `!allLogs.includes(f.path)` **`\|\| basename`** | path citation only | **zero** — all 7 files above already cite a full path |
+| ceiling | `toBeLessThanOrEqual(10)` | `toBeLessThanOrEqual(7)` | zero — set to the actual count |
+
+The fallback is the one that had already failed in the field: `tools/gen/motion.mjs` in the table
+above records the size gate staying green *"only because the basename appeared in a log for an
+unrelated reason"*. Removing it costs nothing precisely **because** the path check was repaired
+first; the two changes had to land in that order.
+
+**Red-proved, both, 2026-08-14** — each restored from a backup taken immediately before it and
+`cmp`'d byte-identical:
+
+- **fallback:** rewrote the one path citation of `tools/gen/motion.mjs` in this file down to the bare
+  `motion.mjs`, leaving 5 basename occurrences. → `Tests 1 failed`, naming
+  `tools/gen/motion.mjs (415 lines)`. With the fallback still present this passes, which is the proof
+  that removing it is what catches it.
+- **ceiling:** added an 8th over-limit file (421 lines) under `src/game/`. → `Tests 2 failed`, one of
+  them `expected 8 to be less than or equal to 7`. At the old `10` this passes.
+
+⚠️ **The count reached seven only after a split made in this same session.** See the note below.
+
+#### The table above was stale within the session that wrote it
+
+Re-measured on 2026-08-14 before the ratchet, the set was **eight**, not seven, and two rows were
+wrong:
+
+- `tests/unit/enemy-ai.test.ts` is **701**, not 648 — grown by this session's own dead-zone tests.
+- **`tests/unit/enemy-view.test.ts` had crossed to 455** and was a genuinely *new* over-limit file,
+  pushed there by this session's own exhaustiveness-test rewrite. It carried **no path citation**,
+  only a basename — so it was exactly the case the fallback existed to mask, created hours after the
+  fallback was scheduled for removal.
+
+Rather than ratchet to 8 and accept a file this session had bloated, it was **split** — the order of
+preference the rule states. `enemy-health-bar.test.ts` now holds criterion 5.7 (197 lines) and
+`enemy-view.test.ts` holds 5.4 / 5.4d (278 lines). The seam is the **criterion boundary** and the two
+halves share no fixture; this is deliberately not a `-helpers` module that one file imports, which
+`file-size.test.ts:18-27` names as the way to game this gate. 28 tests, all preserved.
+
+That restored the count to exactly seven and let the approved ratchet land at the approved number.
+**The lesson is the one this gate keeps teaching: a table of measurements goes stale inside the
+session that writes it.** Re-measure before quoting.
