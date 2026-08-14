@@ -54,7 +54,7 @@ describe("step 9b: the player's swing resolves before contact damage (finding A1
     // Movement and detection disabled, the way `player-attack.test.ts`'s `worldWithScavengerAt` does
     // it — isolating the ordering from the scavenger's own chase behaviour.
     scavenger.detectRadius = 0;
-    scavenger.releaseRadius = 0;
+    scavenger.chaseSpeed = 0;
 
     // Start already mid-swing, one tick before the active window opens. Starting from 'fall' and
     // looping would let the scavenger's contact damage interrupt the swing (via `enterCombatState`

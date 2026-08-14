@@ -16,23 +16,36 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  CHASE_COMMIT_TICKS,
   SENTRY,
   SCAVENGER,
   createScavenger,
   createSentry,
   detects,
+  scavengerFooting,
   stepScavenger,
   stepSentry,
 } from '../../src/sim/enemies';
+import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
+import { DEFAULT_TUNING } from '../../src/sim/player';
+import { createSnapshot, latchAttackPress } from '../../src/sim/input';
 import { stepEnemies } from '../../src/sim/enemyTurn';
-import { createWorld } from '../../src/sim/tick';
+import { createWorld, tick } from '../../src/sim/tick';
 import { sentryRenderDesc } from '../../src/render/enemyView';
 
 /** The sentry sits at x=1000; the player is placed relative to it. */
 function sentryAt(x: number) {
   return createSentry({ x, y: 0 });
 }
+
+/**
+ * Ground under everything, at every height — the footing for every test that is NOT about ledges.
+ *
+ * One solid spanning the whole plane means `groundUnder` answers `true` for any `(x, y)` these
+ * fixtures use, so a test about detection or dead zones measures detection or dead zones and not
+ * terrain. The ledge behaviour has its own `describe` with its own deliberately finite floor —
+ * keeping the two apart is what stops a chase test failing for a reason it never meant to assert.
+ */
+const EVERYWHERE = scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6);
 
 describe('brass-sentry — criterion 5.1', () => {
   it('fires inside its radius — the positive control, not just the refusal', () => {
@@ -159,7 +172,7 @@ describe('rust-scavenger — criterion 5.2', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
     const xs: number[] = [];
     for (let i = 0; i < 2000; i += 1) {
-      stepScavenger(s, { playerX: 99999, playerY: 0 });
+      stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE);
       xs.push(s.x);
     }
     expect(Math.min(...xs)).toBeGreaterThanOrEqual(400);
@@ -180,16 +193,26 @@ describe('rust-scavenger — criterion 5.2', () => {
     });
 
     for (let i = 0; i < 60; i += 1) {
-      stepScavenger(base, far);
-      stepScavenger(faster, far);
+      stepScavenger(base, far, EVERYWHERE);
+      stepScavenger(faster, far, EVERYWHERE);
     }
     expect(Math.abs(faster.x - 500)).toBeGreaterThan(Math.abs(base.x - 500));
   });
 
-  /** Chase must be escapable — slower than the player's run, faster than the walk. */
+  /**
+   * Chase must be OUT-RUNNABLE, and that matters more now than when it was written.
+   *
+   * Aggro is permanent as of 2026-08-14, so out-running the scavenger no longer ends the chase — it
+   * only buys ground. If the chase were as fast as the run, "keep coming until I kill it" would mean
+   * "you must kill it", and a player who does not want that fight would have no move at all.
+   *
+   * 🔴 The bounds are DERIVED, not typed. This test used to read `toBeLessThan(12.0)` with the knob
+   * name in a comment, so it stayed green through two speed re-tunes and would have passed at 7.9 —
+   * Codex plan review finding 10. `DEFAULT_TUNING` is the authority for both ends now.
+   */
   it('chases slower than a running player and faster than a walking one', () => {
-    expect(SCAVENGER.chaseSpeed).toBeLessThan(12.0); // DEFAULT_TUNING.runMax
-    expect(SCAVENGER.chaseSpeed).toBeGreaterThan(5.54); // DEFAULT_TUNING.walkMax
+    expect(SCAVENGER.chaseSpeed).toBeLessThan(DEFAULT_TUNING.runMax);
+    expect(SCAVENGER.chaseSpeed).toBeGreaterThan(DEFAULT_TUNING.walkMax);
   });
 });
 
@@ -212,8 +235,16 @@ describe('episode commitment — criterion 5.3, the flap test (Codex C9)', () =>
    *    nothing to do with hysteresis. Pinning it models the case that actually occurs in game — a
    *    scavenger that cannot reach the player, because the player is above it or across a gap.
    *
-   * Verified to fail: replacing the asymmetric threshold in `detects` with a single
-   * `detectRadius` takes this from 1 state change to ~20.
+   * 🔴 **The mechanism it guards changed on 2026-08-14; the test did not, and that is the point.**
+   * It was written against hysteresis (`detectRadius` to enter, a larger `releaseRadius` to leave)
+   * and used to be verified red by collapsing the two thresholds into one — 1 state change became
+   * ~20. Both thresholds are gone now: aggro is permanent, so the only transition is
+   * patrol → chase and a second one is unreachable by construction.
+   *
+   * It is kept, unchanged, because it asserts the PROPERTY (the drawn state does not oscillate) and
+   * not the implementation. Verified red against the current code by making the chase clearable —
+   * adding `else if (!detects(...)) scavenger.chasing = false` to `stepScavenger` takes it back to
+   * ~300 changes.
    */
   it('does not flap when the player oscillates across the detection boundary', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
@@ -223,7 +254,7 @@ describe('episode commitment — criterion 5.3, the flap test (Codex C9)', () =>
     const states: string[] = [];
     for (let i = 0; i < 600; i += 1) {
       s.x = 500; // pinned: isolate detection from the chase closing the distance
-      stepScavenger(s, { playerX: i % 2 === 0 ? inside : outside, playerY: 0 });
+      stepScavenger(s, { playerX: i % 2 === 0 ? inside : outside, playerY: 0 }, EVERYWHERE);
       states.push(s.chasing ? 'chase' : 'patrol');
     }
 
@@ -237,25 +268,47 @@ describe('episode commitment — criterion 5.3, the flap test (Codex C9)', () =>
   });
 
   /**
-   * Hysteresis, stated as the property it is: **leaving costs more than entering.**
-   * Without this the boundary is a single value and the flap above is inevitable.
+   * 🔴 **The reversal, asserted directly.** This slot used to hold two tests —
+   * `releaseRadius > detectRadius` and "a chase commits for `CHASE_COMMIT_TICKS`" — and the second
+   * one ended `expect(s.chasing).toBe(false)`, which is exactly what the user asked to stop
+   * happening: *"it should keep coming until I kill it"* (2026-08-14).
+   *
+   * Both mechanisms are gone rather than re-tuned, and the flap test above still passes without
+   * them, because **a state with no exit cannot flap**. That is the property worth having; the
+   * hysteresis gap was only ever an approximation of it.
+   *
+   * 1000 ticks is 16 seconds of the player being 100 000 px away — two orders of magnitude past the
+   * old 720 px release. If anything in the sim can still end a chase from geometry, this finds it.
    */
-  it('requires the player to retreat further than the trigger distance to break the chase', () => {
-    expect(SCAVENGER.releaseRadius).toBeGreaterThan(SCAVENGER.detectRadius);
-  });
-
-  it('a chase commits for a minimum number of ticks even if the player vanishes instantly', () => {
+  it('never gives up: a chase entered once survives the player leaving the level', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
-    stepScavenger(s, { playerX: 500, playerY: 0 }); // in range → chase
+    stepScavenger(s, { playerX: 500, playerY: 0 }, EVERYWHERE); // in range → chase
     expect(s.chasing).toBe(true);
 
-    // Player teleports far away on the very next tick.
-    for (let i = 0; i < CHASE_COMMIT_TICKS - 1; i += 1) {
-      stepScavenger(s, { playerX: 99999, playerY: 0 });
+    for (let i = 0; i < 1000; i += 1) {
+      stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE);
       expect(s.chasing).toBe(true);
     }
-    stepScavenger(s, { playerX: 99999, playerY: 0 });
+    // Non-vacuity: the counter must be counting the episode, or "still chasing" could be a flag
+    // nothing ever reads. It is the ONE counter vault 5.1 allows, and this is what it is now for.
+    expect(s.chaseCounter).toBe(1000);
+  });
+
+  /**
+   * The detection radius is still a real threshold — permanence starts a chase no earlier than the
+   * old rule did. Without this, "never gives up" would also pass on a scavenger that chases from
+   * the first tick regardless of where the player is, which is a different game.
+   */
+  it('does not start a chase from outside the detection radius, however long it waits', () => {
+    // Bounds pinned to a point: a patrolling scavenger walks its beat, and one that walked RIGHT
+    // would close on the player and detect them legitimately — which would fail this test for a
+    // reason that is not the one it asserts.
+    const s = createScavenger({ x: 500, y: 0, patrolMin: 500, patrolMax: 500 });
+    for (let i = 0; i < 600; i += 1) {
+      stepScavenger(s, { playerX: 500 + SCAVENGER.detectRadius + 1, playerY: 0 }, EVERYWHERE);
+    }
     expect(s.chasing).toBe(false);
+    expect(s.chaseCounter).toBe(0);
   });
 
   /**
@@ -280,7 +333,7 @@ describe('detects — the imported predicate, never restated (5.3)', () => {
     expect(detects(s, { playerX: inside, playerY: 0 })).toBe(true);
     expect(detects(s, { playerX: outside, playerY: 0 })).toBe(false);
 
-    stepScavenger(s, { playerX: inside, playerY: 0 });
+    stepScavenger(s, { playerX: inside, playerY: 0 }, EVERYWHERE);
     expect(s.chasing).toBe(true);
   });
 });
@@ -288,12 +341,12 @@ describe('detects — the imported predicate, never restated (5.3)', () => {
 describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => {
   it('does not flip facing when the player is unreachable straight up and barely off-axis', () => {
     const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
-    stepScavenger(s, { playerX: 504, playerY: 660 });
+    stepScavenger(s, { playerX: 504, playerY: 660 }, EVERYWHERE);
     expect(s.chasing).toBe(true);
 
     const facings: Array<1 | -1> = [];
     for (let i = 0; i < 40; i += 1) {
-      stepScavenger(s, { playerX: 504, playerY: 660 });
+      stepScavenger(s, { playerX: 504, playerY: 660 }, EVERYWHERE);
       facings.push(s.facing);
     }
     let flips = 0;
@@ -305,7 +358,7 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
 
   it('does not move while the player sits at the same x, inside the dead zone', () => {
     const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
-    stepScavenger(s, { playerX: 500, playerY: 960 });
+    stepScavenger(s, { playerX: 500, playerY: 960 }, EVERYWHERE);
     expect(s.chasing).toBe(true);
 
     // Assert EVERY tick, not just the last — an even tick count would land back home by
@@ -313,18 +366,18 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
     // false green in W1.
     const xBefore = s.x;
     for (let i = 0; i < 41; i += 1) {
-      stepScavenger(s, { playerX: 500, playerY: 960 });
+      stepScavenger(s, { playerX: 500, playerY: 960 }, EVERYWHERE);
       expect(s.x).toBe(xBefore);
     }
   });
 
   it('boundary probe: 95px offset holds, 97px offset moves and turns', () => {
     const hold = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
-    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 });
+    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 }, EVERYWHERE);
     expect(hold.chasing).toBe(true);
     const holdX = hold.x;
     const holdFacing = hold.facing;
-    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 });
+    stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 }, EVERYWHERE);
     expect(hold.x).toBe(holdX);
     expect(hold.facing).toBe(holdFacing);
 
@@ -333,47 +386,104 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
     // tick chasing begins, per the existing single-call pattern above.
     const move = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
     const moveXBefore = move.x;
-    stepScavenger(move, { playerX: 500 + move.deadZone + 1, playerY: 960 });
+    stepScavenger(move, { playerX: 500 + move.deadZone + 1, playerY: 960 }, EVERYWHERE);
     expect(move.chasing).toBe(true);
     expect(move.x).not.toBe(moveXBefore);
     expect(move.facing).toBe(1);
   });
 
-  it('the chase never exceeds patrolMax, and release never single-tick teleports', () => {
+  /**
+   * 🔴 **The patrol clamp no longer applies to a chase, and this is the test that used to say the
+   * opposite.** It read *"the chase never exceeds patrolMax"* and ended `expect(s.x).toBe(700)`.
+   *
+   * That clamp IS the bug the user reported: *"after it sees me, it gets stuck after I get far from
+   * him."* A chasing scavenger driven past its patrol bound was pinned there, playing a run
+   * animation while covering no ground — which on screen reads as broken, not as territorial. The
+   * bound is a PATROL beat, a level-design number about where an idle machine walks; it was never
+   * meant to be the reach of a hunt.
+   *
+   * A chase is now bounded by GROUND instead, which is a physical limit rather than an authored one.
+   */
+  it('leaves its patrol zone to keep chasing, rather than pinning at the bound', () => {
     const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
-    // Drive the player far to the right so the scavenger chases past its patrol bound.
-    for (let i = 0; i < 60; i += 1) {
-      stepScavenger(s, { playerX: 900, playerY: 960 });
-      expect(s.x).toBeLessThanOrEqual(700);
+    // Sighted from inside detectRadius first — 3000 alone is 2500 px away and would never be seen.
+    // From here on the chase is permanent, so the player can run as far as they like.
+    stepScavenger(s, { playerX: 900, playerY: 960 }, EVERYWHERE);
+    expect(s.chasing).toBe(true);
+    for (let i = 0; i < 600; i += 1) {
+      stepScavenger(s, { playerX: 3000, playerY: 960 }, EVERYWHERE);
     }
     expect(s.chasing).toBe(true);
-    expect(s.x).toBe(700);
+    expect(s.x).toBeGreaterThan(700);
+    // It closed on the player rather than merely drifting: 60 ticks at chaseSpeed covers the gap.
+    expect(Math.abs(3000 - s.x)).toBeLessThan(s.deadZone + s.chaseSpeed);
+  });
 
-    // Release the chase by moving the player far away, past releaseRadius, and hold there.
+  it('never teleports — no single tick moves it further than one chaseSpeed', () => {
+    const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
+    stepScavenger(s, { playerX: 900, playerY: 960 }, EVERYWHERE);
     let maxDelta = 0;
     let prevX = s.x;
     for (let i = 0; i < 200; i += 1) {
-      stepScavenger(s, { playerX: 99999, playerY: 960 });
+      stepScavenger(s, { playerX: 99999, playerY: 960 }, EVERYWHERE);
       const delta = Math.abs(s.x - prevX);
       if (delta > maxDelta) maxDelta = delta;
       prevX = s.x;
     }
     expect(maxDelta).toBeLessThanOrEqual(s.chaseSpeed);
+    // Non-vacuity: it must have MOVED at all, or a frozen scavenger passes the line above trivially.
+    expect(maxDelta).toBe(s.chaseSpeed);
+  });
+});
+
+/**
+ * Ground-following — the limit that replaced the patrol clamp.
+ *
+ * The user's decision (2026-08-14): the scavenger may leave its patrol zone to chase, but only where
+ * its **whole body** has ground. It never floats, and it never falls — enemies still have no gravity
+ * and no collision, deliberately, so `groundUnder` is a veto on a step and nothing more.
+ */
+describe('rust-scavenger — a chase stops at the edge of the floor', () => {
+  /** A ledge ending at x = 2000, with the scavenger's feet on its top surface at y = 960. */
+  const LEDGE = scavengerFooting([{ x: 0, y: 960, w: 2000, h: 500 }], 6);
+
+  /** Sight the player from inside `detectRadius`, then have them flee past the drop and stay there. */
+  function seeThenFlee(s: ReturnType<typeof createScavenger>): void {
+    stepScavenger(s, { playerX: 1600, playerY: 960 }, LEDGE);
+    for (let i = 0; i < 300; i += 1) {
+      stepScavenger(s, { playerX: 5000, playerY: 960 }, LEDGE);
+    }
+  }
+
+  it('stops before its LEADING EDGE leaves the floor, not when its centre does', () => {
+    const s = createScavenger({ x: 1500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    seeThenFlee(s);
+    expect(s.chasing).toBe(true);
+    // 🔴 The body is 120 px wide, so the last legal centre is a half-body back from the drop —
+    // and this bound is what a CENTRE probe (Codex plan review finding 7) would fail: it would
+    // happily walk to 2000 and leave half a scavenger hanging over the void.
+    expect(s.x).toBeLessThanOrEqual(2000 - LEDGE.halfWidthPx);
+    // ...but it did walk right up to it. A scavenger that stopped early for any other reason —
+    // a surviving clamp, a stalled chase — fails here.
+    expect(s.x).toBeGreaterThan(2000 - LEDGE.halfWidthPx - s.chaseSpeed);
   });
 
-  it('preserves facing toward the player when pinned at the chase boundary', () => {
-    const s = createScavenger({ x: 690, y: 960, patrolMin: 400, patrolMax: 700 });
-    // Enter the chase from within detectRadius first (99999 alone would never be sighted), then
-    // push the player far to the right — chase pushes the scavenger to its patrolMax bound and it
-    // must still face right, toward the player, not left as a patrol-branch clamp would leave it.
-    stepScavenger(s, { playerX: 790, playerY: 960 });
-    expect(s.chasing).toBe(true);
-    for (let i = 0; i < 10; i += 1) {
-      stepScavenger(s, { playerX: 99999, playerY: 960 });
-    }
-    expect(s.x).toBe(700);
-    expect(s.chasing).toBe(true);
+  it('keeps FACING the player it cannot reach, so it does not read as having given up', () => {
+    const s = createScavenger({ x: 1500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    seeThenFlee(s);
     expect(s.facing).toBe(1);
+    expect(s.chasing).toBe(true);
+  });
+
+  it('walks back off the edge the moment the player is on the reachable side again', () => {
+    const s = createScavenger({ x: 1500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    seeThenFlee(s);
+    const stopped = s.x;
+    for (let i = 0; i < 100; i += 1) {
+      stepScavenger(s, { playerX: 200, playerY: 960 }, LEDGE);
+    }
+    expect(s.x).toBeLessThan(stopped);
+    expect(s.facing).toBe(-1);
   });
 });
 
@@ -399,6 +509,60 @@ describe('dead enemies stop acting — stepEnemies must filter hp <= 0', () => {
 
     expect(world.projectiles.length).toBe(0);
     expect(sentry.cooldownCounter).toBe(counterBefore);
+  });
+
+  /**
+   * 🔴 **Codex plan review finding 3.** The test below was vacuous for the half that mattered: it
+   * sets `hp = 0` on a scavenger that had **never chased**, so `expect(chasing).toBe(false)` passed
+   * on the initial value of the field and would have passed with the death transition deleted.
+   *
+   * It could be ignored while a chase lapsed on its own. It cannot now: aggro is permanent, so death
+   * is the ONLY exit, and a corpse left flagged `chasing` would keep `enemyView` picking the `chase`
+   * sheet for a body that is not going anywhere.
+   *
+   * The kill is done with **real swings against a live enemy**, not by assigning `hp = 0` — which is
+   * separately the gap (T2) that let a dead-enemy defect ship past the entire Phase 5 gate: 5.10 and
+   * 5.16 both zeroed hp directly, and the closest real swing stopped two hits short of a kill.
+   */
+  it('a CHASING scavenger, killed by real swings, stops chasing', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: SCALE,
+      bounds: BOUNDS,
+      solids: [{ x: 0, y: 960, w: 8000, h: 120 }],
+      spawn: { x: 1000, y: 960 },
+      // 1200 is `player-attack.test.ts`'s IN_REACH: clear of the player's own 132 px box and inside
+      // the swing's reach, a gap only `ATTACK_BOX` crosses.
+      enemies: [{ slug: 'rust-scavenger', x: 1200, y: 960, patrolMin: 1100, patrolMax: 1300 }],
+    });
+    const scavenger = world.enemies.scavengers[0]!;
+
+    // Chasing FIRST — the whole point, and what the old version of this test never established.
+    // 200 px is well inside the 480 px detect radius.
+    stepEnemies(world);
+    expect(scavenger.chasing).toBe(true);
+
+    // Then freeze it where it stands. A chaser that closes to contact puts the player in `hurt`,
+    // where `canAct` is false and no swing ever starts — the same reason `player-attack.test.ts`
+    // disables approach. `chasing` stays true, which is the state under test.
+    scavenger.chaseSpeed = 0;
+
+    let killed = false;
+    for (let swing = 0; swing < 20 && !killed; swing += 1) {
+      // `attackPressed` is an EDGE: re-latched per swing, so a held key cannot become a second hit.
+      const input = createSnapshot();
+      latchAttackPress(input);
+      for (let i = 0; i < attackTotalTicks(ATTACK) + 4; i += 1) {
+        tick(world, input);
+      }
+      killed = scavenger.hp <= 0;
+    }
+
+    expect(killed, 'the swing loop never actually killed it — the rest asserts nothing').toBe(true);
+    // `tick` runs `stepEnemies`, so the clear has already happened by here — asserted after a kill
+    // that took real damage through the real attack path, not after an assignment.
+    expect(scavenger.chasing).toBe(false);
+    expect(scavenger.chaseCounter).toBe(0);
   });
 
   it('a dead scavenger with real patrol bounds does not move, turn or start chasing', () => {

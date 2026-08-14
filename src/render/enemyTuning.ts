@@ -86,7 +86,6 @@ export function enemyKnobs(world: World): Knob[] {
       knob(`${name}.patrolSpeed`, target, 'patrolSpeed', STEP.speed, STEP.speed),
       knob(`${name}.chaseSpeed`, target, 'chaseSpeed', STEP.speed, STEP.speed),
       knob(`${name}.detectRadius`, target, 'detectRadius', STEP.distance, 0),
-      knob(`${name}.releaseRadius`, target, 'releaseRadius', STEP.distance, 0),
       knob(`${name}.deadZone`, target, 'deadZone', STEP.distance, 0),
     );
   });
@@ -107,18 +106,14 @@ export function knobLine(k: Knob, selected: boolean): string {
 }
 
 /**
- * The hysteresis gap is an INVARIANT, not two independent knobs.
+ * 🔴 **`enforceHysteresis` is deleted, and its absence is the point.**
  *
- * `releaseRadius` must stay strictly greater than `detectRadius` or the anti-flap mechanism is
- * gone — and a tuning panel that lets you drag one past the other hands you a scavenger that
- * stutters between patrol and chase every tick, which is the frame-0 animation bug arriving through
- * the AI. Called after every adjustment rather than being a rule inside each knob, because it is a
- * relationship between two of them.
+ * It existed to hold `releaseRadius > detectRadius`, because a panel that let you drag one past the
+ * other handed you a scavenger stuttering between patrol and chase every tick. Aggro is permanent
+ * as of 2026-08-14 (`enemyScavenger.ts`), so `releaseRadius` no longer exists and there is no pair
+ * of knobs left to hold in order.
+ *
+ * Criterion 5.9 is why this is a deletion rather than a no-op left in place: a knob that no longer
+ * moves a number, and an invariant with nothing to enforce, both read as working machinery in a
+ * panel. `PlaygroundScene` no longer calls it.
  */
-export function enforceHysteresis(world: World): void {
-  for (const scavenger of world.enemies.scavengers) {
-    if (scavenger.releaseRadius <= scavenger.detectRadius) {
-      scavenger.releaseRadius = scavenger.detectRadius + STEP.distance;
-    }
-  }
-}

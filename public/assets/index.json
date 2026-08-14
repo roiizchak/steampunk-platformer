@@ -150,8 +150,8 @@
       "frameWidth": 512,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 24,
-      "fps": 30,
+      "simTicks": 36,
+      "fps": 20,
       "loop": true,
       "derivedFrom": "authored"
     },

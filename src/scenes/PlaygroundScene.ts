@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { ticksToMs } from '../sim';
 import { derivedFeel } from '../sim/derived';
-import { enemyKnobs, enforceHysteresis, knobLine, type Knob } from '../render/enemyTuning';
+import { enemyKnobs, knobLine, type Knob } from '../render/enemyTuning';
 import { DEFAULT_TUNING } from '../sim/player';
 import type { TuningKnobs } from '../sim/types';
 import { GameScene } from './GameScene';
@@ -139,9 +139,8 @@ export class PlaygroundScene extends GameScene {
     if (enemyIndex >= 0) {
       const target = this.enemyKnobList[enemyIndex]!;
       target.set(Math.round((target.get() + target.step * direction) * 1000) / 1000);
-      // The gap between the two radii is an INVARIANT, not two free knobs — drag one past the
-      // other and the anti-flap mechanism is gone. See `enemyTuning.ts`.
-      enforceHysteresis(this.simWorld);
+      // No cross-knob invariant to re-assert any more: `releaseRadius` is gone with permanent
+      // aggro, and one radius cannot be dragged past itself. See `enemyTuning.ts`.
       this.refreshReadout();
       return;
     }

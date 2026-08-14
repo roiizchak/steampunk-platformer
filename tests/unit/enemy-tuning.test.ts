@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { enemyKnobs, enforceHysteresis, knobLine } from '../../src/render/enemyTuning';
+import { enemyKnobs, knobLine } from '../../src/render/enemyTuning';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { World } from '../../src/sim/types';
@@ -20,10 +20,11 @@ import type { World } from '../../src/sim/types';
 /**
  * The player RETREATS for the whole run, and that is not scenery either.
  *
- * `releaseRadius` is the threshold for LEAVING a chase, so it can only be observed while the
- * distance is growing. With a stationary player the scavenger closes in and stays, and no value of
- * `releaseRadius` changes anything — which the first version of this file reported as a dead knob.
- * Running away also crosses `detectRadius` outward, which is the case hysteresis exists for.
+ * It was introduced so `releaseRadius` — the threshold for LEAVING a chase — could be observed at
+ * all, since it only bites while the distance is growing. **That knob no longer exists**: aggro is
+ * permanent as of 2026-08-14, so nothing leaves a chase but death. The retreat is kept anyway,
+ * because it is now the only input that keeps a chasing scavenger MOVING for the whole run: against
+ * a stationary player it closes to the dead zone and stops, and `chaseSpeed` reads dead.
  */
 const RETREAT = { ...createSnapshot(), left: true };
 
@@ -121,7 +122,6 @@ describe('every enemy knob is live (criterion 5.9, vault A6)', () => {
           const world = freshWorld(placement);
           const target = enemyKnobs(world).find((k) => k.label === label)!;
           target.set(i === 0 ? target.min : target.get() * 2 + 200);
-          enforceHysteresis(world);
           return behaviourSignature(world, 240) !== baseline;
         });
       });
@@ -139,18 +139,25 @@ describe('every enemy knob is live (criterion 5.9, vault A6)', () => {
   });
 });
 
-describe('the hysteresis gap survives tuning', () => {
-  it('release is pushed back above detect when detect is dragged past it', () => {
-    const world = freshWorld();
-    const scavenger = world.enemies.scavengers[0]!;
+/**
+ * 🔴 The `hysteresis gap survives tuning` suite is DELETED, not disabled.
+ *
+ * It asserted that dragging `detectRadius` past `releaseRadius` pushed the second one back above
+ * it. With permanent aggro there is one radius and no pair to invert, so `enforceHysteresis` is
+ * gone from `enemyTuning.ts` and a test of it could only ever be green.
+ *
+ * The behaviour it protected — the scavenger must not stutter patrol/chase every tick — is still
+ * gated, by the flap test in `enemy-ai.test.ts`, which asserts the property rather than the
+ * mechanism and therefore outlived the mechanism.
+ */
 
-    const detect = enemyKnobs(world).find((k) => k.label === 'scav0.detectRadius')!;
-    detect.set(scavenger.releaseRadius + 200);
-    enforceHysteresis(world);
-
-    // Without this the two thresholds invert, the anti-flap mechanism is gone, and the scavenger
-    // stutters patrol/chase every tick — the frame-0 animation bug arriving through the AI.
-    expect(scavenger.releaseRadius).toBeGreaterThan(scavenger.detectRadius);
+describe('no knob promises a behaviour the sim no longer has', () => {
+  it('offers no releaseRadius knob, because a chase has no geometric exit', () => {
+    const labels = enemyKnobs(freshWorld()).map((k) => k.label);
+    expect(labels).not.toContain('scav0.releaseRadius');
+    // Non-vacuity: the scavenger's OTHER radius knob is still there, so this is not passing
+    // because the sweep found no scavenger at all.
+    expect(labels).toContain('scav0.detectRadius');
   });
 });
 

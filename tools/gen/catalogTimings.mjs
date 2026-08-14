@@ -33,8 +33,14 @@ export const HURT_TICKS = 18;
 /** Mirrors `SCAVENGER.patrolSpeed` (`src/sim/enemyScavenger.ts`), px/tick. */
 export const SCAVENGER_PATROL_SPEED = 2.5;
 
-/** Mirrors `SCAVENGER.chaseSpeed` (`src/sim/enemyScavenger.ts`), px/tick. */
-export const SCAVENGER_CHASE_SPEED = 8;
+/**
+ * Mirrors `SCAVENGER.chaseSpeed` (`src/sim/enemyScavenger.ts`), px/tick.
+ *
+ * 8 → 6 on 2026-08-14, when the chase was planted against its own art. The mirror gate in
+ * `tests/unit/catalog-timings.test.ts` caught the drift the same run the sim constant moved, which
+ * is the entire reason a hand-copied constant is allowed to exist here at all.
+ */
+export const SCAVENGER_CHASE_SPEED = 6;
 
 /**
  * Ticks one locomotion cycle occupies, from the art's stride and the sim's speed. Mirrors

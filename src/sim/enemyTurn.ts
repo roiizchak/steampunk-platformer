@@ -18,7 +18,7 @@
  * body-width from the barrel.
  */
 
-import { SENTRY, SENTRY_MUZZLE, stepScavenger, stepSentry } from './enemies';
+import { SENTRY, SENTRY_MUZZLE, scavengerFooting, stepScavenger, stepSentry } from './enemies';
 import { PLAYER_BOX, toWorld } from './player';
 import { fireProjectile, stepProjectiles } from './projectiles';
 import type { World } from './types';
@@ -27,10 +27,23 @@ export function stepEnemies(world: World): void {
   const { player } = world;
   const sighting = { playerX: player.x, playerY: player.y };
 
+  const footing = scavengerFooting(world.solids, world.scale);
+
   for (const scavenger of world.enemies.scavengers) {
     if (scavenger.hp > 0) {
-      stepScavenger(scavenger, sighting);
+      stepScavenger(scavenger, sighting, footing);
+      continue;
     }
+    // 🔴 Death is the ONLY exit from a chase now that aggro is permanent, so it has to be written
+    // down somewhere — and this loop, which every cause of death routes through, is the one place
+    // that sees every corpse regardless of what killed it. Before this the loop just `continue`d,
+    // which left a dead scavenger flagged `chasing` forever: `enemyView.ts` would pick the `chase`
+    // sheet for a body, and any future "is anything hunting the player" question would answer yes
+    // from a corpse. Harmless while a chase could lapse on its own; a permanent state with no exit
+    // has to be cleared explicitly (Codex plan review, finding 3 — which also found the existing
+    // test for this vacuous, because it set `hp = 0` on a scavenger that had never chased).
+    scavenger.chasing = false;
+    scavenger.chaseCounter = 0;
   }
 
   world.projectiles = stepProjectiles(

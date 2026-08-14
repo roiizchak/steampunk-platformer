@@ -4,7 +4,7 @@ import type { EnemySlug } from './enemies';
 import { createSentry } from './enemySentry';
 import type { Sentry } from './enemySentry';
 import { createScavenger } from './enemyScavenger';
-import type { Scavenger } from './enemyScavenger';
+import type { Scavenger, ScavengerFooting } from './enemyScavenger';
 
 /* ------------------------------------------------------------------ *
  * Placement — turning level data into live entities.
@@ -118,6 +118,18 @@ export const SCAVENGER_BOX: LocalBox = { x: -10, y: 0, w: 20, h: 40 };
  * against the FIRING pose, not the idle one, if the two disagree.
  */
 export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
+
+/**
+ * The ground data one tick of scavenger chasing needs, with the body's half-width resolved once.
+ *
+ * It lives HERE, beside `SCAVENGER_BOX`, so the width has exactly one definition *(vault 5.3)*.
+ * `enemyScavenger.ts` cannot import the box itself without closing a runtime cycle — this file
+ * already imports `createScavenger` from it — and restating `20 / 2 * scale` at the call site is how
+ * a body ends up two different widths depending on which question is being asked of it.
+ */
+export function scavengerFooting(solids: readonly Rect[], scale: number): ScavengerFooting {
+  return { solids, halfWidthPx: (SCAVENGER_BOX.w / 2) * scale };
+}
 
 /**
  * Does the player's world box touch this scavenger's?

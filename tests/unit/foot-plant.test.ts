@@ -43,8 +43,14 @@ import {
   FOOT_PX_PER_FRAME,
   LOCOMOTION_TICKS_PER_FRAME,
 } from '../../src/sim/player';
+import {
+  CHASE_FOOT_PX_PER_FRAME,
+  CHASE_TICKS_PER_FRAME,
+  SCAVENGER,
+} from '../../src/sim/enemyScavenger';
 import catalog from '../../public/assets/index.json';
 import bounds from '../../public/assets/config/character-bounds.json';
+import scavengerBounds from '../../public/assets/config/character-bounds-rust-scavenger.json';
 
 /** The two locomotion loops, and the tuning knob that caps each one's speed. */
 const LOOPS = [
@@ -120,6 +126,66 @@ describe('the sim speed and the art cadence are one decision, not two', () => {
       });
     });
   }
+});
+
+/**
+ * 🔴 **The scavenger's chase, added 2026-08-14 — and it is the same defect on a second body.**
+ *
+ * The player's locomotion was planted earlier the same session. The user then reported *"when
+ * Scavenger is running fast, the animation is not smooth like the character"* — the one slug whose
+ * cadence had never been checked against its own art. It shipped at 2 ticks/frame against a
+ * `chaseSpeed` of 8, so the body advanced 16 px per drawn frame while the foot travelled 18.
+ *
+ * The block below is the player's assertions applied to the enemy, and it exists so the NEXT slug
+ * is a rule rather than a second discovery.
+ */
+describe('rust-scavenger-chase — the same invariant, on the enemy', () => {
+  const row = catalog.sheets.find((sheet) => sheet.key === 'rust-scavenger-chase');
+  const chase = (
+    scavengerBounds.animations as Record<string, { fps?: number; footPxPerFrame?: number }>
+  ).chase;
+
+  it('records its measured foot travel in the slug bounds file, which is the copy of record', () => {
+    expect(chase?.footPxPerFrame).toBeGreaterThan(0);
+  });
+
+  it("src/sim/'s mirrored constant matches that measurement", () => {
+    expect(
+      CHASE_FOOT_PX_PER_FRAME,
+      'enemyScavenger.ts mirrors the measurement because src/sim/ cannot read a file. This is ' +
+        'what keeps the mirror reflecting.',
+    ).toBe(chase?.footPxPerFrame);
+  });
+
+  it('holds every drawn frame for a WHOLE number of ticks', () => {
+    const ticksPerFrame = row!.simTicks / row!.frameCount;
+    expect(Number.isInteger(ticksPerFrame)).toBe(true);
+    expect(ticksPerFrame).toBe(CHASE_TICKS_PER_FRAME);
+  });
+
+  it('advances the body exactly as far per frame as the art moves the foot', () => {
+    const ticksPerFrame = row!.simTicks / row!.frameCount;
+    expect(
+      ticksPerFrame * SCAVENGER.chaseSpeed,
+      `rust-scavenger-chase: the body covers ${ticksPerFrame * SCAVENGER.chaseSpeed}px per drawn ` +
+        `frame while the art moves the planted foot ${CHASE_FOOT_PX_PER_FRAME}px. That difference ` +
+        'is the foot-slide the user reported as "not smooth like the character".',
+    ).toBeCloseTo(CHASE_FOOT_PX_PER_FRAME, 10);
+  });
+
+  it('derives its fps from the cadence rather than carrying an authored one', () => {
+    expect(row!.fps).toBeCloseTo((row!.frameCount * 60) / row!.simTicks, 10);
+  });
+
+  /**
+   * The speed is not a free number and this is the assertion that says so out loud. Under the plant
+   * invariant `chaseSpeed = 18 / ticksPerFrame`, so the ONLY values that exist are 18, 9, 6 and
+   * 4.5 — which is why the session's decided "three quarters of run" (6.75) was unreachable and 6.0
+   * was taken instead. Anyone re-tuning by taste rather than by dwell fails here.
+   */
+  it('is a quotient of the measurement, never an independently chosen number', () => {
+    expect(SCAVENGER.chaseSpeed).toBe(CHASE_FOOT_PX_PER_FRAME / CHASE_TICKS_PER_FRAME);
+  });
 });
 
 describe('the retune preserved what it claimed to preserve', () => {

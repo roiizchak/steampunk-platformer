@@ -1573,3 +1573,117 @@ against the pipeline's own gates before forcing them through.
 
 This also **dissolves finding T10**, which recorded that 5.3's chase commitment is unobservable and
 "resolves by shipping the chase sheet (post-phase art)". The chase sheet was already bought.
+
+---
+
+## Session 10 — two reversed decisions, and the scavenger's own foot-plant
+
+Both entries below reverse a decision that is written down with a rationale, so both are recorded
+here as reversals rather than applied as silent knob edits. Both are the user's calls, taken
+2026-08-14 off a screen recording of live play.
+
+### 🔴 Aggro is PERMANENT. `releaseRadius` and `CHASE_COMMIT_TICKS` are deleted.
+
+**Reverses:** `enemyScavenger.ts`'s *"`chaseSpeed` sits between `walkMax` and `runMax` —
+**deliberately escapable**. A chaser faster than the player's run means fleeing is never an option,
+and with no stamina system that is not tension, it is a tax."* That reasoning stands on its own
+terms; the user simply wants a different game. Their words: **"it should keep coming until I kill
+it."**
+
+**And it was already the source of a reported defect.** The second half of the same report —
+*"after it sees me, it gets stuck after I get far from him"* — was the 720 px `releaseRadius`
+combined with the patrol clamp: driven past its patrol bound, a chasing scavenger was pinned there
+playing a run animation while covering no ground, until the player crossed the release threshold and
+it went back to patrolling. On screen that reads as broken, not as territorial.
+
+| | before | after |
+|---|---|---|
+| enter a chase | inside `detectRadius` 480 | unchanged |
+| leave a chase | outside `releaseRadius` 720, after `CHASE_COMMIT_TICKS` 30 | **only death** |
+| reach of a chase | clamped to `patrolMin`/`patrolMax` | **bounded by ground** |
+| anti-flap mechanism | hysteresis gap + commitment floor | **unreachable by construction** |
+
+**The anti-flap machinery went with it, and nothing was lost.** Hysteresis existed so a player
+straddling the boundary could not toggle patrol↔chase every tick, which restarts the animation every
+tick (vault 5.1's render-side consequence). With one one-way transition, **a state with no exit
+cannot flap.** The flap test in `enemy-ai.test.ts` is kept *unchanged* and still passes: it asserts
+the property (the drawn state does not oscillate), not the mechanism, so it outlived the mechanism.
+Re-proved red against the current code by making the chase clearable — 1 state change becomes ~300.
+
+**Ground-following replaced the patrol clamp.** A patrol bound is a level-design number about where
+an idle machine walks; it was never the reach of a hunt. A chase now steps only where the body's
+**leading edge** still has ground — `groundUnder` in `enemyGeometry.ts`, probed at
+`x + dir × halfWidth`. The centre probe the first draft used would walk half a 120 px body over the
+void (Codex plan review finding 7), and since enemies have no gravity it would *hang there* rather
+than fall, which is worse than either. `stepScavenger` takes the footing as a **required** argument
+for the same reason `createWorld`'s `scale` is required (vault 2.11): a caller that forgot it would
+get the old pinned-at-the-bound behaviour, silently.
+
+**Death is now the only exit, so it had to be written down.** `stepEnemies` clears `chasing` and
+`chaseCounter` on `hp <= 0` — one place, covering every cause of death. Codex plan review finding 3:
+the existing test for this was **vacuous**, setting `hp = 0` on a scavenger that had never chased,
+so it passed on the field's initial value. Replaced with a scavenger that is chasing first and then
+killed **by real swings through `tick`**, which also closes finding **T2** (nothing in the suite
+killed a live enemy with the real attack path; 5.10 and 5.16 both assigned `hp = 0`).
+
+**⚠️ Owed, and not done this session: the hands-on check at `x: 3198`.** A recorded playtest bug
+wedges the player against terrain with a scavenger in contact, draining 100 → 35 hp with no way
+past. It was never diagnosed and is not a Phase 5 criterion. A scavenger that never gives up *and*
+follows out of its patrol zone turns that wedge from "escapable by breaking line of sight" into a
+guaranteed death. **If it is now unsurvivable, that is a blocker to raise, not something to absorb.**
+
+### 🔴 `chaseSpeed` 8 → 6, because it is a measurement now and not a taste
+
+**Reverses** nothing written down — 8 was never justified against the art. It is recorded here
+because the number moved and because the *method* is now binding on every future locomotion sheet.
+
+The user reported *"when Scavenger is running fast, the animation is not smooth like the character."*
+Correct, and the cause is the defect the player's own locomotion had until earlier the same session:
+the chase shipped at **2 ticks/frame against `chaseSpeed` 8**, so the body advanced 16 px per drawn
+frame while the art moved the planted foot **18**. Nothing was watching, because the scavenger's foot
+travel had never been measured at all.
+
+Measured off the shipped `chase.png` with the courier's planted-foot tracker; the derivation, the two
+agreeing contact bands and the excluded foot-switch frames are in
+`character-bounds-rust-scavenger.json` → `_footPxPerFrame`, which is the copy of record.
+
+| | before | after |
+|---|---|---|
+| `chase` cadence | 12 frames / 24 ticks — 2 ticks/frame, 30 fps | 12 / 36 — **3 ticks/frame, 20 fps** |
+| `chaseSpeed` | 8 | **6.0** |
+| body px per drawn frame | 16.0 | **18.0** |
+| foot slide | **+12.5 %** | **0.00 %** |
+
+**The decided value was unreachable, and that is worth stating plainly.** The session's earlier
+decision was *"three quarters of the run speed"* — 6.75 at `runMax` 9.0. Planted feet require
+`ticksPerFrame × speed === footPxPerFrame` with a **whole** `ticksPerFrame`, so the chase speed is
+`18 / n` and the only values that exist are **18, 9, 6 and 4.5**. 6.75 is not among them. 6.0 was
+taken as the nearest reachable value below it — two thirds of the player's run rather than three
+quarters. 9.0 was rejected as the alternative: it is exactly the player's run speed, and with aggro
+now permanent that would make combat mandatory rather than chosen.
+
+**`tests/unit/foot-plant.test.ts` gained a `rust-scavenger-chase` block** so the next slug is a rule
+rather than a second discovery. `catalogTimings.mjs`'s mirrored `SCAVENGER_CHASE_SPEED` caught its
+own drift on the same run the sim constant moved, which is the whole justification for a hand-copied
+constant existing there.
+
+### Red-proofs *(C1/C12)* — every mutation verified applied by count, and reverted
+
+| mutation | result |
+|---|---|
+| delete the death transition in `stepEnemies` | `Tests 1 failed` — "a CHASING scavenger, killed by real swings, stops chasing" |
+| centre probe instead of the leading edge | `Tests 1 failed` — "stops before its LEADING EDGE leaves the floor" |
+| `CHASE_TICKS_PER_FRAME` 3 → 2 | `Tests 2 failed` — the whole-dwell and the plant-invariant assertions |
+| make the chase clearable again (`if (!detects(...)) chasing = false`) | `Tests 7 failed`, including the untouched flap test |
+
+Each verified as *content changed AND the original count dropped by one*, restored, and confirmed
+byte-identical with `cmp` — never as "the original count is now zero" *(C12)*.
+
+### One e2e flake, recorded rather than smoothed over
+
+The first full `npm run test:e2e` after this change failed criterion 5.11's sanity ceiling at
+`medianMs 102.3` against `< 100`. Four subsequent runs of that spec passed, as did a second full
+sweep (**48/48**). It is recorded, not dismissed: the ceiling is a headless SwiftShader figure that
+HANDOFF §14 measures at ~21× the real GPU, on a box that had just run the whole vitest suite — which
+is exactly why **W10 rewrites what 5.11 measures**. It is not evidence about this change, and it is
+not evidence the gate is sound either.

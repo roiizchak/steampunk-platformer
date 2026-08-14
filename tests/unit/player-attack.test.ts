@@ -55,7 +55,12 @@ function worldWithScavengerAt(x: number): World {
   });
   const target = world.enemies.scavengers[0]!;
   target.detectRadius = 0;
-  target.releaseRadius = 0;
+  // `releaseRadius` used to be zeroed here too. Aggro is permanent now, so there is no second
+  // radius — and `detectRadius = 0` alone is a weaker off-switch than it looks: `withinRadius`
+  // compares squares, so a player standing EXACTLY on the scavenger satisfies `0 <= 0`, which these
+  // contact fixtures come close to doing on purpose. Zeroing the speed is the belt to that brace:
+  // detected or not, the body cannot travel, which is the property every test here depends on.
+  target.chaseSpeed = 0;
   return world;
 }
 
