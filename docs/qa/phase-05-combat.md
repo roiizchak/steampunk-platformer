@@ -2480,6 +2480,50 @@ bytes* — and the art gates are the one place this project does not do it. Reco
 candidate for next session; closing it means calling `reachGate` from a unit test over
 `public/assets/`, which is the same move `tilemap-data.test.ts` already makes for levels.
 
+#### ✅ CLOSED, 2026-08-14 — and it cost far less than the entry above assumed
+
+The harness did not need building. **`tests/unit/sheet-gates.test.ts` already decoded a shipped PNG
+off disk inside vitest and called `runSheetGates('brass-sentry', 'idle')`.** It reported G5 as `N/A`
+because that action has no attack window, and `brass-courier/attack` is the *only* pair in
+`ATTACK_WINDOWS` — so the one line that would have exercised G5 against real bytes was simply never
+written. The decode path, the catalog lookup and the window table were all already in-process.
+
+Now wired, with three assertions the hand-run CLI could never have made:
+
+| pinned | value | why the verdict alone is not enough |
+|---|---|---|
+| `peakFrame` | 4 | — |
+| `peakTick` | **9** against a window closing at **10** | one tick of margin; a re-shoot that walks the peak one frame later flips PASS → FAIL with no prior warning |
+| plateau tie-break | first of frames 4/5/6 | **the shipped sheet passes only because of it** |
+
+**The plateau is the real finding.** The shipped reach profile ties at 293 px across *three* frames.
+`gateReachWindow` documents that the first of a tie wins; that is not a formality here —
+
+| tie-break | peakFrame | peakTick | inside [6, 10)? |
+|---|---|---|---|
+| **first (shipped)** | 4 | 9 | ✅ |
+| second | 5 | 11 | ❌ |
+| last | 6 | 13 | ❌ |
+
+`facing` is never supplied by `sheetGates.mjs`, so `gateReachWindow` defaults to `'right'`
+(`tools/gen/reachGate.mjs:124`). Recorded as **deliberate and correct**, not merely untested, and
+pinned by a test asserting a left-facing measurement of the same sheet gives a *different* peak — if
+it did not, `facing` would be inert and G5 direction-blind.
+
+**Red-proved three ways**, each restored byte-identical by `cmp`:
+
+1. Declared window → `[1, 3)` — the exact mutation that stayed green in session 10. → **4 failed**,
+   including the shipped-sheet case, `"frame 4 (tick 9) misses the active window [1, 3)"`.
+2. `PLAY_LAG_TICKS` `1 → 0` — **the important one.** `peakTick` becomes 8, which is *still inside*
+   the window, so **the verdict stays `PASS` and every other assertion in the file stays green**.
+   Only the `peakTick` pin catches it: → **1 failed**, `expected 8 to be 9`. This is the precise
+   demonstration that a verdict-only assertion is blind to margin erosion.
+3. Plateau tie-break `find` → `findLast` — → **3 failed**, and the shipped art now FAILs G5, which is
+   what proves the documented rule is load-bearing rather than decorative.
+
+Criterion **5.4e's structural hole is closed**: G5 now runs over the shipped bytes on every
+`npm test`, so repacking `attack.png` can no longer invalidate the evidence silently.
+
 ### Criterion 5.12 — the seven files over 400 lines, each with its reason
 
 The rule permits a file over the limit **with a written justification in the phase's QA log**. This

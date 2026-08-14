@@ -15,7 +15,10 @@ import { describe, expect, it } from 'vitest';
 
 import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
 import { fill } from '../../tools/gen/gates.mjs';
-import { blank } from '../../tools/gen/png.mjs';
+import { blank, decodePng, readBytes } from '../../tools/gen/png.mjs';
+import { sliceFrame } from '../../tools/gen/assetSources.mjs';
+import { PLAY_LAG_TICKS, gateReachWindow } from '../../tools/gen/reachGate.mjs';
+import catalog from '../../public/assets/index.json';
 import liftProfile from '../../public/assets/config/lift-profile.json';
 import type { RgbaImage } from '../../tools/gen/png.d.mts';
 import {
@@ -132,5 +135,121 @@ describe('runSheetGates — real run against a packed sheet already in the catal
 
   it('an unknown slug throws rather than substituting a placeholder verdict (vault 4.16)', () => {
     expect(() => runSheetGates('not-a-real-slug', 'idle')).toThrow();
+  });
+});
+
+/**
+ * 🔴 **G5 against the SHIPPED sheet — the hole that let a stale measurement read as PASS.**
+ *
+ * G5 had exactly one real-sheet caller above, `brass-sentry/idle`, and that action has no attack
+ * window, so it reports `N/A`. **`brass-courier/attack` is the only pair in `ATTACK_WINDOWS`, and
+ * nobody ever wrote the line that runs it.** The gate therefore existed, was unit-tested against
+ * synthetic fixtures, was runnable from the CLI — and never once ran against the bytes that ship.
+ * Session 10's criterion 5.4e was recorded from a hand-run of the CLI, which is a measurement, not
+ * a gate: it cannot go stale loudly. This closes that.
+ *
+ * ## Why the verdict alone is not enough to assert
+ *
+ * `peakTick` is **9** against a window that closes at **10**. One tick of margin. A verdict-only
+ * assertion sees `PASS` whether the margin is 1 tick or 4, so an art re-shoot that walked the peak
+ * one frame later would flip this from PASS to FAIL with no prior warning. Pinning `peakFrame` and
+ * `peakTick` makes the erosion visible while it is still green.
+ *
+ * ## The plateau is load-bearing, and that is not obvious
+ *
+ * The shipped reach profile ties at its maximum across **three** frames — 4, 5 and 6 all measure
+ * 293 px. `gateReachWindow` documents that the FIRST of a tie wins ("the moment contact begins, not
+ * the moment it ends"), which is why `peakFrame` is 4. That rule is not a formality here:
+ *
+ * | tie-break | peakFrame | peakTick | inside [6, 10)? |
+ * |---|---|---|---|
+ * | **first (shipped)** | 4 | **9** | ✅ |
+ * | second | 5 | 11 | ❌ |
+ * | last | 6 | 13 | ❌ |
+ *
+ * **This sheet passes G5 only because of the tie-break.** Flip it and the shipped art fails. So the
+ * rule is pinned below against the real profile rather than left to a synthetic fixture that could
+ * agree with it by accident.
+ */
+describe('G5 runs against the shipped brass-courier/attack, not only synthetic fixtures', () => {
+  it('reports a REAL G5 verdict, never the N/A that every other shipped sheet gets', () => {
+    const { lines, exitCode, g4, g5 } = runSheetGates('brass-courier', 'attack');
+
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^PASS\tbrass-courier\/attack\tG4/);
+    // The specific hole: this must NOT be the `N/A` line brass-sentry/idle produces.
+    expect(lines[1]).toMatch(/^PASS\tbrass-courier\/attack\tG5/);
+    expect(lines[1]).not.toMatch(/N\/A/);
+
+    expect(g5, 'g5 is null — the window lookup stopped resolving').not.toBeNull();
+    expect(g4.verdict).toBe('PASS');
+    expect(g5!.verdict).toBe('PASS');
+    expect(exitCode).toBe(0);
+  });
+
+  it('the strike lands on frame 4 / tick 9, with exactly ONE tick of margin left in the window', () => {
+    const { g5 } = runSheetGates('brass-courier', 'attack');
+
+    expect(g5!.peakFrame).toBe(4);
+    expect(g5!.peakTick).toBe(9);
+    expect(g5!.window.openTick).toBe(ATTACK.startup);
+    expect(g5!.window.closeTick).toBe(ATTACK.startup + ATTACK.active);
+
+    // The margin, asserted as a quantity rather than left implicit in a PASS. Derived from the
+    // window so re-balancing ATTACK re-states it here instead of silently widening the headroom.
+    expect(
+      g5!.window.closeTick - g5!.peakTick!,
+      'the strike has drifted within its window — still PASS, but the margin is changing and that ' +
+        'is the warning a verdict-only assertion cannot give',
+    ).toBe(1);
+  });
+
+  it('passes only because the plateau tie-break takes the FIRST tied frame', () => {
+    const { g5 } = runSheetGates('brass-courier', 'attack');
+
+    const peakReach = Math.max(...g5!.profile.filter((p) => p.reach !== null).map((p) => p.reach!));
+    const tied = g5!.profile.filter((p) => p.reach === peakReach).map((p) => p.frame);
+
+    // Non-vacuity: if the profile stopped tying, the rest of this test would prove nothing.
+    expect(tied.length, 'the shipped profile no longer plateaus — this test is now vacuous').toBe(3);
+    expect(tied).toEqual([4, 5, 6]);
+    expect(g5!.peakFrame).toBe(tied[0]);
+
+    // ...and the other two tied frames would both MISS the window, which is what makes the
+    // documented "first wins" rule load-bearing for the shipped art rather than a formality.
+    const tickFor = (frame: number): number =>
+      Math.round((frame * attackTotalTicks(ATTACK)) / g5!.profile.length) + PLAY_LAG_TICKS;
+    for (const frame of tied.slice(1)) {
+      const tick = tickFor(frame);
+      expect(tick >= ATTACK.startup && tick < ATTACK.startup + ATTACK.active).toBe(false);
+    }
+  });
+
+  /**
+   * `facing` is never supplied by `sheetGates.mjs`, so `gateReachWindow` falls back to `'right'`
+   * (`tools/gen/reachGate.mjs:124`). That default is CORRECT for this sheet rather than merely
+   * untested — the courier's source clip strikes to the right — and this pins it so the default
+   * stays a deliberate choice. Measuring the same sheet as `'left'` must not reproduce the same
+   * answer, or `facing` would be doing nothing and the gate would be direction-blind.
+   */
+  it("the unsupplied `facing` default of 'right' is deliberate, and the sheet is not direction-blind", () => {
+    const { g5 } = runSheetGates('brass-courier', 'attack');
+    const entry = (catalog.sheets as { key: string; url: string; frameWidth: number; frameHeight: number; frameCount: number }[])
+      .find((s) => s.key === 'brass-courier-attack')!;
+    const decoded = decodePng(readBytes(`public/${entry.url}`));
+    const frames = Array.from({ length: entry.frameCount }, (_, i) =>
+      sliceFrame(decoded, i, entry.frameWidth, entry.frameHeight),
+    );
+
+    const mirrored = gateReachWindow(frames, {
+      ...attackWindowFor('brass-courier', 'attack')!,
+      facing: 'left',
+    });
+
+    expect(
+      mirrored.peakFrame,
+      'measuring left-facing reach gives the same peak as right-facing — `facing` is inert, so ' +
+        'G5 cannot tell a strike from a recoil and the unsupplied default is not load-bearing',
+    ).not.toBe(g5!.peakFrame);
   });
 });
