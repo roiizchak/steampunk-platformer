@@ -58,8 +58,34 @@ import catalog from '../../public/assets/index.json';
 /** Rows above the deepest opaque row that count as "the base". One tile at RENDER_SCALE / 4. */
 const BASE_ROWS = 24;
 
-/** How far a base may differ from its slug's reference before it reads as a different machine. */
-const TOLERANCE = 0.1;
+/**
+ * How far a landmark may differ from its slug's reference before it reads as a different machine.
+ *
+ * **There are two numbers because there are two landmarks**, and one shared number was forced to
+ * cover both. It sat at a flat 10 % — roughly 5x looser than the tripod needs and 5x looser than the
+ * height needs — because the tightest value the *height* landmark tolerates is far looser than the
+ * tightest value the *tripod* landmark tolerates, and a single constant has to satisfy the loosest
+ * consumer. Splitting them is a TIGHTENING of both, never a loosening of either (2026-08-14, D6a).
+ *
+ * Measured against the shipped catalog on the day these were set:
+ *
+ * | assertion | landmark | measured | reference | delta |
+ * |---|---|---|---|---|
+ * | `brass-sentry-fire` | tripod base span | 205 px | idle 205 px | **0.000 %** |
+ * | `brass-sentry-death` | tripod base span | 205 px | idle 205 px | **0.000 %** |
+ * | `rust-scavenger-chase` | silhouette height | 244 px | walk 239 px | **+2.092 %** |
+ * | `rust-scavenger-death` | silhouette height | 240 px | walk 239 px | **+0.418 %** |
+ *
+ * The tripod is a rigid frame photographed from one angle, so its two clips agree EXACTLY and 1 %
+ * still leaves the gate unable to be tripped by noise. A legged body's standing height genuinely
+ * moves a little between gaits — `chase` extends — so 2.5 % is the tightest number that clears the
+ * real spread with margin rather than by a hair. **A flat 2 % would go red on `chase` today**, which
+ * is the whole reason one constant could not be pushed below 10 %.
+ */
+const TRIPOD_TOLERANCE = 0.01;
+
+/** @see {@link TRIPOD_TOLERANCE} — the legged-body half of the same split. */
+const HEIGHT_TOLERANCE = 0.025;
 
 interface Row {
   key: string;
@@ -141,19 +167,24 @@ describe('a machine is the same machine in every animation it plays', () => {
           'or debris inflates the bounding box without making the machine bigger, so matching that ' +
           'box to renderHeightPx shrinks the machine. Re-derive from this landmark instead — see ' +
           'character-bounds-brass-sentry.json.',
-      ).toBeLessThan(TOLERANCE);
+      ).toBeLessThan(TRIPOD_TOLERANCE);
     },
   );
 
   /**
    * The gate must be able to SEE a wrong scale, not merely pass on a right one. `death` shipped at
-   * 0.34408602 and measured 160 px against 205 — a ratio of 0.78, which is 2.2x the tolerance. A
-   * gate that could not distinguish that from correct would be decoration.
+   * 0.34408602 and measured 160 px against 205 — a ratio of 0.78, i.e. **21.95 % off**. At the old
+   * shared 10 % that was 2.2x the tolerance; at `TRIPOD_TOLERANCE` it is 22x. A gate that could not
+   * distinguish that from correct would be decoration.
+   *
+   * ⚠️ This is what bounds the tolerance from ABOVE: it must stay under 0.2195 or this assertion
+   * goes red and the gate stops being able to prove it can catch its own founding defect.
+   * Tightening is always safe from this direction; loosening past 22 % is not.
    */
   it('is sensitive enough to have caught the defect it was written for', () => {
     const want = baseSpan(reference!, 0);
     const asShipped = Math.round((baseSpan(rowFor('brass-sentry-death')!, 0) * 0.34408602) / 0.44081578);
-    expect(Math.abs(asShipped / want - 1)).toBeGreaterThan(TOLERANCE);
+    expect(Math.abs(asShipped / want - 1)).toBeGreaterThan(TRIPOD_TOLERANCE);
   });
 });
 
@@ -203,7 +234,7 @@ describe('the scavenger is the same body at both of its gaits', () => {
       Math.abs(ratio - 1),
       'the scavenger changes height between walking and chasing — the two sheets were packed at ' +
         'different scales',
-    ).toBeLessThan(TOLERANCE);
+    ).toBeLessThan(HEIGHT_TOLERANCE);
   });
 
   /**
@@ -216,7 +247,7 @@ describe('the scavenger is the same body at both of its gaits', () => {
     const walk = rowFor('rust-scavenger-walk')!;
     const death = rowFor('rust-scavenger-death')!;
     const ratio = heightOf(death, 0) / heightOf(walk, 0);
-    expect(Math.abs(ratio - 1)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(ratio - 1)).toBeLessThan(HEIGHT_TOLERANCE);
   });
 
   it('...and the debris really does spread, so the note above is not describing nothing', () => {
