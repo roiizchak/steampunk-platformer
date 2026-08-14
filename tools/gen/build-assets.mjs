@@ -21,9 +21,14 @@
  * override that quietly substituted the standing idle and produced the worst art defect in that
  * project.
  *
- * **It writes deterministically.** Same inputs, same bytes — `encodePng` uses a fixed filter and
- * fixed deflate level, and every position is integer-rounded. That is what makes the byte-identical
- * rebuild contract *(vault 4.15)* checkable at all.
+ * **It writes deterministically.** Same inputs, same bytes — `encodePng` uses a **deterministic
+ * per-row filter choice** and a fixed deflate level, and every position is integer-rounded. That is
+ * what makes the byte-identical rebuild contract *(vault 4.15)* checkable at all.
+ *
+ * ⚠️ This sentence said *"a fixed filter"* until 2026-08-14, and that stopped being true when
+ * `encodePng` gained its adaptive filter. The contract did not change — the choice is a pure
+ * function of the pixels, so it is reproducible on any machine — but the stated REASON did, and a
+ * contract justified by a false premise is one the next reader will not trust. See `png.mjs`.
  */
 
 import { writeFileSync, mkdirSync } from 'node:fs';
