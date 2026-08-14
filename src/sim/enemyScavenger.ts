@@ -61,9 +61,14 @@ export const CHASE_FOOT_PX_PER_FRAME = 18;
  * tick anyway, so holding `facing` and `x` there costs nothing chase-wise and stops the sprite
  * strobing when the player is off-axis and unreachable (gate finding S1).
  *
- * ⚠️ It was the literal `96`, and this comment cited *"`GRID` in `src/game/constants.ts`"* — **there
- * is no `GRID`**; the constant is `TILE_SIZE`. It is `ENEMY_DEAD_ZONE` now, shared with the sentry,
- * which had the same rule in its docstring and none in its code (finding B5).
+ * ⚠️ It was the literal `96`, justified by a citation to a constant named GRID in
+ * `src/game/constants.ts` — **which does not exist and never did**; the constant is `TILE_SIZE`. So
+ * the one number two enemies were meant to share was a literal in one of them, defended by a symbol
+ * that was not there. It is `ENEMY_DEAD_ZONE` now, derived and shared with the sentry, which had the
+ * same rule in its docstring and none at all in its code (finding B5).
+ *
+ * An audit of all 20 `SYMBOL` in `path` citations across `src/`, `tools/gen/` and `tests/` found this
+ * was the ONLY broken one — a slip, not a pattern. Recorded so nobody re-runs it.
  */
 export const SCAVENGER = {
   patrolSpeed: 2.5,

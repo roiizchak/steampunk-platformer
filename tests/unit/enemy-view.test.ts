@@ -299,50 +299,86 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     });
   });
 
-  it('every key a subject can ask for is declared, so the scene registers exactly what it plays', () => {
+  it('no key is declared twice — a repeat means two subjects fighting over one animation', () => {
     const keys = enemyAnimKeys();
-    expect(keys).toContain('brass-sentry-fire');
-    expect(keys).toContain('rust-scavenger-chase');
-    // No duplicates — a repeated key means two subjects fighting over one animation.
     expect(new Set(keys).size).toBe(keys.length);
   });
 
   /**
-   * 🔴 **The one key a subject CAN ask for and that is deliberately NOT declared yet.**
+   * 🔴 **Every key a subject can ask for IS declared — enumerated, not spot-checked.**
    *
-   * ⚠️ The test above is named *"every key a subject can ask for is declared"* and does not check
-   * that. It spot-checks two keys and rejects duplicates. So when `scavengerAnim` gained `'idle'`,
-   * `rust-scavenger-idle` became askable while undeclared and **nothing went red** — the project's
-   * own recurring shape: a name that states the behaviour and a body that checks something adjacent.
+   * ⚠️ This test used to be named exactly that and did not check it. It asserted
+   * `toContain('brass-sentry-fire')` and `toContain('rust-scavenger-chase')` and rejected
+   * duplicates — so when `scavengerAnim` gained `'idle'`, `rust-scavenger-idle` became askable while
+   * undeclared and **nothing went red**. A name that states the behaviour over a body that checks
+   * something adjacent: the shape this project keeps paying for, in the test written to prevent it.
    *
-   * That gap is real but the mismatch here is INTENTIONAL and temporary. The sim state landed first,
-   * at $0, so it could be reviewed before `rust-scavenger/idle` is bought; until the sheet exists,
-   * declaring the key would fail the build by design *(vault 4.16)*. `playIfChanged` no-ops on an
-   * undeclared key, so a stalled scavenger keeps playing whichever key it last had — identical to
-   * the behaviour before this change, **not** an improvement on it. The fix only lands with the art.
+   * It is enumerated now. `askableKeys()` drives the REAL selector functions over states the sim can
+   * actually reach, and the difference against `enemyAnimKeys()` must equal `PENDING_ART` exactly.
+   * That covers both enemies, so a future undeclared **sentry** key fails here too — which the
+   * previous single-key lock would have missed.
    *
-   * This assertion is the lock, and it fails in BOTH directions: red if the key is declared without
-   * this exception being removed, and red if `scavengerAnim` stops being able to ask for it. When
-   * the art lands, delete this test and make the one above genuinely exhaustive.
+   * ## Why `PENDING_ART` is not empty, and why that is deliberate
+   *
+   * `rust-scavenger/idle` is bought art that does not exist yet. The sim state landed first, at $0,
+   * so it could be reviewed before the money moved; until the sheet exists, declaring the key
+   * **fails the build by design** *(vault 4.16)*. `playIfChanged` no-ops on an undeclared key, so a
+   * stalled scavenger keeps playing whichever key it last had — identical to the behaviour before
+   * that change, **not** an improvement on it. The fix only lands with the art.
+   *
+   * Both directions, so it cannot rot: red if a key becomes askable without being listed here, and
+   * red if a listed key is declared without being removed from the list. Same shape as
+   * `BLOCKED_ON_ART` in `blockedDwell.ts`. **Empty this list when the art lands.**
    */
-  it('rust-scavenger-idle is askable but not yet declared — the art is not bought', () => {
-    const askable = new Set(
-      [
-        createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 }),
-        createScavenger({ x: 0, y: 0, patrolMin: -100, patrolMax: 100 }),
-      ].map((s) => `rust-scavenger-${scavengerAnim(s)}`),
-    );
-    // A stalled scavenger really does ask for it — otherwise this lock is vacuous.
-    const pinned = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
-    stepScavenger(pinned, { playerX: 99999, playerY: 0 }, scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6));
-    expect(scavengerAnim(pinned)).toBe('idle');
-    expect(askable.size).toBeGreaterThan(0);
+  const PENDING_ART = ['rust-scavenger-idle'] as const;
 
-    expect(
-      enemyAnimKeys(),
-      'rust-scavenger-idle is declared now — buy-the-art step is done, so delete this lock and ' +
-        'make the exhaustiveness test above real',
-    ).not.toContain('rust-scavenger-idle');
+  /** Every key the REAL selectors can return, over states the sim can actually reach. */
+  function askableKeys(): string[] {
+    const everywhere = scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6);
+
+    const patrolling = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    stepScavenger(patrolling, { playerX: 99999, playerY: 0 }, everywhere);
+
+    const chasing = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    chasing.chasing = true;
+    stepScavenger(chasing, { playerX: 5000, playerY: 0 }, everywhere);
+
+    const stalled = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
+    stepScavenger(stalled, { playerX: 99999, playerY: 0 }, everywhere);
+
+    const deadScavenger = createScavenger({ x: 0, y: 0, patrolMin: -100, patrolMax: 100 });
+    deadScavenger.hp = 0;
+
+    const firing = createSentry({ x: 0, y: 0 });
+    firing.cooldownCounter = 0;
+    const waiting = createSentry({ x: 0, y: 0 });
+    waiting.cooldownCounter = waiting.cooldown;
+    const deadSentry = createSentry({ x: 0, y: 0 });
+    deadSentry.hp = 0;
+
+    return [
+      ...[patrolling, chasing, stalled, deadScavenger].map((s) => `rust-scavenger-${scavengerAnim(s)}`),
+      ...[firing, waiting, deadSentry].map((s) => `brass-sentry-${sentryAnim(s)}`),
+    ];
+  }
+
+  it('every key a subject can ask for is declared, except the art not yet bought', () => {
+    const askable = [...new Set(askableKeys())].sort();
+    const declared = new Set(enemyAnimKeys());
+
+    // Non-vacuity: the fixtures must actually reach every state, or "nothing undeclared" is trivial.
+    expect(askable.length, 'the fixtures stopped reaching some states').toBe(7);
+
+    const undeclared = askable.filter((k) => !declared.has(k));
+    expect(undeclared, 'a key became askable without being declared or listed as pending art').toEqual(
+      [...PENDING_ART].sort(),
+    );
+  });
+
+  it('nothing listed as pending art is already declared — empty the list when the sheet lands', () => {
+    const declared = new Set(enemyAnimKeys());
+    const alreadyThere = PENDING_ART.filter((k) => declared.has(k));
+    expect(alreadyThere, 'the art landed — remove it from PENDING_ART').toEqual([]);
   });
 });
 
