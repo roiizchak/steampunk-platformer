@@ -93,12 +93,19 @@ export type AnimName = PlayerState | EnemyAnim;
 export type TimingProvenance = 'sim' | 'measured' | 'authored';
 
 /**
- * The idle breathing cycle, in ticks. 90 ticks = 1.5 s at 60 Hz.
+ * The idle breathing cycle, in ticks. 96 ticks = 1.6 s at 60 Hz.
  *
  * AUTHORED. The only number in this file that is not derived from something, and it is named as a
  * constant rather than inlined so that fact is greppable.
+ *
+ * 🔴 **96, not 90, and the reason is arithmetic rather than taste.** It is shared by BOTH idle
+ * sheets, which have different frame counts — the courier's 12 and the sentry's 8 — so it must
+ * divide by both or one of them judders. 90 divided evenly by neither (7.5 and 11.25 refreshes per
+ * frame); 96 gives the courier 8 and the sentry 12, i.e. 7.5 fps and 5 fps, both dead even. See
+ * `tests/unit/loop-dwell.test.ts`. The sibling project's idle is 8 frames over 1.6 s at 5 fps — the
+ * same cycle length this lands on, arrived at independently.
  */
-export const IDLE_TICKS = 90;
+export const IDLE_TICKS = 96;
 
 export interface AnimTiming {
   name: AnimName;
@@ -164,7 +171,13 @@ export function cadenceTicks(renderFrames: number, authoredFps: number): number 
   if (!(authoredFps > 0) || !Number.isFinite(authoredFps)) {
     throw new Error(`cadenceTicks: authored fps must be a finite number > 0, got ${authoredFps}`);
   }
-  return Math.max(1, Math.round((renderFrames * TICK_HZ) / authoredFps));
+  // 🔴 Round the TICKS PER FRAME, not the cycle. See the header's "whole refreshes" section: this is
+  // what makes the returned `simTicks` an exact multiple of `renderFrames`, so every drawn frame is
+  // held for the same number of 60 Hz refreshes. Rounding the cycle instead — which is what this did
+  // until session 9 — let `run` land on 23 ticks for 12 frames, i.e. eleven frames of two refreshes
+  // and one of one, and that hitch IS the reported ghosting. `tests/unit/loop-dwell.test.ts`.
+  const ticksPerFrame = Math.max(1, Math.round(TICK_HZ / authoredFps));
+  return renderFrames * ticksPerFrame;
 }
 
 /**

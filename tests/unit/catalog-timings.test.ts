@@ -127,13 +127,19 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
    */
   it('timingFor(rust-scavenger, walk|chase) resolves from an authored cadence and a frame count', () => {
     expect(timingFor('rust-scavenger', 'walk', { authoredFps: 18, renderFrames: 12 })).toEqual({
-      // 12 frames at 18 fps = 0.667 s = 40 ticks. Hand-computed, not via the production helper (C2).
-      simTicks: 40,
+      // An authored 18 fps asks for 3.33 ticks per frame; the nearest cadence that holds every frame
+      // for a WHOLE tick is 3, so 12 x 3 = 36 ticks (an effective 20 fps). Hand-computed, not via
+      // the production helper (C2). It was 40 while the cycle was rounded instead of the dwell —
+      // 3.33 ticks a frame, which the display serves as 3,3,4,3,3,4: the judder of session 9.
+      simTicks: 36,
       loop: true,
       derivedFrom: 'authored',
     });
-    expect(timingFor('rust-scavenger', 'chase', { authoredFps: 24, renderFrames: 12 })).toEqual({
-      simTicks: 30,
+    // 30 fps, the SHIPPED cadence, not 24. An authored 24 asks for 2.5 ticks per frame and rounds to
+    // the same 3 as walk's 18 — the two gaits would be indistinguishable on screen. 30 asks for 2
+    // and gets it exactly: 12 x 2 = 24 ticks.
+    expect(timingFor('rust-scavenger', 'chase', { authoredFps: 30, renderFrames: 12 })).toEqual({
+      simTicks: 24,
       loop: true,
       derivedFrom: 'authored',
     });
@@ -217,8 +223,17 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
     );
 
     it('hasCatalogTiming is false for a pair nobody declared', () => {
-      expect(hasCatalogTiming('brass-courier', 'idle')).toBe(false);
+      // The sentry is a bolted-down turret: it has no `walk`, and never will.
+      expect(hasCatalogTiming('brass-sentry', 'walk')).toBe(false);
       expect(hasCatalogTiming('nonexistent-slug', 'idle')).toBe(false);
+    });
+
+    it('hasCatalogTiming is TRUE for brass-courier/idle, which had no rule and went stale', () => {
+      // This pair asserted FALSE until session 9, on the reasoning that idle "already has a Phase-4
+      // row". Having a row is not having a RULE: when `IDLE_TICKS` moved 90 -> 96 the packer rewrote
+      // the strip, printed `ok`, wrote no row, and left the catalog claiming 7.5 ticks per frame.
+      // Pinned positively so nobody removes the rule to make the negative case above read tidier.
+      expect(hasCatalogTiming('brass-courier', 'idle')).toBe(true);
     });
   });
 

@@ -16,7 +16,7 @@
 export const TICK_HZ = 60;
 
 /** Mirrors `IDLE_TICKS` (`src/render/animTiming.ts`) — the authored breathing cycle. */
-export const IDLE_TICKS = 90;
+export const IDLE_TICKS = 96;
 
 /** Mirrors `DEATH_TICKS` (`src/sim/combat.ts`). */
 export const DEATH_TICKS = 45;
@@ -65,6 +65,12 @@ const FIXED_TIMINGS = {
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
   },
   'brass-courier': {
+    // Added session 9 (second pass). `idle` was left out as an "already has a Phase-4 row" action,
+    // and that row then went STALE the moment `IDLE_TICKS` moved 90 -> 96: the packer rewrote the
+    // strip, printed `ok`, and wrote no row, because no rule existed to write one. The catalog kept
+    // saying 90 ticks over 12 frames — 7.5 refreshes per frame — while the constant said otherwise.
+    // A Phase-4 row is not a reason to have no rule; it is a row nobody can correct.
+    idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
     attack: { simTicks: ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },
     hurt: { simTicks: HURT_TICKS, loop: false, derivedFrom: 'sim' },
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
@@ -150,7 +156,10 @@ export function cadenceTicks(renderFrames, authoredFps) {
   if (!(authoredFps > 0) || !Number.isFinite(authoredFps)) {
     throw new Error(`cadenceTicks: authored fps must be a finite number > 0, got ${authoredFps}`);
   }
-  return Math.max(1, Math.round((renderFrames * TICK_HZ) / authoredFps));
+  // Rounds the TICKS PER FRAME, so the cycle is an exact multiple of the frame count and every
+  // drawn frame is held for the same number of 60 Hz refreshes. See the TS original.
+  const ticksPerFrame = Math.max(1, Math.round(TICK_HZ / authoredFps));
+  return renderFrames * ticksPerFrame;
 }
 
 /** `renderFrames * TICK_HZ / simTicks`. Mirrors `deriveFps` in `src/render/animTiming.ts`. */

@@ -40,8 +40,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 90,
-      "fps": 8,
+      "simTicks": 96,
+      "fps": 7.5,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -51,8 +51,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 24,
-      "simTicks": 40,
-      "fps": 36,
+      "simTicks": 48,
+      "fps": 30,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -62,8 +62,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 23,
-      "fps": 31.304347826086957,
+      "simTicks": 24,
+      "fps": 30,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -95,8 +95,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 8,
-      "simTicks": 90,
-      "fps": 5.333333333333333,
+      "simTicks": 96,
+      "fps": 5,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -117,8 +117,8 @@
       "frameWidth": 512,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 40,
-      "fps": 18,
+      "simTicks": 36,
+      "fps": 20,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -150,8 +150,8 @@
       "frameWidth": 512,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 30,
-      "fps": 24,
+      "simTicks": 24,
+      "fps": 30,
       "loop": true,
       "derivedFrom": "authored"
     }

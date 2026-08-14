@@ -44,11 +44,29 @@ import type { World } from '../sim/types';
  */
 const FOOT_PX_PER_FRAME: Record<string, number> = { run: 22.5, walk: 9.0 };
 
+/**
+ * 🔴 The knob steps in TICKS PER FRAME, not in fps, and that is the whole point of the second pass.
+ *
+ * The first version stepped +/-1 fps and the user reported it made no difference in either
+ * direction. It didn't: a frame can only be held for a whole number of 60 Hz refreshes, so of the
+ * values a 1-fps step reaches around 31, only 30 divides evenly. Every other setting juddered too,
+ * just with a different pattern — which is why up and down looked identical.
+ *
+ * Stepping the DWELL makes every reachable value legal: 1 tick/frame = 60 fps, 2 = 30, 3 = 20,
+ * 4 = 15, 5 = 12, 6 = 10, 8 = 7.5. The steps are coarse on purpose. They are the only steps there
+ * are.
+ */
+const MAX_TICKS_PER_FRAME = 20;
+
 interface TunerState {
-  runFps: number;
-  walkFps: number;
+  /** Ticks (== refreshes) each drawn frame is held for. Integer >= 1. Effective fps is `60 / tpf`. */
+  runTpf: number;
+  walkTpf: number;
   speedScale: number;
 }
+
+/** Nearest legal dwell for an fps, matching `cadenceTicks`. */
+const tpfFor = (fps: number): number => Math.max(1, Math.round(60 / fps));
 
 /**
  * Install the tuner. Returns an `update` to call once per frame with the drawn player sprite.
@@ -63,7 +81,11 @@ export function createFeelTuner(
 ): (sprite: Phaser.GameObjects.Sprite) => void {
   const shippedRunMax = world.tuning.runMax;
   const shippedWalkMax = world.tuning.walkMax;
-  const state: TunerState = { runFps: base.runFps, walkFps: base.walkFps, speedScale: 1 };
+  const state: TunerState = {
+    runTpf: tpfFor(base.runFps),
+    walkTpf: tpfFor(base.walkFps),
+    speedScale: 1,
+  };
 
   const label = scene.add
     .text(24, 900, '', {
@@ -80,14 +102,14 @@ export function createFeelTuner(
     scene.input.keyboard?.on(`keydown-${key}`, fn);
   };
   // Cadence of whichever loop is playing, so one pair of keys tunes both without a mode.
-  nudge('OPEN_BRACKET', () => {
-    if (world.player.state === 'walk') state.walkFps = Math.max(1, state.walkFps - 1);
-    else state.runFps = Math.max(1, state.runFps - 1);
-  });
-  nudge('CLOSED_BRACKET', () => {
-    if (world.player.state === 'walk') state.walkFps += 1;
-    else state.runFps += 1;
-  });
+  // `]` is FASTER, so it decrements the dwell — the key that reads as "more" still gives more fps.
+  const stepDwell = (by: number): void => {
+    const clamp = (t: number): number => Math.min(MAX_TICKS_PER_FRAME, Math.max(1, t + by));
+    if (world.player.state === 'walk') state.walkTpf = clamp(state.walkTpf);
+    else state.runTpf = clamp(state.runTpf);
+  };
+  nudge('OPEN_BRACKET', () => stepDwell(1));
+  nudge('CLOSED_BRACKET', () => stepDwell(-1));
   nudge('MINUS', () => {
     state.speedScale = Math.max(0.1, Number((state.speedScale - 0.05).toFixed(2)));
   });
@@ -95,8 +117,8 @@ export function createFeelTuner(
     state.speedScale = Number((state.speedScale + 0.05).toFixed(2));
   });
   nudge('ZERO', () => {
-    state.runFps = base.runFps;
-    state.walkFps = base.walkFps;
+    state.runTpf = tpfFor(base.runFps);
+    state.walkTpf = tpfFor(base.walkFps);
     state.speedScale = 1;
   });
 
@@ -105,7 +127,8 @@ export function createFeelTuner(
     world.tuning.walkMax = shippedWalkMax * state.speedScale;
 
     const playing = world.player.state === 'walk' ? 'walk' : 'run';
-    const wanted = playing === 'walk' ? state.walkFps : state.runFps;
+    const tpf = playing === 'walk' ? state.walkTpf : state.runTpf;
+    const wanted = 60 / tpf;
     const baseFps = playing === 'walk' ? base.walkFps : base.runFps;
     sprite.anims.timeScale = wanted / baseFps;
 
@@ -115,11 +138,12 @@ export function createFeelTuner(
     const footPerFrame = FOOT_PX_PER_FRAME[playing] ?? 0;
     const slip = bodyPerFrame - footPerFrame;
 
+    const fpsOf = (t: number): string => (60 / t).toFixed(2);
     label.setText(
       [
-        `LOCOMOTION TUNER   [ ] cadence   - = speed   0 reset`,
+        `LOCOMOTION TUNER   [ slower / ] faster   - = speed   0 reset`,
         `state ${playing}   speed x${state.speedScale.toFixed(2)}   runMax ${world.tuning.runMax.toFixed(2)}  walkMax ${world.tuning.walkMax.toFixed(2)}`,
-        `walk fps ${state.walkFps}    run fps ${state.runFps}`,
+        `walk ${state.walkTpf} ticks/frame = ${fpsOf(state.walkTpf)} fps     run ${state.runTpf} ticks/frame = ${fpsOf(state.runTpf)} fps`,
         `body/frame ${bodyPerFrame.toFixed(1)}px   foot/frame ${footPerFrame.toFixed(1)}px   SLIP ${slip >= 0 ? '+' : ''}${slip.toFixed(1)}px  <- drive to 0`,
       ].join('\n'),
     );

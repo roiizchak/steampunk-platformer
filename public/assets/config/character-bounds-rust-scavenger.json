@@ -32,7 +32,7 @@
       "verticalAnchor": "feet",
       "footOffsetPx": 0,
       "activeFrames": [],
-      "fps": 24
+      "fps": 30
     },
     "death": {
       "loop": false,
@@ -43,5 +43,5 @@
   },
   "_animations": "['walk','chase','death'] — must equal configFor('rust-scavenger').actions in tools/gen/slugConfig.mjs and ANIMS_BY_SLUG['rust-scavenger'] in src/render/enemyView.ts. There is no `idle`: the scavenger patrols continuously (src/render/enemyView.ts's `scavengerAnim`), so a standing pose is never reached and a sheet for it would be money spent on a state the sim cannot enter. `verticalAnchor` is 'feet' for all three: the scavenger never leaves the ground, same reasoning as the sentry's file.",
   "_activeFrames": "Empty for every animation. The scavenger has no attack state — its BODY is the hazard (contact damage, no swing, src/render/enemyView.ts's header) — so there is no strike window to align a per-frame hitbox against for this slug.",
-  "_loopFps": "AUTHORED locomotion cadence (session 9), replacing stridePxPerCycle as the timing input for walk/chase. Full reasoning is in character-bounds.json _loopFps. walk 12 frames @ 18fps = 1.5 cycles/sec (the same cadence the player walk now uses, and the sibling project walkF uses); chase 12 @ 24 = 2.0 cycles/sec, a visibly quicker gait than the patrol. STARTING POINTS, to be tuned by eye in the Gym against the running character -- that is the point of authoring them. This also UNBLOCKS chase: it could never be catalogued before because its stride was unmeasured and catalogTimings threw rather than guess a number. A loop does not need a stride any more."
+  "_loopFps": "AUTHORED locomotion cadence (session 9), replacing stridePxPerCycle as the timing input for walk/chase. Full reasoning is in character-bounds.json _loopFps. walk 12 frames @ 18fps = 1.5 cycles/sec (the same cadence the player walk now uses, and the sibling project walkF uses); chase 12 @ 30 = 2.5 cycles/sec, a visibly quicker gait than the patrol. SNAPPED (session 9, second pass): cadenceTicks now rounds the TICKS PER FRAME, so an authored fps is served as the nearest cadence that holds every frame for a whole number of 60Hz refreshes -- walk 18 -> 3 ticks/frame = 20 fps, chase 30 -> 2 ticks/frame = 30 fps. chase was authored 24, which rounds to the SAME 3 ticks/frame as walk and would have made the two gaits identical on screen; 30 is the next value up and keeps chase visibly quicker. See tests/unit/loop-dwell.test.ts for why unevenly-held frames read as ghosting. STARTING POINTS, to be tuned by eye against the running character -- that is the point of authoring them. This also UNBLOCKS chase: it could never be catalogued before because its stride was unmeasured and catalogTimings threw rather than guess a number. A loop does not need a stride any more."
 }
