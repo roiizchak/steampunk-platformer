@@ -3,6 +3,13 @@ import { parseLevel } from '../../src/game/tilemap';
 import { BRICK_GID, SURFACE_GID } from '../../src/render/groundTiles';
 import { TILE_SIZE } from '../../src/game/constants';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
+import { DEFAULT_TUNING } from '../../src/sim/player';
+
+/**
+ * One gravity step, world px/tick. Imported from the live knob, never retyped: it is the slack a
+ * per-frame `|vy|` bound needs because the sample can land either side of step 6's integration.
+ */
+const GRAVITY_PX = DEFAULT_TUNING.gravity;
 
 /**
  * Phase 4 — criteria 4.23 and 4.24, plus catalog/texture agreement.
@@ -65,6 +72,8 @@ async function groundTopAtSpawn(page: import('@playwright/test').Page): Promise<
 
 interface Sample {
   simY: number;
+  /** Sim vertical speed, px/tick. Bounds how far interpolation may place the drawing from the sim. */
+  simVy: number;
   drawnBottom: number;
   drawnY: number;
   frameIndex: number;
@@ -109,11 +118,17 @@ async function sampleDrawnVsSim(
                 frame: { name: string };
               }
             | undefined;
-          const sim = window.__game?.player as { y?: number; state?: string } | null | undefined;
+          const sim = window.__game?.player as
+            | { y?: number; vy?: number; state?: string }
+            | null
+            | undefined;
 
           if (drawn && sim && typeof sim.y === 'number') {
             out.push({
               simY: sim.y,
+              // Sampled so the divergence bound below can be THIS frame's vertical speed rather
+              // than a blanket constant. See the assertion for why that matters.
+              simVy: typeof sim.vy === 'number' ? sim.vy : 0,
               drawnY: drawn.y,
               drawnBottom: drawn.getBounds().bottom,
               frameIndex: Number(drawn.frame.name),
@@ -161,10 +176,36 @@ test.describe('4.23 — the drawn feet meet the surface', () => {
     // ever regresses to Phaser's 0.5 default the character floats half its height above the floor.
     expect([...new Set(all.map((s) => s.originY))]).toEqual([1]);
 
-    // The claim itself: the drawn bottom IS the sim's feet, on every sampled frame, exactly.
-    const worst = Math.max(...all.map((s) => Math.abs(s.drawnBottom - s.simY)));
-    expect(worst, 'the drawn sprite bottom diverged from the sim feet y').toBe(0);
-    expect(Math.max(...all.map((s) => Math.abs(s.drawnY - s.simY)))).toBe(0);
+    /**
+     * 🔴 **Amended in session 9 for render interpolation — and made TIGHTER, not looser.**
+     *
+     * The sprite is now drawn between the last two ticks (`src/render/interpolate.ts`), so while
+     * the player is moving vertically the drawn bottom trails the sim's feet by a fraction of one
+     * tick's fall. Exact equality on every frame is no longer the right claim.
+     *
+     * The lazy amendment would be a blanket tolerance of `maxFallSpeed` (51.6 px) — nearly a fifth
+     * of the character's height, wide enough for a genuinely broken vertical anchor to pass. So the
+     * bound is THIS FRAME's actual vertical speed instead: interpolation can never place the
+     * drawing further from the sim than one tick of travel, and one tick of travel is `|vy|`, plus
+     * one `gravity` step for the sample landing either side of the integration.
+     *
+     * Where the player is NOT moving vertically the assertion stays EXACT, which is most of the
+     * window and is where a vertical-anchor defect would show anyway.
+     */
+    const grounded = all.filter((s) => s.simVy === 0);
+    expect(grounded.length, 'no vertically-still samples — the exact claim below is vacuous').toBeGreaterThan(10);
+    expect(
+      Math.max(...grounded.map((s) => Math.abs(s.drawnBottom - s.simY))),
+      'the drawn bottom left the sim feet y while NOT moving vertically — interpolation cannot excuse this',
+    ).toBe(0);
+
+    const worst = Math.max(
+      ...all.map((s) => Math.abs(s.drawnBottom - s.simY) - (Math.abs(s.simVy) + GRAVITY_PX)),
+    );
+    expect(worst, 'the drawn bottom trailed the sim feet by more than one tick of fall').toBeLessThanOrEqual(0);
+    expect(
+      Math.max(...all.map((s) => Math.abs(s.drawnY - s.simY) - (Math.abs(s.simVy) + GRAVITY_PX))),
+    ).toBeLessThanOrEqual(0);
 
     // ...and the window really did contain flight, so "never diverged" is not a claim about a
     // character that never left the ground.

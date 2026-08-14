@@ -6,6 +6,7 @@ import { drainTicks } from '../game/frameClock';
 import { parseLevel, type LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
+import { interpolatedPosition, renderAlpha, type Point } from '../render/interpolate';
 import { registerCatalogAnimations } from './gameAnimations';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
 import { createFeelTuner } from './devFeelTuner';
@@ -61,6 +62,14 @@ export class GameScene extends Phaser.Scene {
   private world!: World;
   private input$!: InputSnapshot;
   private accumulatorMs = 0;
+  /**
+   * The player's position immediately BEFORE the most recent tick, or `null` before any tick has
+   * run. Read only by `renderPlayer` — see `src/render/interpolate.ts`.
+   *
+   * A plain copy rather than a reference: `world.player` is mutated in place by the sim, so holding
+   * a reference would make `prev` and `cur` the same object and the blend a no-op.
+   */
+  private prevPlayer: Point | null = null;
   private playerSprite!: Phaser.GameObjects.Sprite;
   private enemies!: EnemyLayer;
   private hudFill!: Phaser.GameObjects.Graphics;
@@ -102,6 +111,10 @@ export class GameScene extends Phaser.Scene {
    */
   init(): void {
     this.accumulatorMs = 0;
+    // Cleared with the accumulator: a stale `prev` from the previous level would blend the first
+    // drawn frame between two different levels. `interpolatedPosition` also snaps on a leap, but
+    // the honest reset is here rather than relying on that guard to catch a restart.
+    this.prevPlayer = null;
     this.held = { left: [], right: [], jump: [], walk: [], attack: [] };
   }
 
@@ -220,7 +233,20 @@ export class GameScene extends Phaser.Scene {
     // Called even when `ticks === 0`, and that case is load-bearing: it must NOT consume the
     // input snapshot. A frame too short to produce a whole tick that ate a jump press is vault
     // 2.4's "a tick ran is not your input was consumed", inverted.
-    advance(this.world, this.input$, ticks);
+    //
+    // 🔴 The batch is SPLIT so `prevPlayer` is the state immediately before the LAST tick, which is
+    // what `interpolatedPosition` needs. Snapshotting before the whole batch was the first draft
+    // and the Codex plan review rejected it (finding 1): a healthy 30 Hz frame drains two ticks —
+    // routine here, not a stall, and `frame-clock.test.ts` covers it — so blending across the whole
+    // batch would add ~33 ms of render lag on every frame. Total ticks run is unchanged, and the
+    // split is safe because an input EDGE is cleared by the first tick rather than re-consumed.
+    if (ticks > 0) {
+      if (ticks > 1) advance(this.world, this.input$, ticks - 1);
+      this.prevPlayer = { x: this.world.player.x, y: this.world.player.y };
+      advance(this.world, this.input$, 1);
+    } else {
+      advance(this.world, this.input$, 0);
+    }
 
     this.renderPlayer();
     this.renderHud();
@@ -355,7 +381,14 @@ export class GameScene extends Phaser.Scene {
 
   private renderPlayer(): void {
     const desc = playerRenderDesc(this.world.player, this.world.scale);
-    this.playerSprite.setPosition(desc.x, desc.y);
+    // Drawn BETWEEN the last two ticks, not at the current one. Without this the sprite is held
+    // still on every frame `drainTicks` returns 0 ticks for — three refreshes out of four at
+    // 240 Hz — and then jumps 12 px, which is the "ghost / double image" the user reported and
+    // which the `?probe=1` falsifier reproduced with the animation frozen. See
+    // `src/render/interpolate.ts`. `this.accumulatorMs` is already the time since the last whole
+    // tick, so it is exactly the blend factor.
+    const drawn = interpolatedPosition(this.prevPlayer, desc, renderAlpha(this.accumulatorMs));
+    this.playerSprite.setPosition(drawn.x, drawn.y);
 
     // A real flip at last. Phase 2 drew facing as a "nose" rectangle because Phaser 4's Flip
     // component is mixed into Sprite and Image but NOT into Shape, so the grey-box `Rectangle`
