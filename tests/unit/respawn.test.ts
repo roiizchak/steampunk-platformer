@@ -27,6 +27,7 @@ import { describe, expect, it } from 'vitest';
 import { DEATH_TICKS, PLAYER_MAX_HP, deathWindowClosed, respawnPlayer } from '../../src/sim/combat';
 import { DEFAULT_TUNING } from '../../src/sim/player';
 import { createSnapshot } from '../../src/sim/input';
+import { createScavenger } from '../../src/sim/enemies';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { InputSnapshot, World } from '../../src/sim/types';
 
@@ -236,6 +237,99 @@ describe('what the respawn restores, and what it deliberately leaves alone', () 
     run(w, DEATH_TICKS + 5);
     expect(w.player.y).toBe(SPAWN.y);
     expect(w.player.hp).toBe(PLAYER_MAX_HP);
+  });
+});
+
+/**
+ * 🔴 Dying resets the board — gate finding B4, decided by the user 2026-08-14 (D4).
+ *
+ * Aggro is permanent by design: *"it should keep coming until I kill it"*. Nothing cleared `chasing`
+ * on respawn, though, so after a death every scavenger walked toward the NEW spawn and never
+ * patrolled again. Repeated deaths converge every scavenger in a level onto the spawn point, and
+ * each death makes the level harder than the last — which reads as punishing rather than difficult.
+ *
+ * This does not weaken what was asked for. **Within one life the scavenger still never gives up**;
+ * the only new exit is the player's own death, which is a thing the player has already paid for.
+ *
+ * Invisible in play today because `level-01` places one scavenger — so it is gated here, not left to
+ * a playtest that cannot see it.
+ */
+describe('death releases aggro, so a respawn is not walked to', () => {
+  /**
+   * The scavenger patrols 4000 px from the spawn, deliberately.
+   *
+   * ⚠️ The first draft of this fixture put it 400 px away and both tests failed — **correctly**.
+   * `detectRadius` is 480, so a scavenger that close re-aggros the moment the player reappears, and
+   * "aggro survived the death" is indistinguishable from "aggro was earned again immediately". The
+   * release only has a visible effect where the respawn is outside the detection radius, so that is
+   * where it has to be measured.
+   *
+   * The aggro distance (300 px) is inside `detectRadius` and outside body overlap, so the chase
+   * starts without contact damage putting the player in `hurt` with i-frames — which is what made
+   * the first draft's kill land as `hurt` instead of `death`.
+   */
+  const FAR = 5000;
+
+  function worldWithChaser(): World {
+    const w = world();
+    w.enemies.scavengers.push(
+      createScavenger({ x: FAR, y: 960, patrolMin: FAR - 200, patrolMax: FAR + 200 }),
+    );
+    return w;
+  }
+
+  /** Aggro the scavenger through the real predicate, then kill the player the way the game kills. */
+  function aggroThenDie(w: World, scavenger: ReturnType<typeof createScavenger>): void {
+    w.player.x = scavenger.x - 300;
+    tick(w, createSnapshot());
+    expect(scavenger.chasing, 'the fixture must actually aggro, or this gate is vacuous').toBe(true);
+
+    w.player.hp = 1;
+    w.hazards = [{ x: w.player.x - 50, y: 900, w: 100, h: 200 }];
+    tick(w, createSnapshot());
+    expect(w.player.state, 'the fixture must actually kill, or this gate is vacuous').toBe('death');
+  }
+
+  it('clears the chase flag and its counter by the time the respawn completes', () => {
+    const w = worldWithChaser();
+    const scavenger = w.enemies.scavengers[0]!;
+    aggroThenDie(w, scavenger);
+
+    const respawns = run(w, DEATH_TICKS + 5);
+    expect(respawns).toBe(1);
+    expect(scavenger.chasing, 'a respawn must reset the board').toBe(false);
+    expect(scavenger.chaseCounter).toBe(0);
+  });
+
+  it('lets it patrol again rather than converge on the spawn', () => {
+    const w = worldWithChaser();
+    const scavenger = w.enemies.scavengers[0]!;
+    aggroThenDie(w, scavenger);
+    run(w, DEATH_TICKS + 5);
+    w.hazards = [];
+
+    const xBefore = scavenger.x;
+    run(w, 20);
+    expect(scavenger.chasing, 'the spawn is 4000 px away — nothing here re-aggros it').toBe(false);
+    expect(scavenger.x, 'a released scavenger patrols, so it moves').not.toBe(xBefore);
+    expect(scavenger.x).toBeGreaterThanOrEqual(scavenger.patrolMin);
+    expect(scavenger.x).toBeLessThanOrEqual(scavenger.patrolMax);
+  });
+
+  /**
+   * The half of the decision that must NOT change: permanent aggro within one life. A test that only
+   * proved the release would stay green if death released aggro every tick.
+   */
+  it('does not release aggro while the player is merely running away', () => {
+    const w = worldWithChaser();
+    const scavenger = w.enemies.scavengers[0]!;
+    w.player.x = scavenger.x - 300;
+    tick(w, createSnapshot());
+    expect(scavenger.chasing).toBe(true);
+
+    w.player.x = 0; // far outside detectRadius, alive
+    run(w, 60);
+    expect(scavenger.chasing, 'within one life it never gives up — that is the whole design').toBe(true);
   });
 });
 

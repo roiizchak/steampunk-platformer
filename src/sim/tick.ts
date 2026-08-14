@@ -88,6 +88,7 @@
 import { consumeJumpPress } from './input';
 import { PLAYER_BOX, resolveCollisions, resolveState, stepHorizontal, stepVertical } from './player';
 import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
+import { releaseAggro } from './enemies';
 import { stepEnemies } from './enemyTurn';
 import { clampToBounds } from './hazards';
 import { applyPlayerAttack } from './playerAttack';
@@ -161,8 +162,25 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //        BEFORE step 5, not after: the respawned player is alive for the whole of this tick's
   //        movement, so the first frame after a death is an ordinary frame at the spawn point
   //        rather than a corpse's pose in a new position.
+  //
+  //        🔴 **The respawn also releases every chase.** Aggro is permanent by design — *"it should
+  //        keep coming until I kill it"* — but nothing cleared it on death, so after dying every
+  //        scavenger walked toward the NEW spawn and never patrolled again. Repeated deaths converge
+  //        every scavenger in a level onto the spawn point, and each death leaves the level harder
+  //        than the last: punishing rather than difficult. Decided by the user 2026-08-14 (D4), and
+  //        it does not weaken what was asked for — within ONE life the scavenger still never gives
+  //        up. The player's own death is the only new exit, and it is one they already paid for.
+  //
+  //        Invisible in play today because `level-01` places a single scavenger, which is exactly
+  //        why it is gated in `respawn.test.ts` rather than left to a playtest that cannot see it.
+  //
+  //        This adds NO new numbered step. It sits inside the existing 4c block, so the 14-step
+  //        contract above is untouched — renumbering it would be a balance change, not a refactor.
   if (deathWindowClosed(player)) {
     respawnPlayer(player, world.spawn, tuning);
+    for (const scavenger of world.enemies.scavengers) {
+      releaseAggro(scavenger);
+    }
     events.respawned = true;
   }
 

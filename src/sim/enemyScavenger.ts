@@ -186,6 +186,27 @@ export function detects(scavenger: Scavenger, at: Sighting): boolean {
 }
 
 /**
+ * End a chase episode — the ONE way out, stated once *(vault 5.3)*.
+ *
+ * There are exactly two exits from permanent aggro and they must clear the same fields, or a
+ * scavenger released by one route carries state the other route clears:
+ *
+ *   - **the scavenger's own death** (`stepEnemies`) — a corpse must not read as hunting;
+ *   - **the player's death** (`tick`, step 4c) — decided by the user 2026-08-14 (D4).
+ *
+ * ⚠️ It deliberately does NOT touch `moving`. That is a readback of `x` recomputed every live tick,
+ * so it has no stale value to clear — and `scavengerAnim` tests `hp <= 0` before it reads `moving`
+ * at all. Clearing it here would be a second definition of a derived value.
+ *
+ * `facing` is left alone too: a released scavenger resumes its patrol from where it is pointing,
+ * which is what the patrol turn at the bounds is for.
+ */
+export function releaseAggro(scavenger: Scavenger): void {
+  scavenger.chasing = false;
+  scavenger.chaseCounter = 0;
+}
+
+/**
  * One tick of scavenger behaviour.
  *
  * `footing` is required — see `ScavengerFooting`. It is consulted on the CHASE path only: a patrol

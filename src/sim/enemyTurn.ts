@@ -18,7 +18,7 @@
  * body-width from the barrel.
  */
 
-import { SENTRY, SENTRY_MUZZLE, scavengerFooting, stepScavenger, stepSentry } from './enemies';
+import { SENTRY, SENTRY_MUZZLE, releaseAggro, scavengerFooting, stepScavenger, stepSentry } from './enemies';
 import { PLAYER_BOX, toWorld } from './player';
 import { fireProjectile, stepProjectiles } from './projectiles';
 import type { World } from './types';
@@ -42,8 +42,10 @@ export function stepEnemies(world: World): void {
     // from a corpse. Harmless while a chase could lapse on its own; a permanent state with no exit
     // has to be cleared explicitly (Codex plan review, finding 3 — which also found the existing
     // test for this vacuous, because it set `hp = 0` on a scavenger that had never chased).
-    scavenger.chasing = false;
-    scavenger.chaseCounter = 0;
+    // One definition of "the chase is over", shared with the player-death release in `tick`'s step
+    // 4c (vault 5.3). Two exits writing their own copy of the same two fields is how one of them
+    // ends up clearing a field the other forgets.
+    releaseAggro(scavenger);
   }
 
   world.projectiles = stepProjectiles(
