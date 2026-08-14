@@ -346,9 +346,18 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     // one number a uniform scaling of every knob does NOT leave alone. It moved on purpose: 3.13
     // body heights was 28 % of the screen at the old scale and would have been 84 % at this one.
     expect(feel.apexPx / bodyHeightPx).toBeCloseTo(1.6, 2);
-    // Top speed in body heights per second — the measure the user's "moves too fast" was about,
-    // and the one a pure re-scale leaves at 6.5 no matter how big the character gets.
-    expect((feel.topSpeed * 60) / bodyHeightPx).toBeCloseTo(2.5, 2);
+    /**
+     * Top speed in body heights per second — the measure the user's "moves too fast" was about,
+     * and the one a pure re-scale leaves at 6.5 no matter how big the character gets.
+     *
+     * **6.5 → 2.5 (Phase 4) → 1.5625 (session 10).** The last move is not another preference dial:
+     * it is what the ART dictates. Zero foot-slide requires `ticksPerFrame × topSpeed` to equal the
+     * measured foot travel per drawn frame (22.5 px on run), and `ticksPerFrame` must be a whole
+     * number or session 9's judder returns. At 3 ticks per frame that fixes `runMax` at exactly
+     * 7.5 px/tick — 450 px/s over a 288 px character. See `tests/unit/foot-plant.test.ts`, which
+     * is the gate; this line only records the consequence for the published contract.
+     */
+    expect((feel.topSpeed * 60) / bodyHeightPx).toBeCloseTo(1.5625, 3);
     // And the character's share of the screen, which is what Phase 4 generates art against.
     expect((bodyHeightPx / GAME_HEIGHT) * 100).toBeCloseTo(26.67, 2);
   });

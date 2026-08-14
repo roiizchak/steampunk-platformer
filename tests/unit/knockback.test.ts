@@ -94,14 +94,34 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
   });
 
   /**
-   * The grounded number is the one worth writing down: **7.39 px** (FIX 2) — up from 1.85 px.
+   * The grounded shove, bled down by ground friction until it dies.
+   *
    * `knockbackSettling` (`combat.ts`) exempts the ONE tick immediately after the hit from ground
-   * friction, so the full `KNOCKBACK_SPEED` impulse survives to move the player that tick; the
-   * second tick then decelerates by `groundFriction` as before, and friction eats the rest before
-   * a third tick can contribute. Pinned exactly, because the whole reason this test exists is that
-   * a sign assertion would have called the old, invisible 1.85 px a success.
+   * friction, so the full `KNOCKBACK_SPEED` impulse survives to move the player that tick; every
+   * later tick decelerates by `groundFriction` until the velocity reaches zero.
+   *
+   * ## 🔴 It used to say "and that is all" after TWO ticks. Session 10 made that false.
+   *
+   * The shipped numbers were `KNOCKBACK_SPEED` 5.54 against `groundFriction` 3.69, which dies after
+   * exactly two ticks: `5.54 + 1.85 = 7.39 px`. Session 10 retuned locomotion from the art's
+   * measured foot travel, scaling every horizontal knob by `0.625` — including `groundFriction`,
+   * down to 2.30625 — while the user's decision **pinned `KNOCKBACK_SPEED` at 5.54** so a combat
+   * number would not move because the walk cycle was re-timed.
+   *
+   * Pinning the impulse while the decelerating force shrank makes the shove **travel further**:
+   * a third tick now contributes, and displacement rises to **9.70 px, up from 7.39**.
+   *
+   * > **That is worth stating plainly: "pin the constant" did NOT preserve the feel.** Felt
+   * > knockback is displacement, and displacement is impulse ÷ friction — so holding one input
+   * > fixed while the other moved changed the output by +31 %. The alternative (deriving
+   * > `KNOCKBACK_SPEED` backwards from a 7.39 px target) was rejected as brittle: the sum is
+   * > discontinuous in the number of surviving ticks, so a small knob edit would jump it.
+   *
+   * The expectation is therefore **derived from the knobs**, not retyped: it sums the real
+   * decelerating series and so stays true through the next retune, which is exactly what the
+   * hardcoded two-tick formula failed to do.
    */
-  it('grounded displacement is one un-friction-ed tick plus one decelerated tick, and that is all', () => {
+  it('grounded displacement is one un-friction-ed tick plus the whole decelerating tail', () => {
     const world = contactWorld(700, 706);
     const before = world.player.x;
 
@@ -111,11 +131,21 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     }
 
     const moved = world.player.x - before;
-    const expected = KNOCKBACK_SPEED + (KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction);
+
+    // The exempt tick, then every tick that still has velocity left after friction.
+    let expected = KNOCKBACK_SPEED;
+    for (let k = 1; ; k += 1) {
+      const v = KNOCKBACK_SPEED - k * DEFAULT_TUNING.groundFriction;
+      if (v <= 0) break;
+      expected += v;
+    }
     expect(moved).toBeCloseTo(expected, 5);
-    // 7.39 px, not 1.85. Recorded so nobody later reads "knockback ships" as "knockback is visible".
-    expect(moved).toBeGreaterThan(7);
-    expect(moved).toBeLessThan(8);
+
+    // 9.70 px at the session-10 tune, 7.39 px before it, 1.85 px before the friction exemption.
+    // Kept as absolute bounds so "knockback ships" can never again be read as "knockback is
+    // visible" — a sign assertion called the invisible 1.85 px a success.
+    expect(moved).toBeGreaterThan(9);
+    expect(moved).toBeLessThan(10);
   });
 
   /**
@@ -170,14 +200,28 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     }
 
     const moved = world.player.x - before;
-    // Air friction 0.51 against ground's 3.69, so the impulse survives the whole window instead of
-    // dying after two ticks: **25.59 px**, up from **20.05 px** before the friction exemption.
-    // It decomposes exactly — 5.54 for the newly exempt settling tick, plus the five ticks that
-    // already bled at `airFriction` (5.03 + 4.52 + 4.01 + 3.50 + 2.99 = 20.05). That arithmetic is
-    // how the number was checked: two agents reported different pre-fix figures and only one of
-    // them adds up. The gap against 7.39 grounded is why "does knockback work" is not one question.
-    expect(moved).toBeCloseTo(25.59, 1);
-    expect(moved).toBeGreaterThan(KNOCKBACK_SPEED + (KNOCKBACK_SPEED - DEFAULT_TUNING.groundFriction));
+    /**
+     * Air friction is a fraction of ground friction, so the impulse survives the whole hurt window
+     * instead of dying in a few ticks: **28.46 px** at the session-10 tune, up from 25.59 px, up
+     * from 20.05 px before the friction exemption existed.
+     *
+     * It decomposes exactly, which is how the figure is checked rather than trusted — the settling
+     * tick at the full `KNOCKBACK_SPEED`, then one tick per remaining lock tick bleeding at
+     * `airFriction`. Two agents once reported different pre-fix numbers and only one of them added
+     * up, so this is summed from the knobs rather than retyped.
+     *
+     * The gap against the grounded figure is the point: "does knockback work" is not one question,
+     * and a fixture that only ever tested one surface would answer the easy half.
+     */
+    let expected = KNOCKBACK_SPEED;
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
+      const v = KNOCKBACK_SPEED - k * DEFAULT_TUNING.airFriction;
+      if (v <= 0) break;
+      expected += v;
+    }
+    expect(moved).toBeCloseTo(expected, 5);
+    expect(moved).toBeGreaterThan(25);
+    expect(moved).toBeLessThan(30);
   });
 
   it('a PROJECTILE hit shoves the player away from the shot', () => {

@@ -34,20 +34,38 @@
 import { HAZARD_DAMAGE, belowKillPlane, hazardHit } from './hazards';
 import { SCAVENGER, overlapsScavenger } from './enemies';
 import { damagePlayer, killPlayer } from './combat';
-import { DEFAULT_TUNING, PLAYER_BOX, toWorld } from './player';
+import { PLAYER_BOX, toWorld } from './player';
 import { projectileHit } from './projectiles';
 import type { PlayerSim, World } from './types';
 
 /**
  * Knockback speed on a landed, non-lethal hit, px/tick.
  *
- * Reuses `DEFAULT_TUNING.walkMax` (Phase 2's walk cap) rather than authoring a new number — one
- * measured constant, a second consumer. Lives here rather than in `combat.ts` because `combat.ts`
- * exports `isCombatState`, which `player.ts` imports; a knockback constant sourced FROM `player.ts`
- * and consumed IN `combat.ts` would close that into a cycle. `worldDamage.ts` already imports from
- * both `combat.ts` and `player.ts` and feeds neither, so it is the seam without one.
+ * ## 🔴 It was `DEFAULT_TUNING.walkMax`, and session 10 cut that wire deliberately
+ *
+ * The original reasoning was *"one measured constant, a second consumer"* — reuse Phase 2's walk cap
+ * rather than authoring a number. That is a good instinct and it was the wrong constant, which only
+ * became visible when the two consumers needed to move in different directions.
+ *
+ * Session 10 retuned locomotion from the art's measured foot travel: `walkMax` 5.54 → 3.0. Wired as
+ * it was, that would have silently weakened every knockback in the game by **46 %** — a combat
+ * change wearing a locomotion change's clothes, which is precisely the confusion vault 4.22 exists
+ * to prevent. The Codex plan review caught it before it shipped, and the QA log already had this
+ * decision recorded as **re-opened and owed to the user**.
+ *
+ * **The user's decision (2026-08-14): pin it.** 5.54 is the value that was measured, played and
+ * approved as the shove that feels right; it keeps that value on its own terms. A combat number must
+ * not move because the walk cycle was re-timed.
+ *
+ * It is still ONE authored number with ONE consumer, still tuned in the Playground, and the
+ * displacement it produces is pinned by `tests/unit/knockback.test.ts` — which measures real px of
+ * travel rather than asserting this constant back at itself.
+ *
+ * Lives here rather than in `combat.ts` because `combat.ts` exports `isCombatState`, which
+ * `player.ts` imports; a knockback constant consumed IN `combat.ts` would close that into a cycle.
+ * `worldDamage.ts` already imports from both and feeds neither, so it is the seam without one.
  */
-export const KNOCKBACK_SPEED = DEFAULT_TUNING.walkMax;
+export const KNOCKBACK_SPEED = 5.54;
 
 /**
  * Shove the player away from `sourceX`, horizontally only — knockback never touches `vy`.

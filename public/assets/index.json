@@ -51,8 +51,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 24,
-      "simTicks": 48,
-      "fps": 30,
+      "simTicks": 72,
+      "fps": 20,
       "loop": true,
       "derivedFrom": "authored"
     },
@@ -62,8 +62,8 @@
       "frameWidth": 288,
       "frameHeight": 384,
       "frameCount": 12,
-      "simTicks": 24,
-      "fps": 30,
+      "simTicks": 36,
+      "fps": 20,
       "loop": true,
       "derivedFrom": "authored"
     },

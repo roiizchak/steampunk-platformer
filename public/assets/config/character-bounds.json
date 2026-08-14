@@ -1,44 +1,85 @@
 {
   "_comment": "Saved character configuration. THE SCALE LIVES HERE ON PURPOSE (vault A5): a global constant derived from a single regenerable frame means regenerating that frame silently rescales every other animation and moves every measured bound. `npm run assets:build` READS this and never computes it; `node tools/gen/build-assets.mjs --derive-scale` prints a new one for a human to paste in deliberately. Regenerating a sheet therefore moves nothing here.",
   "slug": "brass-courier",
-
   "renderHeightPx": 288,
   "scale": 0.23723229,
   "_scale": "Source pixels to game pixels. Derived from the mean figure height of the twelve idle frames, which is the only genuinely neutral upright pose in the set. 288 / 1214 = 0.23723229 (RE-DERIVED a third time, from the clips shot off the LEVELLED anchor - see _anchorLevelled). Standing height 1214 src px, spread 10 px (0.8%). Previously 288 / 1211 = 0.23781998. RE-DERIVED AGAIN when all five clips were regenerated with the monotonic airborne clause: the new idle stands 1211 source px against 1209, and its frame-to-frame spread TIGHTENED from 18 px (1.5%) to 10 px (0.8%), which is the size-pop the scale exists to hold still. Same procedure as before and it is not optional - `assets:build --derive-scale` prints the number and a human pastes it, in that order, with idle regenerated and rebuilt FIRST because every other animation is packed against it (vault A5). PREVIOUS VALUE 0.2382134 against a 1209 px standing height; before that, 935 px on the old 2K grid sheets. RE-DERIVED when the sheets moved from per-frame image generation to sampled Seedance video: the source is now a 720x1280 clip in which the courier stands 1209 px tall, against 935 px in the old 2K grid sheet, so this is a 4.2x DOWNSCALE and every drawn pixel is still one the model actually drew. Re-deriving was NOT optional and NOT cosmetic - the scale is the one number vault A5 warns about, so `assets:build --derive-scale` prints it and a human pastes it, in that order, with idle rebuilt FIRST because every other animation is packed against it. The measurement worth keeping: the twelve idle frames span 1200-1218 px, a spread of 18 px or 1.5%. The sheet this replaced varied its drawn figure by 20% in width and 7% in height between cells, which is what made the head bob without the character moving.",
-
   "frameWidth": 288,
   "frameHeight": 384,
   "_frame": "3 x 4 tiles at TILE_SIZE 96. BACK TO 288 (M3 amended, 2026-08-12): the cell is now PER-SLUG, not one global size — every courier sheet fits 288 wide, so this slug never needed the 384 that was widened for `rust-scavenger/death` alone. See character-bounds-rust-scavenger.json's `_frame` note for that slug's own figure (a full per-frame sweep, not the single clipped frame the old error reported) and why only IT needs 512. Height stays 384: RAISED 336 -> 384 when the regenerated fall was packed: centroid anchoring removes the translation the model added despite being told to hang in one place, and on that clip the correction is 78 px, which needs 352 px of cell. The packer THREW rather than clipping the head off, and vault 4.14 says raise the cell, never rescale one animation to fit. The extra headroom is transparent above the figure - the contact line is still the cell bottom, so nothing moves at runtime. The build FAILS rather than rescaling an animation to fit (vault 4.14).",
-
   "_baseline": "THE DEEPEST frame of a sheet reaches the LAST row of its cell; every other frame sits exactly its measured, scaled lift above that. One baseline per SHEET, not one per frame. `playerView` draws the sprite at origin (0.5, 1) on the player's feet position and PLAYER_BOX is authored +y up from the feet (vault 2.10), so a transparent gap below the DEEPEST frame sinks the whole animation into the ground by that many pixels - but a gap below any OTHER frame is the lift the model drew and must be preserved. CORRECTED: this note used to read 'feet sit on the last row of the cell' with no per-sheet qualifier, which is the contract packStrip actually implemented and it was wrong. Pinning each frame's own lowest pixel to the cell floor destroys all inter-frame vertical information and replaces it with an INVERTED bob - at the frames where both boots are clear of the ground the whole body is dragged DOWN to meet the floor. Measured on the shipped art in game pixels, the head sank: run 15, jump 67, fall 98, a full tile of concertina on the fall. The source clips are camera-locked and their prompts forbid translation, so what the model drew is POSE, not travel, and preserving it cannot double-count against the sim's own stepVertical. Anything re-asserting the old per-frame rule is reintroducing that defect - see tests/unit/sheet-packing.test.ts and public/assets/config/lift-profile.json.",
-
   "collisionBox": {
     "widthPx": 132,
     "heightPx": 288,
     "_source": "PLAYER_BOX x RENDER_SCALE, published in ASSET-PIPELINE.md §0a and pinned by tests/unit/tilemap-data.test.ts. The ART is narrower than this (36 px at the anchor), which is the safe direction."
   },
-
-  "stridePxPerCycle": { "walk": 254, "run": 320 },
+  "stridePxPerCycle": {
+    "walk": 254,
+    "run": 320
+  },
   "_loopFps": "🔴 AUTHORED locomotion cadence, session 9, and it REPLACES stridePxPerCycle as the input to walk/run timing. `animations.<name>.fps` above. The stride numbers below are kept as a record of what was measured; nothing reads them for timing any more. WHY: deriving a loop's frame rate from a measured stride made an unmeasurable quantity load-bearing, and it shipped as visible foot-slide -- the user's report was 'moves too fast, like a ghost'. Measured on the shipped sheets by tracking the planted foot across frames: run travels -22.4 px/frame while the body advances +27.0, so 17% of every step was slip; walk slipped 13%. It is not fixable by measuring harder -- four independent methods put walk at 156-250 against a declared 254 and run at 214-285 against a declared 320, which is vault 4.18's INDETERMINATE condition. HOW THESE NUMBERS WERE PICKED: from the one quantity that DOES measure cleanly, foot travel per frame (tightest reading sd 1.51 px). For zero slide the body must advance exactly as far as the planted foot does, so fps = topSpeed * TICK_HZ / footTravelPerFrame -- run 12.0*60/22.5 = 32, walk 5.54*60/9.0 = 37, rounded to 36 so the 24-frame cycle lands on 1.5 cycles/sec. That is the same cadence the sibling Street-Fighter project's walk uses (8 frames at an authored 12 fps), arrived at independently. THESE ARE A STARTING POINT TO BE TUNED BY EYE, which is the whole point of authoring them: re-tune in the Gym against the running character, not by re-deriving from art. vault 4.22 is NOT weakened -- fps = renderFrames * TICK_HZ / simTicks still governs every animation, and every sheet with a real window (attack/hurt/death/jump/fall) still takes its simTicks from the simulation. A loop has no window to outrun, which is the same reason `idle` has always been authored. User decision 2026-08-13 after comparing against C:\\Claude\\Street-Fighter, whose own timing module states: 'Looping states (idle/walk) have no duration to match and keep their authored fps.'",
   "_strideLevelledAnchor": "RE-MEASURED a third time, on the clips shot from the LEVELLED anchor, same foot-band method as every earlier figure so they stay comparable. WALK 278 -> 254 game px: packed foot-band spans peak at 127 and 105 with troughs at 47 and 38, two peaks and two troughs, so the sampler again cut exactly one cycle. simTicks 50 -> 46, fps 14.4 -> 15.65. RUN 340 -> 320: the direct peak of 160 gives 320, and scaling from walk by the full-extension ratio (160/127 = 1.26, x 254) gives 320 as well, so the two methods agree a second time. BUT THE RUN EVIDENCE WEAKENED with this art: eleven of its twelve frames measure 31-47 px, which is one boot, and only frame 2 spans 160. That is close to vault 4.18's INDETERMINATE condition and the agreement now rests on a single frame. Treat 320 as PROVISIONAL, settle it in the Gym against the running character, and expect run foot-slide as the observable if it is wrong.",
   "_strideRemeasuredAgain": "SUPERSEDED by the entry above. RE-MEASURED on the regenerated idle/walk/run clips, same foot-band method throughout so every number here stays comparable. WALK 310 -> 278 game px: the packed foot-band span peaks at 139 px (frames 1 and 12) and 93 px (frame 6), with troughs at 55 (frame 4) and 46 (frame 9) - two peaks and two troughs across the sheet, which independently confirms the sampler cut exactly ONE cycle. simTicks 56 -> 50 and fps 12.86 -> 14.4, both automatically, because animTimings derives them. RUN 468 -> 340, and this is the first time that number has had any evidence at all: the direct foot-band peak is 170 px (frame 6, both boots inside the band and clearly separated), giving 340 per cycle - and scaling from walk by the ratio of full-extension widths, the method the old 468 came from, gives 139 -> 170 i.e. 278 x 1.223 = 340 as well. TWO INDEPENDENT METHODS AGREE, which the old value never had. It is adopted rather than left at 468 because 468 against a measured 340 is a 38% error and foot-slide is the observable, i.e. knowingly shipping the defect vault 4.22 exists to prevent. It is still owed a Gym confirmation against the running character (ASSET-PIPELINE section 6) - two agreeing silhouette metrics are better evidence than one, but both are silhouette-shaped and vault 4.18's caution about what a foot band can see has not been retired, only weakened.",
   "_strideRemeasured": "SUPERSEDED by the entry above, kept because it records the method. WALK re-measured off the Seedance sheets, 276 -> 310 game px. Same method as before, so the two numbers are comparable: the widest foot-to-foot span at a contact frame is one step, doubled for the two steps in a cycle. On the new 12-frame walk the span peaks at 155 px (frames 2 and 12) and troughs at 53 (frame 9) - two peaks across the sheet, which independently confirms the sampler cut exactly ONE cycle. Re-measuring was not optional: the stride is a property of the ART, the art changed, and leaving 276 against a 310 px stride is a 12% foot-slide - the exact defect vault 4.22's derivation exists to prevent. It moved simTicks 50 -> 56 and walk fps 9.6 -> 12.86, both automatically, because `animTimings` derives them. RUN IS STILL NOT MEASURED and must not be reported as if it were: at a run contact frame the trailing leg is airborne, so the foot band captures one boot and cannot call the step length - INDETERMINATE by vault 4.18's own standard. Its 468 px is still the value scaled from the OLD walk art, so it is now doubly unverified. Settling it is a Gym task (ASSET-PIPELINE section 6) and the observable if it is wrong is run foot-slide.",
   "_stride": "Ground distance one full cycle covers, in GAME pixels. Scaled x3 with RENDER_SCALE 2 -> 6, because these are GAME pixels. This is what makes the locomotion frame rate derived rather than authored (vault 4.22): simTicks = round(stride / topSpeed), so retuning runMax or walkMax re-derives the fps with no asset rebuild, and foot-slide is the observable defect if the number is wrong. WALK is measured directly - at both contact frames both boots are planted and the foot band spans 45-46 source-derived px, doubled for the two steps in a cycle. RUN is NOT measured the same way and must not be reported as if it were: at its contact frames the trailing leg is airborne, so the foot band captures only one boot (21-22 px) and the metric cannot call the stride - INDETERMINATE by vault 4.18's own standard. It is instead scaled from walk by the ratio of full-extension widths (78/46), giving 78 px per step and 156 per cycle at the old scale. Re-derive it in the Gym against the real running character.",
-
   "animations": {
-    "idle": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
-    "walk": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [], "fps": 36 },
-    "run": { "loop": true, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [], "fps": 32 },
-    "jump": { "loop": false, "verticalAnchor": "centroid", "footOffsetPx": 0, "activeFrames": [] },
-    "fall": { "loop": false, "verticalAnchor": "centroid", "footOffsetPx": 0, "activeFrames": [] },
-    "hurt": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [] },
-    "attack": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [], "scale": 0.6 },
-    "death": { "loop": false, "verticalAnchor": "feet", "footOffsetPx": 0, "activeFrames": [], "scale": 0.60504202 }
+    "idle": {
+      "loop": true,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": []
+    },
+    "walk": {
+      "loop": true,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "fps": 20,
+      "footPxPerFrame": 9
+    },
+    "run": {
+      "loop": true,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "fps": 20,
+      "footPxPerFrame": 22.5
+    },
+    "jump": {
+      "loop": false,
+      "verticalAnchor": "centroid",
+      "footOffsetPx": 0,
+      "activeFrames": []
+    },
+    "fall": {
+      "loop": false,
+      "verticalAnchor": "centroid",
+      "footOffsetPx": 0,
+      "activeFrames": []
+    },
+    "hurt": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": []
+    },
+    "attack": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "scale": 0.6
+    },
+    "death": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "scale": 0.60504202
+    }
   },
   "_actionScale": "PER-(slug, action) scale OVERRIDES, added 2026-08-12 (user decision D2) so a PADDED generation of this character can coexist with the UNPADDED slug default (0.23723229) above -- padding is a property of a GENERATION and so is the scale it implies (vault A5, NARROWED to bind only scaleSource:'slug' entries -- see catalogWrite.mjs's upsertLiftProfile guard). Both actions are shot from the same padded 5050px anchor (`--fill 0.50`, clipAnchors.mjs PADDED_ANCHORS['brass-courier/attack'|'brass-courier/death']): attack request_id 019ff189-2309-7ee3-bb6b-afc8278dda98, death request_id 019ff18b-df29-7c00-bb4a-6f46ebb5ec1c (docs/generations/phase-05-padded-round.md). ATTACK: `node tools/gen/build-assets.mjs brass-courier attack --derive-scale` measured all 8 extracted frames at 482,474,472,482,482,482,482,482 source px (mean 480, spread 10px/2.1%) -> 288/480 = 0.6 exactly; trustworthy because the swing stays upright throughout, same reasoning as idle being the one genuinely neutral pose. DEATH: the same command's mean-of-ALL-frames method does NOT apply here -- death is a COLLAPSE, so its 10 frame heights fall 476,428,358,228,240,220,142,106,106,106 (spread 370px/153.5%) as the figure topples, and a mean across that range is not a standing-height measurement (it printed 1.19502075, which would be a bug to paste). Read BY HAND off the tool's own printed per-frame heights instead: frame 0 (476 source px), the first sampled frame at the death clip's motion onset, is still essentially the upright anchor pose before the visible fall begins -- closely consistent with attack's independently-measured 480px from the same anchor/fill/generation family. 288/476 = 0.60504202.",
-
   "_verticalAnchor": "Which landmark packStrip aligns a sheet's frames on. `feet` tracks the lowest opaque row and is right whenever the ART is what puts the character on the floor - the contact frame defines the line, and a lifted boot or a flight phase reads as exactly the lift the model drew. `centroid` tracks the vertical centre of mass instead, and is right for jump and fall because the SIM owns altitude there: stepVertical already moves the sprite every tick, so art that also rises adds a second uncorrelated motion. Measured on these clips, feet-anchoring gave the jump 51 px of climb of its own and put a 48 px balloon in the middle of the fall, while centroid holds both inside ~11 px and lets only the pose change. The choice was made by LOOKING at the three candidates side by side against a ground line, which is the only way it could be made - foot and head ranges discard direction and correlation, so they cannot separate pose deformation from whole-figure drift. Codex plan review blocker 1.",
-
   "_pingPong": "Play the poses out and back (1..n then n-1..2) so the loop wrap is a real drawn step rather than a jump. Opt-in per animation, supported by build-assets, and NOW SET ON NOTHING. It was set on idle while the sheets came from per-frame image generation: that 8-pose sheet drifted off its neutral pose partway through and no cut of it closed. Mirroring made the wrap a drawn step, but it could not fix what was actually wrong - measured on the shipped strip, consecutive idle frames scored a silhouette IoU of 0.86-0.98, which means they were the SAME POSE, while the interior still changed by 13-36 per channel. There was no breath to mirror; there was only the character being redrawn slightly differently each frame. The sheets now come from a Seedance clip that performs one full breathing cycle and returns to where it started, so the wrap closes by construction and ping-ponging would play the breath twice per loop. Left in place as a mechanism because a future one-shot-into-loop animation may want it.",
   "_footOffsetPx": "Per-animation vertical nudge, applied to the packed frame. Zero for every animation today, and NOTHING derives it - it is a hand adjustment made by looking, in the Gym (ASSET-PIPELINE section 6, `G` from the game), which writes it back here through serialiseBounds. SUPERSEDED REASON, kept because it explains why the field exists: it was introduced because bottom-aligning an airborne pose that tucks its legs makes the character appear to stand on air. Jump and fall no longer bottom-align - they anchor on the centroid, see _verticalAnchor - so that specific defect is gone and both read 0. The field stays because the residual case is real and only an eye can call it: an anchor's contact line is a property of the ART, and if a future animation's deepest frame is not its true contact frame, this is where the correction goes rather than into the scale or the cell height.",
   "_activeFrames": "Per-frame attack hitbox toggles. Empty for every animation because attack, hurt and death are PHASE 5 deliverables - their contact frames must align to active windows defined in src/sim/combat.ts, which does not exist yet."
