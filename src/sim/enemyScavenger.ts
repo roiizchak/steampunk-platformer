@@ -1,6 +1,6 @@
 import type { Rect } from './types';
 import type { Sighting } from './enemies';
-import { groundUnder, withinRadius } from './enemyGeometry';
+import { ENEMY_DEAD_ZONE, groundUnder, withinRadius } from './enemyGeometry';
 
 /* ------------------------------------------------------------------ *
  * rust-scavenger — patrols, detects, then chases until it is killed.
@@ -57,16 +57,19 @@ export const CHASE_FOOT_PX_PER_FRAME = 18;
  * which is the stronger version of the same guarantee. `enemy-ai.test.ts` still parks the player
  * exactly on the radius and still asserts no flap — the test outlives the mechanism.
  *
- * `deadZone` 96 px is one grid tile (`GRID` in `src/game/constants.ts`) — a straddling player within
- * it is closer than the chaser could close in one tick anyway, so holding `facing` and `x` there
- * costs nothing chase-wise and stops the sprite strobing when the player is off-axis and unreachable
- * (gate finding S1).
+ * `deadZone` is one tile — a straddling player within it is closer than the chaser could close in one
+ * tick anyway, so holding `facing` and `x` there costs nothing chase-wise and stops the sprite
+ * strobing when the player is off-axis and unreachable (gate finding S1).
+ *
+ * ⚠️ It was the literal `96`, and this comment cited *"`GRID` in `src/game/constants.ts`"* — **there
+ * is no `GRID`**; the constant is `TILE_SIZE`. It is `ENEMY_DEAD_ZONE` now, shared with the sentry,
+ * which had the same rule in its docstring and none in its code (finding B5).
  */
 export const SCAVENGER = {
   patrolSpeed: 2.5,
   chaseSpeed: CHASE_FOOT_PX_PER_FRAME / CHASE_TICKS_PER_FRAME,
   detectRadius: 480,
-  deadZone: 96,
+  deadZone: ENEMY_DEAD_ZONE,
   damage: 15,
   /**
    * ⚠️ **`contactCooldown: 45` used to sit here and has been deleted.** It was read by nothing —

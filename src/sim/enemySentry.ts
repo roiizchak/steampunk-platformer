@@ -1,6 +1,6 @@
 import type { Sighting } from './enemies';
 import { windowOpen } from './windows';
-import { withinRadius } from './enemyGeometry';
+import { ENEMY_DEAD_ZONE, withinRadius } from './enemyGeometry';
 
 /* ------------------------------------------------------------------ *
  * brass-sentry — static, radial detection, fixed cadence.
@@ -19,6 +19,13 @@ export const SENTRY = {
   cooldown: 90,
   damage: 10,
   projectileSpeed: 9,
+  /**
+   * The anti-flap hold, shared with the scavenger from ONE definition — see `ENEMY_DEAD_ZONE`.
+   *
+   * This is finding B5's fix. The docstring on `Sentry.facing` claimed the scavenger's rule for
+   * months while the code had no dead zone at all.
+   */
+  deadZone: ENEMY_DEAD_ZONE,
 } as const;
 
 export interface Sentry {
@@ -37,17 +44,23 @@ export interface Sentry {
    */
   lastHitSwing: number;
   /**
-   * Toward the player while the sentry can see them; HELD otherwise. Read by the render layer and
-   * never re-derived from velocity, because a stationary turret has no velocity to read a direction
-   * from.
+   * Toward the player while the sentry can see them **and they are outside `deadZone`**; HELD
+   * otherwise. Read by the render layer and never re-derived from velocity, because a stationary
+   * turret has no velocity to read a direction from.
    *
-   * ⚠️ **NOT "the same rule and same shape as `Scavenger.facing`", which this said until
-   * 2026-08-14.** The scavenger commits its facing outside a `deadZone`; this re-derives it every
-   * tick the player is visible, with no dead zone at all, so a player oscillating around `sentry.x`
-   * flips it at 60 Hz. `setFlipX` does not restart an animation, so no gate sees it. Recorded as
-   * finding B5 — the fix is to mirror the dead zone, and it is deferred, not overlooked.
+   * ✅ **Now genuinely "the same rule and the same shape as `Scavenger.facing`"**, from one shared
+   * `ENEMY_DEAD_ZONE` rather than two literals that agree. This docstring made that claim from the
+   * start while the code re-derived `facing` every visible tick with no dead zone at all, so a
+   * player oscillating around `sentry.x` — a jump apex over a turret — flipped it at 60 Hz.
+   *
+   * ⚠️ **No gate could see that**, and none can now: `setFlipX` does not restart an animation, so a
+   * frame-index assertion is blind to it. It is prevented by construction and asserted as *"does not
+   * change across 40 ticks"* in `enemy-ai.test.ts` — a single-tick assertion cannot see a strobe,
+   * which is exactly how this survived from Phase 5's start to 2026-08-14 (finding B5, decision D5).
    */
   facing: 1 | -1;
+  /** Per-instance override of `SENTRY.deadZone`, so a level can differ deliberately, not by drift. */
+  deadZone: number;
   /** Shot-time aim, integer px, muzzle->chest at the tick fired. `null` before the first shot. */
   lastFireDx: number | null;
   lastFireDy: number | null;
@@ -59,6 +72,7 @@ export interface SentryOptions {
   radius?: number;
   cooldown?: number;
   hp?: number;
+  deadZone?: number;
 }
 
 export function createSentry(options: SentryOptions): Sentry {
@@ -70,6 +84,7 @@ export function createSentry(options: SentryOptions): Sentry {
     y: options.y,
     radius,
     cooldown,
+    deadZone: options.deadZone ?? SENTRY.deadZone,
     // Starts ready, so the first player who walks into range is shot at rather than granted a free
     // cooldown's grace — otherwise the radius reads as larger than it is.
     cooldownCounter: cooldown,
@@ -103,11 +118,17 @@ export function stepSentry(sentry: Sentry, at: Sighting): SentryStep {
     sentry.cooldownCounter += 1;
   }
   if (!sentrySees(sentry, at)) {
-    // Cannot see the player: HOLD facing, don't snap back — the same anti-flap rule as the
-    // scavenger's dead zone (vault 5.1).
+    // Cannot see the player: HOLD facing, don't snap back. One of the two anti-flap holds this
+    // turret has; the other is the dead zone immediately below (vault 5.1).
     return { fired: false };
   }
-  sentry.facing = at.playerX >= sentry.x ? 1 : -1;
+  // Inside the dead zone, HOLD — the same rule as the scavenger, from the same constant. A player
+  // straddling `sentry.x` would otherwise flip this every tick, and `setFlipX` does not restart an
+  // animation, so no gate would ever report it. Fires are NOT gated on this: a turret with the
+  // player on top of it still shoots, it just does not spin.
+  if (Math.abs(at.playerX - sentry.x) >= sentry.deadZone) {
+    sentry.facing = at.playerX >= sentry.x ? 1 : -1;
+  }
   if (windowOpen(sentry.cooldownCounter, sentry.cooldown)) {
     return { fired: false };
   }

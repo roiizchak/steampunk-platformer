@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  ENEMY_DEAD_ZONE,
   SENTRY,
   SCAVENGER,
   createScavenger,
@@ -29,6 +30,7 @@ import {
 } from '../../src/sim/enemies';
 import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
 import { DEFAULT_TUNING } from '../../src/sim/player';
+import { TILE_SIZE } from '../../src/game/constants';
 import { createSnapshot, latchAttackPress } from '../../src/sim/input';
 import { stepEnemies } from '../../src/sim/enemyTurn';
 import { createWorld, tick } from '../../src/sim/tick';
@@ -139,6 +141,57 @@ describe('brass-sentry facing — the 2026-08-13 playtest defect (no facing at a
     const right = sentryAt(1000);
     stepSentry(right, { playerX: 1500, playerY: 0 });
     expect(sentryRenderDesc(right, 6).flipX).toBe(false);
+  });
+
+  /**
+   * 🔴 **The 60 Hz strobe — gate finding B5, fixed 2026-08-14 (D5).**
+   *
+   * `facing` was re-derived on EVERY tick the player was visible, with no dead zone, so a player
+   * oscillating around `sentry.x` — a jump apex over a turret is the ordinary case — flipped it at
+   * the tick rate. Nothing could see it: `setFlipX` does not restart an animation, so no frame-index
+   * gate notices, and the field's own docstring claimed it used the scavenger's rule, which is what
+   * a reviewer checks against instead of the code.
+   *
+   * The fix is the scavenger's `deadZone`, mirrored: inside it, HOLD. That is the same anti-flap
+   * shape as the out-of-radius hold directly above, and now genuinely the same rule as the
+   * scavenger's rather than merely claiming to be.
+   *
+   * Asserted as "does not change across N ticks", not "is correct once" — a single-tick assertion
+   * cannot see a strobe, which is the whole reason this survived.
+   */
+  it('does not strobe when the player oscillates across its centre', () => {
+    const sentry = sentryAt(1000);
+    stepSentry(sentry, { playerX: 400, playerY: 0 }); // commit to the left, outside the dead zone
+    expect(sentry.facing).toBe(-1);
+
+    // A player straddling `sentry.x` inside the dead zone, alternating sides every tick.
+    for (let i = 0; i < 40; i += 1) {
+      const offset = i % 2 === 0 ? 30 : -30;
+      stepSentry(sentry, { playerX: 1000 + offset, playerY: 0 });
+      expect(sentry.facing, `flipped on tick ${i} — the strobe is back`).toBe(-1);
+    }
+  });
+
+  it('still commits once the player is genuinely to one side', () => {
+    const sentry = sentryAt(1000);
+    stepSentry(sentry, { playerX: 400, playerY: 0 });
+    expect(sentry.facing).toBe(-1);
+
+    // Outside the dead zone on the right — the hold must not become a freeze.
+    stepSentry(sentry, { playerX: 1000 + ENEMY_DEAD_ZONE + 1, playerY: 0 });
+    expect(sentry.facing, 'a dead zone that never releases is a turret that never turns').toBe(1);
+  });
+
+  /**
+   * The docstring claimed parity with the scavenger for months while the code had none. Assert the
+   * shared SOURCE, not that two numbers happen to be equal — `SCAVENGER.contactCooldown` and
+   * `IFRAME_TICKS` agreed at 45 by coincidence for a whole phase, and that is what one definition
+   * with two consumers is for *(vault 5.3)*.
+   */
+  it('uses the same dead zone as the scavenger, from one definition', () => {
+    expect(SENTRY.deadZone).toBe(ENEMY_DEAD_ZONE);
+    expect(SCAVENGER.deadZone).toBe(ENEMY_DEAD_ZONE);
+    expect(ENEMY_DEAD_ZONE).toBe(TILE_SIZE);
   });
 });
 

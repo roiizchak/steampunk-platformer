@@ -1,9 +1,31 @@
+import { TILE_SIZE } from '../game/constants';
 import type { Rect } from './types';
 import type { Sighting } from './enemies';
 
 /* ------------------------------------------------------------------ *
  * Shared geometry.
  * ------------------------------------------------------------------ */
+
+/**
+ * How close the player may get, horizontally, before an enemy stops re-deciding which way it faces.
+ *
+ * **ONE definition, two consumers** *(vault 5.3)* — `SCAVENGER.deadZone` and `SENTRY.deadZone` both
+ * read it, and each still accepts a per-instance override so a level or a tuner can differ
+ * deliberately rather than by drift.
+ *
+ * One tile wide. A player straddling an enemy inside one tile is closer than a chaser could close in
+ * a tick anyway, so holding costs nothing; what it buys is that a player oscillating across the
+ * enemy's own `x` — a jump apex over a turret, the ordinary case — cannot strobe `flipX` at the tick
+ * rate. `setFlipX` does not restart an animation, so **no frame-index gate can see that happening**;
+ * it has to be prevented rather than detected.
+ *
+ * ⚠️ It was 96 written as a literal in `SCAVENGER`, whose comment cited *"`GRID` in
+ * `src/game/constants.ts`"* — **there is no `GRID`**; the constant is `TILE_SIZE`. So the one number
+ * the two enemies were supposed to share was a literal in one of them, justified by a citation to a
+ * symbol that does not exist. Derived here instead, which is why the sentry's copy cannot drift from
+ * the scavenger's the way its docstring already had.
+ */
+export const ENEMY_DEAD_ZONE = TILE_SIZE;
 
 /**
  * Squared-distance comparison — no `Math.sqrt`.
