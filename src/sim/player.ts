@@ -86,7 +86,7 @@ import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './type
  * It lives here, beside the speeds it constrains, because the two are one decision: see
  * `FOOT_PX_PER_FRAME` below.
  */
-export const LOCOMOTION_TICKS_PER_FRAME = 3;
+export const LOCOMOTION_TICKS_PER_FRAME = 2;
 
 /**
  * Foot travel per drawn frame, world px, **measured off the shipped sheets** by tracking the planted
@@ -97,7 +97,7 @@ export const LOCOMOTION_TICKS_PER_FRAME = 3;
  * retyped constant does. `src/sim/` may not read a file, which is why it is mirrored rather than
  * imported *(the same boundary G5 already crosses this way)*.
  */
-export const FOOT_PX_PER_FRAME = { run: 22.5, walk: 9.0 } as const;
+export const FOOT_PX_PER_FRAME = { run: 18.0, walk: 9.0 } as const;
 
 /**
  * Starting values, tuned by hand in the Playground.

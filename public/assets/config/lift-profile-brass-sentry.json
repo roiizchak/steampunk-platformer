@@ -77,8 +77,8 @@
     },
     "fire": {
       "anchor": "feet",
-      "scale": 0.28915663,
-      "scaleSource": "slug",
+      "scale": 0.42572062,
+      "scaleSource": "action",
       "deepestSourceY": 491,
       "frames": [
         {
@@ -86,7 +86,7 @@
           "sourceMinY": 50,
           "sourceMaxY": 491,
           "sourceCentroidY": 246.564,
-          "drawnHeight": 128,
+          "drawnHeight": 188,
           "liftPx": 0
         },
         {
@@ -94,7 +94,7 @@
           "sourceMinY": 50,
           "sourceMaxY": 491,
           "sourceCentroidY": 257.23,
-          "drawnHeight": 128,
+          "drawnHeight": 188,
           "liftPx": 0
         },
         {
@@ -102,7 +102,7 @@
           "sourceMinY": 54,
           "sourceMaxY": 491,
           "sourceCentroidY": 255.757,
-          "drawnHeight": 127,
+          "drawnHeight": 186,
           "liftPx": 0
         },
         {
@@ -110,7 +110,7 @@
           "sourceMinY": 56,
           "sourceMaxY": 491,
           "sourceCentroidY": 251.697,
-          "drawnHeight": 126,
+          "drawnHeight": 186,
           "liftPx": 0
         },
         {
@@ -118,7 +118,7 @@
           "sourceMinY": 34,
           "sourceMaxY": 491,
           "sourceCentroidY": 247.133,
-          "drawnHeight": 132,
+          "drawnHeight": 195,
           "liftPx": 0
         },
         {
@@ -126,15 +126,15 @@
           "sourceMinY": 0,
           "sourceMaxY": 491,
           "sourceCentroidY": 248.22,
-          "drawnHeight": 142,
+          "drawnHeight": 209,
           "liftPx": 0
         }
       ]
     },
     "death": {
       "anchor": "feet",
-      "scale": 0.28915663,
-      "scaleSource": "slug",
+      "scale": 0.34408602,
+      "scaleSource": "action",
       "deepestSourceY": 739,
       "frames": [
         {
@@ -142,47 +142,47 @@
           "sourceMinY": 160,
           "sourceMaxY": 717,
           "sourceCentroidY": 446.398,
-          "drawnHeight": 161,
-          "liftPx": 6
+          "drawnHeight": 192,
+          "liftPx": 8
         },
         {
           "index": 1,
           "sourceMinY": 144,
           "sourceMaxY": 717,
           "sourceCentroidY": 429.558,
-          "drawnHeight": 166,
-          "liftPx": 6
+          "drawnHeight": 198,
+          "liftPx": 8
         },
         {
           "index": 2,
           "sourceMinY": 18,
           "sourceMaxY": 717,
           "sourceCentroidY": 405.168,
-          "drawnHeight": 202,
-          "liftPx": 6
+          "drawnHeight": 241,
+          "liftPx": 8
         },
         {
           "index": 3,
           "sourceMinY": 0,
           "sourceMaxY": 719,
           "sourceCentroidY": 423.545,
-          "drawnHeight": 208,
-          "liftPx": 6
+          "drawnHeight": 248,
+          "liftPx": 7
         },
         {
           "index": 4,
           "sourceMinY": 0,
           "sourceMaxY": 721,
           "sourceCentroidY": 508.674,
-          "drawnHeight": 209,
-          "liftPx": 5
+          "drawnHeight": 248,
+          "liftPx": 6
         },
         {
           "index": 5,
           "sourceMinY": 186,
           "sourceMaxY": 739,
           "sourceCentroidY": 551.922,
-          "drawnHeight": 160,
+          "drawnHeight": 191,
           "liftPx": 0
         },
         {
@@ -190,7 +190,7 @@
           "sourceMinY": 146,
           "sourceMaxY": 739,
           "sourceCentroidY": 566.868,
-          "drawnHeight": 172,
+          "drawnHeight": 204,
           "liftPx": 0
         },
         {
@@ -198,7 +198,7 @@
           "sourceMinY": 124,
           "sourceMaxY": 739,
           "sourceCentroidY": 576.49,
-          "drawnHeight": 178,
+          "drawnHeight": 212,
           "liftPx": 0
         }
       ]

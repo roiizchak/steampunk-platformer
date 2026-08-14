@@ -132,20 +132,31 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     const moved = world.player.x - before;
 
-    // The exempt tick, then every tick that still has velocity left after friction.
+    // The exempt tick, then every tick INSIDE THE SAMPLED WINDOW that still has velocity left.
+    // Bounded by the same `HURT_LOCK_TICKS` the fixture steps, not by "until v <= 0" — at the
+    // session-10 knockback the impulse OUTLIVES the lock window by a tick, so an unbounded series
+    // over-counts by exactly that tail. See the i-frame test at the bottom of this file, which had
+    // the mirror-image assumption and had to be corrected the same way.
     let expected = KNOCKBACK_SPEED;
-    for (let k = 1; ; k += 1) {
+    for (let k = 1; k < HURT_LOCK_TICKS; k += 1) {
       const v = KNOCKBACK_SPEED - k * DEFAULT_TUNING.groundFriction;
       if (v <= 0) break;
       expected += v;
     }
     expect(moved).toBeCloseTo(expected, 5);
 
-    // 9.70 px at the session-10 tune, 7.39 px before it, 1.85 px before the friction exemption.
-    // Kept as absolute bounds so "knockback ships" can never again be read as "knockback is
-    // visible" — a sign assertion called the invisible 1.85 px a success.
-    expect(moved).toBeGreaterThan(9);
-    expect(moved).toBeLessThan(10);
+    /**
+     * **63.5 px — and the units are the point.** The player's box is 132 px wide, so this is ~48 %
+     * of the character's own width: a shove you can SEE.
+     *
+     * The history is why the bounds are absolute rather than a sign check. 1.85 px before the
+     * friction exemption; 7.39 px after it; 9.70 px once locomotion was retuned. Every one of those
+     * passed a "did the player move away" assertion, and the user still reported *"the knockback is
+     * not working"* — because at 9.70 px, 7 % of a body width, there is nothing to see. A gate that
+     * measures whether knockback HAPPENED cannot notice that it is invisible.
+     */
+    expect(moved).toBeGreaterThan(55);
+    expect(moved).toBeLessThan(70);
   });
 
   /**
@@ -220,8 +231,10 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
       expected += v;
     }
     expect(moved).toBeCloseTo(expected, 5);
-    expect(moved).toBeGreaterThan(25);
-    expect(moved).toBeLessThan(30);
+    // 99.3 px — three quarters of a body width, and roughly 1.6x the grounded figure. Being hit in
+    // the air should carry you further; that gap is the reason both surfaces are measured.
+    expect(moved).toBeGreaterThan(90);
+    expect(moved).toBeLessThan(110);
   });
 
   it('a PROJECTILE hit shoves the player away from the shot', () => {
@@ -326,12 +339,26 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     // Let the shove settle, then measure only the ticks where contact is still happening but every
     // hit is being refused by the i-frame window.
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    /**
+     * 🔴 **Sampled after the shove has actually stopped, not after the LOCK has.**
+     *
+     * This used to read `settled` at `HURT_LOCK_TICKS` on the assumption that the impulse died
+     * inside the lock window. At the session-10 knockback (17.5 px/tick against a friction of
+     * 2.77) it does not — velocity is still 0.895 px/tick on the tick the lock ends, so `settled`
+     * captured a player who was still moving and the assertion below failed by exactly that
+     * 0.895 px. The test was measuring the wrong instant, not catching a defect.
+     *
+     * `SETTLE_TICKS` is generous on purpose: it only has to outlast the tail, and over-waiting
+     * cannot hide a second hit — the i-frame window is what bounds the whole fixture.
+     */
+    const SETTLE_TICKS = HURT_LOCK_TICKS + 4;
+    for (let i = 0; i < SETTLE_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
+    expect(world.player.vx, 'the shove must have fully settled before x is sampled').toBe(0);
     const settled = world.player.x;
 
-    for (let i = 0; i < IFRAME_TICKS - HURT_LOCK_TICKS - 2; i += 1) {
+    for (let i = 0; i < IFRAME_TICKS - SETTLE_TICKS - 2; i += 1) {
       tick(world, { ...IDLE });
     }
 

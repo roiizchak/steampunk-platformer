@@ -248,7 +248,26 @@ export const VIDEO_MOTIONS = Object.freeze({
   },
   run: {
     cyclic: true,
-    frames: 12,
+    /**
+     * 🔴 **15, not 12, and the reason is the SPEED — not the animation.**
+     *
+     * Foot travel per drawn frame is `stridePerCycle / frames`, and planted feet require
+     * `ticksPerFrame × topSpeed === footPxPerFrame` with `ticksPerFrame` a whole number. Substitute
+     * and the speed collapses to `stridePerCycle / (frames × ticksPerFrame)` — so with 12 frames the
+     * ONLY planted run speeds are `270/24 = 11.25` and `270/36 = 7.5`, and nothing in between exists.
+     *
+     * 7.5 was too slow and 11.25 is within 6 % of the 12.0 the user had already rejected as *"moves
+     * very fast"*. Changing the frame count is the one lever that reaches between them: **15 frames
+     * at 2 ticks/frame gives `270/30 = 9.0`**, with zero slide. The user chose it over accepting a
+     * 20 % slide at the same speed.
+     *
+     * ⚠️ **It costs pose distinctness, and that is the recorded trade.** The clip carries roughly 13
+     * genuinely distinct poses per cycle, so 15 sampled frames necessarily repeats some — the same
+     * mild defect already measured on the walk sheet (pairs 1-2, 4-5, 14-15, 18-19). `gateMotionFloor`
+     * cannot catch it: it compares every frame to frame 0 and keeps the maximum, never adjacent
+     * pairs. Buying real distinctness here needs a longer or higher-frame-rate clip, i.e. money.
+     */
+    frames: 15,
     motion:
       'runs hard to the RIGHT with a complete and clearly visible running cycle, repeated steadily ' +
       'for the whole clip: he drives one knee high in front of him, reaches that leg forward, ' +

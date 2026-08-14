@@ -34,7 +34,7 @@
       "verticalAnchor": "feet",
       "footOffsetPx": 0,
       "activeFrames": [],
-      "fps": 20,
+      "fps": 30,
       "footPxPerFrame": 9
     },
     "run": {
@@ -42,8 +42,8 @@
       "verticalAnchor": "feet",
       "footOffsetPx": 0,
       "activeFrames": [],
-      "fps": 20,
-      "footPxPerFrame": 22.5
+      "fps": 30,
+      "footPxPerFrame": 18
     },
     "jump": {
       "loop": false,

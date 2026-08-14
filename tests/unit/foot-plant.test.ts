@@ -141,7 +141,7 @@ describe('the retune preserved what it claimed to preserve', () => {
    * a designed relationship rather than an artefact of two eye-tuned numbers.
    */
   it('deliberately does NOT preserve walkMax / runMax', () => {
-    expect(DEFAULT_TUNING.walkMax / DEFAULT_TUNING.runMax).toBeCloseTo(0.4, 6);
+    expect(DEFAULT_TUNING.walkMax / DEFAULT_TUNING.runMax).toBeCloseTo(0.5, 6);
     expect(DEFAULT_TUNING.walkMax / DEFAULT_TUNING.runMax).not.toBeCloseTo(5.54 / 12.0, 3);
   });
 

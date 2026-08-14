@@ -53,19 +53,34 @@ import type { PlayerSim, World } from './types';
  * to prevent. The Codex plan review caught it before it shipped, and the QA log already had this
  * decision recorded as **re-opened and owed to the user**.
  *
- * **The user's decision (2026-08-14): pin it.** 5.54 is the value that was measured, played and
- * approved as the shove that feels right; it keeps that value on its own terms. A combat number must
- * not move because the walk cycle was re-timed.
+ * ## 🔴 And then the playtest showed the number itself was never big enough to SEE
  *
- * It is still ONE authored number with ONE consumer, still tuned in the Playground, and the
- * displacement it produces is pinned by `tests/unit/knockback.test.ts` — which measures real px of
- * travel rather than asserting this constant back at itself.
+ * Pinned at 5.54 the shove travelled **9.7 world px**. The player's collision box is 132 px wide, so
+ * that is 7 % of the character's own width and half a percent of a 1920 px view. The user reported
+ * it as *"the knockback is not working… when I got hit, the animation got stuck"* — and both halves
+ * of that are the same defect. Knockback fired correctly every time; with no visible displacement,
+ * what a player sees is a hurt pose, six ticks of `movementLocked`, and a character that does not
+ * move. That reads as a freeze, not as a hit.
+ *
+ * The root cause is inheritance: 5.54 was `walkMax`, i.e. **one tick of walking**, which cannot read
+ * as an impact at any scale. Every re-tune since carried it forward without ever asking what it
+ * looked like — the gates measured that knockback *happened*, never that it was *visible*, which is
+ * vault 9.4's shape (a thing that is cheap because it is not really being done).
+ *
+ * **17.5 px/tick, the user's decision (2026-08-14), chosen as a fraction of the body rather than as a
+ * multiple of a speed:** it produces 64.4 px of travel — 49 % of the character's 132 px width — which is
+ * the shove a 2D brawler uses to sell a hit without launching the player off ledges. The exact
+ * figure is asserted in `tests/unit/knockback.test.ts` by summing the real decelerating series, so
+ * it stays true when friction next moves.
+ *
+ * It is ONE authored number with ONE consumer, tuned by eye in the Playground, and expressed in the
+ * unit that actually matters — **px of travel**, not px per tick.
  *
  * Lives here rather than in `combat.ts` because `combat.ts` exports `isCombatState`, which
  * `player.ts` imports; a knockback constant consumed IN `combat.ts` would close that into a cycle.
  * `worldDamage.ts` already imports from both and feeds neither, so it is the seam without one.
  */
-export const KNOCKBACK_SPEED = 5.54;
+export const KNOCKBACK_SPEED = 17.5;
 
 /**
  * Shove the player away from `sourceX`, horizontally only — knockback never touches `vy`.
