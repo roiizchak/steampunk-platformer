@@ -314,4 +314,63 @@ test.describe('Phase 5 — combat', () => {
     // walk cycle that never leaves frame 0.
     expect(result.distinctFrames).toBeGreaterThan(1);
   });
+
+  /**
+   * 🔴 The enemy half of session 9's ghost fix, which was missing for five days.
+   *
+   * `phase-02-movement.spec.ts` asserts the same property of the PLAYER, and it is the only reason
+   * that half stayed fixed. Nothing asked it of the enemies, so `enemyLayer.sync` kept drawing them
+   * at raw tick positions on a display faster than 60 Hz — three identical frames, then a jump. The
+   * user reported it on 2026-08-14 as the scavenger being *"not smooth like my character"*, which
+   * names the exact comparison this file was missing.
+   *
+   * `tests/unit/enemy-interpolation.test.ts` gates the layer's arithmetic. This gates the wiring
+   * that unit test cannot see: that `GameScene` actually calls `snapshot()` before the last tick and
+   * feeds `sync()` a live alpha. Deleting either reverts the drawn position to the sim position on
+   * every frame, and `maxLag` collapses to 0.
+   *
+   * Sampled once per `requestAnimationFrame` INSIDE the page and returned as an aggregate — a wait
+   * expressed in ticks cannot bound a sampling window, and this suite has produced both a false
+   * green and a false red that way.
+   */
+  test('the drawn enemy is interpolated between ticks, exactly as the player is', async ({
+    page,
+  }) => {
+    await bootToGame(page);
+
+    const lags = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const scene = (
+            window as unknown as { __phaserGame: PhaserGameHandle }
+          ).__phaserGame.scene.getScene('Game') as unknown as GameSceneHandle & {
+            world: { enemies: { sentries: unknown[]; scavengers: { x: number }[] } };
+            enemies: { bodies: { x: number }[] };
+          };
+          // Bodies are built sentries-then-scavengers (`enemyLayer.ts`), so the first scavenger's
+          // body sits after every sentry. Derived, never the literal index — a level with a
+          // different enemy mix must not silently sample a turret.
+          const at = scene.world.enemies.sentries.length;
+          const out: number[] = [];
+          let n = 0;
+          const step = (): void => {
+            const sim = scene.world.enemies.scavengers[0];
+            const drawn = scene.enemies.bodies[at];
+            if (sim && drawn) out.push(sim.x - drawn.x);
+            if (++n < 90) requestAnimationFrame(step);
+            else resolve(out);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+
+    expect(lags.length).toBeGreaterThan(30);
+    // 🔴 The assertion the defect fails. Exactly zero on EVERY frame means the body is pinned to
+    // the sim tick, which is the tick-stepping the user reported.
+    expect(Math.max(...lags.map(Math.abs))).toBeGreaterThan(0);
+    // Never further behind than one tick of the fastest thing a scavenger does. `chaseSpeed` is
+    // 6 px/tick in sim units and the level runs at RENDER_SCALE, so this is the ceiling on how
+    // stale one interpolated frame may be; anything past it is not lag, it is a wrong position.
+    expect(Math.max(...lags.map(Math.abs))).toBeLessThanOrEqual(6 * RENDER_SCALE);
+  });
 });

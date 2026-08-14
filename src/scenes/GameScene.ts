@@ -243,6 +243,12 @@ export class GameScene extends Phaser.Scene {
     if (ticks > 0) {
       if (ticks > 1) advance(this.world, this.input$, ticks - 1);
       this.prevPlayer = { x: this.world.player.x, y: this.world.player.y };
+      // The enemies' half of the same snapshot, taken at the same instant and for the same reason.
+      // It was missing until 2026-08-14, which left every enemy drawn at raw tick positions while
+      // the player was blended — three still frames then a jump, at 240 Hz. The user reported it as
+      // the scavenger "not smooth like my character", and the comparison in those words is literally
+      // what the code was doing.
+      this.enemies.snapshot();
       advance(this.world, this.input$, 1);
     } else {
       advance(this.world, this.input$, 0);
@@ -250,7 +256,7 @@ export class GameScene extends Phaser.Scene {
 
     this.renderPlayer();
     this.renderHud();
-    this.enemies.sync();
+    this.enemies.sync(renderAlpha(this.accumulatorMs));
     this.renderParallax();
     // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
     // lane advances between ticks and the other does not.

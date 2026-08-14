@@ -85,7 +85,7 @@ describe('EnemyLayer.sync() grows bodies for enemies appended after create()', (
       createScavenger({ x: 300, y: 0, patrolMin: 250, patrolMax: 350 }),
     );
 
-    layer.sync();
+    layer.sync(1);
 
     // A body must now exist for the appended enemy — proven by a second Rectangle having been
     // built, not merely by sync() not throwing.

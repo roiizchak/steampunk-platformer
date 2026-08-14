@@ -241,16 +241,16 @@ describe('the Sprite path (criterion 5.4)', () => {
     const scavengerSprite = sprites[1]!;
     expect(scavengerSprite.playCalls.length).toBe(1); // the initial play() in addBody
 
-    layer.sync();
-    layer.sync();
-    layer.sync();
+    layer.sync(1);
+    layer.sync(1);
+    layer.sync(1);
     // Same state across three syncs — a correct guard calls play() zero more times. The mutation
     // that deletes the getName() comparison makes this 4, not 1.
     expect(scavengerSprite.playCalls.length).toBe(1);
 
     // A real animation change: kill the scavenger, so scavengerAnim() switches to 'death'.
     world.enemies.scavengers[0]!.hp = 0;
-    layer.sync();
+    layer.sync(1);
     expect(scavengerSprite.playCalls.length).toBe(2);
     expect(scavengerSprite.playCalls[1]).toBe('rust-scavenger-death');
   });

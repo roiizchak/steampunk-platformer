@@ -1687,3 +1687,56 @@ sweep (**48/48**). It is recorded, not dismissed: the ceiling is a headless Swif
 HANDOFF §14 measures at ~21× the real GPU, on a box that had just run the whole vitest suite — which
 is exactly why **W10 rewrites what 5.11 measures**. It is not evidence about this change, and it is
 not evidence the gate is sound either.
+
+### 🔴 The scavenger was STILL not smooth, and the cadence was never the whole cause
+
+The user re-reported it after the chase was planted: *"the scavenger, his animation is not smoothing
+like my character."* Re-timing `chase` was correct and insufficient, because **two different defects
+look alike at a glance** and only one of them had been fixed.
+
+**Session 9 gave the interpolation to the player and to nobody else.** `src/render/interpolate.ts`
+blends a drawn position across the leftover accumulator, and `interpolate.test.ts` gates that
+function thoroughly. **What no test asked was who calls it** — the answer was
+`GameScene.renderPlayer`, and only that. `enemyLayer.sync` wrote `body.setPosition(desc.x, desc.y)`,
+the raw tick position, so every enemy was drawn as three identical frames followed by a jump on any
+display faster than 60 Hz. The defect had become *more* visible for having been fixed on the
+character standing next to it, which is exactly the comparison the user's words name.
+
+| | player | enemies, before | enemies, after |
+|---|---|---|---|
+| drawn position | blended across the accumulator | **raw tick position** | blended, same accumulator |
+| snapshot taken | before the last tick of a batch | — | before the last tick of a batch |
+| gated by | `phase-02-movement.spec.ts` lag test | **nothing** | unit + e2e, both red-proved |
+
+**Fix.** `EnemyLayer` gains `snapshot()` and `sync(alpha)`. `GameScene` calls the first at the exact
+seam it captures `prevPlayer`, and feeds the second `renderAlpha(this.accumulatorMs)` — the same
+factor from the same accumulator, so the two can never disagree about what "now" means on screen.
+The sentries-then-scavengers ordering moved into one private `subjects()` used by `create`,
+`snapshot` and `sync` alike *(vault 5.3)*: a snapshot walked in a different order would blend each
+enemy toward a **different enemy's** position.
+
+**Health bars ride the drawn body**, shifted by the same delta. `healthBarDesc` is positioned from
+the sim, so without that shift the bar would hang still while the body slid underneath it — the same
+defect one layer up, and more obvious for the two being inches apart.
+
+**Projectiles are deliberately NOT interpolated.** A shot is created and destroyed by the sim, so
+`world.projectiles[i]` is not the same bolt from tick to tick, and index-matched blending would slide
+a *new* bolt out of a *different* one's position. Doing it properly needs an id per shot, which is
+`projectileView.ts` (W16, unbuilt). At `projectileSpeed` 9 px/tick it is also the smallest of the
+three steps by some distance.
+
+**Two gates, because one of them could not see the bug.**
+`tests/unit/enemy-interpolation.test.ts` gates the layer's arithmetic against a mock scene — it
+sweeps alpha across the open interval and demands the drawn x actually vary, which is the assertion a
+layer ignoring alpha cannot satisfy. But a unit test cannot see whether `GameScene` ever calls
+`snapshot()`, and **that call site is precisely where the original hole was**. So the e2e in
+`phase-05-combat.spec.ts` mirrors the player's own ghost test: sample `simX - drawnX` once per
+animation frame, in-page, and require at least one non-zero.
+
+| mutation | result |
+|---|---|
+| `setPosition(desc.x, desc.y)` — the original defect | unit: `Tests 3 failed` |
+| delete `this.enemies.snapshot()` in `GameScene` | unit: **all green** · e2e: `1 failed` |
+
+That second row is the entry worth keeping: **the unit gate alone would have passed a game with the
+bug still in it.** The e2e is not redundant coverage, it is the only thing watching the wiring.

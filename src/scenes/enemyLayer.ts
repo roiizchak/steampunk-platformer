@@ -2,6 +2,7 @@ import type Phaser from 'phaser';
 
 import { healthBarDesc, type BarSubject } from '../render/enemyHealthBar';
 import { scavengerRenderDesc, sentryRenderDesc, type EnemyRenderDesc } from '../render/enemyView';
+import { interpolatedPosition, type Point } from '../render/interpolate';
 import type { EnemySlug } from '../sim/enemies';
 import type { World } from '../sim/types';
 import { playIfChanged } from './playAnim';
@@ -34,10 +35,36 @@ import { playIfChanged } from './playAnim';
  * `sync()`'s state-change play (criterion 5.4) routes through `playAnim.ts`'s `playIfChanged`, which
  * `GameScene.ts`'s player render also uses — ONE implementation of the frame-0 guard AND the R4
  * missing-key guard, rather than the two copies that used to drift here (R10).
+ *
+ * ## 🔴 Enemies are drawn BETWEEN ticks, and until 2026-08-14 only the player was
+ *
+ * Session 9 fixed the player's "ghost" by blending its drawn position across the leftover
+ * accumulator (`src/render/interpolate.ts`). **The enemies were never given the same treatment**, so
+ * they kept being drawn at raw tick positions: on a 240 Hz display that is three identical frames
+ * followed by a jump, which is the exact defect the player no longer has.
+ *
+ * That is why re-timing the scavenger's chase to plant its feet did not fix the complaint. Foot
+ * slide and tick-stepping are two different defects that look alike at a glance, and the second one
+ * had become *more* visible once the first was gone from the character standing next to it — the
+ * user's words were *"not smooth like my character"*, which names the comparison exactly.
+ *
+ * `snapshot()` is the other half and `GameScene` must call it in the same place it captures
+ * `prevPlayer`: immediately before the LAST tick of a batch. Both halves live here rather than in
+ * the scene so the sentries-then-scavengers ordering has ONE definition *(vault 5.3)* — a snapshot
+ * walked in a different order than the sync would blend each enemy toward another enemy's position.
  */
 export class EnemyLayer {
   private readonly bodies: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Sprite)[] = [];
   private readonly isSprite: boolean[] = [];
+  /**
+   * Each enemy's position immediately before the most recent tick, in subject order.
+   *
+   * `null` until the first `snapshot()`, which is the honest answer on the first frame — the same
+   * contract `prevPlayer` has, and `interpolatedPosition` returns `cur` for it rather than guessing.
+   * Plain copies, not references: the sim mutates enemies in place, so a reference would make
+   * `prev` and `cur` the same object and the blend a silent no-op.
+   */
+  private prevPositions: Point[] | null = null;
   private bars!: Phaser.GameObjects.Graphics;
   private shots!: Phaser.GameObjects.Graphics;
 
@@ -88,24 +115,48 @@ export class EnemyLayer {
   }
 
   /**
-   * Push this tick's sim state onto the drawables.
+   * Every enemy this frame, in the ONE order `create`, `snapshot` and `sync` all walk.
+   *
+   * Sentries then scavengers, decided in a single place, so index `i` is the same enemy in
+   * `bodies`, in `prevPositions` and here — the alternative is an id on every enemy for a list that
+   * is built once and never reordered.
+   */
+  private subjects(): [BarSubject, EnemyRenderDesc, EnemySlug][] {
+    const { scale } = this.world;
+    const out: [BarSubject, EnemyRenderDesc, EnemySlug][] = [];
+    for (const sentry of this.world.enemies.sentries) {
+      out.push([sentry, sentryRenderDesc(sentry, scale), 'brass-sentry']);
+    }
+    for (const scavenger of this.world.enemies.scavengers) {
+      out.push([scavenger, scavengerRenderDesc(scavenger, scale), 'rust-scavenger']);
+    }
+    return out;
+  }
+
+  /**
+   * Record where every enemy is RIGHT NOW, to be blended from on the frames that follow.
+   *
+   * Called by `GameScene` immediately before the last tick of a batch — the same seam and the same
+   * reasoning as `prevPlayer`. Snapshotting before the whole batch would blend across every tick it
+   * drained and add a frame of lag on any healthy 30 Hz frame (Codex plan review, finding 1).
+   */
+  snapshot(): void {
+    this.prevPositions = this.subjects().map(([, desc]) => ({ x: desc.x, y: desc.y }));
+  }
+
+  /**
+   * Push this tick's sim state onto the drawables, drawn `alpha` of the way from the last tick.
+   *
+   * `alpha` comes from `renderAlpha(accumulatorMs)` — the same blend factor the player uses, from
+   * the same accumulator, so the two never disagree about what "now" means on screen.
    *
    * Bars and shots are cleared and redrawn wholesale rather than diffed. At a handful of objects
    * that is cheaper than tracking which changed, and it removes the class of bug where a killed
    * enemy's bar outlives it.
    */
-  sync(): void {
+  sync(alpha: number): void {
     const { scale } = this.world;
-    // Same order `create` used. Sentries then scavengers, in both places, so index `i` is the same
-    // enemy in `bodies` as it is here — the alternative is an id on every enemy for a list that is
-    // built once and never reordered.
-    const subjects: [BarSubject, EnemyRenderDesc, EnemySlug][] = [];
-    for (const sentry of this.world.enemies.sentries) {
-      subjects.push([sentry, sentryRenderDesc(sentry, scale), 'brass-sentry']);
-    }
-    for (const scavenger of this.world.enemies.scavengers) {
-      subjects.push([scavenger, scavengerRenderDesc(scavenger, scale), 'rust-scavenger']);
-    }
+    const subjects = this.subjects();
 
     // Growth path: a dev spawn (or anything else that appends after `create()`) has no body yet.
     // Building it here — rather than leaving the `continue` below to skip it forever — is what
@@ -120,7 +171,12 @@ export class EnemyLayer {
       if (body === undefined) {
         continue;
       }
-      body.setPosition(desc.x, desc.y);
+      // 🔴 Between the last two ticks, not at the current one — see this class's header. `prev` is
+      // read per index from the snapshot taken before the last tick; a body appended since then
+      // (the dev fleet) has no entry, and `interpolatedPosition` draws it at `cur`, which is right:
+      // a spawn is a teleport, and there is nothing to blend from.
+      const drawn = interpolatedPosition(this.prevPositions?.[i] ?? null, desc, alpha);
+      body.setPosition(drawn.x, drawn.y);
       if (this.isSprite[i]) {
         const sprite = body as Phaser.GameObjects.Sprite;
         sprite.setFlipX(desc.flipX);
@@ -143,13 +199,26 @@ export class EnemyLayer {
       // looping `idle`. Testing `isPlaying` alone would hold that corpse at full alpha forever.
       body.setAlpha(subject.hp > 0 || this.playingDeath(i, desc) ? 1 : 0.35);
 
+      // The bar rides the DRAWN body, not the sim one. `healthBarDesc` is positioned from the
+      // enemy's tick position, so without this shift the bar would sit still while the body it
+      // describes slides under it — the interpolation defect reintroduced one layer up, and more
+      // obvious than the original because the two are inches apart on screen.
       const bar = healthBarDesc(subject, slug, scale);
-      this.bars.fillStyle(0x1a1512, 1).fillRect(bar.x, bar.y, bar.w, bar.h);
+      const barX = bar.x + (drawn.x - desc.x);
+      const barY = bar.y + (drawn.y - desc.y);
+      this.bars.fillStyle(0x1a1512, 1).fillRect(barX, barY, bar.w, bar.h);
       if (bar.fillW > 0) {
-        this.bars.fillStyle(0xc4463f, 1).fillRect(bar.x, bar.y, bar.fillW, bar.h);
+        this.bars.fillStyle(0xc4463f, 1).fillRect(barX, barY, bar.fillW, bar.h);
       }
     }
 
+    // 🔴 Shots are deliberately NOT interpolated, and it is a decision rather than an omission.
+    // A projectile is created and destroyed by the sim, so `world.projectiles[i]` is not the same
+    // shot from tick to tick — index-matched blending would slide a NEW bolt out of the position a
+    // DIFFERENT one occupied, which is worse than the stepping it would remove. Doing it properly
+    // needs an id per shot, which is `projectileView.ts` (W16), still unbuilt. At
+    // `projectileSpeed` 9 px/tick the step is under a tenth of the 96 px grid, against the 18 px a
+    // chasing scavenger covers, so this is the smallest of the three by some distance.
     this.shots.clear().fillStyle(0xf2c14e, 1);
     for (const shot of this.world.projectiles) {
       this.shots.fillCircle(shot.x, shot.y, 8);
