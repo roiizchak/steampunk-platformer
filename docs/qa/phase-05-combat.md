@@ -2328,3 +2328,96 @@ Restored and confirmed byte-identical with `cmp` *(C12)*. `BLOCKED_ON_ART` lives
 `tests/unit/blockedDwell.ts` so both files skip the same row from one definition *(vault 5.3)*, and
 it is asserted in **both** directions: red if `fall` leaves the catalog, red if its dwell changes at
 all — including if the art is fixed and the row turns even — and red if any second row joins it.
+
+### 🔴 Criterion 5.11 — rebuilt. Every number it had reported was measuring something else
+
+5.11 asks for the *"frame budget under worst-case enemy count"*. It has been failing **as a
+measurement** since session 8, and W10 replaces it. Four separate defects, each fixed:
+
+| | before | after |
+|---|---|---|
+| **what ran it** | default headless Chromium — **SwiftShader**, a software rasteriser | a headed real-GPU project, `chromium-gpu`, scoped to one spec |
+| **what was drawn** | `DEV_FLEET_OFFSET_X` 200 sim px against a **160 sim px** visible half-width — **0 of 20** enemies on screen | spread symmetrically about the player, all 20 inside the view |
+| **which enemies** | scavengers only | scavengers **and** sentries, alternating, with bolts in flight |
+| **what was sampled** | rAF **interval** over 90 frames vs a 100 ms ceiling | rAF **work**, every frame, vs a control measured in the same page |
+
+The second is the one that made the whole criterion vacuous. The fixture stepped 20 enemies in the
+sim and the renderer culled all 20 — so the number that came back was reassuring precisely because
+nothing extra had been drawn. Vault 9.4, on the criterion whose entire subject is cost.
+
+#### The old ceiling was a hang detector wearing a budget's clothes
+
+HANDOFF §14 measured the harness directly: the same scene reports **90.10 ms** headless against
+**4.2 ms** on the real GPU, a factor of **21**. A 100 ms ceiling set against the first number cannot
+fail for any reason short of a hang — and the old comment said as much in its own words. This is why
+the fix is a different **measurement** and not a different tolerance.
+
+#### `long-animation-frame` was tried first and cannot gate this
+
+The plan called for `PerformanceObserver` on `long-animation-frame`, and it was built that way.
+Measured on the GPU, **both halves reported zero entries and zero blocking time**: LoAF only emits
+for frames over **50 ms**, and this game runs at **4.16 ms** a frame on a 240 Hz display. The ratio
+was `0 / 0` and the gate could not be made to fail — decoration *(C2)*.
+
+It is kept and reported, because *"no frame in the window exceeded 50 ms"* is true and worth having.
+**Nothing is asserted on it.**
+
+#### What gates instead: rAF's own timestamp
+
+`requestAnimationFrame` hands its callback the frame's start time. Read at the top of a callback
+registered **after** the game loop's, `performance.now() - frameStart` is the main-thread time that
+frame has already spent — `update()`, the sim ticks inside it, and the render submission. It reports
+on every frame rather than only slow ones, and it moves when the scene gets heavier.
+
+The ordering holds because rAF runs callbacks in registration order and both parties re-register
+from inside their own callback, so the sampler stays behind the work it measures. A median of 0
+would mean it had got in front, and that is asserted, not assumed.
+
+#### The gate is a RATIO, against a control in the same page
+
+⚠️ **An absolute millisecond figure from this harness is uninterpretable** *(HANDOFF §14)*. So the
+identical sampler runs **twice in one page, seconds apart** — first against the level's own 2
+enemies, then against 22. Machine, driver, Vite still compiling, whatever else is on the box: all of
+it is present in both halves and divides out. What survives is what 5.11 actually asks — *what
+adding 20 enemies costs*.
+
+**Recorded baseline**, four runs on this machine (240 Hz display, real GPU, 120-frame windows):
+
+| | baseline, 2 bodies | fleet, 22 bodies | ratio |
+|---|---|---|---|
+| run 1 | 0.90 ms median | 0.90 ms | 1.00x |
+| run 2 | 0.70 ms | 0.80 ms | 1.14x |
+| run 3 | 0.70 ms | 0.80 ms | 1.14x |
+| run 4 | 0.70 ms | 0.80 ms | 1.17x |
+
+**11x the enemies costs about 1.1x the frame work**, peak 8–9 bolts in flight, zero frames over
+50 ms in any run. `performance.now()` is coarsened to 100 µs in Chrome, which is why the ratios land
+on a coarse grid at this magnitude — it is the reason the bound is 4x and not 1.5x.
+
+`MAX_WORK_RATIO = 4` is set to catch a cost that grows **faster than the enemy count** — an O(n²)
+sweep, a per-enemy texture upload, a per-frame allocation storm — not to pin today's number.
+
+#### Red-proof *(C1/C12)*
+
+An O(n²) sweep injected into `EnemyLayer.sync` (every subject against every subject, 3000 `sqrt`
+each):
+
+```
+baseline  2 bodies: work median 0.70ms   <- unchanged
+fleet    22 bodies: work median 4.50ms, p95 7.70ms
+work ratio 6.43x for 11.0x the enemies   -> 1 failed
+```
+
+**The control did not move and only the fleet half did** — which is the proof that the measurement
+isolates the enemy count rather than the machine. Restored and confirmed byte-identical with `cmp`;
+re-ran green at 1.17x.
+
+#### A false red found on the way, in a different test
+
+The first full sweep after the split failed `the drawn enemy is interpolated between ticks` with
+**every one of 90 lags exactly 0** — and it passed twice in isolation. Interpolation is only
+observable while the subject is moving, and a patrol reversal or a chase paused inside the dead zone
+holds the scavenger still; a window that catches that reports exactly what the defect reports. The
+test now records the scavenger's own position alongside the lag and asserts it moved, in those
+words, and samples 240 frames instead of 90. **The tolerance did not change** — what changed is that
+the two causes are now distinguishable. Full sweep after: **49 passed**.

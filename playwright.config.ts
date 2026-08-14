@@ -44,7 +44,44 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // Everything except the frame-budget spec, which needs a browser this one cannot be.
+      testIgnore: /phase-05-perf\.spec\.ts/,
+    },
+    /**
+     * 🔴 **The frame-budget project, and the only reason it exists.**
+     *
+     * Default headless Chromium has no GPU: it rasterises through **SwiftShader**, on the CPU.
+     * HANDOFF §14 measured the same scene at **90.10 ms** headless against **4.2 ms** on the real
+     * GPU — a factor of 21 — so every pre-session-8 frame number in this project was a measurement
+     * of a software rasteriser, and criterion 5.11's 100 ms "budget" was a 10 fps hang detector
+     * that had been read as a budget.
+     *
+     * `headless: false` is what gets a real GPU context on this machine. It is scoped to one spec
+     * on purpose: a headed browser opens a window, cannot run on a display-less CI box, and is
+     * unnecessary for every other test here, all of which assert behaviour rather than speed.
+     *
+     * ⚠️ Even on the GPU an absolute millisecond figure from this harness means little — Vite is
+     * still compiling, the box is shared. The spec therefore measures a **ratio** against a control
+     * sampled in the same page seconds earlier, which is why it can be trusted at all.
+     */
+    {
+      name: 'chromium-gpu',
+      testMatch: /phase-05-perf\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: false,
+        launchOptions: {
+          // `--disable-gpu` is what the headless default effectively implies; these say the opposite
+          // as loudly as the flags allow, so a driver that CAN give hardware acceleration does.
+          args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'],
+        },
+      },
+    },
+  ],
   webServer: {
     // Vault C13: launch the dev server's REAL entry point, never `npm run dev`. On Windows the
     // package script is a shell wrapper; killing the wrapper orphans the real process, which

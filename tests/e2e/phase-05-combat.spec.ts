@@ -1,5 +1,5 @@
 /**
- * Phase 5 combat, in a real browser. Covers 5.7 and 5.11.
+ * Phase 5 combat, in a real browser. Covers 5.4 and 5.7 — **5.11 has moved**, see below.
  *
  * ⚠️ **The claim that used to be here — that 5.4 could not be tested because
  * `rust-scavenger-walk` "does not exist yet" — went stale in session 7 when that sheet shipped as a
@@ -37,14 +37,13 @@
  * function would go green even if it always returned the full slot width. Both bounds — `> 0` and
  * `< slotW` — are asserted against the OTHER drawn rectangle's own width instead.
  *
- * ## 5.11 — a count that cannot pass by not drawing
+ * ## 5.11 is not here any more
  *
- * The shipped level already places 2 enemies, so an absolute body count is satisfiable by the
- * baseline alone (vault 9.4). The assertion is the DELTA of `enemies.bodies.length` across the
- * spawn, and it must equal `DEV_FLEET_COUNT` exactly. Frame timing is sampled inside the page once
- * per `requestAnimationFrame` over a fixed frame count and reported as an aggregate — `waitTicks`
- * guarantees only "at least N ticks", never "exactly this window", so it cannot bound a sampling
- * loop (this suite has produced both a false green and a false red that way).
+ * It moved to `phase-05-perf.spec.ts`, which runs under its own **headed, real-GPU** Playwright
+ * project. Default headless Chromium falls back to SwiftShader and reports the same scene 21x
+ * slower *(HANDOFF §14)*, so a number measured beside these tests could not be a frame budget —
+ * and giving this whole file that project would have made every combat test open a window. Details,
+ * including what the old version was actually measuring, are in that file's header.
  */
 
 import { expect, test } from '@playwright/test';
@@ -53,9 +52,6 @@ import { healthBarDesc } from '../../src/render/enemyHealthBar';
 import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
 
 type Page = import('@playwright/test').Page;
-
-// Mirrors `DEV_FLEET_COUNT` in `src/scenes/GameScene.ts` — a private const there, not exported.
-const DEV_FLEET_COUNT = 20;
 
 interface EnemySnapshot {
   x: number;
@@ -142,21 +138,6 @@ async function waitForScavengerCount(page: Page, target: number): Promise<void> 
   );
 }
 
-/** Waits for the drawn body count to reach at least `target` — the EnemyLayer growth path runs
- * inside `sync()`, called every `GameScene.update()` (every rAF), not synchronously with the spawn. */
-async function waitForBodyCount(page: Page, target: number): Promise<void> {
-  await page.waitForFunction(
-    (n) => {
-      const scene = (window as unknown as { __phaserGame: PhaserGameHandle }).__phaserGame.scene.getScene(
-        'Game',
-      ) as unknown as GameSceneHandle;
-      return scene.enemies.bodies.length >= n;
-    },
-    target,
-    { timeout: BOOT_TIMEOUT },
-  );
-}
-
 test.describe('Phase 5 — combat', () => {
   test('5.7 a live enemy at 2/60 hp draws a non-empty, non-full health bar', async ({ page }) => {
     await bootToGame(page);
@@ -205,74 +186,17 @@ test.describe('Phase 5 — combat', () => {
     expect(fillRect!.w).toBeLessThan(slotRect!.w);
   });
 
-  test('5.11 worst-case fleet: drawn body count grows by exactly N, frame budget measured', async ({
-    page,
-  }) => {
-    await bootToGame(page);
-    const before = await snapshot(page);
-
-    await page.keyboard.press('n');
-    await waitForScavengerCount(page, before.scavengers.length + DEV_FLEET_COUNT);
-    await waitForBodyCount(page, before.bodyCount + DEV_FLEET_COUNT);
-
-    const after = await snapshot(page);
-    expect(typeof after.bodyCount).toBe('number');
-    // The DELTA, not an absolute — the shipped level's own 2 enemies would satisfy an absolute
-    // count on their own, and "fast because nothing new was drawn" is the failure this excludes.
-    expect(after.bodyCount - before.bodyCount).toBe(DEV_FLEET_COUNT);
-
-    // Type before value (vault C1). Without this, replacing all 20 fleet sprites with the cheaper
-    // Rectangle fallback would still satisfy the body-count assertion above — and would make the
-    // frame budget look BETTER, so the render-path check and the perf number must travel together.
-    expect(typeof after.spriteCount).toBe('number');
-    expect(after.spriteCount - before.spriteCount).toBe(DEV_FLEET_COUNT);
-
-    // Sampled inside the page, once per rAF, over a FIXED frame count — never `waitTicks`, which
-    // only bounds "at least N ticks" and cannot bound a sampling window.
-    const SAMPLE_FRAMES = 90;
-    const budget = await page.evaluate(
-      (frameCount) =>
-        new Promise<{ frames: number; maxMs: number; medianMs: number }>((resolve) => {
-          const deltas: number[] = [];
-          let last = performance.now();
-          const step = () => {
-            const now = performance.now();
-            deltas.push(now - last);
-            last = now;
-            if (deltas.length < frameCount) {
-              requestAnimationFrame(step);
-            } else {
-              const sorted = [...deltas].sort((a, b) => a - b);
-              resolve({
-                frames: deltas.length,
-                maxMs: sorted[sorted.length - 1]!,
-                medianMs: sorted[Math.floor(sorted.length / 2)]!,
-              });
-            }
-          };
-          requestAnimationFrame(step);
-        }),
-      SAMPLE_FRAMES,
-    );
-
-    expect(typeof budget.frames).toBe('number');
-    // The sample loop itself ran the full window — cannot pass by measuring nothing.
-    expect(budget.frames).toBe(SAMPLE_FRAMES);
-    // eslint-disable-next-line no-console
-    console.log(
-      `[5.11] frame budget under ${before.bodyCount + DEV_FLEET_COUNT} drawn enemy bodies: ` +
-        `${budget.frames} frames, median ${budget.medianMs.toFixed(2)}ms, max ${budget.maxMs.toFixed(2)}ms`,
-    );
-    // No prior measurement exists (PRD §7: "the vault has nothing on performance" for this phase).
-    // Measured on this dev box under a headless-Chromium + Vite-dev-server load, median lands
-    // ~55-64ms (a real, reportable number, not a target) — so 100ms (a 10fps floor) is a generous
-    // sanity ceiling meant to catch a hang or an O(n^2) regression, not a tuned budget, and it does
-    // not flake this gate on a loaded CI box.
-    expect(budget.medianMs).toBeLessThan(100);
-    // A median at or near 0 means the sampler never actually ran across real frames — a false
-    // green, not a fast one.
-    expect(budget.medianMs).toBeGreaterThan(0);
-  });
+  /**
+   * 🔴 **5.11 lived here and has moved to `phase-05-perf.spec.ts`.**
+   *
+   * Not a tidy-up. It needs a browser this project does not run for anything else — a headed
+   * Chromium on the real GPU — because the default headless one falls back to SwiftShader and
+   * reports the same scene 21x slower (HANDOFF §14). `playwright.config.ts` gives that spec its own
+   * project, and keeping it in this file would have dragged every combat test into it.
+   *
+   * What was here measured the rAF INTERVAL over 90 frames against a 100 ms ceiling, with
+   * `DEV_FLEET_OFFSET_X` putting all twenty enemies off camera. See the new file's header.
+   */
 
   test('5.4 rust-scavenger walk animation advances past frame 0 during patrol', async ({ page }) => {
     await bootToGame(page);
@@ -358,9 +282,9 @@ test.describe('Phase 5 — combat', () => {
   }) => {
     await bootToGame(page);
 
-    const lags = await page.evaluate(
+    const sampled = await page.evaluate(
       () =>
-        new Promise<number[]>((resolve) => {
+        new Promise<{ lags: number[]; simXs: number[] }>((resolve) => {
           const scene = (
             window as unknown as { __phaserGame: PhaserGameHandle }
           ).__phaserGame.scene.getScene('Game') as unknown as GameSceneHandle & {
@@ -371,20 +295,39 @@ test.describe('Phase 5 — combat', () => {
           // body sits after every sentry. Derived, never the literal index — a level with a
           // different enemy mix must not silently sample a turret.
           const at = scene.world.enemies.sentries.length;
-          const out: number[] = [];
+          const lags: number[] = [];
+          const simXs: number[] = [];
           let n = 0;
           const step = (): void => {
             const sim = scene.world.enemies.scavengers[0];
             const drawn = scene.enemies.bodies[at];
-            if (sim && drawn) out.push(sim.x - drawn.x);
-            if (++n < 90) requestAnimationFrame(step);
-            else resolve(out);
+            if (sim && drawn) {
+              lags.push(sim.x - drawn.x);
+              // 🔴 The subject's OWN position, recorded alongside. Interpolation is only observable
+              // while the thing being interpolated is moving, so a window that caught the scavenger
+              // standing still would report every lag as 0 — which is also exactly what the defect
+              // this test exists for looks like. Without this the two are indistinguishable, and a
+              // full-suite run produced precisely that false red while the test passed alone.
+              simXs.push(sim.x);
+            }
+            // 240 frames rather than 90: a patrol reversal, or a chase paused inside the dead zone,
+            // can hold the scavenger still for a stretch, and the window has to outlast it.
+            if (++n < 240) requestAnimationFrame(step);
+            else resolve({ lags, simXs });
           };
           requestAnimationFrame(step);
         }),
     );
 
+    const { lags, simXs } = sampled;
     expect(lags.length).toBeGreaterThan(30);
+    // Non-vacuity, and the diagnosis for the flake above: if the scavenger never moved, this test
+    // has measured nothing and must say so in those words rather than failing as "not interpolated".
+    expect(
+      Math.max(...simXs) - Math.min(...simXs),
+      'the scavenger did not move at all during the sample window, so interpolation was not ' +
+        'observable — this is a window that caught it standing still, not a body pinned to the tick',
+    ).toBeGreaterThan(0);
     // 🔴 The assertion the defect fails. Exactly zero on EVERY frame means the body is pinned to
     // the sim tick, which is the tick-stepping the user reported.
     expect(Math.max(...lags.map(Math.abs))).toBeGreaterThan(0);

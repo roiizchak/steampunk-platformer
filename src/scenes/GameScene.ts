@@ -11,7 +11,7 @@ import { registerCatalogAnimations } from './gameAnimations';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
-import { spawnDevEnemies } from './devSpawn';
+import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
 import { createHud, renderHud } from './gameHud';
@@ -46,7 +46,18 @@ const SIM_SEED = 20260806;
  */
 const DEV_FLEET_COUNT = 20;
 const DEV_FLEET_HP = 60;
-const DEV_FLEET_OFFSET_X = 200;
+/**
+ * How wide the fleet is spread, in SIM px, centred on the player.
+ *
+ * 🔴 This replaces `DEV_FLEET_OFFSET_X = 200`, which put the whole fleet **off camera**. The view
+ * is 1920 drawn px at `RENDER_SCALE` 6, so the visible half-width is `960 / 6` = **160 sim px** —
+ * the old fixture started 40 sim px past the right edge and ran 760 further, and 5.11 measured a
+ * frame that drew none of its twenty bodies.
+ *
+ * 288 is `160 * 2 * 0.9`: the full visible width less a 10 % margin, so every body stays inside the
+ * view even as the player drifts a little between the keypress and the sample.
+ */
+const DEV_FLEET_SPREAD_SIM_PX = 288;
 /** 2 of 60: below the 3-swing floor (60 hp / 20 dmg per swing) combat can ever land on. */
 const DEV_LOW_HP = 2;
 const DEV_LOW_HP_OFFSET_X = 200;
@@ -297,11 +308,12 @@ export class GameScene extends Phaser.Scene {
   /** DEV ONLY (5.11 fixture). Guard repeated inside the body — see `togglePlayground`'s docstring. */
   protected spawnDevFleet(): void {
     if (import.meta.env.DEV) {
-      spawnDevEnemies(this.world, {
+      spawnDevFleet(this.world, {
         count: DEV_FLEET_COUNT,
         hp: DEV_FLEET_HP,
-        x: this.world.player.x + DEV_FLEET_OFFSET_X,
+        x: this.world.player.x,
         y: this.world.player.y,
+        spreadSimPx: DEV_FLEET_SPREAD_SIM_PX,
       });
     }
   }
