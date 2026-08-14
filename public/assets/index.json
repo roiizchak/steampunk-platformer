@@ -154,6 +154,28 @@
       "fps": 30,
       "loop": true,
       "derivedFrom": "authored"
+    },
+    {
+      "key": "brass-sentry-fire",
+      "url": "assets/characters/brass-sentry/sheets/fire.png",
+      "frameWidth": 288,
+      "frameHeight": 384,
+      "frameCount": 6,
+      "simTicks": 18,
+      "fps": 20,
+      "loop": false,
+      "derivedFrom": "sim"
+    },
+    {
+      "key": "brass-sentry-death",
+      "url": "assets/characters/brass-sentry/sheets/death.png",
+      "frameWidth": 288,
+      "frameHeight": 384,
+      "frameCount": 8,
+      "simTicks": 45,
+      "fps": 10.666666666666666,
+      "loop": false,
+      "derivedFrom": "sim"
     }
   ]
 }

@@ -43,6 +43,7 @@ import { decodePng } from './png.mjs';
 import { borderKey, keyOut } from './chroma.mjs';
 import { crop } from './resize.mjs';
 import { gateEdgeBleed } from './edgeGate.mjs';
+import { acceptedEdgeBleed, failedEdgesOf } from './edgeExceptions.mjs';
 
 const SHEET_DIR = '_generated/sheets';
 
@@ -195,7 +196,7 @@ function extract(clip, indices, out) {
  * refuses on low border agreement — a crop is exactly the condition that produces one) runs on that
  * un-padded crop, not the sheet.
  */
-export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight) {
+export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight, declaredFile = null) {
   const cellW = clipWidth + GUTTER;
   const raw = decodePng(readFileSync(sheetPath));
   for (let i = 0; i < cellCount; i += 1) {
@@ -203,6 +204,23 @@ export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeig
     const keyed = keyOut(inner, { key: borderKey(inner) });
     const edge = gateEdgeBleed(keyed);
     if (edge.status === 'FAIL') {
+      /**
+       * The narrow exception for a clip where what reaches the edge is an EFFECT, not the subject —
+       * pinned to one filename AND one set of edges, so neither a re-shoot nor a different defect
+       * is silently covered. See `edgeExceptions.mjs` for the two rounds of measurement behind each
+       * entry, and `tests/unit/edge-exceptions.test.ts` for the lock that keeps them honest.
+       *
+       * Printed, never silent: a gate that waives something without saying so is how a cropped clip
+       * ships looking exactly like success.
+       */
+      const accepted = acceptedEdgeBleed(action, declaredFile, edge.value);
+      if (accepted !== null) {
+        console.log(
+          `  G6 ACCEPTED  "${action}" frame ${i} of ${cellCount} bleeds on the ` +
+            `${failedEdgesOf(edge.value).join(', ')} edge(s) — ${accepted}`,
+        );
+        continue;
+      }
       throw new Error(
         `assets:clips: "${action}" frame ${i} of ${cellCount} fails G6 edge bleed — ${edge.reason}. ` +
           `This clip must be re-shot, not packed (vault: no gate looked at frame edges before G6).`,
@@ -280,7 +298,7 @@ function main() {
     // flat `<stem>-clip.png` prefix shape is also depended on downstream.
     const out = join(SHEET_DIR, `${clipStem(action)}-clip.png`);
     extract(clip, indices, out);
-    gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height));
+    gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height), CLIP_JOBS[action]?.file ?? null);
 
     /**
      * Declare the geometry this strip was written with, beside the strip.

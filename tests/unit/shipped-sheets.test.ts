@@ -69,7 +69,7 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the eleven animations these assertions cover', () => {
+  it('the catalog declares the thirteen animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
@@ -84,6 +84,24 @@ describe('the shipped character sheets, read from the files the player loads', (
       'brass-courier-jump',
       'brass-courier-run',
       'brass-courier-walk',
+      /**
+       * Session 10: the sentry's K.O. and its firing pose — the last two of the six enemy
+       * animations, and the pair that completed `enemyAnimKeys()`.
+       *
+       * **$0 of new art was needed and $2.38 was spent proving that.** Both clips were bought in
+       * session 6 and had sat unpacked because G6 failed them. Session 10 measured *where*: the
+       * machine is complete in both (`fire` at L232 T278 B244, `death` at L226 R200 B244), and
+       * what crosses the edge is the muzzle discharge and a detached steam plume respectively.
+       * Two single-variable re-shoots from a larger padded anchor failed to move either, because
+       * padding scales a subject and cannot scale an effect that exists to leave the scene.
+       *
+       * They ship under a narrow, pinned exception — `tools/gen/edgeExceptions.mjs`, locked by
+       * `tests/unit/edge-exceptions.test.ts` to this exact filename and this exact edge. No G6
+       * threshold moved. Until these landed, a killed sentry looped its `idle` at 0.35 alpha
+       * forever, because `playIfChanged` no-ops on a key the catalog never registered.
+       */
+      'brass-sentry-death',
+      'brass-sentry-fire',
       'brass-sentry-idle',
       // Session 9: blocked for TWO sessions on an unmeasured stride, and it never needed one. A
       // looping animation's cadence is authored now, so `chase` resolved the moment that rule

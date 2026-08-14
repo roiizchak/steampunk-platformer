@@ -148,17 +148,33 @@ function buildWorld() {
 }
 
 describe('the Rectangle fallback is a dated temporary, not permanent scaffolding', () => {
-  it('the shipped catalog carries some, but not yet all, enemyAnimKeys() — the fallback stays legitimately reachable', () => {
-    // Was "zero enemy sheets today" — expired the moment `brass-sentry-idle` shipped (the first
-    // enemy row in public/assets/index.json). The fallback is legitimate exactly as long as the
-    // overlap is a real, non-empty, PROPER subset of enemyAnimKeys(): some registered (so the
-    // Sprite path below is exercised against real keys), some still missing (so Rectangle still has
-    // a reason to exist). Both halves going empty is the two tests below, each dated on its own.
+  /**
+   * 🔴 **This assertion has now flipped, and that is the milestone it was written to detect.**
+   *
+   * It began as "zero enemy sheets today", became "some but not yet all" when `brass-sentry-idle`
+   * shipped, and expired for real in session 10 when `brass-sentry/fire` and `brass-sentry/death`
+   * were packed — the last two of the six. It ran red, on schedule, on the commit that completed
+   * the set. That is a dated expiry doing exactly its job, not a regression.
+   *
+   * So it is rewritten to the state that is now true, and it still goes red in both directions: if
+   * an enemy key is renamed or a sheet is dropped, the set stops being complete.
+   *
+   * **The Rectangle fallback is no longer reachable from shipped content.** It is NOT dead code —
+   * `enemyLayer` must still cope with a scene where an anim key is unregistered (a partial load, a
+   * new slug added before its art) — and the mock-scene tests below are what keep that path
+   * exercised. What has ended is the fallback being reachable *in the shipped game*.
+   */
+  it('the shipped catalog now carries EVERY enemyAnimKeys() row — the fallback is no longer reachable in play', () => {
     const shipped = new Set(shippedSheetKeys());
     const all = enemyAnimKeys();
-    const overlap = all.filter((key) => shipped.has(key));
-    expect(overlap.length, 'no shipped enemy sheet matches any enemyAnimKeys() — did a key rename?').toBeGreaterThan(0);
-    expect(overlap.length, 'every enemyAnimKeys() key is now shipped — the "zero sheets" test below has expired').toBeLessThan(all.length);
+    const missing = all.filter((key) => !shipped.has(key));
+    expect(
+      missing,
+      `these enemy animations have no shipped sheet: ${missing.join(', ')} — either the art was ` +
+        'dropped or a key was renamed. Every enemy action must resolve to a real catalog row.',
+    ).toEqual([]);
+    // Guards the other direction: an empty `enemyAnimKeys()` would make the line above vacuous.
+    expect(all.length, 'enemyAnimKeys() is empty — the assertion above proves nothing').toBe(6);
   });
 
   it('the fixture carries all six enemyAnimKeys() rows, or the expiry test below proves nothing', () => {

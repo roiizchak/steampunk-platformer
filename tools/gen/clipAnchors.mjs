@@ -107,26 +107,46 @@ export function expectedAspectRatio(ratio) {
  */
 export const PADDED_ANCHORS = Object.freeze({
   /**
-   * `--fill 0.45` → 3130², figure 68.8 % → 45.0 % of height, margins T29.6 B25.5 L24.3 R25.2.
-   * G1 returned an identical verdict on padded and unpadded (`PASS, sole-spread=0px of 21px`),
-   * proving the blit is a pure translation. Measured single-variable against the unpadded `-r2`
-   * control: G6 went **5 of 6 fail → 1 of 6**, margins roughly doubled.
-   * `request_id 019ff0db-0597-7490-ae69-921c125fed29`.
+   * `--fill 0.35` → **4024²**, figure 68.8 % → 35.0 % of height, margins T34.1 B30.9 L30.0 R30.7.
+   * G1 `PASS, sole-spread=0px of 21px` — identical to the unpadded verdict, proving the blit is a
+   * pure translation. Uploaded 2026-08-14 (session 10) and **hash-verified by re-download**: the
+   * fetched bytes match `04d35f22…` exactly.
+   *
+   * ## Why this is the SECOND padding step, and what it is buying
+   *
+   * The previous `--fill 0.45` → 3130² canvas took `fire` from **5 of 6 G6 failures → 1 of 6**
+   * (`request_id 019ff0db-0597-7490-ae69-921c125fed29`, prior url `…dy30uDOQhkQNGzOlTpP4C…`,
+   * sha `4c6ec48b…`). That residual failure is **not the machine**. Measured on `fire-r4` cell 0:
+   * the turret sits with margins L232 T278 B244, and what crosses the right edge is a **4-row
+   * sliver at y 388–391** — the muzzle flash's spark tail. `death-r4` cell 3 is the same shape:
+   * machine margins L226 R200 B244, and the top edge is crossed by **detached steam puffs**
+   * spanning x 320–569. Both confirmed by eye at full resolution.
+   *
+   * G6 measures an opaque mask and cannot tell a sheared limb from a discharge — the blind spot
+   * already recorded for G1. **The user's decision (2026-08-14) was to re-shoot rather than write
+   * an exception**, so this canvas exists to give the effect itself room, not to un-crop the
+   * subject. The flash is drawn relative to the barrel, so shrinking the figure 45 % → 35 % should
+   * pull its tip roughly 20 % back toward centre.
+   *
+   * **Cost:** subject resolution. The figure is 35 % of frame height, so the packed cell upscales
+   * more than any other sheet in the project. If the sprite reads soft in play, that is this dial
+   * and not the prompt. **Do not raise the fill again without re-running the G6 comparison.**
    */
   'brass-sentry/fire': Object.freeze({
-    url: 'https://v3b.fal.media/files/b/0aa5e8eb/dy30uDOQhkQNGzOlTpP4C_brass-sentry-padded.png',
-    sha256: '4c6ec48b1d810568a2c30e7e7ab7c0b2e58437c7f40b78910e7644c165569e08',
+    url: 'https://v3b.fal.media/files/b/0aa648b8/Xyt-uiNmmFDt72vwuwVCw_brass-sentry-padded.png',
+    sha256: '04d35f22e309ab3fdc33a829c1845865e22fec35793c5547d2597d3092b64610',
     source: '_generated/anchors-padded/brass-sentry-padded.png',
   }),
 
   /**
-   * The same 3130² sentry canvas as `fire` above — one padded PNG serves every sentry action.
-   * `death`'s failure is a genuine one (G6 f1/8, left 0): the wreckage spread really does reach the
-   * frame, which is what padding is for.
+   * The same 4024² sentry canvas as `fire` above — one padded PNG serves every sentry action.
+   * `death`'s original failure was a genuine wreckage spread (G6 f1/8, left 0), which the first
+   * padding step fixed; what remains at `-r4` is the steam plume leaving the TOP edge, measured in
+   * the block above.
    */
   'brass-sentry/death': Object.freeze({
-    url: 'https://v3b.fal.media/files/b/0aa5e8eb/dy30uDOQhkQNGzOlTpP4C_brass-sentry-padded.png',
-    sha256: '4c6ec48b1d810568a2c30e7e7ab7c0b2e58437c7f40b78910e7644c165569e08',
+    url: 'https://v3b.fal.media/files/b/0aa648b8/Xyt-uiNmmFDt72vwuwVCw_brass-sentry-padded.png',
+    sha256: '04d35f22e309ab3fdc33a829c1845865e22fec35793c5547d2597d3092b64610',
     source: '_generated/anchors-padded/brass-sentry-padded.png',
   }),
 

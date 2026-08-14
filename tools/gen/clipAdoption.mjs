@@ -48,6 +48,7 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'brass-sentry-death-r2.mp4',
     'brass-sentry-death-r3.mp4',
     'brass-sentry-death-r5.mp4',
+    'brass-sentry-death-r6.mp4',
   ]),
   'rust-scavenger/walk': Object.freeze(['rust-scavenger-walk.mp4', 'rust-scavenger-walk-r2.mp4']),
   'rust-scavenger/chase': Object.freeze(['rust-scavenger-chase.mp4', 'rust-scavenger-chase-r2.mp4']),
@@ -90,10 +91,26 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * constraint describing a SHAPE, met by not performing the action). It is declared because it is
    * the round the gates must now judge, **not** because it is agreed to be better art.
    */
+  /**
+   * `-r5` (session 10) is the SECOND padding step: a 4024² anchor at `--fill 0.35`, single-variable
+   * against `-r4`'s 3130². It **refuted the treatment** and is superseded on two counts.
+   *
+   * The machine gained margin on every edge (`L232→276 T278→308 B244→296`) and the right edge stayed
+   * at 0, because what crosses it is the **departing bolt**, drawn to leave the scene — a bigger
+   * canvas gives it more room to travel rather than pulling it inside. Padding shrinks a subject; it
+   * cannot shrink a projectile whose purpose is to exit the frame.
+   *
+   * And `-r5` is worse art: a smoke cloud plus a small bolt, where `-r4` has a large bright muzzle
+   * flash, which reads better across an 18-tick `fire` window. `request_id
+   * 019fff77-93ab-7f92-b2c6-49cffe2d6ab2`, $1.19, full log in
+   * `docs/generations/phase-05-fire-repad.md`. The paired `death` generation was rendered and
+   * **never submitted** — the stop rule fired first, so it cost $0.
+   */
   'brass-sentry/fire': Object.freeze([
     'brass-sentry-fire.mp4',
     'brass-sentry-fire-r2.mp4',
     'brass-sentry-fire-r3.mp4',
+    'brass-sentry-fire-r5.mp4',
   ]),
 });
 
