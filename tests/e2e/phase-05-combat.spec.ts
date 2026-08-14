@@ -75,12 +75,18 @@ interface SceneSnapshot {
   bodyCount: number;
   spriteCount: number;
   barRects: BarRect[];
+  /** Where each body was actually DRAWN this frame, in `bodies` order. See `bodyPositions` below. */
+  bodyPositions: { x: number; y: number }[];
 }
 
 type PhaserGameHandle = { scene: { getScene(key: string): unknown } };
 type GameSceneHandle = {
-  world: { enemies: { scavengers: EnemySnapshot[] } };
-  enemies: { bodies: unknown[]; isSprite: boolean[]; bars: { commandBuffer: number[] } };
+  world: { enemies: { sentries: unknown[]; scavengers: EnemySnapshot[] } };
+  enemies: {
+    bodies: { x: number; y: number }[];
+    isSprite: boolean[];
+    bars: { commandBuffer: number[] };
+  };
 };
 
 /**
@@ -114,6 +120,10 @@ async function snapshot(page: Page): Promise<SceneSnapshot> {
       // real Sprite from the Rectangle grey-box fallback — a body count alone cannot (vault 9.4).
       spriteCount: scene.enemies.isSprite.filter(Boolean).length,
       barRects,
+      // 🔴 Read in the SAME `page.evaluate` as `barRects`, which is what makes comparing them
+      // meaningful: enemies are drawn BETWEEN ticks now (`enemyLayer.ts`), so a body position
+      // sampled on a different frame than the bar it is compared against is a different moment.
+      bodyPositions: scene.enemies.bodies.map((b) => ({ x: b.x, y: b.y })),
     };
   });
 }
@@ -166,8 +176,18 @@ test.describe('Phase 5 — combat', () => {
     // Position math only — NOT `desc.fillW`, which comes from the function 5.7 gates on.
     const desc = healthBarDesc(spawned!, 'rust-scavenger', RENDER_SCALE);
     const EPS = 0.01;
+
+    // 🔴 Anchored to the DRAWN body, not to the sim position, and this is not a tolerance
+    // loosening — it is the same exactness against the right reference. Enemies are interpolated
+    // between ticks as of 2026-08-14, so on most frames the body is a fraction of a tick behind
+    // `spawned.x`; `enemyLayer.sync` shifts the bar by exactly that delta so it rides the body it
+    // describes. Comparing against the sim position made this test fail for the RIGHT reason: the
+    // two really are different points now.
+    const drawn = after.bodyPositions[after.bodyPositions.length - 1]!;
+    const shiftX = drawn.x - spawned!.x;
+    const shiftY = drawn.y - spawned!.y;
     const atThisEnemy = after.barRects.filter(
-      (r) => Math.abs(r.x - desc.x) < EPS && Math.abs(r.y - desc.y) < EPS,
+      (r) => Math.abs(r.x - (desc.x + shiftX)) < EPS && Math.abs(r.y - (desc.y + shiftY)) < EPS,
     );
     // Both the background slot AND a fill rect were drawn at this enemy's own x — "a Graphics
     // exists" would pass with only one, or none.
