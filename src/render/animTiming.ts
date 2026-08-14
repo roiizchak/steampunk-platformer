@@ -9,8 +9,15 @@
  *
  * This file lives in `src/render/` for the same reason `playerView.ts` and `cameraRig.ts` do: it is
  * a rendering decision, it is engine-free, and pulling it out of the scene is what makes its edge
- * cases reachable from a unit test at all *(vault 2.12)*. It imports nothing from Phaser and nothing
- * from `src/sim/` except types — it takes a `DerivedFeel` the caller measured.
+ * cases reachable from a unit test at all *(vault 2.12)*. It imports nothing from Phaser.
+ *
+ * > 🔴 This paragraph also claimed it imported **nothing from `src/sim/` except types**. That has
+ * > been false since Phase 5: the import block below takes `ATTACK`, `DEATH_TICKS`, `HURT_TICKS` and
+ * > `attackTotalTicks` as **values**, and it must — every fixed-window animation's `simTicks` comes
+ * > from the simulation that owns the window, which is the whole point of vault 4.22. `DerivedFeel`
+ * > is still passed in by the caller rather than measured here. Corrected 2026-08-14; the direction
+ * > that actually matters (nothing in `src/sim/` imports THIS) is unchanged and is mechanically
+ * > enforced by `tests/unit/sim-boundary.test.ts`.
  *
  * ## Where each `simTicks` comes from, and where the honesty is
  *

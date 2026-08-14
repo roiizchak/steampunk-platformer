@@ -189,8 +189,9 @@ export class GameScene extends Phaser.Scene {
     // create, `ready` stays false with `bootError` null — the third state, a hang, which the QA
     // gate can see precisely because it is distinct from both of the others (vault 1.4).
     //
-    // `levelId` fills the slot Phase 1 cut on the nine-field debug surface and left null. No new
-    // field, so the surface is still closed at nine (a tenth needs a STOP-and-ask).
+    // `levelId` fills the slot Phase 1 cut on the eight-field debug surface and left null. No new
+    // field, so the surface is still closed at eight (a ninth needs a STOP-and-ask). The count read
+    // "nine" here and in three documents until 2026-08-14; `src/debug/globals.ts` is the authority.
     updateDebugState({
       sceneKey: this.scene.key,
       ready: true,
@@ -483,7 +484,7 @@ export class GameScene extends Phaser.Scene {
     updateDebugState({
       tick: this.world.tickCount,
       player: { x: player.x, y: player.y, vx: player.vx, vy: player.vy, state: player.state },
-      // `health` has been on the nine-field surface since Phase 1 and permanently 0 until now.
+      // `health` has been on the eight-field surface since Phase 1 and permanently 0 until now.
       // Filling it is not widening the surface — the field already existed and was a lie.
       health: player.hp,
     });

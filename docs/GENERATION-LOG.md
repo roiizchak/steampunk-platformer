@@ -20,9 +20,16 @@ predate this contract and have no recorded request ids.** They are style probes,
 so nothing in the game depends on rebuilding them — but they are consequently **not rebuildable**,
 and that is stated here rather than discovered later.
 
-**Running total: 66 generations · `$31.39` — INVOICED, not quoted.** 21 on the retired
-`nano-banana-2`, 23 on `nano-banana-pro`, and **22 `seedance-2.0/image-to-video` clips**. The invoice
-was read on 2026-08-09 and it **overran the $25 ceiling by $6.39**.
+**Invoice reading of 2026-08-09: 66 generations · `$31.39`.** 21 on the retired `nano-banana-2`,
+23 on `nano-banana-pro`, and **22 `seedance-2.0/image-to-video` clips**. It **overran the $25 ceiling
+by $6.39**.
+
+> ⚠️ **That is a point-in-time INVOICE reading and it is no longer the running total.** It was
+> written as one, went stale the moment Phase 5 spent again, and was still being quoted as current on
+> 2026-08-14. Everything after it is priced at the invoiced per-unit rates ($0.15 an image, $1.19 a
+> clip) and is therefore **quoted, not invoiced** — the two must not be added into one number that
+> claims to be either. **The live figure is the Phase 5 running total below.** Re-read the invoice
+> before the next spend and reconcile both.
 
 It also settled the contested clip rate: `genmedia pricing`'s `0.014 / "units"` was **wrong by ~21×**,
 and the pessimistic dashboard-derived rate was right to within ~1 %. Full reconciliation, and the
@@ -67,7 +74,18 @@ and nothing else moves.**
 | [generations/phase-05-jump-reshoot.md](generations/phase-05-jump-reshoot.md) | Phase 5 — `jump` at `1:1`. Probe **REFUTED** its own hypothesis; clip kept as evidence, **not adopted** | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
 | [generations/phase-05-ratio-match.md](generations/phase-05-ratio-match.md) | Phase 5 — the `1:1` round. Ratio-match probe **CONFIRMED** (6/6 cut → 0/6), 5 clips ratio-matched, then a padding probe **CONFIRMED** (5/6 → 1/6) | `bytedance/seedance-2.0/image-to-video` | 7 · $8.33 |
 
-**Phase 5 running total: 25 generations, $23.51 of the $40 ceiling. $16.49 remains.**
+| [generations/phase-05-padded-round.md](generations/phase-05-padded-round.md) | Phase 5 — seven clips from padded anchors. Padding **CONFIRMED** on the subject, and the finding that it cannot rescue an effect | `bytedance/seedance-2.0/image-to-video` | 7 · $8.33 |
+| [generations/phase-05-fire-repad.md](generations/phase-05-fire-repad.md) | Phase 5 — the sentry `fire`/`death` re-pad. Treatment **REFUTED**: padding scales a subject, never an effect that exists to leave the scene | `bytedance/seedance-2.0/image-to-video` | 2 · $2.38 |
+| [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md) | Phase 5 — criterion 5.4e closed from the genmedia gallery. **No generations, $0** | — | 0 · $0.00 |
+
+**Phase 5 running total: $43.74 of the $55 ceiling. $11.26 remains.**
+
+> 🔴 This line read **"25 generations, $23.51 of the $40 ceiling"** until 2026-08-14 — stale by two
+> ceiling raises and four gate groups, and the three rows above were missing from the table entirely.
+> The chain, each step recorded in its own log: `$0.90 → $13.99 → $15.18 → $16.37 → $23.51 →
+> $31.84 → $41.36 → $43.74`, against a ceiling the user moved `$40 → $45 → $55`. The generation
+> COUNT is deliberately not restated: the per-file rows above carry it, and a hand-summed total is
+> what went stale here in the first place.
 
 **The cross-cutting entries below stay here.** The cost summary and the invoice reconciliation span
 every gate and have no single owner.

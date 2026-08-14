@@ -125,7 +125,11 @@ QA gate cannot fail.
 can assert the *drawn* object tracks the sim — without that, deleting `renderPlayer()` left every
 Phase 2 test green, because everything else reads `__game`, which the scene writes directly.
 
-**The surface is closed at nine fields** by a Phase 1 Codex ruling. Phase 2 wanted two values it does
+**The surface is closed at eight fields** by a Phase 1 Codex ruling — `sceneKey`, `tick`, `player`,
+`score`, `health`, `levelId`, `ready`, `bootError` (`src/debug/globals.ts`). *(It said **nine** in
+this file, in PRD.md and in three `GameScene.ts` comments until 2026-08-14. Nobody had counted; the
+closure is what matters and it never moved, but a rule quoted with the wrong number is a rule
+someone will argue with.)* Phase 2 wanted two values it does
 not carry and rewrote both tests to measure behaviour instead. A tenth field needs a STOP-and-ask.
 Full rationale in [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowgame-surface).
 

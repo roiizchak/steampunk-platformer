@@ -370,7 +370,130 @@ removed.
 
 ## Vault-out — Phase 5
 
-*(Written at the end of the phase.)*
+**Status: DRAFT, written 2026-08-14 (session 10). Phase 5 is still FAILING and this is not a
+phase-exit sign-off.** PRD §7 asks for a vault-out at phase exit; leaving it as the words *"(Written
+at the end of the phase.)"* through five sessions meant every lesson below was carried in a
+transcript instead of a file, and two of them had to be rediscovered by measurement. Written as it is
+learned, and to be finalised when the gate actually passes.
+
+### 1. Episode-committed AI vs the frame-0 problem — and the stronger answer
+
+The vault note says a per-tick decision is not a behaviour, because Phaser restarts a looping
+animation on every state change and a flapping AI is the frame-0 bug arriving through the AI. Phase 5
+implemented the textbook answer: **hysteresis** (a larger radius to leave than to enter) plus a
+**commitment floor** (a chase lasts at least N ticks whatever happens).
+
+Both worked. Both are now deleted, and what replaced them is worth the note:
+
+> **A state with no exit cannot flap.** When the user made aggro permanent, hysteresis and the
+> commitment floor became unreachable machinery, and the flap test — which asserts the drawn state
+> does not oscillate — **passed unchanged**.
+
+The lesson is not "permanent aggro is better". It is that the flap test survived a total rewrite of
+the mechanism it was written against, because it asserted the **property** and not the
+implementation. The two tests written against the mechanism (`releaseRadius > detectRadius`, and the
+commitment floor) both had to be deleted. Gate on the observable.
+
+### 2. The enemy tuning values that felt fair
+
+| knob | value | how it was arrived at |
+|---|---|---|
+| `detectRadius` | 480 | authored, never contested in play |
+| `chaseSpeed` | **6.0** | **not a taste — `18 / 3`, forced by the foot-plant invariant** |
+| `patrolSpeed` | 2.5 | authored |
+| `deadZone` | 96 (one tile) | fixes the off-axis sprite strobe (gate finding S1) |
+| `SCAVENGER.damage` | 15 | authored |
+| `KNOCKBACK_SPEED` | 17.5 | **tuned in px of TRAVEL (64 px ≈ half a body), not px/tick** |
+
+Two of those six stopped being free numbers during the phase, and that is the finding:
+
+- **`chaseSpeed` is a quotient, not a preference.** Planted feet require
+  `ticksPerFrame × speed === footPxPerFrame` with a whole `ticksPerFrame`, so the only speeds that
+  exist for a 12-frame sheet with 18 px of foot travel are **18, 9, 6 and 4.5**. The decided value
+  (3/4 of the player's run = 6.75) was **not reachable**. Locomotion speed is a property of the art
+  now, and a design decision that names a speed has to be checked against the sheet before it is
+  agreed to.
+- **`KNOCKBACK_SPEED` had to be re-expressed in the unit a human can judge.** At 5.54 px/tick it
+  produced **9.7 px** of travel against a 132 px body — invisible, and reported as *"the knockback is
+  not working, the animation got stuck"*. Every gate on it passed, because they all measured that
+  knockback **happened**. Tune an impulse by the distance it moves something, never by its velocity.
+
+### 3. What the frame budget actually was — **UNKNOWN, and that is the finding**
+
+The vault has nothing on performance and this phase did not fix that.
+
+- **No baseline exists.** Criterion 5.11 has never produced a number anyone should trust.
+- **The measurement was measuring the wrong thing twice over.** `playwright.config.ts` has no
+  `launchOptions`, so every figure came from headless SwiftShader — **90.10 ms headless against
+  4.2 ms on the real GPU, a 21× difference**. And the sampler measured rAF *interval*, not work.
+- **The worst case was never on screen.** `DEV_FLEET_OFFSET_X = 200 × RENDER_SCALE 6` = 1200 px
+  against a 960 px visible half-width: **0 of 20 fleet enemies were in view**, and the fleet is
+  scavengers-only — no sentries, no projectiles.
+- **Rectangles are cheaper than Sprites**, so the grey-box fallback defect made the frame budget look
+  *better*. Vault 9.4 exactly: a measurement that is cheap because it is not really being done.
+
+**Carry forward:** absolute milliseconds from a headless browser are not evidence. Only a
+same-session interleaved A/B decides anything, and a performance gate needs a recorded baseline
+before it can be a gate at all.
+
+### 4. Two defects that look identical on screen, and only one of them is timing
+
+The most expensive lesson of the phase, because it cost two rounds of fixing the wrong half.
+
+The user reported the scavenger as *"not smooth"*. There were **two** independent causes:
+
+1. **Foot-slide** — the body advancing further per drawn frame than the art moves the planted foot.
+   Fixed by re-timing the sheet and the speed together.
+2. **Tick-stepping** — the drawn position updated only on simulation ticks, so on a 240 Hz display
+   three frames out of four are identical and the fourth jumps.
+
+Fixing (1) did not fix the complaint, because (2) was still there. Worse, **fixing (2) for the player
+in session 9 made (1)+(2) more visible on the enemy**, since the character standing next to it had
+become smooth. The user's own words named the comparison — *"not smooth **like my character**"* — and
+that phrasing was the diagnostic.
+
+**Carry forward:** when a smoothness complaint survives a timing fix, ask what else is drawn near the
+subject and whether it is drawn the same way.
+
+### 5. A correct, well-tested decision function with an unchecked consumer
+
+`interpolate.ts` was engine-free, thoroughly unit-tested, and called from exactly one place. Nothing
+asked *who calls it*, so the enemies never got it — and no unit test could see that, because the
+missing call is in a Phaser scene.
+
+This is vault 5.3 one step out. Two definitions of a concept is where the bug lives; **one definition
+with an incomplete set of consumers is the same bug wearing a better hat.** The gate that catches it
+has to be at the level where the wiring is real: deleting `GameScene`'s snapshot call left **every
+unit test green** and only the e2e went red.
+
+### 6. Level geometry needs a horizontal reach gate, not just a vertical one
+
+`level-01` shipped a spike strip that was **impassable at any speed** from Phase 4's rescale until
+session 10 — four sessions, two of them playtested. The suite had a reach gate; it asked whether
+every platform was within the measured jump apex. It could not see a gap too wide to *cross*.
+
+The related finding: a recorded playtest bug (*"wedges against terrain at x 3198, 100 → 35 hp"*) sat
+undiagnosed for two sessions and turned out to be **the player's collision box against a pillar they
+were meant to jump** — `3198 + 66 = 3264`, exactly the pillar's face. A traversal test found it by
+accident within an hour of existing.
+
+**Carry forward:** simulate the level. Hand arithmetic against a tick order with a jump-cut divisor,
+a coyote window and per-tick friction was wrong on **both** inputs when the Codex review checked it.
+
+### 7. The generated-art pipeline's own lessons
+
+- **Anchor padding scales a subject; it cannot scale an effect.** Two paid single-variable
+  experiments established it. A muzzle flash and a debris plume exist *to leave the frame*, and no
+  amount of margin contains them — the framing gate has to learn the difference, or the clip is
+  accepted with a written exception naming the file and the edges.
+- **Version the sidecars, not just the download.** `submit-clips.mjs` versioned `-rN` on the `.mp4`
+  and overwrote `.params.json`, so a re-render destroyed the provenance of the round already paid
+  for. Two shipped clips carry self-contradicting params because of it.
+- **The generation gallery is a recoverable source of truth.** Two `request_id`s recorded as
+  permanently lost were both in `~/.genmedia/gallery/sessions/<id>/data.json`, with the download path.
+  Cost to close criterion 5.4e: **$0**. Check the tool's own records before declaring provenance lost.
+- **Measure before spending.** It saved money in sessions 4, 5 and 10; the only round that skipped it
+  bought two clips that failed the same gate the first pair did.
 
 ---
 

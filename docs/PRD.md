@@ -396,5 +396,5 @@ would go stale and let a spec asserting `tick === 0` pass forever.
 the `Phaser.Game` instance so e2e can restart the Boot scene, and so a spec can assert the *drawn*
 object tracks the sim. Phase 2 needed the latter: deleting `renderPlayer()` left every test green,
 because everything else reads `__game`, which the scene writes directly. It carries no state of its
-own, so it does not widen the nine-field closure — but it is dev-only under the same rule, and
+own, so it does not widen the eight-field closure — but it is dev-only under the same rule, and
 Phase 10 verifies its absence from `dist/` alongside `__game`.

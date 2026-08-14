@@ -1387,3 +1387,141 @@ was run **interleaved**, A,B,A,B,A,B, in a single session.
 - **Hand your reviewers your own conclusions, not just the diff.** The prompt for Codex review 8
   listed the gate's known findings and asked it to say if any were wrong. **Both corrections came
   from that section**, including the blocker.
+
+---
+
+## 15. Sessions 9 and 10 — 2026-08-13/14. **This section supersedes §14 and everything above it.**
+
+**Written 2026-08-14.** Session 9's eight commits were recorded in **no** handoff section at all —
+this file stopped at §14 while the branch moved on — and two of session 10's own numbers were wrong
+*because of that gap*. Both sessions are here.
+
+**Phase 5 is FAILING and must be reported failing.** Most of the QA gate is unrun; it last ran at
+`b988e66`, and thirteen commits have landed since.
+
+### Session 9 — the ghost, chased through three wrong causes
+
+The user reported the character *"moves too fast, like a ghost"* and *"two overlapping copies"*.
+Three separate defects were found under that one report, and the first two fixes did not resolve it:
+
+| commit | what |
+|---|---|
+| `74cdfb0` | DEV-only playable feel variants, to stop guessing |
+| `dc76df2` | **A loop has no window to outrun** — locomotion cadence became AUTHORED (`character-bounds.json` → `animations.<name>.fps`), replacing a stride measurement with a ±20 % spread |
+| `ce6a56f` | DEV-only live locomotion tuner: `[`/`]` cadence, `-`/`=` speed, SLIP on the overlay |
+| `36ad73e` | **`cadenceTicks` rounds TICKS PER FRAME, not the cycle** — an unevenly-held frame is judder. Of the values a ±1 fps step reaches around 31, only 30 divides evenly; that is why the user reported the first tuner as making no difference in either direction |
+| `7ccc4ad` | a falsifier for the ghost report, built BEFORE the fix |
+| `01f2ae7` | **render interpolation** — the sim runs at 60 Hz on a 240 Hz display, so three frames in four were identical and the fourth jumped |
+
+**Confirmed in real play at 240 Hz: the ghost is gone and the character does NOT feel less
+responsive.** Interpolation costs up to one tick (16.7 ms) of visual latency by design and the trade
+is accepted.
+
+⚠️ **The lesson session 10 paid for: `01f2ae7` gave interpolation to the PLAYER only.** See below.
+
+### Session 10 — five commits, and three things nobody had measured
+
+| commit | what |
+|---|---|
+| `fd18032` | The sentry can fire and die. Both clips were bought in **session 6** and never packed — nothing in `src/` needed changing |
+| `40a35a1` | The character slows to the speed its own feet describe |
+| `336bf9b` | Three playtest bugs: speed, the shrinking turret, an invisible shove |
+| `7ec5308` | The scavenger keeps coming, and its feet finally land |
+| `83b0c1e` | The enemies never got session 9's ghost fix, only the player |
+| `79ed371` | The spike strip was never jumpable, and `x:3198` was never a bug |
+
+#### 🔴 The foot-plant invariant, and why session 9's fix was incomplete
+
+Session 9 tuned foot-slide **by eye**. By eye is not the same as gone. Measured against the art's own
+foot travel, the shipped tune was never planted:
+
+```
+         art foot travel   ticks/frame   speed   body px/frame   slide
+  run    22.5 px           2             12.0    24.0            +6.7 %
+  walk    9.0 px           2              5.54   11.08           +23 %   ← worse than the reported defect
+```
+
+Nothing was watching, because nothing had ever compared the sim's speed to the art's measured foot
+travel — the two halves lived in different files, one of them a DEV-only scene.
+`tests/unit/foot-plant.test.ts` is that comparison now, as an **exact** equality.
+
+**The invariant collapses speed to a quotient.** `ticksPerFrame × topSpeed === footPxPerFrame` with a
+whole `ticksPerFrame` means speed is `footPxPerFrame / n` and **nothing between**. Consequences that
+will recur:
+
+- `run` had to be **resampled 12 → 15 frames** to reach 9.0, because 12 frames offered only 11.25 and
+  7.5. Cost: ~13 distinct poses per cycle, so 15 repeats some.
+- The scavenger's decided `chaseSpeed` of "3/4 of run" (**6.75**) **does not exist**. 6.0 was taken.
+
+**A design decision that names a speed must be checked against the sheet before it is agreed to.**
+
+#### 🔴 Two defects that look identical, and the diagnostic was in the user's phrasing
+
+*"The scavenger's animation is not smooth"* had **two** independent causes: foot-slide, and
+tick-stepping. Re-timing the sheet fixed the first and the complaint survived. `enemyLayer.sync`
+still wrote `body.setPosition(desc.x, desc.y)` — the raw tick position — because `01f2ae7` wired
+interpolation into `GameScene.renderPlayer` **and nowhere else**.
+
+The defect had become *more* visible for having been fixed on the character standing next to it. The
+user's words named the comparison exactly: *"not smooth **like my character**"*.
+
+**`interpolate.ts` was correct, engine-free and thoroughly unit-tested. Nothing asked who called
+it.** That is vault 5.3 one step out — one definition with an incomplete set of consumers. And no
+unit test could see it: **deleting `GameScene`'s snapshot call leaves every unit test green**, which
+is why the enemy interpolation carries a unit gate *and* an e2e one.
+
+#### 🔴 The spike strip was impassable, and `x:3198` is not a bug
+
+`tests/unit/level-traversal.test.ts` runs the real `tick` over the real shipped `.tmj`. It found:
+
+- **The spike strip at 384 px could not be jumped at any speed**, and had not been since Phase 4's
+  rescale — four sessions, two of them playtested. The only reach gate in the suite was **vertical**.
+  Narrowed to **192 px**, in `make-greybox-level.mjs` (the hazard rect is derived from the `SPIKES`
+  array; hand-editing the `.tmj` desynchronises art from collision and `level-entities.test.ts`
+  catches it immediately).
+- **`x: 3198` is the player's box against the pillar at 3264** — `3198 + 66 = 3264` exactly. The
+  "wedge bug" recorded 2026-08-12 and carried as an open unknown through two sessions is a collider
+  working correctly on a solid the player is meant to jump.
+- **The permanent-aggro blocker is settled by terrain.** The level scavenger stands on the floor
+  beginning at 4128; the pit at 3840–4128 stops the chase over 400 px from the player. Red-proved:
+  remove the ground veto and it closes to **92 px**.
+
+#### 🔴 Knockback was firing correctly and was invisible
+
+`KNOCKBACK_SPEED` was aliased to `walkMax` — **one tick of walking** — producing **9.7 px** of travel
+against a 132 px body. What a player sees is a hurt pose, six ticks of movement lock, and no
+movement: *"the knockback is not working… the animation got stuck"*. Both halves of that report are
+the same defect. Now **17.5 px/tick = 64 px of travel**, tuned in the unit that matters (px of
+**travel**, not px per tick) and asserted by summing the real decelerating series.
+
+#### What the money did and did not buy
+
+**$43.74 of the $55 ceiling. $2.38 spent this session, both clips REFUTED the hypothesis they tested.**
+
+- The sentry's `fire` and `death` clips were bought in session 6 and sat unpacked. Adopting them cost
+  **$0** and gave the turret a firing pose and a K.O.
+- **Anchor padding scales a subject; it cannot scale an effect.** Two paid single-variable re-shoots
+  established it. A muzzle flash and a debris plume exist *to leave the frame*. Both clips accepted
+  under a written G6 exception naming the file and the edges (`tools/gen/edgeExceptions.mjs`).
+- **Criterion 5.4e closed for $0.** Two `request_id`s recorded as permanently unrecoverable were both
+  in `~/.genmedia/gallery/sessions/<id>/data.json`, with the download path. Check the tool's own
+  records before declaring provenance lost.
+
+### Traps this pair of sessions leaves behind
+
+- **`brass-courier/death` still cannot pack** — it needs a 332 px cell against the courier's 288.
+  STOP-and-ask, undecided.
+- **`docs/GENERATION-LOG.md`'s "66 generations · $31.39" is an INVOICE reading from 2026-08-09**, not
+  a running total. It was being quoted as current five days later. The live figure is the Phase 5
+  total; everything after that date is quoted, not invoiced, and the two must not be summed.
+- **The `window.__game` surface has EIGHT fields, not nine.** Three documents and three code comments
+  said nine; nobody had counted. `src/debug/globals.ts` is the authority.
+- **`enemyView.ts:66` returns `chasing ? 'chase' : 'walk'`**, and aggro is permanent — so after first
+  sighting the scavenger's `walk` sheet is never drawn in play again. A consequence, not a defect.
+- **Two gates that could not go red were found by mutation, not by reading.** `withinRadius`'s `dy`
+  term (every fixture placed enemy and player at the same `y`) and `healthBarFillWidth`'s low-end
+  compression (at the real 144 px slot the naive floor behaves almost identically). Both now fail
+  under mutation; before, neither did.
+- **A test harness that can produce a contradiction is worth more than one that quietly produces a
+  plausible wrong answer.** `level-traversal.test.ts`'s first draft never jumped in any test — the
+  tell was a run-up that failed while a standing hop succeeded, in the same run.
