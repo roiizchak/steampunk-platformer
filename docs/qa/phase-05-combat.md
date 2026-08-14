@@ -2170,3 +2170,72 @@ even 3. That is the judder mechanism session 9 fixed for loops. It cannot be fix
 either pinning the frame count (no lever exists — the count comes from silhouette detection) or
 letting a one-shot carry an authored cadence, **which is a gate rule change and therefore a
 STOP-and-ask**. Flagged, not absorbed.
+
+### 🔴 The sentry shrank when it fired, and shrank further when it died — twice, the same mistake
+
+Reported on 2026-08-14, in two parts:
+
+> *"This is a K-1 animation now for stationary, but when you shoot, the animation becomes smaller."*
+> *"The stationary character, when it dies, when they play the K/O animation, it becomes smaller."*
+
+**The second was introduced while fixing the first**, by the same method, which is why the fix below
+is a landmark rather than a number.
+
+#### Why the obvious measurement is the wrong one
+
+A per-action scale is derived by matching the drawn figure to the slug's `renderHeightPx`. The
+tempting landmark is the **silhouette** — the opaque bounding box — and for a walk cycle it is fine.
+
+It is wrong for anything carrying an **effect**. The sentry's clips have a muzzle flash, a steam
+plume and a debris spray, and every one inflates the bounding box **without making the machine any
+bigger**. Match that box to a target and the machine shrinks by exactly what the effect added.
+
+| | derived from | tripod span | vs `idle` |
+|---|---|---|---|
+| `idle` | the slug scale | 205 px | — |
+| `fire` @ 0.42572062 | mean silhouette height | 198 px | −3 % (barely visible) |
+| `death` @ 0.34408602 | its first frame's silhouette height | **160 px** | **−22 % (obvious)** |
+
+The `death` note in the bounds file even recorded *why* the mean was rejected — the eight frame
+heights run 558…722, a 26.7 % spread, "because a wreck legitimately GROWS as its debris spreads" —
+and then used the **first frame's silhouette instead**, which has the same disease in a smaller dose.
+
+#### The landmark that works: the tripod base
+
+It is the same physical object in all three sheets, it sits at the bottom of the frame, and **no
+effect in any of these clips touches it** — steam rises, debris falls outward, the muzzle flash is at
+barrel height. Its span across the bottom 24 rows measures the **machine**, not the picture.
+
+Correcting each to idle's 205 px gives **0.44077135** (fire) and **0.44086021** (death) — agreeing to
+**0.02 %**. That agreement is the real finding: both clips were shot from the same padded anchor, so
+**one scale was always right for both**, and two independently-derived numbers were never justified.
+Shipped at their mean, **0.44081578**. Re-measured after repacking: **205, 205, 205**.
+
+#### The scavenger is NOT the same defect
+
+*"When he dies, the animation of the kill becomes bigger for each character."* Measured: `death`
+frame 0 stands **240 px** against the walk's **239** — correctly scaled. What grows is the
+**explosion**: the debris reaches **476 px** wide against a 200 px body, which is the art doing what
+an explosion does. Asserted in both directions, so "it is the explosion" is not an explanation for
+something that never happens.
+
+#### A landmark has to be chosen per body plan
+
+`tests/unit/sprite-size-consistency.test.ts`'s first version applied the tripod landmark to the
+scavenger too and failed by **56 %**. Not a scale error: the sentry's tripod is a **rigid** frame and
+the scavenger's legs are not. In `walk` frame 0 one foot is planted and the other mid-swing (a 42 px
+footprint); in `chase` frame 0 both legs extend (143 px). **Its footprint is a pose**, and comparing
+poses across two gaits measures the gait.
+
+Height is the landmark that survives for a legged body, and the scavenger's own bounds file already
+derives its slug scale from exactly that. `brass-courier` is deliberately not gated at all: a person
+legitimately changes both footprint and height between standing, running and lying down.
+
+That generalisation is the entry worth keeping. **The gate is per body plan, not per project.**
+
+#### Red-proof
+
+Restoring `death` to the shipped 0.34408602 and repacking turns the new gate red with the diagnosis
+in the failure message: *"brass-sentry-death frame 0 has a 160px base against idle's 205px — −22.0 %
+… almost certainly a per-action scale derived from the SILHOUETTE."* The file also carries a
+sensitivity assertion, so a gate that could not tell that from correct would itself be red.
