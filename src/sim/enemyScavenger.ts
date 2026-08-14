@@ -108,6 +108,31 @@ export interface Scavenger {
   chasing: boolean;
   /** ONE counter (vault 5.1) — ticks spent in the current chase episode. */
   chaseCounter: number;
+  /**
+   * Did `x` actually change on the last `stepScavenger`? **A readback, not a second state axis.**
+   *
+   * It exists because the animation was reading the INTENT and not the MOTION. A chasing scavenger
+   * that cannot move — held inside `deadZone`, or vetoed by the ledge probe — still returned `chase`
+   * from `scavengerAnim`, so the art ran a 17.5 px/frame gait over zero px of travel. That violates
+   * the foot-plant invariant by the whole stride, and because aggro is permanent it never ends: the
+   * old release radius used to end it by accident.
+   *
+   * **Derived by comparing `x` across the step, deliberately, rather than written at each site that
+   * declines to move.** Writing it at the commit site and both veto paths would mean *enumerating*
+   * every way the body can fail to move; comparing the outcome covers all of them — including the
+   * degenerate `patrolMin === patrolMax` pin that nobody had listed, and any veto added later.
+   * One write cannot drift from the movement code; three can.
+   *
+   * ⚠️ **Not a second counter, and it must never become one.** It carries no memory: it is
+   * recomputed from scratch every live tick, so no combination of `chasing`/`chaseCounter`/`moving`
+   * is unrepresentable and vault 5.1's "one flag plus one counter" still describes this state.
+   * `enemy-ai.test.ts` asserts exactly one field whose name ends in `Counter` — naming this
+   * `movingCounter` would fail that, correctly.
+   *
+   * `true` before the first tick: there is no measured travel yet, and a patroller's default is
+   * motion.
+   */
+  moving: boolean;
   hp: number;
   maxHp: number;
   /** The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`. */
@@ -140,6 +165,7 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     facing: 1,
     chasing: false,
     chaseCounter: 0,
+    moving: true,
     hp,
     maxHp: hp,
     lastHitSwing: -1,
@@ -167,6 +193,11 @@ export function detects(scavenger: Scavenger, at: Sighting): boolean {
  * would let a level's floor geometry silently override the beat the `.tmj` declares.
  */
 export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: ScavengerFooting): void {
+  // Read BEFORE anything below can move the body. `moving` is derived from the outcome rather than
+  // written at each site that declines to move — see `Scavenger.moving` for why that is the whole
+  // point and not a shortcut.
+  const xBefore = scavenger.x;
+
   if (!scavenger.chasing) {
     if (detects(scavenger, at)) {
       scavenger.chasing = true;
@@ -210,4 +241,9 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
       scavenger.x = scavenger.patrolMin;
     }
   }
+
+  // The readback. Every path above that fails to move the body — the dead zone, the ledge veto, a
+  // patrol clamped at its bound, a degenerate `patrolMin === patrolMax`, and any veto added later —
+  // lands here as `false` without this line having to know which one happened.
+  scavenger.moving = scavenger.x !== xBefore;
 }

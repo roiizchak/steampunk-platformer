@@ -42,7 +42,7 @@ import { windowOpen } from '../sim/windows';
 export const SENTRY_FIRE_TICKS = 18;
 
 export type SentryAnim = 'idle' | 'fire' | 'death';
-export type ScavengerAnim = 'walk' | 'chase' | 'death';
+export type ScavengerAnim = 'idle' | 'walk' | 'chase' | 'death';
 export type EnemyAnim = SentryAnim | ScavengerAnim;
 
 /** Which animation a sentry is playing. Death outranks everything — a corpse does not shoot. */
@@ -56,12 +56,26 @@ export function sentryAnim(sentry: Sentry): SentryAnim {
 /**
  * Which animation a scavenger is playing.
  *
- * There is no `idle`: it patrols continuously, so a standing pose would never be reached and a
- * sheet for it would be money spent on a state the sim cannot enter.
+ * 🔴 **`idle` exists now, and it is selected from the MOTION, not the intent.** This used to read
+ * `chasing ? 'chase' : 'walk'` and this comment used to say *"There is no `idle`: it patrols
+ * continuously, so a standing pose would never be reached and a sheet for it would be money spent
+ * on a state the sim cannot enter."* That was true when a chase could lapse. **Permanent aggro
+ * created the state**: a chasing scavenger held inside `deadZone` or vetoed by the ledge probe
+ * covers 0 px while `chase` moves the foot 17.5 px per frame, and nothing ends it.
+ *
+ * So the question this asks is `moving`, not `chasing` — see `Scavenger.moving`, which is a readback
+ * of `x` across the step rather than a second state axis. `chasing` still chooses *which* gait once
+ * the body is actually travelling.
+ *
+ * Death outranks everything, and is tested first: a corpse's `moving` is not read at all, which is
+ * why `stepEnemies`' death reset does not need to clear it.
  */
 export function scavengerAnim(scavenger: Scavenger): ScavengerAnim {
   if (scavenger.hp <= 0) {
     return 'death';
+  }
+  if (!scavenger.moving) {
+    return 'idle';
   }
   return scavenger.chasing ? 'chase' : 'walk';
 }

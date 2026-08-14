@@ -27,7 +27,7 @@ import {
 import { RENDER_SCALE } from '../../src/game/constants';
 import { enemyAnimTimings } from '../../src/render/animTiming';
 import { SENTRY_FIRE_TICKS, enemyAnimKeys, scavengerAnim, sentryAnim } from '../../src/render/enemyView';
-import { createScavenger, createSentry } from '../../src/sim/enemies';
+import { createScavenger, createSentry, scavengerFooting, stepScavenger } from '../../src/sim/enemies';
 
 /**
  * 🔴 **DERIVED, and it used to be a hardcoded `120`.**
@@ -228,12 +228,121 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     expect(scavengerAnim(scavenger)).toBe('death');
   });
 
+  /**
+   * 🔴 The animation follows the MOTION, not the intent — criterion 5.3, gate finding B3.
+   *
+   * These drive the REAL `stepScavenger` rather than setting `moving` by hand, because the claim
+   * under test is not *"`scavengerAnim` reads a boolean"* — it is *"the boolean is true exactly when
+   * the body travelled"*. Setting the field directly would pass against an implementation that never
+   * writes it, which is the whole defect: `chase` played over zero travel, violating the foot-plant
+   * invariant by 17.5 px a frame, and permanent aggro means it never ends.
+   *
+   * `EVERYWHERE_HERE` is ground under everything; `NO_GROUND_AHEAD` is a single platform the
+   * scavenger stands on whose right edge it cannot step past — the ledge probe's veto.
+   */
+  describe('a scavenger that cannot move plays idle, not its gait', () => {
+    const EVERYWHERE_HERE = scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6);
+
+    it('holds idle inside the dead zone, where it deliberately does not close', () => {
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      s.chasing = true;
+      // Strictly inside `deadZone` (96), so the movement block is skipped entirely.
+      stepScavenger(s, { playerX: 40, playerY: 0 }, EVERYWHERE_HERE);
+      expect(s.x, 'the dead zone means it did not travel').toBe(0);
+      expect(scavengerAnim(s)).toBe('idle');
+    });
+
+    it('holds idle when the ledge probe vetoes the step', () => {
+      // One platform. The scavenger stands at its right edge; the leading edge of the next step is
+      // over the void, so `groundUnder` refuses it.
+      const footing = scavengerFooting([{ x: -500, y: 10, w: 500, h: 100 }], 6);
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      s.chasing = true;
+      stepScavenger(s, { playerX: 5000, playerY: 0 }, footing);
+      expect(s.x, 'the ledge veto means it did not travel').toBe(0);
+      expect(scavengerAnim(s)).toBe('idle');
+      expect(s.facing, 'but it still LOOKS at the player it cannot reach').toBe(1);
+    });
+
+    it('plays chase when it is genuinely closing', () => {
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      s.chasing = true;
+      stepScavenger(s, { playerX: 5000, playerY: 0 }, EVERYWHERE_HERE);
+      expect(s.x).toBeGreaterThan(0);
+      expect(scavengerAnim(s)).toBe('chase');
+    });
+
+    it('plays walk while actually patrolling', () => {
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE_HERE);
+      expect(s.x).not.toBe(0);
+      expect(scavengerAnim(s)).toBe('walk');
+    });
+
+    /**
+     * The path nobody enumerated. A patrol pinned to a single point covers zero px per tick and is
+     * not a chase, so neither veto describes it — which is exactly why `moving` is derived by
+     * comparing `x` rather than written at each site that declines to move.
+     */
+    it('plays idle when its patrol bounds pin it to one spot', () => {
+      const s = createScavenger({ x: 50, y: 0, patrolMin: 50, patrolMax: 50 });
+      stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE_HERE);
+      expect(s.x).toBe(50);
+      expect(scavengerAnim(s)).toBe('idle');
+    });
+
+    it('death still outranks a stalled body', () => {
+      const s = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
+      stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE_HERE);
+      s.hp = 0;
+      expect(scavengerAnim(s)).toBe('death');
+    });
+  });
+
   it('every key a subject can ask for is declared, so the scene registers exactly what it plays', () => {
     const keys = enemyAnimKeys();
     expect(keys).toContain('brass-sentry-fire');
     expect(keys).toContain('rust-scavenger-chase');
     // No duplicates — a repeated key means two subjects fighting over one animation.
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  /**
+   * 🔴 **The one key a subject CAN ask for and that is deliberately NOT declared yet.**
+   *
+   * ⚠️ The test above is named *"every key a subject can ask for is declared"* and does not check
+   * that. It spot-checks two keys and rejects duplicates. So when `scavengerAnim` gained `'idle'`,
+   * `rust-scavenger-idle` became askable while undeclared and **nothing went red** — the project's
+   * own recurring shape: a name that states the behaviour and a body that checks something adjacent.
+   *
+   * That gap is real but the mismatch here is INTENTIONAL and temporary. The sim state landed first,
+   * at $0, so it could be reviewed before `rust-scavenger/idle` is bought; until the sheet exists,
+   * declaring the key would fail the build by design *(vault 4.16)*. `playIfChanged` no-ops on an
+   * undeclared key, so a stalled scavenger keeps playing whichever key it last had — identical to
+   * the behaviour before this change, **not** an improvement on it. The fix only lands with the art.
+   *
+   * This assertion is the lock, and it fails in BOTH directions: red if the key is declared without
+   * this exception being removed, and red if `scavengerAnim` stops being able to ask for it. When
+   * the art lands, delete this test and make the one above genuinely exhaustive.
+   */
+  it('rust-scavenger-idle is askable but not yet declared — the art is not bought', () => {
+    const askable = new Set(
+      [
+        createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 }),
+        createScavenger({ x: 0, y: 0, patrolMin: -100, patrolMax: 100 }),
+      ].map((s) => `rust-scavenger-${scavengerAnim(s)}`),
+    );
+    // A stalled scavenger really does ask for it — otherwise this lock is vacuous.
+    const pinned = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
+    stepScavenger(pinned, { playerX: 99999, playerY: 0 }, scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6));
+    expect(scavengerAnim(pinned)).toBe('idle');
+    expect(askable.size).toBeGreaterThan(0);
+
+    expect(
+      enemyAnimKeys(),
+      'rust-scavenger-idle is declared now — buy-the-art step is done, so delete this lock and ' +
+        'make the exhaustiveness test above real',
+    ).not.toContain('rust-scavenger-idle');
   });
 });
 
