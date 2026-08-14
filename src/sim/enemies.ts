@@ -20,10 +20,17 @@
  * tick — and because Phaser restarts a looping animation on every state change, that is the frame-0
  * bug arriving through the AI instead of through `play()`. So detection commits two ways:
  *
- *   - **Hysteresis.** Entering a chase needs `detectRadius`; leaving needs the player past a
- *     strictly larger `releaseRadius`. One threshold cannot flap; two can only flap if the player
- *     crosses the whole gap between them.
- *   - **A commitment floor.** A chase lasts at least `CHASE_COMMIT_TICKS` regardless.
+ * ⚠️ **This paragraph described two mechanisms that no longer exist**, until the criterion 5.3 gate
+ * owner found it on 2026-08-14. It said detection committed through **hysteresis** (a
+ * `releaseRadius` strictly larger than `detectRadius`) and a **commitment floor**
+ * (`CHASE_COMMIT_TICKS`). Both were deleted when aggro became permanent, and `enemyScavenger.ts`,
+ * `enemyTuning.ts` and `PlaygroundScene.ts` were all updated — this barrel, which every importer
+ * reads first, was not. Finding S6's exact shape, in the file that names 5.3's own vault items.
+ *
+ * **What actually commits, now:** the chase is a one-way transition. `chasing` is set by
+ * `detects()` and **nothing inside `stepScavenger` can clear it**; only death does, in
+ * `enemyTurn.ts`. A flag that cannot be un-set cannot flap, which is a stronger guarantee than two
+ * thresholds — there is no gap to stand in the middle of. `chaseCounter` is the episode's age.
  *
  * `enemy-ai.test.ts` gates this with a flap test rather than by reading the structure, because the
  * structure looks correct either way.

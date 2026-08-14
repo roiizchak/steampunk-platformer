@@ -68,7 +68,15 @@ export const SCAVENGER = {
   detectRadius: 480,
   deadZone: 96,
   damage: 15,
-  contactCooldown: 45,
+  /**
+   * ⚠️ **`contactCooldown: 45` used to sit here and has been deleted.** It was read by nothing —
+   * one grep hit across `src/`, `tests/` and `tools/`, its own declaration — while the scavenger's
+   * real contact cadence is the shared i-frame window, `IFRAME_TICKS` in `src/sim/combat.ts`,
+   * applied by `worldDamage.ts`. Two statements of one quantity, agreeing at 45 by coincidence,
+   * sitting in the block a tuner reaches for first *(vault 5.3)*. Found by the criterion 5.3 gate
+   * owner. Deleting it is the fix: a knob nobody reads is worse than no knob, because it invites
+   * someone to turn it.
+   */
 } as const;
 
 /**

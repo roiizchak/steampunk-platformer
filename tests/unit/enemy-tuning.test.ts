@@ -13,6 +13,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { enemyKnobs, knobLine } from '../../src/render/enemyTuning';
+import { SENTRY_FIRE_TICKS, sentryAnim } from '../../src/render/enemyView';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { World } from '../../src/sim/types';
@@ -175,5 +176,56 @@ describe('the panel line', () => {
     const k = enemyKnobs(world)[0]!;
     expect(knobLine(k, true).startsWith('>')).toBe(true);
     expect(knobLine(k, false).startsWith('>')).toBe(false);
+  });
+});
+
+/**
+ * 🔴 **An episode that never closes, reachable through a knob criterion 5.9 requires to be
+ * sweepable** — found by the criterion 5.3 gate owner, 2026-08-14.
+ *
+ * `sentryAnim` derives the firing episode as `windowOpen(cooldownCounter, SENTRY_FIRE_TICKS)`
+ * (`src/render/enemyView.ts`), and `stepSentry` **saturates** that counter at the sentry's own
+ * `cooldown`. So a `cooldown` at or below `SENTRY_FIRE_TICKS` leaves a counter that can never reach
+ * the window length, and the window never closes: the turret is drawn firing forever. Measured at
+ * `cooldown` 18 — `fire` on 400 of 400 ticks, `idle` on none. The shipped cooldown is 90; the knob
+ * stepped by 5 from a floor of **1**, so fifteen keypresses reached it.
+ *
+ * The floor is the fix, and it is asserted as a RELATIONSHIP rather than as the number 19, so
+ * moving `SENTRY_FIRE_TICKS` cannot silently re-open the hole *(vault 5.3)*.
+ */
+describe('the sentry cooldown knob cannot be turned into an episode that never closes', () => {
+  const cooldownKnob = () => enemyKnobs(freshWorld()).find((k) => k.label === 'sentry0.cooldown')!;
+
+  it('floors above the fire window, so the counter can always reach it', () => {
+    expect(cooldownKnob().min).toBeGreaterThan(SENTRY_FIRE_TICKS);
+  });
+
+  it('refuses a value below the floor however far it is turned down', () => {
+    const k = cooldownKnob();
+    for (let i = 0; i < 40; i += 1) k.set(k.get() - k.step);
+    expect(k.get()).toBeGreaterThan(SENTRY_FIRE_TICKS);
+  });
+
+  /**
+   * Non-vacuity, and the reason the two assertions above are worth running: at the FLOOR — the
+   * worst value the knob can now reach — the episode still closes. A floor that merely happened to
+   * be a large number would satisfy the checks above and prove nothing about the mechanism.
+   */
+  it('and at that floor the fire episode genuinely opens AND closes', () => {
+    const world = freshWorld();
+    const k = enemyKnobs(world).find((label) => label.label === 'sentry0.cooldown')!;
+    k.set(0); // clamped to the floor
+    const sentry = world.enemies.sentries[0]!;
+    expect(sentry.cooldown).toBe(k.min);
+
+    // The player parked inside the radius, so the turret fires as often as it is allowed to.
+    world.player.x = sentry.x;
+    world.player.y = sentry.y;
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i += 1) {
+      tick(world, createSnapshot());
+      seen.add(sentryAnim(sentry));
+    }
+    expect([...seen].sort(), 'the turret never left one of the two states').toEqual(['fire', 'idle']);
   });
 });

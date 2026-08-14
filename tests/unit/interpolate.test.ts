@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MS_PER_TICK } from '../../src/game/constants';
 import { MAX_LEAP_PX, renderAlpha, interpolatedPosition } from '../../src/render/interpolate';
+import { DEFAULT_TUNING } from '../../src/sim/player';
 
 describe('renderAlpha — where between two ticks this frame is being drawn', () => {
   it('is 0 exactly on a tick boundary and 0.5 halfway between', () => {
@@ -73,21 +74,49 @@ describe('interpolatedPosition — the drawn point between the last two ticks', 
 
   it('SNAPS to cur across a leap no tick could have produced', () => {
     // Respawn, level restart and the dev fleet spawn all move a subject instantly. Interpolating
-    // across that would slide the sprite through the level over one tick. `runMax` is 12 px/tick,
-    // so anything past MAX_LEAP_PX is not motion, it is a teleport.
+    // across that would slide the sprite through the level over one tick.
     const far = { x: cur.x + MAX_LEAP_PX + 1, y: cur.y };
     expect(interpolatedPosition(prev, far, 0.5)).toEqual(far);
-    // Vertical too — a respawn moves y, and a fall does not exceed the cap in one tick.
+    // Vertical too — a respawn moves y.
     expect(interpolatedPosition(prev, { x: prev.x, y: prev.y + MAX_LEAP_PX + 1 }, 0.5)).toEqual({
       x: prev.x,
       y: prev.y + MAX_LEAP_PX + 1,
     });
   });
 
-  it('does NOT snap for ordinary travel, or the fix would never apply', () => {
-    // The non-vacuity guard on the test above. `runMax` 12 px must interpolate; a cap that ate
-    // normal running would leave the defect in place while every assertion here stayed green.
-    expect(interpolatedPosition({ x: 0, y: 0 }, { x: 12, y: 0 }, 0.5).x).toBeCloseTo(6, 9);
-    expect(MAX_LEAP_PX).toBeGreaterThan(12);
+  /**
+   * 🔴 **The assertion this file did not have, and the reason the defect shipped.**
+   *
+   * The non-vacuity guard used to read `expect(MAX_LEAP_PX).toBeGreaterThan(12)` against a hand-typed
+   * `12` — a stale copy of `runMax`, which had moved to 9, and a number that was never the largest
+   * per-tick travel anyway. `maxFallSpeed` is **51.6** and `jumpVelocity` **48.6**, both larger than
+   * the 48 px cap that shipped, so the takeoff tick of every jump and every tick at terminal
+   * velocity were drawn as teleports — 51 ticks in 120 of a jump-plus-run-off-a-ledge, measured by
+   * the 5.3 gate owner. The judder session 9 removed horizontally was still there vertically.
+   *
+   * A restated constant cannot catch a constant that moved *(vault 5.3)*. This imports the tuning
+   * and asserts the RELATIONSHIP, so any future retune of gravity, the jump or the run speed that
+   * outgrows the guard turns this red instead of quietly reintroducing the artifact.
+   */
+  it('never snaps on anything one tick of the REAL simulation can produce', () => {
+    const perTickMax = [
+      ['runMax', DEFAULT_TUNING.runMax],
+      ['walkMax', DEFAULT_TUNING.walkMax],
+      ['jumpVelocity', DEFAULT_TUNING.jumpVelocity],
+      ['maxFallSpeed', DEFAULT_TUNING.maxFallSpeed],
+    ] as const;
+
+    for (const [name, travel] of perTickMax) {
+      expect(
+        MAX_LEAP_PX,
+        `${name} is ${travel} px in one tick, which the ${MAX_LEAP_PX}px teleport guard would treat ` +
+          `as a teleport — so that motion is drawn unblended and juddering, on the axis it happens on`,
+      ).toBeGreaterThan(travel);
+
+      // And it genuinely interpolates at that distance, on BOTH axes — the guard is per-axis, so a
+      // cap that was fine horizontally could still be eating every fall.
+      expect(interpolatedPosition({ x: 0, y: 0 }, { x: travel, y: 0 }, 0.5).x).toBeCloseTo(travel / 2, 9);
+      expect(interpolatedPosition({ x: 0, y: 0 }, { x: 0, y: travel }, 0.5).y).toBeCloseTo(travel / 2, 9);
+    }
   });
 });

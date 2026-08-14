@@ -25,6 +25,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEATH_TICKS, PLAYER_MAX_HP, deathWindowClosed, respawnPlayer } from '../../src/sim/combat';
+import { DEFAULT_TUNING } from '../../src/sim/player';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { InputSnapshot, World } from '../../src/sim/types';
@@ -141,7 +142,7 @@ describe('what the respawn restores, and what it deliberately leaves alone', () 
     p.combatCounter = 99;
     p.iFrameCounter = 99;
     p.grounded = true;
-    respawnPlayer(p, SPAWN);
+    respawnPlayer(p, SPAWN, DEFAULT_TUNING);
 
     expect(p).toMatchObject({ x: SPAWN.x, y: SPAWN.y, vx: 0, vy: 0, state: 'idle' });
     expect(p.hp).toBe(p.maxHp);
@@ -149,8 +150,56 @@ describe('what the respawn restores, and what it deliberately leaves alone', () 
     // i-frames OPEN, so whatever was touching the player when they died cannot instantly re-kill
     // them. A grace window, not invulnerability — it lapses on its own.
     expect(p.iFrameCounter).toBe(0);
-    // No free coyote jump from a window armed before the death.
     expect(p.grounded).toBe(false);
+    // 🔴 Both forgiveness windows CLOSED, and this is the assertion, not `grounded`. See the test
+    // below for the defect that distinction was hiding.
+    expect(p.ticksSinceGrounded).toBe(DEFAULT_TUNING.coyoteTicks);
+    expect(p.ticksSinceJumpPressed).toBe(DEFAULT_TUNING.jumpBufferTicks);
+  });
+
+  /**
+   * 🔴 **The respawn handed out a free mid-air jump, and the test named for it checked the wrong
+   * field.** `respawnPlayer`'s docstring said *"`grounded` false and `ticksSinceGrounded` saturated,
+   * so a respawn cannot hand out a free coyote jump"*; the code cleared only `grounded`, and the
+   * test above asserted only `grounded`. The comment named the behaviour and the assertion checked
+   * something else — CLAUDE.md §5's *"an existence assertion cannot verify a timing claim"*.
+   *
+   * A corpse stays `grounded` for the whole death window, so step 10 re-armed `ticksSinceGrounded`
+   * to 0 on all 45 of those ticks, and step 7 of the respawn tick read a wide-open coyote window.
+   * Holding jump while dead — which is what a player does — launched the courier **216 px above the
+   * spawn point, in mid-air, at full `jumpVelocity`**. Measured by the criterion 5.3 gate owner.
+   *
+   * This drives the real `tick()` with the jump held for the whole death, which is the input that
+   * produced it.
+   */
+  it('🔴 does not fire a jump held down through the death — no free coyote from a corpse', () => {
+    const w = world();
+    w.player.hp = 1;
+    w.hazards = [{ x: SPAWN.x - 100, y: 900, w: 200, h: 200 }];
+    tick(w, createSnapshot());
+    expect(w.player.state).toBe('death');
+
+    const jump: InputSnapshot = createSnapshot();
+    jump.jumpHeld = true;
+    jump.jumpPressed = true;
+
+    let respawnTick = -1;
+    for (let i = 0; i < DEATH_TICKS * 2 && respawnTick < 0; i += 1) {
+      // Re-armed EVERY tick, and that is the whole fixture. `jumpPressed` is a latched edge that
+      // `consumeJumpPress` clears when it is read, so setting it once before the loop leaves it
+      // false for every tick after the first — and the press never survives to the respawn tick,
+      // which made the first draft of this test green against the unfixed code. A player mashing
+      // jump while dead presses it again on every frame; this is that input.
+      jump.jumpPressed = true;
+      if (tick(w, jump).respawned) respawnTick = i;
+    }
+    expect(respawnTick, 'never respawned at all').toBeGreaterThanOrEqual(0);
+
+    // On the respawn tick itself the player is alive, at the spawn, and NOT launched. `vy` is the
+    // honest witness: `jumpVelocity` is negative-up, so a free jump shows as a large negative.
+    expect(w.player.vy, 'the respawn fired a jump from mid-air').toBeGreaterThanOrEqual(0);
+    expect(w.player.state).not.toBe('jump');
+    expect(w.player.y).toBeGreaterThanOrEqual(SPAWN.y - 1);
   });
 
   /**

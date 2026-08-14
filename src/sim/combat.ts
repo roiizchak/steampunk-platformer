@@ -39,7 +39,7 @@
  */
 
 import { consumeAttackPress } from './input';
-import type { CombatState, InputSnapshot, PlayerSim, PlayerState } from './types';
+import type { CombatState, InputSnapshot, PlayerSim, PlayerState, TuningKnobs } from './types';
 import { advanceWindow, windowOpen } from './windows';
 
 /** A three-phase move. Every field is an integer count of 60 Hz ticks. */
@@ -268,10 +268,18 @@ export function deathWindowClosed(player: PlayerSim): boolean {
  * life), and it is not what the death of one actor implies. Recorded as a decision so the absence is
  * not read as an oversight the way the missing respawn was.
  *
- * Vertical state is cleared too: `grounded` false and `ticksSinceGrounded` saturated, so a respawn
- * cannot hand out a free coyote jump from a window armed before the player died.
+ * Vertical state is cleared too: `grounded` false and **both forgiveness counters saturated**, so a
+ * respawn cannot hand out a free coyote jump or fire a jump buffered while the player was dead.
+ *
+ * `tuning` is a REQUIRED argument for the same reason `createWorld`'s `scale` is *(vault 2.11)*: the
+ * window lengths belong to the tuning in play, and defaulting them here would silently close the
+ * default-sized window while a feel variant left its own longer one open.
  */
-export function respawnPlayer(player: PlayerSim, spawn: { x: number; y: number }): void {
+export function respawnPlayer(
+  player: PlayerSim,
+  spawn: { x: number; y: number },
+  tuning: Pick<TuningKnobs, 'coyoteTicks' | 'jumpBufferTicks'>,
+): void {
   player.x = spawn.x;
   player.y = spawn.y;
   player.vx = 0;
@@ -283,6 +291,18 @@ export function respawnPlayer(player: PlayerSim, spawn: { x: number; y: number }
   player.knockbackPending = false;
   player.grounded = false;
   player.jumpCutPending = false;
+  // 🔴 Both forgiveness windows are CLOSED by saturating their counters, not merely by clearing
+  // `grounded`. Setting the flag alone was the bug: a corpse stays `grounded` for the whole death
+  // window, so step 10 re-arms `ticksSinceGrounded = 0` on every one of those 45 ticks, and step 7
+  // of the respawn tick then read a coyote window that was still wide open. A jump held while dead —
+  // which is what a player does — launched the courier off the spawn point in mid-air at full
+  // `jumpVelocity`. Found by the criterion 5.3 gate owner, who measured 216 px of free height.
+  //
+  // `advanceWindow`'s convention is that a counter AT the window length means closed, so the
+  // saturated value is the length itself. The numbers come from the tuning the caller is running,
+  // not from `DEFAULT_TUNING`: a feel variant with a longer coyote window must close ITS window.
+  player.ticksSinceGrounded = tuning.coyoteTicks;
+  player.ticksSinceJumpPressed = tuning.jumpBufferTicks;
 }
 
 /**

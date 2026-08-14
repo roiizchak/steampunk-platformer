@@ -337,22 +337,12 @@ export const VIDEO_MOTIONS = Object.freeze({
   fall: {
     cyclic: false,
     airborne: true,
-    /**
-     * 🔴 **6 -> 8, which is a CORRECTION of a desync, not a choice — and 8 is the wrong number.**
-     *
-     * This spec said 6 while `_generated/sheets/fall-clip.png` held 8 cells and the catalog shipped
-     * 8 frames. `assets:build` packs whatever the extracted strip contains and never reads this
-     * file, so the two could drift silently and did. 8 is what actually ships, so 8 is what this
-     * now declares; `one-shot-divisor.test.ts` pins spec, strip and catalog together from here on.
-     *
-     * ⚠️ **8 does not divide the 18-tick rise** — 2.25 refreshes a frame, the judder
-     * `loop-dwell.test.ts` exists to forbid, and the only row still carrying it. **9 is the fix**
-     * and it is blocked on the ART, not on this number: re-extracting at any count re-runs G6, and
-     * `fall.mp4`'s frames 0-4 fail it on the left, right and top edges. Frame 0 is at the measured
-     * onset regardless of the count, so 6, 8 and 9 all fail identically — which means the SHIPPED
-     * sheet never passed G6 either. See `docs/qa/phase-05-combat.md`; the unblock is a decision
-     * about the clip, and a STOP-and-ask.
-     */
+    // 🔴 6 -> 8 corrects a DESYNC: this said 6 while the extracted strip held 8 cells and
+    // the catalog shipped 8, because `assets:build` packs the strip and never reads this file.
+    // ⚠️ 8 does not divide the 18-tick rise, and **9 is the known fix, blocked on the art** —
+    // the full measurement, and why re-extracting at ANY count fails G6, is in
+    // `tests/unit/blockedDwell.ts`. Kept there rather than restated here: one description of
+    // one blocker, next to the gate that skips on it (vault 5.3).
     frames: 8,
     motion:
       'is airborne, caught in the middle of a fall.\n' +

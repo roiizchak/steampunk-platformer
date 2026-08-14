@@ -161,7 +161,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //        movement, so the first frame after a death is an ordinary frame at the spawn point
   //        rather than a corpse's pose in a new position.
   if (deathWindowClosed(player)) {
-    respawnPlayer(player, world.spawn);
+    respawnPlayer(player, world.spawn, tuning);
     events.respawned = true;
   }
 
@@ -318,9 +318,22 @@ export function advance(world: World, input: InputSnapshot, ticks: number): Adva
   const total = noEvents();
   for (let i = 0; i < ticks; i += 1) {
     const events = tick(world, input);
-    total.jumped = total.jumped || events.jumped;
-    total.landed = total.landed || events.landed;
-    total.leftGround = total.leftGround || events.leftGround;
+    // 🔴 Every field, walked from the record itself — NOT three named assignments.
+    //
+    // It was three, and `TickEvents` had grown to seven. `attackStarted`, `hitActive`, `hitLanded`
+    // and `respawned` were silently dropped on the way out of `advance()`, so `GameScene.update()`
+    // — which is the only production caller — read `events.respawned` as **always false** and the
+    // guard written to drop the interpolation snapshot on a respawn could never fire. Found by the
+    // criterion 5.12 gate owner; the test named for the guard calls `tick()` directly, so it could
+    // not see it.
+    //
+    // Adding a field to `TickEvents` and forgetting a line here is a mistake that compiles, passes
+    // every unit test, and shows up as a rendering artifact. Iterating removes the chance to make
+    // it: a new edge is accumulated the moment `noEvents()` declares it. `tick-events.test.ts`
+    // asserts every declared field survives a batch, so this cannot regress to a named list.
+    for (const key of Object.keys(total) as (keyof TickEvents)[]) {
+      total[key] = total[key] || events[key];
+    }
   }
   return total;
 }

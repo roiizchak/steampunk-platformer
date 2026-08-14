@@ -23,6 +23,7 @@
  * cost is that adding one means adding it here. Stated rather than hidden.
  */
 
+import { SENTRY_FIRE_TICKS } from './enemyView';
 import type { Scavenger, Sentry } from '../sim/enemies';
 import type { World } from '../sim/types';
 
@@ -73,9 +74,23 @@ export function enemyKnobs(world: World): Knob[] {
     const target = sentry as unknown as Record<string, number>;
     knobs.push(
       knob(`${name}.radius`, target, 'radius', STEP.distance, 0),
-      // Floor of 1: a cooldown of 0 fires every tick, which is not a tuning of the turret, it is a
-      // different weapon, and it makes the projectile list grow without bound.
-      knob(`${name}.cooldown`, target, 'cooldown', STEP.ticks, 1),
+      /**
+       * 🔴 Floor of `SENTRY_FIRE_TICKS + 1`, raised from **1** on 2026-08-14.
+       *
+       * A cooldown of 0 fires every tick — not a tuning of the turret but a different weapon, and
+       * the projectile list grows without bound. That was the original reason for a floor, and it
+       * was set too low. `sentryAnim` derives the firing EPISODE as
+       * `windowOpen(cooldownCounter, SENTRY_FIRE_TICKS)` while `stepSentry` saturates that counter
+       * at `cooldown`, so any `cooldown <= 18` leaves a counter that can never reach 18 and a
+       * window that never closes. Measured by the criterion 5.3 gate owner: at `cooldown` 18 the
+       * turret shows `fire` on **400 of 400** ticks and `idle` on none — an episode that never
+       * closes, which is the exact failure 5.3 exists to forbid, reached in fifteen keypresses
+       * through the knob criterion 5.9 requires to be sweepable.
+       *
+       * `enemy-tuning.test.ts` asserts the relationship rather than the number, so moving
+       * `SENTRY_FIRE_TICKS` cannot re-open the hole.
+       */
+      knob(`${name}.cooldown`, target, 'cooldown', STEP.ticks, SENTRY_FIRE_TICKS + 1),
     );
   });
 

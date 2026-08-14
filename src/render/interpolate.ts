@@ -38,6 +38,7 @@
  */
 
 import { MS_PER_TICK } from '../game/constants';
+import { DEFAULT_TUNING } from '../sim/player';
 
 /** A drawn subject's position. Structural on purpose, so this module needs no sim types. */
 export interface Point {
@@ -46,19 +47,42 @@ export interface Point {
 }
 
 /**
+ * The furthest the simulation can move a subject on ONE axis in ONE tick.
+ *
+ * Vertical, not horizontal — and that is the whole point. `maxFallSpeed` is the largest per-tick
+ * displacement in the game, larger than `runMax` by a factor of nearly six.
+ */
+const MAX_TICK_TRAVEL_PX = Math.max(
+  DEFAULT_TUNING.runMax,
+  DEFAULT_TUNING.maxFallSpeed,
+  DEFAULT_TUNING.jumpVelocity,
+);
+
+/**
  * Distance beyond which a change of position is treated as a TELEPORT and drawn without blending.
  *
  * Respawn, level restart and the dev fleet spawn all move a subject instantly. Interpolating across
  * one of those would slide the sprite through the level over a single tick — a visible artifact
  * worse than the one this module removes.
  *
- * 48 px is four ticks of `runMax` (12 px/tick). Nothing the sim can do in ONE tick comes close:
- * horizontal travel is capped at `runMax`, and vertical travel is capped by terminal velocity,
- * which is smaller. The margin is deliberate — a cap set near the real per-tick maximum would start
- * snapping during ordinary fast movement, which would put the defect straight back, and
- * `interpolate.test.ts` pins that it does not.
+ * 🔴 **It was the literal `48`, and it was smaller than the sim's own vertical maximum.** The
+ * docstring here claimed *"48 px is four ticks of `runMax` (12 px/tick). Nothing the sim can do in
+ * ONE tick comes close … vertical travel is capped by terminal velocity, which is smaller."* Both
+ * halves were false: `runMax` is **9** (it moved when locomotion was planted against the art), and
+ * `maxFallSpeed` is **51.6** with `jumpVelocity` **48.6** — so the takeoff tick of every jump and
+ * every tick at terminal velocity exceeded the cap and were drawn as teleports. Measured by the
+ * criterion 5.3 gate owner over a jump plus a run off a ledge: **51 of 120 ticks snapped**.
+ *
+ * That is the ghosting defect this module exists to remove, still live on the vertical axis, at
+ * exactly the moments the stale margin was said to protect.
+ *
+ * Derived now, never typed *(vault 5.3)*, so retuning gravity or the jump cannot silently push the
+ * sim past its own teleport guard again. **2x** the maximum: enough that no simulated tick can
+ * reach it, small enough that a real teleport — a respawn is thousands of px — is still obvious.
+ * `interpolate.test.ts` imports `DEFAULT_TUNING` and asserts the relationship rather than restating
+ * the number, which is what let the stale literal survive two speed changes.
  */
-export const MAX_LEAP_PX = 48;
+export const MAX_LEAP_PX = Math.ceil(MAX_TICK_TRAVEL_PX * 2);
 
 /**
  * Where between the previous and current tick this frame falls, as a fraction in `[0, 1]`.
