@@ -14,6 +14,23 @@ import { ENEMY_DEAD_ZONE, withinRadius } from './enemyGeometry';
  * reach you. `cooldown` 90 ticks (1.5 s) is long enough to walk through the radius between shots,
  * which is what makes the projectile's travel time a dodge rather than a tax.
  */
+/**
+ * How long the muzzle episode lasts after a shot leaves, in ticks.
+ *
+ * 18 ticks, 0.3 s. It rides the EXISTING `cooldownCounter` rather than adding a second counter —
+ * vault 5.1's "one counter plus one flag" — because that counter already resets to 0 at the exact
+ * moment of firing. So this is both the animation's length and its `simTicks`, and a retune of one
+ * is a retune of the other.
+ *
+ * ⚠️ **It lived in `src/render/enemyView.ts` until 2026-08-14, and that was the wrong side of the
+ * boundary.** `createSentry` has to reject a `cooldown` this value makes unrepresentable (below), and
+ * `src/sim/` may not import from `src/render/`. It is a **sim** window that the renderer reads, not a
+ * render setting: the firing episode is a fact about the simulation's cadence. `enemyView.ts`
+ * re-exports it, so every existing consumer is unchanged and there is still exactly one definition
+ * *(vault 5.3)*.
+ */
+export const SENTRY_FIRE_TICKS = 18;
+
 export const SENTRY = {
   radius: 640,
   cooldown: 90,
@@ -79,6 +96,32 @@ export function createSentry(options: SentryOptions): Sentry {
   const radius = options.radius ?? SENTRY.radius;
   const cooldown = options.cooldown ?? SENTRY.cooldown;
   const hp = options.hp ?? 40;
+  /**
+   * 🔴 A `cooldown` at or below `SENTRY_FIRE_TICKS` is UNREPRESENTABLE, so it throws rather than
+   * being clamped — the same choice `createWorld` makes for its required `scale` *(vault 2.11)*.
+   *
+   * `sentryAnim` derives the firing episode as `windowOpen(cooldownCounter, SENTRY_FIRE_TICKS)`
+   * while `stepSentry` SATURATES that counter at `cooldown`. At `cooldown = 18` the counter's
+   * observed values are 0..17 and then 0 again — the renderer never sees 18, so the window never
+   * closes and the turret shows `fire` on **400 of 400** ticks and `idle` on none. That is an
+   * episode that never ends, which is the exact failure criterion 5.3 forbids. **19 is the smallest
+   * cooldown that yields even one `idle` tick.**
+   *
+   * The Playground knob was floored at `SENTRY_FIRE_TICKS + 1` on 2026-08-14 and that fix was
+   * PARTIAL: `createSentry` is the exported factory a level or a test calls directly, and it
+   * accepted 18 without complaint. Found by the Codex implementation review; decision D7.
+   *
+   * Clamping was the alternative and is worse here — a level author who writes 18 and silently gets
+   * 19 has had their tuning changed without being told, and the number they read back is not the one
+   * they wrote.
+   */
+  if (!Number.isInteger(cooldown) || cooldown <= SENTRY_FIRE_TICKS) {
+    throw new Error(
+      `createSentry: cooldown must be an integer tick count greater than SENTRY_FIRE_TICKS ` +
+        `(${SENTRY_FIRE_TICKS}), or the firing episode never closes and the turret shows "fire" ` +
+        `on every tick, got ${cooldown}`,
+    );
+  }
   return {
     x: options.x,
     y: options.y,

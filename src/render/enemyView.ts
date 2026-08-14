@@ -28,18 +28,19 @@
  */
 
 import type { EnemySlug, Scavenger, Sentry } from '../sim/enemies';
-import { SCAVENGER_BOX, SENTRY_BOX } from '../sim/enemies';
+import { SCAVENGER_BOX, SENTRY_BOX, SENTRY_FIRE_TICKS } from '../sim/enemies';
 import { windowOpen } from '../sim/windows';
 
 /**
- * How long the muzzle animation plays after a shot leaves, in ticks.
+ * Re-exported from `src/sim/enemySentry.ts`, where it now lives — see that file for the reasoning.
  *
- * 18 ticks, 0.3 s. It rides the EXISTING `cooldownCounter` rather than adding a second counter —
- * vault 5.1's "one counter plus one flag" — because the counter already resets to 0 at the exact
- * moment of firing. So this is both the animation's length and its `simTicks`, and a retune of one
- * is a retune of the other.
+ * It moved on 2026-08-14 because `createSentry` must reject a `cooldown` this value makes
+ * unrepresentable, and `src/sim/` may not import from `src/render/`. Re-exported rather than
+ * relocated-and-updated at ~10 call sites, so there is still exactly one definition *(vault 5.3)*
+ * and every existing consumer — `animTiming.ts`, `enemyTuning.ts`, four test files and the
+ * `catalogTimings.mjs` mirror lock — keeps working unchanged.
  */
-export const SENTRY_FIRE_TICKS = 18;
+export { SENTRY_FIRE_TICKS };
 
 export type SentryAnim = 'idle' | 'fire' | 'death';
 export type ScavengerAnim = 'idle' | 'walk' | 'chase' | 'death';
