@@ -28,12 +28,20 @@
 
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { encodePng } from './png.mjs';
+import { readFileSync } from 'node:fs';
+import { decodePng, encodePng } from './png.mjs';
 import { dropCastShadow } from './chroma.mjs';
-import { figureMetrics, packStrip, deriveScale } from './sheets.mjs';
+import { packStrip } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
 import { configFor, workListFor, resolveActionScale } from './slugConfig.mjs';
 import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
+import { printDerivedScale } from './deriveScale.mjs';
+import {
+  decideCatalogRow,
+  liftProfileEntry,
+  sheetReportRow,
+  validateCatalogRows,
+} from './catalogDecision.mjs';
 import { upsertCatalogSheets, upsertLiftProfile } from './catalogWrite.mjs';
 import {
   findSource,
@@ -76,46 +84,11 @@ const LIFT_PROFILE_NOTE =
   'hand-edit — regenerate it, and read the diff.';
 
 function main() {
-  const deriveOnly = process.argv.includes('--derive-scale');
-
-  if (deriveOnly) {
-    /**
-     * The canonical standing height comes from `idle` — the only genuinely neutral upright pose —
-     * **where the subject has one.**
-     *
-     * `rust-scavenger` does not, and that is a deliberate design decision, not an omission: it
-     * patrols continuously, so a standing pose is a state the sim can never enter and a sheet for
-     * it would be money spent on an unreachable frame. This branch nonetheless hardcoded
-     * `findSource(..., 'idle')`, so `--derive-scale` for the scavenger searched for
-     * `rust-scavenger-idle-clip.png` and threw — while the scavenger's own bounds config carried
-     * `"scale": null` and its error message told you to run this exact command. A deadlock, caught
-     * by the session-6 Codex plan review before it was hit.
-     *
-     * So the action is now taken from argv, defaulting to `idle` where one exists. Whichever action
-     * is used, its name is printed beside the number: the scale is pasted in BY HAND (vault A5),
-     * and a human pasting it must be able to see what it was measured from.
-     */
-    const deriveAction = ACTIONS[0] ?? 'idle';
-    const deriveSource = findSource(GENERATED, SLUG, deriveAction);
-    const { keyed } = keySheet(deriveSource);
-    const heights = framesOf(keyed, cellPitchFor(deriveSource)).map(
-      (f) => figureMetrics(f)?.height ?? 0,
-    );
-    const standing = Math.round(heights.reduce((a, b) => a + b, 0) / heights.length);
-    // The target height is read from the config rather than written here. It was a literal `96`,
-    // which went stale the moment RENDER_SCALE moved 2 -> 6 and `renderHeightPx` became 288 — and a
-    // deriver that prints a number for the wrong target is worse than no deriver, because its output
-    // is meant to be pasted straight into the file it disagrees with.
-    const renderHeight = loadConfig(CONFIG).renderHeightPx;
-    const scale = deriveScale(standing, renderHeight);
-    console.log(`${deriveAction} frame heights: ${heights.join(", ")}`);
-    const spread = Math.max(...heights) - Math.min(...heights);
-    console.log(
-      `mean standing height: ${standing} source px  (spread ${spread} px, ` +
-        `${((spread / standing) * 100).toFixed(1)}% — this is the frame-to-frame size pop)`,
-    );
-    console.log(`scale for a ${renderHeight} px render height: ${scale.toFixed(8)}`);
-    console.log(`\nWrite this into ${CONFIG} deliberately. The build will not derive it (vault A5).`);
+  // A separate command mode that prints and returns before anything is written. `deriveScale.mjs`
+  // carries the whole of it, including why the action is an argument rather than a hardcoded
+  // 'idle' — and why vault A5 makes this print for a human to paste instead of writing the number.
+  if (process.argv.includes('--derive-scale')) {
+    printDerivedScale({ slug: SLUG, actions: ACTIONS, generated: GENERATED, configPath: CONFIG });
     return;
   }
 
@@ -131,6 +104,12 @@ function main() {
   // Catalog rows this run packed, merged into public/assets/index.json once at the end — see
   // catalogTimings.mjs's header for which slugs are covered.
   const catalogRows = [];
+  // Read ONCE, before anything is packed: which keys the shipped catalog already carries. It is the
+  // other half of `decideCatalogRow` — a rebuilt sheet with no timing rule is only dangerous when a
+  // row for it is already out there.
+  const existingCatalogKeys = new Set(
+    (JSON.parse(readFileSync(CATALOG_PATH, 'utf8')).sheets ?? []).map((row) => row.key),
+  );
 
   for (const action of ACTIONS) {
     const source = findSource(GENERATED, SLUG, action);
@@ -294,28 +273,36 @@ function main() {
     const out = join(OUT_DIR, `${action}.png`);
     writeFileSync(out, encodePng(strip.width, strip.height, strip.data));
 
-    rows.push({
-      action,
-      key: `${SLUG}-${action}`,
-      url: `assets/characters/${SLUG}/sheets/${action}.png`,
-      frameWidth,
-      frameHeight,
-      frameCount: frames.length,
-      loop: LOOPING.has(action),
-      measuredKey: key,
-      borderAgreement: Number(agreement.toFixed(4)),
-      tallest,
-      widest,
-      gates: Object.fromEntries(
-        Object.entries(verdicts).map(([k, v]) => [k, `${v.status}: ${v.reason}`]),
-      ),
-      summary: summary.status,
-    });
+    rows.push(
+      sheetReportRow({
+        slug: SLUG,
+        action,
+        frameWidth,
+        frameHeight,
+        frameCount: frames.length,
+        loop: LOOPING.has(action),
+        key,
+        agreement,
+        tallest,
+        widest,
+        verdicts,
+        summary: summary.status,
+      }),
+    );
 
-    // Per-(slug, action), not per-slug: brass-courier only has timings for three of its eight
-    // actions, so gating on the slug alone would throw PARTWAY through a bare `assets:build
-    // brass-courier` run, after actions earlier in the loop had already been written.
-    if (hasCatalogTiming(SLUG, action)) {
+    // 🔴 The decision is `catalogDecision.mjs`'s, not this file's. It used to be a bare
+    // `if (hasCatalogTiming(...))` with **no else**, and because `upsertCatalogSheets` leaves keys
+    // it was not handed untouched, a sheet rebuilt without a timing rule kept shipping the catalog
+    // row describing its PREVIOUS self. That bit `brass-courier/idle` in play, and the Codex plan
+    // review (finding 2) rejected "log a warning" as a fix for it. It fails the build now.
+    if (
+      decideCatalogRow({
+        slug: SLUG,
+        action,
+        hasTiming: hasCatalogTiming(SLUG, action),
+        hasExistingRow: existingCatalogKeys.has(`${SLUG}-${action}`),
+      }) === 'write'
+    ) {
       catalogRows.push(
         catalogRowFor(
           SLUG,
@@ -339,20 +326,13 @@ function main() {
       );
     }
 
-    liftProfile[action] = {
+    liftProfile[action] = liftProfileEntry({
       anchor,
       scale: resolvedScale,
       scaleSource,
       deepestSourceY,
-      frames: frames.map((f) => ({
-        index: f.index,
-        sourceMinY: f.sourceMinY,
-        sourceMaxY: f.sourceMaxY,
-        sourceCentroidY: Number(f.sourceCentroidY.toFixed(3)),
-        drawnHeight: f.drawnHeight,
-        liftPx: f.liftPx,
-      })),
-    };
+      frames,
+    });
 
     const flag = summary.status === PASS ? 'ok  ' : '⚠   ';
     console.log(
@@ -394,6 +374,13 @@ function main() {
 
   let catalogNote = '';
   if (catalogRows.length > 0) {
+    // Measured from the PNG bytes actually on disk, decoded independently — NOT from the numbers
+    // the packer was handed. The obvious version of this check read its expectation from the thing
+    // it was checking and could not fail (Codex plan review, finding 4).
+    validateCatalogRows(catalogRows, (row) => {
+      const png = decodePng(readFileSync(join('public/assets', row.url.replace(/^assets\//, ''))));
+      return { width: png.width, height: png.height };
+    });
     // One upsert for the whole run, not one per action — a single read-merge-write.
     upsertCatalogSheets(CATALOG_PATH, catalogRows);
     catalogNote = ` and ${catalogRows.length} row(s) into ${CATALOG_PATH}`;

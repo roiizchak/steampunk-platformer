@@ -1982,3 +1982,73 @@ and the player therefore **never jumped in any test**. The tell was a run-up tha
 standing hop that succeeded **in the same run** — impossible for any real geometry. The parameter is
 gone. A test harness that can produce a contradiction is worth more than one that quietly produces a
 plausible wrong answer.
+
+### W2 — the catalog could ship a row describing a sheet that no longer exists
+
+Codex plan review findings 2, 4 and 9, in one pass.
+
+#### The hole
+
+`build-assets.mjs` wrote a catalog row inside `if (hasCatalogTiming(slug, action))` **with no
+`else`**, and `catalogWrite.mjs`'s `upsertCatalogSheets` deliberately leaves keys it was not handed
+untouched. Together: a sheet rebuilt **without** a timing rule keeps shipping the row describing its
+**previous** self — different frame count, different dimensions, same key, and the game slices the
+new PNG by the old numbers. Silently. It bit `brass-courier/idle` in play.
+
+The review also rejected the first proposed fix — a warning log — and was right to. The stale row
+still ships, and one more line in a build that prints thirty is not a gate.
+
+**A rebuilt sheet with no timing rule and an existing row now FAILS the build.** That is the only
+safe answer of the three: writing a row means inventing a timing, which `timingFor` throws rather
+than do; deleting the row silently removes an animation the game is currently registering, turning a
+data problem into a missing-texture problem at runtime.
+
+Proved against the **real build**, not just the unit: deleting `chase` from `AUTHORED_LOOPS` and
+running `assets:build rust-scavenger chase` now aborts with the pair named, the stale key named, and
+both repair routes spelled out. Before, it wrote the PNG and left the old row in place.
+
+#### The check that could not fail
+
+The plan's dimension check compared a row's `frameWidth × frameCount` against dimensions
+`sheetsPack.mjs` had just constructed **from those same numbers** — tautological, and
+`sheet-packing.test.ts` already covers the packer's arithmetic (finding 4).
+
+`validateCatalogRows(rows, measure)` takes the measurement as a **function**. The production caller
+decodes the PNG bytes off disk; the tests hand it a deliberately inconsistent object. That injection
+is the only reason the check can go red at all, and it now refuses four distinct cases: a narrower
+sheet, a different height, an unmeasurable file, and a non-function measurer (which would otherwise
+pass every row unchecked — the same failure one level up).
+
+#### The 400-line rule, obeyed rather than negotiated
+
+`build-assets.mjs` was **406 lines before this session added anything to it** (finding 9), and
+`file-size.test.ts` was green only because it tolerates ten named offenders. Adding the catalog fix
+took it to **430**.
+
+Extractions, in the order they were tried:
+
+| what moved | to | result |
+|---|---|---|
+| the catalog decision + the two row shapes | `catalogDecision.mjs` | 430 → 427 — **barely anything**, because object literals became argument lists of the same length |
+| the whole `--derive-scale` command mode | `deriveScale.mjs` | 427 → **393** |
+
+The second is the real cut and the reason is worth keeping: `--derive-scale` reads frames, prints a
+number and **returns before anything is written**. It shared argument parsing with the build and
+nothing else, so `main()` was a function with two unrelated halves. Splitting by *what a thing does*
+moved 34 lines; splitting by *object shape* moved 3.
+
+Both command modes were re-run afterwards and produce byte-identical output: `assets:build
+rust-scavenger chase` rewrites the same sheet and the same row, and `--derive-scale` still prints
+**0.56074766**, the value the config carries.
+
+#### Red-proofs
+
+| mutation | result |
+|---|---|
+| `if (false && hasExistingRow)` — the missing `else`, restored | `Tests 2 failed` |
+| delete `chase` from `AUTHORED_LOOPS`, run the REAL build | build aborts, PNG written, **catalog untouched** |
+| measurer returns a narrower / shorter / unreadable sheet | `Tests 3 failed` |
+
+`tools/gen/catalogDecision.d.mts` follows the hand-written declaration pattern `png.d.mts` and
+`edgeExceptions.d.mts` already use — the implementation stays `.mjs` outside the tsconfig `include`,
+so its `node:` imports never drag `@types/node` into a project whose dependencies are frozen.
