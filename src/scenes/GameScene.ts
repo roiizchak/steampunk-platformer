@@ -9,6 +9,7 @@ import { playerRenderDesc } from '../render/playerView';
 import { registerCatalogAnimations } from './gameAnimations';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
 import { createFeelTuner } from './devFeelTuner';
+import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies } from './devSpawn';
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
@@ -70,6 +71,8 @@ export class GameScene extends Phaser.Scene {
   private held: HeldKeys = { left: [], right: [], jump: [], walk: [], attack: [] };
   /** DEV ONLY — see `devFeelTuner.ts`. Undefined in production, where the branch is compiled out. */
   private feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void;
+  /** DEV ONLY — see `devMotionProbe.ts`. The ghost-report falsifier, `?probe=1`. */
+  private motionProbe?: MotionProbe;
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -158,6 +161,12 @@ export class GameScene extends Phaser.Scene {
           walkFps: fpsOf('brass-courier-walk'),
         });
       }
+      // DEV ONLY — the ghost-report falsifier (`?probe=1`). Two copies of one FROZEN pose, one
+      // moved on whole ticks and one moved every refresh, so position schedule is the only
+      // variable. See devMotionProbe.ts for how to read the three possible outcomes.
+      if (params.get('probe') === '1') {
+        this.motionProbe = createMotionProbe(this, 'brass-courier-run');
+      }
     }
 
     this.followPlayer(level);
@@ -217,6 +226,9 @@ export class GameScene extends Phaser.Scene {
     this.renderHud();
     this.enemies.sync();
     this.renderParallax();
+    // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
+    // lane advances between ticks and the other does not.
+    this.motionProbe?.update(delta);
     this.publishDebugState();
   }
 
