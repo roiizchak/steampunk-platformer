@@ -86,7 +86,7 @@
 
 import { consumeJumpPress } from './input';
 import { PLAYER_BOX, resolveCollisions, resolveState, stepHorizontal, stepVertical } from './player';
-import { movementLocked, stepCombat } from './combat';
+import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
 import { stepEnemies } from './enemyTurn';
 import { clampToBounds } from './hazards';
 import { applyPlayerAttack } from './playerAttack';
@@ -106,6 +106,7 @@ function noEvents(): TickEvents {
     attackStarted: false,
     hitActive: false,
     hitLanded: false,
+    respawned: false,
   };
 }
 
@@ -143,6 +144,26 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   const combat = stepCombat(player, input);
   events.attackStarted = combat.attackStarted;
   events.hitActive = combat.hitActive;
+
+  //    4c. The respawn. `death` is the one combat state `stepCombat` will not release, because
+  //        releasing it into `idle` would let a corpse walk — so the decision is taken here, where
+  //        the spawn point lives (`world.spawn`).
+  //
+  //        🔴 There was NO respawn anywhere in this project until 2026-08-14, and `death` did not
+  //        even advance its own counter, so the state was terminal in both senses. `hazards.ts`
+  //        recorded the missing respawn as deliberate Phase-4 debt — "bolting a respawn onto a game
+  //        with no health model would have had to be undone here" — and Phase 5 built the health
+  //        model without coming back for it. The player reported the result as *"I cannot die. It
+  //        gets stuck before I actually see the kill"*, which is exactly what a terminal state with
+  //        a `movementLocked` body looks like from the outside.
+  //
+  //        BEFORE step 5, not after: the respawned player is alive for the whole of this tick's
+  //        movement, so the first frame after a death is an ordinary frame at the spawn point
+  //        rather than a corpse's pose in a new position.
+  if (deathWindowClosed(player)) {
+    respawnPlayer(player, world.spawn);
+    events.respawned = true;
+  }
 
   // `dir` and the jump gate below are both read here, AFTER step 4b, so `movementLocked` reads
   // this tick's post-advance `combatCounter` (W3) rather than last tick's. Neither is itself a

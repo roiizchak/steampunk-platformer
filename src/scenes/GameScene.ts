@@ -250,7 +250,14 @@ export class GameScene extends Phaser.Scene {
       // the scavenger "not smooth like my character", and the comparison in those words is literally
       // what the code was doing.
       this.enemies.snapshot();
-      advance(this.world, this.input$, 1);
+      const events = advance(this.world, this.input$, 1);
+      // A respawn moves the player the width of the level in one tick. `interpolatedPosition`
+      // already snaps past `MAX_LEAP_PX`, but only past it — a player who dies within 48px of the
+      // spawn would be blended across the gap instead. Dropping the snapshot says "there is no
+      // previous position to come from", which is the truth about a respawn and needs no threshold.
+      if (events.respawned) {
+        this.prevPlayer = null;
+      }
     } else {
       advance(this.world, this.input$, 0);
     }

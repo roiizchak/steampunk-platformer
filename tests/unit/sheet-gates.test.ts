@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
 import { fill } from '../../tools/gen/gates.mjs';
 import { blank } from '../../tools/gen/png.mjs';
+import liftProfile from '../../public/assets/config/lift-profile.json';
 import type { RgbaImage } from '../../tools/gen/png.d.mts';
 import {
   ATTACK_ACTIVE_TICKS,
@@ -64,8 +65,18 @@ describe('driftAllowanceFor reads the pipeline\'s own recorded numbers, never in
   });
 
   it('a centroid-anchored (airborne) action gets the recorded liftPx spread as its allowance', () => {
-    // public/assets/config/lift-profile.json's jump frames: liftPx 27,54,41,7,35,0 -> spread 54.
-    expect(driftAllowanceFor('brass-courier', 'jump')).toBe(54);
+    // Read off `public/assets/config/lift-profile.json`'s jump frames, and RE-PINNED 54 -> 18 on
+    // 2026-08-14 when every courier sheet repacked at the widened 336px cell. The allowance is the
+    // recorded liftPx spread and nothing else, so re-pinning it after a deliberate repack is the
+    // gate working; inventing a number here, or widening it to cover both, is what it exists to
+    // prevent. Derived from the file rather than retyped, so the next repack cannot leave a stale
+    // literal behind.
+    const jumpLifts = liftProfile.animations.jump.frames.map((f) => f.liftPx);
+    const spread = Math.max(...jumpLifts) - Math.min(...jumpLifts);
+    expect(driftAllowanceFor('brass-courier', 'jump')).toBe(spread);
+    // Non-vacuity: an allowance of 0 would make this indistinguishable from the grounded case
+    // above, and would silently disable G4's drift check for every airborne action.
+    expect(spread).toBeGreaterThan(0);
   });
 });
 

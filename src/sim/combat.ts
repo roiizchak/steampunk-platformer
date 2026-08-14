@@ -236,6 +236,56 @@ export function killPlayer(player: PlayerSim): void {
 }
 
 /**
+ * Has the corpse been on screen for its full `DEATH_TICKS`?
+ *
+ * An exported predicate rather than an inequality restated at the call site *(vault 5.3)*: `tick.ts`
+ * owns the respawn because it owns the spawn point, but the WINDOW belongs to the module that
+ * declares `DEATH_TICKS`, and two statements of one window is where the off-by-one lives.
+ */
+export function deathWindowClosed(player: PlayerSim): boolean {
+  return player.state === 'death' && !windowOpen(player.combatCounter, DEATH_TICKS);
+}
+
+/**
+ * Put the player back at `spawn`, alive.
+ *
+ * ## Why this exists at all
+ *
+ * Phase 4 shipped a level the player could fall out of forever; `hazards.ts` recorded that as
+ * deliberate debt, because *"bolting a respawn onto a game with no health model would have had to
+ * be undone here"*. Phase 5 built the health model and never came back for the respawn, so death
+ * became a **terminal freeze** — the exact defect that note was deferring, arriving through combat
+ * instead of through the kill plane.
+ *
+ * ## What it resets, and what it deliberately does not
+ *
+ * The **player** is restored: position, both velocities, hp, state, and every combat counter.
+ * `iFrameCounter` is opened so a respawn cannot be immediately re-killed by whatever was touching
+ * the player when they died — that is a grace window, not invulnerability, and it lapses on its own.
+ *
+ * The **world** is untouched. Enemies you killed stay dead, enemies you hurt stay hurt, and shots in
+ * flight keep flying. Resetting them would be a different game (a checkpoint restart rather than a
+ * life), and it is not what the death of one actor implies. Recorded as a decision so the absence is
+ * not read as an oversight the way the missing respawn was.
+ *
+ * Vertical state is cleared too: `grounded` false and `ticksSinceGrounded` saturated, so a respawn
+ * cannot hand out a free coyote jump from a window armed before the player died.
+ */
+export function respawnPlayer(player: PlayerSim, spawn: { x: number; y: number }): void {
+  player.x = spawn.x;
+  player.y = spawn.y;
+  player.vx = 0;
+  player.vy = 0;
+  player.hp = player.maxHp;
+  player.state = 'idle';
+  player.combatCounter = 0;
+  player.iFrameCounter = 0;
+  player.knockbackPending = false;
+  player.grounded = false;
+  player.jumpCutPending = false;
+}
+
+/**
  * Enter a combat state through the one door, resetting the shared counter.
  *
  * Kept here rather than in `player.ts`'s `enterState` because only combat states carry a duration;
@@ -272,11 +322,24 @@ export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep 
   // 1. i-frames.
   player.iFrameCounter = advanceWindow(player.iFrameCounter, IFRAME_TICKS);
 
-  // 2. Combat-state expiry. `death` is terminal here — the respawn is the caller's decision, and
-  //    releasing it into `idle` would let a dead player walk.
-  if (isCombatState(player.state) && player.state !== 'death') {
+  // 2. Combat-state expiry.
+  //
+  //    🔴 The counter advances for EVERY combat state including `death`, and until 2026-08-14 it
+  //    did not. `death` was excluded from the whole block, so a dead player's `combatCounter` sat
+  //    at 0 forever, the death window could never close, and nothing downstream could ever ask
+  //    "has the corpse been on screen long enough". The player reported it exactly as it behaves:
+  //    *"I cannot die. It gets stuck before I actually see the kill."* `DEATH_TICKS`'s own
+  //    docstring said "45 ticks before the respawn" and there was no respawn anywhere in the
+  //    project — `hazards.ts` had recorded that as deliberate Phase-4 debt, to be closed once a
+  //    health model existed. It does now.
+  //
+  //    What has NOT changed is that `death` is terminal HERE. It still never releases itself into
+  //    `idle`, because that would let a dead player walk. The counter advances so `deathWindowClosed`
+  //    below can be asked; the respawn is still the caller's decision, taken in `tick.ts` step 4c
+  //    where the spawn point lives.
+  if (isCombatState(player.state)) {
     player.combatCounter += 1;
-    if (!windowOpen(player.combatCounter, combatStateTicks(player.state))) {
+    if (player.state !== 'death' && !windowOpen(player.combatCounter, combatStateTicks(player.state))) {
       // Hand the body back to step 11, which re-derives a movement state from grounded/moving.
       player.state = 'idle';
       player.combatCounter = 0;
@@ -340,8 +403,23 @@ export const HURT_LOCK_TICKS = ATTACK.startup;
  * exactly the shape of the buffered-jump asymmetry `tick.ts` documents. What the shared constant
  * buys is still the useful property: **the movement lock ends on precisely the tick an attack's
  * active frames would have begun.** One measured constant, two consumers, one stated asymmetry.
+ *
+ * ## 🔴 `death` locks too, and it did not until 2026-08-14
+ *
+ * This tested `hurt` alone, so **a corpse could still be walked around** — `canAct` blocks a dead
+ * player from ATTACKING, and nothing blocked them from moving. It went unnoticed because death was
+ * terminal: the state never ended, so nobody looked at what could be done inside it, and the
+ * respawn tests were the first thing to hold a direction key while dead.
+ *
+ * There is no window on this half. Death is locked for as long as it lasts, which is what
+ * `deathWindowClosed` and the respawn now bound. Friction still applies (step 5 sees `dir === 0`
+ * rather than being skipped), so a body killed mid-run slides to a stop instead of stopping dead —
+ * which is the behaviour a corpse should have and the one a hard velocity clear would lose.
  */
 export function movementLocked(player: PlayerSim): boolean {
+  if (player.state === 'death') {
+    return true;
+  }
   return player.state === 'hurt' && windowOpen(player.combatCounter, HURT_LOCK_TICKS);
 }
 

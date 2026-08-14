@@ -37,7 +37,7 @@
     {
       "key": "brass-courier-idle",
       "url": "assets/characters/brass-courier/sheets/idle.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 12,
       "simTicks": 96,
@@ -48,7 +48,7 @@
     {
       "key": "brass-courier-walk",
       "url": "assets/characters/brass-courier/sheets/walk.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 24,
       "simTicks": 48,
@@ -59,7 +59,7 @@
     {
       "key": "brass-courier-run",
       "url": "assets/characters/brass-courier/sheets/run.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 15,
       "simTicks": 30,
@@ -70,7 +70,7 @@
     {
       "key": "brass-courier-jump",
       "url": "assets/characters/brass-courier/sheets/jump.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 6,
       "simTicks": 18,
@@ -81,11 +81,11 @@
     {
       "key": "brass-courier-fall",
       "url": "assets/characters/brass-courier/sheets/fall.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
-      "frameCount": 6,
+      "frameCount": 8,
       "simTicks": 18,
-      "fps": 20,
+      "fps": 26.666666666666668,
       "loop": false,
       "derivedFrom": "sim"
     },
@@ -103,7 +103,7 @@
     {
       "key": "brass-courier-hurt",
       "url": "assets/characters/brass-courier/sheets/hurt.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 6,
       "simTicks": 18,
@@ -125,7 +125,7 @@
     {
       "key": "brass-courier-attack",
       "url": "assets/characters/brass-courier/sheets/attack.png",
-      "frameWidth": 288,
+      "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 8,
       "simTicks": 20,
@@ -174,6 +174,17 @@
       "frameCount": 8,
       "simTicks": 45,
       "fps": 10.666666666666666,
+      "loop": false,
+      "derivedFrom": "sim"
+    },
+    {
+      "key": "brass-courier-death",
+      "url": "assets/characters/brass-courier/sheets/death.png",
+      "frameWidth": 336,
+      "frameHeight": 384,
+      "frameCount": 10,
+      "simTicks": 45,
+      "fps": 13.333333333333334,
       "loop": false,
       "derivedFrom": "sim"
     }

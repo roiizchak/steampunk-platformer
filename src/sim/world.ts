@@ -87,6 +87,9 @@ export function createWorld({
     tickCount: 0,
     rng: createRng(seed),
     tickRoll: 0,
+    // The same defaults the player below is built from, kept so a respawn returns to the place the
+    // level actually started the player — never to a second, drifting copy of that decision.
+    spawn: { x: spawn?.x ?? SPAWN_X, y: spawn?.y ?? SPAWN_Y },
     solids: solids ?? GREY_BOX_SOLIDS,
     bounds: bounds ?? GREY_BOX_BOUNDS,
     hazards: hazards ?? [],

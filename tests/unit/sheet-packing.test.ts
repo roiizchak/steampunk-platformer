@@ -237,9 +237,10 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
 
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
-    // `attack` joined last (session 7): merged in after the six that already shipped, so it lands
-    // at the end of insertion order rather than sorted with the rest.
-    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt', 'attack']);
+    // Insertion order, not sorted: `attack` joined in session 7 after the six that already
+    // shipped, and `death` on 2026-08-14 after that — it could not pack at all until the cell was
+    // widened 288 -> 336, and the player reported dying as a freeze because of it.
+    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt', 'attack', 'death']);
   });
 
   it.each(actions)('%s: liftPx is re-derivable from the recorded source coordinates', (action) => {
@@ -253,13 +254,26 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(anim.frames.length).toBeGreaterThan(0);
     expect(['feet', 'centroid']).toContain(anim.anchor);
 
+    /**
+     * 🔴 `anim.scale`, NOT `liftProfile.scale`. Two actions carry a per-action override — `attack`
+     * at 0.6 and `death` at 0.60504202, against the slug's 0.23723229 — and re-deriving those with
+     * the slug figure is out by 2.55x. It went unnoticed while `attack` was the only override
+     * because its lifts round to the same small integers either way; `death` landing on 2026-08-14
+     * made it fail loudly.
+     *
+     * The profile records the scale each animation was PACKED at, per action, exactly so this is
+     * re-derivable. Using it is not a loosening — it is the right number, and it makes this
+     * assertion catch a per-action scale that disagrees with the strip it produced, which the slug
+     * figure never could.
+     */
+    const scale = anim.scale;
     const deepest = Math.max(...anim.frames.map((f) => f.sourceMaxY));
     const rounded = anim.frames.map((f) =>
       Math.round(
         anim.anchor === 'feet'
-          ? (deepest - f.sourceMaxY) * liftProfile.scale
+          ? (deepest - f.sourceMaxY) * scale
           : // the centroid's offset INSIDE the figure, less the height the figure is placed by
-            (f.sourceCentroidY - f.sourceMinY) * liftProfile.scale - f.drawnHeight,
+            (f.sourceCentroidY - f.sourceMinY) * scale - f.drawnHeight,
       ),
     );
     const expected = rounded.map((v) => v - Math.min(...rounded));
@@ -283,9 +297,9 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     // together. `centroid` on a grounded animation would silently unmoor it from the floor.
     //
     // Scoped to `actions` (what actually SHIPPED, i.e. `liftProfile.animations`' own keys) rather
-    // than every key `bounds.animations` declares — `death` has a config declaration (session 7)
-    // but no packed sheet yet, so it would otherwise make `declared` and `used` disagree on a key
-    // that is legitimately absent from one of them for a reason this test does not cover.
+    // than every key `bounds.animations` declares. `death` was the reason for that scoping — it had
+    // a config declaration from session 7 and no packed sheet — and as of 2026-08-14 it ships, so
+    // the two sets now coincide. The scoping stays: it is the right rule whenever they next differ.
     const declared = Object.fromEntries(
       actions.map((a) => [a, bounds.animations[a as keyof typeof bounds.animations].verticalAnchor]),
     );
@@ -304,6 +318,13 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       // Session 7: the swing stays upright throughout (2.1% frame-to-frame height spread) — grounded,
       // like every other combat action so far.
       attack: 'feet',
+      // Session 10, and the one place `feet` needs justifying rather than assuming. A death is the
+      // one animation where the figure genuinely LEAVES its feet — the courier falls sideways, and
+      // by the last frames the body is 312px wide against a standing 133. `feet` is still right:
+      // the anchor pins the DEEPEST frame to the contact line, and a fallen body's deepest point is
+      // still the ground it is lying on. `centroid` would float the corpse as the silhouette
+      // flattened, which is the airborne rule applied to a body that has stopped moving.
+      death: 'feet',
     });
   });
 

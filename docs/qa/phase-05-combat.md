@@ -2052,3 +2052,121 @@ rust-scavenger chase` rewrites the same sheet and the same row, and `--derive-sc
 `tools/gen/catalogDecision.d.mts` follows the hand-written declaration pattern `png.d.mts` and
 `edgeExceptions.d.mts` already use — the implementation stays `.mjs` outside the tsconfig `include`,
 so its `node:` imports never drag `@types/node` into a project whose dependencies are frozen.
+
+### 🔴 Death never ended. The game had no respawn at all.
+
+**Reported 2026-08-14:** *"I cannot die. It gets stuck before I actually see the kill. [It] stops
+getting low health when I get hit. Also, the animation doesn't play anymore for anything."*
+
+Every clause is one bug with four faces, and all four are now closed.
+
+| # | what | evidence |
+|---|---|---|
+| 1 | **`combatCounter` never advanced in `death`** | `stepCombat` excluded the state from its expiry block outright, so the counter sat at 0 forever and the death window could never close |
+| 2 | **Nothing anywhere respawned the player** | `DEATH_TICKS`'s docstring said *"45 ticks before the respawn"*; `stepCombat` said *"the respawn is the caller's decision"*; **no caller decided** |
+| 3 | **`brass-courier-death` was not in the catalog** | so `playAnim` no-ops and the corpse holds whichever frame it was on — *"the animation doesn't play anymore"* |
+| 4 | **A corpse could be walked around** | `movementLocked` tested `hurt` only; `canAct` blocks a dead player from ATTACKING and nothing blocked them from MOVING |
+
+**`hazards.ts` had recorded the missing respawn as deliberate Phase-4 debt** — *"bolting a respawn
+onto a game with no health model would have had to be undone here"*. Phase 5 built the health model
+and never came back for it. The note was right when written and became the defect it was deferring.
+
+**Not one test caught any of it, because every test asserted that dying HAPPENS.** Nothing asked what
+happens *next*. Vault 9.4's shape, applied to the terminal state of the whole game.
+
+#### The fix
+
+- **`stepCombat` advances the counter for every combat state**, `death` included. What has NOT
+  changed is that death is terminal *there* — it still never releases itself into `idle`, because
+  that would let a corpse walk. The counter advances so the window can be *asked about*.
+- **`deathWindowClosed` is an exported predicate**, not an inequality restated at the call site
+  *(vault 5.3)*: the window belongs to the module that declares `DEATH_TICKS`, and two statements of
+  one window is where the off-by-one lives.
+- **`tick.ts` gains step 4c**, before step 5, so the respawned player is alive for the whole of that
+  tick's movement rather than being a corpse's pose in a new position.
+- **`World` gains `spawn`.** It was previously a `createWorld` *argument* that initialised the player
+  and was then forgotten, which is precisely why nothing knew where to put a player back. Keeping it
+  on the world rather than in the scene is what lets the respawn stay inside `tick()`; a scene-driven
+  one would be a second place deciding when a death ends, and the tick contract would stop describing
+  the whole simulation.
+- **`movementLocked` locks `death` too**, with no window on that half — death is locked for as long
+  as it lasts, which is what the respawn now bounds. Friction still applies, so a body killed
+  mid-run slides to a stop rather than stopping dead.
+- **`respawned` joins `TickEvents`** as an edge (vault 2.5). A consumer cannot reconstruct it: a
+  respawn restores full hp, so "hp went up" is also what a pickup looks like. `GameScene` drops
+  `prevPlayer` on it — `interpolatedPosition` already snaps past `MAX_LEAP_PX`, but only past it, and
+  a player who dies within 48 px of the spawn would otherwise be blended across the gap.
+
+**What the respawn deliberately does NOT do: reset the world.** Enemies you killed stay dead, shots
+in flight keep flying. A life is not a checkpoint restart. Recorded as a decision because the missing
+respawn itself was once read as one.
+
+It also closes the **Phase 4 "fall forever" defect** as a side effect: the kill plane now leads
+somewhere.
+
+#### Red-proofs *(C1/C12)*
+
+| mutation | result |
+|---|---|
+| delete step 4c — the pre-fix behaviour | `Tests 5 failed` |
+| freeze the death counter again | `Tests 6 failed` |
+| let a corpse walk again | `Tests 1 failed` |
+
+⚠️ Mutation 3 initially reported *"changed=NO"* from a `perl` substitution that silently matched
+nothing: **`combat.ts` is CRLF and its neighbours are LF** (recorded finding T18). Verifying the
+mutation applied by `cmp` rather than by exit code is what caught it — a "refused" mutation that
+looks applied is exactly the C12 failure mode, and this is the first time T18 has actually bitten.
+
+### The player's death sheet, and the cell that had to widen
+
+`brass-courier/death` was bought in an earlier session and **could not pack**: `packStrip` refused
+seven of ten frames against the 288 px cell, needing **332 px at frame 9**. A falling body is wider
+than a standing one. Vault 4.14 and the packer's own error say the same thing — **widen the cell,
+never rescale the animation to fit** — so the courier's cell is **336** now, four pixels over the
+true maximum, the same margin convention as the scavenger's 512 over its 510.
+
+Widening is visually neutral: `packStrip` centres each frame and the sprite draws at origin (0.5, 1)
+on the feet. It costs payload and nothing else. It had been parked as a STOP-and-ask while it was
+only a missing animation; it stopped being optional when dying read as a freeze.
+
+#### 🔴 The W2 gate caught a live instance of its own defect, within the hour
+
+Widening the cell repacks every courier sheet — and the build **aborted** on `brass-courier/jump`:
+
+> `catalog: "brass-courier/jump" was rebuilt but has no timing rule, and index.json already carries
+> a "brass-courier-jump" row. That row describes the PREVIOUS sheet and would ship unchanged.`
+
+`jump` and `fall` were the last two "Phase-4 row, no rule" pairs — the exact hole `idle` had been
+in, and `catalogTimings.mjs`'s own docstring already records the lesson: *"A Phase-4 row is not a
+reason to have no rule; it is a row nobody can correct."* Without the gate, `jump.png` would have
+shipped at 336 px with the catalog still saying 288, and Phaser would have sliced it into garbage.
+
+Both now have rules. **18 ticks is the jump's RISE time** — `jumpVelocity / gravity` = 48.6 / 2.7 —
+which is a sim quantity, as `asset-catalog.test.ts` requires of any non-looping row. The shipped
+values are reproduced exactly, so the catalog does not move; it just becomes correctable.
+
+#### Three stale gates, and one that was measuring the wrong number
+
+Packing `death` fired four expiry tests on schedule (catalog count, `PENDING_ART`, the shipped-sheet
+list, the lift-profile action list) — all updated, all still able to go red.
+
+The fifth was **not** an expiry: `sheet-packing.test.ts` re-derived every animation's `liftPx` using
+`liftProfile.scale`, the **slug-wide** figure. Two courier actions carry a per-action override —
+`attack` at 0.6 and `death` at 0.60504202, against the slug's 0.23723229 — so the re-derivation was
+out by 2.55×. It went unnoticed while `attack` was the only override because its lifts round to the
+same small integers either way; `death` made it fail loudly. It reads `anim.scale` now, which the
+profile records precisely so this is re-derivable, and the assertion is strictly stronger: it can
+now catch a per-action scale that disagrees with the strip it produced.
+
+#### One change nobody asked for, recorded rather than buried
+
+Rebuilding `fall` produced **8 frames where the shipped sheet had 6** — a fuller extraction of the
+same clip (verified by eye; the two extra poses are real, not a split frame), because the packed
+sheet was stale relative to its source. It ships, because reverting one sheet while the rest move to
+336 px is exactly the art/catalog divergence this session closed.
+
+**The cost is an uneven dwell**: 8 frames over 18 ticks is **2.25 ticks/frame**, against `jump`'s
+even 3. That is the judder mechanism session 9 fixed for loops. It cannot be fixed here without
+either pinning the frame count (no lever exists — the count comes from silhouette detection) or
+letting a one-shot carry an authored cadence, **which is a gate rule change and therefore a
+STOP-and-ask**. Flagged, not absorbed.

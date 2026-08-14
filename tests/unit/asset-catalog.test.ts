@@ -141,7 +141,20 @@ const catalogFrames = new Map<string, number>(
 // already passed G6 packs at 289 px against hurt's 288 px instead of 114. `death` remains pending:
 // the same padded round needs a 332 px cell against the shared 288 px one (decision M3's reopened
 // cell question — see docs/HANDOFF.md) and was deliberately not widened to fit.
-const PENDING_ART: readonly AnimName[] = ['death'];
+/**
+ * Animations declared in the timing table but not yet packed into `public/`.
+ *
+ * 🔴 **Empty as of 2026-08-14.** `death` was the last entry and it shipped when the courier's cell
+ * was widened 288 -> 336 so `packStrip` would accept it — the player had been reporting death as a
+ * freeze, and with no `brass-courier-death` row `playAnim` no-ops and the corpse holds whatever
+ * frame it was on.
+ *
+ * The list stays rather than being deleted: it is the mechanism that makes a declared-but-unpacked
+ * animation VISIBLE instead of silently missing, and the next bought clip goes through the same
+ * door. `asset-catalog.test.ts` asserts every name here is genuinely absent from the catalog, so
+ * leaving a shipped animation in it is red — which is exactly how this entry was caught.
+ */
+const PENDING_ART: readonly AnimName[] = [];
 
 const derived = animTimings(
   derivedFeel(DEFAULT_TUNING, ticksToMs),

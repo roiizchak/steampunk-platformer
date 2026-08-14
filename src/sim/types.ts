@@ -239,6 +239,17 @@ export interface TickEvents {
    */
   hitActive: boolean;
   /**
+   * The player died, their death animation ran its full `DEATH_TICKS`, and they were put back at
+   * the level spawn on THIS tick.
+   *
+   * An EDGE, emitted rather than reconstructed (vault 2.5). A consumer comparing `hp` across frames
+   * cannot see it: a respawn restores full hp, so "hp went up" is also what a pickup would look
+   * like, and "state left `death`" is unobservable from outside a single tick. The renderer needs
+   * it to snap rather than interpolate — a respawn moves the player the width of the level, and
+   * `interpolatedPosition` would otherwise slide them across it over one tick.
+   */
+  respawned: boolean;
+  /**
    * The swing CONNECTED with at least one enemy this tick.
    *
    * Distinct from `hitActive`, which only says the hitbox was live. Emitted rather than
@@ -266,6 +277,16 @@ export interface World {
    */
   tickRoll: number;
   player: PlayerSim;
+  /**
+   * Where the player's feet start, and where they return on a respawn.
+   *
+   * Added 2026-08-14 with the respawn. It was previously a `createWorld` ARGUMENT that initialised
+   * the player and was then forgotten — so nothing in the sim knew where to put a player back, and
+   * death was a terminal freeze. Keeping it on the world rather than in the scene is what lets the
+   * respawn stay inside `tick()`: a scene-driven one would be a second place that decides when a
+   * death ends, and the tick contract would no longer describe the whole simulation.
+   */
+  spawn: { x: number; y: number };
   /** Static collision geometry. Phase 3 replaces the SOURCE of these; the resolver is unchanged. */
   solids: Rect[];
   /**

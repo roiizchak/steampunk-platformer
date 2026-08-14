@@ -30,6 +30,24 @@ export const ATTACK_TOTAL_TICKS = 20;
 /** Mirrors `HURT_TICKS` (`src/sim/combat.ts`). */
 export const HURT_TICKS = 18;
 
+/**
+ * The RISE half of a full-height jump, in ticks: `DEFAULT_TUNING.jumpVelocity / gravity`
+ * = 48.6 / 2.7 = **18**.
+ *
+ * 🔴 It is what `jump` and `fall` have always been timed to — their shipped rows say 18 — but until
+ * 2026-08-14 there was **no rule saying so**, only two Phase-4 catalog rows nobody could correct.
+ * That is the same hole `idle` was in (see FIXED_TIMINGS below), and it bit the same way: widening
+ * the courier's cell to 336 rewrote `jump.png` while the catalog kept saying 288, and the build
+ * refused. Without `decideCatalogRow` it would have shipped a sheet Phaser slices by the wrong
+ * width.
+ *
+ * It is a SIM quantity, not an authored one, and that distinction is enforced —
+ * `asset-catalog.test.ts` forbids `derivedFrom: 'authored'` on any non-looping row and names `jump`
+ * and `fall` while doing it. There is no fixed airborne WINDOW (airtime varies with the jump cut),
+ * but the rise is exact: velocity over acceleration, both integers of the tick contract.
+ */
+export const JUMP_RISE_TICKS = 18;
+
 /** Mirrors `SCAVENGER.patrolSpeed` (`src/sim/enemyScavenger.ts`), px/tick. */
 export const SCAVENGER_PATROL_SPEED = 2.5;
 
@@ -77,6 +95,11 @@ const FIXED_TIMINGS = {
     // saying 90 ticks over 12 frames — 7.5 refreshes per frame — while the constant said otherwise.
     // A Phase-4 row is not a reason to have no rule; it is a row nobody can correct.
     idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
+    // `jump` and `fall` were the LAST two "Phase-4 row, no rule" pairs, added 2026-08-14 for exactly
+    // the reason the note above gives. Both reproduce the rows that already shipped — 6 frames,
+    // 18 ticks, 20 fps — so the catalog does not move; it just becomes correctable.
+    jump: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
+    fall: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
     attack: { simTicks: ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },
     hurt: { simTicks: HURT_TICKS, loop: false, derivedFrom: 'sim' },
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
