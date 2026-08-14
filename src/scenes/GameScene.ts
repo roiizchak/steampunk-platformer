@@ -8,6 +8,7 @@ import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import { registerCatalogAnimations } from './gameAnimations';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
+import { createFeelTuner } from './devFeelTuner';
 import { spawnDevEnemies } from './devSpawn';
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
@@ -67,6 +68,8 @@ export class GameScene extends Phaser.Scene {
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
   /** Bound and sampled in `src/scenes/gameInput.ts`; see `bindKeys`/`sampleHeldKeys` below. */
   private held: HeldKeys = { left: [], right: [], jump: [], walk: [], attack: [] };
+  /** DEV ONLY — see `devFeelTuner.ts`. Undefined in production, where the branch is compiled out. */
+  private feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void;
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -141,6 +144,21 @@ export class GameScene extends Phaser.Scene {
         color: '#8f8776',
       })
       .setScrollFactor(0);
+
+    if (import.meta.env.DEV) {
+      // DEV ONLY — the live locomotion tuner (`?tune=1`). Off by default so an ordinary dev run is
+      // not covered in an overlay, and absent entirely from production.
+      const params = new URLSearchParams(globalThis.location?.search ?? '');
+      if (params.get('tune') === '1') {
+        const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
+        const fpsOf = (key: string): number =>
+          catalog?.sheets.find((s) => s.key === key)?.fps ?? 24;
+        this.feelTuner = createFeelTuner(this, this.world, {
+          runFps: fpsOf('brass-courier-run'),
+          walkFps: fpsOf('brass-courier-walk'),
+        });
+      }
+    }
 
     this.followPlayer(level);
 
@@ -337,6 +355,12 @@ export class GameScene extends Phaser.Scene {
     // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
     // used to reimplement inline (R10).
     playIfChanged(this.playerSprite, desc.animKey);
+
+    // DEV ONLY — the live locomotion tuner's per-frame update. Guarded at the point of use so the
+    // branch and its import are tree-shaken out of `dist/`; `verify-dist` proves the absence.
+    if (import.meta.env.DEV) {
+      this.feelTuner?.(this.playerSprite);
+    }
   }
 
   /** Registration logic lives in `src/scenes/gameAnimations.ts` — see its header. */
