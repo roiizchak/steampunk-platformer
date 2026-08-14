@@ -7,7 +7,10 @@
  * elapsed time. That makes the simulation frame-rate independent, which is the whole point of vault
  * 2.1 — but it says nothing about what is DRAWN between ticks. On a display faster than 60 Hz,
  * `drainTicks` returns `ticks: 0` on most frames and the scene re-draws an identical world. At
- * 240 Hz that is three still frames out of four, then a jump of `runMax` — 12 world px.
+ * 240 Hz that is three still frames out of four, then a jump of `runMax`. (That said **12 world
+ * px** until 2026-08-14; `runMax` is **9** since locomotion was planted against the art's measured
+ * foot travel. The argument does not depend on the number, but a stale one here is what let the
+ * teleport guard below ship smaller than the sim's own maximum.)
  *
  * The eye tracks a running character continuously. Holding its image still for 16.7 ms slides it
  * across the retina, which reads as a smear, and the jump lands a second copy 12 px away. The user

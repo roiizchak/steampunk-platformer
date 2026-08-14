@@ -37,9 +37,15 @@ export interface Sentry {
    */
   lastHitSwing: number;
   /**
-   * Toward the player while the sentry can see them; HELD otherwise — same rule and same shape as
-   * `Scavenger.facing` (`enemyScavenger.ts`), read by the render layer and never re-derived from
-   * velocity, because a stationary turret has no velocity to read a direction from.
+   * Toward the player while the sentry can see them; HELD otherwise. Read by the render layer and
+   * never re-derived from velocity, because a stationary turret has no velocity to read a direction
+   * from.
+   *
+   * ⚠️ **NOT "the same rule and same shape as `Scavenger.facing`", which this said until
+   * 2026-08-14.** The scavenger commits its facing outside a `deadZone`; this re-derives it every
+   * tick the player is visible, with no dead zone at all, so a player oscillating around `sentry.x`
+   * flips it at 60 Hz. `setFlipX` does not restart an animation, so no gate sees it. Recorded as
+   * finding B5 — the fix is to mirror the dead zone, and it is deferred, not overlooked.
    */
   facing: 1 | -1;
   /** Shot-time aim, integer px, muzzle->chest at the tick fired. `null` before the first shot. */

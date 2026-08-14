@@ -285,7 +285,8 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts` (split out to
-   * keep this file under the 400-line rule). This scene still owns `playerInputEnabled` and the
+   * keep this file smaller; it is 515 lines and OVER the 400-line rule, justified in
+   * `docs/qa/phase-05-combat.md`). This scene still owns `playerInputEnabled` and the
    * DEV scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
    */
   private sampleHeldKeys(): void {
@@ -388,7 +389,8 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Draw the level's tile layer. The tileset/layer resolution and the brass-cap surface rule live
-   * in `src/scenes/gameLevelDraw.ts` — split out to keep this file under the 400-line rule; the
+   * in `src/scenes/gameLevelDraw.ts` — split out to keep this file smaller (it is still over the
+   * 400-line rule, justified in `docs/qa/phase-05-combat.md`); the
    * logic is pure scene-Phaser plumbing with no subclass override.
    */
   private drawLevel(level: LevelData): void {

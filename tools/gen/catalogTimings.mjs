@@ -96,8 +96,11 @@ const FIXED_TIMINGS = {
     // A Phase-4 row is not a reason to have no rule; it is a row nobody can correct.
     idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
     // `jump` and `fall` were the LAST two "Phase-4 row, no rule" pairs, added 2026-08-14 for exactly
-    // the reason the note above gives. Both reproduce the rows that already shipped — 6 frames,
-    // 18 ticks, 20 fps — so the catalog does not move; it just becomes correctable.
+    // the reason the note above gives. ⚠️ This said "both reproduce the rows that already
+    // shipped — 6 frames, 18 ticks, 20 fps"; that is true of `jump` and was never true of `fall`,
+    // whose extracted strip held 8 cells. `fall` ships **8** frames over the same 18-tick window
+    // (26.67 fps) and is the one row in the catalog that does not divide evenly — see
+    // `tests/unit/blockedDwell.ts` for the measurement and why it cannot be fixed yet.
     jump: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
     fall: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
     attack: { simTicks: ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },

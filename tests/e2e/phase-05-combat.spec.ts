@@ -48,6 +48,7 @@
 
 import { expect, test } from '@playwright/test';
 import { RENDER_SCALE } from '../../src/game/constants';
+import { SCAVENGER } from '../../src/sim/enemyScavenger';
 import { healthBarDesc } from '../../src/render/enemyHealthBar';
 import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
 
@@ -331,9 +332,19 @@ test.describe('Phase 5 — combat', () => {
     // 🔴 The assertion the defect fails. Exactly zero on EVERY frame means the body is pinned to
     // the sim tick, which is the tick-stepping the user reported.
     expect(Math.max(...lags.map(Math.abs))).toBeGreaterThan(0);
-    // Never further behind than one tick of the fastest thing a scavenger does. `chaseSpeed` is
-    // 6 px/tick in sim units and the level runs at RENDER_SCALE, so this is the ceiling on how
-    // stale one interpolated frame may be; anything past it is not lag, it is a wrong position.
-    expect(Math.max(...lags.map(Math.abs))).toBeLessThanOrEqual(6 * RENDER_SCALE);
+    /**
+     * Never further behind than ONE tick of the fastest thing a scavenger does.
+     *
+     * 🔴 This was `6 * RENDER_SCALE` = **36 px**, six times too loose, on the belief that
+     * `chaseSpeed` was in sim units needing a scale multiply. It is not: `scavengerRenderDesc`
+     * returns `x: scavenger.x` unscaled, so the sim's px and the drawn px are the same px. A frame
+     * can drain up to `MAX_TICKS_PER_FRAME` ticks and `GameScene` snapshots before only the LAST
+     * of them, so a 36 px ceiling would have accepted a snapshot taken before the whole batch —
+     * which is exactly the batch-ordering bug this test exists to catch. Found by the Codex
+     * implementation review.
+     *
+     * Imported, not retyped, so retuning the chase cannot leave a stale ceiling behind *(5.3)*.
+     */
+    expect(Math.max(...lags.map(Math.abs))).toBeLessThanOrEqual(SCAVENGER.chaseSpeed);
   });
 });

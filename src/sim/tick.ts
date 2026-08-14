@@ -13,6 +13,7 @@
  *   3.  Arm the jump-buffer window if a press edge arrived
  *   4a. Enemies: AI decisions, projectile flight, sentries firing        (Phase 5)
  *   4b. Combat: i-frames, combat-state expiry, the attack edge, the live hitbox  (Phase 5)
+ *   4c. Respawn: the death window has closed -> put the player back at `world.spawn`  (Phase 5)
  *   5.  Horizontal: accel / air-accel / friction, clamped to runMax
  *   6.  Vertical: gravity, fall clamp, early-release jump cut
  *   7.  Jump resolution: buffer open AND (grounded OR coyote open) -> impulse, close both

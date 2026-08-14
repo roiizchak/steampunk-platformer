@@ -113,9 +113,10 @@ export const SCAVENGER_BOX: LocalBox = { x: -10, y: 0, w: 20, h: 40 };
  * 106.8 px behind the barrel and 39.6 px below it. The user reported it as "the sentry fires from
  * its belly" off a screen recording, and no test asking "did a projectile spawn" could have seen it.
  *
- * ⚠️ **This is art-derived, so re-measure it if `brass-sentry/idle` is ever re-shot** — and note
- * that `brass-sentry/fire` is not in the catalog yet. When it lands, the muzzle should be measured
- * against the FIRING pose, not the idle one, if the two disagree.
+ * ⚠️ **This is art-derived, so re-measure it if `brass-sentry/idle` is ever re-shot.** This note
+ * used to say `brass-sentry/fire` was "not in the catalog yet"; it landed in session 7 and the
+ * sentence outlived it. **The muzzle is still measured against the IDLE pose**, and re-measuring it
+ * against the firing one is open work — recorded here rather than silently assumed equal.
  */
 export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
 

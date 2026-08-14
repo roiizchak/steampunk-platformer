@@ -25,9 +25,12 @@ import { playIfChanged } from './playAnim';
  * with `ready:false` and `bootError:null`, the one outcome the refuse-to-route design exists to
  * prevent *(vault 1.4)*. So `addBody` asks `scene.anims.exists(desc.animKey)`: true draws a
  * `Sprite` and plays it, false falls back to the `Rectangle` grey box. The fallback is a dated
- * temporary — `tests/unit/enemy-layer-catalog.test.ts` asserts today's shipped catalog has no enemy
- * sheets (making it legitimately reachable now) and fails once all six `enemyAnimKeys()` are
- * registered but a `Rectangle` is still drawn.
+ * temporary. ⚠️ **It said "today's shipped catalog has no enemy sheets" until 2026-08-14, and that
+ * has been false since session 7** — all six `enemyAnimKeys()` are registered now (`index.json`
+ * carries both scavenger loops, both death sheets, sentry `idle` and sentry `fire`), so the
+ * `Rectangle` path is no longer legitimately reachable in production and exists for the grey-box
+ * fixtures and the unit suite's mock scene. `tests/unit/enemy-layer-catalog.test.ts` is what says
+ * so, and it fails if a `Rectangle` is drawn for a key the catalog registers.
  *
  * `isSprite` runs parallel to `bodies` rather than an `instanceof` check in `sync()`, because the
  * unit test drives `EnemyLayer` against a plain mock scene, not a real `Phaser.GameObjects.Sprite`.
@@ -194,9 +197,12 @@ export class EnemyLayer {
       // 10 poses painted, because they WERE painted, just barely visible. Vault 9.4 one layer over
       // — "drawn" and "seen" are not the same measurement.
       //
-      // Keyed on the death animation still running, NOT merely on something running: a dead sentry
-      // has no `death` sheet in the catalog, so `playIfChanged` no-ops and it keeps playing its
-      // looping `idle`. Testing `isPlaying` alone would hold that corpse at full alpha forever.
+      // Keyed on the death animation still running, NOT merely on something running. ⚠️ The reason
+      // given here was "a dead sentry has no `death` sheet in the catalog" — true when written and
+      // **false since session 7**, which packed `brass-sentry-death`. The check is still right, and
+      // for a better reason: `death` is a ONE-SHOT, so once it finishes `isPlaying` goes false while
+      // the corpse stays on screen. Testing `isPlaying` alone would hold it at full alpha forever,
+      // and testing "any animation" would do the same for a body that fell back to a looping key.
       body.setAlpha(subject.hp > 0 || this.playingDeath(i, desc) ? 1 : 0.35);
 
       // The bar rides the DRAWN body, not the sim one. `healthBarDesc` is positioned from the

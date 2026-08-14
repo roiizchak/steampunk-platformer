@@ -9,10 +9,10 @@
  *
  * | | old | now |
  * |---|---|---|
- * | **what ran it** | default headless Chromium — SwiftShader, a software rasteriser | a headed project with a real GPU (`playwright.config.ts`, `chromium-gpu`) |
+ * | **what ran it** | default headless Chromium — SwiftShader, a software rasteriser | a headed project on a GPU, **with the renderer string asserted** so a silent SwiftShader fallback fails instead of measuring |
  * | **what was drawn** | `DEV_FLEET_OFFSET_X` 200 sim px against a **160 sim px** visible half-width: **0 of 20** enemies on screen | the fleet spread symmetrically about the player, every body inside the view |
  * | **which enemies** | scavengers only | scavengers **and** sentries, alternating, with bolts in flight |
- * | **what was sampled** | rAF *interval* — how often the browser chose to call back | rAF *work*, from `PerformanceObserver`'s `long-animation-frame` |
+ * | **what was sampled** | rAF *interval* — how often the browser chose to call back | rAF *work*, from rAF's own frame-start timestamp (`long-animation-frame` is reported beside it and gates nothing — see `perfSampler.ts`) |
  *
  * HANDOFF §14 measured the first of those directly: the same scene reports **90.10 ms** headless and
  * **4.2 ms** on the real GPU, a factor of 21. A ceiling tuned against the first number is not a
@@ -72,7 +72,9 @@ import {
   SENTRY_COOLDOWN_TICKS,
   counts,
   sample,
+  SOFTWARE_RENDERERS,
   waitForBodyCount,
+  webglRenderer,
 } from './perfSampler';
 import { bootToGame } from './gameHarness';
 
@@ -81,6 +83,22 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     page,
   }) => {
     await bootToGame(page);
+
+    // 🔴 Before anything is measured: prove this is a GPU. `headless: false` and the GPU flags are a
+    // REQUEST, and Chromium answers a refused request by falling back to SwiftShader — 21x slower
+    // (HANDOFF §14) and the whole reason this spec has its own project. A number measured on a
+    // software rasteriser is not a frame budget, and until now nothing checked.
+    const renderer = (await webglRenderer(page)).toLowerCase();
+    // eslint-disable-next-line no-console
+    console.log(`[5.11] WebGL renderer: ${renderer}`);
+    for (const software of SOFTWARE_RENDERERS) {
+      expect(
+        renderer,
+        `this ran on "${renderer}", a SOFTWARE rasteriser. Every number below would be a ` +
+          `measurement of the CPU drawing pixels, not of the frame budget. Do not soften this into ` +
+          `a skip: the point of the chromium-gpu project is that the fallback is invisible.`,
+      ).not.toContain(software);
+    }
 
     const before = await counts(page);
     // The level's own enemies. Asserted, not assumed: if the baseline were empty the ratio below

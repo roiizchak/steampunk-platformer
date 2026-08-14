@@ -1525,3 +1525,79 @@ the same defect. Now **17.5 px/tick = 64 px of travel**, tuned in the unit that 
 - **A test harness that can produce a contradiction is worth more than one that quietly produces a
   plausible wrong answer.** `level-traversal.test.ts`'s first draft never jumped in any test — the
   tell was a run-up that failed while a standing hop succeeded, in the same run.
+
+### Session 10, second half — the dwell fix, the 5.11 rebuild, and the gate
+
+Five more commits after the four recorded above.
+
+| commit | what |
+|---|---|
+| `d0fac00` | **Four one-shots juddered because a "permanent" exception was wrong.** `loop-dwell.test.ts` gated loops only and carried a `KNOWN_UNEVEN_ONE_SHOTS` list calling two of them unfixable. The reason given was half right — a one-shot's `simTicks` IS a sim window and rounding it would be a balance change — and half false: a one-shot's **frame count is declared**, in `VIDEO_MOTIONS[key].frames`, and `build-clips.mjs` samples exactly that many. Widening the gate found **five**, not two. Four re-extracted and repacked at $0. |
+| `21c56ff` | **Criterion 5.11 was measuring a frame that drew none of its enemies.** `DEV_FLEET_OFFSET_X` 200 sim px against a 160 sim px visible half-width: 0 of 20 on screen. Rebuilt on a real GPU with the fleet in view, both enemy kinds, and bolts in flight. |
+| `64ac651` | **The gate's adversarial briefs found three shipped defects** — see below. |
+
+#### The three defects the second briefs found, and the first briefs did not
+
+Vault **A7** paid for itself again, harder than usual. Brief 1 returned *no failures* for
+`qa-expert` and *PASS with defects* for `code-reviewer`. Brief 2 of each found these:
+
+- **`MAX_LEAP_PX` was smaller than the simulation's own vertical maximum.** The teleport guard was
+  the literal `48` while `maxFallSpeed` is **51.6** and `jumpVelocity` **48.6** — so the takeoff
+  tick of every jump and every tick at terminal velocity were drawn **unblended**. 51 of 120 ticks
+  over a jump plus a run off a ledge. Session 9's ghosting fix was only ever horizontal.
+  Its docstring said *"vertical travel is capped by terminal velocity, which is smaller"*, and its
+  test restated a stale literal `12` instead of importing the tuning — which is exactly how the
+  constant survived two speed changes.
+- **The respawn handed out a free mid-air jump.** A corpse stays `grounded` for the whole death
+  window, so step 10 re-armed the coyote window on all 45 ticks. Jump held while dead launched the
+  courier **216 px above the spawn**. `respawnPlayer`'s own docstring claimed it could not.
+- **`advance()` dropped four of its seven events.** Named assignments for three fields while
+  `TickEvents` had grown to seven, so `GameScene` read `events.respawned` as **always false** and
+  the interpolation guard added earlier the same session could never fire.
+
+**All three are the same shape: a comment that named the behaviour, and code or a test that checked
+something adjacent to it.** That is the failure mode this project is most exposed to, because its
+comments carry so much of its knowledge.
+
+#### 🔴 Things that are open and need YOUR decision — none of them are bugs to go and fix
+
+| | what | why it is yours |
+|---|---|---|
+| **`brass-courier/fall`** | Needs **9** frames to stop juddering. Re-extracting at any count fails G6 on frames 0-4, and frame 0 is the same source frame at 6, 8 or 9 — **so the sheet shipping today never passed G6 either.** The courier is not cropped; what fails is green that does not key out on the fastest frames. Regenerating the rejected strip rebuilds `fall.png` **byte for byte**, which is how the write-then-gate path was confirmed. | Three unblocks: a keying tolerance, an `ACCEPTED_EDGE_BLEED` entry with a stateable reason, or a re-shoot. Tolerance and money are both STOP-and-ask. `jump` is the same batch and already known-bad. |
+| **A 47.9 MB screen recording is still tracked in git** | `.gitignore` gained `Recording*.mp4` but that does nothing to an already-tracked file. Merging puts 48 MB into `main`'s history permanently. Needs `git rm --cached` before the merge. | It is your file, and deleting a file is a STOP-and-ask. |
+| **A stationary chasing scavenger still runs its chase cycle** | Inside the dead zone or vetoed by the ledge probe it does not move, but `scavengerAnim` returns `chase` from the flag. Foot-plant violated by 18 px a frame. Permanent aggro means this never ends. | The fix needs a stationary pose the scavenger does not have — `rust-scavenger/idle` was descoped as art with no sim state. Buying it, or deriving the animation from real travel, is a design call. |
+| **Aggro survives your death** | Nothing clears `chasing` on respawn, so scavengers walk to the new spawn and never patrol again. Invisible today because `level-01` has one. | Whether death releases aggro is a **balance** decision, and permanent aggro is what you asked for. |
+| **The sentry re-derives `facing` every tick** | No dead zone, so a player oscillating around its `x` strobes `flipX` at 60 Hz. Its docstring claims the scavenger's rule; the code does not implement it. | Deferred rather than fixed blind — it is a visual claim nobody has observed, and no gate can see it. Next session's first candidate. |
+
+#### The gate hole worth closing first next session
+
+**G5 — the contact-frame gate — runs only from a CLI, by hand.** `reachGate.mjs` is unit-tested
+against synthetic fixtures and **never against the shipped `attack.png`**. So repacking that sheet
+this session invalidated 5.4c's recorded evidence and **nothing went red**; the criterion kept
+reading PASS against a sheet that no longer existed. (Re-run by hand: it passes. The number was
+fine; the mechanism was not.)
+
+That is the shape vault 3.1 exists for — *the unit suite runs the real validator over the shipped
+bytes* — and the art gates are the one place this project does not do it.
+
+#### Smaller things worth knowing
+
+- **A one-shot's frame count is load-bearing, not a taste setting.** It must divide its sim window.
+  `tests/unit/one-shot-divisor.test.ts` gates the declared count; `loop-dwell.test.ts` gates the
+  shipped catalog; `tests/unit/blockedDwell.ts` holds the one exception from **one** definition so
+  both gates skip the same row and neither can widen quietly.
+- **`assets:clips` and `assets:build` can disagree.** The first reads the motion spec; the second
+  packs whatever strip is on disk and never reads the spec. `fall` had declared 6 while shipping 8.
+- **`build-clips.mjs` writes the strip and gates it afterwards**, so a G6 failure leaves a complete,
+  usable strip that `assets:build` will pack without complaint.
+- **The 5.11 sampler is bounded in TICKS, not frames**, because every sentry volleys on the same
+  tick and then waits 90. At 240 Hz a 120-frame window was a third of one cooldown, so the burst
+  the gate exists to catch could fall outside it entirely.
+- **`long-animation-frame` cannot gate a frame budget here.** It only emits above 50 ms; the game
+  runs at 4.16 ms. Both halves reported zero, and `0 / 0` is a gate that cannot fail.
+- **`file-size.test.ts`'s path check was dead for every test file.** Vite resolves glob keys against
+  `tests/unit/`, so anything under `tests/` came back as `../e2e/…` — a form no QA log could
+  contain — leaving only the basename fallback. A 648-line file counted as "recorded" because its
+  name appeared in an unrelated citation.
+- **The e2e suite now has two Playwright projects.** `chromium` for everything, and `chromium-gpu`
+  — headed, real GPU — for `phase-05-perf.spec.ts` only. It opens a window when it runs.
