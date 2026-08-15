@@ -17,7 +17,7 @@ import { SENTRY_FIRE_TICKS, sentryAnim } from '../../src/render/enemyView';
 import { createSnapshot } from '../../src/sim/input';
 import { SCAVENGER, SCAVENGER_ATTACK_TICKS, createScavenger, SENTRY, createSentry } from '../../src/sim/enemies';
 import { createWorld, tick } from '../../src/sim/tick';
-import type { World } from '../../src/sim/types';
+import type { InputSnapshot, World } from '../../src/sim/types';
 
 /** A minimal legal scavenger, so each guard test varies exactly one argument. */
 const BASE = { x: 0, y: 0, patrolMin: -100, patrolMax: 100 };
@@ -32,6 +32,32 @@ const BASE = { x: 0, y: 0, patrolMin: -100, patrolMax: 100 };
  * a stationary player it closes to the dead zone and stops, and `chaseSpeed` reads dead.
  */
 const RETREAT = { ...createSnapshot(), left: true };
+
+/**
+ * 🔴 **A STANDING player, added 2026-08-15, and the file's own docstring predicted needing it.**
+ *
+ * `RETREAT`'s note says a stationary player makes `chaseSpeed` read dead because the scavenger
+ * *"closes to the dead zone and stops"* — which is the same sentence, read the other way, saying
+ * that a stationary player is the ONLY input under which the dead zone is observable at all. While
+ * the player retreats, `|dx|` grows past the dead zone within a few ticks and never returns.
+ *
+ * It became necessary when `createScavenger` started requiring `deadZone < attackRange`: inside that
+ * band a swing plants the feet, so against a retreating player the dead zone's effect on travel is
+ * masked by the swing for exactly as long as the player is inside it. Measured — travel at
+ * `deadZone` 0, 96 and 143 was **identical to the last pixel** in all three retreating placements.
+ * The knob was reported dead while being demonstrably live.
+ */
+const STAND = { ...createSnapshot() };
+
+type Placement = 'near' | 'far' | 'contact' | 'stand';
+
+/** Which input each placement runs under. Only `stand` differs, and its docstring says why. */
+const INPUT_FOR: Record<Placement, InputSnapshot> = {
+  near: RETREAT,
+  far: RETREAT,
+  contact: RETREAT,
+  stand: STAND,
+};
 
 /**
  * THREE placements, because no single one makes every knob live.
@@ -55,11 +81,23 @@ const RETREAT = { ...createSnapshot(), left: true };
  * A third placement can only make the sweep MORE sensitive — the assertion is `some()` across
  * placements, so nothing that passed before can start failing. That is broadening what the gate
  * MEASURES, never loosening what it TOLERATES.
+ *
+ * 🔴 `stand` is the FOURTH, added 2026-08-15, and it is `contact` with the retreat removed. Same
+ * reason as `contact`, one step further: `deadZone`'s effect on travel is only visible while the
+ * player STAYS inside the band, and against `RETREAT` nobody stays anywhere. It is the same shape of
+ * lesson twice — a sim change (this time `deadZone < attackRange`, which lets a swing plant the feet
+ * across the whole band) silently cost the sweep its sensitivity to one knob, and the sweep reported
+ * that knob dead rather than reporting itself blind.
+ *
+ * The `some()` argument above still holds: adding a placement can only broaden what is measured.
  */
-function freshWorld(placement: 'near' | 'far' | 'contact' = 'near'): World {
-  const spawnX = { near: 2800, far: 400, contact: 3000 }[placement];
+function freshWorld(placement: Placement = 'near'): World {
+  const spawnX = { near: 2800, far: 400, contact: 3000, stand: 3100 }[placement];
   // Wide enough that 240 ticks at `chaseSpeed` 8 (1920 px) cannot reach either bound from 3000.
-  const scavBounds = placement === 'contact' ? { min: 800, max: 5200 } : { min: 2600, max: 3400 };
+  const scavBounds =
+    placement === 'contact' || placement === 'stand'
+      ? { min: 800, max: 5200 }
+      : { min: 2600, max: 3400 };
   return createWorld({
     seed: 1,
     scale: 6,
@@ -85,18 +123,37 @@ function freshWorld(placement: 'near' | 'far' | 'contact' = 'near'): World {
  * Deliberately an aggregate of behaviour rather than a read of the knob. If a knob's field is never
  * consulted by the sim, this cannot move, however cleanly the setter worked.
  */
-function behaviourSignature(world: World, ticks: number): number {
+function behaviourSignature(world: World, ticks: number, input: InputSnapshot = RETREAT): number {
   const startX = world.enemies.scavengers.map((s) => s.x);
   let shots = 0;
+  /**
+   * 🔴 **`facing` flips are counted, added 2026-08-15.** The signature was travel plus shots, and
+   * the criterion 5.3 adversarial brief found the consequence: *"`facing` is not in the signature at
+   * all"*, so the sweep could not see a knob whose whole job is to stop the sprite mirroring. That
+   * matters more than it sounds, because `ENEMY_DEAD_ZONE`'s own docstring says a facing strobe
+   * *"has to be prevented rather than detected"* — `setFlipX` does not restart an animation, so no
+   * frame-index gate downstream can catch it either. This was the only place it could be caught and
+   * it was not looking.
+   *
+   * It also became load-bearing the moment `createScavenger` started requiring
+   * `deadZone < attackRange`: inside that band a swing plants the feet, so the dead zone's effect on
+   * TRAVEL is masked by construction, and `facing` is the only observable it still moves. Without
+   * this line the `scav0.deadZone` row reports a live knob as dead.
+   */
+  let flips = 0;
+  let facing = world.enemies.scavengers.map((s) => s.facing);
   for (let i = 0; i < ticks; i += 1) {
-    tick(world, { ...RETREAT });
+    tick(world, { ...input });
     shots += world.projectiles.length;
+    const now = world.enemies.scavengers.map((s) => s.facing);
+    flips += now.filter((f, j) => f !== facing[j]).length;
+    facing = now;
   }
   const travel = world.enemies.scavengers.reduce(
     (sum, s, i) => sum + Math.abs(s.x - startX[i]!),
     0,
   );
-  return travel * 1000 + shots;
+  return travel * 1000000 + shots * 1000 + flips;
 }
 
 describe('every enemy knob is live (criterion 5.9, vault A6)', () => {
@@ -121,13 +178,13 @@ describe('every enemy knob is live (criterion 5.9, vault A6)', () => {
   it.each(enemyKnobs(freshWorld()).map((k) => k.label))(
     '%s changes what the enemies actually do, not just what the panel says',
     (label) => {
-      const observed = (['near', 'far', 'contact'] as const).some((placement) => {
-        const baseline = behaviourSignature(freshWorld(placement), 240);
+      const observed = (['near', 'far', 'contact', 'stand'] as const).some((placement) => {
+        const baseline = behaviourSignature(freshWorld(placement), 240, INPUT_FOR[placement]);
         return [Number.NaN, 0].some((_, i) => {
           const world = freshWorld(placement);
           const target = enemyKnobs(world).find((k) => k.label === label)!;
           target.set(i === 0 ? target.min : target.get() * 2 + 200);
-          return behaviourSignature(world, 240) !== baseline;
+          return behaviourSignature(world, 240, INPUT_FOR[placement]) !== baseline;
         });
       });
 

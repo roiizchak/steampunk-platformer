@@ -14,7 +14,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { ATTACK, attackTotalTicks } from '../../src/sim/combat';
-import { fill } from '../../tools/gen/gates.mjs';
+import { SCAVENGER_ATTACK } from '../../src/sim/scavengerAttack';
+import { FAIL, fill } from '../../tools/gen/gates.mjs';
 import { blank, decodePng, readBytes } from '../../tools/gen/png.mjs';
 import { sliceFrame } from '../../tools/gen/assetSources.mjs';
 import { PLAY_LAG_TICKS, gateReachWindow } from '../../tools/gen/reachGate.mjs';
@@ -251,5 +252,48 @@ describe('G5 runs against the shipped brass-courier/attack, not only synthetic f
       'measuring left-facing reach gives the same peak as right-facing — `facing` is inert, so ' +
         'G5 cannot tell a strike from a recoil and the unsupplied default is not load-bearing',
     ).not.toBe(g5!.peakFrame);
+  });
+  /**
+   * 🔴 **The scavenger's own attack sheet, added 2026-08-15 — and it FAILED the first time it ran.**
+   *
+   * `rust-scavenger/attack` shipped in this session and `ATTACK_WINDOWS` had no row for it, so
+   * `attackWindowFor` returned `null`, `runSheetGates` printed G5 as `N/A`, and criterion 5.4c —
+   * whose text says *"every attack sheet"* — read as satisfied against a table with one row. Both
+   * criterion 5.4c gate-owner briefs found it independently.
+   *
+   * Run for the first time, it reported:
+   *
+   * ```
+   * FAIL  rust-scavenger/attack  G5  frame 5 (tick 21) misses the active window [14, 20)
+   *                                  — contact is drawn after the strike
+   * ```
+   *
+   * A real mismatch, not a gate misconfiguration: the player was damaged on ticks 14–19 while the
+   * claw reached furthest on tick 21. Fixed by moving the SIM window (`SCAVENGER_ATTACK.startup`
+   * 14 → 18) rather than the art, because the art is bought and paid for and the tick counts are
+   * free. The window is now centred on the drawn strike.
+   *
+   * This case is the reason a second attack sheet can never ship ungated again: the assertions below
+   * pin the peak FRAME and TICK, not the verdict, so the alignment cannot erode quietly.
+   */
+  it('rust-scavenger/attack — the contact frame lands inside the scavenger active window', () => {
+    const { g4, g5 } = runSheetGates('rust-scavenger', 'attack');
+
+    expect(g5, 'G5 reported N/A — ATTACK_WINDOWS has lost its rust-scavenger/attack row').not.toBeNull();
+    expect(g4!.verdict, g4!.reason).not.toBe(FAIL);
+    expect(g5!.verdict, g5!.reason).not.toBe(FAIL);
+
+    // The peak is asserted as a quantity. A verdict-only check cannot see the margin erode, which
+    // is exactly how the courier's own one-tick margin went unnoticed.
+    expect(g5!.peakFrame).toBe(5);
+    expect(g5!.peakTick).toBe(21);
+    expect(g5!.window.openTick).toBe(SCAVENGER_ATTACK.startup);
+    expect(g5!.window.closeTick).toBe(SCAVENGER_ATTACK.startup + SCAVENGER_ATTACK.active);
+
+    // Centred, not merely inside: three ticks of margin either side. The courier's row asserts its
+    // own margin as ONE, and the difference between the two is the point — this one was re-timed
+    // deliberately, that one is riding its edge.
+    expect(g5!.peakTick! - g5!.window.openTick).toBe(3);
+    expect(g5!.window.closeTick - g5!.peakTick!).toBe(3);
   });
 });

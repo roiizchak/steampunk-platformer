@@ -45,10 +45,7 @@
       "loop": false,
       "verticalAnchor": "feet",
       "footOffsetPx": 0,
-      "activeFrames": [
-        3,
-        4
-      ]
+      "activeFrames": [4, 5]
     },
     "death": {
       "loop": false,

@@ -18,6 +18,7 @@
  */
 
 import { windowOpen } from './windows';
+import { hitWindowOpen } from './combat';
 import type { CombatTiming } from './combat';
 import type { Scavenger } from './enemyScavenger';
 
@@ -28,8 +29,8 @@ import type { Scavenger } from './enemyScavenger';
  * ## Why the startup is more than twice the player's
  *
  * The player's `ATTACK` is `{ startup: 6, active: 4, recovery: 10 }`. The player already knows what
- * they pressed; an enemy's windup exists to be **read by someone who did not choose it**. 14 ticks
- * is ~233 ms of raised claw before anything can hurt you, which is what turns "I got hit" into "I
+ * they pressed; an enemy's windup exists to be **read by someone who did not choose it**. 18 ticks
+ * is ~300 ms of raised claw before anything can hurt you, which is what turns "I got hit" into "I
  * should have moved".
  *
  * ## This is a BALANCE CHANGE, and it is meant to be
@@ -38,7 +39,7 @@ import type { Scavenger } from './enemyScavenger';
  * scavenger, gated only by the shared i-frame window. The player asked for a swing (2026-08-14), so
  * damage now requires the ACTIVE window *and* overlap. Two consequences, both intended:
  *
- *  - **The scavenger deals less damage.** A player who backs off during the 14-tick startup takes
+ *  - **The scavenger deals less damage.** A player who backs off during the 18-tick startup takes
  *    nothing at all. That is the point of a telegraph.
  *  - **Walking into a stationary scavenger is no longer instantly harmful** — it has to swing first.
  *
@@ -47,7 +48,33 @@ import type { Scavenger } from './enemyScavenger';
  * At 9 frames that is 4 ticks/frame, fps 15. Changing this number without changing the sheet is how
  * a one-shot starts dwelling unevenly.
  */
-export const SCAVENGER_ATTACK: CombatTiming = { startup: 14, active: 6, recovery: 16 };
+/**
+ * 🔴 **`startup` 14 → 18, `recovery` 16 → 12 on 2026-08-15. The ART moved these, not a preference.**
+ *
+ * G5 — the gate that checks the drawn contact frame lands inside the damaging window — was run
+ * against the shipped `rust-scavenger/attack` sheet for the first time and **failed**:
+ *
+ * ```
+ * FAIL  rust-scavenger/attack  G5  frame 5 (tick 21) misses the active window [14, 20)
+ *                                  — contact is drawn after the strike
+ * ```
+ *
+ * The sheet is 9 frames over 36 ticks, 4 ticks each, and its furthest claw extension is **frame 5**
+ * (ticks 20–23). The old window closed at 20. So the player took damage on ticks 14–19 and the claw
+ * reached them on tick 21 — **hit first, drawn second.** Small, and exactly the mismatch this gate
+ * exists to catch; it went unnoticed for a session only because `ATTACK_WINDOWS` had no row for this
+ * slug, so G5 reported `N/A` and folded it into a passing exit code.
+ *
+ * The window is now **centred on the drawn strike**: `[18, 24)` against a contact tick of 21, three
+ * ticks of margin either side instead of one tick outside. Total stays **36**, which is not optional
+ * — the sheet's 9 frames must divide it (`one-shot-divisor`), and 36 is what `catalogTimings.mjs`
+ * mirrors into the catalog's `simTicks`.
+ *
+ * What this changes for the player: the telegraph gets **longer** (18 ticks of windup against the
+ * player's own 6, up from 14) and the recovery shorter. Backing off during the windup still costs
+ * the scavenger the swing.
+ */
+export const SCAVENGER_ATTACK: CombatTiming = { startup: 18, active: 6, recovery: 12 };
 
 /** The whole swing, windup through recovery. Mirrors `attackTotalTicks(ATTACK)` for the player. */
 export const SCAVENGER_ATTACK_TICKS =
@@ -62,10 +89,20 @@ export const SCAVENGER_ATTACK_TICKS =
  */
 export function attackIsLive(scavenger: Scavenger): boolean {
   if (scavenger.hp <= 0) return false;
-  return (
-    scavenger.attackCounter >= SCAVENGER_ATTACK.startup &&
-    scavenger.attackCounter < SCAVENGER_ATTACK.startup + SCAVENGER_ATTACK.active
-  );
+  /**
+   * 🔴 **`hitWindowOpen`, not a hand-written boundary.** This function used to read
+   * `counter >= startup && counter < startup + active` inline — while the comment directly above
+   * warned that *"two copies of `counter >= startup && counter < startup + active` would be two
+   * definitions that happen to match today (vault 5.3)"*. It then wrote that expression, making
+   * itself the second copy it names. `hitWindowOpen` (`combat.ts`) already exists and documents
+   * itself as *"the one predicate the sim, the tests and the art gate all consult"* — the art gate
+   * G5 checks the contact frame against IT, so a hand-rolled boundary here is precisely how the
+   * drawn strike and the damaging tick drift apart while every test stays green.
+   *
+   * Found by the criterion 5.5 adversarial brief. Citing a rule in a docstring is not the same as
+   * obeying it, and this file did the first while breaking the second in the next six lines.
+   */
+  return hitWindowOpen(scavenger.attackCounter, SCAVENGER_ATTACK);
 }
 
 /** Is the scavenger mid-swing at all — windup, strike or recovery? Drives the animation. */

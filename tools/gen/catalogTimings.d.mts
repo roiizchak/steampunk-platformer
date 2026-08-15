@@ -5,6 +5,7 @@ export declare const IDLE_TICKS: number;
 export declare const DEATH_TICKS: number;
 export declare const SENTRY_FIRE_TICKS: number;
 export declare const ATTACK_TOTAL_TICKS: number;
+export declare const SCAVENGER_ATTACK_TOTAL_TICKS: number;
 export declare const HURT_TICKS: number;
 export declare const SCAVENGER_PATROL_SPEED: number;
 export declare const SCAVENGER_CHASE_SPEED: number;

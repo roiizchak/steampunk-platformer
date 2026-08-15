@@ -6,6 +6,8 @@ import type { ReachResult } from './reachGate.d.mts';
 
 export declare const ATTACK_STARTUP_TICKS: number;
 export declare const ATTACK_ACTIVE_TICKS: number;
+export declare const SCAVENGER_ATTACK_STARTUP_TICKS: number;
+export declare const SCAVENGER_ATTACK_ACTIVE_TICKS: number;
 
 export interface AttackWindow {
   startup: number;

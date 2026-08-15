@@ -47,12 +47,22 @@ function knob(
   field: string,
   step: number,
   min: number,
+  /**
+   * 🔴 Optional CEILING, added 2026-08-15. Every knob had a floor and none had a roof, and the
+   * criterion 5.3 adversarial brief found that asymmetry is not harmless: `deadZone` at step 20 with
+   * no maximum walks past `attackRange` (144) in five keypresses, and past it the gait animation
+   * restarts **132 times in 300 ticks**. `createScavenger` now throws on that relationship, but a
+   * knob mutates a live object and never re-enters the constructor — so the guard has to exist on
+   * both sides or the Gym is the one door that bypasses it. Same shape as the sentry cooldown FLOOR
+   * (`SENTRY_FIRE_TICKS + 1`), which is the precedent this mirrors, one bound the other way up.
+   */
+  max = Infinity,
 ): Knob {
   return {
     label,
     get: () => target[field]!,
     set: (value) => {
-      target[field] = Math.max(min, value);
+      target[field] = Math.min(max, Math.max(min, value));
     },
     step,
     min,
@@ -101,7 +111,11 @@ export function enemyKnobs(world: World): Knob[] {
       knob(`${name}.patrolSpeed`, target, 'patrolSpeed', STEP.speed, STEP.speed),
       knob(`${name}.chaseSpeed`, target, 'chaseSpeed', STEP.speed, STEP.speed),
       knob(`${name}.detectRadius`, target, 'detectRadius', STEP.distance, 0),
-      knob(`${name}.deadZone`, target, 'deadZone', STEP.distance, 0),
+      // Capped one px below this scavenger's OWN `attackRange`, not below the shared default — a
+      // per-instance `attackRange` is a legal option, so reading it off the constant would let a
+      // fixture-tuned scavenger walk past its own limit. `createScavenger` throws on the same
+      // relationship; this is the live-object half of that guard.
+      knob(`${name}.deadZone`, target, 'deadZone', STEP.distance, 0, scavenger.attackRange - 1),
     );
   });
 

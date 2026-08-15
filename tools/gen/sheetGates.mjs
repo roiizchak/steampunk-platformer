@@ -26,7 +26,13 @@
  * pipeline itself measured when it packed the sheet, not a guessed constant.
  *
  * **G5's active window** only exists for moves with a startup/active/recovery struct — today that is
- * `brass-courier/attack`. `ATTACK_STARTUP_TICKS`/`ATTACK_ACTIVE_TICKS` mirror `src/sim/combat.ts`'s
+ * `brass-courier/attack` **and `rust-scavenger/attack`**. The scavenger row was missing for a full
+ * session after its sheet shipped, and the consequence is worth stating: `attackWindowFor` returns
+ * `null` for an undeclared pair and `runSheetGates` then reports G5 as `N/A` and folds that into a
+ * PASSING exit code. So the one attack sheet the session actually bought was exempt from the gate
+ * criterion 5.4c names — **by omission, not by a documented exception** — and 5.4c read as satisfied.
+ * Found independently by both criterion 5.4c gate-owner briefs. A criterion that says "every attack
+ * sheet" against a table with one row is a criterion measuring one sheet. `ATTACK_STARTUP_TICKS`/`ATTACK_ACTIVE_TICKS` mirror `src/sim/combat.ts`'s
  * `ATTACK` the same way `reachGate.mjs` mirrors `PLAY_LAG_TICKS`: `tools/gen/*.mjs` cannot import
  * TypeScript (`tools/gen` sits outside tsconfig's `include`), so the constant is restated here and
  * pinned equal to the real export by `tests/unit/sheet-gates.test.ts`. An action with no declared
@@ -37,7 +43,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { ATTACK_TOTAL_TICKS } from './catalogTimings.mjs';
+import { ATTACK_TOTAL_TICKS, SCAVENGER_ATTACK_TOTAL_TICKS } from './catalogTimings.mjs';
 import { configFor } from './slugConfig.mjs';
 import { sliceFrame } from './assetSources.mjs';
 import { decodePng, readBytes } from './png.mjs';
@@ -47,6 +53,10 @@ import { FAIL } from './gates.mjs';
 
 /** Mirrors `ATTACK.startup` (`src/sim/combat.ts`). Pinned by `tests/unit/sheet-gates.test.ts`. */
 export const ATTACK_STARTUP_TICKS = 6;
+/** Mirrors `SCAVENGER_ATTACK.startup` (`src/sim/scavengerAttack.ts`). Pinned by `sheet-gates.test.ts`. */
+export const SCAVENGER_ATTACK_STARTUP_TICKS = 18;
+/** Mirrors `SCAVENGER_ATTACK.active` (`src/sim/scavengerAttack.ts`). Pinned by `sheet-gates.test.ts`. */
+export const SCAVENGER_ATTACK_ACTIVE_TICKS = 6;
 /** Mirrors `ATTACK.active` (`src/sim/combat.ts`). */
 export const ATTACK_ACTIVE_TICKS = 4;
 
@@ -58,6 +68,11 @@ const ATTACK_WINDOWS = {
     startup: ATTACK_STARTUP_TICKS,
     active: ATTACK_ACTIVE_TICKS,
     simTicks: ATTACK_TOTAL_TICKS,
+  },
+  'rust-scavenger/attack': {
+    startup: SCAVENGER_ATTACK_STARTUP_TICKS,
+    active: SCAVENGER_ATTACK_ACTIVE_TICKS,
+    simTicks: SCAVENGER_ATTACK_TOTAL_TICKS,
   },
 };
 

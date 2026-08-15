@@ -27,6 +27,15 @@ import {
 import { SENTRY_FIRE_TICKS as SIM_SENTRY_FIRE_TICKS } from '../../src/render/enemyView';
 import { SCAVENGER as SIM_SCAVENGER } from '../../src/sim/enemyScavenger';
 import {
+  SCAVENGER_ATTACK as SIM_SCAVENGER_ATTACK,
+  SCAVENGER_ATTACK_TICKS as SIM_SCAVENGER_ATTACK_TICKS,
+} from '../../src/sim/scavengerAttack';
+import {
+  SCAVENGER_ATTACK_ACTIVE_TICKS as MIRROR_SCAV_ACTIVE,
+  SCAVENGER_ATTACK_STARTUP_TICKS as MIRROR_SCAV_STARTUP,
+} from '../../tools/gen/sheetGates.mjs';
+import { SCAVENGER_ATTACK_TOTAL_TICKS as MIRROR_SCAVENGER_ATTACK_TOTAL } from '../../tools/gen/catalogTimings.mjs';
+import {
   TICK_HZ as MIRROR_TICK_HZ,
   IDLE_TICKS as MIRROR_IDLE_TICKS,
   DEATH_TICKS as MIRROR_DEATH_TICKS,
@@ -65,6 +74,27 @@ describe('catalogTimings.mjs mirrors the real sim/render constants', () => {
     expect(MIRROR_HURT_TICKS).toBe(SIM_HURT_TICKS);
     expect(MIRROR_SCAVENGER_PATROL_SPEED).toBe(SIM_SCAVENGER.patrolSpeed);
     expect(MIRROR_SCAVENGER_CHASE_SPEED).toBe(SIM_SCAVENGER.chaseSpeed);
+  });
+
+  /**
+   * 🔴 **Three scavenger-attack mirrors that NOTHING pinned**, added 2026-08-15.
+   *
+   * `catalogTimings.mjs` hand-types `SCAVENGER_ATTACK_TOTAL_TICKS = 36` and `sheetGates.mjs`
+   * hand-types the startup and active counts — three restatements of `SCAVENGER_ATTACK`, across the
+   * `tools/gen` boundary that exists because those files cannot import TypeScript. Every one carried
+   * a docstring saying it was *"pinned equal to the real export by `tests/unit/sheet-gates.test.ts`"*.
+   * **It was not.** Found by the criterion 5.4d gate owner, which checked the claim instead of
+   * reading it.
+   *
+   * What that bought: a retune of `SCAVENGER_ATTACK` would silently desync the catalog's `simTicks`
+   * from the sim's real window AND move G5's target without moving the gate — with nothing red. That
+   * is not hypothetical; the startup moved 14 → 18 in this very session, which is exactly the edit
+   * these locks now catch.
+   */
+  it('every scavenger-attack mirror agrees with src/sim/scavengerAttack.ts', () => {
+    expect(MIRROR_SCAVENGER_ATTACK_TOTAL).toBe(SIM_SCAVENGER_ATTACK_TICKS);
+    expect(MIRROR_SCAV_STARTUP).toBe(SIM_SCAVENGER_ATTACK.startup);
+    expect(MIRROR_SCAV_ACTIVE).toBe(SIM_SCAVENGER_ATTACK.active);
   });
 
   it('timingFor(brass-sentry, idle) is authored at IDLE_TICKS and loops', () => {
