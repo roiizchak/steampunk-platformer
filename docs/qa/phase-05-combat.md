@@ -2689,3 +2689,104 @@ halves share no fixture; this is deliberately not a `-helpers` module that one f
 That restored the count to exactly seven and let the approved ratchet land at the approved number.
 **The lesson is the one this gate keeps teaching: a table of measurements goes stale inside the
 session that writes it.** Re-measure before quoting.
+
+---
+
+# Session 11 — the locomotion retune that was measured and then NOT applied
+
+**Decision: no speed change. The shipped tune stands.** Recorded because the measurement behind it
+cost real work, closes a question that will be asked again, and would otherwise have to be re-derived
+by the next person who thinks the game moves too fast.
+
+## The request, and why the obvious answer does not exist
+
+The player, 2026-08-15, after playing the session's art: *"I think we need to slow down the game of
+the character and the enemies. I think maybe another 10%. I think the all move is a bit fast."*
+
+**10% is not a value locomotion speed can take.** Planted feet require
+`ticksPerFrame × speed === footPxPerFrame` with a WHOLE `ticksPerFrame`, so the only run speeds that
+exist are `18 / n` — **18, 9, 6, 4.5**. From today's 9.0 the next one down is 6.0, a **33%** cut.
+This is the same wall session 10 hit, from the same request, and it is now hit twice.
+
+Two options were put to the player:
+
+- **A — take the reachable step.** Two integers (`LOCOMOTION_TICKS_PER_FRAME` 2→3,
+  `CHASE_TICKS_PER_FRAME` 3→4) plus the authored fps that must move with them. Free, minutes.
+- **B — re-cut the three locomotion sheets** at new frame counts so the speed lands near 10%. No new
+  art and no money (the clips are on disk), but the foot travel must be **re-measured** on the new
+  sheets, and 1–2 hours with a real chance the loop gates fail at a new frame count.
+
+A was chosen deliberately as the cheap probe: ten minutes to find out whether 33% was simply wrong,
+rather than arguing arithmetic.
+
+## 🔴 A was built, and it broke the LEVEL — which nobody had predicted as a hard failure
+
+`tests/unit/level-traversal.test.ts` went red on both crossings:
+
+```
+the pit between the two floor sections can be crossed with a run-up
+  fell or stalled crossing a 288px pit at x 3840; furthest x 4020.525
+the spike strip can be cleared with a run-up
+  lost 20 hp and reached x 2798 against a 192px strip starting at 2304
+```
+
+**Short by roughly 107 px.** The risk had been flagged before the change ("a slower run means you
+clear less gap per jump") but as a *possibility*; it is a certainty, and the traversal gate is what
+turned it from a guess into a number within one run. **This is the file earning its keep** — a
+vertical-apex gate could not see it, and the failure would otherwise have surfaced as an
+unplayable level in a playtest.
+
+## The measured ceiling — this is the number worth keeping
+
+Swept with a scratch probe reusing `level-traversal.test.ts`'s own `attempt()`, over the real shipped
+`.tmj`, varying `runMax` and scaling every horizontal knob by the same factor `SPEED_SCALE` does:
+
+| `runMax` | vs today | pit (288 px @ 3840) | spikes (192 px @ 2304) |
+|---|---|---|---|
+| 9.00 | 100% | ✅ | ✅ |
+| 8.10 | 90% | ✅ | ✅ |
+| **7.80** | **87%** | ✅ | ✅ |
+| **7.70** | **86%** | ❌ **falls in** | ✅ |
+| 7.20 | 80% | ❌ | ❌ |
+| 6.00 | 67% *(option A)* | ❌ | ❌ |
+
+**`level-01` tolerates at most a 13% slowdown, and it is a cliff rather than a slope.** One notch
+past 7.80 the jump no longer reaches. The spike strip is the looser of the two constraints (fails at
+7.20); **the pit is what binds.**
+
+So the player's instinct was right and A's arithmetic was not: **10% was very nearly the only cut
+that fits**, and only B could have reached it.
+
+> ⚠️ **The first sweep reported EVERY row failing, including today's shipped 9.0.** The probe set
+> `latchJumpPress` true for one tick and false after, so `jumpCutDivisor: 3` chopped every jump to a
+> third of its height. The real harness holds `input.jumpHeld = true` for the whole attempt and
+> comments that releasing early *is* the jump cut. **A sweep that fails at the known-good control is
+> reporting on the harness, not the subject** — the control row is what caught it, which is the
+> argument for always including one.
+
+## Outcome: reverted, and the player accepted the shipped speed
+
+A was reverted in full — six files restored with `git show HEAD:path > path`, never `git checkout`,
+and the suite returned to 1134 green. **Nothing was committed.** The player's call on being shown
+the 13% ceiling: *"it's still good enough to me."*
+
+**What is now known and must not be re-derived:**
+
+1. Locomotion speed is quantised to `footPxPerFrame / n`. Any request phrased as a percentage has to
+   be checked against that set **before** it is agreed to.
+2. `level-01` has **13% of headroom** and the binding obstacle is the 288 px pit at x 3840.
+3. Anything slower than that is **a level edit**, not a tuning change — which is a different
+   decision with a different owner. `level-traversal.test.ts`'s own failure message already says so:
+   *"widen the jump only by changing the LEVEL."*
+4. The enemy half is cheaper than the player half and was never the blocker: `chase` at
+   `18/4 = 4.5` breaks nothing, because no enemy has to clear the pit. If the request ever returns as
+   *"the enemies specifically feel fast"*, that half can land alone.
+
+⚠️ **A side effect A would have shipped, recorded so it is priced next time.** The player is cut 33%
+and the scavenger 25% — those are the steps that exist, not a choice — so the ratio moves
+**0.667 → 0.75** and the ground gained by running drops from 3.0 px/tick to **1.5**. Since aggro is
+permanent (session 10), the escape margin is load-bearing, and *any* future slowdown must re-check it
+rather than assume it survives.
+
+The scratch probe is not committed. It is reproducible in ten minutes from
+`level-traversal.test.ts`'s `attempt()` plus a per-world tuning multiply.
