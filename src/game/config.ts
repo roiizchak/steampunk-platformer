@@ -4,6 +4,7 @@ import { GameScene } from '../scenes/GameScene';
 import { ElementEditorScene } from '../scenes/ElementEditorScene';
 import { GymScene } from '../scenes/GymScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
+import { UIScene } from '../scenes/UIScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
 
 /**
@@ -45,7 +46,9 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // chain it pulls in, are dropped from `dist/`. It was registered unconditionally until the Codex
   // implementation review caught it (finding I2): PRD.md's file structure marks the scene DEV ONLY,
   // and a tuning console reachable in the shipped game is not a cosmetic difference.
+  // `UIScene` is in BOTH arms: the HUD ships. It is registered but idle — `GameScene.create()`
+  // launches it in parallel, which is the first `scene.launch` in this project.
   scene: import.meta.env.DEV
-    ? [BootScene, GameScene, PlaygroundScene, ElementEditorScene, GymScene]
-    : [BootScene, GameScene],
+    ? [BootScene, GameScene, UIScene, PlaygroundScene, ElementEditorScene, GymScene]
+    : [BootScene, GameScene, UIScene],
 };

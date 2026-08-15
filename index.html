@@ -16,13 +16,22 @@
         Deliberately no rule targets `canvas`: the ScaleManager owns canvas.style
         (width/height/margin/image-rendering). A second writer here is the exact mechanism
         behind vault 1.5's "CSS silently contradicted the engine on every phone".
+
+        🔴 THE CANVAS IS CENTRED ONCE, BY PHASER, AND THIS RULE MUST NOT CENTRE IT AGAIN.
+        `display:flex; align-items:center; justify-content:center` used to live here while
+        config.ts sets `autoCenter: Phaser.Scale.CENTER_BOTH`. Phaser's centring writes CSS
+        MARGINS onto the canvas; a flex parent then centres the margin BOX, and the two compose
+        to park the canvas roughly a quarter of the leftover gap off centre (vault 6.6/6.7,
+        criterion 6.7). It looks almost right, which is why it survived five phases.
+
+        The same comment above already said the ScaleManager owns canvas.style. Flex centring
+        was a second writer of exactly that, and the comment did not stop it — a comment is not
+        enforcement (vault C9). `tests/e2e/phase-06-hud.spec.ts` measures the canvas bounding
+        box against the viewport instead, because only a measurement can.
       */
       #game {
         width: 100vw;
         height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
     </style>
   </head>

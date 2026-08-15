@@ -147,6 +147,9 @@ export class BootScene extends Phaser.Scene {
     // mean the game is not running, or the refusal is cosmetic. `scene.stop` on a scene that was
     // never started is a no-op, so the fresh-boot path is unchanged.
     this.scene.stop('Game');
+    // Phase 6: the HUD runs in parallel with Game, so stopping only Game leaves a health bar and a
+    // gear counter drawn over the error screen — a refusal you can see straight through.
+    this.scene.stop('UI');
     // The dev scenes, guarded so their keys do not survive into `dist/`. In production neither is
     // registered, so stopping them is already a no-op — the guard costs nothing and keeps the
     // production bundle free of any mention of a scene that cannot exist there. Phase 3 added

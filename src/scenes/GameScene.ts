@@ -12,7 +12,9 @@ import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
-import { createHud, renderHud } from './gameHud';
+import { attachHud } from './gameHud';
+import type { GearLayer } from './gearLayer';
+import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
@@ -82,7 +84,9 @@ export class GameScene extends Phaser.Scene {
   private prevPlayer: Point | null = null;
   private playerSprite!: Phaser.GameObjects.Sprite;
   private enemies!: EnemyLayer;
-  private hudFill!: Phaser.GameObjects.Graphics;
+  private gears!: GearLayer;
+  /** The parallel HUD scene. Optional at the type level: `launch` is async, so a frame can beat it. */
+  private ui?: UIScene;
   private parallax: ParallaxImage[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -164,7 +168,10 @@ export class GameScene extends Phaser.Scene {
     this.enemies = new EnemyLayer(this, this.world);
     this.enemies.create();
 
-    this.createHud();
+    // Phase 6: the HUD is a PARALLEL scene, not objects on this display list — see `UIScene` for
+    // why that removes vault 6.1's reciprocal-ignore-list hazard instead of managing it.
+    ({ ui: this.ui, gears: this.gears } = attachHud(this, this.world));
+
     this.bindKeys();
     this.add
       .text(24, 168, this.helpText(), {
@@ -248,18 +255,10 @@ export class GameScene extends Phaser.Scene {
     // input snapshot. A frame too short to produce a whole tick that ate a jump press is vault
     // 2.4's "a tick ran is not your input was consumed", inverted.
     //
-    // 🔴 The batch is SPLIT so `prevPlayer` is the state immediately before the LAST tick, which is
-    // what `interpolatedPosition` needs. Snapshotting before the whole batch was the first draft
-    // and the Codex plan review rejected it (finding 1): a healthy 30 Hz frame drains two ticks —
-    // routine here, not a stall, and `frame-clock.test.ts` covers it — so blending across the whole
-    // batch would add ~33 ms of render lag on every frame. Total ticks run is unchanged, and the
-    // split is safe because an input EDGE is cleared by the first tick rather than re-consumed.
-    //
-    // 🔴 The split itself moved to `src/sim/advanceSplit.ts` in Phase 6, and it fixed a defect that
-    // lived here: the `ticks - 1` call's return value was DISCARDED, so every edge produced by the
-    // earlier ticks of a multi-tick frame was silently lost — half of all events at a routine 30 Hz.
-    // It could not be unit-tested while it lived inside this method, which is why Phase 5 shipped
-    // with it (vault 2.12; Codex Phase 6 plan review F8).
+    // 🔴 The batch is SPLIT, and both why-it-is-split and the defect that lived here before it moved
+    // are in `src/sim/advanceSplit.ts`'s header. Stated in ONE place on purpose: it was explained
+    // here, in a scene method no test could reach, and the explanation outlived its own accuracy for
+    // a whole phase (vault C9 — a wrong comment is worse than none).
     const events = advanceSplit(this.world, this.input$, ticks, () => {
       this.prevPlayer = { x: this.world.player.x, y: this.world.player.y };
       // The enemies' half of the same snapshot, taken at the same instant and for the same reason.
@@ -279,6 +278,7 @@ export class GameScene extends Phaser.Scene {
 
     this.renderPlayer();
     this.renderHud();
+    this.gears.sync();
     this.enemies.sync(renderAlpha(this.accumulatorMs));
     this.renderParallax();
     // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
@@ -434,13 +434,15 @@ export class GameScene extends Phaser.Scene {
     this.parallax = createParallax(this);
   }
 
-  /** The HUD's fill geometry is `src/render/playerHud.ts`; this owns the Phaser objects. */
-  private createHud(): void {
-    this.hudFill = createHud(this);
-  }
-
+  /**
+   * The HUD lives in `UIScene` now, so this hands it the world and this scene's camera.
+   *
+   * The camera goes across because the collect tween has to turn a gear's WORLD position into a
+   * screen position, and the camera's scroll and zoom are that transform. Doing the conversion here
+   * would put HUD arithmetic in the one file this project cannot let grow.
+   */
   private renderHud(): void {
-    renderHud(this.hudFill, this.world.player.hp, this.world.player.maxHp);
+    this.ui?.render(this.world, this.cameras.main);
   }
 
   private renderParallax(): void {
