@@ -370,11 +370,14 @@ removed.
 
 ## Vault-out — Phase 5
 
-**Status: DRAFT, written 2026-08-14 (session 10). Phase 5 is still FAILING and this is not a
-phase-exit sign-off.** PRD §7 asks for a vault-out at phase exit; leaving it as the words *"(Written
-at the end of the phase.)"* through five sessions meant every lesson below was carried in a
-transcript instead of a file, and two of them had to be rediscovered by measurement. Written as it is
-learned, and to be finalised when the gate actually passes.
+**Status: DRAFT, written 2026-08-14 (session 10), extended 2026-08-15 (session 11). Phase 5 is still
+FAILING and this is not a phase-exit sign-off.** PRD §7 asks for a vault-out at phase exit; leaving
+it as the words *"(Written at the end of the phase.)"* through five sessions meant every lesson below
+was carried in a transcript instead of a file, and two of them had to be rediscovered by measurement.
+Written as it is learned, and to be finalised when the gate actually passes.
+
+> Sections **1–7** are session 10's. Sections **8–12** are session 11's, and section 3 carries a
+> correction from it.
 
 ### 1. Episode-committed AI vs the frame-0 problem — and the stronger answer
 
@@ -436,6 +439,22 @@ The vault has nothing on performance and this phase did not fix that.
 same-session interleaved A/B decides anything, and a performance gate needs a recorded baseline
 before it can be a gate at all.
 
+> ✅ **Session 11 correction — the GPU half is no longer unknown, and the reason it stayed unknown
+> was FALSE.** Two places recorded the blind spot as unclosable: `phase-05-perf.spec.ts` said a GPU
+> timer query *"is not reachable from here"*, and finding P1 said *"not reachable without a new
+> dependency"*. **A GPU timer is a WebGL extension**, available from the page itself, with no package
+> involved and the frozen-dependency rule untouched. It was built in an afternoon.
+>
+> **A blind spot recorded with a WRONG reason is worse than one recorded with no reason**, because
+> the wrong reason is precisely what stops the next person looking. Both wordings were corrected in
+> place rather than merely superseded.
+>
+> Two further corrections came out of building it, and both were only findable by probing:
+> the extension is `EXT_disjoint_timer_query` (**WebGL 1** — Phaser 4 runs WebGL 1, so the
+> `_webgl2` name the plan specified cannot exist here), and Phaser 4's `WebGLRenderer` **is** the
+> event emitter rather than having a `.events` property. Two plan-stated facts, both wrong, both
+> cheap to find and expensive to assume.
+
 ### 4. Two defects that look identical on screen, and only one of them is timing
 
 The most expensive lesson of the phase, because it cost two rounds of fixing the wrong half.
@@ -494,6 +513,98 @@ a coyote window and per-tick friction was wrong on **both** inputs when the Code
   Cost to close criterion 5.4e: **$0**. Check the tool's own records before declaring provenance lost.
 - **Measure before spending.** It saved money in sessions 4, 5 and 10; the only round that skipped it
   bought two clips that failed the same gate the first pair did.
+
+### 8. A gate that has never run against the bytes that ship is not a gate
+
+Three separate instances of one shape, all found in session 11, all of which had been green for
+sessions:
+
+- **G5 had never once been run against a shipped sheet.** The harness existed, the decode path
+  existed, and `sheet-gates.test.ts` already ran `runSheetGates` in-process on a shipped PNG — for
+  `brass-sentry/idle`, which has **no attack window**, so G5 reported `N/A` and the file looked
+  covered. Nobody had written the one line naming a slug that does. When it was finally run, it
+  passed — **and revealed the sheet passes only because of a tie-break**: frames 4, 5 and 6 all tie
+  at 293 px of reach, and only the first lands inside the active window. Frames 5 and 6 would both
+  fail. A verdict-only assertion could never have seen that; assert the *peak frame and tick*, not
+  the pass.
+- **`gateLoopWrap` was silently not running** on the scavenger's `idle`. Its absence was visible only
+  as a line of build output that was not printed. A gate that skips quietly is indistinguishable from
+  a gate that passes.
+- **The shipped `brass-courier/fall` sheet had never passed G6 either.** `build-clips.mjs` writes the
+  strip and gates it *afterwards*, so a failing extraction leaves a usable file on disk that
+  `assets:build` packs without complaint. Confirmed rather than guessed: regenerating the old strip
+  reproduced the shipped `fall.png` byte for byte.
+
+**Carry forward:** for every gate, ask *"has this ever run against what ships?"* — separately from
+*"does this gate work?"*. And **write-then-gate is a defect pattern**, not a style: any tool that
+emits an artefact before validating it has already put a bad artefact where something else will find
+it.
+
+### 9. Keep the exception machinery when the exception list empties
+
+`BLOCKED_ON_ART` and `PENDING_ART` both hold *"the thing we know is wrong and are waiting on"*, and
+both are asserted in **both directions**: the gate skips these rows AND asserts the list equals the
+set that actually fails. So a fixed entry left behind is red, and a broken row with nothing listed is
+red too.
+
+Both emptied in session 11. Both were kept as files rather than inlined as `[]` at their two call
+sites — and the reasoning was tested almost immediately: **`PENDING_ART` was emptied one commit
+before the scavenger's attack needed it, and was in use again within the hour.**
+
+The load-bearing part is that emptying a list this way makes the gate **strictly stronger**:
+`uneven === Object.keys(BLOCKED_ON_ART)` went from *"exactly one row may be uneven"* to *"no row may
+be uneven at all"*, with no assertion rewritten. **Inlining `[]` twice is where that property dies.**
+
+### 10. A player's report is a symptom. It is reliable about the symptom and not about the cause.
+
+Two session-11 reports, both worth acting on, neither describing what was actually wrong:
+
+- *"The scavenger does not have an attack animation."* **It was not a bug — it was the spec.** The
+  creature was scoped as a chaser whose body is the hazard, and criterion 5.16 still called it
+  *contact damage*. But the instinct behind the report was exactly right: **a thing that hurts you
+  with no windup reads as unfinished**, because there is no telegraph and the hit feels arbitrary.
+  Buying the swing was correct; "fixing a bug" would have been the wrong frame.
+- *"Slow everything down about 10%."* Right that it was too fast; **10% is not a value the speed can
+  take** (see section 11), and the reachable step breaks the level.
+
+**Carry forward:** take the symptom literally and the diagnosis not at all. Then say plainly which
+one you acted on.
+
+### 11. Locomotion speed is quantised, and the LEVEL is the real ceiling
+
+The most transferable number this phase produced.
+
+Planted feet require `ticksPerFrame × speed === footPxPerFrame` with a **whole** `ticksPerFrame`, so
+run speed is `18 / n` and the only values that exist are **18, 9, 6, 4.5**. Any request phrased as a
+percentage must be checked against that set *before* it is agreed to — session 10 and session 11 both
+agreed to one first and discovered it second.
+
+And the harder constraint is not the art at all:
+
+> **`level-01` tolerates a 13% slowdown and no more.** Measured by sweeping `runMax` over the real
+> shipped `.tmj` with the real `tick`: 7.80 clears the 288 px pit at x 3840, **7.70 falls in.** It is
+> a cliff, not a slope. Anything past it is a **level edit**, which is a different decision with a
+> different owner.
+
+The reachable step (33%) is four times past that ceiling, so it was built, measured, refuted by
+`level-traversal.test.ts` within one run, and reverted. **The traversal gate paid for itself here** —
+a vertical-apex gate cannot see a gap too wide to cross, and the failure would otherwise have arrived
+as an unplayable level in a playtest.
+
+### 12. A sweep that fails at its own control is reporting on the harness
+
+The speed sweep above first reported **every** row failing — including the shipped 9.0, which
+demonstrably works. The probe released the jump button one tick after pressing it, and
+`jumpCutDivisor: 3` chopped every jump to a third of its height. The real harness holds
+`input.jumpHeld = true` for the whole attempt and says so in a comment.
+
+Nothing about the *subject* was wrong. **The known-good control row is what caught it**, and without
+one the sweep would have "proved" that the game is already unplayable.
+
+**Carry forward:** every sweep, mutation loop and A/B includes a row whose answer is already known.
+It costs one line and it is the only thing standing between a broken harness and a confident wrong
+conclusion. This is the same rule as *(C1)* — watch the gate fail — pointed at the measuring
+instrument instead of the gate.
 
 ---
 
