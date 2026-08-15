@@ -20,7 +20,7 @@
  *
  * ## `hudFits` is one predicate with two consumers
  *
- * Imported by `tests/unit/hud-layout.test.ts` AND by `tests/e2e/phase-06-hud.spec.ts`, which reads
+ * Imported by `tests/unit/hud-layout.test.ts` AND by `tests/e2e/phase-06-chrome.spec.ts`, which reads
  * the live scene tree. The `viewFits`/`tracksTarget` precedent from Phase 3, for the same reason:
  * two assertions that happen to agree on the happy path are not one gate.
  */
@@ -39,6 +39,20 @@ export const HUD_PLATE = { w: 413, h: 128 } as const;
 
 /** Distance from the top-left corner of the screen to the plate, in DESIGN pixels. */
 export const HUD_MARGIN = 24;
+
+/**
+ * The catalog key the generated gear sprite lands under. One string, three consumers.
+ *
+ * 🔴 It lived in `src/scenes/gearLayer.ts` until a unit test tried to import it — and importing
+ * that file pulls in Phaser, which cannot load in the node test environment. The test file then
+ * contributed **zero tests while the suite still reported PASS**: six assertions vanished and
+ * nothing went red. That is the vault 3.1 failure shape exactly, bought for the price of one import
+ * line.
+ *
+ * It lives in this engine-free module now, so the gate that proves the sprite branch ships can
+ * actually reference it.
+ */
+export const GEAR_TEXTURE_KEY = 'gear';
 
 /** Gap between the plate and the gear counter that follows it, in DESIGN pixels. */
 const COUNTER_GAP = 24;

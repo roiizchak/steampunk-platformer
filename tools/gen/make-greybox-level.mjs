@@ -110,11 +110,12 @@ const PLATFORMS = [
  *
  * The row for each is one tile ABOVE the surface it belongs to. The player's box is 48 local units
  * — 288 px, three tiles — measured up from the feet, so a gear one tile above a surface sits inside
- * the body of a player standing on it. Placing them ON the surface row would work too and would
- * look like they were buried in the floor.
+ * the body of a player standing on it.
  *
- * `tests/unit/tilemap-data.test.ts` re-derives these from the shipped `.tmj`, so a gear that stops
- * being reachable fails there rather than in a playtest.
+ * `tests/unit/level-entities.test.ts` re-derives these from the shipped `.tmj`: in bounds, not
+ * buried in a solid, not duplicated. **It does NOT test reachability**, which nothing does — a gear
+ * somewhere unjumpable would ship. Said out loud because this comment cited `tilemap-data.test.ts`
+ * until the code-reviewer gate owner found that file has no gear assertions *(vault C9)*.
  */
 const GEARS = [
   { col: 8, row: 19 }, // opening run, flat ground

@@ -9,7 +9,7 @@
  * arguments, so vault 6.2's "a second camera created at an explicit size never auto-resizes" cannot
  * open here later, and the e2e spec drives a genuine `scale.resize()` against the same predicate.
  *
- * `hudFits` is imported by this file AND by `tests/e2e/phase-06-hud.spec.ts`. One definition, two
+ * `hudFits` is imported by this file AND by `tests/e2e/phase-06-chrome.spec.ts`. One definition, two
  * consumers — the `viewFits`/`tracksTarget` precedent from Phase 3.
  */
 

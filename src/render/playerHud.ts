@@ -21,9 +21,13 @@
  * than re-measured at runtime, so a re-shot HUD produces a visibly wrong bar rather than silently
  * moving the geometry under everything else.
  *
- * **If `hud-health` is regenerated, re-measure these four numbers.** There is no gate that can catch
- * a stale slot: the fill would simply sit slightly off inside the frame, which is a thing only an
- * eye can see. Recorded as a known limitation rather than papered over.
+ * **If `hud-health` is regenerated, re-measure these four numbers.** Phase 6 regenerated it and this
+ * warning came true to the pixel — see `HUD_SLOT` below.
+ *
+ * `tests/unit/shipped-hud.test.ts` now measures the shipped PNG against `HUD_PLATE` and asserts the
+ * slot lies inside it with a bezel margin, so a re-shoot can no longer land in silence. What no gate
+ * can still see is whether the slot lands **on the amber** — the fill would simply sit slightly off
+ * inside the frame, which is a thing only an eye can see. That is criterion 6.8, owner `play`.
  */
 
 import { healthBarFillWidth } from './enemyHealthBar';

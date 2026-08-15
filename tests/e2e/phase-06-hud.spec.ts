@@ -142,7 +142,7 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
   /**
    * The pixel read Codex's F4 asked for.
    *
-   * The unit suite proves `healthBarFillWidth(99, 100, 156)` cannot return a full-slot width. It
+   * The unit suite proves `healthBarFillWidth(99, 100, 239)` cannot return a full-slot width. It
    * cannot prove that the rectangle built from that width is drawn in the right place, in the right
    * colour, at all — `UIScene.drawHealth` is a separate step and every one of its coordinates can be
    * wrong while the arithmetic is right.
@@ -221,7 +221,7 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
       }, hp);
 
       // The band is expressed in GAME pixels and converted, so it stays inside the drained region
-      // whatever the viewport scale happens to be. At 99 hp the spent portion is 14 game px wide;
+      // whatever the viewport scale happens to be. At 99 hp the spent portion is 22 game px wide (239 slot - 217 fill);
       // sampling 3..12 in from the right end is inside it and clear of the rounded brass cap.
       const inner = Math.round((fromRight + 9) * slot.k);
       const outer = Math.round(fromRight * slot.k);
@@ -277,13 +277,59 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
     expect(spentAt99).toBeLessThan(sameBandAtFull * 0.6);
   });
 
-  test('at full health the bar draws no spent portion', async ({ page }) => {
+  /**
+   * 🔴 This test asserted only `barFill.willRender === true` and `health === 100`, and could not
+   * fail for the reason its name states: a `Graphics` reports `willRender` true whether or not any
+   * rectangle was ever queued into it. The code-reviewer gate owner found it, in the spec whose own
+   * header forbids exactly this — asserting a value where the drawn thing is the criterion.
+   *
+   * The replacement reads Phaser's own **command buffer** — the list of drawing operations queued
+   * on the `Graphics` — which is the closest thing to "what did you actually draw" that is
+   * observable without sampling pixels, and which is empty by construction at full health because
+   * `drawHealth` skips the `fillRect` when `spentW <= 0`.
+   */
+  test('at full health the bar queues NO spent rectangle, and below it queues one', async ({
+    page,
+  }) => {
     await bootToGame(page);
-    const hud = await readHud(page);
-    expect(hud.barFill.willRender).toBe(true);
 
-    const health = await page.evaluate(() => window.__game?.health);
-    expect(typeof health).toBe('number');
-    expect(health).toBe(100);
+    const commandsAt = async (hp: number): Promise<number> =>
+      page.evaluate((forcedHp) => {
+        const game = (
+          window as unknown as {
+            __phaserGame: { scene: { getScene(k: string): unknown; pause(k: string): void } };
+          }
+        ).__phaserGame;
+        game.scene.pause('Game');
+        const gs = game.scene.getScene('Game') as unknown as {
+          world: Record<string, unknown> & { player: Record<string, unknown> };
+          cameras: { main: unknown };
+        };
+        const ui = game.scene.getScene('UI') as unknown as {
+          render(w: unknown, c: unknown): void;
+          hudObjects(): { barFill: { commandBuffer: unknown[] } };
+        };
+        ui.render(
+          {
+            ...gs.world,
+            player: { ...gs.world.player, hp: forcedHp, maxHp: 100 },
+            gears: [],
+            gearsCollected: 0,
+            tickCount: 0,
+          },
+          gs.cameras.main,
+        );
+        return ui.hudObjects().barFill.commandBuffer.length;
+      }, hp);
+
+    const atFull = await commandsAt(100);
+    const atHalf = await commandsAt(50);
+
+    expect(typeof atFull).toBe('number');
+    expect(typeof atHalf).toBe('number');
+    // Nothing queued at full health — the art's own gold bar IS the full state.
+    expect(atFull).toBe(0);
+    // And something queued below it. If `drawHealth` stopped drawing entirely, this goes red.
+    expect(atHalf).toBeGreaterThan(0);
   });
 });

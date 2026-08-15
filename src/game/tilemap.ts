@@ -278,7 +278,12 @@ export function describeLevelProblem(raw: unknown): string | null {
     return enemyProblem;
   }
 
-  const gearProblem = describeGearProblem(objects.filter(isGearObject));
+  // The map's own extent, measured from the file rather than assumed (vault 3.2). Both casts are
+  // discharged by the positive-integer checks above.
+  const gearProblem = describeGearProblem(objects.filter(isGearObject), {
+    widthPx: (map.width as number) * (map.tilewidth as number),
+    heightPx: (map.height as number) * (map.tileheight as number),
+  });
   if (gearProblem !== null) {
     return gearProblem;
   }

@@ -24,6 +24,7 @@ import { readPng } from '../../tools/gen/png.mjs';
 import { GEAR_BOX } from '../../src/sim';
 import { RENDER_SCALE } from '../../src/game/constants';
 import { CHROMA } from '../../tools/gen/chromaKey.mjs';
+import { GEAR_TEXTURE_KEY } from '../../src/render/hud';
 import catalog from '../../public/assets/index.json';
 
 /** The shipped bytes, read the same way every other art gate in this suite reads them. */
@@ -79,6 +80,23 @@ describe('the shipped gear sprite', () => {
       if (distance < CHROMA.LOW) greenSurvivors += 1;
     }
     expect(greenSurvivors).toBe(0);
+  });
+
+  it('is catalogued under the key the renderer asks for, so the SPRITE branch is what ships', () => {
+    // 🔴 `gearIsGreybox` was exported with a docstring saying "so a test can assert which branch
+    // shipped instead of inferring it", and no such test existed. The code-reviewer gate owner
+    // found the dangling claim — a comment describing a countermeasure that was never wired up
+    // *(vault C9)*, in a file whose own header recounts Phase 5 shipping 12 of 20 enemies as
+    // permanent grey boxes with every gate green.
+    //
+    // The runtime branch keys on `scene.textures.exists(GEAR_TEXTURE_KEY)`, and a texture exists at
+    // runtime because `BootScene` loaded it from the catalog. So the thing to assert here, without
+    // a Phaser scene, is that the catalog carries exactly that key — if it did not, every gear in
+    // the game would silently be an Arc.
+    const entry = catalog.images.find((i) => i.key === GEAR_TEXTURE_KEY);
+    expect(entry, `no catalog image keyed '${GEAR_TEXTURE_KEY}' — every gear would be a grey box`)
+      .toBeDefined();
+    expect(GEAR_TEXTURE_KEY).toBe('gear');
   });
 
   it('has a catalog entry, because an entry is what makes a file an asset', () => {

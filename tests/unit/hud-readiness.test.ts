@@ -130,11 +130,21 @@ describe('fillIsHonest states the criterion, for both consumers', () => {
 });
 
 describe('playerHudFill applies the compression, so the scene cannot forget to', () => {
-  it('never returns a full-slot width below max health', () => {
+  it('never draws more than the ready fraction below max health', () => {
+    // 🔴 This asserted `fill.w < HUD_SLOT.w` and COULD NOT FAIL. Delete `HUD_READY_FRACTION` from
+    // `playerHudFill` and the worst uncompressed fill below max is 237 of a 239 px slot — and
+    // 237 < 239, so the whole suite stayed green with the fix removed. The code-reviewer gate owner
+    // computed it.
+    //
+    // That is the *same* weak assertion this file's own header calls out at the top, made again in
+    // the one test that exercises the shipped WIRING rather than the parameter: every other test
+    // here passes `HUD_READY_FRACTION` into `healthBarFillWidth` explicitly, so they prove the
+    // compression works and prove nothing about whether `playerHudFill` asks for it.
+    const ceiling = Math.floor(HUD_SLOT.w * HUD_READY_FRACTION);
     for (let hp = 1; hp < MAX_HP; hp += 1) {
       const fill = playerHudFill(hp, MAX_HP, 24, 24);
       expect(typeof fill.w).toBe('number');
-      expect(fill.w, `hp ${hp} drew the full slot`).toBeLessThan(HUD_SLOT.w);
+      expect(fill.w, `hp ${hp} drew ${fill.w} of ${HUD_SLOT.w}`).toBeLessThanOrEqual(ceiling);
     }
   });
 

@@ -16,11 +16,10 @@
  */
 
 import Phaser from 'phaser';
+import { GEAR_TEXTURE_KEY } from '../render/hud';
 import { GEAR_BOX } from '../sim/pickups';
 import type { World } from '../sim/types';
 
-/** The catalog key the generated art lands under. One string, three consumers. */
-export const GEAR_TEXTURE_KEY = 'gear';
 
 /** Grey-box colours — brass, so the placeholder reads as the thing it is standing in for. */
 const GREYBOX_FILL = 0xd9a441;

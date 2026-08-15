@@ -56,10 +56,22 @@ const TWEEN_MS = 260;
  * The counter's colours.
  *
  * 🔴 **Criterion 6.6 requires a MEASURED contrast ratio of at least 4.5:1** — WCAG 2.2 SC 1.4.3,
- * Level AA, normal-size text. These two are the pair that was measured; changing either without
- * re-measuring breaks the criterion silently, because a colour that looks fine on brass is exactly
- * the kind of claim an eye gets wrong. The plate behind the text is dark, and the counter is drawn
- * over the HUD's own background rather than over the world, so the measurement is stable.
+ * Level AA. Measured 2026-08-15 by the accessibility gate owner against background pixels sampled
+ * from the running game: **9.47:1 to 11.87:1**, well clear of the 4.5:1 normal-text threshold and
+ * of the 3:1 large-text one this 44 px bold face actually qualifies for. Changing either colour
+ * without re-measuring breaks the criterion silently.
+ *
+ * 🔴 **The counter is drawn over the LEVEL, not over the HUD plate.** An earlier version of this
+ * comment claimed the opposite — that the text sat on the plate's own dark background, so the
+ * measurement was stable. It is false: `hudLayout` puts `counter.x` beyond `plate.x + plate.w`, so
+ * whatever the world happens to be behind it IS the background. The accessibility gate owner
+ * caught it while verifying the claim rather than assuming it *(vault C9 — a comment describing a
+ * mechanism that does not exist turns nothing red)*.
+ *
+ * That makes `COUNTER_STROKE` load-bearing rather than decorative: a 6 px dark outline is what
+ * holds the contrast when the player walks in front of something pale. The measurement above is of
+ * the shipped level's actual background, not of a guaranteed one, and that limitation is recorded
+ * in `docs/qa/phase-06-hud.md` rather than papered over.
  */
 const COUNTER_FILL = '#f7e3b8';
 const COUNTER_STROKE = '#1a1410';
@@ -72,6 +84,14 @@ export class UIScene extends Phaser.Scene {
   private counter!: Phaser.GameObjects.Text;
   /** The last sim tick a collect tween was spawned for. See `gearsCollectedFrom`. */
   private lastGearTick = 0;
+  /**
+   * The count currently DRAWN in the counter.
+   *
+   * Separate from `world.gearsCollected` so `render()` can tell "nothing changed" from "changed to
+   * the same number", and skip both the text update and the tween scan on the overwhelming majority
+   * of frames. See the comment in `render()` for whose finding this was.
+   */
+  private drawnGearCount = -1;
   private built = false;
   /**
    * The diameter the gear icon was CREATED at.
@@ -168,8 +188,26 @@ export class UIScene extends Phaser.Scene {
     }
 
     this.drawHealth(world.player.hp, world.player.maxHp);
-    this.counter.setText(counterText(world.gearsCollected));
-    this.spawnCollectTweens(world, worldCamera);
+
+    // 🔴 Both of the next two are guarded on "did the count actually change", and the guard is the
+    // finding rather than an optimisation reflex.
+    //
+    // The performance gate owner's brief 1 pointed out that `setText` was called every frame with
+    // the same string, and that whether Phaser 4.2.1 re-rasterises its canvas texture on an
+    // unchanged value is an internal it could not read — making it the one place in this diff where
+    // per-frame cost could plausibly scale with something other than "trivial". Rather than read
+    // Phaser's internals to find out, the call is simply not made when nothing changed.
+    //
+    // The same guard removes `gearsCollectedFrom`'s per-frame array allocation, which `.filter()`
+    // performs even when it matches nothing. `GearLayer.sync()` already uses this exact discipline
+    // one file over (`body.visible === gear.collected`), so this is the established shape here, not
+    // a new one.
+    if (world.gearsCollected !== this.drawnGearCount) {
+      this.drawnGearCount = world.gearsCollected;
+      this.counter.setText(counterText(world.gearsCollected));
+      this.spawnCollectTweens(world, worldCamera);
+    }
+    this.lastGearTick = world.tickCount;
   }
 
   private drawHealth(hp: number, maxHp: number): void {
@@ -192,8 +230,10 @@ export class UIScene extends Phaser.Scene {
 
   /** One flying gear per gear collected since the last frame — position and count from the sim. */
   private spawnCollectTweens(world: World, worldCamera: Phaser.Cameras.Scene2D.Camera): void {
+    // `lastGearTick` is advanced by the caller, on EVERY frame — including the ones that skip this
+    // function. It has to be: if it only moved when a gear was collected, the window would grow
+    // without bound and a gear collected long ago would be re-tweened the next time any gear was.
     const fresh = gearsCollectedFrom(world.gears, this.lastGearTick);
-    this.lastGearTick = world.tickCount;
     if (fresh.length === 0) {
       return;
     }

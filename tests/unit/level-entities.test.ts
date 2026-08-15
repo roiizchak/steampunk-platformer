@@ -158,6 +158,10 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // which fires earlier, and prove nothing about the cap.
     ['too-many-enemies', /23 enemies, over the 22/],
     ['gear-not-a-point', /must be a POINT/],
+    // Added after the code-reviewer gate owner noticed gears were the only entity with no
+    // placement check at all: enemies get ground under both patrol ends, the spawn gets ground
+    // beneath it, and a gear could sit outside the map and simply never be collectable.
+    ['gear-outside-map', /outside the map/],
   ];
 
   it.each(cases)('%s', (name, reason) => {

@@ -36,7 +36,10 @@ export function isGearObject(object: unknown): boolean {
  * a level file could silently disagree with. Tiled writes `width: 0, height: 0` for a point, and
  * accepting a rectangle here would mean quietly ignoring whatever the designer drew.
  */
-export function describeGearProblem(gearObjects: TiledObject[]): string | null {
+export function describeGearProblem(
+  gearObjects: TiledObject[],
+  bounds: { widthPx: number; heightPx: number },
+): string | null {
   if (gearObjects.length > MAX_LEVEL_GEARS) {
     return (
       `${gearObjects.length} gears, over the ${MAX_LEVEL_GEARS} cap. Refusing rather than ` +
@@ -51,6 +54,16 @@ export function describeGearProblem(gearObjects: TiledObject[]): string | null {
     }
     if (!Number.isFinite(gear.x) || !Number.isFinite(gear.y)) {
       return `gear #${index} has a non-finite position (${gear.x}, ${gear.y})`;
+    }
+    // Inside the map. Every other entity gets a placement check — enemies are tested for ground
+    // under BOTH patrol ends, the spawn for ground beneath it — and gears had none, so an
+    // out-of-bounds gear booted fine and was simply uncollectable. That is the same "a level the
+    // player can never complete" the cap above refuses for, arrived at from the other direction.
+    //
+    // This is a BOUNDS check, not a reachability one. Nothing in this project tests whether a gear
+    // can actually be jumped to, and pretending otherwise would be worse than the gap.
+    if (gear.x < 0 || gear.x > bounds.widthPx || gear.y < 0 || gear.y > bounds.heightPx) {
+      return `gear #${index} at (${gear.x}, ${gear.y}) is outside the map (${bounds.widthPx} x ${bounds.heightPx}) — it can never be collected`;
     }
     // A gear authored as a rectangle would have its centre read off a point that is really a
     // corner, putting the pickup half a box away from where the designer placed it — visible only

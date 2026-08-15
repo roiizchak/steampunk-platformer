@@ -25,6 +25,8 @@
 import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
 import { readHud } from './hudHelpers';
+
+type Page = import('@playwright/test').Page;
 import { hudFits } from '../../src/render/hud';
 
 
@@ -221,18 +223,51 @@ test.describe('criterion 6.7 — the canvas is centred once', () => {
 });
 
 test.describe('the boot gate still owns the HUD', () => {
-  test('a refused boot leaves no HUD drawn over the error screen', async ({ page }) => {
-    await bootToGame(page);
-    expect(await page.evaluate(() => window.__game?.ready)).toBe(true);
-
-    // The HUD runs in parallel with Game, so a refusal that stops only Game leaves a health bar and
-    // a gear counter drawn over the error screen — a refusal you can see straight through.
-    const uiActive = await page.evaluate(() => {
+  /** Is a scene running right now, per Phaser's own scene manager? */
+  const uiActive = (page: Page): Promise<boolean> =>
+    page.evaluate(() => {
       const game = (
         window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }
       ).__phaserGame;
       return game.scene.isActive('UI');
     });
-    expect(uiActive).toBe(true);
+
+  test('a successful boot runs the HUD alongside the game', async ({ page }) => {
+    await bootToGame(page);
+    expect(await page.evaluate(() => window.__game?.ready)).toBe(true);
+    expect(await uiActive(page)).toBe(true);
+  });
+
+  /**
+   * 🔴 This test used to be called "a refused boot leaves no HUD drawn over the error screen" and
+   * **never refused a boot**. It called `bootToGame`, asserted `ready === true`, and then asserted
+   * the UI scene was ACTIVE — the opposite of the thing its name claimed. Deleting
+   * `this.scene.stop('UI')` from `BootScene.refuseToRoute` left it green, so the one line Phase 6
+   * added to `BootScene` had no coverage at all. The code-reviewer gate owner found it.
+   *
+   * `?breakAsset=corrupt` points the first catalog entry at a committed non-image, which is the
+   * repeatable refusal fixture Phase 1 built precisely so this path is a regression test rather
+   * than a ritual *(vault C2)*.
+   */
+  test('a REFUSED boot stops the HUD instead of drawing it over the error screen', async ({
+    page,
+  }) => {
+    await page.goto('/?breakAsset=corrupt');
+    await page.waitForFunction(
+      () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
+      undefined,
+      { timeout: 20_000 },
+    );
+
+    // The premise: this really is a refusal, not a slow boot. Without it the assertion below would
+    // pass on a game that simply had not started the HUD yet.
+    const view = await page.evaluate(() => window.__game);
+    expect(typeof view?.bootError).toBe('string');
+    expect(view?.bootError).not.toBe('');
+    expect(view?.ready).toBe(false);
+
+    // The HUD runs in parallel with Game, so a refusal that stopped only Game would leave a health
+    // bar and a gear counter drawn over the error screen — a refusal you can see straight through.
+    expect(await uiActive(page)).toBe(false);
   });
 });
