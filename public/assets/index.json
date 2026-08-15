@@ -25,6 +25,10 @@
     {
       "key": "hud-health",
       "url": "assets/hud/health-assembly.png"
+    },
+    {
+      "key": "gear",
+      "url": "assets/objects/gear.png"
     }
   ],
   "levels": [

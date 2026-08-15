@@ -1,5 +1,9 @@
 /**
- * `npm run assets:world` — tileset, parallax layers and HUD from raw model output to shipped assets.
+ * `npm run assets:world` — tileset, parallax, HUD and the gear pickup, from raw model output to
+ * shipped assets.
+ *
+ * The two isolated-object assets (HUD, gear) live in `buildChrome.mjs`; source resolution lives in
+ * `rawSource.mjs`. What stays here is the grid-and-seam work, which shares nothing with them.
  *
  * The tileset is the interesting one. `nano-banana-pro` exposes no explicit `width`/`height`, so a
  * 32 px grid cannot be requested — SOURCE-ANALYSIS open question 7. It is achieved in post instead:
@@ -10,12 +14,14 @@
  * it on the written file *(criterion 4.23)*.
  */
 
-import { readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { decodePng, encodePng } from './png.mjs';
 import { estimateFieldColour, estimateKeyColour, keyOut, removeSpecks } from './chroma.mjs';
 import { detectFrames } from './sheets.mjs';
 import { crop, downscale, mirrorLoop } from './resize.mjs';
 import { gateGridExact, gateSeam, regionStats, PASS, WARM } from './gates.mjs';
+import { raw } from './rawSource.mjs';
+import { buildHud, buildGear } from './buildChrome.mjs';
 
 /**
  * Read `TILE_SIZE` out of the runtime constants rather than declaring a second copy.
@@ -79,36 +85,6 @@ const GAME_WIDTH = runtimeGameWidth();
  */
 const MIN_LOOP_VIEWS = 2;
 
-const RAW = '_generated/world';
-
-function raw(prefix) {
-  // Model output is `<prefix>-<request_id>.png`, and the request id is what makes a generation
-  // citable in GENERATION-LOG.md. Matching it explicitly also excludes this script's own
-  // `-preview.png` output, which lands in the same folder and is not a source.
-  const files = readdirSync(RAW).filter((f) =>
-    new RegExp(`^${prefix}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png$`)
-      .test(f),
-  );
-  if (files.length === 0) {
-    throw new Error(
-      `assets:world: no source for "${prefix}" in ${RAW}. A declared input that cannot be found ` +
-        `fails the build and is never substituted (vault 4.16).`,
-    );
-  }
-  if (files.length > 1) {
-    // `.find()` used to sit here, which silently takes whichever name readdir returns first.
-    // Regenerating an asset leaves BOTH the old and the new file in place — the filename carries
-    // the request_id — so the build would keep using the superseded image and every gate would
-    // pass on it. That is the stale-asset failure this phase has already paid for twice, and an
-    // ambiguous input is not a resolvable one: move the superseded file out of `${RAW}/`.
-    throw new Error(
-      `assets:world: "${prefix}" is ambiguous — ${files.length} candidates in ${RAW}:\n` +
-        files.map((f) => `  ${f}`).join('\n') +
-        `\nThe build refuses to guess which generation is current.`,
-    );
-  }
-  return decodePng(readFileSync(`${RAW}/${files[0]}`));
-}
 
 /** Square a tile about its centre before downscaling, so nothing is stretched. */
 function square(image) {
@@ -333,38 +309,13 @@ function warmFraction(image) {
   return opaque === 0 ? 0 : warm / opaque;
 }
 
-function buildHud() {
-  const image = raw('hud');
-  const { key } = estimateKeyColour(image);
-  const keyed = removeSpecks(keyOut(image, { key }));
-  const rects = detectFrames(keyed, { minGap: 16, minExtent: 64 });
-  if (rects.length !== 1) {
-    throw new Error(
-      `assets:world: expected ONE HUD assembly, detected ${rects.length}. STYLE.md's geometry ` +
-        `constraint exists to guarantee a single row — a second component means it did not hold.`,
-    );
-  }
-  const r = rects[0];
-  const trimmed = crop(keyed, r.x, r.y, r.w, r.h);
-  // The assembly draws at 1/8 of the 1080 viewport height, which puts the medallion at ~135 px.
-  const target = 128;
-  const scaled = downscale(trimmed, Math.round((r.w * target) / r.h), target);
-  mkdirSync('public/assets/hud', { recursive: true });
-  writeFileSync(
-    'public/assets/hud/health-assembly.png',
-    encodePng(scaled.width, scaled.height, scaled.data),
-  );
-  console.log(
-    `ok  hud       1 assembly  ${r.w}x${r.h} -> ${scaled.width}x${scaled.height}  key(${key.join(',')})`,
-  );
-  return { width: scaled.width, height: scaled.height };
-}
 
 const tiles = buildTileset();
 const backgrounds = buildParallax();
 const hud = buildHud();
+const gear = buildGear();
 writeFileSync(
   '_generated/world-report.json',
-  `${JSON.stringify({ tiles, backgrounds, hud }, null, 2)}\n`,
+  `${JSON.stringify({ tiles, backgrounds, hud, gear }, null, 2)}\n`,
 );
-console.log('\nwrote tiles, backgrounds and hud into public/assets/');
+console.log('\nwrote tiles, backgrounds, hud and gear into public/assets/');

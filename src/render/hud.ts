@@ -35,7 +35,7 @@ import type { GearSim } from '../sim/pickups';
  * the same warning `HUD_SLOT` carries in `playerHud.ts`, for the same reason: nothing can catch a
  * stale number here, because a wrong plate size draws a HUD that is merely slightly off.
  */
-export const HUD_PLATE = { w: 305, h: 128 } as const;
+export const HUD_PLATE = { w: 413, h: 128 } as const;
 
 /** Distance from the top-left corner of the screen to the plate, in DESIGN pixels. */
 export const HUD_MARGIN = 24;
@@ -53,8 +53,17 @@ const COUNTER_GAP = 24;
  */
 const COUNTER_FONT_PX = 44;
 
-/** The gear icon beside the counter, square, in DESIGN pixels. */
-const GEAR_ICON_PX = 56;
+/**
+ * The gear icon beside the counter, square, in DESIGN pixels.
+ *
+ * **72, because that is exactly the size the gear sprite is authored at** — `GEAR_BOX.w` ×
+ * `RENDER_SCALE`, the same size it draws at in the world. At `CAMERA_ZOOM` 1 that makes the icon
+ * 1:1 with its own texture, which is the rule the whole art pipeline is built on: sprite art is
+ * authored at the exact pixel size it is drawn at, and "readable at true sprite size" is a testable
+ * claim rather than a range. An icon at 56 would have been the one place in the project that
+ * resampled a sprite, and the counter is not worth breaking that for.
+ */
+const GEAR_ICON_PX = 72;
 
 export interface Rect {
   x: number;
