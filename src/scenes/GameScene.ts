@@ -17,7 +17,8 @@ import { drawLevelLayer } from './gameLevelDraw';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
 import { createSnapshot } from '../sim/input';
-import { advance, createWorld } from '../sim/tick';
+import { createWorld } from '../sim/tick';
+import { advanceSplit } from '../sim/advanceSplit';
 import type { InputSnapshot, World } from '../sim/types';
 
 /**
@@ -250,8 +251,13 @@ export class GameScene extends Phaser.Scene {
     // routine here, not a stall, and `frame-clock.test.ts` covers it — so blending across the whole
     // batch would add ~33 ms of render lag on every frame. Total ticks run is unchanged, and the
     // split is safe because an input EDGE is cleared by the first tick rather than re-consumed.
-    if (ticks > 0) {
-      if (ticks > 1) advance(this.world, this.input$, ticks - 1);
+    //
+    // 🔴 The split itself moved to `src/sim/advanceSplit.ts` in Phase 6, and it fixed a defect that
+    // lived here: the `ticks - 1` call's return value was DISCARDED, so every edge produced by the
+    // earlier ticks of a multi-tick frame was silently lost — half of all events at a routine 30 Hz.
+    // It could not be unit-tested while it lived inside this method, which is why Phase 5 shipped
+    // with it (vault 2.12; Codex Phase 6 plan review F8).
+    const events = advanceSplit(this.world, this.input$, ticks, () => {
       this.prevPlayer = { x: this.world.player.x, y: this.world.player.y };
       // The enemies' half of the same snapshot, taken at the same instant and for the same reason.
       // It was missing until 2026-08-14, which left every enemy drawn at raw tick positions while
@@ -259,16 +265,13 @@ export class GameScene extends Phaser.Scene {
       // the scavenger "not smooth like my character", and the comparison in those words is literally
       // what the code was doing.
       this.enemies.snapshot();
-      const events = advance(this.world, this.input$, 1);
-      // A respawn moves the player the width of the level in one tick. `interpolatedPosition`
-      // already snaps past `MAX_LEAP_PX`, but only past it — a player who dies within 48px of the
-      // spawn would be blended across the gap instead. Dropping the snapshot says "there is no
-      // previous position to come from", which is the truth about a respawn and needs no threshold.
-      if (events.respawned) {
-        this.prevPlayer = null;
-      }
-    } else {
-      advance(this.world, this.input$, 0);
+    });
+    // A respawn moves the player the width of the level in one tick. `interpolatedPosition`
+    // already snaps past `MAX_LEAP_PX`, but only past it — a player who dies within 48px of the
+    // spawn would be blended across the gap instead. Dropping the snapshot says "there is no
+    // previous position to come from", which is the truth about a respawn and needs no threshold.
+    if (events.respawned) {
+      this.prevPlayer = null;
     }
 
     this.renderPlayer();

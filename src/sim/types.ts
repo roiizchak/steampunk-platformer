@@ -15,6 +15,7 @@
 
 import type { EnemySet } from './enemies';
 import type { WorldBounds } from './hazards';
+import type { GearSim } from './pickups';
 import type { Projectile } from './projectiles';
 
 /** Axis-aligned box. `x`/`y` are the TOP-LEFT corner in world space, where +y is DOWN. */
@@ -257,6 +258,15 @@ export interface TickEvents {
    * a hit-stop or a flash, and diffing hp would also fire when a hazard hurt something.
    */
   hitLanded: boolean;
+  /**
+   * At least one gear was collected on this tick — criterion 6.1.
+   *
+   * An edge, for Phase 7's pickup cue. It deliberately carries neither WHICH gear nor HOW MANY:
+   * this record is OR-accumulated field by field across a whole render frame's batch, so a
+   * coordinate put here would be overwritten and a second gear in the same batch would vanish. The
+   * render layer reads `GearSim.collectedTick` instead. See `pickups.ts`.
+   */
+  gearCollected: boolean;
 }
 
 /**
@@ -303,6 +313,22 @@ export interface World {
   enemies: EnemySet;
   /** Shots in flight. Replaced each tick rather than spliced — see `projectiles.ts`. */
   projectiles: Projectile[];
+  /**
+   * Every gear in the level, collected or not.
+   *
+   * Collected gears STAY in the array with `collected: true` rather than being spliced out: the
+   * render layer indexes bodies by position in this list, exactly as `EnemyLayer` does, and a
+   * shrinking array would silently re-point every body after the hole.
+   */
+  gears: GearSim[];
+  /**
+   * How many gears have been collected. `window.__game.score` publishes this.
+   *
+   * Kept as a counter rather than derived from `gears.filter(...)` on demand: it is read every
+   * frame by the HUD, and a derived value is a second definition of the same fact the moment
+   * anything else needs to write it.
+   */
+  gearsCollected: number;
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

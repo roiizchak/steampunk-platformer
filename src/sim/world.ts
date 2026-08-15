@@ -11,6 +11,7 @@ import { createTuning } from './player';
 import { PLAYER_MAX_HP, IFRAME_TICKS } from './combat';
 import { type EnemySpawn, spawnEnemies } from './enemies';
 import { type WorldBounds } from './hazards';
+import { type GearSpawn, spawnGears } from './pickups';
 import { createRng } from './rng';
 import type { Rect, World } from './types';
 
@@ -60,6 +61,11 @@ export interface CreateWorldOptions {
   /** Level placements. `spawnEnemies` turns each into the live entity its slug names. */
   enemies?: readonly EnemySpawn[];
   /**
+   * Gear placements from the level's object layer. Optional for the same reason `spawn` is: every
+   * pre-Phase-6 fixture is entitled to a world with nothing to collect.
+   */
+  gears?: readonly GearSpawn[];
+  /**
    * The player's feet at level start. Defaults to the grey-box spawn above.
    *
    * Optional on purpose: Phase 3 feeds this from the shipped `.tmj`'s spawn object, while every
@@ -77,6 +83,7 @@ export function createWorld({
   bounds,
   hazards,
   enemies,
+  gears,
 }: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
@@ -95,6 +102,8 @@ export function createWorld({
     hazards: hazards ?? [],
     enemies: spawnEnemies(enemies ?? []),
     projectiles: [],
+    gears: spawnGears(gears ?? []),
+    gearsCollected: 0,
     tuning,
     scale,
     player: {

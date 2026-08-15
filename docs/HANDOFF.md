@@ -1,14 +1,20 @@
-# Session handoff — Phase 5 (combat, enemies, hazards)
+# Session handoff — Phase 6 (collectibles, HUD, steampunk UI chrome)
 
-**Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
-**§14 (session 8, 2026-08-13) supersedes §13 and everything above it. Read §14 first.**
+**Branch:** `phase-06-hud`. **Written:** 2026-08-09 (Phase 5, session 1), amended each session since.
+**§16 (2026-08-15) supersedes §15 and everything above it. Read §16 first.**
 > ⚠️ **This document is stale from the first commit of any session that will rewrite it.**
 > Two Codex blockers and one QA brief in session 7 were caused by reading it mid-flight.
 > If you are reviewing during a session, ask which sections are known stale.
-**Phase 5 is NOT complete and must not be reported complete.**
+
+🔴 **§14 and §15 below say "Phase 5 is FAILING". That was true when they were written and is not
+true now** — Phase 5 closed on 2026-08-15 and merged at `c38c76b`. **This header was itself the
+example**: it carried "Phase 5 is NOT complete" for eleven days past the merge, while
+[PRD.md](PRD.md) marked the phase done, and the Phase 6 plan review had to be told which documents
+to disbelieve. Sections are superseded, never edited in place; the header is the one place that
+tracks the truth, so it is the one place to look first.
 
 Read this first, then [PRD.md](PRD.md), then
-[prd/phase-05-combat.md](prd/phase-05-combat.md) §6 (the gate), then
+[prd/phase-06-hud.md](prd/phase-06-hud.md) §6 (the gate), then
 [qa/phase-05-combat.md](qa/phase-05-combat.md) (what has already been decided and measured — **read
 it before re-measuring anything**).
 
@@ -32,6 +38,46 @@ section moves to `docs/handoff/`. The live sessions stay in this file.
 | §12, §12b, §13 | sessions 6–7 — 2026-08-11/12 | [handoff/sessions-06-07.md](handoff/sessions-06-07.md) |
 | §14 | session 8 — 2026-08-13 | below |
 | §15 | sessions 9–10 — 2026-08-13/14 | below |
+| §16 | Phase 6, session 1 — 2026-08-15 | below |
+
+---
+
+## 16. Phase 6, session 1 — 2026-08-15. **This section supersedes §15 and everything above it.**
+
+**Phase 5 is done.** Closed 2026-08-15, merged at `c38c76b`, and `b8546a8` then took the over-400-line
+file count from seven to one. **`src/scenes/GameScene.ts` at 459 lines is now the only file over the
+ceiling, and `tests/unit/file-size.test.ts` allows exactly one** — so any new Phase 6 file that
+crosses 400 is a hard red, and `tilemap.ts` (374), `GymScene.ts` (399) and `build-assets.mjs` (398)
+are all close enough that an ordinary edit tips them.
+
+**Phase 6 opened on `phase-06-hud`.** Baseline before the first change: typecheck clean · 1146 unit
+tests pass · `npm run build` + `verify-dist` ok.
+
+### Four things the code does not tell you, found while planning this phase
+
+- 🔴 **The player's health bar already has the vault 6.4 defect.** `healthBarFillWidth(99, 100, 156)`
+  returns **154 of 156 px** — a visually full bar at 99 % health, which is vault 6.4's "315 of 318 px"
+  case on the bar that matters most. It shipped in Phase 5 and no gate looks at it.
+- 🔴 **The canvas is centred twice.** [index.html](../index.html) gives `#game` a flex centre while
+  `config.ts:30` sets `autoCenter: CENTER_BOTH`, which writes CSS margins. Vault 6.6/6.7 exactly, and
+  it is what criterion 6.7 exists to catch.
+- 🔴 **`GameScene.update()` throws away events.** The split batch at `GameScene.ts:253-262` keeps only
+  the last tick's events and discards those from `advance(world, input, ticks - 1)`. **This is a
+  Phase 5 defect, not a Phase 6 one** — any edge landing in a dropped tick is silently lost — and no
+  Phase 5 gate found it. Codex's plan review did (finding F8).
+- **The HUD is not missing.** `assets/hud/health-assembly.png` ships, is catalogued as `hud-health`,
+  and was generated on the **current** model, not a retired one. The phase doc's "drawn by a model we
+  no longer use" is about the HUD *inside the anchor scene image*. The user chose to re-shoot anyway
+  with that stated; the cost is a hand re-measure of `HUD_SLOT`, which no gate can catch.
+
+### Decisions taken before any code
+
+Recorded here because none of them is derivable from the diff: minimum supported resolution is
+**both** 1280×720 and 852×480 · gears come from a **Tiled object layer**, like hazards and enemies ·
+up to **10 fal generations** authorised · **every pixel, screenshot and timing number in this phase
+comes from the `chromium-gpu` Playwright project**, headed and on a real GPU — the headless project
+is for logic regression only, because SwiftShader inflates milliseconds ~21× and is not the
+rasteriser a player sees.
 
 ---
 
