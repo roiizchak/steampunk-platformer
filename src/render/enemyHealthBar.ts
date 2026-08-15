@@ -101,6 +101,26 @@ export function healthBarFillWidth(
       `healthBarFillWidth: maxPartialFraction must be in (0, 1], got ${maxPartialFraction}`,
     );
   }
+  // 🔴 The compressed range must have room for the floor, or the mapping INVERTS.
+  //
+  // `liveMax - BAR_MIN_FILL_PX` goes negative once the slot is narrow enough, and a healthier
+  // player then draws a NARROWER bar: the adversarial QA brief executed it — at slotW 3,
+  // `healthBarFillWidth(1, 3, 3, 0.92)` returned 3 and `(2, 3, 3, 0.92)` returned 2. Dead in
+  // practice today because the only 4-argument caller passes a fixed 239 px slot, but this function
+  // is generic and exported, and this phase has already watched the HUD plate change size once.
+  // Throwing beats silently inverting a health bar.
+  if (Math.floor(slotW * maxPartialFraction) <= BAR_MIN_FILL_PX) {
+    throw new Error(
+      `healthBarFillWidth: slot ${slotW} at fraction ${maxPartialFraction} leaves no room above ` +
+        `the ${BAR_MIN_FILL_PX}px floor — the mapping would invert and a healthier bar would draw ` +
+        `narrower.`,
+    );
+  }
+  if (!Number.isFinite(hp)) {
+    // NaN skips both the `<= 0` and `>= maxHp` branches below and propagates through `Math.round`
+    // into `fillRect`, which Canvas drops in silence — a bar that is wrong without being broken.
+    throw new Error(`healthBarFillWidth: hp must be a finite number, got ${hp}`);
+  }
   if (hp <= 0) {
     return 0;
   }
@@ -134,8 +154,22 @@ export function fillIsHonest(
   slotW: number,
   hp: number,
   maxHp?: number,
-  maxPartialFraction = 1,
+  maxPartialFraction?: number,
 ): boolean {
+  // 🔴 Supplying `maxHp` without the fraction used to default it to 1, which collapses the vault
+  // 6.4 branch below to `fillW <= slotW` — something the range check two lines down has ALREADY
+  // guaranteed. So a four-argument call read as if it had opted into the "never full below max"
+  // check and actually checked nothing, returning `true` for precisely the defect the predicate
+  // exists to reject. Confirmed by execution in the adversarial QA brief:
+  // `fillIsHonest(239, 239, 99, 100)` was `true`.
+  //
+  // The two arguments are one decision, so they are required together.
+  if ((maxHp === undefined) !== (maxPartialFraction === undefined)) {
+    throw new Error(
+      'fillIsHonest: pass BOTH maxHp and maxPartialFraction, or neither. Supplying maxHp alone ' +
+        'silently disables the very check it looks like it is enabling.',
+    );
+  }
   if (hp <= 0) {
     return fillW === 0;
   }
@@ -149,7 +183,7 @@ export function fillIsHonest(
   // below max does not draw full". Extending the predicate rather than writing a second one is what
   // keeps a single definition of "this bar is honest" — two predicates that agree on the happy path
   // are not one gate *(vault 5.3)*.
-  if (maxHp !== undefined && hp < maxHp) {
+  if (maxHp !== undefined && maxPartialFraction !== undefined && hp < maxHp) {
     return fillW <= Math.floor(slotW * maxPartialFraction);
   }
   return true;

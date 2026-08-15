@@ -47,10 +47,21 @@ import {
   type HudLayout,
 } from '../render/hud';
 import { addGearObject } from './gearLayer';
+import { ticksToMs } from '../sim';
 import type { World } from '../sim/types';
 
-/** How long a collected gear takes to fly to the counter, in milliseconds. */
-const TWEEN_MS = 260;
+/**
+ * How long a collected gear takes to fly to the counter, as an INTEGER COUNT OF TICKS.
+ *
+ * 🔴 This was `const TWEEN_MS = 260`, and Codex's implementation review called it a blocker against
+ * the project's own rule: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6 ticks
+ * — a float of seconds wearing a millisecond's clothes, in the one layer where the rule is easiest
+ * to forget because Phaser's tween API genuinely takes milliseconds.
+ *
+ * 15 ticks is 250 ms exactly. The conversion goes through `ticksToMs`, the same function the rest of
+ * the project uses, so the number that reaches Phaser is derived rather than authored.
+ */
+const TWEEN_TICKS = 15;
 
 /**
  * The counter's colours.
@@ -144,6 +155,16 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0, 0)
       .setDepth(1002);
+
+    // 🔴 Reset with the objects, not at field-declaration time.
+    //
+    // `attachHud`'s `isActive('UI')` guard deliberately does NOT rebuild this scene when
+    // `GameScene` restarts, and neither did anything reset these two caches. After a level reload
+    // the new world starts at `tickCount` 0 while `lastGearTick` still held the previous run's
+    // final tick, so `gearsCollectedFrom` returned nothing and the first gear of the new run
+    // produced no tween. Found by the code-reviewer's adversarial brief.
+    this.lastGearTick = 0;
+    this.drawnGearCount = -1;
 
     this.built = true;
     this.applyLayout();
@@ -248,13 +269,23 @@ export class UIScene extends Phaser.Scene {
 
       const flyer = addGearObject(this, screenX, screenY, target.w).setDepth(1003);
 
+      // 🔴 `from` is the flyer's OWN scale, never a literal 1.
+      //
+      // `addGearObject` sizes an `Image` with `setDisplaySize`, i.e. it sets `scaleX`. Tweening
+      // `scale` from a literal 1 overwrote that on the first step — correct only by coincidence at
+      // the design size, where `target.w` happens to equal the texture's own 72 px. After a
+      // `scale.resize(1280, 720)` the icon is 48 px, the flyer's real scale is 0.667, and every
+      // flyer would have snapped to 72 px before shrinking. The `Arc` branch was unaffected, which
+      // is exactly how this would have shipped: the grey-box path looked right.
+      const flyerScale = flyer.scale;
+
       this.tweens.add({
         targets: flyer,
         x: target.x + target.w / 2,
         y: target.y + target.h / 2,
-        scale: { from: 1, to: 0.6 },
+        scale: { from: flyerScale, to: flyerScale * 0.6 },
         alpha: { from: 1, to: 0.25 },
-        duration: TWEEN_MS,
+        duration: ticksToMs(TWEEN_TICKS),
         ease: 'Quad.easeIn',
         // Destroyed rather than hidden: an invisible object still costs a display-list walk every
         // frame, and a HUD that leaks one object per gear is a leak with a level-sized bound.

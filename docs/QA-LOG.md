@@ -25,6 +25,7 @@ the index — `docs-contract.test.ts` addresses it by that name.
 | 3 — Tiled tilemap pipeline + Element Editor | [qa/phase-03-tilemap.md](qa/phase-03-tilemap.md) | [prd/phase-03-tilemap.md](prd/phase-03-tilemap.md) | [plan](reviews/phase-03-plan.md) · [impl](reviews/phase-03-impl.md) |
 | 4 — fal art production + Character Gym | [qa/phase-04-art.md](qa/phase-04-art.md) + [gate](qa/phase-04-art-gate.md) | [prd/phase-04-art.md](prd/phase-04-art.md) | [plan](reviews/phase-04-plan.md) · [impl](reviews/phase-04-impl.md) |
 | 5 — Combat, enemies and hazards | [qa/phase-05-combat.md](qa/phase-05-combat.md) + [9 parts](qa/) | [prd/phase-05-combat.md](prd/phase-05-combat.md) | [plan](reviews/phase-05-plan.md) · [impl](reviews/phase-05-impl.md) |
+| 6 — Collectibles, HUD, steampunk UI chrome | [qa/phase-06-hud.md](qa/phase-06-hud.md) | [prd/phase-06-hud.md](prd/phase-06-hud.md) | [plan](reviews/phase-06-plan.md) · [impl](reviews/phase-06-impl.md) |
 
 > Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
 > not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads

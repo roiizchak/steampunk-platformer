@@ -60,11 +60,40 @@ test.describe('criterion 6.1 — the gear counter', () => {
     const after = await readHud(page);
 
     expect(after.counter.text).not.toBe(before.counter.text);
-    // Same glyph count, same drawn width, same left edge. A proportional face would move the
-    // counter every time a 1 became a 2, which is the jitter the criterion names.
     expect(after.counter.text.length).toBe(before.counter.text.length);
     expect(after.counter.w).toBe(before.counter.w);
     expect(after.counter.x).toBe(before.counter.x);
+
+    // 🔴 The assertions above CANNOT detect a proportional font, and that was the whole point of
+    // the test. Comparing '000' with '002' proves nothing: essentially every Latin face ships
+    // LINING figures on a common advance, so Arial passes it too. The code-reviewer's adversarial
+    // brief named the mutation — change `fontFamily` to 'Arial' and this stayed green.
+    //
+    // Digits are not the only thing a monospace face makes equal-width. Measuring a digit string
+    // against a LETTER string of the same length is what actually separates the two: in any
+    // proportional face 'iii' is dramatically narrower than '000'.
+    const widths = await page.evaluate(() => {
+      const ui = (
+        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+      ).__phaserGame.scene.getScene('UI') as unknown as {
+        hudObjects(): { counter: { text: string; width: number; setText(t: string): void } };
+      };
+      const counter = ui.hudObjects().counter;
+      const original = counter.text;
+      const measure = (t: string): number => {
+        counter.setText(t);
+        return counter.width;
+      };
+      const out = { digits: measure('000'), narrow: measure('iii'), wide: measure('WWW') };
+      counter.setText(original);
+      return out;
+    });
+
+    expect(typeof widths.digits).toBe('number');
+    expect(widths.digits).toBeGreaterThan(0);
+    // In a monospace face all three are the same advance. In any proportional face they are not.
+    expect(widths.narrow).toBe(widths.digits);
+    expect(widths.wide).toBe(widths.digits);
   });
 
   test('a collected gear stops being drawn in the world', async ({ page }) => {
@@ -119,9 +148,25 @@ test.describe('criterion 6.1 — the gear counter', () => {
         requestAnimationFrame(step);
       });
 
-      return { peakTweens, peakObjects, settled: ui.children.list.length - baseline };
+      return { peakTweens, peakObjects, baseline };
     });
+    // 🔴 Release the key BEFORE measuring what settled, then wait out one full tween.
+    //
+    // The key used to be held for the entire sampling window and released after it, so a gear
+    // collected in the last 260 ms left a live flyer at the instant `settled` was read — green on a
+    // slow machine, red on a fast one. The code-reviewer's adversarial brief caught the race before
+    // it flaked.
     await page.keyboard.up('ArrowRight');
+    await page.waitForFunction(
+      (base) => {
+        const ui = (
+          window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+        ).__phaserGame.scene.getScene('UI') as unknown as { children: { list: unknown[] } };
+        return ui.children.list.length - (base as number) === 0;
+      },
+      flyers.baseline,
+      { timeout: 5_000 },
+    );
 
     // The premise: gears were actually collected during the sampling window. Without this the
     // assertions below could pass on a game that collected nothing and drew nothing.
@@ -133,8 +178,8 @@ test.describe('criterion 6.1 — the gear counter', () => {
     expect(flyers.peakTweens).toBeGreaterThan(0);
     expect(flyers.peakObjects).toBeGreaterThan(0);
     // And it does not leak: one object per gear, destroyed on arrival. A HUD that keeps them is a
-    // leak with a level-sized bound.
-    expect(flyers.settled).toBe(0);
+    // leak with a level-sized bound. The `waitForFunction` above IS the assertion — it times out
+    // and fails the test if the flyers are never destroyed.
   });
 });
 
