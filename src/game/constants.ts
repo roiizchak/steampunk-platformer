@@ -137,3 +137,18 @@ export const PHASER_RESERVED_TEXTURE_KEYS = ['__DEFAULT', '__MISSING', '__WHITE'
  * unbounded. **Finding S5's `src/sim/` half stays open** and needs its own perf evidence.
  */
 export const MAX_LEVEL_ENEMIES = 22;
+
+/**
+ * The most gears one level may declare.
+ *
+ * A refusal bound, not a measured one, and the distinction matters: unlike `MAX_LEVEL_ENEMIES` this
+ * number has **not** been derived from a frame-budget measurement, because a gear is a static sprite
+ * with a rectangle test and nothing that thinks. It exists so a malformed or duplicated object layer
+ * fails loudly at boot instead of shipping a level with a thousand pickups in it.
+ *
+ * 64 is roomy for the level sizes this project builds — `level-01` is 90 × 22 tiles — and small
+ * enough that hitting it means something went wrong rather than a designer being ambitious. If a
+ * level legitimately needs more, raise it; there is no measurement to invalidate. Say so in the QA
+ * log so the next reader knows it was a decision and not an oversight.
+ */
+export const MAX_LEVEL_GEARS = 64;

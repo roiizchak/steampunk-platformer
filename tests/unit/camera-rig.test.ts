@@ -34,6 +34,7 @@ function levelOf(widthPx: number, heightPx: number): LevelData {
     // future field is a typecheck error here too — that seam is why this literal is not a cast.
     hazards: [],
     enemies: [],
+    gears: [],
   };
 }
 

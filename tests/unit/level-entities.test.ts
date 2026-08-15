@@ -157,11 +157,55 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // patrol edges have ground beneath them — without that it would fail on `hasGroundBelow`,
     // which fires earlier, and prove nothing about the cap.
     ['too-many-enemies', /23 enemies, over the 22/],
+    ['gear-not-a-point', /must be a POINT/],
   ];
 
   it.each(cases)('%s', (name, reason) => {
     const raw = BAD_LEVELS[`../fixtures/bad-levels/${name}.fixture`];
     expect(raw, `fixture ${name} is missing`).toBeTypeOf('string');
     expect(describeLevelProblem(JSON.parse(raw!))).toMatch(reason);
+  });
+});
+
+/**
+ * Gears as level data — criterion 6.1's other half.
+ *
+ * Measured off the shipped bytes, never re-typed from `make-greybox-level.mjs`. A test that
+ * restated the authored coordinates would pass just as happily against a level where every gear had
+ * been placed inside the floor: it would be comparing the generator to itself, which is the root
+ * rule's whole complaint.
+ */
+describe('gears in the shipped level', () => {
+  const level = parseLevel('level-01', MAP_01);
+
+  it('the shipped level actually carries gears', () => {
+    expect(Array.isArray(level.gears)).toBe(true);
+    expect(level.gears.length).toBeGreaterThan(0);
+  });
+
+  it('every gear has a finite position inside the map', () => {
+    for (const [index, gear] of level.gears.entries()) {
+      expect(typeof gear.x, `gear #${index} x`).toBe('number');
+      expect(typeof gear.y, `gear #${index} y`).toBe('number');
+      expect(Number.isFinite(gear.x) && Number.isFinite(gear.y)).toBe(true);
+      expect(gear.x).toBeGreaterThan(0);
+      expect(gear.x).toBeLessThan(level.widthPx);
+      expect(gear.y).toBeGreaterThan(0);
+      expect(gear.y).toBeLessThan(level.heightPx);
+    }
+  });
+
+  it('no gear is buried inside a solid — one you can never reach is one that is not there', () => {
+    for (const [index, gear] of level.gears.entries()) {
+      const buried = level.solids.some(
+        (s) => gear.x >= s.x && gear.x <= s.x + s.w && gear.y >= s.y && gear.y <= s.y + s.h,
+      );
+      expect(buried, `gear #${index} at (${gear.x}, ${gear.y}) is inside a solid`).toBe(false);
+    }
+  });
+
+  it('no two gears occupy the same point', () => {
+    const seen = new Set(level.gears.map((g) => `${g.x},${g.y}`));
+    expect(seen.size).toBe(level.gears.length);
   });
 });

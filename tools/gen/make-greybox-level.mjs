@@ -101,6 +101,32 @@ const PLATFORMS = [
 ];
 
 /**
+ * Gear pickups — Phase 6. Authored as POINTS at the centre of a named cell.
+ *
+ * Placed against the layout above rather than scattered, so each one is a reason to do something
+ * the level already asks for: three along the opening run to teach what a gear is, one **over the
+ * ground gap** so the first real jump is rewarded, and one on each of the three stacked ledges so
+ * the climb has a payoff at every height.
+ *
+ * The row for each is one tile ABOVE the surface it belongs to. The player's box is 48 local units
+ * — 288 px, three tiles — measured up from the feet, so a gear one tile above a surface sits inside
+ * the body of a player standing on it. Placing them ON the surface row would work too and would
+ * look like they were buried in the floor.
+ *
+ * `tests/unit/tilemap-data.test.ts` re-derives these from the shipped `.tmj`, so a gear that stops
+ * being reachable fails there rather than in a playtest.
+ */
+const GEARS = [
+  { col: 8, row: 19 }, // opening run, flat ground
+  { col: 14, row: 19 },
+  { col: 22, row: 19 },
+  { col: 41, row: 18 }, // over the 3-tile ground gap — the reward for the jump
+  { col: 50, row: 15 }, // first ledge (row 16)
+  { col: 58, row: 11 }, // top ledge (row 12)
+  { col: 66, row: 15 }, // third ledge (row 16)
+];
+
+/**
  * Spikes, as authored decoration in the tile layer.
  *
  * They carry no collision — hazards are Phase 5, and inventing damage here would mean inventing
@@ -267,6 +293,26 @@ for (const { slug, fromCol, toCol, standRow, tilesTall } of ENEMIES) {
   });
 }
 
+// Gears, as POINTS. Tiled marks a point with `point: true` and zero width/height, and
+// `describeGearProblem` refuses a rectangle: a gear's size is `GEAR_BOX` in the sim, one number for
+// the whole game, so a per-object width would be a second definition a level file could disagree
+// with. Centred in its cell, which is what makes the authored row read as "one tile above".
+for (const { col, row } of GEARS) {
+  objects.push({
+    height: 0,
+    id: nextObjectId++,
+    name: '',
+    point: true,
+    properties: [{ name: 'gear', type: 'bool', value: true }],
+    rotation: 0,
+    type: '',
+    visible: true,
+    width: 0,
+    x: px(col) + TILE / 2,
+    y: px(row) + TILE / 2,
+  });
+}
+
 const map = {
   compressionlevel: -1,
   height: H_TILES,
@@ -347,5 +393,6 @@ console.log(
   `wrote ${out}\n` +
     `  ${W_TILES} x ${H_TILES} tiles @ ${TILE}px = ${W_TILES * TILE} x ${H_TILES * TILE} px\n` +
     `  ${strips.length} collision strips, spawn at (${px(SPAWN_COL) + TILE / 2}, ${px(GROUND_TOP_ROW)})\n` +
-    `  ${SPIKES.length} hazard rects, ${ENEMIES.map((e) => e.slug).join(' + ')}`,
+    `  ${SPIKES.length} hazard rects, ${ENEMIES.map((e) => e.slug).join(' + ')}\n` +
+    `  ${GEARS.length} gears`,
 );

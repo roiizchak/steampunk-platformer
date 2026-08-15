@@ -144,6 +144,9 @@ export class GameScene extends Phaser.Scene {
       bounds: { widthPx: level.widthPx, heightPx: level.heightPx },
       hazards: level.hazards,
       enemies: level.enemies,
+      // Phase 6, from the same parsed level for the same reason: move a gear in Tiled and it moves
+      // in the game. There is no scene-side list of pickups to drift out of step with the file.
+      gears: level.gears,
     });
     this.applyFeelVariant();
     this.input$ = createSnapshot();
@@ -453,6 +456,10 @@ export class GameScene extends Phaser.Scene {
       // `health` has been on the eight-field surface since Phase 1 and permanently 0 until now.
       // Filling it is not widening the surface — the field already existed and was a lie.
       health: player.hp,
+      // `score` was the same lie, and outlived `health` by a phase: declared in Phase 1, reset to 0
+      // by BootScene, and never written by anything. Phase 6 gives it the only meaning this game
+      // has for it. Still eight fields; still no STOP-and-ask.
+      score: this.world.gearsCollected,
     });
   }
 

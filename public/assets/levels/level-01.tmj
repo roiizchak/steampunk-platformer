@@ -2181,6 +2181,139 @@
           "width": 1152,
           "x": 6528,
           "y": 1680
+        },
+        {
+          "height": 0,
+          "id": 11,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 816,
+          "y": 1872
+        },
+        {
+          "height": 0,
+          "id": 12,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 1392,
+          "y": 1872
+        },
+        {
+          "height": 0,
+          "id": 13,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 2160,
+          "y": 1872
+        },
+        {
+          "height": 0,
+          "id": 14,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 3984,
+          "y": 1776
+        },
+        {
+          "height": 0,
+          "id": 15,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 4848,
+          "y": 1488
+        },
+        {
+          "height": 0,
+          "id": 16,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 5616,
+          "y": 1104
+        },
+        {
+          "height": 0,
+          "id": 17,
+          "name": "",
+          "point": true,
+          "properties": [
+            {
+              "name": "gear",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 0,
+          "x": 6384,
+          "y": 1488
         }
       ],
       "opacity": 1,
@@ -2191,7 +2324,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 11,
+  "nextobjectid": 18,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",
