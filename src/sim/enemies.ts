@@ -63,5 +63,6 @@ export interface Sighting {
 
 export * from './enemySentry';
 export * from './enemyScavenger';
+export * from './scavengerAttack';
 export * from './enemyGeometry';
 export * from './enemyPlacement';

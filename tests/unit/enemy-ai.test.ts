@@ -367,14 +367,27 @@ describe('episode commitment — criterion 5.3, the flap test (Codex C9)', () =>
   });
 
   /**
-   * One counter plus one flag *(5.1)*. Two counters admit a state that cannot be drawn:
-   * "chasing and patrolling", or "neither". Asserted on the shape, since the whole point of the
-   * rule is that the unrepresentable state must not be constructible.
+   * Vault 5.1's shape rule, as a **named allowlist** rather than a count.
+   *
+   * The rule is about counters on the SAME axis: two of those admit a state that cannot be drawn —
+   * "chasing and patrolling", or neither — and the point is that the unrepresentable state must not
+   * be constructible.
+   *
+   * 🔴 This was `expect(counters.length).toBe(1)` until 2026-08-14, when the scavenger gained a
+   * swing and with it `attackCounter`. **Bumping that literal to `2` would have been exactly the
+   * loosening this project bans**: the next counter would have bumped it to 3, and the rule would
+   * have decayed into a tally nobody reads.
+   *
+   * Naming them is strictly stronger. A third counter still fails; a *renamed* counter fails; and
+   * the two that exist had to be written down here, which is the review step a number does not
+   * force. `attackCounter` is a different axis from `chaseCounter` — a scavenger may legitimately
+   * be chasing AND mid-swing, and `scavengerAnim` resolves that by precedence — so it does not
+   * reintroduce the contradiction 5.1 forbids.
    */
-  it('carries one counter and one flag, so there is no unrepresentable state', () => {
+  it('carries exactly the two named counters and one flag — no unrepresentable state', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
-    const counters = Object.entries(s).filter(([k]) => k.endsWith('Counter'));
-    expect(counters.length).toBe(1);
+    const counters = Object.keys(s).filter((k) => k.endsWith('Counter')).sort();
+    expect(counters).toEqual(['attackCounter', 'chaseCounter']);
     expect(typeof s.chasing).toBe('boolean');
   });
 });
@@ -426,8 +439,21 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
     }
   });
 
+  /**
+   * ⚠️ **`attackRange: 0` disables the swing so the DEAD ZONE is what is being measured.**
+   *
+   * The shipped `attackRange` is 144 px and `deadZone` is 96, so the whole dead-zone boundary lives
+   * *inside* attack range: at the shipped tuning a player 97 px away is swung at, not walked toward,
+   * and the body is planted for the 36 ticks that takes. That is correct behaviour and it makes this
+   * probe unable to see the rule it is named for — the hold at 95 would pass for the wrong reason
+   * and the move at 97 would fail for the wrong reason.
+   *
+   * Zero is representable and means "never in range" (`Math.abs(dx) <= 0` only at dx === 0), so the
+   * fixture isolates one rule instead of measuring the interaction of two. The interaction itself is
+   * asserted separately, in the swing tests below.
+   */
   it('boundary probe: 95px offset holds, 97px offset moves and turns', () => {
-    const hold = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    const hold = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000, attackRange: 0 });
     stepScavenger(hold, { playerX: 500 + hold.deadZone - 1, playerY: 960 }, EVERYWHERE);
     expect(hold.chasing).toBe(true);
     const holdX = hold.x;
@@ -439,7 +465,7 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
     // A chaser closing distance is self-stabilising (it can enter its own dead zone after moving),
     // so this measures the FIRST tick only — detection and the dead-zone check both evaluate on the
     // tick chasing begins, per the existing single-call pattern above.
-    const move = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000 });
+    const move = createScavenger({ x: 500, y: 960, patrolMin: 0, patrolMax: 100000, attackRange: 0 });
     const moveXBefore = move.x;
     stepScavenger(move, { playerX: 500 + move.deadZone + 1, playerY: 960 }, EVERYWHERE);
     expect(move.chasing).toBe(true);

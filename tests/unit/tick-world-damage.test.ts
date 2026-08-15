@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 
 import { HAZARD_DAMAGE } from '../../src/sim/hazards';
 import { IFRAME_TICKS, PLAYER_MAX_HP } from '../../src/sim/combat';
-import { SCAVENGER, SENTRY } from '../../src/sim/enemies';
+import { SCAVENGER, SCAVENGER_ATTACK, SENTRY } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
 import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
 import { createWorld, tick } from '../../src/sim/tick';
@@ -271,9 +271,36 @@ describe('enemies damage the player', () => {
     }
     expect(apart.player.hp).toBe(PLAYER_MAX_HP);
 
+    // 🔴 Standing on a scavenger still costs hp — but it costs it on the SWING, not on the touch.
+    //
+    // This asserted damage on tick ONE until 2026-08-14, when the scavenger gained a telegraphed
+    // attack on the player's report that it had no attack animation. Contact alone no longer hurts:
+    // the claw must be inside its active window (`attackIsLive`). Deliberately NOT fixed by arming
+    // the fixture — this is criterion 5.10's own gate, so it measures what a player actually
+    // experiences, and the windup is now part of that.
     const touching = worldWith({ enemies: [placement], spawn: { x: 700, y: 960 } });
-    tick(touching, { ...IDLE });
-    expect(touching.player.hp).toBe(PLAYER_MAX_HP - SCAVENGER.damage);
+
+    // The telegraph, asserted rather than assumed: a full startup of standing in the creature's
+    // face costs nothing. This is the half of the change that makes the fight readable, and no
+    // other test would notice if the windup silently became zero.
+    for (let i = 0; i < SCAVENGER_ATTACK.startup; i += 1) {
+      tick(touching, { ...IDLE });
+    }
+    expect(
+      touching.player.hp,
+      'the scavenger damaged the player during its windup — the telegraph is not being honoured',
+    ).toBe(PLAYER_MAX_HP);
+
+    // ...and then the strike lands. One more tick carries the counter to `startup`, the first live
+    // tick. Bounded by the active window rather than "step until something happens", so a swing
+    // that never connects fails here instead of looping.
+    for (let i = 0; i < SCAVENGER_ATTACK.active; i += 1) {
+      tick(touching, { ...IDLE });
+    }
+    expect(
+      touching.player.hp,
+      'the scavenger completed an active window on top of the player and dealt no damage',
+    ).toBe(PLAYER_MAX_HP - SCAVENGER.damage);
   });
 
   /**

@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { enemyAnimTimings } from '../../src/render/animTiming';
 import { SENTRY_FIRE_TICKS, enemyAnimKeys, scavengerAnim, sentryAnim } from '../../src/render/enemyView';
-import { createScavenger, createSentry, scavengerFooting, stepScavenger } from '../../src/sim/enemies';
+import { SCAVENGER_ATTACK_TICKS, createScavenger, createSentry, scavengerFooting, stepScavenger } from '../../src/sim/enemies';
 
 describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', () => {
   it('the sentry plays fire only inside the window after a shot, then returns to idle', () => {
@@ -66,13 +66,47 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
   describe('a scavenger that cannot move plays idle, not its gait', () => {
     const EVERYWHERE_HERE = scavengerFooting([{ x: -1e6, y: -1e6, w: 2e6, h: 2e6 }], 6);
 
+    /**
+     * ⚠️ `attackRange: 0` so this measures the DEAD ZONE and not the swing.
+     *
+     * The shipped `attackRange` is 144 px against a 96 px `deadZone`, so a player 40 px away is
+     * inside both — the scavenger would swing, and `scavengerAnim` correctly answers `attack`
+     * rather than `idle`. That is right behaviour and it would make this test assert the wrong
+     * rule. Zero means "never in range", isolating one mechanism per test; the interaction has its
+     * own case below.
+     */
     it('holds idle inside the dead zone, where it deliberately does not close', () => {
-      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000, attackRange: 0 });
       s.chasing = true;
       // Strictly inside `deadZone` (96), so the movement block is skipped entirely.
       stepScavenger(s, { playerX: 40, playerY: 0 }, EVERYWHERE_HERE);
       expect(s.x, 'the dead zone means it did not travel').toBe(0);
       expect(scavengerAnim(s)).toBe('idle');
+    });
+
+    /**
+     * The interaction the fixture above isolates away — and the reason `attack` is tested BEFORE
+     * `moving` in `scavengerAnim`.
+     *
+     * A swing plants the feet for its whole 36 ticks, so `moving` is false throughout. Were the
+     * precedence the other way round the entire attack would draw as `idle`: no windup, no strike,
+     * no recovery, which is exactly the "no attack animation" this feature was built to fix. This is
+     * the test that would go red if someone reordered those two branches.
+     */
+    it('a scavenger mid-swing draws attack, not idle, even though it is standing still', () => {
+      const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+      s.chasing = true;
+      // Inside the shipped `attackRange`, so the swing commits on this step.
+      stepScavenger(s, { playerX: 40, playerY: 0 }, EVERYWHERE_HERE);
+
+      expect(s.moving, 'a swing plants the feet — that is what makes this test necessary').toBe(false);
+      expect(scavengerAnim(s)).toBe('attack');
+
+      // ...and it stays `attack` for the whole window, not just the tick it started.
+      for (let i = 1; i < SCAVENGER_ATTACK_TICKS; i += 1) {
+        stepScavenger(s, { playerX: 40, playerY: 0 }, EVERYWHERE_HERE);
+        expect(scavengerAnim(s), `dropped out of attack on tick ${i}`).toBe('attack');
+      }
     });
 
     it('holds idle when the ledge probe vetoes the step', () => {
@@ -159,7 +193,7 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
    * Both directions, so it cannot rot: red if a key becomes askable without being listed here, and
    * red if a listed key is declared without being removed from the list.
    */
-  const PENDING_ART: readonly string[] = [];
+  const PENDING_ART: readonly string[] = ['rust-scavenger-attack'];
 
   /** Every key the REAL selectors can return, over states the sim can actually reach. */
   function askableKeys(): string[] {
@@ -175,6 +209,10 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     const stalled = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
     stepScavenger(stalled, { playerX: 99999, playerY: 0 }, everywhere);
 
+    // Mid-swing: the player is inside `attackRange`, so this step commits to an attack.
+    const swinging = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    stepScavenger(swinging, { playerX: 10, playerY: 0 }, everywhere);
+
     const deadScavenger = createScavenger({ x: 0, y: 0, patrolMin: -100, patrolMax: 100 });
     deadScavenger.hp = 0;
 
@@ -186,7 +224,7 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     deadSentry.hp = 0;
 
     return [
-      ...[patrolling, chasing, stalled, deadScavenger].map((s) => `rust-scavenger-${scavengerAnim(s)}`),
+      ...[patrolling, chasing, stalled, swinging, deadScavenger].map((s) => `rust-scavenger-${scavengerAnim(s)}`),
       ...[firing, waiting, deadSentry].map((s) => `brass-sentry-${sentryAnim(s)}`),
     ];
   }
@@ -196,7 +234,7 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     const declared = new Set(enemyAnimKeys());
 
     // Non-vacuity: the fixtures must actually reach every state, or "nothing undeclared" is trivial.
-    expect(askable.length, 'the fixtures stopped reaching some states').toBe(7);
+    expect(askable.length, 'the fixtures stopped reaching some states').toBe(8);
 
     const undeclared = askable.filter((k) => !declared.has(k));
     expect(undeclared, 'a key became askable without being declared or listed as pending art').toEqual(

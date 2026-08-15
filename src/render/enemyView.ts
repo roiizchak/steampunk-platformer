@@ -16,19 +16,34 @@
  * `deriveFps` needs `simTicks`. So the key set is exactly what the simulation can express today:
  *
  *   - `brass-sentry`: `idle`, `fire`, `death`
- *   - `rust-scavenger`: `walk`, `chase`, `death`
+ *   - `rust-scavenger`: `idle`, `walk`, `chase`, `death` — **plus `attack`, askable but not yet
+ *     declared**: the sim window exists and `scavengerAnim` returns it, while the sheet is unbought.
+ *     Declaring a key with no file fails the build by design *(vault 4.16)*, so it is held in
+ *     `PENDING_ART` (`tests/unit/enemy-view.test.ts`) until the art lands — the same $0-sim-first
+ *     order `idle` went through, and the reason that machinery was kept rather than inlined.
  *
- * **This is six clips where the plan's budget table priced ten** — it dropped the sentry's
- * `telegraph` and the scavenger's `idle`, `attack` and `hurt`. Not an oversight and not a silent
- * descope: each of those needs a sim window that does not exist, and inventing one to justify a
- * sheet is how vault 4.22's *"0.43 s of art over a 0.25 s move"* happens. The scavenger has no
- * attack state because its BODY is the hazard — contact damage, no swing — and no hurt state
- * because nothing yet damages it. Adding any of them is a mechanic change with a cost, and it goes
- * to the user at the pre-generation STOP rather than being decided here.
+ * The rule behind that list has not changed: **an animation named here needs a sim window behind
+ * it**, because `deriveFps` needs `simTicks`, and inventing a window to justify a sheet is how vault
+ * 4.22's *"0.43 s of art over a 0.25 s move"* happens.
+ *
+ * ⚠️ This said **six** clips and listed the scavenger as `walk, chase, death`, with the reasoning
+ * *"the scavenger has no attack state because its BODY is the hazard — contact damage, no swing"*.
+ * Both halves are now out of date, and each was retired by a decision rather than by drift:
+ *
+ *  - **`idle`** (2026-08-14, D3) — permanent aggro created a standing state. A chasing scavenger
+ *    held inside `deadZone` or vetoed by the ledge probe covers 0 px while `chase` moves the foot
+ *    17.5 px per frame, and nothing ends it.
+ *  - **`attack`** (2026-08-14) — the player reported *"the scavenger does not have an attack
+ *    animation"*. It is a real sim window now (`SCAVENGER_ATTACK`, startup/active/recovery), and
+ *    damage moved from any overlap to the active window only. That is a balance change, taken
+ *    deliberately, and it is what gives the sheet a duration to derive an fps from.
+ *
+ * `hurt` remains absent, for the original reason restated correctly: it is a named descope lever
+ * (`docs/prd/phase-05-combat.md`), covered by a tint flash instead of a sheet.
  */
 
 import type { EnemySlug, Scavenger, Sentry } from '../sim/enemies';
-import { SCAVENGER_BOX, SENTRY_BOX, SENTRY_FIRE_TICKS } from '../sim/enemies';
+import { attackInProgress, SCAVENGER_BOX, SENTRY_BOX, SENTRY_FIRE_TICKS } from '../sim/enemies';
 import { windowOpen } from '../sim/windows';
 
 /**
@@ -43,7 +58,7 @@ import { windowOpen } from '../sim/windows';
 export { SENTRY_FIRE_TICKS };
 
 export type SentryAnim = 'idle' | 'fire' | 'death';
-export type ScavengerAnim = 'idle' | 'walk' | 'chase' | 'death';
+export type ScavengerAnim = 'idle' | 'walk' | 'chase' | 'attack' | 'death';
 export type EnemyAnim = SentryAnim | ScavengerAnim;
 
 /** Which animation a sentry is playing. Death outranks everything — a corpse does not shoot. */
@@ -74,6 +89,20 @@ export function sentryAnim(sentry: Sentry): SentryAnim {
 export function scavengerAnim(scavenger: Scavenger): ScavengerAnim {
   if (scavenger.hp <= 0) {
     return 'death';
+  }
+  // 🔴 **Attack outranks the gait, and it must outrank `idle` too.**
+  //
+  // A swing plants the feet, so `moving` is false for its whole 36 ticks. Tested after `moving` the
+  // swing would draw as `idle` and never appear at all — the windup, the strike and the recovery
+  // would all be a creature standing still, which is precisely the "no attack animation" the player
+  // reported. Precedence, not exclusion: a scavenger may be chasing AND swinging, and this is where
+  // that pair resolves.
+  //
+  // `attackInProgress` is imported from the sim rather than restated as a counter comparison here —
+  // `worldDamage.ts` gates damage on the same module's `attackIsLive`, so what hurts you and what
+  // you see are derived from one definition *(vault 5.3)*.
+  if (attackInProgress(scavenger)) {
+    return 'attack';
   }
   if (!scavenger.moving) {
     return 'idle';

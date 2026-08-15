@@ -15,9 +15,12 @@ import { describe, expect, it } from 'vitest';
 import { enemyKnobs, knobLine } from '../../src/render/enemyTuning';
 import { SENTRY_FIRE_TICKS, sentryAnim } from '../../src/render/enemyView';
 import { createSnapshot } from '../../src/sim/input';
-import { SENTRY, createSentry } from '../../src/sim/enemies';
+import { SCAVENGER, SCAVENGER_ATTACK_TICKS, createScavenger, SENTRY, createSentry } from '../../src/sim/enemies';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { World } from '../../src/sim/types';
+
+/** A minimal legal scavenger, so each guard test varies exactly one argument. */
+const BASE = { x: 0, y: 0, patrolMin: -100, patrolMax: 100 };
 
 /**
  * The player RETREATS for the whole run, and that is not scenery either.
@@ -300,5 +303,42 @@ describe('createSentry refuses a cooldown that would jam its own animation', () 
       seen.add(sentryAnim(sentry));
     }
     expect([...seen].sort()).toEqual(['fire', 'idle']);
+  });
+});
+
+/**
+ * `createScavenger` refuses a cooldown that would jam its own swing — the same guard, for the same
+ * reason, as `createSentry`'s (D7).
+ *
+ * A cooldown inside `SCAVENGER_ATTACK_TICKS` means `attackInProgress` never goes false: the body
+ * stops moving forever and the sprite shows `attack` on every tick. That is an unrepresentable state
+ * reachable through an ordinary-looking argument, which is what vault 2.11's required-args-throw
+ * exists to prevent.
+ */
+describe('createScavenger refuses a cooldown that would jam its own swing', () => {
+  it('throws on a cooldown equal to the swing length — the boundary, not merely below it', () => {
+    expect(() => createScavenger({ ...BASE, attackCooldown: SCAVENGER_ATTACK_TICKS })).toThrow(
+      /attackCooldown/,
+    );
+  });
+
+  it('throws below it', () => {
+    expect(() => createScavenger({ ...BASE, attackCooldown: 1 })).toThrow(/attackCooldown/);
+  });
+
+  it('accepts the smallest cooldown that leaves one recovered tick', () => {
+    expect(() =>
+      createScavenger({ ...BASE, attackCooldown: SCAVENGER_ATTACK_TICKS + 1 }),
+    ).not.toThrow();
+  });
+
+  it('refuses a non-integer — every duration is an integer count of ticks', () => {
+    expect(() => createScavenger({ ...BASE, attackCooldown: 72.5 })).toThrow(/attackCooldown/);
+  });
+
+  /** Non-vacuity: the shipped default must itself satisfy the rule it enforces. */
+  it('the shipped default is legal, or the guard would reject the game', () => {
+    expect(SCAVENGER.attackCooldown).toBeGreaterThan(SCAVENGER_ATTACK_TICKS);
+    expect(() => createScavenger({ ...BASE })).not.toThrow();
   });
 });

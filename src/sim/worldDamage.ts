@@ -32,7 +32,7 @@
  */
 
 import { HAZARD_DAMAGE, belowKillPlane, hazardHit } from './hazards';
-import { SCAVENGER, overlapsScavenger } from './enemies';
+import { SCAVENGER, attackIsLive, overlapsScavenger } from './enemies';
 import { damagePlayer, killPlayer } from './combat';
 import { PLAYER_BOX, toWorld } from './player';
 import { projectileHit } from './projectiles';
@@ -152,6 +152,19 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
     // A corpse is scenery. Without this the body the player just killed keeps costing hp until it
     // is walked around, which reads as the kill not having registered.
     if (scavenger.hp <= 0) {
+      continue;
+    }
+    // 🔴 **The swing, not the touch** — a deliberate balance change, 2026-08-14, on the player's
+    // report that *"the scavenger does not have an attack animation"*.
+    //
+    // This used to hurt on ANY overlap with a live scavenger, gated only by the shared i-frame
+    // window. That was the spec (criterion 5.16 still calls it "contact damage") and it was
+    // unreadable: no windup, no tell, damage arriving from a body that was only ever walking.
+    //
+    // Now the claw has to be live. `attackIsLive` is imported rather than restated — `enemyView`
+    // draws from the same predicate, so what hurts you and what you see cannot disagree *(5.3)*.
+    // A player who backs out during the 14-tick startup takes nothing, which is the entire point.
+    if (!attackIsLive(scavenger)) {
       continue;
     }
     if (overlapsScavenger(scavenger, box, world.scale)) {

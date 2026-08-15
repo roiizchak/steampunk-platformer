@@ -1,6 +1,9 @@
 import type { Rect } from './types';
 import type { Sighting } from './enemies';
 import { ENEMY_DEAD_ZONE, groundUnder, withinRadius } from './enemyGeometry';
+import { advanceWindow } from './windows';
+import { TILE_SIZE } from '../game/constants';
+import { SCAVENGER_ATTACK_TICKS, attackInProgress } from './scavengerAttack';
 
 /* ------------------------------------------------------------------ *
  * rust-scavenger — patrols, detects, then chases until it is killed.
@@ -85,6 +88,25 @@ export const SCAVENGER = {
    * owner. Deleting it is the fix: a knob nobody reads is worse than no knob, because it invites
    * someone to turn it.
    */
+
+  /**
+   * How close the player must be before the scavenger commits to a swing.
+   *
+   * Wider than the body on purpose: the windup has to START before contact, or the telegraph is
+   * invisible and the swing is indistinguishable from the walk-into-you damage it replaces. One and
+   * a half tiles gives roughly a quarter-second of visible windup at chase speed.
+   */
+  attackRange: Math.round(TILE_SIZE * 1.5),
+
+  /**
+   * Ticks between the START of one swing and the earliest start of the next.
+   *
+   * Must exceed `SCAVENGER_ATTACK_TICKS`, and `createScavenger` throws if it does not — the same
+   * rule, for the same reason, as `createSentry`'s cooldown guard (D7): a cooldown inside the
+   * animation's own length means the window never closes and the sprite shows `attack` on every
+   * tick. `72 - 36 = 36` ticks of visible recovery between swings.
+   */
+  attackCooldown: 72,
 } as const;
 
 /**
@@ -112,6 +134,8 @@ export interface Scavenger {
   detectRadius: number;
   deadZone: number;
   facing: 1 | -1;
+  attackRange: number;
+  attackCooldown: number;
   /** ONE flag (vault 5.1). */
   chasing: boolean;
   /** ONE counter (vault 5.1) — ticks spent in the current chase episode. */
@@ -145,6 +169,32 @@ export interface Scavenger {
   maxHp: number;
   /** The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`. */
   lastHitSwing: number;
+  /**
+   * Ticks since this scavenger's last swing STARTED, saturating at `attackCooldown`.
+   *
+   * ## Why there is a second counter, when vault 5.1 says one
+   *
+   * 5.1's rule is about a state machine whose parts can contradict: two counters on the SAME axis
+   * admit "chasing and patrolling", or neither — an unrepresentable state that still type-checks.
+   * `attackCounter` is a **different axis**. A scavenger can legitimately be chasing *and* mid-swing,
+   * and that combination is drawable: `scavengerAnim` resolves it by precedence, attack over gait.
+   * Nothing here can contradict `chasing`.
+   *
+   * `enemy-ai.test.ts`'s shape guard was a bare `counters.length === 1`. It is a **named allowlist**
+   * now, which is strictly stronger: a third counter still fails, and the two that exist had to be
+   * written down to pass. Bumping a count to 2 would have been the loosening this project bans;
+   * naming them is the reviewed version of the same change.
+   *
+   * ## The saturating shape is the sentry's, deliberately
+   *
+   * Identical to `Sentry.cooldownCounter`: it counts UP and stops at `attackCooldown`, a swing
+   * begins by resetting it to 0, and `windowOpen(attackCounter, n)` reads the phase out of it. One
+   * idiom for both enemies, so a reader who has understood the turret has understood this.
+   *
+   * Starts saturated, so a scavenger that spawns already touching the player can swing on its first
+   * tick rather than granting a free `attackCooldown` of safety.
+   */
+  attackCounter: number;
 }
 
 export interface ScavengerOptions {
@@ -157,10 +207,25 @@ export interface ScavengerOptions {
   detectRadius?: number;
   deadZone?: number;
   hp?: number;
+  attackRange?: number;
+  attackCooldown?: number;
 }
 
 export function createScavenger(options: ScavengerOptions): Scavenger {
   const hp = options.hp ?? 60;
+
+  const attackCooldown = options.attackCooldown ?? SCAVENGER.attackCooldown;
+  // The same guard `createSentry` carries, for the same reason (D7). A cooldown inside the swing's
+  // own length means the window never closes: `attackInProgress` stays true forever, the body never
+  // moves again, and the sprite shows `attack` on every tick. Required-args-throw (vault 2.11).
+  if (!Number.isInteger(attackCooldown) || attackCooldown <= SCAVENGER_ATTACK_TICKS) {
+    throw new Error(
+      `createScavenger: attackCooldown must be an integer tick count greater than ` +
+        `SCAVENGER_ATTACK_TICKS (${SCAVENGER_ATTACK_TICKS}), or the swing never closes — the ` +
+        `scavenger freezes mid-attack and never moves again, got ${attackCooldown}`,
+    );
+  }
+
   return {
     x: options.x,
     y: options.y,
@@ -177,6 +242,11 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     hp,
     maxHp: hp,
     lastHitSwing: -1,
+    // Saturated: a scavenger that spawns already next to the player swings on its first tick
+    // rather than granting a free cooldown of safety.
+    attackCounter: attackCooldown,
+    attackRange: options.attackRange ?? SCAVENGER.attackRange,
+    attackCooldown,
   };
 }
 
@@ -227,6 +297,29 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
   // point and not a shortcut.
   const xBefore = scavenger.x;
 
+  // ---- the swing, resolved BEFORE movement -------------------------------------------------
+  //
+  // Before, on purpose: a scavenger that commits to a swing this tick must not also travel this
+  // tick, or the windup slides across the ground and the telegraph stops being a telegraph. The
+  // ordering is the same argument step 4 makes about knockback reaching the same tick's movement.
+  //
+  // 🔴 Advance FIRST, then test. `advanceWindow` saturates at the cooldown, so the counter is a
+  // phase for the whole swing and a "ready" flag once it tops out — one counter doing both jobs,
+  // exactly as `Sentry.cooldownCounter` does. Advancing last would test this tick's phase against
+  // last tick's counter and put the active window one tick out of step with the drawn frame.
+  if (scavenger.hp > 0) {
+    scavenger.attackCounter = advanceWindow(scavenger.attackCounter, scavenger.attackCooldown);
+    const inRange = Math.abs(at.playerX - scavenger.x) <= scavenger.attackRange;
+    // Saturated means fully recovered. A swing cannot interrupt itself, so this cannot re-arm
+    // mid-window and hold the claw live forever.
+    if (inRange && scavenger.attackCounter >= scavenger.attackCooldown) {
+      scavenger.attackCounter = 0;
+      // Commit to facing the player at the moment of the swing. Without this a scavenger that
+      // walked past can strike backwards, which reads as a bug however correct the geometry is.
+      scavenger.facing = at.playerX >= scavenger.x ? 1 : -1;
+    }
+  }
+
   if (!scavenger.chasing) {
     if (detects(scavenger, at)) {
       scavenger.chasing = true;
@@ -239,7 +332,23 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
     scavenger.chaseCounter += 1;
   }
 
-  if (scavenger.chasing) {
+  // 🔴 **A swing plants the feet — it does NOT blind the creature.**
+  //
+  // This guard wraps LOCOMOTION only, and deliberately sits after the detection block above. The
+  // first version returned early instead, which also skipped `detects` and the `chaseCounter`
+  // increment: a scavenger swinging at a player standing on top of it never acquired aggro at all,
+  // because the attack short-circuited perception. `enemy-ai.test.ts`'s "never gives up" caught it
+  // — the fixture puts the player at the scavenger's own x, which is inside `attackRange`.
+  //
+  // Skipping the block rather than returning also keeps **one write site for `moving`**, which is
+  // the whole argument in that field's docstring: the readback below covers every way the body can
+  // fail to move, including this one, without anyone enumerating them.
+  if (attackInProgress(scavenger)) {
+    // Planted. No branch here moves the body, so the readback at the end reports `moving: false`
+    // and `scavengerAnim` draws the swing. Deliberately its OWN arm rather than a condition on the
+    // two below: an `else` on the chase branch would let a swinging scavenger fall through to the
+    // PATROL walk, which is how it would have shuffled sideways mid-attack.
+  } else if (scavenger.chasing) {
     // Inside the dead zone the player is closer than the chaser could close in one tick anyway
     // (gate finding S1) — hold facing AND position, so an off-axis unreachable player (above, across
     // a gap) does not strobe the sprite by flipping `facing` every tick.

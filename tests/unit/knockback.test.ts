@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { HAZARD_DAMAGE } from '../../src/sim/hazards';
 import { HURT_LOCK_TICKS, IFRAME_TICKS, PLAYER_MAX_HP } from '../../src/sim/combat';
-import { SCAVENGER, SENTRY } from '../../src/sim/enemies';
+import { SCAVENGER, SCAVENGER_ATTACK, SENTRY } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
 import { DEFAULT_TUNING } from '../../src/sim/player';
 import { KNOCKBACK_SPEED } from '../../src/sim/worldDamage';
@@ -57,14 +57,28 @@ const LEFT = { ...createSnapshot(), left: true };
  * Projectile, contact and hazard each get their own named test below.
  */
 describe('knockback (Phase 5 scope, step 9b)', () => {
-  /** Park a scavenger on the player so contact lands on tick one, from a known side. */
+  /**
+   * Park a scavenger on the player so contact lands on tick one, from a known side.
+   *
+   * 🔴 **The scavenger is ARMED to strike on the next tick**, and it has to be. Contact alone stopped
+   * dealing damage on 2026-08-14: the claw must be inside its active window as well as overlapping
+   * (`attackIsLive`, `worldDamage.ts`). Left unarmed, every displacement test below would measure
+   * a scavenger still winding up, and the first damage would land 15 ticks later — mid-way through
+   * the friction tail these tests sum.
+   *
+   * `startup - 1` rather than `startup`, because `stepScavenger` **advances the counter before it
+   * tests it**: one tick of `advanceWindow` carries `13` to `14`, which is the first live tick. So
+   * tick one still lands the hit and every measured px below is unchanged by the balance change.
+   */
   function contactWorld(enemyX: number, spawnX: number): World {
-    return worldWith({
+    const world = worldWith({
       enemies: [
         { slug: 'rust-scavenger' as const, x: enemyX, y: 960, patrolMin: enemyX, patrolMax: enemyX },
       ],
       spawn: { x: spawnX, y: 960 },
     });
+    world.enemies.scavengers[0]!.attackCounter = SCAVENGER_ATTACK.startup - 1;
+    return world;
   }
 
   it('a contact hit from the LEFT shoves the player right, measured as displacement', () => {
@@ -199,6 +213,9 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
       ],
       spawn: { x: 706, y: 400 },
     });
+    // Armed for the same reason `contactWorld` is — see its docstring. This fixture builds its own
+    // world (both entities raised together), so it needs the same one line.
+    world.enemies.scavengers[0]!.attackCounter = SCAVENGER_ATTACK.startup - 1;
     const before = world.player.x;
 
     tick(world, { ...IDLE });
