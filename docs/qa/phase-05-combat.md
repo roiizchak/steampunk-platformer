@@ -5,6 +5,49 @@ Index entry in [QA-LOG.md](../QA-LOG.md). Findings from the gate's agent owners 
 
 ---
 
+## Phase 5 — the gate, criterion by criterion
+
+**Written 2026-08-15, when the phase was marked done.** Everything below it in this file is the
+working journal that produced these verdicts, across ten sessions; this section is the summary the
+journal never had, and it is what `docs-contract.test.ts` reads.
+
+**It adjudicates nothing new.** Every row points at where the verdict was actually reached — a gate
+section in this log, a test file, or a Codex review. Where a verdict changed across sessions, the row
+carries the **last** one and says so. A row here is still a claim a human wrote *(C11)*; the
+adversarial briefs and the Codex implementation review are what test that.
+
+| # | Verdict | Where it was decided |
+|---|---|---|
+| 5.1 | **PASS** | `qa-expert` brief 1; re-verified in § *§6 gate — run 2026-08-12 (session 7)*. Negative + positive control through the real `tick()`; radius tunability measured as shots fired, not a readout. |
+| 5.2 | **PASS — but not by the test that claims to** | The named test sweeps only `patrolSpeed`; the criterion is met by `enemy-tuning.test.ts:93-109`, which sweeps `chaseSpeed` on the live field. Codex C4 called this risk and it is half-real: the knob is honest, the test's title is not. Confirmed unchanged in session 10. |
+| 5.3 | **PASS, mutation-measured** | `code-reviewer` brief 1: single-threshold → **36 state changes**, correct → **0**. ⚠️ Carries finding **R1** — 5.3's own flap test cannot go red, recorded not fixed. |
+| 5.4 | **PASS** | § *`play`-owned criteria — 5.4 and 5.8, run 2026-08-12*. Hand-driven in a live browser against real art for the first time; **12 distinct frame indices** observed. |
+| 5.4b | **PASS** | § *THE FROZEN COMBAT TIMINGS*, recorded **2026-08-09, before any Phase 5 generation**. The ordering is the criterion. |
+| 5.4c | **PASS** | First measurement that was ever runnable (session 7). Its structural hole became **G1** in session 10 — `rust-scavenger/attack` had no window at all — found, fixed by recentring the **sim** window on the drawn strike, and red-proved. |
+| 5.4d | **PASS** | fps derived, never authored. Three mirrors that pinned nothing became **G2**; all three now locked in `catalog-timings.test.ts`. |
+| 5.4e | **PASS** | Two `request_id`s recorded as lost were recovered from `~/.genmedia/gallery/` at **$0**. Structural hole closed: G5 runs over the shipped bytes on every `npm test`. |
+| 5.5 | **PASS** | Both active-window endpoints pinned by name, `combat.test.ts:92-114`. **G4** later found nothing walked `attackIsLive` per tick; fixed with a full 36-tick walk plus a damage-once assertion. |
+| 5.6 | **PASS** | Fixture runs `IFRAME_TICKS * 2` = 90 ticks against a 45-tick window; both endpoints pinned and the length asserted. |
+| 5.7 | **PASS** | Session 7 — *and it had never actually been run by its own owner before then*. |
+| 5.8 | **PASS, with a caveat** | § *5.8 — health bar legible…*. A live scavenger driven to **2/60 hp**, camera zoom 1, true sprite size, against `level-01`'s cool wall. Judged by eye at 3× magnification — a downscaled view cannot settle a legibility question. |
+| 5.9 | **PASS** | `enemyTuning.ts:43-59` writes the live entity's own field, so the stale-readout failure mode is structurally excluded, not merely untested. ⚠️ **R6**: `attackRange` and `attackCooldown` have no Gym knob — a recorded scope gap. |
+| 5.10 | **PASS** | Session 7 proved the **ratio**, not a kill. The caveat is closed: the real-swing kill test added in session 10 is filed under 5.16. |
+| 5.11 | **PASS — on the fourth build of the measurement** | § *Criterion 5.11 — rebuilt*. Every earlier number measured something else: SwiftShader not a GPU, a fleet drawn **0 of 20** on screen, rAF *interval* not rAF *work*. **G5** (worst case not connected to `MAX_LEVEL_ENEMIES`) and **G6** (would pass with an invisible fleet) both fixed and red-proved. Final: **11× the enemies costs ~1.1× the frame work**, bound 4×. |
+| 5.12 | **PASS, by written justification** | The rule permits a file over the limit *with a written justification in this log*; § *the EIGHT files over 400 lines, each with its reason* is that justification, plus a ratchet in `file-size.test.ts`. Ceiling raised 7 → 8 and recorded as a loosening, not edited quietly. ⚠️ **R2, R3, R8** — the ceiling is a count not a set, the globs have blind spots, and A7 is structurally compromised for this criterion. All recorded. |
+| 5.13 | **PASS** | [reviews/phase-05-plan.md](../reviews/phase-05-plan.md). |
+| 5.14 | **PASS** | [reviews/phase-05-impl.md](../reviews/phase-05-impl.md), signed off 2026-08-13. Note the ordering rule it carries: 5.14 runs on the final diff, so **art spend afterwards invalidates it**. |
+| 5.15 | **PASS** | Kill plane pins the **crossing tick**; the tunnelling fixture derives the band from the real trajectory and asserts both halves — no tick sampled inside, damage landed anyway. |
+| 5.16 | **PASS for the scavenger; recorded vacuous for the sentry** | **G3** found the damage clause vacuous — the fixture's geometry was unreachable *even alive* — and it was rewritten to arm a dead scavenger mid-strike on top of the player, with a live control that must take damage. **R7** records that the clause remains unfalsifiable for the sentry, which never had a contact-damage mechanic. |
+
+**Full sweep at close** *(see § Full sweep at the end of this log)*: `typecheck` clean · **1146 unit
+tests pass** · `test:sim-isolated` 1146 pass with Phaser uninstalled · `build` + `verify-dist` ok ·
+**e2e 49 passed** · port 5173 clear *(C13)*.
+
+**Carried out of this phase:** findings **R1–R8** are recorded-not-fixed with reasons, and Phase 4's
+open debt (4.2b, 4.16, 4.27) is not closed by this phase. Both belong to whoever plans Phase 6.
+
+---
+
 ## THE FROZEN COMBAT TIMINGS — criterion 5.4b
 
 **Recorded 2026-08-09, before any fal generation for this phase.** At the moment this table was

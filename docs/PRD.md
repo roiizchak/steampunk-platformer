@@ -28,7 +28,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 2 | Player controller + Character Playground | [phase-02-player.md](prd/phase-02-player.md) | 1 | ✅ **done** 2026-08-06 |
 | 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 | ✅ **done** 2026-08-07 |
 | 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | ⚠️ **merged 2026-08-09 with known debt** — approved and merged while **reported failing**. Open: 4.2b, 4.10, 4.12, 4.16, 4.27. Ledger: [Phase 5 §1b](prd/phase-05-combat.md) |
-| 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | — |
+| 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | ✅ **done** 2026-08-15 |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | — |
 | 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | — |
 | 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
