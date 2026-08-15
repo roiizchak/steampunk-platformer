@@ -20,6 +20,7 @@ import {
 } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
+import { stepScavenger } from '../../src/sim/enemies';
 import type { World } from '../../src/sim/types';
 
 const IDLE = createSnapshot();
@@ -156,5 +157,81 @@ describe('the scavenger claw is live on exactly its active ticks, and nowhere el
       tick(world, { ...IDLE });
     }
     expect(world.player.hp, 'a dead scavenger damaged the player').toBe(PLAYER_MAX_HP);
+  });
+});
+
+/**
+ * 🔴 **The attack TRIGGER, which had no direct regression until Codex 5.14 blocker 3.**
+ *
+ * Three defects were fixed in `stepScavenger`'s swing block and **nothing challenged any of them**:
+ * every claw test either assigns `attackCounter` by hand or parks the player at the creature's own
+ * coordinates, so restoring the original one-dimensional, ungated trigger would have left the whole
+ * suite green. The fix had a docstring and no test — which is the same shape as the three "pinned by
+ * a test" claims this gate already found to be pinned by nothing.
+ *
+ * Each case below is written so that exactly one of the three reverts turns it red:
+ *
+ * | revert | which case fails |
+ * |---|---|
+ * | `withinRadius(...)` back to `Math.abs(dx) <= attackRange` | the overhead player |
+ * | drop the `chasing &&` conjunct | the undetected player |
+ * | move the block back above the detection block | the same-tick acquisition case |
+ */
+describe('the swing only fires at a player it has actually seen and can actually reach', () => {
+  const AT = (x: number, y: number) => ({ playerX: x, playerY: y });
+  const EVERYWHERE = { solids: [{ x: -100000, y: 200, w: 200000, h: 100 }], halfWidthPx: 60 };
+
+  function swingsIn(scav: ReturnType<typeof createScavenger>, at: { playerX: number; playerY: number }, ticks: number): number {
+    let swings = 0;
+    for (let i = 0; i < ticks; i += 1) {
+      const before = scav.attackCounter;
+      stepScavenger(scav, at, EVERYWHERE);
+      if (scav.attackCounter === 0 && before !== 0) swings += 1;
+    }
+    return swings;
+  }
+
+  it('does NOT swing at a player directly overhead and out of reach', () => {
+    // dx = 0, dy = 900. The old 1-D trigger read `|dx| <= 144` as TRUE and swung forever at the
+    // ceiling — measured at 3 swings per 200 ticks, with the patrol frozen because a swing plants
+    // the feet. `detectRadius` 480 also does not reach 900, so this is out of both.
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    expect(swingsIn(s, AT(0, -900), 200)).toBe(0);
+    expect(s.chasing, 'a player 900px up is outside detectRadius 480').toBe(false);
+  });
+
+  it('does NOT swing at an unseen player standing right on top of it', () => {
+    // Within reach but never detected: `detectRadius: 0` is the documented AI off-switch. The
+    // ungated trigger swung anyway, and `worldDamage` gates on the claw rather than on aggro, so it
+    // dealt real damage with its perception disabled.
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000, detectRadius: 0 });
+    expect(swingsIn(s, AT(0, 0), 200)).toBe(0);
+  });
+
+  it('DOES swing on the tick it acquires a reachable player — ordering, not just gating', () => {
+    // The gating fix is only safe because detection runs FIRST. If the swing block moved back above
+    // it, `chasing` would still be false on the acquisition tick and this drops to 0 swings: the
+    // creature would stand and stare for a tick before reacting. Proves the fix did not trade one
+    // defect for a subtler one.
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    expect(s.chasing).toBe(false);
+    stepScavenger(s, AT(100, 0), EVERYWHERE);
+    expect(s.chasing, 'a player 100px away is inside detectRadius 480').toBe(true);
+    expect(s.attackCounter, 'it saw the player and did not swing on the same tick').toBe(0);
+  });
+
+  it('swings at a reachable player OFF the horizontal axis, which is what 2-D buys', () => {
+    // dx 100, dy 100 -> distance 141.4 < attackRange 144. The 1-D predicate would also pass this
+    // one, so it is not the discriminator; it is here so the overhead case above cannot be
+    // satisfied by a trigger that has simply stopped working.
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    expect(swingsIn(s, AT(100, -100), 200)).toBeGreaterThan(0);
+  });
+
+  it('does NOT swing at a player just outside the 2-D radius but inside its x-projection', () => {
+    // dx 140, dy 60 -> distance 152.3 > 144, but |dx| 140 <= 144. THE discriminating case: the old
+    // predicate swings here and the new one must not.
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+    expect(swingsIn(s, AT(140, -60), 200)).toBe(0);
   });
 });

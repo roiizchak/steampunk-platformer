@@ -63,6 +63,9 @@ export interface Sighting {
 
 export * from './enemySentry';
 export * from './enemyScavenger';
+// Construction + validation, split out 2026-08-15 to keep  under the 400-line
+// rule without deleting the QA gate's explanations. The barrel is why no consumer's import moved.
+export * from './scavengerFactory';
 export * from './scavengerAttack';
 export * from './enemyGeometry';
 export * from './enemyPlacement';

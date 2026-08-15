@@ -18,7 +18,7 @@ export const TICK_HZ = 60;
 /** Mirrors `IDLE_TICKS` (`src/render/animTiming.ts`) — the authored breathing cycle. */
 export const IDLE_TICKS = 96;
 
-/** Mirrors `SCAVENGER_ATTACK_TICKS` (`src/sim/scavengerAttack.ts`) — startup 14 + active 6 + recovery 16. */
+/** Mirrors `SCAVENGER_ATTACK_TICKS` (`src/sim/scavengerAttack.ts`) — startup 18 + active 6 + recovery 12. */
 export const SCAVENGER_ATTACK_TOTAL_TICKS = 36;
 
 /** Mirrors `DEATH_TICKS` (`src/sim/combat.ts`). */

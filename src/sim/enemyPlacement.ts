@@ -3,7 +3,7 @@ import type { LocalBox, Rect } from './types';
 import type { EnemySlug } from './enemies';
 import { createSentry } from './enemySentry';
 import type { Sentry } from './enemySentry';
-import { createScavenger } from './enemyScavenger';
+import { createScavenger } from './scavengerFactory';
 import type { Scavenger, ScavengerFooting } from './enemyScavenger';
 
 /* ------------------------------------------------------------------ *

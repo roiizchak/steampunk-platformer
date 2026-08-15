@@ -35,6 +35,22 @@ export const ENEMY_DEAD_ZONE = TILE_SIZE;
  * which is precisely the case the flap test parks the player on.
  */
 export function withinRadius(x: number, y: number, at: Sighting, radius: number): boolean {
+  /**
+   * 🔴 **A radius of ZERO means NEVER, not "only at exactly this point"** — corrected 2026-08-15
+   * (Codex 5.14, major 5).
+   *
+   * Without this line `0 <= 0` is true, so a radius of zero still fired at a perfectly coincident
+   * player. That is not a corner case here: `detectRadius: 0` is documented as *"the AI off-switch
+   * several combat fixtures rely on"*, and `attackRange: 0` is the documented swing off-switch —
+   * **both leaked**, and a scavenger with its perception disabled still swung and still dealt
+   * damage, because `worldDamage.ts` gates on the claw rather than on aggro. Found when a new
+   * regression test asserted the off-switch worked and it did not.
+   *
+   * Negative and `NaN` fall out here too, which is the other half of the same finding: the
+   * comparison below SQUARES the radius, so `-500` behaved as a 500 px radius and `NaN` compared
+   * false in a way no caller intended. One guard, three footguns.
+   */
+  if (!(radius > 0)) return false;
   const dx = at.playerX - x;
   const dy = at.playerY - y;
   return dx * dx + dy * dy <= radius * radius;

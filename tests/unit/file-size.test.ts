@@ -115,30 +115,29 @@ describe('the 400-line rule', () => {
     // A ceiling, not an assertion that everything is fine. It exists so that ADDING a new
     // over-limit file is red even if a QA log happens to mention it for another reason.
     //
-    // Ratcheted 10 -> 7 on 2026-08-14 (D6b), then 7 -> 8 later the same day for
-    // `tools/gen/motionCombat.mjs`, then **8 -> 9 -> 9** through the session-11 QA gate as fixes
-    // grew four files and splits shrank two. **Set to 9 on 2026-08-15, which is the measured count.**
+    // 🔴 **BACK TO 7 on 2026-08-15, and the round trip is the lesson.** It went 10 -> 7 (D6b),
+    // then 7 -> 8 for `motionCombat.mjs`, then briefly 9 as the QA gate's fixes grew two more files.
+    // The **Codex implementation review called that what it was**: whatever justification is
+    // written beside it, moving the assertion from 7 to 9 to accommodate files this very session
+    // created is a tolerance loosening, and this project's rule is that a gate is never fixed by
+    // loosening it. It also noted the recorded red-proof was for the OLD ceiling of seven, so the
+    // raised number had never been proved able to fail at all.
     //
-    // 🔴 **The 7 -> 8 raise has been UNDONE by doing the work it deferred.** That raise leaned on a
-    // stated technical obstacle — `motionCombat.mjs` could not be split because it imported
-    // `poseSpan` from `motion.mjs`, closing a cycle whose failure mode is a silently truncated
-    // `VIDEO_MOTIONS`. The criterion 5.12 gate owner showed the obstacle was removable in six lines:
-    // `poseSpan` is a dependency-free string builder and belongs in the leaf `motionClauses.mjs`.
-    // Moved there, the cycle is GONE — verified by importing `motionCombat.mjs` first, the order
-    // that used to truncate, and reading a complete 17-entry table — and the file then split per
-    // subject into `motionCombatScavenger.mjs`. Every motion record was hashed before and after and
-    // is byte-identical, which is the check that matters when the file is mostly prompt text.
+    // It is 7 because the work was done instead:
+    //   - `motionCombat.mjs` split per subject, after `poseSpan` moved to a leaf and killed the
+    //     import cycle that had been the stated reason it could not be split.
+    //   - `enemyScavenger.ts` 471 -> 313, the swing trigger to `scavengerAttack.ts` and construction
+    //     plus validation to `scavengerFactory.ts`.
+    //   - `tick-world-damage.test.ts` 479 -> 352, the claw window to `scavenger-claw.test.ts`.
+    //   - `enemy-tuning.test.ts` 401 -> under, the constructor guards to
+    //     `enemy-constructor-guards.test.ts`.
     //
-    // ⚠️ **Two of the nine are still this session's own growth and are justified, not split**:
-    // `src/sim/enemyScavenger.ts` (464) and `tests/unit/enemy-tuning.test.ts` (401). Both grew
-    // carrying the explanation of defects the gate found — a 1-D attack predicate, an unguarded
-    // `facing` write, a knob with no ceiling, a sweep blind to `facing`. Deleting that to hit a
-    // number is the failure mode this file's own header names first.
+    // **Not one line of explanation was deleted to get here** — every split moved whole concerns
+    // with their docstrings intact, which is the distinction this file's own header draws between
+    // splitting and gaming.
     //
-    // 🔴 **Re-measure before quoting.** The justification table in `docs/qa/phase-05-combat.md` was
-    // found stale by up to 32 lines during this very gate, on rows written one session earlier —
-    // including a row whose whole justification was a trim that had since been undone. This ceiling
-    // is a count and cannot see that; only re-measuring can.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(9);
+    // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
+    // the way past is to split the file or write the justification, in that order of preference.
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(7);
   });
 });

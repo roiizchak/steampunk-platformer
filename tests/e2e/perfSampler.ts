@@ -175,10 +175,17 @@ export async function counts(page: Page): Promise<{
         projectiles: unknown[];
       };
       enemies: {
-        bodies: { x: number; y: number; alpha: number; visible: boolean }[];
+        bodies: {
+          x: number;
+          y: number;
+          alpha: number;
+          willRender(camera: unknown): boolean;
+        }[];
         isSprite: boolean[];
       };
-      cameras: { main: { worldView: { x: number; y: number; width: number; height: number } } };
+      cameras: {
+        main: { worldView: { x: number; y: number; width: number; height: number } };
+      };
     };
     const view = scene.cameras.main.worldView;
     return {
@@ -191,9 +198,21 @@ export async function counts(page: Page): Promise<{
           b.y >= view.y &&
           b.y <= view.y + view.height,
       ).length,
-      // Visible AND fully opaque. Reads what the RENDERER was actually asked to draw, not a flag
-      // set once at creation — the one signal an invisible fleet cannot satisfy.
-      opaque: scene.enemies.bodies.filter((b) => b.visible !== false && (b.alpha ?? 1) >= 1).length,
+      /**
+       * 🔴 **`willRender(camera)`, not `visible`, corrected 2026-08-15 (Codex 5.14, blocker 1).**
+       *
+       * The first fix tested `visible !== false && alpha >= 1`, which closes only the alpha branch.
+       * Phaser excludes an object from rendering through `renderFlags`, and `setScale(0)` CLEARS the
+       * transform render flag — so a fleet scaled to zero reports `visible: true`, `alpha: 1`, a
+       * valid position and a `isSprite` flag, draws absolutely nothing, and makes both ratios
+       * cheaper. Exactly the hole one layer down from the one that was closed.
+       *
+       * `willRender` is Phaser's own answer to "would this be drawn by this camera", so it tracks
+       * every exclusion route the engine has rather than the two a reviewer happened to think of.
+       */
+      opaque: scene.enemies.bodies.filter(
+        (b) => b.willRender(scene.cameras.main) && (b.alpha ?? 1) >= 1,
+      ).length,
       sentries: scene.world.enemies.sentries.length,
       scavengers: scene.world.enemies.scavengers.length,
       projectiles: scene.world.projectiles.length,

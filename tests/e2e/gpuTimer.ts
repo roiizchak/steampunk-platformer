@@ -201,6 +201,15 @@ export async function installGpuTimer(page: Page): Promise<void> {
         // from 720 rAF frames**, at one query per frame. The ratio built on it read 0.38x — the
         // fleet apparently costing LESS GPU than the control — which is the direction that would
         // have made the gate silently unfailable.
+        /**
+         * 🔴 **Captured BEFORE the reset, fixed 2026-08-15 (Codex 5.14, major 4).** The reset ran
+         * first and the returned object then read the already-zeroed variable, so **every report
+         * claimed zero disjoint frames** regardless of what the driver actually signalled. The
+         * discard logic was correct throughout — corrupted queries really were dropped — so the
+         * numbers were sound; what was false was the evidence that they were sound. A gate whose
+         * disjoint count is structurally 0 cannot warn anyone that its samples are being thrown away.
+         */
+        const disjointAtFinish = disjointFrames;
         results.length = 0;
         disjointFrames = 0;
         const at = (q: number): number =>
@@ -208,7 +217,7 @@ export async function installGpuTimer(page: Page): Promise<void> {
         return {
           supported: Boolean(ext),
           samples: ms.length,
-          disjointFrames,
+          disjointFrames: disjointAtFinish,
           medianMs: at(0.5),
           p95Ms: at(0.95),
           abandoned,

@@ -15,12 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { enemyKnobs, knobLine } from '../../src/render/enemyTuning';
 import { SENTRY_FIRE_TICKS, sentryAnim } from '../../src/render/enemyView';
 import { createSnapshot } from '../../src/sim/input';
-import { SCAVENGER, SCAVENGER_ATTACK_TICKS, createScavenger, SENTRY, createSentry } from '../../src/sim/enemies';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { InputSnapshot, World } from '../../src/sim/types';
-
-/** A minimal legal scavenger, so each guard test varies exactly one argument. */
-const BASE = { x: 0, y: 0, patrolMin: -100, patrolMax: 100 };
 
 /**
  * The player RETREATS for the whole run, and that is not scenery either.
@@ -308,94 +304,3 @@ describe('the sentry cooldown knob cannot be turned into an episode that never c
  * Asserted as a RELATIONSHIP to `SENTRY_FIRE_TICKS`, never as the literal 19, so moving the fire
  * window cannot silently re-open the hole *(vault 5.3)*.
  */
-describe('createSentry refuses a cooldown that would jam its own animation', () => {
-  it('throws at exactly SENTRY_FIRE_TICKS, the largest jamming value', () => {
-    expect(() => createSentry({ x: 0, y: 0, cooldown: SENTRY_FIRE_TICKS })).toThrow(
-      /cooldown must be an integer tick count greater than/,
-    );
-  });
-
-  it('throws below it too, and names the offending value', () => {
-    expect(() => createSentry({ x: 0, y: 0, cooldown: 1 })).toThrow(/got 1/);
-  });
-
-  /**
-   * The other direction. A guard that rejected everything would satisfy the two above and make the
-   * sentry unconstructible — so the smallest LEGAL value must be accepted, and it must be exactly
-   * one tick above the window.
-   */
-  it('accepts the smallest cooldown that lets the episode close', () => {
-    const sentry = createSentry({ x: 0, y: 0, cooldown: SENTRY_FIRE_TICKS + 1 });
-    expect(sentry.cooldown).toBe(SENTRY_FIRE_TICKS + 1);
-  });
-
-  it('still accepts the shipped default with no cooldown given at all', () => {
-    expect(createSentry({ x: 0, y: 0 }).cooldown).toBe(SENTRY.cooldown);
-  });
-
-  /**
-   * A fractional cooldown is rejected for the project's flat rule — every duration is an INTEGER
-   * count of 60 Hz ticks — and because `windowOpen` would compare against a float boundary.
-   */
-  it('refuses a fractional tick count', () => {
-    expect(() => createSentry({ x: 0, y: 0, cooldown: 90.5 })).toThrow(/integer tick count/);
-  });
-
-  /**
-   * 🔴 The one that proves the guard is worth having: at the smallest accepted value the episode
-   * really does open AND close, driven through the real `tick`. Without this the guard could be off
-   * by one and every assertion above would still pass.
-   */
-  it('and at that smallest accepted value the episode opens AND closes', () => {
-    const world = freshWorld();
-    const sentry = world.enemies.sentries[0]!;
-    sentry.cooldown = SENTRY_FIRE_TICKS + 1;
-    sentry.cooldownCounter = sentry.cooldown;
-    world.player.x = sentry.x;
-    world.player.y = sentry.y;
-
-    const seen = new Set<string>();
-    for (let i = 0; i < 400; i += 1) {
-      tick(world, createSnapshot());
-      seen.add(sentryAnim(sentry));
-    }
-    expect([...seen].sort()).toEqual(['fire', 'idle']);
-  });
-});
-
-/**
- * `createScavenger` refuses a cooldown that would jam its own swing — the same guard, for the same
- * reason, as `createSentry`'s (D7).
- *
- * A cooldown inside `SCAVENGER_ATTACK_TICKS` means `attackInProgress` never goes false: the body
- * stops moving forever and the sprite shows `attack` on every tick. That is an unrepresentable state
- * reachable through an ordinary-looking argument, which is what vault 2.11's required-args-throw
- * exists to prevent.
- */
-describe('createScavenger refuses a cooldown that would jam its own swing', () => {
-  it('throws on a cooldown equal to the swing length — the boundary, not merely below it', () => {
-    expect(() => createScavenger({ ...BASE, attackCooldown: SCAVENGER_ATTACK_TICKS })).toThrow(
-      /attackCooldown/,
-    );
-  });
-
-  it('throws below it', () => {
-    expect(() => createScavenger({ ...BASE, attackCooldown: 1 })).toThrow(/attackCooldown/);
-  });
-
-  it('accepts the smallest cooldown that leaves one recovered tick', () => {
-    expect(() =>
-      createScavenger({ ...BASE, attackCooldown: SCAVENGER_ATTACK_TICKS + 1 }),
-    ).not.toThrow();
-  });
-
-  it('refuses a non-integer — every duration is an integer count of ticks', () => {
-    expect(() => createScavenger({ ...BASE, attackCooldown: 72.5 })).toThrow(/attackCooldown/);
-  });
-
-  /** Non-vacuity: the shipped default must itself satisfy the rule it enforces. */
-  it('the shipped default is legal, or the guard would reject the game', () => {
-    expect(SCAVENGER.attackCooldown).toBeGreaterThan(SCAVENGER_ATTACK_TICKS);
-    expect(() => createScavenger({ ...BASE })).not.toThrow();
-  });
-});

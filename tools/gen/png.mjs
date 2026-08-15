@@ -253,8 +253,17 @@ function filterScore(row) {
  * could change between zlib versions"* — the worry there is an **external** heuristic, one living
  * inside a library we do not control and could silently re-tune. `filterScore` is our own code and a
  * **pure function of the pixel bytes**: same pixels → same scores → same filter choices → same
- * `raw` → same deflate input → same output bytes, on every machine and every zlib. The contract is
- * unchanged; only the reason it holds needed restating.
+ * `raw` → same deflate input. That much is genuinely machine-independent.
+ *
+ * ⚠️ **The claim stopped there, and it used to say "same output bytes, on every machine and every
+ * zlib" — corrected 2026-08-15 (Codex 5.14).** Determinism of the FILTER CHOICE is ours to
+ * guarantee and is guaranteed. Determinism of the compressed bytes is `deflateSync`'s, not ours:
+ * the same input can legitimately compress differently across zlib versions, and the test that
+ * backs this proves only that two calls agree within one installed version. So the honest contract
+ * is: **this encoder contributes no non-determinism**, and byte-identical rebuilds hold for a fixed
+ * toolchain. Vault 4.15 is satisfied for the case it is about — a rebuild on this machine
+ * reproducing the shipped bytes — and overstating it into a portability guarantee was a claim
+ * nothing here tests.
  *
  * Filtering is where the compression actually was. `deflateSync(level: 9)` was already maxed, so it
  * had nothing left to give; every scanline was being written with filter 0 (none), which throws away

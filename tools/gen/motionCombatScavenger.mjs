@@ -116,7 +116,7 @@ export const SCAVENGER_MOTIONS = Object.freeze({
    *
    * **9 frames is forced.** A one-shot must satisfy `simTicks % frameCount === 0`
    * (`one-shot-divisor.test.ts`), and `SCAVENGER_ATTACK` totals **36** ticks, so the count divides
-   * 36 → 9 gives 4 ticks/frame, fps 15. The 36 is `startup 14 + active 6 + recovery 16`, all balance
+   * 36 → 9 gives 4 ticks/frame, fps 15. The 36 is `startup 18 + active 6 + recovery 12`, all balance
    * numbers: changing either side without the other is how a one-shot starts dwelling unevenly.
    *
    * The prompt names the three phases separately because the whole point is a **telegraph** — one

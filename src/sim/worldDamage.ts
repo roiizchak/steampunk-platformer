@@ -163,7 +163,7 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
     //
     // Now the claw has to be live. `attackIsLive` is imported rather than restated — `enemyView`
     // draws from the same predicate, so what hurts you and what you see cannot disagree *(5.3)*.
-    // A player who backs out during the 14-tick startup takes nothing, which is the entire point.
+    // A player who backs out during the 18-tick startup takes nothing, which is the entire point.
     if (!attackIsLive(scavenger)) {
       continue;
     }
