@@ -2604,7 +2604,7 @@ it did not, `facing` would be inert and G5 direction-blind.
 Criterion **5.4e's structural hole is closed**: G5 now runs over the shipped bytes on every
 `npm test`, so repacking `attack.png` can no longer invalidate the evidence silently.
 
-### Criterion 5.12 — the seven files over 400 lines, each with its reason
+### Criterion 5.12 — the EIGHT files over 400 lines, each with its reason
 
 The rule permits a file over the limit **with a written justification in the phase's QA log**. This
 is that justification, and it is the first one this phase has actually had: the previous verdict
@@ -2619,6 +2619,23 @@ is that justification, and it is the first one this phase has actually had: the 
 | `tools/gen/motion.mjs` | 415 | **Crossed 400 in this session's own `d0fac00`, 390 → 425, entirely from one docstring** — and the size gate stayed green only because the basename appeared in a log for an unrelated reason. Trimmed to 415 by removing the half that duplicated `tests/unit/blockedDwell.ts`; the rest is the paid-for prompt lessons this project exists to keep. Deleting more would be getting under the limit by deleting the knowledge. |
 | `tests/e2e/phase-04-assets.spec.ts` | 407 | Phase 4's asset spec, untouched this phase. |
 | `tests/unit/sheet-packing.test.ts` | 402 | Crossed at 405 in Phase 4 when per-animation lift landed; recorded there, unchanged here. |
+| `tools/gen/motionCombat.mjs` | **426** | **New 2026-08-14**, from the scavenger's `idle` and `attack` records. Roughly two thirds of this file is **literal prompt text sent to fal** — shortening it changes the art that gets generated, which is not a refactor. Both new docstrings were trimmed twice, with their analysis **relocated** to `docs/generations/phase-05-scavenger-{idle,attack}.md` rather than deleted. A split was **considered and rejected**: the scavenger block calls `poseSpan`, so moving it would deepen the `motion.mjs` ↔ `motionCombat.mjs` cycle whose failure mode is a *silently incomplete* `VIDEO_MOTIONS` spread under Vite — a worse risk than the line count. |
+
+#### ⚠️ The ceiling moved 7 → 8, and it was lowered to 7 EARLIER THE SAME DAY
+
+`file-size.test.ts`'s ratchet was tightened `10 → 7` this session (D6b), and this entry raises it to
+**8**. That is a loosening of a gate tightened hours before, so it is recorded rather than edited
+quietly — a ceiling that moves without a note is how the rule decays.
+
+What makes it legitimate rather than convenient: **the ratchet did its job.** It went red the moment
+a new over-limit file appeared, which is exactly what its own docstring says it exists for
+(*"so that ADDING a new over-limit file is red even if a QA log happens to mention its name for
+another reason"*). The file then had to earn its row in the table above, and the alternatives were
+tried first and are written down — trimmed twice, analysis relocated, split considered and rejected
+**for a stated technical reason**, not for effort.
+
+The 400-line rule itself was never bent: it permits a file over the limit *with a written
+justification in the phase's QA log*, and that is what the row above is.
 
 #### 🔄 REVERSAL, 2026-08-14 — T7 was reopened and both halves are now tightened
 

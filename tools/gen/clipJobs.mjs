@@ -169,6 +169,8 @@ const CLIP_FILES = Object.freeze({
    * explicit feet-planted constraint, because "a walk the model called an idle" is the one failure
    * this sheet exists to prevent.
    */
+  /** First take. `request_id 01a003d5-2734-7f93-a7cf-7ce32a264f7d`, seed 2023738685, 2026-08-14. */
+  'rust-scavenger/attack': 'rust-scavenger-attack.mp4',
   'rust-scavenger/idle': 'rust-scavenger-idle.mp4',
   'rust-scavenger/walk': 'rust-scavenger-walk-r3.mp4',
   'rust-scavenger/chase': 'rust-scavenger-chase-r3.mp4',

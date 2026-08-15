@@ -19,7 +19,7 @@ const EXPECTED_ACTIONS: Record<string, string[]> = {
   'brass-sentry': ['idle', 'fire', 'death'],
   // `idle` added 2026-08-14 with the sheet. Order matters — the test below asserts this matches
   // `enemyAnimKeys()` in order, so the two cannot drift into agreeing on contents but not sequence.
-  'rust-scavenger': ['idle', 'walk', 'chase', 'death'],
+  'rust-scavenger': ['idle', 'walk', 'chase', 'attack', 'death'],
 };
 
 describe('slugConfig — per-slug build paths', () => {

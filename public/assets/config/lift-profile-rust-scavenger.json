@@ -362,6 +362,86 @@
           "liftPx": 0
         }
       ]
+    },
+    "attack": {
+      "anchor": "feet",
+      "scale": 0.56074766,
+      "scaleSource": "slug",
+      "deepestSourceY": 551,
+      "frames": [
+        {
+          "index": 0,
+          "sourceMinY": 120,
+          "sourceMaxY": 550,
+          "sourceCentroidY": 350.779,
+          "drawnHeight": 242,
+          "liftPx": 1
+        },
+        {
+          "index": 1,
+          "sourceMinY": 0,
+          "sourceMaxY": 551,
+          "sourceCentroidY": 302.091,
+          "drawnHeight": 310,
+          "liftPx": 0
+        },
+        {
+          "index": 2,
+          "sourceMinY": 36,
+          "sourceMaxY": 551,
+          "sourceCentroidY": 283.607,
+          "drawnHeight": 289,
+          "liftPx": 0
+        },
+        {
+          "index": 3,
+          "sourceMinY": 88,
+          "sourceMaxY": 551,
+          "sourceCentroidY": 292.712,
+          "drawnHeight": 260,
+          "liftPx": 0
+        },
+        {
+          "index": 4,
+          "sourceMinY": 88,
+          "sourceMaxY": 551,
+          "sourceCentroidY": 292.574,
+          "drawnHeight": 260,
+          "liftPx": 0
+        },
+        {
+          "index": 5,
+          "sourceMinY": 128,
+          "sourceMaxY": 549,
+          "sourceCentroidY": 323.361,
+          "drawnHeight": 237,
+          "liftPx": 1
+        },
+        {
+          "index": 6,
+          "sourceMinY": 118,
+          "sourceMaxY": 551,
+          "sourceCentroidY": 336.976,
+          "drawnHeight": 243,
+          "liftPx": 0
+        },
+        {
+          "index": 7,
+          "sourceMinY": 106,
+          "sourceMaxY": 549,
+          "sourceCentroidY": 339.403,
+          "drawnHeight": 249,
+          "liftPx": 1
+        },
+        {
+          "index": 8,
+          "sourceMinY": 114,
+          "sourceMaxY": 549,
+          "sourceCentroidY": 350.034,
+          "drawnHeight": 244,
+          "liftPx": 1
+        }
+      ]
     }
   }
 }

@@ -186,6 +186,13 @@ export const PADDED_ANCHORS = Object.freeze({
     source: '_generated/anchors-padded/rust-scavenger-padded.png',
   }),
 
+  /** The swing, padded like every other scavenger action — same PNG, same sha, one framing per slug. */
+  'rust-scavenger/attack': Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf0/6X0GqPhD7r1-tuxbrx4Pm_rust-scavenger-padded.png',
+    sha256: '1fd1a6b8768229e47aad0a6d69d8286bbe306fc8aa2c89edcf922936c9f917c1',
+    source: '_generated/anchors-padded/rust-scavenger-padded.png',
+  }),
+
   /** G6 f3/12, **top 0** and left 8 — the failures moved to the top edge, which §10 did not record. */
   'rust-scavenger/chase': Object.freeze({
     url: 'https://v3b.fal.media/files/b/0aa5ecf0/6X0GqPhD7r1-tuxbrx4Pm_rust-scavenger-padded.png',

@@ -18,6 +18,9 @@ export const TICK_HZ = 60;
 /** Mirrors `IDLE_TICKS` (`src/render/animTiming.ts`) — the authored breathing cycle. */
 export const IDLE_TICKS = 96;
 
+/** Mirrors `SCAVENGER_ATTACK_TICKS` (`src/sim/scavengerAttack.ts`) — startup 14 + active 6 + recovery 16. */
+export const SCAVENGER_ATTACK_TOTAL_TICKS = 36;
+
 /** Mirrors `DEATH_TICKS` (`src/sim/combat.ts`). */
 export const DEATH_TICKS = 45;
 
@@ -94,6 +97,12 @@ const FIXED_TIMINGS = {
      * `brass-sentry-idle`'s spec exactly. 8 is a divisor of 96, which is what `loop-dwell` requires.
      */
     idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
+    /**
+     * The swing's own window, mirrored from `SCAVENGER_ATTACK` in `src/sim/scavengerAttack.ts`.
+     * `tools/gen/*.mjs` cannot import TypeScript, so the 36 is restated here and pinned equal to the
+     * real export by `tests/unit/sheet-gates.test.ts`'s mirror lock. 36 / 9 frames = 4 ticks/frame.
+     */
+    attack: { simTicks: SCAVENGER_ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
   },
   'brass-courier': {

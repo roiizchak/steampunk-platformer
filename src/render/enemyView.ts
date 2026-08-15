@@ -16,11 +16,7 @@
  * `deriveFps` needs `simTicks`. So the key set is exactly what the simulation can express today:
  *
  *   - `brass-sentry`: `idle`, `fire`, `death`
- *   - `rust-scavenger`: `idle`, `walk`, `chase`, `death` — **plus `attack`, askable but not yet
- *     declared**: the sim window exists and `scavengerAnim` returns it, while the sheet is unbought.
- *     Declaring a key with no file fails the build by design *(vault 4.16)*, so it is held in
- *     `PENDING_ART` (`tests/unit/enemy-view.test.ts`) until the art lands — the same $0-sim-first
- *     order `idle` went through, and the reason that machinery was kept rather than inlined.
+ *   - `rust-scavenger`: `idle`, `walk`, `chase`, `attack`, `death`
  *
  * The rule behind that list has not changed: **an animation named here needs a sim window behind
  * it**, because `deriveFps` needs `simTicks`, and inventing a window to justify a sheet is how vault
@@ -112,7 +108,7 @@ export function scavengerAnim(scavenger: Scavenger): ScavengerAnim {
 
 const ANIMS_BY_SLUG: Record<EnemySlug, readonly EnemyAnim[]> = {
   'brass-sentry': ['idle', 'fire', 'death'],
-  'rust-scavenger': ['idle', 'walk', 'chase', 'death'],
+  'rust-scavenger': ['idle', 'walk', 'chase', 'attack', 'death'],
 };
 
 /** `brass-sentry` + `fire` -> `brass-sentry-fire`. The catalog namespace is flat. */

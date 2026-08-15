@@ -174,12 +174,12 @@ describe('the Rectangle fallback is a dated temporary, not permanent scaffolding
         'dropped or a key was renamed. Every enemy action must resolve to a real catalog row.',
     ).toEqual([]);
     // Guards the other direction: an empty `enemyAnimKeys()` would make the line above vacuous.
-    expect(all.length, 'enemyAnimKeys() is empty — the assertion above proves nothing').toBe(7);
+    expect(all.length, 'enemyAnimKeys() is empty — the assertion above proves nothing').toBe(8);
   });
 
-  it('the fixture carries all seven enemyAnimKeys() rows, or the expiry test below proves nothing', () => {
+  it('the fixture carries all eight enemyAnimKeys() rows, or the expiry test below proves nothing', () => {
     const fixtureKeys = new Set(fixtureCatalog.sheets.map((sheet) => sheet.key));
-    expect(fixtureKeys.size).toBe(7);
+    expect(fixtureKeys.size).toBe(8);
     expect(fixtureKeys).toEqual(new Set(enemyAnimKeys()));
   });
 

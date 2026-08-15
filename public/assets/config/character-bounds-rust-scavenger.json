@@ -41,6 +41,15 @@
       "fps": 20,
       "footPxPerFrame": 18
     },
+    "attack": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [
+        3,
+        4
+      ]
+    },
     "death": {
       "loop": false,
       "verticalAnchor": "feet",

@@ -56,6 +56,15 @@
       "loop": true
     },
     {
+      "key": "rust-scavenger-attack",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": false
+    },
+    {
       "key": "rust-scavenger-death",
       "frameWidth": 1,
       "frameHeight": 1,

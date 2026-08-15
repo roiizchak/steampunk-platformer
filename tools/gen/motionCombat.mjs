@@ -308,24 +308,16 @@ export const COMBAT_MOTIONS = Object.freeze({
    * no-ops on an unregistered key, so the sprite kept playing `chase`. This sheet is what makes the
    * fix visible. Recorded because the opposite was believed when the spend was approved.
    *
-   * ## 8 frames, and why the count is the only free number
+   * **8 frames is forced.** Cyclic -> `loop: true` -> the binding gate is `loop-dwell.test.ts`
+   * (`simTicks % frameCount === 0`), not `one-shot-divisor`, which filters looping rows out.
+   * `FIXED_TIMINGS` pins `simTicks = IDLE_TICKS = 96`, so the count divides 96 -> **8 gives 12
+   * ticks/frame, fps 5**, `brass-sentry-idle`'s spec exactly.
    *
-   * `idle` is cyclic -> `loop: true` -> `one-shot-divisor.test.ts` does not apply (it filters
-   * looping rows out). The binding gate is `loop-dwell.test.ts`: `simTicks % frameCount === 0`.
-   * `FIXED_TIMINGS` pins `simTicks = IDLE_TICKS = 96`, so the safe set is the divisors of 96, and
-   * **8 -> 12 ticks/frame, fps 5** is `brass-sentry-idle`'s spec exactly.
+   * 🔴 **Do not reach for `pingPong` if a re-shoot fails the loop wrap.** It packs `2n-2` cells; from
+   * 8 that is **14**, and `96 / 14` is not an integer. Compatible counts: n in {4,5,7,9,13,17,25}.
    *
-   * 🔴 **Do not reach for `pingPong` if the loop wrap fails.** It packs `2n-2` cells; from 8 that is
-   * **14**, and `96 / 14` is not an integer, so `loop-dwell` goes red. Ping-pong-compatible counts
-   * here are n in {4, 5, 7, 9, 13, 17, 25}.
-   *
-   * ## The spend risk, and what the prompt does about it
-   *
-   * A cyclic idle from this endpoint had a measured record of **two different partial failures**
-   * before this was written. The clauses below are chosen against them: a named cycle count, an
-   * explicit list of what moves, the head-height clause, and a feet-planted constraint — because
-   * *"a walk the model called an idle"* is the failure this sheet exists to prevent. Full analysis,
-   * both precedents and the outcome in
+   * The clauses below are chosen against two measured precedents — a cyclic idle from this endpoint
+   * had failed two different ways before. Full analysis and outcome in
    * [docs/generations/phase-05-scavenger-idle.md](../../docs/generations/phase-05-scavenger-idle.md).
    */
   'rust-scavenger/idle': {
@@ -348,6 +340,40 @@ export const COMBAT_MOTIONS = Object.freeze({
       'standing height - it never bobs or rocks. It completes exactly TWO full settle-and-rise ' +
       'breaths during the clip, slowly and evenly. It stays hunched, in exactly the same place in ' +
       'the frame, at exactly the same size.' + FRAME_MARGIN,
+  },
+
+  /**
+   * The swing — the animation the player reported missing.
+   *
+   * **9 frames is forced.** A one-shot must satisfy `simTicks % frameCount === 0`
+   * (`one-shot-divisor.test.ts`), and `SCAVENGER_ATTACK` totals **36** ticks, so the count divides
+   * 36 → 9 gives 4 ticks/frame, fps 15. The 36 is `startup 14 + active 6 + recovery 16`, all balance
+   * numbers: changing either side without the other is how a one-shot starts dwelling unevenly.
+   *
+   * The prompt names the three phases separately because the whole point is a **telegraph** — one
+   * smooth motion across nine frames has no readable commitment point, which fails the same way as
+   * having no attack at all. Feet planted throughout, since `stepScavenger` holds `x` still for the
+   * entire swing. Full record in
+   * [docs/generations/phase-05-scavenger-attack.md](../../docs/generations/phase-05-scavenger-attack.md).
+   */
+  'rust-scavenger/attack': {
+    frames: 9,
+    identity: 'IDENTITY: this is the same creature throughout, in strict side profile facing RIGHT - same ' +
+      'riveted bucket head with a narrow slit and two amber lamps, same mismatched scavenged ' +
+      'plates lashed on with wire, same counterweight on a chain at the hip, same bent exhaust ' +
+      'stack, same rusted palette. It has EXACTLY two arms and two legs in every single frame and ' +
+      'grows no extra limb. It stays hunched and forward-leaning and never stands fully upright.',
+    motion:
+      'attacks with ONE single clawed swipe, in three clearly separate stages that a viewer can ' +
+      'tell apart. FIRST it winds up: it leans back, raises its near clawed arm high and back ' +
+      'behind its head, and holds that raised pose long enough to be unmistakable - this windup is ' +
+      'the slowest part of the clip. THEN it strikes: the raised claw sweeps down and forward to ' +
+      'the RIGHT in one fast arc, reaching its furthest extension in front of the body. FINALLY it ' +
+      'recovers: the arm drops and it settles back to its hunched standing pose. It swings exactly ' +
+      'ONCE - there is no second swipe. Its clawed feet stay PLANTED on exactly the same spot on ' +
+      'the ground for the entire clip: neither foot lifts, slides or steps, it does NOT walk, and ' +
+      'it does NOT travel across the frame. It stays hunched, in exactly the same place in the ' +
+      'frame, at exactly the same size.' + FRAME_MARGIN,
   },
 
   /**

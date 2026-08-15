@@ -69,7 +69,7 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the fifteen animations these assertions cover', () => {
+  it('the catalog declares the sixteen animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
@@ -112,6 +112,13 @@ describe('the shipped character sheets, read from the files the player loads', (
       // looping animation's cadence is authored now, so `chase` resolved the moment that rule
       // changed — see character-bounds-rust-scavenger.json's `_loopFps`. Adopting it also dissolves
       // finding T10, which recorded that 5.3's chase commitment was unobservable on screen.
+      /**
+       * Session 11, $1.19, first take adopted — `request_id 01a003d5-2734-7f93-a7cf-7ce32a264f7d`.
+       * The player reported the scavenger had no attack animation; it had none because it had no
+       * attack STATE — its body was the hazard. Both exist now, and damage moved from any overlap
+       * to the active window only. 9 frames over the swing's 36 ticks = 4 ticks/frame, fps 15.
+       */
+      'rust-scavenger-attack',
       'rust-scavenger-chase',
       // Session 9: the enemy KO animation, and the first sheet packed through the DECLARED cell
       // pitch rather than re-detected bands. It could not pack before for two independent reasons,

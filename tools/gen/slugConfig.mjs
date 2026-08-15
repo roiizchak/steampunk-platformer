@@ -44,7 +44,7 @@ const TABLE = {
     config: 'public/assets/config/character-bounds-rust-scavenger.json',
     liftProfile: 'public/assets/config/lift-profile-rust-scavenger.json',
     reportPath: '_generated/sheet-report-rust-scavenger.json',
-    actions: ['idle', 'walk', 'chase', 'death'],
+    actions: ['idle', 'walk', 'chase', 'attack', 'death'],
     looping: new Set(['idle', 'walk', 'chase']),
   },
 };

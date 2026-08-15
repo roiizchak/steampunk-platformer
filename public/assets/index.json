@@ -198,6 +198,17 @@
       "fps": 5,
       "loop": true,
       "derivedFrom": "authored"
+    },
+    {
+      "key": "rust-scavenger-attack",
+      "url": "assets/characters/rust-scavenger/sheets/attack.png",
+      "frameWidth": 512,
+      "frameHeight": 384,
+      "frameCount": 9,
+      "simTicks": 36,
+      "fps": 15,
+      "loop": false,
+      "derivedFrom": "sim"
     }
   ]
 }

@@ -78,8 +78,9 @@ and nothing else moves.**
 | [generations/phase-05-fire-repad.md](generations/phase-05-fire-repad.md) | Phase 5 — the sentry `fire`/`death` re-pad. Treatment **REFUTED**: padding scales a subject, never an effect that exists to leave the scene | `bytedance/seedance-2.0/image-to-video` | 2 · $2.38 |
 | [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md) | Phase 5 — criterion 5.4e closed from the genmedia gallery. **No generations, $0** | — | 0 · $0.00 |
 | [generations/phase-05-scavenger-idle.md](generations/phase-05-scavenger-idle.md) | Phase 5 — `rust-scavenger/idle` (D3). **First take adopted**, tightest loop wrap of any scavenger sheet; found a loop gate that was silently not running | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+| [generations/phase-05-scavenger-attack.md](generations/phase-05-scavenger-attack.md) | Phase 5 — the scavenger swing, on the player report that it had no attack animation. First take adopted; damage moved from contact to an active window | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
 
-**Phase 5 running total: $44.93 of the $55 ceiling. $10.07 remains.**
+**Phase 5 running total: $46.12 of the $55 ceiling. $8.88 remains.**
 
 > 🔴 This line read **"25 generations, $23.51 of the $40 ceiling"** until 2026-08-14 — stale by two
 > ceiling raises and four gate groups, and the three rows above were missing from the table entirely.

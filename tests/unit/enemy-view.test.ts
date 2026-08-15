@@ -193,7 +193,7 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
    * Both directions, so it cannot rot: red if a key becomes askable without being listed here, and
    * red if a listed key is declared without being removed from the list.
    */
-  const PENDING_ART: readonly string[] = ['rust-scavenger-attack'];
+  const PENDING_ART: readonly string[] = [];
 
   /** Every key the REAL selectors can return, over states the sim can actually reach. */
   function askableKeys(): string[] {
