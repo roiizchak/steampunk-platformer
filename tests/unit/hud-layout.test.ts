@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedSince, hudFits, hudLayout } from '../../src/render/hud';
+import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
@@ -100,7 +100,7 @@ describe('hudFits can actually fail', () => {
   });
 });
 
-describe('gearsCollectedSince drives the tween', () => {
+describe('gearsCollectedFrom drives the tween', () => {
   const gear = (collectedTick: number | null): GearSim => ({
     x: 0,
     y: 0,
@@ -108,22 +108,32 @@ describe('gearsCollectedSince drives the tween', () => {
     collectedTick,
   });
 
-  it('returns only gears collected strictly after the given tick', () => {
+  it('REPRODUCTION: the bound is INCLUSIVE — a gear stamped with the bound is returned', () => {
+    // 🔴 This was `> fromTick`, and the first gear of every batch produced no tween because of it.
+    // The caller stores `world.tickCount` after each frame, which is the index of the NEXT tick to
+    // run; a gear collected during that tick carries exactly that number. The counter still
+    // incremented, so only the e2e tween assertion could see it — the one Codex's plan review
+    // (F3) insisted on, and the only reason it was found at all.
     const gears = [gear(null), gear(5), gear(9), gear(12)];
-    expect(gearsCollectedSince(gears, 9)).toHaveLength(1);
-    expect(gearsCollectedSince(gears, 4)).toHaveLength(3);
-    expect(gearsCollectedSince(gears, 12)).toHaveLength(0);
+    expect(gearsCollectedFrom(gears, 9)).toHaveLength(2);
+    expect(gearsCollectedFrom(gears, 12)).toHaveLength(1);
+  });
+
+  it('excludes gears collected before the bound, so a tween is never replayed', () => {
+    const gears = [gear(null), gear(5), gear(9), gear(12)];
+    expect(gearsCollectedFrom(gears, 4)).toHaveLength(3);
+    expect(gearsCollectedFrom(gears, 13)).toHaveLength(0);
   });
 
   it('returns SEVERAL when several were collected in one batch — the reason it exists', () => {
     // A boolean event says "at least one" and carries no position. Two gears taken between two
     // render frames must produce two flying gears, not one.
     const gears = [gear(7), gear(7), gear(7)];
-    expect(gearsCollectedSince(gears, 6)).toHaveLength(3);
+    expect(gearsCollectedFrom(gears, 6)).toHaveLength(3);
   });
 
   it('ignores uncollected gears entirely', () => {
-    expect(gearsCollectedSince([gear(null), gear(null)], 0)).toHaveLength(0);
+    expect(gearsCollectedFrom([gear(null), gear(null)], 0)).toHaveLength(0);
   });
 });
 

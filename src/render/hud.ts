@@ -158,15 +158,22 @@ export function hudFits(
 }
 
 /**
- * Every gear collected strictly after `sinceTick`.
+ * Every gear collected on or after `fromTick` — the half-open window `[fromTick, now)`.
  *
  * This is what drives the collect tween, and it is deliberately NOT the boolean event edge. A
  * render frame drains several ticks, so two gears can be collected between two frames; a boolean
  * says only "at least one", and carries no position. Reading the stamp instead gives the render
  * layer both, and survives a frame that drops events entirely.
+ *
+ * 🔴 **The bound is INCLUSIVE, and it was exclusive for an afternoon.** The caller stores
+ * `world.tickCount` after each frame — which is the index of the NEXT tick to run, not the last one
+ * that ran. A gear collected during that very tick is stamped with exactly that number, so a
+ * strictly-greater test skipped it, and the first gear of every batch produced no tween at all. The
+ * counter still incremented, which is why nothing else noticed: found by the e2e test Codex's plan
+ * review (F3) insisted on, and by nothing else in the suite.
  */
-export function gearsCollectedSince(gears: readonly GearSim[], sinceTick: number): GearSim[] {
-  return gears.filter((gear) => gear.collectedTick !== null && gear.collectedTick > sinceTick);
+export function gearsCollectedFrom(gears: readonly GearSim[], fromTick: number): GearSim[] {
+  return gears.filter((gear) => gear.collectedTick !== null && gear.collectedTick >= fromTick);
 }
 
 /** The counter's text. Zero-padded so its width never changes — see `UIScene` for why that matters. */

@@ -42,7 +42,7 @@ import Phaser from 'phaser';
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
 import {
   counterText,
-  gearsCollectedSince,
+  gearsCollectedFrom,
   hudLayout,
   type HudLayout,
 } from '../render/hud';
@@ -70,7 +70,7 @@ export class UIScene extends Phaser.Scene {
   private barFill!: Phaser.GameObjects.Graphics;
   private gearIcon!: Phaser.GameObjects.Image | Phaser.GameObjects.Arc;
   private counter!: Phaser.GameObjects.Text;
-  /** The last sim tick a collect tween was spawned for. See `gearsCollectedSince`. */
+  /** The last sim tick a collect tween was spawned for. See `gearsCollectedFrom`. */
   private lastGearTick = 0;
   private built = false;
   /**
@@ -192,7 +192,7 @@ export class UIScene extends Phaser.Scene {
 
   /** One flying gear per gear collected since the last frame — position and count from the sim. */
   private spawnCollectTweens(world: World, worldCamera: Phaser.Cameras.Scene2D.Camera): void {
-    const fresh = gearsCollectedSince(world.gears, this.lastGearTick);
+    const fresh = gearsCollectedFrom(world.gears, this.lastGearTick);
     this.lastGearTick = world.tickCount;
     if (fresh.length === 0) {
       return;

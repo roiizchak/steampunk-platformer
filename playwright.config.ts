@@ -90,8 +90,11 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      // Everything except the frame-budget spec, which needs a browser this one cannot be.
-      testIgnore: /phase-05-perf\.spec\.ts/,
+      // Everything except the two specs that need a browser this one cannot be: the frame-budget
+      // spec, and Phase 6's HUD spec, which reads actual PIXELS. SwiftShader is a software
+      // rasteriser, so its output is not what a player's GPU draws — a colour assertion taken from
+      // it is a measurement of the wrong thing, which is the root rule's whole complaint.
+      testIgnore: /phase-0(5-perf|6-hud)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -111,8 +114,12 @@ export default defineConfig({
      * sampled in the same page seconds earlier, which is why it can be trusted at all.
      */
     {
+      // Phase 6 joined this project for a different reason than Phase 5 did. Phase 5 needed a real
+      // GPU because it measures TIME; Phase 6 needs one because it reads PIXELS — criterion 6.4
+      // asserts the health bar's drawn rectangle and 6.8 inspects the chroma-keyed art. Both are
+      // claims about rasterised output, and both are meaningless taken from SwiftShader.
       name: 'chromium-gpu',
-      testMatch: /phase-05-perf\.spec\.ts/,
+      testMatch: /phase-0(5-perf|6-hud)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,
