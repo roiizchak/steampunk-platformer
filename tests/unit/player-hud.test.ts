@@ -13,7 +13,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { healthBarFillWidth, fillIsHonest } from '../../src/render/enemyHealthBar';
-import { HUD_SLOT, playerHudFill } from '../../src/render/playerHud';
+import { HUD_READY_FRACTION, HUD_SLOT, playerHudFill } from '../../src/render/playerHud';
 import { PLAYER_MAX_HP } from '../../src/sim/combat';
 
 describe('the player HUD bar tracks hp instead of being decoration', () => {
@@ -39,6 +39,12 @@ describe('the player HUD bar tracks hp instead of being decoration', () => {
     const desc = playerHudFill(50, 100, 24, 24);
     expect(desc.x).toBe(24 + HUD_SLOT.x);
     expect(desc.y).toBe(24 + HUD_SLOT.y);
-    expect(desc.w).toBe(healthBarFillWidth(50, 100, HUD_SLOT.w));
+    // 🔴 This asserted `healthBarFillWidth(50, 100, HUD_SLOT.w)` — the UNCOMPRESSED width — until
+    // Phase 6 added criterion 6.4's readiness compression, at which point it failed with 73 vs 80.
+    // The assertion's purpose is "the HUD routes through the shared function rather than doing its
+    // own arithmetic", and that purpose is served better with the fraction than without it: it now
+    // also pins that the HUD passes it. Weakening this to `toBeGreaterThan(0)` was the other option
+    // and would have deleted the wiring check to avoid updating a number.
+    expect(desc.w).toBe(healthBarFillWidth(50, 100, HUD_SLOT.w, HUD_READY_FRACTION));
   });
 });

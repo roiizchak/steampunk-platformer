@@ -87,9 +87,19 @@ export interface BarSubject {
  * Clamped at both ends and monotone in between. `hp <= 0` is the ONLY input that yields 0 — that
  * equivalence is the criterion, and `fillIsHonest` states it as a predicate.
  */
-export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): number {
+export function healthBarFillWidth(
+  hp: number,
+  maxHp: number,
+  slotW: number,
+  maxPartialFraction = 1,
+): number {
   if (!(maxHp > 0)) {
     throw new Error(`healthBarFillWidth: maxHp must be greater than 0, got ${maxHp}`);
+  }
+  if (!(maxPartialFraction > 0) || maxPartialFraction > 1) {
+    throw new Error(
+      `healthBarFillWidth: maxPartialFraction must be in (0, 1], got ${maxPartialFraction}`,
+    );
   }
   if (hp <= 0) {
     return 0;
@@ -99,7 +109,18 @@ export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): nu
   }
   // The compression. `BAR_MIN_FILL_PX` is the floor of the live range, not a special case bolted
   // onto the outside of it — which is what keeps the mapping monotone.
-  return Math.round(BAR_MIN_FILL_PX + (hp / maxHp) * (slotW - BAR_MIN_FILL_PX));
+  //
+  // `maxPartialFraction` is the CEILING of that live range, and it is the vault 6.4 countermeasure:
+  // below max health the bar is compressed into the first fraction of the slot, so full width is
+  // reserved for actually-full. It defaults to 1, which is Phase 5's behaviour exactly — an enemy
+  // bar makes no readiness claim and is entitled to look full at 99%. The player's HUD passes
+  // `HUD_READY_FRACTION`; see `playerHud.ts`.
+  //
+  // Compressing the RANGE rather than clamping the top is what keeps this monotone. Subtracting a
+  // few pixels near the end would make two different health values draw the same width, which is a
+  // second lie in place of the first one.
+  const liveMax = Math.floor(slotW * maxPartialFraction);
+  return Math.round(BAR_MIN_FILL_PX + (hp / maxHp) * (liveMax - BAR_MIN_FILL_PX));
 }
 
 /**
@@ -108,11 +129,30 @@ export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): nu
  * Stated as an equivalence rather than a one-way check: a living enemy must draw a visible bar, AND
  * a dead one must draw nothing. Only asserting the first direction passes a bar that is always full.
  */
-export function fillIsHonest(fillW: number, slotW: number, hp: number): boolean {
+export function fillIsHonest(
+  fillW: number,
+  slotW: number,
+  hp: number,
+  maxHp?: number,
+  maxPartialFraction = 1,
+): boolean {
   if (hp <= 0) {
     return fillW === 0;
   }
-  return fillW >= BAR_MIN_FILL_PX && fillW <= slotW;
+  if (!(fillW >= BAR_MIN_FILL_PX && fillW <= slotW)) {
+    return false;
+  }
+  // The vault 6.4 half, and it is deliberately OPT-IN through `maxHp`.
+  //
+  // Criterion 5.7's call sites pass three arguments and mean the Phase 5 claim: a living bar is
+  // visible, a dead one is empty. Criterion 6.4's call sites pass five and mean that AND "a bar
+  // below max does not draw full". Extending the predicate rather than writing a second one is what
+  // keeps a single definition of "this bar is honest" — two predicates that agree on the happy path
+  // are not one gate *(vault 5.3)*.
+  if (maxHp !== undefined && hp < maxHp) {
+    return fillW <= Math.floor(slotW * maxPartialFraction);
+  }
+  return true;
 }
 
 /** Each subject's body height in local units, so the bar clears the head rather than the feet. */

@@ -37,6 +37,29 @@ import { healthBarFillWidth } from './enemyHealthBar';
  */
 export const HUD_SLOT = { x: 140, y: 46, w: 156, h: 30 } as const;
 
+/**
+ * **Criterion 6.4.** The most of the slot a bar below full health may draw.
+ *
+ * ## The defect
+ *
+ * Uncompressed, `healthBarFillWidth(99, 100, 156)` returned **154 of 156 px**. Two pixels of a
+ * 156 px bar is not a difference anyone can see, so a player one hit from full looked untouched.
+ * The vault's own case is a meter at 98/100 drawing 315 px of a 318 px bar, after which the action
+ * it gated refused in total silence — the bar said ready, the game disagreed, and nothing on screen
+ * explained it *(vault 6.4, blocker)*.
+ *
+ * ## Why 0.92
+ *
+ * 92 % of 156 px is 143, so the step from "nearly full" to "full" is 13 px — about four tenths of
+ * the bar's own height, which is the smallest gap that reads as a gap rather than as aliasing at
+ * this size. Below that it is a number that satisfies a test and not an eye, which is the whole
+ * failure mode being fixed.
+ *
+ * It applies to the PLAYER's bar only. The enemy bars keep the default of 1: they carry no
+ * readiness claim, nothing is gated on them, and changing them would silently retune criterion 5.7.
+ */
+export const HUD_READY_FRACTION = 0.92;
+
 export interface HudFillDesc {
   x: number;
   y: number;
@@ -54,7 +77,7 @@ export function playerHudFill(hp: number, maxHp: number, originX: number, origin
   return {
     x: originX + HUD_SLOT.x,
     y: originY + HUD_SLOT.y,
-    w: healthBarFillWidth(hp, maxHp, HUD_SLOT.w),
+    w: healthBarFillWidth(hp, maxHp, HUD_SLOT.w, HUD_READY_FRACTION),
     h: HUD_SLOT.h,
   };
 }
