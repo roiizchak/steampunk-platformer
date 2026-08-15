@@ -157,7 +157,16 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 | 5.13 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-05-plan.md` | — |
 | 5.14 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-05-impl.md` | codex |
 | 5.15 | **Hazard and kill-plane timing** — a hazard thinner than one tick of travel at `maxFallSpeed` still registers, and the kill plane fires on the tick the player crosses it | unit, committed fixture at the tunnelling speed *(C2)* | `voltagent-qa-sec:qa-expert` |
-| 5.16 | **A dead enemy stops acting** — the world is stepped for N ticks **after** `hp` reaches 0 and the sentry fires zero shots, the scavenger's `x` does not change, and neither deals contact damage | unit, fixture stepped past death *(C4)* | `voltagent-qa-sec:qa-expert` |
+| 5.16 | **A dead enemy stops acting** — the world is stepped for N ticks **after** `hp` reaches 0 and the sentry fires zero shots, the scavenger's `x` does not change, and neither deals damage | unit, fixture stepped past death *(C4)* | `voltagent-qa-sec:qa-expert` |
+
+
+> **Criterion 5.16's wording changed 2026-08-15, by user approval.** It read *"neither deals
+> **contact** damage"*. Contact damage stopped being the mechanic when the scavenger gained a
+> telegraphed swing — damage now requires the active window — and the 5.16 gate owner additionally
+> found the phrase was **half wrong before that too**: the sentry has never had a contact-damage
+> path at all, so for one of the two entities it named the clause was unfalsifiable (vault 5.5 —
+> asking whether a branch ran when the branch does not exist). What is MEASURED did not change; the
+> word describing a mechanism that no longer exists did.
 
 > **Why 5.16 exists, added in session 8 with the user's approval.** A 27-second playtest found four
 > defects **after** this gate, both Codex reviews and 46 e2e had all passed. The gate's blind spot was

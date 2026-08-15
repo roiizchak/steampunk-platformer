@@ -128,12 +128,33 @@ interface GpuTimerHandle {
  * creation and never re-derived, so a body made invisible, zero-alpha or scrolled off-camera would
  * still be counted as a drawn Sprite — while making the frame *cheaper* and the ratio *easier* to
  * pass. Testing the drawn position against `camera.worldView` catches the off-camera half of that
- * directly. The invisible/zero-alpha half remains open and is stated in the assertions below.
+ * directly.
+ *
+ * 🔴 **The invisible/zero-alpha half is CLOSED as of 2026-08-15, and it was the sharpest thing the
+ * adversarial perf brief found.** It constructed the whole defect from live code: `enemyLayer.ts`
+ * fades a dead body with `setAlpha(… ? 1 : 0.35)`, and a regression that made freshly-spawned fleet
+ * bodies take that branch would draw all twenty at 35 % — or at 0 — for the entire sample window.
+ * Every assertion in the spec would still pass, because they check body count, a creation-time
+ * `isSprite` flag and a POSITION, none of which stop being true when nothing is visible. And a
+ * transparent sprite is **cheaper to composite**, so both ratios would come in LOWER: a broken fleet
+ * passing more comfortably than a correct one.
+ *
+ * That is not a hypothetical shape. This project has shipped it twice — grey-box Rectangles standing
+ * in for Sprites made every perf number improve, and a death fade that started one frame early played
+ * a whole ten-frame KO at 35 % opacity while the frame sampler *"happily reported 10 of 10 poses
+ * painted, because they WERE painted, just barely visible"*. Vault 9.4: a measurement that is cheap
+ * because the work is not really being done.
+ *
+ * So `alpha` and `visible` are now read per body and reported as `opaque` — bodies that are visible
+ * AND at full alpha. The spec asserts that against the fleet size, which is the assertion neither
+ * previous instance of this defect could have failed.
  */
 export async function counts(page: Page): Promise<{
   bodies: number;
   sprites: number;
   inView: number;
+  /** Visible AND fully opaque. See the alpha note above — this is the vault 9.4 guard. */
+  opaque: number;
   sentries: number;
   scavengers: number;
   projectiles: number;
@@ -153,7 +174,10 @@ export async function counts(page: Page): Promise<{
         enemies: { sentries: unknown[]; scavengers: unknown[] };
         projectiles: unknown[];
       };
-      enemies: { bodies: { x: number; y: number }[]; isSprite: boolean[] };
+      enemies: {
+        bodies: { x: number; y: number; alpha: number; visible: boolean }[];
+        isSprite: boolean[];
+      };
       cameras: { main: { worldView: { x: number; y: number; width: number; height: number } } };
     };
     const view = scene.cameras.main.worldView;
@@ -167,6 +191,9 @@ export async function counts(page: Page): Promise<{
           b.y >= view.y &&
           b.y <= view.y + view.height,
       ).length,
+      // Visible AND fully opaque. Reads what the RENDERER was actually asked to draw, not a flag
+      // set once at creation — the one signal an invisible fleet cannot satisfy.
+      opaque: scene.enemies.bodies.filter((b) => b.visible !== false && (b.alpha ?? 1) >= 1).length,
       sentries: scene.world.enemies.sentries.length,
       scavengers: scene.world.enemies.scavengers.length,
       projectiles: scene.world.projectiles.length,

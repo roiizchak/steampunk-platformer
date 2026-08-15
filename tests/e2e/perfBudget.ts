@@ -13,7 +13,18 @@
  * to raise it — which is how a gate gets loosened one commit at a time.
  */
 
-/** Mirrors `DEV_FLEET_COUNT` in `src/scenes/GameScene.ts` — a private const there, not exported. */
+/**
+ * Mirrors `DEV_FLEET_COUNT` in `src/scenes/GameScene.ts` — a private const there, not exported.
+ *
+ * 🔴 **Pinned against `MAX_LEVEL_ENEMIES` by `phase-05-perf.spec.ts`, added 2026-08-15.** Both
+ * criterion 5.11 gate-owner briefs found the same hole: this was a flat 20, the shipped level has 2,
+ * and the "22 bodies" the spec measured matched the enemy cap **by coincidence** — `MAX_LEVEL_ENEMIES`
+ * appeared nowhere under `tests/e2e/` at all. Delete the cap entirely and this spec would not notice.
+ *
+ * The adversarial brief found the sharper consequence: a level shipping 10 enemies is legal and boots
+ * fine, and would have made this test measure `10 + 20 = 30` — a total the production cap forbids.
+ * The coincidence was fragile in BOTH directions, not merely unprincipled.
+ */
 export const DEV_FLEET_COUNT = 20;
 
 /**

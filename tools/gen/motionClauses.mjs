@@ -140,3 +140,23 @@ export const DEBRIS_MARGIN =
   'far the pieces SCATTER — the machine still comes apart completely and violently, and it must ' +
   'still end as a broken heap rather than an intact shape.';
 
+/**
+ * One-shot pose scaffolding, used instead of `SPAN_CLIP` wherever the motion does NOT return.
+ *
+ * `SPAN_CLIP` says *"extending through the first half and returning through the second"*, which is
+ * true of a jab and false of a death — and Phase 4 paid a generation to learn that the model
+ * resolves a self-contradicting prompt by maximising it (it somersaulted the fall). A one-shot that
+ * ends somewhere new therefore names **three fixed poses with their times**, which is geometry the
+ * model can satisfy exactly one way, rather than a monotonicity clause — the plan is explicit that
+ * a monotonicity clause made the Phase 4 jump somersault through five negations.
+ */
+export function poseSpan(first, halfway, last) {
+  return (
+    'Perform this as ONE single continuous motion that fills the ENTIRE clip and never repeats. ' +
+    `At the very FIRST moment of the clip: ${first} ` +
+    `HALFWAY through the clip: ${halfway} ` +
+    `At the very LAST moment of the clip: ${last} ` +
+    'Move smoothly and steadily between those three poses and never hold still, so that at every ' +
+    'instant the body is at a different position from every other instant.'
+  );
+}

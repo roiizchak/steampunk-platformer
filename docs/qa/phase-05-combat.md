@@ -2901,3 +2901,102 @@ rather than assume it survives.
 
 The scratch probe is not committed. It is reproducible in ten minutes from
 `level-traversal.test.ts`'s `attempt()` plus a per-world tuning multiply.
+
+---
+
+# The session-11 QA gate — three owners, two briefs each *(A7)*
+
+Run 2026-08-15 against HEAD `4b305e2`. Three agent owners, brief 1 then brief 2, **brief 1's findings
+withheld from brief 2**, fresh agents so nothing carried over. Every finding is applied or recorded
+with a reason *(C11)*, and every claim was **re-verified locally** before being acted on — including
+one of my own that the checking found overstated.
+
+**Two criteria came back FAIL, and the gate is the only reason either was known.**
+
+## Three real defects in shipped behaviour — all introduced this session
+
+| # | Finding | Disposition |
+|---|---|---|
+| **B1** | **The attack trigger was one-dimensional.** `Math.abs(playerX - x) <= attackRange`, no `y` term, while every other perception goes through the exported 2-D `withinRadius`. Measured: player 900 px straight up, `dx = 0`, giving 3 swings in 200 ticks, 108 of 200 ticks drawn as `attack`, and a patrol that travelled 50 px instead of 500. Reachable in `level-01` — a solid at `x 6144-6720` sits directly over the scavenger band. | **APPLIED.** Uses `withinRadius`. |
+| **B2** | **The same block ran before detection and unconditionally**, so `detectRadius: 0` — documented as *"the AI off-switch several combat fixtures rely on"* — still swung and still dealt damage. | **APPLIED.** Gated on `chasing`, ordered after detection. Costs nothing in play: `detectRadius` 480 is 3.3x `attackRange`. |
+| **B3** | **`facing` was written at two sites and only one carried the dead-zone guard.** The swing-commit site was unguarded. Measured at `deadZone: 0`: **144 flips in 300 ticks**. `ENEMY_DEAD_ZONE`'s own docstring says this defect *"has to be prevented rather than detected"* because `setFlipX` restarts nothing and no frame gate can see it. | **APPLIED.** Both sites guarded. |
+
+## The gates that could not go red
+
+| # | Finding | Disposition |
+|---|---|---|
+| **G1** | **5.4c — `rust-scavenger/attack` had no G5 window at all.** `ATTACK_WINDOWS` held one row, so `attackWindowFor` returned `null`, `runSheetGates` printed `N/A`, and a criterion whose text says *"every attack sheet"* read as satisfied against a table with one entry. Found independently by **both** 5.4c briefs. | **APPLIED — and it FAILED on first run.** See below. |
+| **G2** | **5.4d — three mirrors nothing pinned.** `SCAVENGER_ATTACK_TOTAL_TICKS` and the startup/active copies in `sheetGates.mjs`, each carrying a docstring claiming *"pinned equal to the real export by tests/unit/sheet-gates.test.ts"*. **No test pinned any of them.** | **APPLIED.** All three locked in `catalog-timings.test.ts`. |
+| **G3** | **5.16's damage clause was vacuous.** The fixture placed the scavenger at patrol `700-1300` against a spawn at `x 400` with `attackRange 144` — unreachable **even alive**, so deleting both death guards left it green. | **APPLIED.** Rewritten to arm a dead scavenger mid-strike on top of the player, **with a live control that must take damage** or the fixture is unreachable geometry again. |
+| **G4** | **5.5 — nothing walked `attackIsLive` per tick**, and the closest coverage stopped at the first hit, so it never re-checked recovery. i-frames would swallow a second hit anyway, masking a boundary that stayed live. | **APPLIED.** Full 36-tick walk with named endpoints, plus a whole-swing damage-once assertion. |
+| **G5** | **5.11 — the "worst case" was not connected to anything.** The spec hardcoded `DEV_FLEET_COUNT = 20`; `MAX_LEVEL_ENEMIES` appeared **zero times** under `tests/e2e/`. The measured 22 matched the cap by coincidence. The adversarial brief found the sharper half: a level shipping 10 enemies is legal and would make the test measure **30**, a total the production cap forbids. | **APPLIED.** The load is asserted equal to `MAX_LEVEL_ENEMIES`. |
+| **G6** | **5.11 — the gate would pass with a fully INVISIBLE fleet, and pass more easily.** `counts()` read body count, a creation-time `isSprite` flag and a POSITION — never `alpha` or `visible` — and a transparent sprite is cheaper to composite, so both ratios come in *lower*. The live trigger is `enemyLayer.ts`'s `setAlpha(... ? 1 : 0.35)`. **This project has shipped this exact shape twice** — grey-box Rectangles standing in for Sprites, and a death fade one frame early that played a whole KO at 35% opacity while the sampler reported every pose painted. Vault 9.4. | **APPLIED.** `counts()` reports `opaque`; the spec asserts it at both ends of the window. **Red-proved**: forcing `setAlpha(0.35)` fails with *"only 0 of the 20 spawned bodies are visible at full alpha"*. |
+
+### G1's consequence: the scavenger's strike was drawn AFTER the damage
+
+Run for the first time, G5 failed against the shipped bytes:
+
+```
+FAIL  rust-scavenger/attack  G5  frame 5 (tick 21) misses the active window [14, 20)
+                                 — contact is drawn after the strike
+```
+
+9 frames over 36 ticks, 4 ticks each; furthest claw extension is **frame 5** (ticks 20-23) and the
+window closed at 20. **The player was damaged on ticks 14-19 and the claw reached them on tick 21 —
+hit first, drawn second.**
+
+Fixed by moving the **sim** window (`startup` 14 to 18, `recovery` 16 to 12, total still 36) rather
+than the art: the art is bought and paid for, the tick counts are free, and 36 must stay divisible by
+the sheet's 9 frames. The window is now **centred** on the drawn strike, three ticks of margin either
+side. `activeFrames` moves from `[3,4]` to `[4,5]`.
+
+> WARNING — **that retune moved the only window in which this creature can hurt anything, and not one
+> test in the suite went red.** The mirror locks (G2) and the shipped-bytes G5 case now both catch
+> it, verified by mutation: reverting `startup` to 14 turns exactly those two red, by name.
+
+## Findings applied beyond the FAIL criteria
+
+| # | Finding | Disposition |
+|---|---|---|
+| **S1** | **`attackIsLive` restated the hit window inline** — six lines below its own comment warning that *"two copies of `counter >= startup && counter < startup + active` would be two definitions that happen to match today"*. It then wrote that expression. | **APPLIED.** Calls `hitWindowOpen`, which is what G5 measures the art against. |
+| **S2** | **The `deadZone` knob had a floor and no ceiling.** Five presses past `attackRange` and the gait key flaps: **132 animation restarts in 300 ticks**, measured, with every gate green. | **APPLIED**, per user decision 2026-08-15. `createScavenger` throws on `deadZone >= attackRange` and the knob caps below it — the same shape as the sentry cooldown floor. **Stated limitation: this makes the flap unreachable rather than removing it.** Hysteresis would remove it at source and was declined, because it re-adds the machinery this phase deliberately deleted when aggro became permanent. |
+| **S3** | **`behaviourSignature` never measured `facing`**, so the sweep could not see a knob whose entire job is to stop the sprite mirroring. | **APPLIED.** Flips are counted. |
+| **S4** | **The knob sweep went blind to `deadZone`** the moment S2's invariant landed — inside the band a swing plants the feet, so the dead zone's effect on travel is masked by construction. Measured **identical to the pixel** at `deadZone` 0, 96 and 143 across all three retreating placements. | **APPLIED.** A fourth placement, `stand`, with the retreat removed — which the file's own `RETREAT` docstring had predicted needing. **Second time a sim change silently cost this sweep its sensitivity, and it reported the knob dead rather than itself blind.** |
+| **S5** | **The 5.12 justification table was stale by up to 32 lines**, on rows written one session earlier — and `motion.mjs`'s whole justification was a trim since undone by more than it recovered. | **APPLIED.** The table below is freshly measured. |
+| **S6** | **The 7-to-8 ceiling raise leaned on a removable obstacle.** `motionCombat.mjs` "could not" be split because it imported `poseSpan` from `motion.mjs`, closing a cycle. `poseSpan` is a dependency-free string builder. | **APPLIED — the raise is undone by doing the work.** `poseSpan` moved to the leaf `motionClauses.mjs`; **the cycle is gone entirely**, verified by importing `motionCombat.mjs` first — the order that used to truncate — and reading a complete 17-entry table. The file then split per subject. **Every motion record was hashed before and after: byte-identical.** |
+| **S7** | Two stale claims in `phase-05-perf.spec.ts`'s blind-spot header: *"none of these are closable without a new dependency"* one line above the one closed with none, and *"nothing in the level format caps concurrent enemies"* after a cap was added. | **APPLIED.** Both corrected in place, struck through rather than deleted. |
+
+## Recorded, not fixed — with the reason *(C11)*
+
+| # | Finding | Why not fixed |
+|---|---|---|
+| **R1** | **5.3's own flap test cannot go red for any input.** `chasing` has no clearing path inside `stepScavenger`, so `changes <= 1` is a theorem about the code, not a measurement — and its only red-proof is a source mutation, which the file's own docstring admits. | Real, and the fix is a design question rather than an edit: making it input-falsifiable means driving death and respawn through `tick`. **Recorded as open.** The property it asserts is still true; what is false is the claim that the test proves it. |
+| **R2** | **The 5.12 ceiling is a count, not a set** — it cannot see one file leaving the list while another joins, and "named in a QA log" is a substring match that pre-approves roughly 48 files already cited for other reasons. | Both true. A membership-set gate is a different design and a bigger change than this gate should absorb mid-QA. **Recorded as the known ceiling of what a line-count test can do**, which its own header already says. |
+| **R3** | **Glob blind spots**: root configs, `tools/**/*.d.mts`, `src/**/*.mjs`, `.mts`/`.tsx`. The sanity check (`SOURCES > 30`) is satisfied by one glob alone, so it would not notice. | Re-verified: still nothing near the limit. **Recorded** — finding S8's judgement re-checked rather than assumed to still hold. |
+| **R4** | **The frame-0 e2e gate samples a patroller that cannot flap**, and its assertion (`distinctFrames > 1`) is weaker than its title — a walk pinned to frames 0 and 1 passes on a 12-frame sheet. | Real. Left for the phase's own e2e pass rather than edited mid-gate; **recorded with the exact weakness named** so it is not re-derived. |
+| **R5** | **`releaseAggro` does not clear `attackCounter`.** A scavenger mid-swing when the player dies carries the window through respawn. | Harmless today only because the respawn point is distant — which is a coincidence, not a design. **Recorded as open.** |
+| **R6** | **`attackRange` and `attackCooldown` have no Gym knob**, so the phase's newest mechanic has zero tunability and the 5.9 sweep cannot report them either way. | Real scope gap. Adding knobs mid-gate changes the very surface the sweep measures. **Recorded for the next tuning pass.** |
+| **R7** | **5.16 is vacuous for the SENTRY** — it never had a contact-damage mechanic, so "the dead sentry deals no contact damage" is unfalsifiable for one of the two entities it names. | Vault 5.5's shape: a measurement of exactly zero where the branch does not exist. Addressed by the criterion wording change rather than by a test that cannot fail. |
+| **R8** | **A7 is structurally compromised for 5.12, permanently.** Brief 1's findings are quoted **verbatim inside `file-size.test.ts`** — the file brief 2 was sent to attack. A second reviewer cannot read it without reading the first's conclusions, and the rule exists precisely because *"a second pass that has read the first one confirms it instead of attacking it."* | **Cannot be fixed without deleting the institutional knowledge those comments carry**, which is the failure mode the same file names first. Recorded as a standing limitation of gating a file that documents its own audit history. **Found by the agent, not by me** — and arguably the most valuable finding of the six reviews, because it is about the process rather than the code. |
+
+## The size table, FRESHLY MEASURED — 9 files over 400
+
+Measured at the end of the gate, not quoted from the previous session. That is S5's whole lesson.
+
+| lines | path | justification |
+|---|---|---|
+| 727 | `tests/unit/enemy-ai.test.ts` | The AI's whole behavioural surface; split once already into `enemy-view` and `enemy-health-bar`. |
+| 517 | `src/scenes/GameScene.ts` | Phase 4 debt, recorded there. |
+| 468 | `src/sim/combat.ts` | The combat contract and its documented windows. |
+| **464** | **`src/sim/enemyScavenger.ts`** | **This session's growth, justified rather than split.** Carries the explanation of B1, B2, B3 and S2 — a 1-D predicate, an ungated `facing` write, an off-switch that stopped switching off, and a knob with no ceiling. The swing already split out to `scavengerAttack.ts`; what remains is one creature's perception and locomotion, which has no second seam. |
+| 446 | `src/sim/player.ts` | Tuning, the state machine and `toWorld` — the locomotion quantisation record lives here. |
+| **436** | **`tools/gen/motion.mjs`** | Mostly literal prompt text; **shortening it changes the generated art.** `poseSpan` left it this session (S6). |
+| 407 | `tests/e2e/phase-04-assets.spec.ts` | Phase 4, recorded there. |
+| 402 | `tests/unit/sheet-packing.test.ts` | Phase 4, recorded there. |
+| **401** | **`tests/unit/enemy-tuning.test.ts`** | **This session's growth, one line over.** Carries S2's guard tests, S3's `facing` counting and S4's fourth placement, each with the measurement that justifies it. |
+
+**Split this session rather than justified:** `tests/unit/tick-world-damage.test.ts` 479 to **352**,
+with the claw window moving to `tests/unit/scavenger-claw.test.ts` (160) on the criterion seam; and
+`tools/gen/motionCombat.mjs` 426 to **264**, with the scavenger's five records moving to
+`tools/gen/motionCombatScavenger.mjs` (195) per subject. Neither is a `-helpers` module that one file
+imports, which `file-size.test.ts` names as the way to game this gate.

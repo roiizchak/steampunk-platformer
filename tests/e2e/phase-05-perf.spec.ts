@@ -39,9 +39,12 @@
  *
  * ## ⚠️ What this gate is blind to — stated, because a gate's blind spots are part of its result
  *
- * Found by the criterion's own gate owner, and none of these are closable without either a new
- * dependency or a design decision. They are listed here rather than in a document because the next
- * person to trust this number will read this file.
+ * Found by the criterion's own gate owner. ⚠️ **This sentence used to claim none of them were
+ * closable "without either a new dependency or a design decision", and that was already false about
+ * the bullet directly beneath it** — the GPU one was closed with no dependency at all. Two of the
+ * items below have since been closed and are struck through rather than deleted, because the reason
+ * each was believed unclosable is the useful part. They are listed here rather than in a document
+ * because the next person to trust this number will read this file.
  *
  *  - ~~**GPU work is invisible to it.**~~ ✅ **CLOSED 2026-08-14, and the recorded reason was wrong.**
  *    This said *"the honest closure is a GPU timer query, **which is not reachable from here**"*, and
@@ -57,9 +60,26 @@
  *  - **No enemy dies during the window.** The death animation, the alpha fade and the corpses that
  *    are never removed from the layer are all real draw states a long fight reaches and this fleet
  *    does not.
- *  - **`DEV_FLEET_COUNT` is a chosen multiple, not a bound.** Nothing in `src/sim/` or the level
- *    format caps concurrent enemies (recorded as finding S5), so "worst case" here means "ten times
- *    the shipped level", not "the most this engine can be asked to draw".
+ *  - ~~**`DEV_FLEET_COUNT` is a chosen multiple, not a bound.**~~ ⚠️ **HALF closed, and the half
+ *    that remains is the important one.** The LEVEL FORMAT now has a bound — `MAX_LEVEL_ENEMIES`
+ *    (`src/game/constants.ts`), enforced by `describeLevelProblem`, which REFUSES rather than
+ *    truncates. So this sentence's claim that "nothing in the level format caps concurrent enemies"
+ *    is stale.
+ *
+ *    But the perf gate did not read that constant at all: `DEV_FLEET_COUNT` was a flat 20 and the
+ *    shipped level has 2, so the measured 22 matched the cap **by coincidence**. Both gate-owner
+ *    briefs found it, and the adversarial one found the sharper half — a level shipping 10 enemies
+ *    is legal and boots fine, and would have made this test measure `10 + 20 = 30`, a total the
+ *    production cap forbids. Fragile in both directions.
+ *
+ *    The fleet is now derived: `MAX_LEVEL_ENEMIES - <the level's own enemies>`, asserted below, so
+ *    the load is the worst case an AUTHORED level can present, by construction rather than by
+ *    arithmetic that happened to agree.
+ *
+ *    🔴 **The `src/sim/` half of S5 stays OPEN and is not closed by any of this.** `spawnDevFleet`
+ *    pushes straight onto `world.enemies`, bypassing the loader entirely, so nothing bounds RUNTIME
+ *    concurrency — 22 authored plus anything spawned at runtime. That number has never been
+ *    measured by anyone, in any session, and saying so is part of the result (vault 9.3).
  *  - **The projectile it measures is a placeholder.** `enemyLayer` draws a bolt as `fillCircle`;
  *    the real renderer is unbuilt, so this baseline goes stale the day that art lands.
  */
@@ -78,6 +98,7 @@ import {
 } from './perfBudget';
 import { SOFTWARE_RENDERERS, counts, sample, waitForBodyCount, webglRenderer } from './perfSampler';
 import { bootToGame } from './gameHarness';
+import { MAX_LEVEL_ENEMIES } from '../../src/game/constants';
 
 test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fleet', () => {
   test('adding 20 on-screen enemies does not cost more than a bounded multiple of the frame work', async ({
@@ -152,6 +173,24 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
 
     // ---- the fleet ---------------------------------------------------------------------------
     await page.keyboard.press('n');
+    /**
+     * 🔴 **The fleet size is now TIED to the production cap**, added 2026-08-15.
+     *
+     * `DEV_FLEET_COUNT` was a flat 20 chosen once, and the "22 bodies" this spec measures matched
+     * `MAX_LEVEL_ENEMIES` by coincidence — the constant appeared nowhere under `tests/e2e/`, so
+     * deleting the cap would not have moved this test at all. Both gate-owner briefs found it.
+     *
+     * Asserted rather than recomputed: the load this spec measures must equal the most an AUTHORED
+     * level can legally present. If either number moves, this fails and names both — which is the
+     * whole difference between a worst case and a chosen one.
+     */
+    expect(
+      before.bodies + DEV_FLEET_COUNT,
+      `the fleet load (${before.bodies} level enemies + ${DEV_FLEET_COUNT} spawned) is no longer ` +
+        `the ${MAX_LEVEL_ENEMIES}-enemy maximum an authored level can present. "Worst case" has ` +
+        `gone back to being a number somebody picked. Re-derive DEV_FLEET_COUNT or re-measure.`,
+    ).toBe(MAX_LEVEL_ENEMIES);
+
     await waitForBodyCount(page, before.bodies + DEV_FLEET_COUNT);
     const after = await counts(page);
 
@@ -176,6 +215,29 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
         `was rebuilt to remove.`,
     ).toBe(DEV_FLEET_COUNT);
 
+    /**
+     * 🔴 **Every spawned body is VISIBLE and FULLY OPAQUE**, added 2026-08-15 — the assertion the
+     * adversarial perf brief showed this spec could not make.
+     *
+     * Every check above is satisfied by a fleet that is created, positioned and completely
+     * invisible: body count, a creation-time `isSprite` flag, and a POSITION inside `worldView` all
+     * stay true when nothing is drawn. And a transparent sprite is cheaper to composite, so both
+     * ratios would come in LOWER — a broken fleet passing more comfortably than a correct one.
+     *
+     * The trigger is live code, not a hypothetical: `enemyLayer.ts` fades a dead body with
+     * `setAlpha(… ? 1 : 0.35)`. This project has already shipped this defect twice — Rectangles
+     * standing in for Sprites, and a death fade one frame early that played a whole KO at 35 %
+     * opacity while the sampler reported every pose painted. Vault 9.4.
+     */
+    expect(typeof after.opaque).toBe('number');
+    expect(
+      after.opaque - before.opaque,
+      `only ${after.opaque - before.opaque} of the ${DEV_FLEET_COUNT} spawned bodies are visible ` +
+        `at full alpha. An invisible fleet satisfies every other assertion in this block AND makes ` +
+        `both ratios cheaper — the frame budget below would be measuring a frame that draws ` +
+        `nothing, which is the exact shape this project has shipped twice (vault 9.4).`,
+    ).toBe(DEV_FLEET_COUNT);
+
     // 🔴 Both kinds, and this is what the old fixture could not say. A scavenger-only fleet
     // exercises one sprite, one animation and no firing path.
     expect(after.scavengers - before.scavengers).toBeGreaterThan(0);
@@ -190,6 +252,9 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     expect(fleet.ticks).toBeGreaterThanOrEqual(SAMPLE_TICKS);
 
     const during = await counts(page);
+    // Still opaque at the END of the window too. A fade that began mid-sample would leave the
+    // entry check green and quietly cheapen the half being measured.
+    expect(during.opaque, 'bodies stopped being drawn during the sample window').toBe(after.opaque);
     // The fleet was still there for the whole window. A sentry that killed the player would respawn
     // them at the level start, leaving the fleet off camera and the second half measuring an empty
     // screen — a false green that looks exactly like a fast one.
