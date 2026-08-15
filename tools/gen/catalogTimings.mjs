@@ -86,6 +86,14 @@ const FIXED_TIMINGS = {
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
   },
   'rust-scavenger': {
+    /**
+     * FIXED, not `AUTHORED_LOOPS`. The two locomotion loops derive their fps from the speed the
+     * body actually travels — that is what `foot-plant.test.ts` gates. `idle` has no travel by
+     * construction (it is selected only when `moving === false`), so there is no speed to derive
+     * from and the cycle length is authored: `IDLE_TICKS` over 8 frames = 12 ticks/frame, fps 5,
+     * `brass-sentry-idle`'s spec exactly. 8 is a divisor of 96, which is what `loop-dwell` requires.
+     */
+    idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
     death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
   },
   'brass-courier': {

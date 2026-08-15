@@ -157,6 +157,19 @@ const CLIP_FILES = Object.freeze({
    */
   'brass-sentry/fire': 'brass-sentry-fire-r4.mp4',
   'brass-sentry/death': 'brass-sentry-death-r4.mp4',
+  /**
+   * First take, adopted. `request_id 01a003ac-ba90-7fd1-acf6-ec8e8c32a81d`, seed 1373696602,
+   * 2026-08-14, from the padded scavenger anchor at `1:1`.
+   *
+   * The risk going in was that a cyclic idle from this endpoint has a measured record of two
+   * different partial failures — `rust-scavenger/walk` round 2 failed extraction outright
+   * (`chooseCycleWindow` found no window clearing `MIN_MEDIAN_STEP`), and `brass-sentry/idle`
+   * extracts but ships under a named `gateLoopWrap` exception. The prompt therefore carried all
+   * three clauses `motion.mjs:207-215` credits for turning frozen idles into real motion, plus an
+   * explicit feet-planted constraint, because "a walk the model called an idle" is the one failure
+   * this sheet exists to prevent.
+   */
+  'rust-scavenger/idle': 'rust-scavenger-idle.mp4',
   'rust-scavenger/walk': 'rust-scavenger-walk-r3.mp4',
   'rust-scavenger/chase': 'rust-scavenger-chase-r3.mp4',
   'rust-scavenger/death': 'rust-scavenger-death-r5.mp4',

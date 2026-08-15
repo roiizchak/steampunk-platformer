@@ -69,7 +69,7 @@ function sliceFrame(strip: RgbaImage, index: number, w: number, h: number): Rgba
 }
 
 describe('the shipped character sheets, read from the files the player loads', () => {
-  it('the catalog declares the fourteen animations these assertions cover', () => {
+  it('the catalog declares the fifteen animations these assertions cover', () => {
     // Vault 4.16: a declared sheet with no file must FAIL, not be skipped. Iterating the catalog
     // rather than a directory listing is what makes a missing PNG a red test.
     expect(catalog.sheets.map((s) => s.key).sort()).toEqual([
@@ -120,6 +120,22 @@ describe('the shipped character sheets, read from the files the player loads', (
       // frames), and the fragment guard then measured HEIGHT, which a collapsing figure loses
       // legitimately. $0 — the clip was bought in session 4 and had sat unadopted since.
       'rust-scavenger-death',
+      /**
+       * Session 11, $1.19, **first take adopted** — `request_id 01a003ac-ba90-7fd1-acf6-ec8e8c32a81d`.
+       *
+       * The state existed before the art did. `scavengerAnim` returned a gait from `chasing` alone,
+       * so a scavenger held still by its dead zone, a ledge veto or a patrol clamp **ran its cycle
+       * on the spot**. The sim fix (`moving`, a readback of `x`) landed first at $0 and changed
+       * nothing on screen by itself: `playAnim.ts` no-ops on an unregistered key, so the sprite kept
+       * playing `chase`. This sheet is what made the fix visible.
+       *
+       * Bought against a measured risk — a cyclic idle from this endpoint had failed two different
+       * ways before (`rust-scavenger/walk` r2 failed extraction outright; `brass-sentry/idle`
+       * extracts but ships under a `gateLoopWrap` exception). It passed both first try, with the
+       * **tightest loop wrap of any scavenger sheet**: 0.00545 within 0.01857, against walk's
+       * 0.01088 and chase's 0.01371.
+       */
+      'rust-scavenger-idle',
       // D1 (session 7): the frame cell widened 288 -> 384 and this sheet's row resolved.
       'rust-scavenger-walk',
     ]);

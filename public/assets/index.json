@@ -187,6 +187,17 @@
       "fps": 12,
       "loop": false,
       "derivedFrom": "sim"
+    },
+    {
+      "key": "rust-scavenger-idle",
+      "url": "assets/characters/rust-scavenger/sheets/idle.png",
+      "frameWidth": 512,
+      "frameHeight": 384,
+      "frameCount": 8,
+      "simTicks": 96,
+      "fps": 5,
+      "loop": true,
+      "derivedFrom": "authored"
     }
   ]
 }

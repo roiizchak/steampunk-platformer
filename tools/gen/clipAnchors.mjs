@@ -169,6 +169,23 @@ export const PADDED_ANCHORS = Object.freeze({
     source: '_generated/anchors-padded/rust-scavenger-padded.png',
   }),
 
+  /**
+   * `idle` is padded **for SCALE, not for ratio** — and that distinction is what makes it required.
+   *
+   * Both scavenger anchors are square, so `aspect_ratio` resolves to `"1:1"` either way and padding
+   * looks optional. It is not: the slug scale `0.56074766` in `character-bounds-rust-scavenger.json`
+   * was derived from `rust-scavenger-walk-r3.mp4`, a **padded** generation. An unpadded idle
+   * measured against that scale reproduces the session-6 defect exactly — padded `attack` drew
+   * **114 px** against `hurt`'s **288**.
+   *
+   * Same PNG, same sha, as every other scavenger action, so the whole slug shares one framing.
+   */
+  'rust-scavenger/idle': Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf0/6X0GqPhD7r1-tuxbrx4Pm_rust-scavenger-padded.png',
+    sha256: '1fd1a6b8768229e47aad0a6d69d8286bbe306fc8aa2c89edcf922936c9f917c1',
+    source: '_generated/anchors-padded/rust-scavenger-padded.png',
+  }),
+
   /** G6 f3/12, **top 0** and left 8 — the failures moved to the top edge, which §10 did not record. */
   'rust-scavenger/chase': Object.freeze({
     url: 'https://v3b.fal.media/files/b/0aa5ecf0/6X0GqPhD7r1-tuxbrx4Pm_rust-scavenger-padded.png',

@@ -296,6 +296,61 @@ export const COMBAT_MOTIONS = Object.freeze({
   },
 
   /**
+   * The idle — a scavenger that is stopped, and the reason it had to be bought.
+   *
+   * ## What it fixes
+   *
+   * A scavenger pinned by its dead zone, a ledge veto or a patrol clamp **ran its gait on the spot**
+   * — a foot-plant violation the sim could see (`moving` is a readback of `x`) and the catalog could
+   * not answer, for want of an `idle` sheet to select.
+   *
+   * ⚠️ The sim half landed first, at $0, and by itself changed NOTHING on screen: `playAnim.ts`
+   * no-ops on an unregistered key, so the sprite kept playing `chase`. This sheet is what makes the
+   * fix visible. Recorded because the opposite was believed when the spend was approved.
+   *
+   * ## 8 frames, and why the count is the only free number
+   *
+   * `idle` is cyclic -> `loop: true` -> `one-shot-divisor.test.ts` does not apply (it filters
+   * looping rows out). The binding gate is `loop-dwell.test.ts`: `simTicks % frameCount === 0`.
+   * `FIXED_TIMINGS` pins `simTicks = IDLE_TICKS = 96`, so the safe set is the divisors of 96, and
+   * **8 -> 12 ticks/frame, fps 5** is `brass-sentry-idle`'s spec exactly.
+   *
+   * 🔴 **Do not reach for `pingPong` if the loop wrap fails.** It packs `2n-2` cells; from 8 that is
+   * **14**, and `96 / 14` is not an integer, so `loop-dwell` goes red. Ping-pong-compatible counts
+   * here are n in {4, 5, 7, 9, 13, 17, 25}.
+   *
+   * ## The spend risk, and what the prompt does about it
+   *
+   * A cyclic idle from this endpoint had a measured record of **two different partial failures**
+   * before this was written. The clauses below are chosen against them: a named cycle count, an
+   * explicit list of what moves, the head-height clause, and a feet-planted constraint — because
+   * *"a walk the model called an idle"* is the failure this sheet exists to prevent. Full analysis,
+   * both precedents and the outcome in
+   * [docs/generations/phase-05-scavenger-idle.md](../../docs/generations/phase-05-scavenger-idle.md).
+   */
+  'rust-scavenger/idle': {
+    cyclic: true,
+    frames: 8,
+    identity: 'IDENTITY: this is the same creature throughout, in strict side profile facing RIGHT - same ' +
+      'riveted bucket head with a narrow slit and two amber lamps, same mismatched scavenged ' +
+      'plates lashed on with wire, same counterweight on a chain at the hip, same bent exhaust ' +
+      'stack, same rusted palette. It has EXACTLY two arms and two legs in every single frame and ' +
+      'grows no extra limb. It stays hunched and forward-leaning and never stands fully upright.',
+    motion:
+      'stands still and idles in place, breathing and ticking over like a machine at rest. Its ' +
+      'clawed feet stay PLANTED on exactly the same spot on the ground for the entire clip - both ' +
+      'feet keep contact, neither foot lifts, slides or steps, and the creature does NOT walk and ' +
+      'does NOT travel across the frame. What moves is only this: the two amber lamps in its head ' +
+      'slit flicker unevenly, a thin plume of steam puffs from the bent exhaust stack, the ' +
+      'counterweight swings gently on its chain at the hip, and the whole body settles down and ' +
+      'rises again as it breathes. Its head dips slightly and lifts again with that breath, and ' +
+      'the top of its head moves up and down by no more than one twentieth of the creature\'s own ' +
+      'standing height - it never bobs or rocks. It completes exactly TWO full settle-and-rise ' +
+      'breaths during the clip, slowly and evenly. It stays hunched, in exactly the same place in ' +
+      'the frame, at exactly the same size.' + FRAME_MARGIN,
+  },
+
+  /**
    * The chase. Same creature, same cycle, visibly FASTER and lower.
    *
    * The difference from `walk` has to be readable at 96 px or the two sheets are one sheet with two

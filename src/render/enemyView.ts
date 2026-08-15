@@ -83,7 +83,7 @@ export function scavengerAnim(scavenger: Scavenger): ScavengerAnim {
 
 const ANIMS_BY_SLUG: Record<EnemySlug, readonly EnemyAnim[]> = {
   'brass-sentry': ['idle', 'fire', 'death'],
-  'rust-scavenger': ['walk', 'chase', 'death'],
+  'rust-scavenger': ['idle', 'walk', 'chase', 'death'],
 };
 
 /** `brass-sentry` + `fire` -> `brass-sentry-fire`. The catalog namespace is flat. */

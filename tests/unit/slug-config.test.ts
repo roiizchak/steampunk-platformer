@@ -17,7 +17,9 @@ import { enemyAnimKeys } from '../../src/render/enemyView';
 const EXPECTED_ACTIONS: Record<string, string[]> = {
   'brass-courier': ['idle', 'walk', 'run', 'jump', 'fall', 'attack', 'hurt', 'death'],
   'brass-sentry': ['idle', 'fire', 'death'],
-  'rust-scavenger': ['walk', 'chase', 'death'],
+  // `idle` added 2026-08-14 with the sheet. Order matters — the test below asserts this matches
+  // `enemyAnimKeys()` in order, so the two cannot drift into agreeing on contents but not sequence.
+  'rust-scavenger': ['idle', 'walk', 'chase', 'death'],
 };
 
 describe('slugConfig — per-slug build paths', () => {

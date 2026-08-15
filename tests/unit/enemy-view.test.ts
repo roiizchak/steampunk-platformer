@@ -141,19 +141,25 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
    * That covers both enemies, so a future undeclared **sentry** key fails here too — which the
    * previous single-key lock would have missed.
    *
-   * ## Why `PENDING_ART` is not empty, and why that is deliberate
+   * ## `PENDING_ART` is now EMPTY, and the machinery is kept anyway
    *
-   * `rust-scavenger/idle` is bought art that does not exist yet. The sim state landed first, at $0,
-   * so it could be reviewed before the money moved; until the sheet exists, declaring the key
-   * **fails the build by design** *(vault 4.16)*. `playIfChanged` no-ops on an undeclared key, so a
-   * stalled scavenger keeps playing whichever key it last had — identical to the behaviour before
-   * that change, **not** an improvement on it. The fix only lands with the art.
+   * It held `rust-scavenger-idle` for exactly as long as that sheet was unbought. The sim state
+   * landed first, at $0, so it could be reviewed before the money moved; the art landed 2026-08-14
+   * (`request_id 01a003ac-ba90-7fd1-acf6-ec8e8c32a81d`) and the key is declared, so the list is
+   * empty.
+   *
+   * **Emptying it is the point.** While it was non-empty this test asserted a known gap on purpose;
+   * empty, the first assertion below becomes strictly stronger — NO askable key may be undeclared,
+   * at all.
+   *
+   * The list is kept rather than inlined as `[]` for the same reason `BLOCKED_ON_ART` is kept in
+   * `blockedDwell.ts`: the next action bought ahead of its sheet needs this machinery, and
+   * rebuilding it from scratch is how the both-directions property gets lost.
    *
    * Both directions, so it cannot rot: red if a key becomes askable without being listed here, and
-   * red if a listed key is declared without being removed from the list. Same shape as
-   * `BLOCKED_ON_ART` in `blockedDwell.ts`. **Empty this list when the art lands.**
+   * red if a listed key is declared without being removed from the list.
    */
-  const PENDING_ART = ['rust-scavenger-idle'] as const;
+  const PENDING_ART: readonly string[] = [];
 
   /** Every key the REAL selectors can return, over states the sim can actually reach. */
   function askableKeys(): string[] {
