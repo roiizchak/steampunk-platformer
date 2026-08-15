@@ -88,7 +88,8 @@ export interface SolidRect {
  *
  * Solidity comes from the object layer, never from the tile grid *(vault 3.3)* — which is also why
  * the fix cannot be "give the spikes a tile the rule ignores". Spikes are a hazard, not a platform:
- * they stay non-solid, and you walk through them until Phase 5 owns hazards.
+ * they stay non-solid, and Phase 5's swept `hazardHit` — not the tile grid — is what makes walking
+ * into one hurt (`src/sim/hazards.ts`, step 4 of the tick contract).
  *
  * **Half-open, positive-area overlap, and that is load-bearing.** An inclusive test would count the
  * ground rectangle beginning at `y = 1920` as touching the row-19 cell that ends at `y = 1920`, and

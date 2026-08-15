@@ -8,8 +8,8 @@
  * it and applies it. That is what makes the mirroring rule, the feet origin and the scale seam
  * testable in `tests/unit/player-view.test.ts` rather than through a screenshot.
  *
- * It is NOT under `src/sim/`, because it is a rendering concern and Phase 5 will give it art keys
- * and frame indices that the simulation must never know about. But it obeys the same discipline,
+ * It is NOT under `src/sim/`, because it is a rendering concern — Phase 5 gave it art keys and
+ * frame indices that the simulation must never know about. But it obeys the same discipline,
  * and the sim boundary test would pass on it unchanged.
  */
 

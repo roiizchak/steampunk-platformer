@@ -432,7 +432,7 @@ export function resolveCollisions(
    * flagged it. Identical output today; correct if the box ever becomes asymmetric.
    *
    * `facing` is pinned to `1`: the COLLISION box does not mirror. Only a hitbox should, and that
-   * arrives in Phase 5 at step 4 of the tick contract.
+   * is what Phase 5 added at step 4 of the tick contract — see `playerAttack.ts`.
    */
   const box = toWorld(PLAYER_BOX, player.x, player.y, 1, scale);
   const leftOffset = player.x - box.x;
