@@ -1,0 +1,18 @@
+A single full-body character sprite reference for a 2D side-scrolling platformer, standing alone against a flat background.
+
+FRAMING: the whole character from the top of the head to the soles of both boots, with empty space above and below. Three-quarter view facing to the right. A neutral standing pose, weight on both feet, arms clear of the torso so the silhouette reads. Nothing is cropped.
+
+CHARACTER: a squat mechanical SENTRY TURRET, not a person, no face, waist-high and wider than it is tall. It stands on THREE splayed riveted brass legs whose feet all rest flat on the same level ground, evenly spaced, none raised. Above the legs a riveted brass drum housing with a hinged inspection plate, two small round pressure gauges with visible needles, and a single glass lens set in a brass ring on the front like a closed eye. ORNAMENTATION, all of it visible: a short stubby barrel projecting forward from the drum with a flared muzzle and three cooling fins; a coiled copper pipe running from the drum to the barrel; exposed cog teeth at the barrel pivot; a small hinged brass hatch with two wing nuts; heavy hexagonal bolts around the drum seam; a stencilled number plate. Cold blue-grey steel and tarnished brass, verdigris in the crevices, individual rivets on every plate. Weathered but intact and clearly still working.
+
+SILHOUETTE: unmistakable and asymmetric, readable as a solid black shape at three tiles tall. No two characters in this game share an outline.
+
+BACKGROUND: one flat uniform chroma green field, RGB 0 255 0, edge to edge. No floor, no shadow cast onto the background, no gradient, no vignette, no scenery, no props, no ground line, no platform beneath the feet. The character touches nothing.
+
+RENDERING: detailed high-definition pixel art in the tradition of Owlboy, Blasphemous and Dead
+Cells. Dense fine pixel detail and heavy ornamentation on every foreground surface: individual
+rivets, seams, engraved filigree, wear, patina, cracked mortar, bolt heads. Many shading steps
+per material with hand-dithered gradients. Hard edges and crisp dark outlines on every
+gameplay-critical shape.
+
+DO NOT INCLUDE: words, letters, sentences, logos, watermarks, signatures, photorealism, 3D
+rendering, depth of field blur, soft focus, airbrushed gradients, lens flare., background scenery, ground shadow, drop shadow, floor, interface, health bar, portrait medallion, multiple characters, cropped limbs.

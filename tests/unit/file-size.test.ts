@@ -40,9 +40,30 @@ const QA_LOGS = import.meta.glob('../../docs/qa/*.md', {
 
 const LIMIT = 400;
 
-/** `../../src/scenes/GameScene.ts` -> `src/scenes/GameScene.ts`, the form a log would cite. */
+/**
+ * A glob key -> the repo-relative path a QA log would cite.
+ *
+ * 🔴 **This used to be `globKey.replace(/^\.\.\/\.\.\//, '')`, and that was wrong for two of the
+ * three globs.** Vite normalises a key against the importing file's own directory, which is
+ * `tests/unit/`. `../../src/...` survives as `src/...` — but everything under `tests/` comes back as
+ * `../e2e/phase-05-perf.spec.ts` or `./enemy-ai.test.ts`, neither of which starts with `../../`, so
+ * `repoPath` returned a string no log could ever contain. **The path half of the acceptance check
+ * was dead for every test file**, leaving only the basename fallback, which is why a 648-line file
+ * was "recorded" by an unrelated citation. Found by the criterion 5.12 gate owner.
+ *
+ * Resolved properly against the base directory instead of string-stripped, so a fourth glob cannot
+ * quietly fall into the same hole.
+ */
+const BASE_DIR = 'tests/unit';
+
 function repoPath(globKey: string): string {
-  return globKey.replace(/^\.\.\/\.\.\//, '');
+  const parts = BASE_DIR.split('/');
+  for (const segment of globKey.split('/')) {
+    if (segment === '.' || segment === '') continue;
+    if (segment === '..') parts.pop();
+    else parts.push(segment);
+  }
+  return parts.join('/');
 }
 
 function lineCount(text: string): number {
@@ -64,8 +85,19 @@ describe('the 400-line rule', () => {
       .filter((f) => f.lines > LIMIT)
       .sort((a, b) => b.lines - a.lines);
 
+    // 🔴 A basename fallback used to sit beside the path check:
+    //     `&& !allLogs.includes(f.path.split('/').pop()!)`
+    // It accepted a file whose BARE FILENAME appeared anywhere in any QA log, for any reason. That
+    // is not a record of a justification, it is a coincidence — and it had already masked a real
+    // one: `docs/qa/phase-05-combat.md:2495` records the 648-line `enemy-ai.test.ts` passing
+    // "only because the basename appeared in a log for an unrelated reason".
+    //
+    // Dropped 2026-08-14 (D6b) at ZERO cost: all 7 over-limit files already carry a full-path
+    // citation, verified file by file before the fallback was removed. See the reversal note in
+    // `docs/qa/phase-05-combat.md` — the ratchet half of this was declined on 2026-08-13 as
+    // finding T7 and has now been reopened and approved.
     const unrecorded = over
-      .filter((f) => !allLogs.includes(f.path) && !allLogs.includes(f.path.split('/').pop()!))
+      .filter((f) => !allLogs.includes(f.path))
       .map((f) => `${f.path} (${f.lines} lines)`);
 
     expect(
@@ -81,7 +113,31 @@ describe('the 400-line rule', () => {
       .filter((f) => f.lines > LIMIT);
 
     // A ceiling, not an assertion that everything is fine. It exists so that ADDING a new
-    // over-limit file is red even if a QA log happens to mention its name for another reason.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(10);
+    // over-limit file is red even if a QA log happens to mention it for another reason.
+    //
+    // 🔴 **BACK TO 7 on 2026-08-15, and the round trip is the lesson.** It went 10 -> 7 (D6b),
+    // then 7 -> 8 for `motionCombat.mjs`, then briefly 9 as the QA gate's fixes grew two more files.
+    // The **Codex implementation review called that what it was**: whatever justification is
+    // written beside it, moving the assertion from 7 to 9 to accommodate files this very session
+    // created is a tolerance loosening, and this project's rule is that a gate is never fixed by
+    // loosening it. It also noted the recorded red-proof was for the OLD ceiling of seven, so the
+    // raised number had never been proved able to fail at all.
+    //
+    // It is 7 because the work was done instead:
+    //   - `motionCombat.mjs` split per subject, after `poseSpan` moved to a leaf and killed the
+    //     import cycle that had been the stated reason it could not be split.
+    //   - `enemyScavenger.ts` 471 -> 313, the swing trigger to `scavengerAttack.ts` and construction
+    //     plus validation to `scavengerFactory.ts`.
+    //   - `tick-world-damage.test.ts` 479 -> 352, the claw window to `scavenger-claw.test.ts`.
+    //   - `enemy-tuning.test.ts` 401 -> under, the constructor guards to
+    //     `enemy-constructor-guards.test.ts`.
+    //
+    // **Not one line of explanation was deleted to get here** — every split moved whole concerns
+    // with their docstrings intact, which is the distinction this file's own header draws between
+    // splitting and gaming.
+    //
+    // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
+    // the way past is to split the file or write the justification, in that order of preference.
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(7);
   });
 });

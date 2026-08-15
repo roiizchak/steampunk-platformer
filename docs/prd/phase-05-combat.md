@@ -69,9 +69,39 @@ rate was. Two rules follow, and they are why 4.27 is at the top of this list:
    absent.** `genmedia pricing` was wrong by ~21×, cheap. It is not a price; do not project on it.
 2. **A gate that prevents a re-shoot is worth more than a cheaper endpoint.**
 
+**This phase's ceiling is $55, and it is a hard STOP.** Halt mid-batch and ask rather than finishing a
+sheet through the line. Named descope levers, in the order they get pulled: `rust-scavenger/hurt`
+(tint flash instead), `brass-sentry/death` (last `fire` frame plus a particle), `rust-scavenger/chase`
+(reuse `walk` and accept the foot-slide, recorded). The number goes to the user before any lever is
+pulled.
+
+> ### The ceiling has moved twice. Both moves are recorded, with who made them.
+>
+> **A ceiling that moves without a record is not a ceiling**, and Phase 4's **$6.39 overrun against a
+> $25 ceiling** is the reason this phase has one at all. So the chain is kept in full rather than
+> overwritten:
+>
+> | | figure | who, when | why |
+> |---|---:|---|---|
+> | original | **$40** | agreed with the user **before any spend** | First-pass cost was ≈$16.67 across ~15 clips and ~8 stills, leaving ≈$23 of rework headroom — at Phase 4's 77 % rework rate that lands over the line, at 50 % near $32 |
+> | first move | **$45** | **user, 2026-08-11, session 6**, mid-session, figure named explicitly on request | At $36.60 all four re-shoots of that round still failed G6. Options put: spend the last $3.40, spend $1.19, hand off, or raise. Chosen for 4–5 clips of measured need plus 2–3 for a second round |
+> | second move | **$55** | **user, 2026-08-12, session 7**, figure named explicitly on request | Asked with the honest note that **nothing in the remaining QA gate needs money** and the prompt lever is exhausted for the courier. Chosen for the named deferred list (~$4.91) plus a genuine second round (~$8.33) |
+>
+> **Spend at the time of the second move: $41.36.** The full reasoning for both, and the options that
+> were on the table each time, are in [qa/phase-05-combat.md](../qa/phase-05-combat.md).
+>
+> ⚠️ This line read *"$40, and it is a hard STOP"* until session 7. It was **deliberately not edited by
+> session 6**, which raised the ceiling — silently rewriting a phase's stated constraint from the
+> session that spent against it is exactly the move that makes a ceiling meaningless. It was corrected
+> here as a distinct, deliberate act, with the authority above.
+
 ### 2. Required skills
 `groups-and-containers` · `events-system` · `animations` · `data-manager` ·
 `e2e-playwright-testing` (specs) · `playwright-cli` (drive the running game)
+**Generating:** `fal-gamedev` · `fal-prompting` · `model-routing` · `genmedia-workflow` ·
+`character-design` — this phase produces art. They were omitted when the Gate 7 Codex review moved
+`attack`/`hurt`/`death` here from Phase 4, because their frame rate derives from `simTicks` in
+`src/sim/combat.ts`, which did not exist until now.
 **Always:** `superpowers:executing-plans` · `superpowers:test-driven-development` ·
 `superpowers:systematic-debugging` · `superpowers:verification-before-completion`
 **Not `physics-arcade`** — see [Phase 2 §2](phase-02-player.md#2-required-skills). Hit detection is
@@ -126,6 +156,27 @@ probability rather than a committed episode?** *(5.1, blocker.)*
 | 5.12 | No file > 400 lines; diff reviewed; adversarial pass | `voltagent-qa-sec:code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` |
 | 5.13 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-05-plan.md` | — |
 | 5.14 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-05-impl.md` | codex |
+| 5.15 | **Hazard and kill-plane timing** — a hazard thinner than one tick of travel at `maxFallSpeed` still registers, and the kill plane fires on the tick the player crosses it | unit, committed fixture at the tunnelling speed *(C2)* | `voltagent-qa-sec:qa-expert` |
+| 5.16 | **A dead enemy stops acting** — the world is stepped for N ticks **after** `hp` reaches 0 and the sentry fires zero shots, the scavenger's `x` does not change, and neither deals damage | unit, fixture stepped past death *(C4)* | `voltagent-qa-sec:qa-expert` |
+
+
+> **Criterion 5.16's wording changed 2026-08-15, by user approval.** It read *"neither deals
+> **contact** damage"*. Contact damage stopped being the mechanic when the scavenger gained a
+> telegraphed swing — damage now requires the active window — and the 5.16 gate owner additionally
+> found the phrase was **half wrong before that too**: the sentry has never had a contact-damage
+> path at all, so for one of the two entities it named the clause was unfalsifiable (vault 5.5 —
+> asking whether a branch ran when the branch does not exist). What is MEASURED did not change; the
+> word describing a mechanism that no longer exists did.
+
+> **Why 5.16 exists, added in session 8 with the user's approval.** A 27-second playtest found four
+> defects **after** this gate, both Codex reviews and 46 e2e had all passed. The gate's blind spot was
+> that **nothing asked what the world does after something dies** — 5.5 asked whether the attack
+> window is correct and never asked what happens to the defender. 5.10's standing caveat, *"no test
+> actually swings twice and asserts death"*, was the same hole seen from the other end. The one test
+> that existed (`player-attack.test.ts`, *"a dead enemy stops threatening"*) stepped 30 ticks past
+> death and asserted only the **player's** hp, on a fixture whose patrol bounds pinned the corpse in
+> place — so the defect was **unobservable to the test named for it**. This criterion is the vault C4
+> lesson written as a gate.
 
 **Regression set:** Phases 1–4, specs 01–04.
 

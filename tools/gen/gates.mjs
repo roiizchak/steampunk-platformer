@@ -3,33 +3,46 @@
  *
  * Vault **4.21**: *"Self-test the gate on synthetic fixtures on every run, before it judges real
  * art — runnable with source art absent."* It caught a 4-pixel speck scoring as a whole second
- * figure. Codex plan review finding 3 pointed out that an earlier draft applied this to the chroma
- * gate only, leaving dimension, alpha, motion, loop, bounds, grid and seam measurements running
- * without ever proving their instruments can fail. So `selfTest()` covers **every** gate here, and
- * criterion 4.26 owns that.
+ * figure. Codex plan review finding 3: an earlier draft self-tested the chroma gate only, leaving
+ * dimension, alpha, motion, loop, bounds, grid and seam measurements unproven. `selfTest()` (in
+ * `gatesSelfTest.mjs`) covers **every** gate here — criterion 4.26.
  *
  * ## Two rules these gates exist to obey
  *
  * **4.19 — enumerate the axes your metrics measure, then ask which axis the failure lives on.**
- * Every art metric in the prior project was vertical, so a purely-upward attack measured beautifully
- * while nothing crossed the gap: an entire unmeasured defect class sitting between two passing
- * gates. Each gate below names its axis in its doc comment. Where no metric can see the thing,
- * the gate says so out loud rather than shipping a number that means nothing *(vault 9.3)* — the
- * brass-cap rule and anatomy are both in that category and are `play`-owned, not gated here.
+ * Every art metric in the prior project was vertical, so a purely-upward attack measured
+ * beautifully while nothing crossed the gap. Each gate below names its axis in its doc comment;
+ * where no metric can see the thing, the gate says so *(vault 9.3)* rather than shipping a number
+ * that means nothing — the brass-cap rule and anatomy are both `play`-owned, not gated here.
  *
  * **4.18 — a box is a claim about a sprite, and INDETERMINATE is a real answer.** A sheet the metric
  * cannot call must say so rather than guess. But a run where EVERY sheet is indeterminate is not a
- * passing run, which is Codex finding 2 against criterion 4.10; `summarise()` enforces that.
+ * passing run (Codex finding 2 against criterion 4.10); `summarise()` enforces that.
  */
 
-import { blank, decodePng, encodePng } from './png.mjs';
-import { CHROMA, components, hasRealAlpha, keyOut, removeSpecks } from './chroma.mjs';
+import { decodePng } from './png.mjs';
+import { CHROMA, hasRealAlpha } from './chroma.mjs';
 
 export const PASS = 'PASS';
 export const FAIL = 'FAIL';
 export const INDETERMINATE = 'INDETERMINATE';
 
-function verdict(status, value, reason) {
+/** Paint a filled rectangle into an RGBA image. Fixture helper. */
+export function fill(image, x0, y0, w, h, rgba) {
+  for (let y = y0; y < y0 + h; y += 1) {
+    for (let x = x0; x < x0 + w; x += 1) {
+      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
+      const i = (y * image.width + x) * 4;
+      image.data[i] = rgba[0];
+      image.data[i + 1] = rgba[1];
+      image.data[i + 2] = rgba[2];
+      image.data[i + 3] = rgba[3];
+    }
+  }
+  return image;
+}
+
+export function verdict(status, value, reason) {
   return { status, value, reason };
 }
 
@@ -301,190 +314,12 @@ export function gateSeam(image, slack = 3) {
 }
 
 /* ------------------------------------------------------------------ *
- * 8. Zone separation — STYLE.md §5, with the HUD region EXCLUDED.
- * Axis: global colour statistics. Blind to the brass-cap rule, which is stated, not hidden.
+ * 8 & 9. Zone separation and brass cap — both STYLE.md §5. Moved to `gatesBrassCap.mjs` (400-line
+ * limit); re-exported because `build-world.mjs` and `ground-tiles.test.ts` import all three by
+ * name from `'./gates.mjs'`.
  * ------------------------------------------------------------------ */
 
-/**
- * Mean saturation and value of a region, for the warm-foreground / cool-background rule.
- *
- * **The HUD region must be excluded from sampling.** It is dark and saturated and sits inside the
- * background band; including it contaminates the result. That was learned the hard way in
- * GENERATION-LOG round 2.
- *
- * This gate is BLIND to STYLE.md's material rule — "every standable platform carries a brass
- * leading edge" is a local edge cue that no whole-region statistic can see *(vault 9.3)*. It says
- * so rather than shipping a number that appears to cover it.
- */
-export function regionStats(image, region) {
-  const x0 = Math.max(0, region?.x ?? 0);
-  const y0 = Math.max(0, region?.y ?? 0);
-  const x1 = Math.min(image.width, x0 + (region?.w ?? image.width));
-  const y1 = Math.min(image.height, y0 + (region?.h ?? image.height));
-  let sat = 0;
-  let val = 0;
-  let n = 0;
-  for (let y = y0; y < y1; y += 1) {
-    for (let x = x0; x < x1; x += 1) {
-      const i = (y * image.width + x) * 4;
-      const r = image.data[i] / 255;
-      const g = image.data[i + 1] / 255;
-      const b = image.data[i + 2] / 255;
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      sat += max === 0 ? 0 : (max - min) / max;
-      val += max;
-      n += 1;
-    }
-  }
-  return n === 0 ? { saturation: 0, value: 0, pixels: 0 } : {
-    saturation: sat / n, value: val / n, pixels: n,
-  };
-}
-
-/* ------------------------------------------------------------------ *
- * 9. Brass cap — STYLE.md §5 RULE ONE, as a measurement.
- * Axis: VERTICAL distribution of warm pixels within one tile.
- * ------------------------------------------------------------------ */
-
-/**
- * What counts as "warm", and how much of it a capped tile needs.
- *
- * Warmth is not decoration in this game: STYLE.md §5 makes it the signal that a thing is
- * reachable. Brass on top of a tile says *stand here*; brass anywhere else says nothing, or worse,
- * lies. So the gate measures **where** the warm pixels are, not merely that some exist.
- */
-export const WARM = Object.freeze({
-  MIN_ALPHA: 32,
-  MIN_RED: 110,
-  RED_OVER_BLUE: 40,
-  GREEN_OVER_BLUE: 15,
-  /** The top quarter of a tile — where a leading edge lives. */
-  CAP_BAND: 0.25,
-  CAP_MIN_FRACTION: 0.02,
-  CAP_TOP_SHARE: 0.8,
-  /**
-   * "Plain" is defined on the SAME axis as "capped", not on total warmth.
-   *
-   * The first version asked for <= 1 % warm, and a regenerated tileset showed why that is the
-   * wrong question: every masonry tile in it carries some warm pixels (1.8 %, 6.4 %, 12.1 %,
-   * 15.4 %) scattered through the brick, and STYLE.md §5 puts the foreground in warm colour on
-   * purpose — the ground is *supposed* to be warm. What RULE ONE actually forbids is a buried tile
-   * that reads as a platform TOP, and that is warmth **concentrated along the top edge**.
-   *
-   * So `plain` means "does not read as a leading edge": the warmth is not gathered on top, and the
-   * tile is not predominantly warm. Raising a threshold to make a red test green is exactly what
-   * this project forbids, so the record is explicit — the ceiling moved because the measure was
-   * wrong, and the measure that decides the verdict is `topShare`, which did not move.
-   */
-  PLAIN_MAX_TOP_SHARE: 0.5,
-  PLAIN_MAX_FRACTION: 0.1,
-});
-
-function isWarm(data, i) {
-  if (data[i + 3] <= WARM.MIN_ALPHA) return false;
-  const r = data[i];
-  const g = data[i + 1];
-  const b = data[i + 2];
-  return r >= WARM.MIN_RED && r - b >= WARM.RED_OVER_BLUE && g - b >= WARM.GREEN_OVER_BLUE;
-}
-
-/**
- * Does this tile carry a brass leading edge along its TOP, or is it plain masonry?
- *
- * `BLIND_SPOTS` used to list the brass rule as something *"no region statistic sees"*, and that was
- * true of a region statistic — `regionStats` returns one saturation number for a whole area, which
- * a tile with a brass bar across its middle and a tile with a brass cap on its top edge produce
- * equally. The axis that separates them is **vertical distribution**, which is vault 4.19's whole
- * point: enumerate what your metrics measure, then ask which axis the failure lives on.
- *
- * That distinction is not hypothetical. Phase 4 shipped a ground stack drawn with a mid-bar tile
- * instead of a capped one, and every gate that existed stayed green.
- *
- * `expect` is `'capped'` (a walking surface) or `'plain'` (buried masonry). A tile with no opaque
- * pixels is INDETERMINATE, never a guess *(vault 4.18)*.
- */
-export function gateBrassCap(image, expect, region) {
-  const x0 = Math.max(0, region?.x ?? 0);
-  const y0 = Math.max(0, region?.y ?? 0);
-  const x1 = Math.min(image.width, x0 + (region?.w ?? image.width));
-  const y1 = Math.min(image.height, y0 + (region?.h ?? image.height));
-  const bandEnd = y0 + (y1 - y0) * WARM.CAP_BAND;
-
-  let opaque = 0;
-  let warm = 0;
-  let warmTop = 0;
-  for (let y = y0; y < y1; y += 1) {
-    for (let x = x0; x < x1; x += 1) {
-      const i = (y * image.width + x) * 4;
-      if (image.data[i + 3] <= WARM.MIN_ALPHA) continue;
-      opaque += 1;
-      if (!isWarm(image.data, i)) continue;
-      warm += 1;
-      if (y < bandEnd) warmTop += 1;
-    }
-  }
-
-  const cells = Math.max(0, x1 - x0) * Math.max(0, y1 - y0);
-  if (opaque === 0) {
-    return verdict(INDETERMINATE, null, 'no opaque pixels in the region — nothing to judge');
-  }
-
-  const warmFraction = warm / opaque;
-  const topShare = warm === 0 ? 0 : warmTop / warm;
-  const value = { opaque, opaqueFraction: opaque / cells, warm, warmFraction, topShare };
-
-  if (expect === 'plain') {
-    if (topShare >= WARM.PLAIN_MAX_TOP_SHARE) {
-      return verdict(
-        FAIL,
-        value,
-        `expected buried masonry but ${(topShare * 100).toFixed(0)}% of its warm pixels sit in ` +
-          `the top ${WARM.CAP_BAND * 100}% — that reads as a leading edge, and an edge on every ` +
-          `row identifies nothing (STYLE.md §5 RULE ONE)`,
-      );
-    }
-    if (warmFraction > WARM.PLAIN_MAX_FRACTION) {
-      return verdict(
-        FAIL,
-        value,
-        `expected buried masonry but ${(warmFraction * 100).toFixed(1)}% of it is warm — warmth ` +
-          `is the reachability signal, and a tile this warm competes with the platforms`,
-      );
-    }
-    return verdict(
-      PASS,
-      value,
-      `plain: ${(warmFraction * 100).toFixed(1)}% warm, only ` +
-        `${(topShare * 100).toFixed(0)}% of it on top`,
-    );
-  }
-  if (expect !== 'capped') {
-    throw new Error(`gateBrassCap: expect must be 'capped' or 'plain', got ${String(expect)}`);
-  }
-  if (warmFraction < WARM.CAP_MIN_FRACTION) {
-    return verdict(
-      FAIL,
-      value,
-      `expected a brass leading edge but only ${(warmFraction * 100).toFixed(2)}% of the tile is ` +
-        `warm — STYLE.md §5 RULE ONE says a player identifies a platform by that edge alone`,
-    );
-  }
-  if (topShare < WARM.CAP_TOP_SHARE) {
-    return verdict(
-      FAIL,
-      value,
-      `the tile is ${(warmFraction * 100).toFixed(1)}% warm but only ` +
-        `${(topShare * 100).toFixed(0)}% of that sits in its top ${WARM.CAP_BAND * 100}% — brass ` +
-        `across the middle is a stripe, not a leading edge, and stacked it reads as a barcode`,
-    );
-  }
-  return verdict(
-    PASS,
-    value,
-    `capped: ${(warmFraction * 100).toFixed(1)}% warm, ${(topShare * 100).toFixed(0)}% of it on top`,
-  );
-}
+export { regionStats, WARM, gateBrassCap } from './gatesBrassCap.mjs';
 
 export const BLIND_SPOTS = Object.freeze([
   'the brass leading-edge rule is only PARTLY gated: gateBrassCap measures where the warm pixels ' +
@@ -527,200 +362,12 @@ export function summarise(results) {
   );
 }
 
-/** Paint a filled rectangle into an RGBA image. Fixture helper. */
-export function fill(image, x0, y0, w, h, rgba) {
-  for (let y = y0; y < y0 + h; y += 1) {
-    for (let x = x0; x < x0 + w; x += 1) {
-      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
-      const i = (y * image.width + x) * 4;
-      image.data[i] = rgba[0];
-      image.data[i + 1] = rgba[1];
-      image.data[i + 2] = rgba[2];
-      image.data[i + 3] = rgba[3];
-    }
-  }
-  return image;
-}
-
 /**
- * Every gate, run against a synthetic fixture built to FAIL it, and one built to pass.
- *
- * Runs with no source art present — that is the point of vault 4.21, and it is why the fixtures are
- * constructed in memory here rather than read from disk. Returns a list of `{gate, ok, detail}`.
+ * `fill` is defined above and genuinely exported from this file; `selfTest` is NOT — it lives in
+ * `gatesSelfTest.mjs`, which imports FROM here and is never imported back (the
+ * `motion.mjs`/`motionCombat.mjs` TDZ risk). Import `selfTest` from `./gatesSelfTest.mjs` directly.
+ * `WARM`/`gateBrassCap` DO get re-exported above despite the resulting cycle, because
+ * `gatesBrassCap.mjs` never calls back into this module at load time — only inside function
+ * bodies, which run long after both modules have finished loading.
  */
-export function selfTest() {
-  const results = [];
-  const check = (gate, ok, detail) => results.push({ gate, ok, detail });
 
-  // --- dimensions: a 4x2 image is not 8x8.
-  const png4x2 = encodeFixture(4, 2, [255, 0, 0, 255]);
-  check(
-    'dimensions',
-    gateDimensions(png4x2, { width: 8, height: 8 }).status === FAIL &&
-      gateDimensions(png4x2, { width: 4, height: 2 }).status === PASS,
-    'fails on a size mismatch, passes on a match',
-  );
-
-  // --- alpha: an opaque image must NOT report real transparency, whatever its colour type.
-  const opaque = gateAlpha(encodeFixture(4, 4, [10, 20, 30, 255]));
-  const transparent = gateAlpha(encodeFixture(4, 4, [10, 20, 30, 0]));
-  check(
-    'alpha',
-    opaque.value.realTransparency === false &&
-      opaque.value.channelPresent === true &&
-      transparent.value.realTransparency === true,
-    'reads the channel VALUES — an RGBA file with alpha 255 everywhere reports no transparency',
-  );
-
-  // --- chroma: pure-ish green keys out; a near-miss green also keys out (never equality).
-  const keyed = keyOut(fill(blank(4, 4, [0, 0, 0, 255]), 0, 0, 4, 4, [252, 1, 252, 255]), {
-    key: [255, 0, 255],
-  });
-  const keyedExact = keyOut(fill(blank(4, 4, [0, 0, 0, 255]), 0, 0, 4, 4, [255, 0, 255, 255]), {
-    key: [255, 0, 255],
-  });
-  check(
-    'chroma-tolerance',
-    keyed.data[3] === 0 && keyedExact.data[3] === 0,
-    'keys by L1 distance with tolerance — (252,1,252) is removed, not only exact (255,0,255)',
-  );
-
-  // --- specks: a 4px blob is a speck; a 32x32 block is not. Judged by AREA, not alpha > 0.
-  const speckSrc = blank(64, 64, [0, 0, 0, 0]);
-  fill(speckSrc, 0, 0, 32, 32, [200, 200, 200, 255]); // 1024px figure
-  fill(speckSrc, 60, 60, 2, 2, [200, 200, 200, 255]); // 4px speck
-  const despeckled = removeSpecks(speckSrc);
-  const remaining = components(despeckled).sizes.filter((s) => s > 0);
-  check(
-    'speck-area',
-    remaining.length === 1 && remaining[0] === 1024 && despeckled.data[(61 * 64 + 61) * 4 + 3] === 0,
-    'a 4px speck is erased and a 1024px figure survives — an alpha>0 test would keep both',
-  );
-
-  // --- motion floor: identical frames fail, a moved block passes.
-  const still = blank(16, 16, [0, 0, 0, 255]);
-  const movedFrame = fill(blank(16, 16, [0, 0, 0, 255]), 4, 4, 8, 8, [255, 255, 255, 255]);
-  check(
-    'motion-floor',
-    gateMotionFloor([still, cloneOf(still)]).status === FAIL &&
-      gateMotionFloor([still, movedFrame]).status === PASS,
-    'a frozen clip fails and a moving one passes',
-  );
-
-  // --- loop wrap: a ramp that jumps back at the end snaps; a symmetric there-and-back does not.
-  const ramp = [0, 1, 2, 3].map((k) => fill(blank(16, 16, [0, 0, 0, 255]), 0, 0, 16, 16,
-    [k * 60, k * 60, k * 60, 255]));
-  const pingpong = [0, 1, 2, 1].map((k) => fill(blank(16, 16, [0, 0, 0, 255]), 0, 0, 16, 16,
-    [k * 60, k * 60, k * 60, 255]));
-  check(
-    'loop-wrap',
-    gateLoopWrap(ramp).status === FAIL && gateLoopWrap(pingpong).status === PASS,
-    'a clip that jumps back at the wrap fails; one that returns smoothly passes',
-  );
-
-  // --- the largest-step clause, pinned in both directions.
-  //
-  // A clip with one big interior move and a wrap the SAME size must pass — the viewer has already
-  // seen a jump that size and read it as motion. The same clip with a wrap larger than anything it
-  // contains must still fail, or widening the budget would have made the gate decorative.
-  const shade = (k) => fill(blank(16, 16, [0, 0, 0, 255]), 0, 0, 16, 16, [k, k, k, 255]);
-  //           steps: 10, 10, 120        wrap back to 0 is 140 -> larger than any step
-  const bigStepBadWrap = [0, 10, 20, 140].map(shade);
-  //           steps: 10, 10, 120        wrap 3 -> 0 is 120, exactly the largest step
-  const bigStepGoodWrap = [0, 10, 20, 140].map(shade).concat([shade(20)]);
-  check(
-    'loop-wrap-largest-step',
-    gateLoopWrap(bigStepBadWrap).status === FAIL && gateLoopWrap(bigStepGoodWrap).status === PASS,
-    'a wrap no larger than a step the clip already makes is not a snap; a larger one still is',
-  );
-
-  // --- reach band: a moved arm is measured; a 4px twitch is INDETERMINATE, never a guess.
-  const base = blank(64, 64, [0, 0, 0, 255]);
-  const armOut = fill(cloneOf(base), 40, 20, 20, 20, [255, 255, 255, 255]);
-  const twitch = fill(cloneOf(base), 62, 62, 2, 2, [255, 255, 255, 255]);
-  const reach = gateReachBand([base, armOut]);
-  check(
-    'reach-band',
-    reach.status === PASS && reach.value.reachX === 59 &&
-      gateReachBand([base, twitch]).status === INDETERMINATE,
-    'measures the moved pixels, and says INDETERMINATE rather than guessing from a 4px change',
-  );
-
-  // --- reach band must NOT be fooled by a planted leg: an opaque column wider than the moved arm.
-  const withLeg = fill(cloneOf(base), 0, 0, 64, 64, [0, 0, 0, 255]);
-  fill(withLeg, 63, 0, 1, 64, [90, 90, 90, 255]); // static column at the far right, in BOTH frames
-  const legBase = cloneOf(withLeg);
-  const legMoved = fill(cloneOf(withLeg), 30, 20, 20, 20, [255, 255, 255, 255]);
-  const legReach = gateReachBand([legBase, legMoved]);
-  check(
-    'reach-ignores-static',
-    legReach.status === PASS && legReach.value.reachX === 49,
-    'a static column at x=63 does not become the reach — only CHANGED pixels count (vault 4.18)',
-  );
-
-  // --- grid exactness.
-  check(
-    'grid-exact',
-    gateGridExact(blank(96, 64), 32).status === PASS &&
-      gateGridExact(blank(100, 64), 32).status === FAIL,
-    '96x64 slices exactly at 32px; 100x64 leaves a partial cell',
-  );
-
-  // --- seam: a horizontal gradient tears at the wrap; a mirrored one does not.
-  const gradient = blank(32, 8, [0, 0, 0, 255]);
-  const mirrored = blank(32, 8, [0, 0, 0, 255]);
-  for (let x = 0; x < 32; x += 1) {
-    const g = Math.round((x / 31) * 255);
-    const m = Math.round((1 - Math.abs(x - 15.5) / 15.5) * 255);
-    fill(gradient, x, 0, 1, 8, [g, g, g, 255]);
-    fill(mirrored, x, 0, 1, 8, [m, m, m, 255]);
-  }
-  check(
-    'seam',
-    gateSeam(gradient).status === FAIL && gateSeam(mirrored).status === PASS,
-    'a ramp tears at the wrap; a mirrored strip loops',
-  );
-
-  // --- brass cap: the fixture set is the defect that shipped.
-  //
-  // Three 32x32 tiles on the same grey body: one with the warm band on its top edge, one with the
-  // SAME AMOUNT of warm across its middle, and one with none at all. The middle-bar tile is the
-  // one Phase 4 actually drew on every ground row, and a metric that only counts warm pixels
-  // cannot tell it from the capped one — they are identical on that axis. This fixture fails if
-  // the gate ever stops measuring vertical position.
-  const grey = () => fill(blank(32, 32, [0, 0, 0, 0]), 0, 0, 32, 32, [70, 66, 62, 255]);
-  const cappedTile = fill(grey(), 0, 0, 32, 4, [190, 150, 70, 255]);
-  const midBarTile = fill(grey(), 0, 14, 32, 4, [190, 150, 70, 255]);
-  const plainTile = grey();
-  check(
-    'brass-cap',
-    gateBrassCap(cappedTile, 'capped').status === PASS &&
-      gateBrassCap(midBarTile, 'capped').status === FAIL &&
-      gateBrassCap(plainTile, 'capped').status === FAIL &&
-      gateBrassCap(plainTile, 'plain').status === PASS &&
-      gateBrassCap(midBarTile, 'plain').status === FAIL &&
-      gateBrassCap(blank(32, 32, [0, 0, 0, 0]), 'capped').status === INDETERMINATE,
-    'a top edge passes, the SAME warmth across the middle fails, and an empty tile is INDETERMINATE',
-  );
-
-  // --- summarise: all-INDETERMINATE is not a pass.
-  check(
-    'summarise',
-    summarise({ a: verdict(INDETERMINATE, null, '') }).status === FAIL &&
-      summarise({ a: verdict(PASS, 1, ''), b: verdict(INDETERMINATE, null, '') }).status === PASS &&
-      summarise({}).status === FAIL,
-    'every-gate-INDETERMINATE fails, a mixed run passes, an empty run fails',
-  );
-
-  return results;
-}
-
-function cloneOf(image) {
-  return { width: image.width, height: image.height, data: new Uint8ClampedArray(image.data) };
-}
-
-/** Build a solid-colour PNG buffer without touching the filesystem (vault 4.21). */
-function encodeFixture(width, height, rgba) {
-  const img = blank(width, height, rgba);
-  return encodePng(width, height, img.data);
-}

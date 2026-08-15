@@ -36,47 +36,9 @@ import { readPng } from '../../tools/gen/png.mjs';
 import type { RgbaImage } from '../../tools/gen/png.d.mts';
 import liftProfile from '../../public/assets/config/lift-profile.json';
 import bounds from '../../public/assets/config/character-bounds.json';
-
-/** A cell of `w x h` holding one solid opaque block spanning rows `top..bottom` inclusive. */
-function cellWithFigure(w: number, h: number, top: number, bottom: number, x0 = 4, x1 = 11): RgbaImage {
-  const data = new Uint8ClampedArray(w * h * 4);
-  for (let y = top; y <= bottom; y += 1) {
-    for (let x = x0; x <= x1; x += 1) {
-      const i = (y * w + x) * 4;
-      data[i] = 200;
-      data[i + 1] = 120;
-      data[i + 2] = 60;
-      data[i + 3] = 255;
-    }
-  }
-  return { width: w, height: h, data };
-}
-
-/** Vertical centre of mass of one packed cell, in strip coordinates. */
-function centroidYOf(strip: RgbaImage, index: number, frameWidth: number): number {
-  let sum = 0;
-  let n = 0;
-  for (let y = 0; y < strip.height; y += 1) {
-    for (let x = index * frameWidth; x < (index + 1) * frameWidth; x += 1) {
-      if (strip.data[(y * strip.width + x) * 4 + 3] >= 8) {
-        sum += y;
-        n += 1;
-      }
-    }
-  }
-  if (n === 0) throw new Error(`centroidYOf: frame ${index} is empty`);
-  return sum / n;
-}
-
-/** Rows of fully transparent pixels between the figure's lowest opaque row and the cell's bottom. */
-function gapBelowFeet(strip: RgbaImage, index: number, frameWidth: number): number {
-  for (let y = strip.height - 1; y >= 0; y -= 1) {
-    for (let x = index * frameWidth; x < (index + 1) * frameWidth; x += 1) {
-      if (strip.data[(y * strip.width + x) * 4 + 3] >= 8) return strip.height - 1 - y;
-    }
-  }
-  throw new Error(`gapBelowFeet: frame ${index} is empty`);
-}
+// Pixel-measurement helpers extracted to a sibling module when this file crossed 400 lines — DATA
+// and SETUP only, every `expect` stays here. See sheet-packing-fixtures.ts.
+import { cellWithFigure, centroidYOf, gapBelowFeet } from './sheet-packing-fixtures';
 
 describe('packStrip vertical alignment — one baseline per sheet', () => {
   // scale 0.5, so a 10 px source lift is a 5 px packed lift with no rounding ambiguity.
@@ -266,7 +228,7 @@ describe('assertSingleRowLayout — the assumption the sheet baseline rests on',
  */
 describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   const SHEETS = 'public/assets/characters/brass-courier/sheets';
-  const FRAME_WIDTH = 288;
+  const FRAME_WIDTH = bounds.frameWidth;
   const actions = Object.keys(liftProfile.animations) as (keyof typeof liftProfile.animations)[];
   const liftsOf = (a: string) =>
     liftProfile.animations[a as keyof typeof liftProfile.animations].frames.map((f) => f.liftPx);
@@ -275,7 +237,10 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
 
 
   it('covers every animation, so the gate cannot pass by measuring nothing', () => {
-    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall']);
+    // Insertion order, not sorted: `attack` joined in session 7 after the six that already
+    // shipped, and `death` on 2026-08-14 after that — it could not pack at all until the cell was
+    // widened 288 -> 336, and the player reported dying as a freeze because of it.
+    expect(actions).toEqual(['idle', 'walk', 'run', 'jump', 'fall', 'hurt', 'attack', 'death']);
   });
 
   it.each(actions)('%s: liftPx is re-derivable from the recorded source coordinates', (action) => {
@@ -289,13 +254,26 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(anim.frames.length).toBeGreaterThan(0);
     expect(['feet', 'centroid']).toContain(anim.anchor);
 
+    /**
+     * 🔴 `anim.scale`, NOT `liftProfile.scale`. Two actions carry a per-action override — `attack`
+     * at 0.6 and `death` at 0.60504202, against the slug's 0.23723229 — and re-deriving those with
+     * the slug figure is out by 2.55x. It went unnoticed while `attack` was the only override
+     * because its lifts round to the same small integers either way; `death` landing on 2026-08-14
+     * made it fail loudly.
+     *
+     * The profile records the scale each animation was PACKED at, per action, exactly so this is
+     * re-derivable. Using it is not a loosening — it is the right number, and it makes this
+     * assertion catch a per-action scale that disagrees with the strip it produced, which the slug
+     * figure never could.
+     */
+    const scale = anim.scale;
     const deepest = Math.max(...anim.frames.map((f) => f.sourceMaxY));
     const rounded = anim.frames.map((f) =>
       Math.round(
         anim.anchor === 'feet'
-          ? (deepest - f.sourceMaxY) * liftProfile.scale
+          ? (deepest - f.sourceMaxY) * scale
           : // the centroid's offset INSIDE the figure, less the height the figure is placed by
-            (f.sourceCentroidY - f.sourceMinY) * liftProfile.scale - f.drawnHeight,
+            (f.sourceCentroidY - f.sourceMinY) * scale - f.drawnHeight,
       ),
     );
     const expected = rounded.map((v) => v - Math.min(...rounded));
@@ -317,8 +295,13 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
   it('each animation uses the anchor its config declares', () => {
     // The anchor is a decision, not an accident, so the manifest records it and this pins the two
     // together. `centroid` on a grounded animation would silently unmoor it from the floor.
+    //
+    // Scoped to `actions` (what actually SHIPPED, i.e. `liftProfile.animations`' own keys) rather
+    // than every key `bounds.animations` declares. `death` was the reason for that scoping — it had
+    // a config declaration from session 7 and no packed sheet — and as of 2026-08-14 it ships, so
+    // the two sets now coincide. The scoping stays: it is the right rule whenever they next differ.
     const declared = Object.fromEntries(
-      Object.entries(bounds.animations).map(([k, v]) => [k, v.verticalAnchor]),
+      actions.map((a) => [a, bounds.animations[a as keyof typeof bounds.animations].verticalAnchor]),
     );
     const used = Object.fromEntries(actions.map((a) => [a, liftProfile.animations[a].anchor]));
     expect(used).toEqual(declared);
@@ -328,6 +311,20 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       run: 'feet',
       jump: 'centroid',
       fall: 'centroid',
+      // Session 6. A struck courier recoils but stays on its feet — the recoil peaks around 20% and
+      // the boots never leave the floor, so `feet`, like the other grounded animations. `centroid`
+      // here would unmoor it from the ground for the 18 ticks it is drawn.
+      hurt: 'feet',
+      // Session 7: the swing stays upright throughout (2.1% frame-to-frame height spread) — grounded,
+      // like every other combat action so far.
+      attack: 'feet',
+      // Session 10, and the one place `feet` needs justifying rather than assuming. A death is the
+      // one animation where the figure genuinely LEAVES its feet — the courier falls sideways, and
+      // by the last frames the body is 312px wide against a standing 133. `feet` is still right:
+      // the anchor pins the DEEPEST frame to the contact line, and a fallen body's deepest point is
+      // still the ground it is lying on. `centroid` would float the corpse as the silhouette
+      // flattened, which is the airborne rule applied to a body that has stopped moving.
+      death: 'feet',
     });
   });
 
@@ -361,7 +358,7 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
       expect(maxLift(action), `${action} packed flat — the per-sheet baseline is gone`).toBeGreaterThan(0);
     }
     // ...and the deepest frame of every animation, idle included, still reaches the final row.
-    for (const action of ['idle', 'walk', 'run', 'jump', 'fall'] as const) {
+    for (const action of ['idle', 'walk', 'run', 'jump', 'fall', 'hurt'] as const) {
       expect(minLift(action), `${action} never reaches its cell floor`).toBe(0);
     }
     // idle is flat BY DESIGN, stated so a future reader does not "fix" it into a bob.

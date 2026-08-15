@@ -40,6 +40,27 @@ const BOUNDS = import.meta.glob('../../public/assets/config/character-bounds.jso
   eager: true,
 }) as Record<string, string>;
 
+/**
+ * EVERY slug's bounds file, not just the player's — because the frame cell is **per slug** as of
+ * session 7's amendment to decision M3, and the courier's file can no longer answer for a sheet it
+ * does not describe.
+ *
+ * The frame-size assertion below used to compare every row in the catalog — including enemy rows —
+ * against the single courier bounds file. That held only while all three slugs happened to share one
+ * global width, and it is the same latent single-slug assumption as R1/R2 and the
+ * `shipped-sheets.test.ts` path bug: correct by coincidence, silent when the coincidence ends.
+ *
+ * Scoping the loop to courier rows would have made it pass again by **checking less**, which is the
+ * forbidden move. Resolving each row against its OWN slug checks strictly more: it still catches
+ * everything the old form caught, and it additionally catches a row whose width disagrees with the
+ * file that actually cut it.
+ */
+const ALL_BOUNDS = import.meta.glob('../../public/assets/config/character-bounds*.json', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 interface SheetRow {
   key: string;
   frameWidth: number;
@@ -69,31 +90,118 @@ const bounds = only<{
   frameWidth: number;
   frameHeight: number;
   stridePxPerCycle: { walk: number; run: number };
+  // Session 9: locomotion cadence is AUTHORED here, per animation, and `stridePxPerCycle` no longer
+  // feeds any timing. See `src/render/animTiming.ts`'s "A LOOP HAS NO WINDOW" header.
+  animations: Record<string, { fps?: number }>;
 }>(BOUNDS, 'character-bounds file');
+
+/**
+ * slug → its own declared cell. Keyed off each file's `slug` FIELD rather than its filename, so a
+ * file renamed or a slug retyped shows up as a missing key instead of a silent mismatch.
+ */
+const boundsBySlug = new Map<string, { frameWidth: number; frameHeight: number }>(
+  Object.values(ALL_BOUNDS).map((raw) => {
+    const b = JSON.parse(raw) as { slug: string; frameWidth: number; frameHeight: number };
+    return [b.slug, { frameWidth: b.frameWidth, frameHeight: b.frameHeight }];
+  }),
+);
+
+/**
+ * `animTimings` builds ONE table — the PLAYER's (`bounds.slug`, e.g. `brass-courier`) — so every
+ * comparison against it must be scoped to that slug's rows only. `public/assets/index.json` now
+ * also carries enemy sheets (`brass-sentry-idle` and onward); an enemy key sliced against
+ * `bounds.slug`'s prefix is not even a valid `AnimName`, so it must never reach `catalogFrames`.
+ */
+const courierSheets = catalog.sheets.filter((s) => s.key.startsWith(`${bounds.slug}-`));
 
 /** `brass-courier-walk` -> `walk`. The catalog key carries the slug; the timing table does not. */
 function animOf(key: string): AnimName {
   return key.slice(`${bounds.slug}-`.length) as AnimName;
 }
 
+const catalogFrames = new Map<string, number>(
+  courierSheets.map((s) => [animOf(s.key), s.frameCount]),
+);
+
+/**
+ * Animations the timing table knows about but no sheet exists for yet.
+ *
+ * Phase 5 adds `attack`, `hurt` and `death` to the table when it builds the combat sim, and
+ * generates their art later in the same phase — so between those two points the table legitimately
+ * describes more animations than the catalog ships. **That gap is asserted rather than hidden**:
+ * the list below must be empty by the end of Phase 5, and the test that reads it says so.
+ *
+ * The previous version cast a partial map with `as Record<AnimName, number>`, which turned a
+ * missing sheet into `deriveFps(undefined, …)` and a thrown error deep inside the table — an
+ * unhelpful failure for a legitimate intermediate state.
+ */
+// `hurt` LANDED in session 6 — it extracted clean from the existing unpadded clip and needed no
+// purchase at all, which only a per-action sweep found. `attack` LANDED here (session 7): scale now
+// resolves per (slug, action) — build-assets.mjs, catalogWrite.mjs — so the padded round that
+// already passed G6 packs at 289 px against hurt's 288 px instead of 114. `death` remains pending:
+// the same padded round needs a 332 px cell against the shared 288 px one (decision M3's reopened
+// cell question — see docs/HANDOFF.md) and was deliberately not widened to fit.
+/**
+ * Animations declared in the timing table but not yet packed into `public/`.
+ *
+ * 🔴 **Empty as of 2026-08-14.** `death` was the last entry and it shipped when the courier's cell
+ * was widened 288 -> 336 so `packStrip` would accept it — the player had been reporting death as a
+ * freeze, and with no `brass-courier-death` row `playAnim` no-ops and the corpse holds whatever
+ * frame it was on.
+ *
+ * The list stays rather than being deleted: it is the mechanism that makes a declared-but-unpacked
+ * animation VISIBLE instead of silently missing, and the next bought clip goes through the same
+ * door. `asset-catalog.test.ts` asserts every name here is genuinely absent from the catalog, so
+ * leaving a shipped animation in it is red — which is exactly how this entry was caught.
+ */
+const PENDING_ART: readonly AnimName[] = [];
+
 const derived = animTimings(
   derivedFeel(DEFAULT_TUNING, ticksToMs),
   // Frame counts come from the CATALOG rather than being retyped, so this compares the catalog's
-  // timings against the sim for the sheets the catalog actually claims to have.
-  Object.fromEntries(
-    catalog.sheets.map((s) => [animOf(s.key), s.frameCount]),
-  ) as Record<AnimName, number>,
-  bounds.stridePxPerCycle,
+  // timings against the sim for the sheets the catalog actually claims to have. Pending rows get a
+  // placeholder purely so the table can be built; nothing below compares them.
+  Object.fromEntries([
+    ...catalogFrames.entries(),
+    ...PENDING_ART.map((name) => [name, 1] as const),
+  ]) as Record<AnimName, number>,
+  // 🔴 The AUTHORED cadence, not the stride. This argument used to be `bounds.stridePxPerCycle`,
+  // and when the parameter changed meaning TypeScript said nothing — `{walk, run}` is structurally
+  // identical either way, so the call silently began passing 254 px as "36 fps" and produced a
+  // 6-tick walk cycle. Read from the config so a hand-edit of the cadence goes red here.
+  {
+    walk: bounds.animations.walk?.fps ?? 0,
+    run: bounds.animations.run?.fps ?? 0,
+  },
 );
 
 describe('the catalog records the timings the simulation derives (criterion 4.7, vault 4.22)', () => {
   it('found a non-empty catalog and a bounds file', () => {
     expect(catalog.sheets.length).toBeGreaterThan(0);
-    expect(derived.length).toBe(catalog.sheets.length);
+    // `derived` is the PLAYER's table only (see `courierSheets` above) — every derived row is
+    // either shipped for the player's slug or explicitly pending, no third category, so a player
+    // row cannot go missing from the catalog by being quietly forgotten. An enemy sheet (e.g.
+    // `brass-sentry-idle`) is neither: it is out of scope for this count on purpose.
+    expect(derived.length).toBe(courierSheets.length + PENDING_ART.length);
+  });
+
+  /**
+   * **The Phase 5 completion gate for art.** `PENDING_ART` is the list of animations the sim needs
+   * and the catalog does not yet ship. It must be empty before Phase 5 can be reported done — and
+   * this test is what makes "we forgot to generate the hurt sheet" a red suite rather than a black
+   * sprite discovered in a playtest.
+   */
+  it('names exactly which sheets are still awaiting art', () => {
+    for (const name of PENDING_ART) {
+      expect(catalogFrames.has(name), `${name} is in PENDING_ART but the catalog ships it — remove it from the list`).toBe(false);
+    }
+    for (const [name] of catalogFrames) {
+      expect(PENDING_ART).not.toContain(name);
+    }
   });
 
   it.each(['walk', 'run', 'jump', 'fall', 'idle'])('%s agrees on simTicks, fps and loop', (name) => {
-    const row = catalog.sheets.find((s) => animOf(s.key) === name);
+    const row = courierSheets.find((s) => animOf(s.key) === name);
     const want = derived.find((d) => d.name === name);
     expect(row, `no catalog entry for ${name}`).toBeDefined();
     expect(want, `no derived timing for ${name}`).toBeDefined();
@@ -113,21 +221,59 @@ describe('the catalog records the timings the simulation derives (criterion 4.7,
     }
   });
 
-  it('every sheet declares the frame size the bounds file cut it at', () => {
+  it('every sheet declares the frame size ITS OWN slug bounds file cut it at', () => {
     // A sheet loaded with the wrong frameWidth registers a texture with correct DIMENSIONS and the
     // wrong number of frames — the single most likely way this phase ships something subtly wrong.
     // `BootScene.verifySheets` catches it at runtime; this catches it before the browser is opened.
+    //
+    // Per slug since session 7: `rust-scavenger` is cut at 512 for its death debris while the
+    // courier and sentry stay at 288, so "every row matches the courier" is no longer the question.
+    expect(boundsBySlug.size, 'slug bounds files found').toBeGreaterThan(1);
+
     for (const row of catalog.sheets) {
-      expect(row.frameWidth, `${row.key} frameWidth`).toBe(bounds.frameWidth);
-      expect(row.frameHeight, `${row.key} frameHeight`).toBe(bounds.frameHeight);
+      const slug = [...boundsBySlug.keys()].find((s) => row.key.startsWith(`${s}-`));
+      // An unresolvable row is a FAILURE, not a skip — silently passing over a row nobody owns is
+      // how a sheet would escape this assertion entirely.
+      expect(slug, `${row.key} resolves to a known slug`).toBeDefined();
+      const own = boundsBySlug.get(slug!)!;
+      expect(row.frameWidth, `${row.key} frameWidth vs ${slug}`).toBe(own.frameWidth);
+      expect(row.frameHeight, `${row.key} frameHeight vs ${slug}`).toBe(own.frameHeight);
     }
   });
 
-  it('idle is the only authored timing, and says so', () => {
-    // Vault 4.22 is satisfied for four of five clips and deliberately NOT for idle — no sim window
-    // governs a breathing loop. The exception is recorded in docs/qa/phase-04-art.md per C11; this
-    // asserts it cannot quietly spread to a clip that does have a window.
-    const authored = catalog.sheets.filter((s) => s.derivedFrom === 'authored').map((s) => s.key);
-    expect(authored).toEqual([`${bounds.slug}-idle`]);
+  it('only LOOPS may be authored — every windowed animation is still derived (session 9)', () => {
+    // 🔴 This used to read "idle is the only authored timing". Session 9 widened it to every LOOP,
+    // by user decision, because a walk cycle has no simulation window to outrun either — the same
+    // argument that always exempted `idle`. Deriving a loop's rate from a measured stride made an
+    // unmeasurable number load-bearing and shipped as 13-17 % foot-slide ("moves like a ghost").
+    // Full reasoning: `src/render/animTiming.ts`'s header, `character-bounds.json`'s `_loopFps`.
+    //
+    // The test's TEETH are unchanged and are the point: vault 4.22 is still enforced for every clip
+    // that depicts a TIMED thing. An `attack`, `hurt`, `death`, `jump` or `fall` row acquiring an
+    // authored fps is exactly the Phase 4 defect ("0.43 s of art over a 0.25 s move, so the strike
+    // was never drawn"), and this still catches it. What is permitted is strictly `loop: true`.
+    const authored = catalog.sheets.filter((s) => s.derivedFrom === 'authored');
+    expect(authored.length).toBeGreaterThan(0);
+    for (const sheet of authored) {
+      expect(
+        sheet.loop,
+        `${sheet.key} is authored but is NOT a loop — a windowed animation must derive its fps ` +
+          `from the simulation (vault 4.22)`,
+      ).toBe(true);
+    }
+    // Non-vacuity: at least one windowed row must still be deriving, or the assertion above could
+    // be satisfied by a catalog that authored everything.
+    const windowed = catalog.sheets.filter((s) => !s.loop);
+    expect(windowed.length).toBeGreaterThan(0);
+    for (const sheet of windowed) {
+      expect(
+        sheet.derivedFrom,
+        `${sheet.key} is a one-shot and must take its simTicks from the simulation`,
+      ).not.toBe('authored');
+    }
+    expect(
+      authored.map((s) => s.key),
+      `the player's own idle (${bounds.slug}-idle) must be among the authored rows`,
+    ).toContain(`${bounds.slug}-idle`);
   });
 });

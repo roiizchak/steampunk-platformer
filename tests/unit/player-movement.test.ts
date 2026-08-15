@@ -75,7 +75,11 @@ describe('running (criterion 2.1)', () => {
   });
 
   it('horizontal speed is capped at runMax however long the key is held', () => {
-    const world = createWorld({ seed: 3, scale: 1 });
+    // The wide `bounds` are the point of the fixture, not scenery. Phase 5 gave every world three
+    // solid edges, and the grey-box world is 1920 px across — so at 600 ticks of held `right` this
+    // test stopped measuring the ACCELERATION cap and started measuring the wall, which zeroes vx.
+    // Removing the wall keeps "however long the key is held" literally true.
+    const world = createWorld({ seed: 3, scale: 1, bounds: { widthPx: 1_000_000, heightPx: 1080 } });
     const input = createSnapshot();
     input.right = true;
     advance(world, input, 600);

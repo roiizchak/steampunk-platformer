@@ -20,9 +20,16 @@ predate this contract and have no recorded request ids.** They are style probes,
 so nothing in the game depends on rebuilding them — but they are consequently **not rebuildable**,
 and that is stated here rather than discovered later.
 
-**Running total: 66 generations · `$31.39` — INVOICED, not quoted.** 21 on the retired
-`nano-banana-2`, 23 on `nano-banana-pro`, and **22 `seedance-2.0/image-to-video` clips**. The invoice
-was read on 2026-08-09 and it **overran the $25 ceiling by $6.39**.
+**Invoice reading of 2026-08-09: 66 generations · `$31.39`.** 21 on the retired `nano-banana-2`,
+23 on `nano-banana-pro`, and **22 `seedance-2.0/image-to-video` clips**. It **overran the $25 ceiling
+by $6.39**.
+
+> ⚠️ **That is a point-in-time INVOICE reading and it is no longer the running total.** It was
+> written as one, went stale the moment Phase 5 spent again, and was still being quoted as current on
+> 2026-08-14. Everything after it is priced at the invoiced per-unit rates ($0.15 an image, $1.19 a
+> clip) and is therefore **quoted, not invoiced** — the two must not be added into one number that
+> claims to be either. **The live figure is the Phase 5 running total below.** Re-read the invoice
+> before the next spend and reconcile both.
 
 It also settled the contested clip rate: `genmedia pricing`'s `0.014 / "units"` was **wrong by ~21×**,
 and the pessimistic dashboard-derived rate was right to within ~1 %. Full reconciliation, and the
@@ -62,6 +69,27 @@ and nothing else moves.**
 | [generations/phase-04-anchor.md](generations/phase-04-anchor.md) | 0 · 0b · 0c · 4.2b/4.2c | `nano-banana-pro`, one Seedance probe | 12 + 1 clip |
 | [generations/phase-04-world.md](generations/phase-04-world.md) | 4b/G · 4b/H | `fal-ai/nano-banana-pro` | 13 · $1.95 |
 | [generations/phase-04-video.md](generations/phase-04-video.md) | 4b/I · 4b/J · batch V | `bytedance/seedance-2.0/image-to-video` | 21 clips + 1 edit |
+| [generations/phase-05-anchors.md](generations/phase-05-anchors.md) | Phase 5 step 4b — enemy anchors, **G1-gated before any clip** | `fal-ai/nano-banana-pro` | 6 · $0.90 |
+| [generations/phase-05-clips.md](generations/phase-05-clips.md) | Phase 5 step 5 — combat + enemy clips, **generated and measured, not yet verified** | `bytedance/seedance-2.0/image-to-video` | 11 · ≈$13.09 |
+| [generations/phase-05-jump-reshoot.md](generations/phase-05-jump-reshoot.md) | Phase 5 — `jump` at `1:1`. Probe **REFUTED** its own hypothesis; clip kept as evidence, **not adopted** | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+| [generations/phase-05-ratio-match.md](generations/phase-05-ratio-match.md) | Phase 5 — the `1:1` round. Ratio-match probe **CONFIRMED** (6/6 cut → 0/6), 5 clips ratio-matched, then a padding probe **CONFIRMED** (5/6 → 1/6) | `bytedance/seedance-2.0/image-to-video` | 7 · $8.33 |
+
+| [generations/phase-05-padded-round.md](generations/phase-05-padded-round.md) | Phase 5 — seven clips from padded anchors. Padding **CONFIRMED** on the subject, and the finding that it cannot rescue an effect | `bytedance/seedance-2.0/image-to-video` | 7 · $8.33 |
+| [generations/phase-05-fire-repad.md](generations/phase-05-fire-repad.md) | Phase 5 — the sentry `fire`/`death` re-pad. Treatment **REFUTED**: padding scales a subject, never an effect that exists to leave the scene | `bytedance/seedance-2.0/image-to-video` | 2 · $2.38 |
+| [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md) | Phase 5 — criterion 5.4e closed from the genmedia gallery. **No generations, $0** | — | 0 · $0.00 |
+| [generations/phase-05-scavenger-idle.md](generations/phase-05-scavenger-idle.md) | Phase 5 — `rust-scavenger/idle` (D3). **First take adopted**, tightest loop wrap of any scavenger sheet; found a loop gate that was silently not running | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+| [generations/phase-05-scavenger-attack.md](generations/phase-05-scavenger-attack.md) | Phase 5 — the scavenger swing, on the player report that it had no attack animation. First take adopted; damage moved from contact to an active window | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+| [generations/phase-05-fall-reshoot.md](generations/phase-05-fall-reshoot.md) | Phase 5 — `brass-courier/fall` (D1). Both courier levers at once, G6 5-of-8 → **0 of 9**; first take adopted, second authorised attempt not spent. Empties `BLOCKED_ON_ART` | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Phase 5 running total: $47.31 of the $55 ceiling. $7.69 remains.**
+
+> 🔴 This line read **"25 generations, $23.51 of the $40 ceiling"** until 2026-08-14 — stale by two
+> ceiling raises and four gate groups, and the three rows above were missing from the table entirely.
+> The chain, each step recorded in its own log: `$0.90 → $13.99 → $15.18 → $16.37 → $23.51 →
+> $31.84 → $41.36 → $43.74`, against a ceiling the user moved `$40 → $45 → $55`. The generation
+> COUNT is deliberately not restated: the per-file rows above carry it, and a hand-summed total is
+> what went stale here in the first place.
 
 **The cross-cutting entries below stay here.** The cost summary and the invoice reconciliation span
 every gate and have no single owner.
@@ -152,3 +180,26 @@ save**; it is worth about six clips.
 Five paid generations remain **unattributable** — the orphaned job records above — so they are inside
 the $31.39 but cannot be traced to a prompt or a date. That is the practical cost of the vault 4.17
 violation, now denominated: **~$6 of spend with no provenance.**
+
+---
+
+## Session 6 — the padded round
+
+**7 clips, $8.33. Spend $23.51 → $31.84 of $40.** Full provenance, every `request_id`, the
+hash-verified anchor uploads and the per-clip verdicts:
+[generations/phase-05-padded-round.md](generations/phase-05-padded-round.md).
+
+The headline is not the framing (which is solved — no subject crop in five of seven strips, on two
+anchors never ratio-matched before). It is that **padding changes the subject's size in the output,
+and `scale` is stored per SLUG**, so the padded courier `attack` packed at 114 px against `hurt`'s
+288 px. Padding is a property of a GENERATION and so is the scale it implies. Recorded there in full.
+
+> 🔵 **SUPERSEDED 2026-08-12 (session 7, user decision D2).** The 114px arithmetic above is
+> unchanged and correct — what changed is the premise that a per-slug scale had to hold it. Scale
+> now resolves per `(slug, action)` (`tools/gen/build-assets.mjs`, `tools/gen/catalogWrite.mjs`), so
+> a padded generation can declare its own number instead of sharing the slug default. The padded
+> `brass-courier/attack`/`death` rounds this session bought are adopted after all — the unpadded
+> re-shoot this session's decision commissioned did not fix the crop (`L188 R0`, unmoved across
+> three prompt clauses) — and `attack` now ships at 289px. Full account:
+> [generations/phase-05-padded-round.md](generations/phase-05-padded-round.md)'s own dated
+> supersession entry.

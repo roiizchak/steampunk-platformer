@@ -150,6 +150,59 @@ export function slugOf(raw: unknown): string | null {
   return typeof slug === 'string' && slug.length > 0 ? slug : null;
 }
 
+/**
+ * The action words the pipeline declares across every slug — courier `idle walk run jump fall
+ * attack hurt death`, sentry `idle fire death`, scavenger `walk chase death` (HANDOFF §4 step 6a).
+ * None contain a hyphen, which is what makes stripping a sheet key's trailing `-<action>` a safe
+ * way to recover its SLUG with no config loaded yet to check it against — the bootstrap
+ * `actionFromKey` itself cannot do, because that needs the slug first.
+ */
+const KNOWN_ACTIONS = [
+  'idle', 'walk', 'run', 'jump', 'fall', 'attack', 'hurt', 'death', 'fire', 'chase',
+] as const;
+
+/**
+ * The character slug a sheet key implies, guessed from its trailing `-<action>` word. `null` on a
+ * key ending in no known action, so a caller can fall back rather than fetch a config for a wrong
+ * guess. This is a GUESS used only to pick which config to fetch next — the actual edit still goes
+ * through `slugOf`/`actionFromKey` against the config that comes back, so a wrong guess here
+ * produces a failed fetch or a refusal, never a silent cross-character write.
+ */
+export function slugFromSheetKey(key: string): string | null {
+  for (const action of KNOWN_ACTIONS) {
+    const suffix = `-${action}`;
+    if (key.endsWith(suffix) && key.length > suffix.length) {
+      return key.slice(0, key.length - suffix.length);
+    }
+  }
+  return null;
+}
+
+/**
+ * Where a slug's bounds config lives. Filenames here MUST match `tools/gen/slugConfig.mjs`'s
+ * `config` field basename exactly — that build script is the producer (it WRITES the file), this
+ * function is the consumer (it fetches and names the save download). Two conventions for one file
+ * is vault 5.3; `tests/unit/gym-bounds-config-path.test.ts` pins the two equal per slug.
+ *
+ * `brass-courier`'s predates per-slug naming and is not renamed — renaming is deletion, a standing
+ * STOP-and-ask. Every other slug follows the producer's `character-bounds-<slug>.json` pattern.
+ */
+const LEGACY_CONFIG_PATHS: Readonly<Record<string, string>> = {
+  'brass-courier': 'assets/config/character-bounds.json',
+};
+
+/** The fetch path for a slug's bounds config. */
+export function configPathFor(slug: string): string {
+  return LEGACY_CONFIG_PATHS[slug] ?? `assets/config/character-bounds-${slug}.json`;
+}
+
+/** The filename a save should download as — `configPathFor`'s own basename, so load and save
+ *  always agree on which file a slug's edits round-trip through. */
+export function configFilenameFor(slug: string): string {
+  const path = configPathFor(slug);
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
 /** Everything the Gym's readout needs. Plain data, so the panel is testable without a scene. */
 export interface ReadoutState {
   /** Named to match `SheetEntry`, so a caller can spread its catalog row straight in. */

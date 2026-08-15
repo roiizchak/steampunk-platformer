@@ -31,18 +31,20 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { VIDEO_MOTIONS } from './motion.mjs';
-import {
-  LIFT_OFF_FRACTION,
-  chooseCycleWindow,
-  liftOffOnset,
-  motionOnset,
-  windowIndices,
-} from './sampler.mjs';
+import { chooseCycleWindow, oneShotOnset, windowIndices } from './sampler.mjs';
+import { findClip } from './clipSource.mjs';
+import { CLIP_JOBS, clipStem } from './clipJobs.mjs';
+import { SLUGS, workListFor } from './slugConfig.mjs';
+import { decodePng } from './png.mjs';
+import { borderKey, keyOut } from './chroma.mjs';
+import { crop } from './resize.mjs';
+import { gateEdgeBleed } from './edgeGate.mjs';
+import { acceptedEdgeBleed, failedEdgesOf } from './edgeExceptions.mjs';
 
-const VIDEO_DIR = '_generated/video';
 const SHEET_DIR = '_generated/sheets';
 
 /**
@@ -55,8 +57,8 @@ const SHEET_DIR = '_generated/sheets';
 const PROBE_W = 120;
 const PROBE_H = 214;
 
-/** The gutter between sampled frames, in px of chroma green. */
-const GUTTER = 48;
+/** The gutter between sampled frames, in px of chroma green. Exported so the G6 wiring test can build a matching fixture. */
+export const GUTTER = 48;
 const CHROMA = '0x00FF00';
 
 /**
@@ -86,36 +88,6 @@ function ffprobe(path) {
       .split(/\r?\n/)
       .map((line) => line.split('=')),
   );
-}
-
-function findClip(action) {
-  if (!existsSync(VIDEO_DIR)) {
-    throw new Error(
-      `assets:clips: ${VIDEO_DIR} does not exist. Raw model output is gitignored by design — ` +
-        `re-fetch it from the request ids in docs/generations/ (indexed by ` +
-        `docs/GENERATION-LOG.md). This build does NOT ` +
-        `substitute a placeholder (vault 4.16).`,
-    );
-  }
-  const files = readdirSync(VIDEO_DIR).filter(
-    (f) => f === `${action}.mp4` || (f.startsWith(`${action}-`) && f.endsWith('.mp4')),
-  );
-  if (files.length === 0) {
-    throw new Error(
-      `assets:clips: no clip for declared animation "${action}" in ${VIDEO_DIR}. A declared input ` +
-        `that cannot be found fails the build; it is never substituted (vault 4.16).`,
-    );
-  }
-  // An ambiguous prefix is a silent way to ship a superseded generation — the same trap `raw()` in
-  // build-world.mjs hit on its first run. Refuse rather than pick.
-  if (files.length > 1) {
-    throw new Error(
-      `assets:clips: "${action}" matches ${files.length} clips in ${VIDEO_DIR} ` +
-        `(${files.join(', ')}). Delete the superseded ones — picking the first would silently ` +
-        `ship whichever the directory happened to list first.`,
-    );
-  }
-  return join(VIDEO_DIR, files[0]);
 }
 
 /**
@@ -200,12 +172,85 @@ function extract(clip, indices, out) {
   );
 }
 
+/**
+ * **G6 — edge bleed** (`edgeGate.mjs`). Every clip in this phase came back with the subject sheared
+ * off by ITS OWN video frame edge — see that module's header for the defect and why it FAILs a
+ * bounding box that touches or nearly touches the canvas boundary.
+ *
+ * The sheet `extract()` just wrote is NOT that canvas: each cell is the source `probe.width` x
+ * `probe.height` frame padded by `GUTTER` px of chroma on every side, so the sheet's own cell
+ * boundary is `GUTTER / 2` px of guaranteed-green margin away from where Seedance actually cropped.
+ * Gating the padded cell would never fire — the pad adds margin regardless of whether the source
+ * frame itself starved the figure. So this un-pads each cell back to exactly the region ffmpeg
+ * extracted before measuring, which is the one boundary the model could have actually cropped
+ * against.
+ *
+ * Fails the build rather than letting a cropped clip reach `assets:build` and be packed — that is
+ * where the defect was found, by eye, after money had already been spent on the clip.
+ *
+ * **Crop before keying, not the other way round.** `extract()` pads every cell with a literal
+ * `GUTTER` px of chroma `0x00FF00` (see `:59-64`) — so estimating the key on the padded sheet
+ * samples that gutter and returns pure green regardless of what colour the model actually rendered,
+ * defeating `borderKey` entirely (R3). Each cell's own background is only knowable from the cell
+ * ITSELF, so the crop to the un-padded region must happen first, and `borderKey` (which never
+ * refuses on low border agreement — a crop is exactly the condition that produces one) runs on that
+ * un-padded crop, not the sheet.
+ */
+export function gateSheetEdges(sheetPath, action, cellCount, clipWidth, clipHeight, declaredFile = null) {
+  const cellW = clipWidth + GUTTER;
+  const raw = decodePng(readFileSync(sheetPath));
+  for (let i = 0; i < cellCount; i += 1) {
+    const inner = crop(raw, i * cellW + GUTTER / 2, GUTTER / 2, clipWidth, clipHeight);
+    const keyed = keyOut(inner, { key: borderKey(inner) });
+    const edge = gateEdgeBleed(keyed);
+    if (edge.status === 'FAIL') {
+      /**
+       * The narrow exception for a clip where what reaches the edge is an EFFECT, not the subject —
+       * pinned to one filename AND one set of edges, so neither a re-shoot nor a different defect
+       * is silently covered. See `edgeExceptions.mjs` for the two rounds of measurement behind each
+       * entry, and `tests/unit/edge-exceptions.test.ts` for the lock that keeps them honest.
+       *
+       * Printed, never silent: a gate that waives something without saying so is how a cropped clip
+       * ships looking exactly like success.
+       */
+      const accepted = acceptedEdgeBleed(action, declaredFile, edge.value);
+      if (accepted !== null) {
+        console.log(
+          `  G6 ACCEPTED  "${action}" frame ${i} of ${cellCount} bleeds on the ` +
+            `${failedEdgesOf(edge.value).join(', ')} edge(s) — ${accepted}`,
+        );
+        continue;
+      }
+      throw new Error(
+        `assets:clips: "${action}" frame ${i} of ${cellCount} fails G6 edge bleed — ${edge.reason}. ` +
+          `This clip must be re-shot, not packed (vault: no gate looked at frame edges before G6).`,
+      );
+    }
+  }
+}
+
+/**
+ * `<slug> [action...]` from argv -> the ordered `{ slug, action, motionKey }` work list `main()`
+ * walks. No slug: today's behaviour — every slug in `SLUGS` across all of ITS declared actions, the
+ * union of the per-slug lists (work item A-T5). That union is not `Object.keys(VIDEO_MOTIONS)`:
+ * `brass-sentry/fire-elevated` is a real `VIDEO_MOTIONS` key with no clip file and no slugConfig
+ * entry, so driving from this list is what keeps `main()` from ever attempting it. Exported so the
+ * unit suite can assert what `main()` ACTUALLY iterates rather than re-testing `workListFor` in
+ * isolation, which would stay green even if `main()` reverted to walking `VIDEO_MOTIONS` directly.
+ */
+export function resolveWorkList(argv = process.argv.slice(2)) {
+  const [slug, ...actions] = argv;
+  return slug ? workListFor(slug, actions) : SLUGS.flatMap((s) => workListFor(s));
+}
+
 function main() {
   mkdirSync(SHEET_DIR, { recursive: true });
   const report = [];
 
-  for (const [action, spec] of Object.entries(VIDEO_MOTIONS)) {
-    const clip = findClip(action);
+  for (const { motionKey } of resolveWorkList()) {
+    const spec = VIDEO_MOTIONS[motionKey];
+    const action = motionKey;
+    const clip = findClip(action, { declaredFile: CLIP_JOBS[action]?.file ?? null });
     const probe = ffprobe(clip);
     const sourceFrames = Number(probe.nb_read_frames);
     const { frames, cyclic } = spec;
@@ -230,34 +275,60 @@ function main() {
     } else {
       // One-shot motions never return to their starting pose, so there is no cycle to find. But the
       // clip is NOT the animation either: it opens on the anchor pose, because the anchor is the
-      // start image, so the courier stands still for the first stretch of it. Six frames spread
-      // across the whole clip spend one or two on a standing figure, which inside an 18-tick jump
-      // is a third of the animation. Sampling runs from the measured motion onset to the end.
-      /**
-       * Take-off is measured from the FEET, not from the silhouette — see `liftOffOnset`.
-       * `motionOnset` remains the fallback for a one-shot that is not airborne at all (there are
-       * none today, but `attack` in Phase 5 will be exactly that).
-       */
-      const masks = silhouettes(clip);
-      const bands = masks.map((m) => maskRows(m));
-      const lift = liftOffOnset(
-        bands.map((b) => b.foot),
-        bands.map((b) => b.head),
-      );
-      if (lift === null) {
-        throw new Error(
-          `assets:clips: "${action}" is an airborne one-shot but its feet never leave the ground — ` +
-            `no frame has them ${Math.round(LIFT_OFF_FRACTION * 100)}% of a standing height above ` +
-            `where they started. That is an INDETERMINATE, not a licence to sample from frame 0 ` +
-            `(vault 4.18); the clip did not perform the motion and must be regenerated.`,
-        );
+      // start image, so the character stands or stands still for the first stretch of it. Sampling
+      // runs from the measured motion onset to the end — take-off is measured from the FEET for an
+      // airborne one-shot (`jump`, `fall`) and from the silhouette for a grounded one (`attack`,
+      // `hurt`, `death`); `spec.airborne` is what decides, never the action's name. See
+      // `oneShotOnset` for both axes and why each throws rather than falling back to frame 0.
+      const footRows = [];
+      const headRows = [];
+      if (spec.airborne) {
+        for (const mask of silhouettes(clip)) {
+          const { foot, head } = maskRows(mask);
+          footRows.push(foot);
+          headRows.push(head);
+        }
       }
-      onset = lift;
+      onset = oneShotOnset(action, spec, { diff, sourceFrames, footRows, headRows });
       indices = windowIndices(onset, sourceFrames - 1 - onset, frames);
     }
 
-    const out = join(SHEET_DIR, `${action}-clip.png`);
+    // A flat name, not `${action}-clip.png`: a namespaced action (`brass-courier/attack`) would
+    // resolve to a `brass-courier/` subdirectory nothing creates, and extraction would fail. The
+    // flat `<stem>-clip.png` prefix shape is also depended on downstream.
+    const out = join(SHEET_DIR, `${clipStem(action)}-clip.png`);
     extract(clip, indices, out);
+    gateSheetEdges(out, action, indices.length, Number(probe.width), Number(probe.height), CLIP_JOBS[action]?.file ?? null);
+
+    /**
+     * Declare the geometry this strip was written with, beside the strip.
+     *
+     * The pitch is known exactly here — `ffmpeg` was just told to pad every frame by `GUTTER / 2`
+     * on each side and tile them — and it was being thrown away, leaving `build-assets` to guess it
+     * back from pixels with `detectFrames`. That guess cannot tell a cell boundary from a detached
+     * limb, which is what stopped `rust-scavenger/death` packing: 12 bands for 10 frames, because
+     * a 64 px chunk of the dying scavenger flew clear of its body by 46 px.
+     *
+     * Written AFTER `gateSheetEdges`, so a strip that fails G6 never gains a sidecar and cannot be
+     * packed by the new path either. Consumers treat a missing sidecar as "use the old detection",
+     * so every sheet packed before this existed is untouched.
+     */
+    writeFileSync(
+      out.replace(/\.png$/, '.json'),
+      `${JSON.stringify(
+        {
+          _comment:
+            'Cell geometry as WRITTEN by build-clips.mjs. build-assets.mjs splits at cellWidth ' +
+            'rather than re-detecting bands, because band detection cannot tell a cell boundary ' +
+            'from a detached limb (rust-scavenger/death). Delete this file to fall back.',
+          cellWidth: Number(probe.width) + GUTTER,
+          cellHeight: Number(probe.height) + GUTTER,
+          cells: indices.length,
+        },
+        null,
+        2,
+      )}\n`,
+    );
 
     report.push({
       action,
@@ -287,4 +358,8 @@ function main() {
   console.log(`\nwrote ${report.length} sheets to ${SHEET_DIR} and _generated/clip-report.json`);
 }
 
-main();
+// Guarded so the unit suite can import `gateSheetEdges` without running the whole CLI (vault: no
+// clips exist on a fresh clone, and `main()` would fail on the first `findClip`).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

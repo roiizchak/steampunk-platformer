@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { ticksToMs } from '../sim';
 import { derivedFeel } from '../sim/derived';
+import { enemyKnobs, knobLine, type Knob } from '../render/enemyTuning';
 import { DEFAULT_TUNING } from '../sim/player';
 import type { TuningKnobs } from '../sim/types';
 import { GameScene } from './GameScene';
@@ -17,9 +18,15 @@ import { GameScene } from './GameScene';
  * that looked right would otherwise satisfy criterion 2.6 while adjusting nothing — which Codex
  * plan review F2c called out.
  *
- * **Keys are Q/E and Z/X, not the arrows.** The plan said arrows; the plan was wrong, because the
- * whole point is to retune the feel WHILE running and jumping, and the arrows are how you run.
+ * **Keys are Q/E and `,`/`.`, not the arrows.** The plan said arrows; the plan was wrong, because
+ * the whole point is to retune the feel WHILE running and jumping, and the arrows are how you run.
  * Rebinding movement to tune movement would make the scene useless for its one job.
+ *
+ * Adjust was `Z`/`X` until Phase 5 bound **`Z` to attack**, at which point one keypress both swung
+ * the sword and decremented a knob. Attack has since moved to `F`/`L` — session 8, on the user's
+ * report that the old placement was awkward to reach — so that collision no longer exists. `,`/`.`
+ * stayed rather than moving back: they are clear of every production binding, and churning a dev
+ * binding twice costs more than it saves.
  */
 
 /** Knobs measured in whole 60 Hz ticks (vault 2.1) rather than pixels. */
@@ -48,6 +55,15 @@ function floorFor(key: keyof TuningKnobs): number {
 
 export class PlaygroundScene extends GameScene {
   private knobKeys: (keyof TuningKnobs)[] = [];
+  /**
+   * Phase 5's enemy knobs, appended after the movement ones so `selected` spans both lists.
+   *
+   * A second selection index and a second pair of adjust keys was the alternative, and it is worse:
+   * the whole point of A6 is that you sweep everything, and a panel with two modes is a panel where
+   * one mode goes unswept. Rebuilt on every adjustment because the accessors close over live
+   * entities, and spawning one invalidates the list.
+   */
+  private enemyKnobList: Knob[] = [];
   private selected = 0;
   private readout!: Phaser.GameObjects.Text;
   private derivedText!: Phaser.GameObjects.Text;
@@ -69,6 +85,7 @@ export class PlaygroundScene extends GameScene {
     // Read from the live tuning object rather than a hand-written list, so a knob added in a
     // later phase appears here with no edit — the same construction the sweep test uses.
     this.knobKeys = Object.keys(this.simWorld.tuning) as (keyof TuningKnobs)[];
+    this.enemyKnobList = enemyKnobs(this.simWorld);
 
     this.readout = this.add
       .text(24, 64, '', { fontFamily: 'monospace', fontSize: '18px', color: '#c8a86b' })
@@ -87,7 +104,7 @@ export class PlaygroundScene extends GameScene {
   }
 
   protected helpText(): string {
-    return 'ARROWS / WASD move · SPACE jump · Q/E select knob · Z/X adjust · R reset · P back';
+    return 'ARROWS / WASD move · SPACE jump · F/L attack · Q/E select knob · ,/. adjust · R reset · P back';
   }
 
   protected togglePlayground(): void {
@@ -99,25 +116,35 @@ export class PlaygroundScene extends GameScene {
     if (!keyboard) {
       return;
     }
-    const { Q, E, Z, X, R } = Phaser.Input.Keyboard.KeyCodes;
+    const { Q, E, COMMA, PERIOD, R } = Phaser.Input.Keyboard.KeyCodes;
 
     // `emitOnRepeat: false` for selection so one press moves one row, but the adjust keys are
     // left repeating on purpose — holding X to sweep a knob is the entire ergonomic point.
     keyboard.addKey(Q, true, false).on('down', () => this.moveSelection(-1));
     keyboard.addKey(E, true, false).on('down', () => this.moveSelection(1));
-    keyboard.addKey(Z, true, true).on('down', () => this.adjust(-1));
-    keyboard.addKey(X, true, true).on('down', () => this.adjust(1));
+    keyboard.addKey(COMMA, true, true).on('down', () => this.adjust(-1));
+    keyboard.addKey(PERIOD, true, true).on('down', () => this.adjust(1));
     keyboard.addKey(R, true, false).on('down', () => this.resetTuning());
-    keyboard.addCapture('Q,E,Z,X,R');
+    keyboard.addCapture('Q,E,COMMA,PERIOD,R');
   }
 
   private moveSelection(delta: number): void {
-    const count = this.knobKeys.length;
+    const count = this.knobKeys.length + this.enemyKnobList.length;
     this.selected = (this.selected + delta + count) % count;
     this.refreshReadout();
   }
 
   private adjust(direction: -1 | 1): void {
+    const enemyIndex = this.selected - this.knobKeys.length;
+    if (enemyIndex >= 0) {
+      const target = this.enemyKnobList[enemyIndex]!;
+      target.set(Math.round((target.get() + target.step * direction) * 1000) / 1000);
+      // No cross-knob invariant to re-assert any more: `releaseRadius` is gone with permanent
+      // aggro, and one radius cannot be dragged past itself. See `enemyTuning.ts`.
+      this.refreshReadout();
+      return;
+    }
+
     const key = this.knobKeys[this.selected];
     const tuning = this.simWorld.tuning;
     const next = tuning[key] + stepFor(key) * direction;
@@ -144,7 +171,14 @@ export class PlaygroundScene extends GameScene {
       const suffix = isTickCount(key) ? ` (${ticksToMs(tuning[key])}ms)` : '';
       return `${marker} ${drifted} ${key.padEnd(16)} ${String(tuning[key]).padStart(8)}${suffix}`;
     });
-    this.readout.setText(lines);
+
+    // Phase 5's enemy knobs, on the same list and the same selection index — see `enemyKnobList`.
+    // Rebuilt each refresh because the accessors close over live entities.
+    this.enemyKnobList = enemyKnobs(this.simWorld);
+    const enemyLines = this.enemyKnobList.map((k, index) =>
+      knobLine(k, this.knobKeys.length + index === this.selected),
+    );
+    this.readout.setText(enemyLines.length > 0 ? [...lines, '', ...enemyLines] : lines);
 
     const feel = derivedFeel(tuning, ticksToMs);
     this.derivedText.setText([

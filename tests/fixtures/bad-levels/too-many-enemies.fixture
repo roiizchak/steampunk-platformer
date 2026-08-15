@@ -1,0 +1,632 @@
+{
+ "compressionlevel": -1,
+ "height": 4,
+ "infinite": false,
+ "layers": [
+  {
+   "data": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "height": 4,
+   "id": 1,
+   "name": "ground",
+   "opacity": 1,
+   "type": "tilelayer",
+   "visible": true,
+   "width": 31,
+   "x": 0,
+   "y": 0
+  },
+  {
+   "draworder": "topdown",
+   "id": 2,
+   "name": "collision",
+   "objects": [
+    {
+     "height": 32,
+     "id": 1,
+     "name": "",
+     "properties": [
+      {
+       "name": "solid",
+       "type": "bool",
+       "value": true
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 984,
+     "x": 0,
+     "y": 96
+    },
+    {
+     "height": 0,
+     "id": 2,
+     "name": "",
+     "point": true,
+     "properties": [
+      {
+       "name": "spawn",
+       "type": "bool",
+       "value": true
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 0,
+     "x": 16,
+     "y": 96
+    },
+    {
+     "height": 32,
+     "id": 100,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 32,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 101,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 72,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 102,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 112,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 103,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 152,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 104,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 192,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 105,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 232,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 106,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 272,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 107,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 312,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 108,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 352,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 109,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 392,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 110,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 432,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 111,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 472,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 112,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 512,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 113,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 552,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 114,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 592,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 115,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 632,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 116,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 672,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 117,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 712,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 118,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 752,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 119,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 792,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 120,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 832,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 121,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 872,
+     "y": 64
+    },
+    {
+     "height": 32,
+     "id": 122,
+     "name": "",
+     "properties": [
+      {
+       "name": "enemy",
+       "type": "string",
+       "value": "rust-scavenger"
+      }
+     ],
+     "rotation": 0,
+     "type": "",
+     "visible": true,
+     "width": 32,
+     "x": 912,
+     "y": 64
+    }
+   ],
+   "opacity": 1,
+   "type": "objectgroup",
+   "visible": true,
+   "x": 0,
+   "y": 0
+  }
+ ],
+ "nextlayerid": 3,
+ "nextobjectid": 3,
+ "orientation": "orthogonal",
+ "renderorder": "right-down",
+ "tiledversion": "1.11.2",
+ "tileheight": 32,
+ "tilesets": [
+  {
+   "columns": 1,
+   "firstgid": 1,
+   "image": "../placeholder-tile.png",
+   "imageheight": 32,
+   "imagewidth": 32,
+   "margin": 0,
+   "name": "greybox",
+   "spacing": 0,
+   "tilecount": 1,
+   "tileheight": 32,
+   "tilewidth": 32
+  }
+ ],
+ "tilewidth": 32,
+ "type": "map",
+ "version": "1.10",
+ "width": 31
+}

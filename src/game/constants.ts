@@ -107,3 +107,33 @@ export const CRISP_IMAGE_RENDERING = [
  * never fetched at all — the loader silently skips any key that already exists.
  */
 export const PHASER_RESERVED_TEXTURE_KEYS = ['__DEFAULT', '__MISSING', '__WHITE', '__NORMAL'];
+
+/**
+ * The most enemies a level file may author — **the number criterion 5.11 was measured at**.
+ *
+ * ## Why the cap exists, and why 22
+ *
+ * Finding S5: nothing bounded concurrent enemies anywhere, so 5.11's *"worst-case enemy count"* was
+ * a **chosen multiple, not a bound** — "ten times the shipped level" rather than "the most this
+ * engine can be asked to draw". A frame budget measured against an unbounded quantity is not a
+ * budget.
+ *
+ * 22 is the only number the evidence supports. 5.11 samples the shipped level's **2** enemies
+ * against those 2 plus the 20-body dev fleet — 22 concurrent bodies, every one inside
+ * `camera.worldView`. A level authored at this cap with nothing spawned at runtime is *exactly* the
+ * configuration that spec measures. `level-01.tmj` authors 2, so the cap has 11x headroom and
+ * blocks nothing that exists.
+ *
+ * 🔴 **Raising it means RE-MEASURING 5.11.** The number is not a preference; it is the point where a
+ * measurement was taken. Editing it without re-running the frame budget turns a measured bound back
+ * into the chosen multiple it replaced.
+ *
+ * ## What it does NOT cap, stated rather than glossed
+ *
+ * This caps **authored** enemies, not **runtime concurrency**. `GameScene.spawnDevFleet` goes
+ * through `src/scenes/devSpawn.ts`, which pushes straight onto `world.enemies` of an
+ * already-constructed world — it never passes through this loader, which is precisely why the cap
+ * belongs here and not in `src/sim/`. With the fleet, 22 authored + 20 spawned = 42 live bodies,
+ * unbounded. **Finding S5's `src/sim/` half stays open** and needs its own perf evidence.
+ */
+export const MAX_LEVEL_ENEMIES = 22;

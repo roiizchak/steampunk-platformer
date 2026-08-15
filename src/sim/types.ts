@@ -7,7 +7,15 @@
  * Vault 2.1 (blocker): every DURATION here is an integer count of 60 Hz ticks. Every DISTANCE is
  * pixels. Velocities are px/tick, accelerations px/tick^2 — never px/second, so nothing in this
  * directory ever multiplies by a frame delta.
+ *
+ * The two imports below are `import type` and are erased at compile time, so the apparent cycle
+ * with `hazards.ts` (which imports `Rect` from here) has no runtime edge and cannot affect module
+ * initialisation order.
  */
+
+import type { EnemySet } from './enemies';
+import type { WorldBounds } from './hazards';
+import type { Projectile } from './projectiles';
 
 /** Axis-aligned box. `x`/`y` are the TOP-LEFT corner in world space, where +y is DOWN. */
 export interface Rect {
@@ -44,7 +52,26 @@ export interface LocalBox {
  * because a walk animation playing at run speed is foot-slide arriving through the state machine
  * instead of through the art. `tests/unit/walk-state.test.ts` asserts it on every tick.
  */
-export type PlayerState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
+export type PlayerState = MovementState | CombatState;
+
+/**
+ * States derived from the body every tick, at step 11.
+ *
+ * These are *re-decided* each tick from grounded / moving / walkHeld. Nothing remembers them, which
+ * is what makes them safe to recompute.
+ */
+export type MovementState = 'idle' | 'walk' | 'run' | 'jump' | 'fall';
+
+/**
+ * States combat OWNS, entered at step 4 and held for a fixed number of ticks.
+ *
+ * The distinction is load-bearing, not taxonomy. `resolveState` at step 11 derives a movement state
+ * unconditionally, so without a category to test against it would overwrite an `attack` entered at
+ * step 4 **on the same tick, every tick** — the swing would be set and erased before anything could
+ * draw it, and "did an attack happen" would still pass. Found by the Phase 5 Codex plan review
+ * (C7); pinned by `tests/unit/player-combat.test.ts`.
+ */
+export type CombatState = 'attack' | 'hurt' | 'death';
 
 /** Seeded xorshift32 state (vault 2.3). A mutable single-field cell, never a global. */
 export interface Rng {
@@ -73,6 +100,12 @@ export interface InputSnapshot {
    * at the wrong rate.
    */
   walkHeld: boolean;
+  /**
+   * Attack. An EDGE, with the same latch/consume pair as `jumpPressed` and for the same reason —
+   * holding the key must not swing repeatedly, and a frame that drained zero ticks must not eat the
+   * press. Bound to `Z` and `J`; jump stays on SPACE so every Phase 2 spec keeps working.
+   */
+  attackPressed: boolean;
 }
 
 /** Live movement knobs. Every field is swept by `tests/unit/knob-sweep.test.ts` (vault A6). */
@@ -107,11 +140,32 @@ export interface TuningKnobs {
    */
   jumpCutDivisor: number;
   /**
-   * Coyote window, in TICKS. See the window definition in `tick.ts`: `N` means the jump is
-   * accepted on the tick the player leaves the ground and on the `N - 1` ticks after it.
+   * Coyote window, in TICKS. **`tick.ts`'s header is the authority; this is a pointer to it, not a
+   * second definition** *(vault 2.2, 5.3)*.
+   *
+   * `N` means the jump is accepted on the `N` consecutive ticks starting with the **first tick
+   * AFTER** the player walks off a ledge. The ledge tick itself is not one of them, because step 7
+   * had already run when step 10 armed the window.
+   *
+   * > This comment said "accepted on the tick the player leaves the ground" until Phase 5, which
+   * > contradicted `tick.ts` by exactly one tick and was found by the Phase 5 Codex plan review
+   * > (C3) before combat could add a third window to the disagreement. `coyote-time.test.ts` and
+   * > `tick.ts` were right; this was the outlier. Vault 5.3 in its literal form — two definitions
+   * > of one concept, drifting.
    */
   coyoteTicks: number;
-  /** Jump-buffer window, in TICKS. Same inclusive definition as `coyoteTicks`. */
+  /**
+   * Jump-buffer window, in TICKS.
+   *
+   * **NOT the same definition as `coyoteTicks` — the two windows are deliberately asymmetric**, and
+   * this comment claimed they matched until Phase 5. A press is remembered for `N` ticks starting
+   * with **the tick of the press itself** (inclusive), where coyote's window starts the tick *after*
+   * the ledge. And when the player is airborne, "able to jump" is the tick AFTER touchdown, not the
+   * touchdown tick, because step 7 tests `grounded` as step 9 of the previous tick set it.
+   *
+   * Both endpoints are pinned by `tests/unit/coyote-time.test.ts`. Read `tick.ts`'s header before
+   * changing either.
+   */
   jumpBufferTicks: number;
 }
 
@@ -135,6 +189,38 @@ export interface PlayerSim {
   ticksSinceJumpPressed: number;
   /** True while a jump is rising and has not yet been cut short by releasing the button. */
   jumpCutPending: boolean;
+
+  /* --- Phase 5 combat. Every counter increments; none is a decrementing timer. --- */
+
+  hp: number;
+  maxHp: number;
+  /**
+   * Ticks spent in the CURRENT combat state. Meaningless unless `state` is a `CombatState`.
+   *
+   * **One counter for all three combat states, not three.** They are mutually exclusive — you
+   * cannot be attacking and dead — so a counter each would admit "attacking on tick 4 and hurt on
+   * tick 9 simultaneously", a state nothing can draw *(vault 5.1: two counters admit the
+   * unrepresentable state)*. `enterState` resets it, which is why that funnel exists.
+   */
+  combatCounter: number;
+  /**
+   * Ticks since damage was last taken. Invulnerable while this window is open.
+   *
+   * Separate from `combatCounter` on purpose, and this is NOT the case vault 5.1 warns about:
+   * i-frames are **orthogonal** to the combat state, not a second counter for the same concept.
+   * They outlast hitstun by design, so the player is idle, walking or jumping — a movement state —
+   * while still invulnerable. One counter could not represent that.
+   */
+  iFrameCounter: number;
+  /**
+   * FIX 2 (QA gate, session 8): did an actual knockback IMPULSE land this hit, not merely "is the
+   * player `hurt`"? `knockbackSettling` (`combat.ts`) used to key on `state === 'hurt' &&
+   * combatCounter === 1` alone, so a hazard hit — which deliberately writes no `vx` shove — got the
+   * friction exemption anyway and bought one free tick of preserved momentum for nothing. Set true
+   * where `applyKnockback` actually writes `vx` (`worldDamage.ts`), read and cleared exactly once
+   * by `stepHorizontal`'s `knockbackSettling` branch (`player.ts`) so the exemption stays ONE tick.
+   */
+  knockbackPending: boolean;
 }
 
 /** Per-tick event edges (vault 2.5). Emitted, never reconstructed from a state comparison. */
@@ -142,6 +228,35 @@ export interface TickEvents {
   jumped: boolean;
   landed: boolean;
   leftGround: boolean;
+  /** A swing began on this tick. The render layer plays the sheet from this, not from a state diff. */
+  attackStarted: boolean;
+  /**
+   * The attack hitbox is live on this tick — criterion 5.5.
+   *
+   * An EDGE-free per-tick fact, deliberately: the caller asks "is it live now", never "has it been
+   * live since". Under `advance()` these OR across the batch, which is correct for "did the window
+   * open at all during those ticks".
+   */
+  hitActive: boolean;
+  /**
+   * The player died, their death animation ran its full `DEATH_TICKS`, and they were put back at
+   * the level spawn on THIS tick.
+   *
+   * An EDGE, emitted rather than reconstructed (vault 2.5). A consumer comparing `hp` across frames
+   * cannot see it: a respawn restores full hp, so "hp went up" is also what a pickup would look
+   * like, and "state left `death`" is unobservable from outside a single tick. The renderer needs
+   * it to snap rather than interpolate — a respawn moves the player the width of the level, and
+   * `interpolatedPosition` would otherwise slide them across it over one tick.
+   */
+  respawned: boolean;
+  /**
+   * The swing CONNECTED with at least one enemy this tick.
+   *
+   * Distinct from `hitActive`, which only says the hitbox was live. Emitted rather than
+   * reconstructed by comparing enemy hp across frames *(vault 2.5)* — the render layer wants it for
+   * a hit-stop or a flash, and diffing hp would also fire when a hazard hurt something.
+   */
+  hitLanded: boolean;
 }
 
 /**
@@ -162,8 +277,32 @@ export interface World {
    */
   tickRoll: number;
   player: PlayerSim;
+  /**
+   * Where the player's feet start, and where they return on a respawn.
+   *
+   * Added 2026-08-14 with the respawn. It was previously a `createWorld` ARGUMENT that initialised
+   * the player and was then forgotten — so nothing in the sim knew where to put a player back, and
+   * death was a terminal freeze. Keeping it on the world rather than in the scene is what lets the
+   * respawn stay inside `tick()`: a scene-driven one would be a second place that decides when a
+   * death ends, and the tick contract would no longer describe the whole simulation.
+   */
+  spawn: { x: number; y: number };
   /** Static collision geometry. Phase 3 replaces the SOURCE of these; the resolver is unchanged. */
   solids: Rect[];
+  /**
+   * The world's extent, in pixels. The bottom is a KILL PLANE; left, right and top are collision.
+   *
+   * Two treatments on purpose: falling is a death you can see coming, walking off the side is not.
+   * Clamping all four was considered and rejected — a pit you cannot fall into is not a platformer.
+   * See `hazards.ts`.
+   */
+  bounds: WorldBounds;
+  /** Damaging geometry. Contact is SWEPT, so a hazard thinner than one tick of travel still bites. */
+  hazards: Rect[];
+  /** Every live enemy, one array per type. */
+  enemies: EnemySet;
+  /** Shots in flight. Replaced each tick rather than spliced — see `projectiles.ts`. */
+  projectiles: Projectile[];
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

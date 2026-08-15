@@ -1,0 +1,43 @@
+{
+  "_comment": "Saved character configuration for brass-sentry. Modeled on character-bounds.json (the courier's) — see that file for the long-form rationale on every field below; this copy states only what differs for a stationary turret. THE SCALE LIVES HERE ON PURPOSE (vault A5): a global constant derived from a single regenerable frame means regenerating that frame silently rescales every other animation and moves every measured bound. `npm run assets:build` READS this and never computes it; `node tools/gen/build-assets.mjs brass-sentry idle --derive-scale` prints a new one for a human to paste in deliberately.",
+  "slug": "brass-sentry",
+  "renderHeightPx": 192,
+  "scale": 0.28915663,
+  "_scale": "Source pixels to game pixels. DERIVED 2026-08-11 (session 5) from `brass-sentry-idle-r2.mp4`, the ratio-match re-shoot and the first Phase 5 clip to survive extraction — 192 / 664 = 0.28915663. Pasted by hand from `node tools/gen/build-assets.mjs brass-sentry idle --derive-scale`, which PRINTS it and never writes it (vault A5's STOP: the build reads this number and never computes it, so regenerating the idle sheet moves nothing here). The eight idle frames span a mean standing height of 664 source px with a frame-to-frame spread of 0.3% — that spread IS the size-pop the scale exists to hold still, and 0.3% is tighter than the courier's 0.8%, which is what a machine at rest should look like against a breathing man. Note the provenance limitation this shares with the courier (Codex C5, recorded at docs/qa/phase-05-combat.md limitation 7): the source is a regenerable idle sheet, not the locked anchor. The anchor CANNOT supply it — the anchor is 2048 square while the clip is 960 square, so the anchor's figure height is not the sheet's. Re-deriving is therefore mandatory if the idle clip is ever re-shot, and `fire`/`death` must be packed against whatever value stands here, never the reverse.",
+  "_renderHeightPx": "SENTRY_BOX.h (32 sim px, src/sim/enemyPlacement.ts) x RENDER_SCALE (6, src/game/constants.ts) = 192 px = 2 tiles. Deliberately shorter than the courier's 288 px (3 tiles) and the scavenger's 240 px (2.5 tiles) — three distinct silhouette heights so the two enemies read apart from the player and from each other at true sprite size before any colour does (src/sim/enemyPlacement.ts's own header on SENTRY_BOX/SCAVENGER_BOX).",
+  "frameWidth": 512,
+  "frameHeight": 384,
+  "_frame": "512 x 384. WIDENED 288 -> 512 on 2026-08-14 (session 10), and the reason is the per-action scale directly above, not a new animation. Packed at its own correct scale the fire sheet needs 391 px for frame 0: the muzzle discharge extends well past the turret and scales with it, so restoring the machine to its idle size necessarily made the widest frame wider. packStrip refused it rather than silently shrinking the animation to fit -- \"Widen frameWidth, do NOT rescale this animation\" (vault 4.14) -- which is the guard working exactly as intended. 512 matches the cell character-bounds-rust-scavenger.json already uses, so this slug is no longer the odd one out, and it leaves 121 px of headroom over the measured requirement. The cell is PER-SLUG (M3 amended, 2026-08-12); a wider cell only adds transparent margin, and the sprite origin stays (0.5, 1) so nothing moves on screen. The previous note said \"every sentry sheet fits 288\" -- true only while fire and death were packed at the wrong scale and drew 26% too small.",
+  "_baseline": "Same per-SHEET contact-frame rule as the courier's file (see character-bounds.json's `_baseline` note) — the deepest frame of a sheet reaches the last row of its cell, every other frame keeps its own measured, scaled lift.",
+  "collisionBox": {
+    "widthPx": 96,
+    "heightPx": 192,
+    "_source": "SENTRY_BOX x RENDER_SCALE (src/sim/enemyPlacement.ts:93). The ART is drawn narrower than this at the anchor, which is the safe direction, same as the courier's."
+  },
+  "animations": {
+    "idle": {
+      "loop": true,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": []
+    },
+    "fire": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "scale": 0.44081578,
+      "_scale": "🔴 RE-DERIVED 2026-08-14, from the TRIPOD BASE, and this replaces two earlier per-action figures that were both wrong in the same way. Previous: fire 0.42572062, death 0.34408602 — the first from a mean SILHOUETTE height, the second from its opening frame's silhouette height. BOTH MEASURE THE WRONG THING, because a sentry's clips are full of EFFECTS: a muzzle flash, a steam plume, a debris spray. Every one of those inflates the silhouette WITHOUT making the machine any bigger, so scaling the silhouette to a target shrinks the machine by however much the effect added. The user saw it and reported it: 'the stationary character, when they play the K/O animation, it becomes smaller.' MEASURED, not eyeballed: the TRIPOD BASE is the same physical object in all three sheets and no effect touches it, so its span in the bottom 24 rows is a landmark that steam cannot move. It measured 205 px in idle, 198 in fire (-3%, barely visible) and 160 in death (-22%, obvious). Correcting each to 205 gives 0.44077135 and 0.44086021 — AGREEING TO 0.02%, which is the real finding: fire and death were shot from the SAME padded anchor, so ONE scale is right for both and two independently-derived numbers were never justified. 0.44081578 is their mean. Verified after repacking: the tripod measures 205, 205 and 205. Re-derive from the tripod, never from the silhouette, if either clip is ever re-shot."
+    },
+    "death": {
+      "loop": false,
+      "verticalAnchor": "feet",
+      "footOffsetPx": 0,
+      "activeFrames": [],
+      "scale": 0.44081578,
+      "_scale": "🔴 RE-DERIVED 2026-08-14, from the TRIPOD BASE, and this replaces two earlier per-action figures that were both wrong in the same way. Previous: fire 0.42572062, death 0.34408602 — the first from a mean SILHOUETTE height, the second from its opening frame's silhouette height. BOTH MEASURE THE WRONG THING, because a sentry's clips are full of EFFECTS: a muzzle flash, a steam plume, a debris spray. Every one of those inflates the silhouette WITHOUT making the machine any bigger, so scaling the silhouette to a target shrinks the machine by however much the effect added. The user saw it and reported it: 'the stationary character, when they play the K/O animation, it becomes smaller.' MEASURED, not eyeballed: the TRIPOD BASE is the same physical object in all three sheets and no effect touches it, so its span in the bottom 24 rows is a landmark that steam cannot move. It measured 205 px in idle, 198 in fire (-3%, barely visible) and 160 in death (-22%, obvious). Correcting each to 205 gives 0.44077135 and 0.44086021 — AGREEING TO 0.02%, which is the real finding: fire and death were shot from the SAME padded anchor, so ONE scale is right for both and two independently-derived numbers were never justified. 0.44081578 is their mean. Verified after repacking: the tripod measures 205, 205 and 205. Re-derive from the tripod, never from the silhouette, if either clip is ever re-shot. DEATH-SPECIFIC: its eight frame heights run 558, 574, 700, 720, 722, 554, 594, 616 — a 26.7% spread — because a wreck legitimately grows as its debris spreads. That spread is why NO mean of the silhouette can be right for this sheet, and why the landmark had to be a part of the machine rather than a summary of the picture."
+    }
+  },
+  "_animations": "['idle','fire','death'] — must equal configFor('brass-sentry').actions in tools/gen/slugConfig.mjs and ANIMS_BY_SLUG['brass-sentry'] in src/render/enemyView.ts. `verticalAnchor` is 'feet' for all three: a sentry turret never leaves the ground, so there is no sim-owned altitude for `centroid` to protect against the way jump/fall need it on the courier — see character-bounds.json's `_verticalAnchor` note for when 'centroid' is the right choice instead.",
+  "_activeFrames": "Empty for every animation. `fire`'s active window rides the sim's existing cooldownCounter (SENTRY_FIRE_TICKS, src/render/enemyView.ts) rather than a per-frame hitbox toggle — the sentry has no swing to align a strike window against, so this field stays unused for this slug unless that changes."
+}

@@ -57,7 +57,7 @@ test.describe('Phase 2 — Character Playground', () => {
     //
     // Each press gets its own frame. Fired back to back they intermittently collapsed — several
     // arrived in one frame's event queue and the selection advanced fewer rows than presses sent,
-    // so `Z` was tuning `runAccel` instead. That reads as "the knob did nothing", which is
+    // so the adjust key was tuning `runAccel` instead. That reads as "the knob did nothing", which is
     // indistinguishable from the defect this test exists to catch, so it had to be removed rather
     // than retried away. The wait is on the simulation's own tick count, never a sleep.
     const pressKnobKey = async (key: string) => {
@@ -70,8 +70,11 @@ test.describe('Phase 2 — Character Playground', () => {
     for (let i = 0; i < runMaxIndex; i += 1) {
       await pressKnobKey('KeyE');
     }
+    // `Comma`, not `KeyZ`. Phase 5 bound `Z` to attack, so one press both swung the sword and
+    // decremented the knob — the Playground moved its adjust keys to `,`/`.` for the same reason
+    // they were never on the arrows: the keys you tune WITH must not be keys you play with.
     for (let i = 0; i < 6; i += 1) {
-      await pressKnobKey('KeyZ');
+      await pressKnobKey('Comma');
     }
 
     const after = await measureTopSpeed();

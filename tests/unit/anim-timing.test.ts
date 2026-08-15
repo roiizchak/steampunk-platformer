@@ -35,8 +35,23 @@ import { DEFAULT_TUNING } from '../../src/sim/player';
 const feel = () => derivedFeel(DEFAULT_TUNING, ticksToMs);
 
 /** Frame counts stand in for what the real sheets will report. The timings must not assume them. */
-const FRAMES: MeasuredFrames = { idle: 4, walk: 8, run: 8, jump: 4, fall: 4 };
+const FRAMES: MeasuredFrames = {
+  idle: 4,
+  walk: 8,
+  run: 8,
+  jump: 4,
+  fall: 4,
+  attack: 6,
+  hurt: 3,
+  death: 6,
+};
 const STRIDES = { run: 144, walk: 96 };
+/**
+ * Authored loop cadences, fps. Session 9: locomotion `simTicks` comes from these, not from
+ * `STRIDES` — see `src/render/animTiming.ts`'s "A LOOP HAS NO WINDOW" header. `STRIDES` stays
+ * because `strideTicks` is still exported and still tested; it just no longer reaches the screen.
+ */
+const CADENCE = { run: 32, walk: 36 };
 
 describe('jump and fall durations are COUNTED from the sim (Codex finding 9)', () => {
   it('rise + fall is airtime MINUS the landing tick, not airtime', () => {
@@ -51,11 +66,19 @@ describe('jump and fall durations are COUNTED from the sim (Codex finding 9)', (
     expect(naive).not.toBe(f.fallTicks);
   });
 
+  /**
+   * **37 / 18 / 18 until 2026-08-15.** The airborne window was doubled — `gravity` 2.7 → 0.675 and
+   * `jumpVelocity` 48.6 → 24.3 — so the jump and fall sheets play at half speed and can be read.
+   * Apex is unchanged in the continuous form (`v²/2g` is 437.4 either way); only the tick count
+   * moved, and these three numbers are the tick count. Editing them is the deliberate act this test
+   * exists to force. The consequence downstream is that `jump` and `fall` now derive **10 fps** and
+   * **15 fps** instead of 20 and 30 — see `public/assets/index.json`.
+   */
   it('pins the measured values on the shipped tuning', () => {
     const f = feel();
-    expect(f.airtimeTicks).toBe(37);
-    expect(f.riseTicks).toBe(18);
-    expect(f.fallTicks).toBe(18);
+    expect(f.airtimeTicks).toBe(73);
+    expect(f.riseTicks).toBe(36);
+    expect(f.fallTicks).toBe(36);
   });
 
   it('rise matches the closed form, so the counter is not counting something else', () => {
@@ -111,11 +134,22 @@ describe('strideTicks rounds to an integer tick count (PRD Global Constraints)',
 });
 
 describe('the timing table', () => {
-  const timings = () => animTimings(feel(), FRAMES, STRIDES);
+  const timings = () => animTimings(feel(), FRAMES, CADENCE);
 
   it('covers every animation exactly once', () => {
     const names = timings().map((t) => t.name).sort();
-    const expected: AnimName[] = ['fall', 'idle', 'jump', 'run', 'walk'];
+    // Phase 5 added the three combat rows. The list is spelled out rather than derived from the
+    // table under test, so a row silently disappearing is a failure rather than a smaller loop.
+    const expected: AnimName[] = [
+      'attack',
+      'death',
+      'fall',
+      'hurt',
+      'idle',
+      'jump',
+      'run',
+      'walk',
+    ];
     expect(names).toEqual(expected);
   });
 
@@ -134,10 +168,13 @@ describe('the timing table', () => {
     }
   });
 
-  it('labels provenance honestly — idle is the only authored row', () => {
+  it('labels provenance honestly — the authored rows are exactly the LOOPS', () => {
+    // Session 9 widened this from `['idle']`. The list is spelled out rather than computed from
+    // `loop`, so adding a fourth authored row is a deliberate edit here and not a silent drift.
     const authored = timings().filter((t) => t.derivedFrom === 'authored');
-    expect(authored.map((t) => t.name)).toEqual(['idle']);
-    expect(authored[0]?.simTicks).toBe(IDLE_TICKS);
+    expect(authored.map((t) => t.name).sort()).toEqual(['idle', 'run', 'walk']);
+    expect(authored.every((t) => t.loop)).toBe(true);
+    expect(timings().find((t) => t.name === 'idle')?.simTicks).toBe(IDLE_TICKS);
   });
 
   it('jump and fall take their durations from the sim, not from the stride measurements', () => {
@@ -169,11 +206,37 @@ describe('the timing table', () => {
     );
   });
 
-  it('retuning runMax changes the run fps without anyone editing a number', () => {
+  /**
+   * 🔴 This assertion is INVERTED from what it said before session 9, deliberately.
+   *
+   * It used to read "retuning runMax changes the run fps without anyone editing a number", and that
+   * coupling was the whole point of deriving a loop's rate from a stride. It is also what made the
+   * character glide: the coupling is only correct if the stride is correct, and the stride is not
+   * measurable to better than ~20 % off generated art (vault 4.18). So the coupling is now cut on
+   * purpose, and the new invariant is the opposite one — worth pinning precisely because the old
+   * behaviour was intentional and someone reading the diff will wonder if this was an accident.
+   *
+   * What retuning `runMax` changes now: how far the character travels. Nothing about the animation.
+   * The two are tuned independently, against each other, by eye — which is what the sibling
+   * Street-Fighter project does and why its movement reads correctly.
+   */
+  it('retuning runMax does NOT change the run fps — speed and cadence are independent now', () => {
     const slow = derivedFeel({ ...DEFAULT_TUNING, runMax: DEFAULT_TUNING.runMax / 2 }, ticksToMs);
     const fast = feel();
     const runOf = (f: ReturnType<typeof feel>) =>
-      animTimings(f, FRAMES, STRIDES).find((t) => t.name === 'run')?.fps;
-    expect(runOf(slow)).not.toBe(runOf(fast));
+      animTimings(f, FRAMES, CADENCE).find((t) => t.name === 'run')?.fps;
+    expect(runOf(slow)).toBe(runOf(fast));
+    // Non-vacuity: the row must actually exist, or `undefined === undefined` passes it.
+    expect(runOf(fast)).toBeGreaterThan(0);
+  });
+
+  it('a WINDOWED animation still moves with the simulation — 4.22 is intact', () => {
+    // The half of the old coupling that must survive: retune the attack window and the attack
+    // sheet's fps follows, with nobody editing a number. This is what stops "0.43s of art over a
+    // 0.25s move" coming back, and it is why cutting the LOOP coupling is not cutting 4.22.
+    const table = timings();
+    const attack = table.find((t) => t.name === 'attack');
+    expect(attack?.derivedFrom).toBe('sim');
+    expect(attack?.fps).toBeCloseTo((attack!.renderFrames * 60) / attack!.simTicks, 6);
   });
 });

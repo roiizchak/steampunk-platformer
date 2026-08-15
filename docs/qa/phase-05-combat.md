@@ -1,0 +1,3123 @@
+# Phase 5 — combat, enemies and hazards
+
+Index entry in [QA-LOG.md](../QA-LOG.md). Findings from the gate's agent owners land here;
+`docs/reviews/` stays Codex-only.
+
+---
+
+## THE FROZEN COMBAT TIMINGS — criterion 5.4b
+
+**Recorded 2026-08-09, before any fal generation for this phase.** At the moment this table was
+written no `request_id` existed for Phase 5 and `docs/generations/phase-05-*.md` did not exist —
+both do now, and the ordering between them is the criterion. The numbers art is derived from must be
+fixed *before* the art is bought, or the art is what fixes the numbers. This paragraph is a dated
+record of that ordering, not a description of the repository today.
+
+Every value below is **live in `src/sim/`** and imported by `src/render/animTiming.ts` — never
+retyped there *(vault 5.3)*. This table is a record of what was frozen, not a second definition; if
+it and the code ever disagree, **the code is right and this document is stale**.
+
+### Player
+
+| Window | Ticks | ms @ 60 Hz | Source |
+|---|---:|---:|---|
+| `ATTACK.startup` | 6 | 100 | `combat.ts:62` |
+| `ATTACK.active` | 4 | 67 | `combat.ts:62` |
+| `ATTACK.recovery` | 10 | 167 | `combat.ts:62` |
+| **`attackTotalTicks(ATTACK)`** | **20** | **333** | derived |
+| `HURT_TICKS` | 18 | 300 | `combat.ts:65` |
+| `IFRAME_TICKS` | 45 | 750 | `combat.ts:75` |
+| `DEATH_TICKS` | 45 | 750 | `combat.ts:78` |
+| `PLAY_LAG_TICKS` | 1 | 17 | `combat.ts:101` |
+
+### Enemies
+
+| Window | Ticks | ms | Source |
+|---|---:|---:|---|
+| `SENTRY.cooldown` | 90 | 1500 | `enemies.ts` |
+| `SENTRY_FIRE_TICKS` | 18 | 300 | `enemyView.ts:41` |
+| `CHASE_COMMIT_TICKS` | 30 | 500 | `enemies.ts` |
+| `SCAVENGER.contactCooldown` | 45 | 750 | `enemies.ts` |
+
+### Damage and health
+
+| Value | Number | Source |
+|---|---:|---|
+| `PLAYER_MAX_HP` | 100 | `combat.ts:87` |
+| `PLAYER_ATTACK_DAMAGE` | 20 | `playerAttack.ts:39` |
+| `HAZARD_DAMAGE` | 20 | `hazards.ts:42` |
+| `SENTRY.damage` | 10 | `enemies.ts` |
+| `SCAVENGER.damage` | 15 | `enemies.ts` |
+| `brass-sentry` hp | 40 | `createSentry` default |
+| `rust-scavenger` hp | 60 | `createScavenger` default |
+
+**The 5.10 invariant, stated so it can be checked rather than admired:** at equal incoming damage
+the **sentry dies first** — 2 swings against the scavenger's 3. It is the static threat you remove
+from a distance; the scavenger is the one you retreat from. If that ever inverts, the two enemies
+have swapped roles. Gated in `player-attack.test.ts`.
+
+### What each animation's frame rate will be derived against
+
+`fps = renderFrames × TICK_HZ / simTicks`, and **`simTicks` is imported, never authored** *(vault
+4.22, guard G2)*. `renderFrames` is measured off the packed sheet, so it is the only column that is
+blank until the art exists — which is the point.
+
+| Sheet | `simTicks` | Comes from | Loops |
+|---|---:|---|---|
+| `brass-courier-attack` | 20 | `attackTotalTicks(ATTACK)` | no |
+| `brass-courier-hurt` | 18 | `HURT_TICKS` | no |
+| `brass-courier-death` | 45 | `DEATH_TICKS` | no |
+| `brass-sentry-idle` | 90 | `IDLE_TICKS` *(authored — recorded exception)* | yes |
+| `brass-sentry-fire` | 18 | `SENTRY_FIRE_TICKS` | no |
+| `brass-sentry-death` | 45 | `DEATH_TICKS` | no |
+| `rust-scavenger-walk` | measured | `strideTicks(stride, SCAVENGER.patrolSpeed)` | yes |
+| `rust-scavenger-chase` | measured | `strideTicks(stride, SCAVENGER.chaseSpeed)` | yes |
+| `rust-scavenger-death` | 45 | `DEATH_TICKS` | no |
+
+**Nine sheets, not thirteen.** See the scope decision below.
+
+---
+
+## The enemy animation scope — six clips where the plan priced ten
+
+**Decision, taken after the combat sim was complete and recorded rather than made silently.** The
+plan's budget table priced ten enemy clips. Four are not being generated:
+
+| Dropped | Why it has no sheet |
+|---|---|
+| `brass-sentry-telegraph` | Needs a wind-up window in `stepSentry`. There is none. The turret's fairness comes from the **projectile's travel time**, which was the mechanism agreed with the user, so a telegraph is a second solution to a solved problem. |
+| `rust-scavenger-idle` | **Unreachable.** The scavenger patrols continuously; there is no sim state in which it stands still, so the sheet would be money spent on a pose the game cannot enter. |
+| `rust-scavenger-attack` | Its **body is the hazard** — contact damage, no swing. Giving it an attack animation would mean giving it an attack, which is a mechanic change. |
+| `rust-scavenger-hurt` | Needs an enemy stagger state and window. Taking the plan's own named descope lever instead: **a tint flash**, drawn from the `hitLanded` event that `TickEvents` already emits. Feedback that the hit landed, at zero generation cost. |
+
+The rule behind all four: **an animation named in `animTiming` must have a `simTicks` that comes
+from the simulation.** Inventing a window to justify a sheet is vault 4.22's *"0.43 s of art over a
+0.25 s move"* arriving from the other direction. Each is one mechanic change away from being worth
+buying, and each is the user's call at that point, not a render module's.
+
+Saving: **≈ $4.76** against the plan's first-pass estimate, before any rework.
+
+---
+
+## Art findings — what the first batch taught
+
+Full provenance in [generations/phase-05-anchors.md](../generations/phase-05-anchors.md) and
+[phase-05-clips.md](../generations/phase-05-clips.md). The three findings worth carrying forward:
+
+**1. G1 caught the 4.27 defect on the first new art it ever saw.** A scavenger candidate came back
+with one foot 52 px above the other against a 27 px limit. In Phase 4 that shape of defect shipped
+and was found by eye after ≈$7 of clips had been shot from it; here it cost $0.15 and never left
+`_generated/`. The gate had already been validated against the real historical files — the original
+anchor fails at 59 px, the corrected one passes at 0, and the hand-recorded figure was 58.
+
+**2. `poseSpan` works and `SPAN_CLIP` does not, and the split was total.** Four of four clips using
+three timed poses hit their specified poses; two of two using `SPAN_CLIP` failed. `SPAN_CLIP`
+describes a SHAPE — *"extending through the first half and returning through the second"* — and the
+model satisfied it exactly by raising the spanner and lowering it, which is not a strike. Three
+timed poses describe a GEOMETRY. **I reasoned that `attack` and `hurt` genuinely do extend and
+return, so `SPAN_CLIP` was right for them; the reasoning was sound and the outcome was wrong.** All
+six one-shots now use `poseSpan`. This is STYLE.md §6's stills finding arriving in the video path.
+
+**3. `ffprobe` cannot see what a clip depicts.** All nine round-1 clips reported 720 × 1280, 97
+frames, 4.041667 s — perfect, identical, and two of them were unusable. The six-frame contact strip
+is what caught it, and it costs nothing.
+
+### Uncertain, and deliberately not re-shot yet
+
+| Clip | Suspicion | Why an eye cannot settle it |
+|---|---|---|
+| `brass-sentry/idle` | Near-frozen | For a machine at rest that may be correct rather than Phase 4's *"no breath, only boil"*. It will measure near the motion floor either way, and the gate is the arbiter. |
+| `rust-scavenger/walk` | Possible near-idle | Legs move, poses are close. This is an IoU measurement, not a judgement. |
+| all three `death`s | Back-loaded | The contact strips sample EVENLY; `sampler.mjs` selects on a difference matrix. A held opening that wastes three of six even samples may cost nothing once the real sampler runs. Re-shooting on the strength of a strip that uses the wrong sampling would be spending money to fix an artefact of the measurement. |
+
+### Open against G5 (criterion 5.4c)
+
+`brass-courier/attack`'s reach peaks **late** — around 5/6 of the way through the clip — while the
+active window is ticks 6–10 of 20, i.e. 30–50 %. Whether that survives sampling is exactly what G5
+measures. Written down before the measurement so the answer cannot be quietly rounded to a pass;
+`INDETERMINATE` and `FAIL` are both legal outcomes.
+
+---
+
+## Known limitations, recorded rather than fixed *(C11)*
+
+| # | What | Why it is not fixed here |
+|---|---|---|
+| 1 | ~~**The 9b ordering between the player's swing and the enemies' damage is ungated.** Swapping the two calls fails no test.~~ **WITHDRAWN 2026-08-11 — the rationale below is FALSE. See the correction under it.** | ~~Not a missing test — a masked effect. Being in contact range means having already taken contact damage, which grants 45 ticks of i-frames, longer than the whole 20-tick swing. A test that only passed because of how it was posed would be worse. **Becomes reachable if `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`.**~~ |
+| 2 | **`HUD_SLOT` is measured from the shipped `hud-health.png`.** | Uncomfortably close to what vault A5 forbids. Declared in one place with its provenance instead of re-measured at runtime. **If the HUD art is regenerated, re-measure those four numbers** — no gate can see a stale slot, the fill just sits slightly off inside the frame. |
+| 3 | **The sentry's projectile does not collide with solids.** | It would need the solid list, an ordering decision against the player's own motion, and a second swept test. The sentry has clear line of sight in `level-01`, so the case does not arise. |
+| 4 | **`enemyKnobs` uses a named field list, not enumeration.** | An enemy's `x`, `hp` and counters are state, not tuning; a panel that let you drag `hp` would be a cheat menu. Cost: adding a knob means adding it there too. |
+| 5 | **G1 cannot tell a boot from a hand.** It measures ground-contact components and assumes they are what the subject stands on. | Exposed by the round-1 scavenger, whose fingertips entered the ground band so the gate compared a hand against a foot and reported 104 px. The number was right; the question was wrong. Giving it limb semantics is a much larger gate than 4.27 needs. Constraint pushed into the prompts instead: any subject putting something other than its feet into the bottom 12 % of its height must say so in its concept. |
+| 6 | **The two new anchors add 7.5 MB under `public/`**, which Vite copies into `dist/`. | It grows the already-recorded debt about relocating anchor art out of the shipped payload. Followed the established `brass-courier` layout rather than inventing a second one; the relocation is a standing STOP-and-ask. |
+| 7 | **`character-bounds.json`'s `scale` is saved and never recomputed by the build — but its PROVENANCE is the idle sheet**, a regenerable frame. | A5's protection is intact in practice: regenerating a sheet moves nothing, because the build reads the saved value. Codex C5's point stands about where the number came from, and it becomes live at step 6a when each new subject needs its own. |
+
+---
+
+## §6 gate — agent owners, run 2026-08-10 (session 3)
+
+**Protocol:** each owner ran **two briefs** *(A7)*, dispatched in parallel so **brief 2 never saw
+brief 1's findings** — a second pass that has read the first confirms it instead of attacking it.
+Every finding below is **applied or recorded with a one-line reason** *(C11)*. Subagents were
+forbidden from writing here; the orchestrator recorded these after verifying the decisive claims.
+
+### `voltagent-qa-sec:qa-expert` — brief 1 (verify the stated criteria)
+
+| # | Verdict | Note |
+|---|---|---|
+| 5.1 | **PASS** | Negative + positive control through the real `tick()`, `tick-world-damage.test.ts:223-241`; radius tunability measured as **shots fired**, not a readout. |
+| 5.2 | **PASS, but not by the test that claims to** | ⚠️ `enemy-ai.test.ts:107-123` is titled *"patrol and chase speeds are independently tunable"* and **only sweeps `patrolSpeed`**; `:126-129` compares `chaseSpeed` against two constants with no live entity. The criterion is met **elsewhere** — `enemy-tuning.test.ts:93-109` sweeps `chaseSpeed` on the live field and measures travel. **Codex C4 called this exact risk and it is half-real: the knob is honest, the named test is not.** |
+| 5.5 | **PASS** | Both active-window endpoints pinned **by name** (`combat.test.ts:92-114`), plus measured hp change, once-per-swing and facing. |
+| 5.6 | **PASS** | Fixture runs `IFRAME_TICKS * 2` = 90 ticks against a 45-tick window; **both endpoints pinned** and the length asserted. |
+| 5.9 | **PASS** | `enemyTuning.ts:43-59` writes the live entity's own field — the stale-readout failure mode is **structurally excluded**, not merely untested. |
+| 5.10 | **PASS, with a caveat** | Two genuinely different entities, real constants. But it proves the **ratio** (`ceil(maxHp/damage)` = 2 vs 3), not a simulated kill sequence — **no test actually swings twice and asserts death**. |
+| 5.15 | **PASS** | Kill plane pins the **crossing tick**; the tunnelling case derives the band from the real trajectory and asserts both halves — no tick sampled inside, damage landed anyway. |
+
+### `voltagent-qa-sec:code-reviewer` — brief 1
+
+| # | Verdict | Note |
+|---|---|---|
+| 5.3 | **PASS** | Commitment is real, not just determinism: one exported asymmetric predicate (detect 480 / release 720) plus a 30-tick commit floor. The flap test **oscillates ±10 px** rather than parking on the boundary — the parked version passed with hysteresis deleted. Reviewer reproduced the mutation independently: single-threshold → **36 state changes**, correct → **0**. |
+| 5.12 | ~~**FAIL**~~ → **PASS at HEAD** | Was FAIL, correctly, when written. **Superseded 2026-08-13: 0 project files over 400** — see § *The 5.12 record earlier in this log is STALE* in the session-8 gate section. Left in place rather than rewritten, because the row was true when it was written; the pointer is the fix. |
+
+### Findings — every one applied or recorded
+
+| ID | Sev | Finding | Disposition |
+|---|---|---|---|
+| **A1** | **HIGH** | **The recorded "9b ordering is masked by i-frames" rationale is geometrically false.** Limitation 1 above argues the swing/contact-damage ordering is untestable because being in contact range implies already holding 45 ticks of i-frames. But `ATTACK_BOX` reaches ~26 units **beyond** contact-overlap distance, so a **dead zone** exists where a swing lands with **zero** contact damage and therefore no i-frames. `player-attack.test.ts:44-58` *builds a fixture at exactly that gap*. **Worse: `worldDamage.ts:77-87`'s contact loop only iterates `scavengers`** — a sentry never deals contact damage at all, so the premise never applies to a sentry kill. | **RECORDED, NOT FIXED — and limitation 1 above is now WRONG and must not be relied on.** The numeric premise (45 > 20) holds; the **geometric** premise does not. Fixing it is a sim change to gated combat code and belongs to a planned work item, not an ad-hoc edit late in a session. **Raised to a blocker-class item for session 4.** |
+| **A2** | MED | **Two raw reimplementations of `windowOpen`** — `enemies.ts:144` sits six lines below a correct `windowOpen(...)` call; `enemyView.ts:52` restates the same shape. Both agree today. | **RECORDED.** Exactly the vault 5.3 drift class Codex C3 fixed once already. Import-not-restate is the fix; deferred to session 4 because it touches `src/sim/enemies.ts`, which is at **exactly 400 lines**. |
+| **R1** | **CRITICAL** | **Producer/consumer filename collision, self-inflicted this session.** W2b changed `build-clips.mjs:255` to write `<slug>-<action>-clip.png`, but `build-assets.mjs:80` still globs `` f.startsWith(`${action}-`) ``. `slugConfig.mjs` then added `attack, hurt, death` to brass-courier. `assets:build` will throw *"no source sheet for declared animation attack"* while the sheet sits there under the namespaced name. **Both test suites pass because neither crosses the seam.** | **VERIFIED LOCALLY, RECORDED.** Confirmed: files on disk are `idle-clip.png` (legacy stems unchanged) but a namespaced action yields `brass-courier-attack-clip.png`, which `startsWith('attack-')` cannot match. **Latent until W7b runs, and W7b rewrites that exact scan** — so it is W7b's first test case, not a separate fix. `slugConfig.mjs:6`'s claim that nothing changes for brass-courier is **now false** and must be corrected there. |
+| **R2** | **CRITICAL (latent)** | All three slugs share `generated: '_generated/sheets'` **with bare action names**. Once `build-assets` runs for `rust-scavenger`, `findSource('walk')` matches the **courier's** `walk-clip.png` and packs it as the scavenger's walk — **silently, not as a throw.** | **RECORDED as W7b's defining requirement.** This is precisely why the source scan must become slug-aware rather than prefix-based. Wrong-character art shipping silently is worse than a build failure. |
+| **R3** | **HIGH** | **G6's new `minAlpha = 255` is fragile against an off-key background.** `build-clips.mjs:191` calls `keyOut()` with the **default** key while `build-assets.mjs:117` calls `estimateKeyColour` first. `chroma.mjs:88-93` records a real clip whose background came back `(0,195,64)` — key-distance **above** `HIGH`, so `keyOut` leaves it **fully opaque**, and at `minAlpha 255` the whole cell reads as subject: margins 0 on all four sides, G6 throws on a perfectly framed clip. **The `255` floor makes this failure mode worse than `8` did, and its remedy is fal spend.** | **RECORDED, NOT FIXED — highest-value follow-up.** The G6 correction this session is right for the measured case but is **not robust to background drift**. The fix is to key with the **estimated** colour, as `build-assets` already does. Not changed now because it is a second gate change in one session and needs its own both-directions re-validation. |
+| **R4** | **HIGH** | **`enemyLayer` checks `anims.exists()` at CREATE time for ONE key**, then plays any later state's key. With a partial catalog (walk packed, death gate-failed), killing a scavenger calls `play()` on a missing key: Phaser no-ops, `getName()` never changes, so it **re-fires every frame forever and the corpse keeps walking**. | **RECORDED.** A real hole in this session's W8. The guard must be **per-key at play time**, not per-body at create time. Deferred to session 4; harmless today because **zero** enemy sheets are catalogued, so no body takes the Sprite path at all. |
+| **R5** | MED | `submit-clips.mjs` versions the download `-rN` but **not** the sidecars (`${stem}.txt`, `${stem}.params.json`), so a re-render overwrites the params of the round that was actually paid for. | **RECORDED.** Undermines the very provenance `CLIP_JOBS` exists to create. Cheap to fix; belongs with the next generation work. |
+| **R6** | MED | The overwrite guard is **render-time, not run-time**: `nextFreeDownloadPath` reads disk when the command is *printed*. Print twice → same path; run a printed command twice → the paid file is clobbered anyway. | **RECORDED.** It reduces the window rather than closing it. Honest framing: this is a speed bump, not the atomic guard the commit message implies. |
+| **R7** | MED | `videoDirExists()` guards one directory while `missingClipFiles()` spans two; `submit-clips.mjs:68` `mkdirSync`s the namespaced dir, so merely *rendering a command* on a fresh clone flips the guard true and reds the test with no defect present. | **RECORDED.** A false-red generator in the exact test written to avoid false greens. |
+| **R8** | MED | **`declaredFile` bypasses the stem check.** A copy-paste in `CLIP_FILES` (`attack` → `…hurt-r2.mp4`) packs the wrong animation; the glob path's stem filter would have caught it. `clipSource.mjs:61` also restates `action.replace('/','-')` instead of importing `clipStem`. | **RECORDED.** The structural test asserts the stem rule, but `findClip` itself does not enforce it — the guard lives beside the data rather than in the code path. |
+| **R9** | LOW | **Three independent action lists** — `enemyView.ANIMS_BY_SLUG` (what the game plays), `slugConfig.actions` (what the build makes), `slug-config.test.ts:EXPECTED_ACTIONS` (a third literal). Add an anim to one and no sheet is ever built; `enemyLayer` silently falls back to a Rectangle. `gymBounds.KNOWN_ACTIONS` is a fourth. | **RECORDED.** Assert `configFor(slug).actions` against `enemyAnimKeys()` — the two that must agree are currently pinned to nothing. |
+| **R10** | LOW | Frame-0 guard implemented **twice** — `enemyLayer.ts:115-117` and `GameScene.ts:437-440`. `enemyLayer.ts:33-35` says *"two implementations of that one rule is where the bug lives"* and then writes the second. | **RECORDED.** One `playIfChanged(sprite, key)` helper closes it. My W8 brief caused this by saying "match the player's form" without saying "extract it". |
+| **R11** | LOW | `enemy-ai.test.ts:151-152`'s comment claims the mutation goes *"from 1 state change to ~20"*; measured **0 → 36**. | **RECORDED.** A stale recorded baseline in a mutation note — wrong in both directions. |
+| **R12** | LOW | `enemyLayer.ts:134` draws shots as radius-8 circles; `projectiles.ts:112-124` sweeps them as a **point**. The drawn threat is 8 px larger than the real one on every side. | **RECORDED.** A fairness/readability mismatch the player can feel. Relevant to W16's bolt art, which replaces this circle anyway. |
+| **A3 / R13** | LOW | Sentry projectiles have no line-of-sight or solid collision; nothing gates that a future `level-01` placement puts a wall between sentry and player. | **ALREADY RECORDED** as limitation 3 above. No change. |
+
+### What this run proves about the protocol itself
+
+**The adversarial brief did the work again.** Brief 1 returned seven PASSes; brief 2 — which never saw
+them — found that the **9b masking rationale in this very document is false (A1)**, that the G6 fix
+landed this session is **fragile to background drift (R3)**, and a **critical filename collision the
+orchestrator introduced himself (R1)**. A checklist pass confirms; an adversarial pass attacks. *(A7)*
+
+**Criterion 5.12 is FAILING and is reported failing.** Ten files exceed 400 lines, `docs/qa/` contains
+no Phase 5 file-size record at all, and the Phase 4 entry that names them explicitly calls itself
+*"an open violation of a non-negotiable, not a justified exception."* A green `file-size.test.ts`
+proves *"≤10 over-limit files, each name-dropped somewhere"* — **not** the criterion.
+
+| file | lines | | file | lines |
+|---|---:|---|---|---:|
+| `tools/gen/gates.mjs` | 726 | | `tests/unit/tilemap-data.test.ts` | 466 |
+| `src/scenes/GameScene.ts` | 613 | | `tests/e2e/phase-01-boot.spec.ts` | 449 |
+| `tools/gen/prompt.mjs` | 586 | | `tools/gen/sheets.mjs` | 442 |
+| `tools/gen/chroma.mjs` | 542 | | `src/scenes/BootScene.ts` | 438 |
+| `tests/e2e/phase-03-tilemap.spec.ts` | 496 | | `tests/unit/sheet-packing.test.ts` | 405 |
+
+`src/sim/enemies.ts` sits at **exactly 400** — one line from turning the 10/10 ceiling red.
+
+---
+
+## Session 4 — 2026-08-11. The framing mechanism, and the findings session 3 recorded
+
+### 🔴 Limitation 1 is WITHDRAWN — the "masked by i-frames" rationale was geometrically false
+
+Finding **A1**, raised by `code-reviewer`'s adversarial brief in session 3 and confirmed here.
+
+The withdrawn rationale argued the step-9b ordering between the player's swing and the enemies'
+contact damage was untestable, because being in contact range implies already holding 45 ticks of
+i-frames (`IFRAME_TICKS` 45 > `attackTotalTicks(ATTACK)` 20). **The numeric premise holds. The
+geometric premise does not.**
+
+- `ATTACK_BOX` is `{ x: 11, y: 12, w: 26, h: 24 }` (`src/sim/playerAttack.ts:50`) and reaches well past
+  contact-overlap distance, so a **dead zone** exists where a swing lands with **zero** contact damage
+  and therefore grants no i-frames. `tests/unit/player-attack.test.ts:89` already builds a fixture at
+  exactly that gap (`IN_REACH = 1200`, doc block at `:83-88`).
+- **`src/sim/worldDamage.ts:77-87` iterates `world.enemies.scavengers` only.** A sentry never deals
+  contact damage at all, so the premise never applied to a sentry in the first place.
+
+**Now gated** by `tests/unit/tick-damage-order.test.ts`, driven through the real `tick()`.
+
+**And a decision that had never been written down is now written down:** the sentry's damage is
+**projectile-only by design**. `SENTRY.damage` is spent by `src/sim/projectiles.ts`; a static turret is
+something you can stand next to without being hurt, and the bolt's travel time is what makes it fair.
+That was an *absence* in the code and is now an asserted fact.
+
+### W10a — an eyeball verdict was contradicted by a measurement, and both are kept
+
+`docs/generations/phase-05-clips.md` rates `brass-sentry/fire` and `/death` **good**; session 2's audit
+and session 3's corrected G6 found every sentry clip cropped at the left and right edges. **Both
+readings are honest and answered different questions** — the table read *motion* (does the flash land
+on the specified pose? it does) and did not read *framing*. The verdicts are **left as written** rather
+than edited, because overwriting a dated reading destroys the record that makes the contradiction
+visible. Recorded in place at that file. The transferable lesson: **an eye reading a contact strip sees
+motion and does not see the frame edge.**
+
+### W10b / W11 — the live schema, compared field by field rather than pasted
+
+`genmedia schema "bytedance/seedance-2.0/image-to-video"`, run 2026-08-11 and compared
+programmatically against `CLIP_JOBS` (a pasted quote proves nothing):
+
+```
+OK     endpoint      CLIP_JOBS=bytedance/seedance-2.0/image-to-video   live: same
+OK     aspect_ratio  CLIP_JOBS=1:1     live: auto|21:9|16:9|4:3|1:1|3:4|9:16
+OK     resolution    CLIP_JOBS=720p    live: 480p|720p|1080p|4k
+OK     duration      CLIP_JOBS=4       live: auto|4|5|6|7|8|9|10|11|12|13|14|15
+records in CLIP_JOBS: 15
+```
+
+**No drift on any submitted parameter.** Three further facts, and they bound the whole framing problem:
+
+| fact | consequence |
+|---|---|
+| `aspect_ratio: auto` is documented live as **"infer from the input image"** | The answer W10b was owed. `docs/FAL-MODELS.md:183-197` tabulates `auto` and never says what it does. |
+| **No `negative_prompt` field exists** | Every framing instruction must go in the positive prompt. The forbid tail (`cropped limbs`) is prompt text, not a model-level negative. |
+| **No `seed` INPUT field exists** — `seed` is output-only | The endpoint is **not seed-deterministic**. Any single generation carries irreducible run-to-run variance, so one output can never attribute an outcome to one treatment with confidence. This is now stated wherever a probe is designed. |
+| `end_user_id` and `bitrate_mode` are live and unused | `bitrate_mode` (`standard`/`high`) is absent from the documented snapshot. |
+
+**`docs/FAL-MODELS.md` is outside this session's scope lock.** The `bitrate_mode` addition and the
+missing `auto` semantics are **flagged, not fixed**.
+
+### 🔴 The anchor measurement, and the correction it forced to the recorded root cause
+
+Measured with the repository's own decoder and `estimateKeyColour`:
+
+| anchor | canvas | ratio | figure fills | L / R | T / B |
+|---|---|---:|---:|---|---|
+| `brass-courier` | **1536 × 2752** | **0.558 ≈ 9:16** | **91.8 % of height** (2525 px), 61.1 % of width | 18.4 % / 20.6 % | **5.1 % / 3.2 %** |
+| `brass-sentry` | 2048 × 2048 | 1.000 | 68.8 % h, 77.1 % w | **10.7 % / 12.1 %** | 18.8 % / 12.5 % |
+| `rust-scavenger` | 2048 × 2048 | 1.000 | 81.1 % h, 60.5 % w | 20.0 % / 19.5 % | 9.0 % / 10.0 % |
+
+Agreement was `1.000` on all three; keys `[4,249,6]` and `[1,252,3]` — **not pure green**, the same
+finding `chroma.mjs:88-93` already records, now confirmed on all three shipped anchors.
+
+**`docs/generations/phase-05-jump-reshoot.md:22` said the courier anchor was "square 2048²". It is
+1536 × 2752 — already 9:16.** Found by the session-4 Codex plan review, re-verified locally, corrected
+in place. HANDOFF §8's root cause — *"its square anchor forced into 9:16 lost ~14 % off each side"* —
+**never applied to the courier at all.**
+
+**There are two causes of crop, not one:**
+
+| cause | evidence |
+|---|---|
+| **Reframing** — anchor ratio ≠ output ratio, so the model refits and eats margin on the squeezed axis | `jump-r2` (0.558 → 1:1) cut at the **top**, `figureHeight` = the whole canvas on f0; the three sentry clips (1.0 → 9:16) cut at **both sides** |
+| **Motion-induced extension** — the subject moves outside its anchor's static silhouette and spends whatever margin existed | Phase 4 `jump` (0.558 → 9:16, **no reframe at all**) cut on the **right**. Already recorded independently at `motion.mjs:286,291`, describing a prior jump translating upward until sampled frames had no head |
+
+**Both spend the same resource: margin in the anchor.** That — not a single-axis mechanism — is what
+justifies the anchor-padding probe. The earlier single-axis claim ("the crop lands on the anchor's
+tightest axis") was correlation dressed as mechanism and is **withdrawn**.
+
+### R3 — G6 now keys with the border median, and the fix is validated in FOUR directions
+
+`build-clips.mjs` keyed with the **default** `[0,255,0]` while `build-assets.mjs` estimated first.
+`chroma.mjs:88-93` records a real generation whose background came back `(0,195,64)` — above
+`CHROMA.HIGH` — leaving it fully opaque, so at `minAlpha 255` the whole cell reads as subject and G6
+throws on a well-framed clip.
+
+**The obvious fix does not work, and the Codex plan review caught it before it was written.**
+`crop → estimateKeyColour → keyOut` **throws** on the very fixture G6 must fail:
+`brass-sentry-fire-frame.png` measures **78.41 %** border agreement against a 90 % floor — because the
+subject occupies 21.6 % of the border, **which is the crop**.
+
+Agreement turns out to *separate* the two cases cleanly:
+
+| fixture | agreement |
+|---|---:|
+| synthetic uniform background, any colour (incl. off-key `(0,195,64)`) | **1.0000** |
+| real clean Phase 4 `idle` frame, key `[3,231,8]` | **1.0000** |
+| `touching-left` / `touching-right` (subject on an edge) | 0.9265 |
+| real cropped `brass-sentry-fire` | **0.7841** |
+
+So the border **median** is the correct key in both cases, and the **agreement floor** is what must be
+bypassed — **not the alpha threshold**. `borderKey(image) = estimateKeyColour(image, { minAgreement: 0 })`.
+`DEFAULT_MIN_ALPHA` stays **255** and `DEFAULT_MARGIN_PX` stays **3**; no threshold was touched.
+
+**Re-validated in four directions, the fourth demanded by the Codex review:**
+
+| direction | with `borderKey` | today (default key) |
+|---|---|---|
+| real cropped `brass-sentry-fire` | **FAIL** `{left:0,right:0,top:43,bottom:29}` | FAIL |
+| real clean Phase 4 `idle` | **PASS** `{30,41,13,6}` | PASS |
+| **R3:** off-key `(0,195,64)`, well framed | **PASS** `{30,30,30,30}` | **FAIL** ← the false positive |
+| **R3 ∩ crop:** off-key **and** at the edge | **FAIL** `{60,0,30,30}` | FAIL |
+
+The fourth row is what proves the gate was not loosened: a clean off-key PASS plus a pure-green cropped
+FAIL does not cover their intersection. **This is the second time a G6 change has been made by changing
+what it MEASURES rather than what it TOLERATES, and re-validated in both directions.**
+
+### 🔴 A2 — the two `windowOpen` restatements were NOT both redundant
+
+Session 3 recorded `enemies.ts:144` as a redundant restatement six lines below a correct `windowOpen`
+call at `:138`. **They are not redundant, and deleting `:144` would have shipped a live combat
+regression.** Caught by the session-4 Codex plan review, confirmed by reading `:137-149`:
+
+- `:138` `if (windowOpen(counter, cooldown)) counter += 1` — a **saturating increment**
+- `:144` `if (counter < cooldown) return { fired: false }` — the **fire guard**
+
+Same expression, different jobs. Removing `:144` makes **every sighted sentry fire on every tick**.
+The correct deduplication is a **replacement** with `windowOpen(...)`, not a deletion — so it buys
+**no** file-size headroom, and `src/sim/enemies.ts` stays at **exactly 400 lines with zero headroom**.
+The sentry cadence was **unguarded** until this session; it now has a test that goes red if `:144` is
+removed.
+
+
+---
+
+## Vault-out — Phase 5
+
+**Status: DRAFT, written 2026-08-14 (session 10), extended 2026-08-15 (session 11). Phase 5 is still
+FAILING and this is not a phase-exit sign-off.** PRD §7 asks for a vault-out at phase exit; leaving
+it as the words *"(Written at the end of the phase.)"* through five sessions meant every lesson below
+was carried in a transcript instead of a file, and two of them had to be rediscovered by measurement.
+Written as it is learned, and to be finalised when the gate actually passes.
+
+> Sections **1–7** are session 10's. Sections **8–12** are session 11's, and section 3 carries a
+> correction from it.
+
+### 1. Episode-committed AI vs the frame-0 problem — and the stronger answer
+
+The vault note says a per-tick decision is not a behaviour, because Phaser restarts a looping
+animation on every state change and a flapping AI is the frame-0 bug arriving through the AI. Phase 5
+implemented the textbook answer: **hysteresis** (a larger radius to leave than to enter) plus a
+**commitment floor** (a chase lasts at least N ticks whatever happens).
+
+Both worked. Both are now deleted, and what replaced them is worth the note:
+
+> **A state with no exit cannot flap.** When the user made aggro permanent, hysteresis and the
+> commitment floor became unreachable machinery, and the flap test — which asserts the drawn state
+> does not oscillate — **passed unchanged**.
+
+The lesson is not "permanent aggro is better". It is that the flap test survived a total rewrite of
+the mechanism it was written against, because it asserted the **property** and not the
+implementation. The two tests written against the mechanism (`releaseRadius > detectRadius`, and the
+commitment floor) both had to be deleted. Gate on the observable.
+
+### 2. The enemy tuning values that felt fair
+
+| knob | value | how it was arrived at |
+|---|---|---|
+| `detectRadius` | 480 | authored, never contested in play |
+| `chaseSpeed` | **6.0** | **not a taste — `18 / 3`, forced by the foot-plant invariant** |
+| `patrolSpeed` | 2.5 | authored |
+| `deadZone` | 96 (one tile) | fixes the off-axis sprite strobe (gate finding S1) |
+| `SCAVENGER.damage` | 15 | authored |
+| `KNOCKBACK_SPEED` | 17.5 | **tuned in px of TRAVEL (64 px ≈ half a body), not px/tick** |
+
+Two of those six stopped being free numbers during the phase, and that is the finding:
+
+- **`chaseSpeed` is a quotient, not a preference.** Planted feet require
+  `ticksPerFrame × speed === footPxPerFrame` with a whole `ticksPerFrame`, so the only speeds that
+  exist for a 12-frame sheet with 18 px of foot travel are **18, 9, 6 and 4.5**. The decided value
+  (3/4 of the player's run = 6.75) was **not reachable**. Locomotion speed is a property of the art
+  now, and a design decision that names a speed has to be checked against the sheet before it is
+  agreed to.
+- **`KNOCKBACK_SPEED` had to be re-expressed in the unit a human can judge.** At 5.54 px/tick it
+  produced **9.7 px** of travel against a 132 px body — invisible, and reported as *"the knockback is
+  not working, the animation got stuck"*. Every gate on it passed, because they all measured that
+  knockback **happened**. Tune an impulse by the distance it moves something, never by its velocity.
+
+### 3. What the frame budget actually was — **UNKNOWN, and that is the finding**
+
+The vault has nothing on performance and this phase did not fix that.
+
+- **No baseline exists.** Criterion 5.11 has never produced a number anyone should trust.
+- **The measurement was measuring the wrong thing twice over.** `playwright.config.ts` has no
+  `launchOptions`, so every figure came from headless SwiftShader — **90.10 ms headless against
+  4.2 ms on the real GPU, a 21× difference**. And the sampler measured rAF *interval*, not work.
+- **The worst case was never on screen.** `DEV_FLEET_OFFSET_X = 200 × RENDER_SCALE 6` = 1200 px
+  against a 960 px visible half-width: **0 of 20 fleet enemies were in view**, and the fleet is
+  scavengers-only — no sentries, no projectiles.
+- **Rectangles are cheaper than Sprites**, so the grey-box fallback defect made the frame budget look
+  *better*. Vault 9.4 exactly: a measurement that is cheap because it is not really being done.
+
+**Carry forward:** absolute milliseconds from a headless browser are not evidence. Only a
+same-session interleaved A/B decides anything, and a performance gate needs a recorded baseline
+before it can be a gate at all.
+
+> ✅ **Session 11 correction — the GPU half is no longer unknown, and the reason it stayed unknown
+> was FALSE.** Two places recorded the blind spot as unclosable: `phase-05-perf.spec.ts` said a GPU
+> timer query *"is not reachable from here"*, and finding P1 said *"not reachable without a new
+> dependency"*. **A GPU timer is a WebGL extension**, available from the page itself, with no package
+> involved and the frozen-dependency rule untouched. It was built in an afternoon.
+>
+> **A blind spot recorded with a WRONG reason is worse than one recorded with no reason**, because
+> the wrong reason is precisely what stops the next person looking. Both wordings were corrected in
+> place rather than merely superseded.
+>
+> Two further corrections came out of building it, and both were only findable by probing:
+> the extension is `EXT_disjoint_timer_query` (**WebGL 1** — Phaser 4 runs WebGL 1, so the
+> `_webgl2` name the plan specified cannot exist here), and Phaser 4's `WebGLRenderer` **is** the
+> event emitter rather than having a `.events` property. Two plan-stated facts, both wrong, both
+> cheap to find and expensive to assume.
+
+### 4. Two defects that look identical on screen, and only one of them is timing
+
+The most expensive lesson of the phase, because it cost two rounds of fixing the wrong half.
+
+The user reported the scavenger as *"not smooth"*. There were **two** independent causes:
+
+1. **Foot-slide** — the body advancing further per drawn frame than the art moves the planted foot.
+   Fixed by re-timing the sheet and the speed together.
+2. **Tick-stepping** — the drawn position updated only on simulation ticks, so on a 240 Hz display
+   three frames out of four are identical and the fourth jumps.
+
+Fixing (1) did not fix the complaint, because (2) was still there. Worse, **fixing (2) for the player
+in session 9 made (1)+(2) more visible on the enemy**, since the character standing next to it had
+become smooth. The user's own words named the comparison — *"not smooth **like my character**"* — and
+that phrasing was the diagnostic.
+
+**Carry forward:** when a smoothness complaint survives a timing fix, ask what else is drawn near the
+subject and whether it is drawn the same way.
+
+### 5. A correct, well-tested decision function with an unchecked consumer
+
+`interpolate.ts` was engine-free, thoroughly unit-tested, and called from exactly one place. Nothing
+asked *who calls it*, so the enemies never got it — and no unit test could see that, because the
+missing call is in a Phaser scene.
+
+This is vault 5.3 one step out. Two definitions of a concept is where the bug lives; **one definition
+with an incomplete set of consumers is the same bug wearing a better hat.** The gate that catches it
+has to be at the level where the wiring is real: deleting `GameScene`'s snapshot call left **every
+unit test green** and only the e2e went red.
+
+### 6. Level geometry needs a horizontal reach gate, not just a vertical one
+
+`level-01` shipped a spike strip that was **impassable at any speed** from Phase 4's rescale until
+session 10 — four sessions, two of them playtested. The suite had a reach gate; it asked whether
+every platform was within the measured jump apex. It could not see a gap too wide to *cross*.
+
+The related finding: a recorded playtest bug (*"wedges against terrain at x 3198, 100 → 35 hp"*) sat
+undiagnosed for two sessions and turned out to be **the player's collision box against a pillar they
+were meant to jump** — `3198 + 66 = 3264`, exactly the pillar's face. A traversal test found it by
+accident within an hour of existing.
+
+**Carry forward:** simulate the level. Hand arithmetic against a tick order with a jump-cut divisor,
+a coyote window and per-tick friction was wrong on **both** inputs when the Codex review checked it.
+
+### 7. The generated-art pipeline's own lessons
+
+- **Anchor padding scales a subject; it cannot scale an effect.** Two paid single-variable
+  experiments established it. A muzzle flash and a debris plume exist *to leave the frame*, and no
+  amount of margin contains them — the framing gate has to learn the difference, or the clip is
+  accepted with a written exception naming the file and the edges.
+- **Version the sidecars, not just the download.** `submit-clips.mjs` versioned `-rN` on the `.mp4`
+  and overwrote `.params.json`, so a re-render destroyed the provenance of the round already paid
+  for. Two shipped clips carry self-contradicting params because of it.
+- **The generation gallery is a recoverable source of truth.** Two `request_id`s recorded as
+  permanently lost were both in `~/.genmedia/gallery/sessions/<id>/data.json`, with the download path.
+  Cost to close criterion 5.4e: **$0**. Check the tool's own records before declaring provenance lost.
+- **Measure before spending.** It saved money in sessions 4, 5 and 10; the only round that skipped it
+  bought two clips that failed the same gate the first pair did.
+
+### 8. A gate that has never run against the bytes that ship is not a gate
+
+Three separate instances of one shape, all found in session 11, all of which had been green for
+sessions:
+
+- **G5 had never once been run against a shipped sheet.** The harness existed, the decode path
+  existed, and `sheet-gates.test.ts` already ran `runSheetGates` in-process on a shipped PNG — for
+  `brass-sentry/idle`, which has **no attack window**, so G5 reported `N/A` and the file looked
+  covered. Nobody had written the one line naming a slug that does. When it was finally run, it
+  passed — **and revealed the sheet passes only because of a tie-break**: frames 4, 5 and 6 all tie
+  at 293 px of reach, and only the first lands inside the active window. Frames 5 and 6 would both
+  fail. A verdict-only assertion could never have seen that; assert the *peak frame and tick*, not
+  the pass.
+- **`gateLoopWrap` was silently not running** on the scavenger's `idle`. Its absence was visible only
+  as a line of build output that was not printed. A gate that skips quietly is indistinguishable from
+  a gate that passes.
+- **The shipped `brass-courier/fall` sheet had never passed G6 either.** `build-clips.mjs` writes the
+  strip and gates it *afterwards*, so a failing extraction leaves a usable file on disk that
+  `assets:build` packs without complaint. Confirmed rather than guessed: regenerating the old strip
+  reproduced the shipped `fall.png` byte for byte.
+
+**Carry forward:** for every gate, ask *"has this ever run against what ships?"* — separately from
+*"does this gate work?"*. And **write-then-gate is a defect pattern**, not a style: any tool that
+emits an artefact before validating it has already put a bad artefact where something else will find
+it.
+
+### 9. Keep the exception machinery when the exception list empties
+
+`BLOCKED_ON_ART` and `PENDING_ART` both hold *"the thing we know is wrong and are waiting on"*, and
+both are asserted in **both directions**: the gate skips these rows AND asserts the list equals the
+set that actually fails. So a fixed entry left behind is red, and a broken row with nothing listed is
+red too.
+
+Both emptied in session 11. Both were kept as files rather than inlined as `[]` at their two call
+sites — and the reasoning was tested almost immediately: **`PENDING_ART` was emptied one commit
+before the scavenger's attack needed it, and was in use again within the hour.**
+
+The load-bearing part is that emptying a list this way makes the gate **strictly stronger**:
+`uneven === Object.keys(BLOCKED_ON_ART)` went from *"exactly one row may be uneven"* to *"no row may
+be uneven at all"*, with no assertion rewritten. **Inlining `[]` twice is where that property dies.**
+
+### 10. A player's report is a symptom. It is reliable about the symptom and not about the cause.
+
+Two session-11 reports, both worth acting on, neither describing what was actually wrong:
+
+- *"The scavenger does not have an attack animation."* **It was not a bug — it was the spec.** The
+  creature was scoped as a chaser whose body is the hazard, and criterion 5.16 still called it
+  *contact damage*. But the instinct behind the report was exactly right: **a thing that hurts you
+  with no windup reads as unfinished**, because there is no telegraph and the hit feels arbitrary.
+  Buying the swing was correct; "fixing a bug" would have been the wrong frame.
+- *"Slow everything down about 10%."* Right that it was too fast; **10% is not a value the speed can
+  take** (see section 11), and the reachable step breaks the level.
+
+**Carry forward:** take the symptom literally and the diagnosis not at all. Then say plainly which
+one you acted on.
+
+### 11. Locomotion speed is quantised, and the LEVEL is the real ceiling
+
+The most transferable number this phase produced.
+
+Planted feet require `ticksPerFrame × speed === footPxPerFrame` with a **whole** `ticksPerFrame`, so
+run speed is `18 / n` and the only values that exist are **18, 9, 6, 4.5**. Any request phrased as a
+percentage must be checked against that set *before* it is agreed to — session 10 and session 11 both
+agreed to one first and discovered it second.
+
+And the harder constraint is not the art at all:
+
+> **`level-01` tolerates a 13% slowdown and no more.** Measured by sweeping `runMax` over the real
+> shipped `.tmj` with the real `tick`: 7.80 clears the 288 px pit at x 3840, **7.70 falls in.** It is
+> a cliff, not a slope. Anything past it is a **level edit**, which is a different decision with a
+> different owner.
+
+The reachable step (33%) is four times past that ceiling, so it was built, measured, refuted by
+`level-traversal.test.ts` within one run, and reverted. **The traversal gate paid for itself here** —
+a vertical-apex gate cannot see a gap too wide to cross, and the failure would otherwise have arrived
+as an unplayable level in a playtest.
+
+### 12. A sweep that fails at its own control is reporting on the harness
+
+The speed sweep above first reported **every** row failing — including the shipped 9.0, which
+demonstrably works. The probe released the jump button one tick after pressing it, and
+`jumpCutDivisor: 3` chopped every jump to a third of its height. The real harness holds
+`input.jumpHeld = true` for the whole attempt and says so in a comment.
+
+Nothing about the *subject* was wrong. **The known-good control row is what caught it**, and without
+one the sweep would have "proved" that the game is already unplayable.
+
+**Carry forward:** every sweep, mutation loop and A/B includes a row whose answer is already known.
+It costs one line and it is the only thing standing between a broken harness and a confident wrong
+conclusion. This is the same rule as *(C1)* — watch the gate fail — pointed at the measuring
+instrument instead of the gate.
+
+---
+
+## Session 6 — the spend ceiling was raised, and by whom
+
+**The $40 ceiling was raised to $45 by the user on 2026-08-11, mid-session, with the number named
+explicitly.** Recorded here because a ceiling that moves without a record is not a ceiling.
+
+The sequence matters. At **$36.60** spent, all four re-shoots of that round still failed G6, and the
+margins diagnosed the cause as **off-centre positioning rather than excessive motion** — `left 188 /
+right 0`, `left 160 / right 0`, `left 154 / right 0`, each of which has roughly 90 px a side if
+centred. `HOLD_CENTRED` was written against that diagnosis at $0 and remained unproven.
+
+The options put to the user were: spend the last $3.40 on two clips, spend $1.19 on one,
+spend nothing and hand off, or raise the ceiling. **The user chose to raise it, and was asked to name
+a figure rather than leave it open** — because the ceiling is a hard STOP agreed before any spend,
+and Phase 4's **$6.39 overrun against a $25 ceiling** is the reason this phase had one at all. An
+elastic ceiling is the Phase 4 failure with extra steps.
+
+**$45**, chosen for 4–5 clips of measured need plus 2–3 for a second round if `HOLD_CENTRED` only
+partly works.
+
+> ⚠️ **[prd/phase-05-combat.md](../prd/phase-05-combat.md) §1b still reads *"This phase's ceiling is
+> $40, and it is a hard STOP."* That line is now stale.** It is **not** edited here: `docs/prd/` is
+> outside this session's scope lock, and silently rewriting a phase's stated constraint from a
+> session that spent against it is exactly the move that makes a ceiling meaningless. Flagged for the
+> next session to correct deliberately, with this entry as the authority for who changed it and why.
+
+### What the money established, so the next session does not re-buy it
+
+| lever | verdict |
+|---|---|
+| **Ratio-matching** | **PROVEN.** Reframing cut 7 of 7 measured clips; matching removes it. The guard now measures anchor-vs-output ratio rather than banning the string `9:16`, which for the courier's 0.558 anchor is the *matched* value. |
+| **Padding** | **PROVEN for framing, and it costs the scale.** It fixes the crop and shrinks the subject in frame, so a per-slug `scale` (vault A5) cannot serve a padded and an unpadded generation of one subject. The padded courier `attack` packed at 114 px against `hurt`'s 288 px. |
+| **`DEBRIS_MARGIN`** | **WORKED.** `brass-sentry/death` went from `left 2 / right 0` to `left 226 / right 200`, its wreck compact rather than frame-spanning, **and it still ends broken rather than intact** — the anti-`SPAN_CLIP` sentence doing its job. |
+| **`DISCHARGE_MARGIN`** | **BACKFIRED.** Satisfied by the model very largely **not firing** — `fire-r4` returned a thin wisp of smoke and no flash. A constraint describing a SHAPE, met by not performing the action. The second instance of that failure after `SPAN_CLIP`, and the reason `DEBRIS_MARGIN` carries an explicit "this governs the scatter, not the destruction" sentence. |
+| **`HOLD_CENTRED`** | **UNPROVEN at the time of writing.** Authored at $0 against a measured diagnosis; the batch testing it is the one the raised ceiling paid for. |
+
+---
+
+## Session 7 — 2026-08-12. Four decisions, and the measurements behind them
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-vectorized-hanrahan.md`. Its Codex plan
+review — the **seventh** for this phase — returned **BLOCK, 4 blockers, 3 major, 1 minor**; the two
+decisive blockers were re-verified locally and **CONFIRMED**, and all eight were applied. Appended to
+[reviews/phase-05-plan.md](../reviews/phase-05-plan.md).
+
+**Verified baseline before any change**, taken from the JSON reporter rather than a summary line:
+
+```
+suites passed 255  failed 0  total 255
+tests  passed 847  failed 0  total 847
+```
+
+### D1 — the global cell goes 288×384 → 384×384. Decision M3 stays intact.
+
+**Taken by the user, 2026-08-12, after being shown every measurement rather than one.** Session 6
+asked with a single data point (`walk` needs 296) and got an answer — 320×384 — that the next
+measurement invalidated. The full set, at the scavenger's scale `0.56074766`:
+
+| sheet | width required | fits 288? | fits 320? | fits 384? |
+|---|---:|---|---|---|
+| `rust-scavenger/chase` | 288 | ✅ | ✅ | ✅ |
+| `rust-scavenger/walk` | **296** | ❌ | ✅ | ✅ |
+| `rust-scavenger/death` | **358** | ❌ | ❌ | ✅ |
+| every `brass-courier/*` | 288 | ✅ | ✅ | ✅ |
+| every `brass-sentry/*` | 288 | ✅ | ✅ | ✅ |
+
+**A collapsed scavenger lying flat is genuinely wider than it is tall** — that is why `death` is the
+outlier and why it was not predictable from `walk`. 384 covers it with **26 px spare**.
+
+**The cost was stated before the choice, not after:** 288 → 384 is a **~33 % atlas area increase**
+against the **~11 %** that was agreed in session 6. That is a materially different decision, so it went
+back to the user rather than being rounded up quietly. The alternatives offered were a **per-slug cell**
+(smallest atlas, but amends M3 so one subject gets special treatment) and **320 with
+`rust-scavenger/death` shelved** (cheapest, but discards paid art that already passes G6).
+
+> **Why one global cell is worth 33 %.** M3 exists so that no subject silently gets its own geometry.
+> The turret's wasted area is a recorded, measurable number; a per-slug cell is an invisible
+> divergence that every consumer must then carry.
+
+### D2 — `scale` becomes declarable per `(slug, action)`
+
+**Taken by the user, 2026-08-12.** The courier's framing was already solved on disk and what remained
+was a number in a config file.
+
+`brass-courier-attack-r3.mp4` is padded, **passed G6 cleanly**, and packed — and drew **114 px against
+`hurt`'s 288 px**. The arithmetic, so nobody re-derives it:
+
+```
+courier slug scale      0.23723229   derived from an UNPADDED idle,
+                                     figure fills 1214 px of 1280
+padded round            figure fills  ~480 px of 960
+480 x 0.23723229      = 114 px drawn                (hurt, unpadded: 288 px)
+```
+
+**Padding is a property of a GENERATION, and so is the scale it implies.** A per-slug scale cannot
+serve a padded and an unpadded generation of one subject. The declared per-action scale is **pasted by
+hand with provenance and never computed by the build** — which is what vault A5 actually protects.
+
+**This reverses a decision session 6 took, and the reversal is legitimate for a stated reason.**
+Session 6 chose to re-shoot the courier unpadded, keeping one scale per slug. That was correct *given
+its premise* — that per-slug scale could not serve both. **D2 removes the premise.** And the
+alternative it chose has since been measured and failed: **three containment clauses were tried and
+`brass-courier/attack`'s margins never moved off `L188 R0`** (`/death`: `L172 R0`). The $4.76 spent
+since is what established that the prompt lever is exhausted for this subject.
+
+> **What this costs, stated plainly.** The one-scale rule in `upsertLiftProfile` now binds only
+> **slug-sourced** entries. That is a **narrowing**, not a strengthening, and the Codex review caught
+> an earlier draft of the plan describing it as "strictly stronger". Three genuinely new checks are
+> added alongside it — every entry must carry a finite scale and a known source, and a **cross-slug
+> merge now throws where it was silently accepted** — but the narrowing is real, deliberate, and is
+> this decision.
+
+### D3 — the ceiling goes $45 → $55
+
+**Taken by the user, 2026-08-12, figure named explicitly on request.** Recorded in full, with the
+whole chain from $40, at [prd/phase-05-combat.md §1b](../prd/phase-05-combat.md) — which was also
+corrected this session, since it still read "$40, and it is a hard STOP".
+
+The user was asked with the honest framing that **nothing in the remaining QA gate needs money**: the
+gate, the file splits and the Codex review are all $0, and the only remaining art problem with an
+unattempted fix is `brass-sentry/fire`'s missing muzzle flash. Spend at the time: **$41.36**.
+
+### D4 — config and gate first, at $0; art last
+
+**Taken by the user, 2026-08-12.** Art bought after the gate is art the gate has not reviewed. The
+Codex review then sharpened this into a hard rule rather than a preference: the implementation review
+(criterion 5.14) runs on the final diff, so **any art spend afterwards invalidates it**. Art work is
+therefore **explicitly post-phase** — either a future session with its own gate, or a knowing re-run of
+5.14 and the full verification.
+
+### What the money has already established — do not re-buy any of it
+
+| lever | verdict |
+|---|---|
+| **Ratio-matching** | **PROVEN.** Reframing cut 7 of 7 measured clips. The guard now compares anchor ratio against submitted ratio rather than banning the string `9:16` — which, for the courier's **1536 × 2752 = 0.558** anchor, is the *matched* value and not the defect |
+| **Padding** | **PROVEN for framing, and it costs the scale.** That cost is what D2 pays |
+| **`DEBRIS_MARGIN`** | **WORKED**, single-variable: `brass-sentry/death` `L2 → L226`, wreck compact, **and it still ends broken**. Its "this governs the SCATTER, not the destruction" sentence is load-bearing |
+| **`DISCHARGE_MARGIN`** | **BACKFIRED** — satisfied by the model very largely **not firing**. Second instance of the `SPAN_CLIP` failure: a constraint describing a SHAPE, met by not performing the action |
+| **`HOLD_CENTRED`** | **Withdrawn as UNATTRIBUTABLE, not disproven.** 1 win, 1 loss, 2 no-change over four clips. **The endpoint has no `seed` input**, so four samples cannot separate a clause from run-to-run variance. Kept in `motionClauses.mjs`, applied nowhere. **Do not re-apply it** |
+
+### A correction the Codex review forced to the repository record
+
+**Every handoff since session 4 has described `rust-scavenger/walk` as blocked on cell width and
+`chase` as blocked on its stride, as if these were different problems.** They are not.
+`character-bounds-rust-scavenger.json:22` reads:
+
+```
+"stridePxPerCycle": { "walk": null, "chase": null },
+```
+
+**Both are null.** `walk` hits the pack blocker first, so no session ever reached its catalog blocker.
+This is the **fourth** time in this phase that *"extraction stops at the first failure"* has hidden a
+second defect behind the first — after the G6/`idle` false positive hiding the real `jump` crop, the
+per-action sweep finding `brass-courier/hurt` already clean, and `--derive-scale`'s hardcoded
+`findSource('idle')` deadlocking on a subject with no idle by design.
+
+**The generalisable rule, since it now has four instances:** when a pipeline stops at the first
+failure, a clean verdict on stage N is evidence about stage N **only**. Any statement of the form
+"X is blocked on Y" is provisional until X has actually reached the end.
+
+### A render risk that was checked and cleared, not assumed
+
+Widening the cell moves a Sprite's `displayOriginX` from 144 to 192, because the constructor runs
+`setSizeToFrame` → `setOriginFromFrame`. That would shift every drawn figure by 48 px **if any renderer
+used a horizontal origin other than the frame centre**.
+
+**Checked: none does.** `enemyView.ts:113`, `enemyView.ts:129`, `playerView.ts:112` and
+`GymScene.ts:127` all use **originX 0.5** — which is exactly where `packStrip` centres the figure's
+centroid (`sheets.mjs:353-354`). Vertically `frameHeight` is unchanged and `baselineY = frameHeight`,
+so an `originY` of 1 still lands on the contact line. **The repack is render-safe, and this is why.**
+
+### 🔴 D1 is AMENDED, and the reason is that the number it was decided on was wrong
+
+**D1 as first recorded above — one global 384×384 cell — was taken on a figure that does not survive
+measurement.** It was applied, went green, and was then withdrawn the same session. The record is kept
+rather than rewritten, because the mistake is the lesson.
+
+**`rust-scavenger/death` does not need 358 px. It needs 510.** A full per-frame sweep, using the same
+`figureMetrics` the packer uses:
+
+```
+f0 170  f1 179  f2 243  f3 236  f4 358  f5 505  f6 507  f7 510  f8 508  f9 508
+                        ^^^^^^                          ^^^^^^
+                    the recorded figure               the actual maximum
+```
+
+**358 is frame 4.** `packStrip` throws on the FIRST clipped frame, so at the 288 cell it reported
+frame 4's requirement and **frames 5–9 were never evaluated**. HANDOFF §12b recorded that number as
+though it were the maximum, and a user decision was taken on it.
+
+> **Fifth instance of one pattern, and the first that cost a decision.** *"Extraction stops at the
+> first failure"* has now hidden a second defect behind the first five times in this phase: G6's
+> `idle` false positive hid the real `jump` crop · the per-action sweep found `brass-courier/hurt`
+> already clean · `--derive-scale`'s hardcoded `findSource('idle')` deadlocked on a subject with no
+> idle by design · `rust-scavenger/walk`'s null stride sat behind its pack failure · and now this.
+>
+> **The rule, now that it has five instances:** when a pipeline stops at the first failure, a verdict
+> about stage N is evidence about stage N **only**. Any statement of the form *"X is blocked on Y"* is
+> provisional until X has actually reached the end. **Prefer instruments that sweep and report a
+> maximum over instruments that stop and report an instance** — which is exactly what was done to
+> `packStrip` below.
+
+### The instrument was fixed, not just the number
+
+`packStrip` now **sweeps every frame on both axes** and reports the true maximum, naming every clipped
+frame and which is widest. Horizontal (`sheets.mjs:378`) and vertical (`:399`) both had the defect;
+both are fixed.
+
+**The verdict is unchanged — any clipped frame still fails the build.** What changed is what the gate
+*measures*, never what it tolerates: it now reports complete information instead of the first
+instance. Watched go red *(C1)* against a committed fixture, and the revert verified **by count**
+*(C12)*: the single-frame-throw literal went 1 → 0 on both axes with content confirmed changed.
+New test: `tests/unit/sheet-packing-clip-report.test.ts`.
+
+### D1-revised — the cell is PER SLUG. Decision M3 is amended.
+
+**Taken by the user, 2026-08-12, on the complete sweep.**
+
+| slug | cell | why |
+|---|---|---|
+| `brass-courier` | **288 × 384** | every courier sheet fits 288 — pays nothing |
+| `brass-sentry` | **288 × 384** | every sentry sheet fits 288 — pays nothing |
+| `rust-scavenger` | **512 × 384** | `death` frame 7 requires **510**; `walk` 296; `chase` 273 |
+
+**This required no code change.** `frameWidth` was already per-slug data in
+`character-bounds-<slug>.json`, already per-row in `index.json`, and `src/render/gymGeometry.ts` and
+`gymBounds.ts` already read it per row. **M3 was a policy, not a structural constraint** — a fact
+nobody had checked, and which made the amendment far cheaper than the options put to the user in the
+first round implied. *(That first round's option C was described as "the packer, catalog and every
+consumer must carry a per-slug cell". That was wrong.)*
+
+**What M3 actually protects is that special-casing be VISIBLE.** It is satisfied here by recording, in
+the open and with the measurement, that one subject's cell differs and exactly why. Each bounds file's
+`_frame` note now states its own slug's number; none still claims to be "the ONE global cell size".
+
+**Why not the alternatives:**
+
+- **512 global** was rejected as **+78 % atlas area** over the 288 baseline, against the ~33 % that had
+  just been approved and the ~11 % before that — and it argues against itself: criterion **5.11 is
+  already uncomfortable** at median 55.70 ms ≈ 18 fps, is **unrun**, and the project carries a recorded
+  34.5 MB parallax-per-boot debt that already pins Playwright to `workers: 1`. Inflating every atlas by
+  78 % for one animation's debris, immediately before a performance criterion is assessed, is a finding
+  waiting to happen.
+- **320 global, death deferred** was the runner-up and remains the fallback if per-slug ever proves
+  troublesome.
+
+### 🔴 And `rust-scavenger/death` STILL does not ship — for a sixth-instance reason
+
+**The 512 cell is correct and `packStrip` now succeeds on death for the first time. A different gate
+then throws:**
+
+```
+assets:build: "death" cell 5 of 12 is 36x9 against a median height of 229
+  — that is a fragment, not a frame. Same cause as an empty cell, caught one step earlier.
+```
+
+`detectFrames` segments the extraction by content, not by even division, and finds **12** islands where
+the clip has 10 real frames: indices **5 and 7 are 64 × 16 debris flecks**, detected as separate frames.
+**This was masked the entire time by the clipping throw that fired first** — the sixth instance of the
+pattern, surfaced by fixing the fifth.
+
+> ⚠️ **Note for anyone measuring this clip:** an even `width / height` split gives 10 frames and is the
+> WRONG splitter. `detectFrames` gives 12. Both readings appear in this session's working notes; the
+> 510 px width figure is unaffected, because it comes from the real collapse frames either way.
+
+**Not fixed here, and deliberately so.** Fixing it means tuning `minGap` / segmentation, which is a
+gate change with its own both-directions revalidation, in a session already carrying the cell change,
+the per-action scale and the guard redesign. **It is also plausibly the wrong fix:** the figure goes
+**169 px drawn at f0 to 476 px at f7**, which is debris scatter, not anatomy. `DEBRIS_MARGIN` is proven
+single-variable on `brass-sentry/death` (`L2 → L226`, wreck compact, still ends broken) and **was never
+applied to the scavenger**. The likely correct answer is art, and art is post-phase this session.
+
+**`rust-scavenger/death` is therefore DEFERRED with its paid clip kept on disk**, and the 512 cell
+stands ready for it. `rust-scavenger/chase` is also deferred — its stride is genuinely
+**INDETERMINATE**, swept at band heights 16/24/32 px with every sweep showing one peak and one trough
+across the 12-frame sheet instead of two: the same trailing-leg-airborne failure vault 4.18 names for
+the courier's `run`. **No stride was guessed.** A guessed stride is the specific failure
+`catalogTimings.mjs` exists to prevent.
+
+### What DID ship from this work
+
+**`rust-scavenger/walk` — the first scavenger sheet in the catalog.** Packs at 512, gates PASS/PASS,
+stride **312 game px** measured by the courier's own documented foot-band method (24 px band, spans
+`121,153,156,134,98,66,61,62,69,127,46,45`, peak 156 doubled), re-confirmed unchanged after the cell
+moved from 384 to 512 — which it must be, since the cell change is pure padding.
+
+⚠️ **The scavenger's slug scale `0.56074766` came from a GAIT, not a neutral pose** — spread 4.2 %
+against the sentry's 0.3 %. Recorded in its config. **Re-derive it if `walk` is ever re-shot.**
+
+### A latent single-slug assumption the amendment exposed
+
+`tests/unit/asset-catalog.test.ts` globbed **only** the courier's bounds file and checked **every**
+catalog row — enemy rows included — against it. That held only while all three slugs happened to share
+one width. **Same class as R1/R2 and the `shipped-sheets.test.ts` path bug: correct by coincidence,
+silent when the coincidence ends.**
+
+**Scoping the loop to courier rows would have made it pass by checking LESS**, which is the forbidden
+move — enemy rows would have stopped being checked at all. It now resolves each row against **its own
+slug's** bounds, which catches everything the old form caught **plus** a row disagreeing with the file
+that actually cut it. An unresolvable row is an explicit failure, not a skip. Watched go red *(C1)* by
+setting `rust-scavenger-walk`'s row to 288 against its slug's 512 —
+`AssertionError: rust-scavenger-walk frameWidth vs rust-scavenger: expected 288 to be 512` — restored
+from a fresh temp copy, revert verified **by count** *(C12)*.
+
+**Verified after all of the above**, from the JSON reporter:
+
+```
+suites 258/258  failed 0
+tests  853/853  failed 0
+typecheck clean · build + verify-dist ok
+```
+
+---
+
+## §6 gate — agent owners, run 2026-08-12 (session 7)
+
+**Protocol:** four owners, **two briefs each** *(A7)*, all six agent briefs **dispatched simultaneously
+so brief 2 could never see brief 1's findings**. Every finding below is **applied or recorded with a
+one-line reason** *(C11)*. Subagents were forbidden from writing here; the orchestrator recorded these
+after re-verifying the decisive claims. **Each agent's own "could not check" is preserved** *(9.3)*.
+
+**Two sign-offs were VOID entering this run** — 5.1 and 5.5, signed in session 3 before session 4
+changed `stepSentry`. Both were re-run from scratch.
+
+### Verdicts
+
+| # | Owner | Verdict | Basis |
+|---|---|---|---|
+| 5.1 | qa-expert | **PASS**, re-verified | Both sentry guards survived the barrel split — `enemySentry.ts:89` saturating increment, `:95` fire guard. Mutation-measured by code-reviewer: **deleting `:95` gives 265 shots in 270 ticks** against 3 |
+| 5.2 | qa-expert | **PASS**, caveat unchanged | Still passes by `enemy-tuning.test.ts:74-109`, **not** by the test whose title claims it |
+| 5.3 | code-reviewer | **PASS**, mutation-measured | Baseline 0 flap changes; single-threshold **36**; inverted asymmetry **36**; commit floor deleted → `:210` red. Reproduces session 3's 36 exactly, so session 4 did not weaken it |
+| 5.4c | qa-expert | **PASS — newly measured, first time ever runnable** | `sheetGates.mjs brass-courier attack` → `G4 drift 0px within budget 3px` · `G5 frame 3 (tick 9) lands inside the active window [6, 10)` |
+| 5.4d | qa-expert | **PASS** | `deriveFps` imports `attackTotalTicks(ATTACK)`/`HURT_TICKS`/`DEATH_TICKS` from `src/sim/combat.ts`, never retyped; `asset-catalog.test.ts:192-199` re-derives fps for **every** shipped row |
+| 5.5 | qa-expert | **PASS**, re-verified | `combat.test.ts:84-121` walks every tick of the 20-tick swing and pins both endpoints by name |
+| 5.6 | qa-expert | **PASS** | Fixture runs `IFRAME_TICKS*2` = 90 against a 45-tick window, both endpoints pinned |
+| 5.7 | qa-expert | **PASS** — and it had **never actually been run by its owner** | Absent from session 3's owner table despite `qa-expert` being listed. Closed here: unit at 2/100 plus live e2e reading the real `Graphics` command buffer at 2/60 |
+| 5.9 | qa-expert | **PASS** | Knobs enumerated live, swept both directions, asserted on behaviour signature not knob readout |
+| 5.10 | qa-expert | **PASS**, caveat unchanged | Proves the **ratio** `ceil(maxHp/damage)` 2 vs 3; still **no test swings twice and asserts death** |
+| 5.11 | performance-engineer | **MEASURED, NOT SATISFIED** — see below | |
+| 5.12 | code-reviewer | **FAILING** — 8 files over 400 | |
+| 5.15 | qa-expert | **PASS** | Kill-plane crossing tick pinned; tunnelling band derived from a real trajectory, both halves asserted |
+
+### Findings — every one applied or recorded
+
+| ID | Sev | Finding | Disposition |
+|---|---|---|---|
+| **S1** | **HIGH** | **The scavenger's chase has no dead zone.** `enemyScavenger.ts:118-120` is `dir = playerX >= x ? 1 : -1` with no tolerance, so a player the scavenger cannot reach — standing directly above it — makes `facing` flip **every single tick**. `enemyView.ts:133` reads `facing` for `flipX`, so the sprite strobes. **Measured against the real sim: 39 facing flips in 40 ticks** with the player 4 px to one side and 300 px up. Worse, `enemy-ai.test.ts:188` re-pins `s.x = 500` every tick and its own docstring names *"the player is above it"* as the real in-game case — **the test pins out exactly the case it names.** No test asserts `.facing`. | **RECORDED, NOT FIXED — blocker-class for session 8.** Confirmed by the orchestrator against the real sim, not taken on report. The fix needs a dead-zone width, which is a **balance decision**, and it is a change to gated combat code late in a long session — the same reasoning that deferred finding A1 rather than patching it ad hoc. **It is a visible defect and must not be shipped unfixed.** |
+| **S2** | **HIGH** | **The chase ignores the patrol bounds, and release teleports.** `enemyScavenger.ts:121` returns before the clamp at `:127-133`. **Measured: patrolMax 700, chased to x=900, snapped back to 700 the first tick after release — a 200 px instantaneous jump.** `enemy-ai.test.ts:121` uses `playerX: 99999`, so the chase branch never meets the bounds. | **RECORDED, NOT FIXED — blocker-class for session 8.** Confirmed by the orchestrator. Whether a chase *should* respect patrol bounds is a design question (a scavenger that will not leave its ledge vs one that pursues), so it is the user's call, not a render module's. |
+| **S3** | **HIGH** | **5.11's `bodyCount` cannot tell a real Sprite from the `Rectangle` fallback.** `EnemyLayer` tracks `isSprite` alongside `bodies` **for exactly this purpose** (`enemyLayer.ts:39-40`), but the spec's `snapshot()` and delta assertion read only `bodies.length` (`phase-05-combat.spec.ts:80-104`, `:188`). A catalog regression that un-registered `rust-scavenger-walk` would drop all 20 fleet scavengers to plain rectangles, **frame time would plausibly improve**, and 5.11 would still report green. | **RECORDED, NOT FIXED.** This is vault 9.4 exactly — *fast because nothing expensive is drawn* — one layer subtler than an empty scene. The fix is small (assert on `isSprite`, and add a lower bound on `medianMs`) but it is a change to the very spec whose measurement 5.11 is being judged on, and doing that inside the same session that judges it is the wrong order. **First item for session 8.** |
+| **S4** | **HIGH** | **The `<100 ms` ceiling does not test the stated target and is simultaneously too tight and too loose.** The criterion and the spec docstring promise **60 fps** (16.6 ms); the assertion permits 100 ms. **And the number is not stable:** the recorded run was `median 55.70 ms / max 63.30`, an independent re-run on the same fixture with zero code changes gave **`median 82.10 ms / max 89.40`** — a ~48 % swing that is already 82–89 % of the cutoff. So it can fire on ordinary noise while still passing a 2× directional regression. | **RECORDED.** The ceiling is documented in-file as a deliberate sanity bound because **no baseline exists** — PRD §7 records the vault has nothing on performance (§B1). Replacing it needs a baseline, which is what this phase's vault-out is supposed to create. See the vault-out entry below. |
+| **S5** | MED | **`DEV_FLEET_COUNT = 20` is worst-case by fiat.** `GameScene.ts:42-44` calls it *"a deliberate 10x stress multiple… no authored level approaches"* — a design claim, not a measurement. Nothing in `src/sim/` or the level format caps concurrent enemies, and the only shipped level places **2**. | **RECORDED.** Honest framing: 22 bodies is a *chosen* stress figure, not a derived worst case. It becomes checkable when level-02+ exist. |
+| **S6** | MED | **`combat.ts`'s own docstring contradicted `tick.ts`.** It listed *"hazard / kill plane"* as step-4 internal item 2. World-geometry damage actually resolves at **step 9b**, after collision — `tick.ts:21,40-46`, which is the declared authority and states explicitly *"The plan put world-geometry damage in step 4. It cannot go there"*, because a swept hazard test needs both endpoints of the tick's motion. | ✅ **APPLIED.** Corrected in `src/sim/combat.ts`, with a note recording that this was the *"prose is not the authority"* trap in the one file least allowed to carry it. |
+| **S7** | MED | **The session's own split introduced a duplicate and a cycle.** `verdict()` was defined identically in **both** `gates.mjs:32` and `gatesSelfTest.mjs:30` — the same restate-don't-import class as recorded finding A2 — and `gates.mjs` re-exported from `gatesSelfTest.mjs` while that file imported back, a **circular import** safe only for as long as `gatesSelfTest.mjs` declared no top-level `const`. One edit from a TDZ crash, and the same fragility already recorded for `motion.mjs`/`motionCombat.mjs`. | ✅ **APPLIED.** `verdict` is now exported once from `gates.mjs`; `fill` moved beside the gates that use it; the re-export is gone, so the edge is one-way. **The first fix attempt broke 23 suites** — other tests imported `fill` from `gates.mjs` — which is why `fill` moved rather than the importers. Both modules' docstrings corrected. `265 suites / 865 tests / 0 failed` after. |
+| **S8** | MED | **`file-size.test.ts`'s globs cannot see two files over 400.** `.agents/skills/fal-redesign/runtime/src/upgrade.mjs` (**597**) and `bin/fal-site.mjs` (**413**) are invisible to `src/**/*.ts` · `tools/**/*.mjs` · `tests/**/*.ts`. | **RECORDED, no change.** Judgement: both are **vendored skill runtime, not this project's source**, so the honest count for criterion 5.12 remains **8**. The glob's blindness is real and is recorded here so it is not rediscovered. Within the project tree the blindness is currently harmless — `tools/**/*.ts` and `src/**/*.mjs` match zero files. |
+| **S9** | MED | **The phase ADDED to the worst offenders while the split commit advertised a reduction.** Against `main`: `GameScene.ts` **+105** (613 → 657), `sheets.mjs` +22, `sheet-packing.test.ts` +14 — and `file-size.test.ts` stayed green throughout. | **RECORDED.** True and worth stating plainly: 10 → 8 is real, and the phase also grew the largest file by 105 lines. Both facts belong in the 5.12 verdict, which is **FAILING**. |
+| **S10** | MED | **The 5.12 evidence table in this log was stale.** It read *"Ten files exceed 400"* and listed `chroma.mjs` 542 (now 55), `prompt.mjs` 586 (now 396), `enemies.ts` "exactly 400" (now 60) — **and that stale table is exactly what keeps `file-size.test.ts:68`'s name-drop check green.** | ✅ **APPLIED.** Corrected below. The *verdict* was always honest (5.12 marked FAIL); the evidence under it had rotted. |
+| **S11** | MED | **5.7's e2e cannot catch the defect its unit test was written for.** The live assertion is `0 < fillRect.w < slotW` at hp 2/60 — which a naive `Math.max(MIN, ratio × slotW)` floor **also satisfies**. Only the pure unit test (`enemy-view.test.ts:74-75`, 1hp ≠ 2hp) catches a flattened low end. | **RECORDED.** The two tests are complementary, not redundant, and the e2e must not be mistaken for a superset. Worth a 1hp-vs-2hp live assertion later. |
+| **S12** | LOW | No one-counter shape assertion for `Sentry.cooldownCounter` (only the scavenger has one, `enemy-ai.test.ts:229`), and that assertion enforces a **naming convention** (`endsWith('Counter')`) rather than a state-space property — a `chaseTimer` would bypass it. No test oscillates across `releaseRadius`. | **RECORDED.** Neither was reachable by any mutation the reviewer found. |
+| **S13** | LOW | The hysteresis invariant is enforced at the **dev knob** (`enemyTuning.ts:119`), not at construction — `createScavenger` accepts inverted radii silently. | **RECORDED.** Caller-enforced invariant in the wrong layer; harmless today because the only writer is the dev panel. |
+| **S14** | LOW | 5.6's test lives at `player-combat.test.ts:129-142`; session 3's log cites `combat.test.ts`. Citation drift, test intact. | ✅ **APPLIED** — corrected by this entry. |
+| **S15** | LOW | The splits are recorded in **no** `docs/qa/` entry; commit `898c928` was their only record. | ✅ **APPLIED** — recorded below. |
+
+### What this run proves about the protocol itself
+
+**The adversarial brief earned its place for the third phase running.** Brief 1 for `qa-expert`
+returned ten PASSes. The three adversarial passes — none of which saw a checklist result — produced
+**S1, S2, S3 and S11**, including **two confirmed gameplay bugs in code that every checklist verdict
+had just called PASS**. 5.3 is genuinely well-built and mutation-resistant, *and* the scavenger it
+governs strobes its facing 39 times in 40 ticks. Both are true. A checklist pass asks whether the
+stated thing works; only an adversarial pass asks what else is in there.
+
+**And two agent reports were WRONG, which is why every decisive claim was re-verified:**
+
+- The `performance-engineer` **checklist** brief reported *"all 22 bodies draw as `Rectangle`
+  fallbacks — zero enemy keys in `index.json`"*. **False.** `brass-sentry-idle` and
+  `rust-scavenger-walk` are both catalogued as of this session, `GameScene.ts:518` registers every
+  catalog key, and a patrolling scavenger asks for `rust-scavenger-walk`. Its own adversarial
+  counterpart said the opposite and was right.
+- The `qa-expert` **adversarial** brief reported 5.4c and 5.4d as *"never run — no combat sheet is
+  packed"*. **False**, and it said honestly that it had run no tests and was reading `docs/HANDOFF.md`.
+  **`HANDOFF.md` was stale mid-session by construction** — §13 had not been written yet — so the
+  document that exists to orient a reader actively misled one.
+
+> **Two transferable lessons.** A subagent's summary is a claim, not evidence — *both* of these were
+> caught only because the orchestrator re-read the catalog. And **a handoff document is stale from the
+> first commit of the session that will rewrite it**; anything reading it mid-session must be told so.
+
+**The orchestrator's own probe was wrong twice before it was right**, which is worth recording rather
+than hiding: `createScavenger` takes `y` with **no default**, so omitting it made `withinRadius`
+compare against `undefined` and detection silently returned `false` — the scavenger never chased and
+the first run looked like a clean refutation of S1. The second attempt put the player outside the
+480 px detect radius and failed the same way. **A probe that quietly does nothing looks exactly like a
+probe that found nothing.** Both bugs were only confirmed once the fixture was checked for entering
+the state it was meant to test.
+
+### 5.11 — the measurement, and it is NOT satisfied
+
+**Vault-out entry for performance, stated precisely because the vault has nothing (§B1):**
+
+> Under headless Chromium + Vite dev server, `workers: 1`, **22 drawn enemy bodies** (2 placed by the
+> level + `DEV_FLEET_COUNT` 20), with `rust-scavenger-walk` and `brass-sentry-idle` catalogued so the
+> fleet renders as **animated Sprites**: median frame time **55.70 ms** (recorded session 6) and
+> **82.10 ms** (independent re-run, session 7), max to **89.40 ms** — **roughly 12–18 fps against a
+> 60 Hz (16.7 ms) target**, i.e. **3–5× over budget**, with a **~48 % run-to-run swing** on identical
+> code.
+
+**The swing is the most important number here and neither brief drew the connection: session 6's
+55.70 ms was measured when the 20-scavenger fleet had no sheet and drew as rectangles. This session
+shipped `rust-scavenger/walk`, so those 20 bodies now animate.** Part of the 55.70 → 82.10 movement is
+very likely **not noise but the sprite path being exercised for the first time** — i.e. the cost of
+this session's own art landing. That is a hypothesis, not a measurement: it is not isolated, and
+isolating it needs a run with the catalog row removed. **Do not report the 48 % as pure variance.**
+
+**Confounds, stated rather than assumed away:** headless Chromium (SwiftShader vs a real GPU
+rasteriser — direction of bias genuinely unknown), `workers: 1`, **34.5 MB of PNG per boot** with
+`mid.png` alone at 9.1 MB (an existing recorded debt), and dev-server rather than production build.
+
+**Criterion 5.11 asks for the frame budget "measured under worst-case enemy count." A number exists
+and it is bad. It is reported as measured-and-failing, not as passed.**
+
+### 5.12 — FAILING, with the evidence table corrected (supersedes the stale one above)
+
+> ⚠️ **This section is itself now stale, 2026-08-13.** Its eight-file table was accurate when
+> written and every file in it is now under 400 lines. **The count at HEAD is 0.** See § *The 5.12
+> record earlier in this log is STALE* in the session-8 gate section — this is the second time this
+> criterion's evidence has rotted in this file, which is why the correction is a pointer at each
+> stale claim rather than one note at the end.
+
+**Eight files exceed 400 lines.** The three splits this session were real — export surfaces verified
+identical (gates 19/19, prompt 13/13, chroma 15/15, nothing missing or added), and a multiset line
+diff showed **zero lines lost** for prompt and chroma, so nothing was "shortened" by deleting
+explanation, which `file-size.test.ts:22-26` names as the failure mode to fear most.
+
+| file | lines | | file | lines |
+|---|---:|---|---|---:|
+| `src/scenes/GameScene.ts` | **657** | | `tools/gen/sheets.mjs` | 464 |
+| `tools/gen/gates.mjs` | 562 | | `tests/e2e/phase-01-boot.spec.ts` | 449 |
+| `tests/e2e/phase-03-tilemap.spec.ts` | 496 | | `src/scenes/BootScene.ts` | 438 |
+| `tests/unit/tilemap-data.test.ts` | 466 | | `tests/unit/sheet-packing.test.ts` | 419 |
+
+**None of these is justified, and this log will not pretend otherwise.** Phase 4's entry already calls
+its list *"an open violation of a non-negotiable, not a justified exception"*, and that remains the
+honest description.
+
+**`file-size.test.ts` is not evidence for this criterion and should not be cited as such.** It asserts
+`over.length <= 10` — **two free slots** at 8 — and its name-drop check is a bare-basename
+`String.includes` across *all* `docs/qa/*.md`, so `src/sim/tick.ts` (379) could cross 400 tomorrow and
+be "pre-approved" by an unrelated prose mention. It is a ceiling, not an assertion that anything is
+fine, and its own comment says so.
+
+**Why `gates.mjs` is still over:** removing exactly the fixtures and `selfTest` leaves **529 lines of
+actual gate logic** — already over the cap before anything is extracted. Getting it under 400 requires
+moving gate logic itself; the 153-line brass-cap section is the obvious candidate. **`GameScene.ts`
+was excluded deliberately**: it is subclassed by `ElementEditorScene` and `PlaygroundScene`, and
+`ElementEditorScene` already depends on its key arrays, making it the one split that can break
+dev-only scene guarding.
+
+**Splits recorded for the name-drop check and for the record** *(S15)*: `tools/gen/gatesSelfTest.mjs`,
+`tools/gen/promptData.mjs`, `tools/gen/chromaKey.mjs`, `tools/gen/chromaComponents.mjs`.
+
+### `play`-owned criteria — 5.4 and 5.8, run 2026-08-12
+
+`play` is **not an agent**. Both were driven by hand in a live browser with `playwright-cli` against
+the dev server, after the sheets that unblock them shipped this session. **Neither had ever been run
+against real art**; 5.4 was excluded from the e2e spec on the grounds that `rust-scavenger-walk` did
+not exist, and 5.8's only prior evidence was a grey-box screenshot.
+
+#### 5.4 — enemy walk animation advances past frame 0 during patrol — **PASS**
+
+**A screenshot cannot prove this.** It is a *timing* claim, and CLAUDE.md's own rule is that an
+existence assertion cannot verify one. Sampled **inside the page** via Phaser's `animationupdate`
+event, which fires on **every frame change** and carries `frame.index` — a strictly better instrument
+than polling per animation frame, and it satisfies *"sample inside the page and return an aggregate"*
+without a wait expressed in ticks, which cannot bound a sampling window.
+
+```
+sprites with a live animation : brass-sentry-idle, rust-scavenger-walk, brass-courier-idle
+animationupdate events        : 41
+
+rust-scavenger-walk   distinct frame indices [1..12] of 12   everLeftFrame0: true
+brass-courier-idle    distinct frame indices [1..12] of 12   everLeftFrame0: true
+brass-sentry-idle     distinct frame indices [1..8]  of 8    everLeftFrame0: true
+```
+
+**The scavenger walked through all twelve of its frames during patrol.** This is the criterion, and it
+is the first time it has been answerable — `enemyLayer` drew `Rectangle`s until this phase, and the
+frame-0 guard was only ever tested against a **mock scene, never a live Phaser `AnimationState`**.
+
+**Why the criterion exists, confirmed mechanically:** this phase's vault-in *(5.1)* records *"Phaser
+restarts a looping animation on every state change, which is how a walk cycle never left frame 0."*
+That is exactly `play()`'s documented behaviour — it stops and restarts — and `playIfChanged`
+(`src/scenes/playAnim.ts`) is the guard, skipping when `getName()` already matches. The 12 distinct
+indices are that guard working in a live scene rather than in a unit fixture.
+
+#### 5.8 — health bar legible at true sprite size against a cool background — **PASS, with a caveat**
+
+Driven to a genuine low-HP state rather than screenshotted full: a live scavenger set to **2/60**, at
+camera zoom 1 and true sprite size, against `level-01`'s cool blue-grey boiler wall. **Judged by eye at
+3× magnification**, because a downscaled view cannot settle a legibility question.
+
+**Verdict: legible.** The fill reads as a saturated red sliver on a black field — high contrast both
+against the bar interior and against the cool background behind it — and it is **visibly non-empty at
+2/60**, which is criterion 5.7's `BAR_MIN_FILL_PX` floor confirmed *visually* rather than only as a
+predicate. A bar this size at 3.3 % HP would be invisible without that floor.
+
+> ⚠️ **Caveat, and it is a real readability finding.** By capture time the scavenger had closed to
+> ~120 px of the player, so the two sprites overlap at true size and the enemy bar renders **across the
+> player's head**. At a glance it is ambiguous which entity the bar belongs to. It is not a blocker —
+> the bar itself is legible and correctly positioned above its own body — but "legible" and
+> "unambiguous" are different properties, and only the first is currently gated. Worth an offset or an
+> ownership cue when enemy art is finished.
+
+**Recorded here, not only in the session, because the repository had no record of either run and the
+Codex implementation review correctly reported both as UNRUN on that basis.** See
+[reviews/phase-05-impl.md](../reviews/phase-05-impl.md) findings 1 and 2, and the note there about a
+handoff document being stale from the first commit of the session that will rewrite it.
+
+---
+
+## Playtest, 2026-08-12 — three defects found by hand that the whole gate missed
+
+**Source:** `Recording 2026-08-12 173100.mp4`, 27.7 s of live play, reported by the user after the
+§6 gate, both Codex reviews and 46 e2e had all been run and reported. **Every one of the three was
+then confirmed in the code**, so these are not impressions — they are located defects with a line
+number. None is fixed; all three are session-8 work.
+
+> **This is vault C4 again, and more sharply than Phase 2 recorded it.** The gate had just finished:
+> 4 owners × 2 briefs, 15 findings, two Codex reviews, 870 unit tests and 46 e2e green. **Two minutes
+> of hands-on play found three defects, two of them one-line root causes.** A criterion is a question
+> someone thought to ask; playing the game is what asks the questions nobody wrote down.
+
+### P1 — dead enemies keep acting. **One missing condition, two visible symptoms.**
+
+`src/sim/enemyTurn.ts:29-41` — `stepEnemies` iterates **every** scavenger and **every** sentry with
+**no `hp > 0` filter**:
+
+```js
+for (const scavenger of world.enemies.scavengers) stepScavenger(scavenger, sighting);
+...
+for (const sentry of world.enemies.sentries) { if (!stepSentry(sentry, sighting).fired) continue; ... }
+```
+
+And `stepSentry` itself never reads `hp` — confirmed, the only occurrences of `hp` in
+`src/sim/enemySentry.ts` are the interface (`:31`), the options type (`:49`) and the constructor
+(`:55,64,65`). The fire path at `:89-99` gates on the cooldown window alone.
+
+**So a sentry at 0 hp keeps counting its cooldown and keeps firing**, which is exactly what the user
+saw. The same missing guard means **a dead scavenger keeps patrolling and chasing** — the
+"corpse keeps walking" symptom that finding R4 predicted from the render side and that
+`playIfChanged`'s missing-key no-op was only ever a partial mitigation for.
+
+**Why no test caught it:** every combat test asserts hp reaching 0, and none steps the world
+*afterwards*. `5.10`'s known caveat — *"no test actually swings twice and asserts death"* — is the
+same blind spot seen from the other end. Death is asserted as a **number**, never as a **state the
+world then has to behave correctly in**.
+
+### P2 — the death animation never plays, for either enemy
+
+Reported as "misses the animation of death", and it is a direct consequence of the catalog:
+**neither `brass-sentry/death` nor `rust-scavenger/death` ships.** Both are blocked at the fragment
+gate. `playIfChanged` (`src/scenes/playAnim.ts`) deliberately **no-ops on a missing key so the
+previous animation keeps running** — documented as "the intended fallback while the catalog is
+partial". Combined with **P1**, a killed enemy therefore keeps playing its *idle* or *walk* cycle and
+keeps acting. The two defects compound: the fallback was designed for a body that had **stopped**.
+
+### P3 — hitstun is COSMETIC. Being hit does not interrupt the player.
+
+Reported as "even when he touched me, [it] broke the animation ... and I can actually move and can
+attack him." Confirmed:
+
+- `HURT_TICKS = 18` (`src/sim/combat.ts:71`) and `enterCombatState(player, 'hurt')` (`:211`).
+- `COMBAT_STATES` (`:156`) and `isCombatState` (`:166`) are consumed in **exactly one place** —
+  `src/sim/player.ts:185`, inside `resolveState`, whose only job is to stop **step 11 overwriting the
+  state label**.
+- **Nothing in the tick order suspends input, movement or the attack edge during `hurt`.** Step 5
+  (horizontal accel) and step 4b (the attack edge) run unconditionally; neither consults
+  `player.state`. `grep` for any movement gate on `hurt` returns nothing.
+
+**So `hurt` reserves a label for 18 ticks and changes no behaviour.** The player slides and swings
+through their own hitstun, which is also why the animation "breaks" — the sheet plays while the
+character is being driven by live input.
+
+⚠️ **This is a design decision that was never taken.** Whether hitstun should lock movement, lock
+attack, or neither is a **balance call for the user**, not something to patch in. But the current
+state is not a considered choice — it is an absence, and the criteria never asked.
+
+### How this lands against the criteria
+
+| criterion | status before | what the playtest shows |
+|---|---|---|
+| 5.5 | PASS | still true — the *attack window* is correct. It never asked what happens to the **defender** |
+| 5.6 | PASS | still true — i-frames span their window. i-frames gate **damage**, not **control**; nobody noticed those are different |
+| 5.10 | PASS, caveated | the caveat is now a defect. "No test swings twice and asserts death" is why P1 shipped |
+| 5.4 | PASS | the walk cycle does advance — on a **live** enemy. It also advances on a dead one, which is P1/P2 |
+
+**None of these verdicts was wrong. The gate simply had no criterion for "what does the world do
+after something dies."** That is the gap to write into Phase 5's vault-out.
+
+### P4 — the run cycle drops frames, and it is 5.11 made visible
+
+Reported as "when the character is running, it is missing frames ... not using the whole 12 frames."
+
+**The sheet is complete.** `brass-courier-run` is catalogued with **12 frames**, `simTicks 27`, and
+**fps 26.67** derived as `12 × 60 / 27`. Nothing is missing from the art or the catalog.
+
+**The renderer cannot keep up with it.** Criterion 5.11 measured **12–18 fps** actual. A 26.67 fps
+animation sampled by a 12–18 fps render loop **must** skip: at 15 fps each drawn frame advances the
+animation by ~1.8 frames, so roughly every other pose is never displayed. `run` is the fastest
+animation in the game and therefore the first place the frame budget becomes visible as an art defect.
+
+> **This is the most valuable thing in the playtest.** 5.11's number was abstract — "12–18 fps against
+> a 60 fps target" — and the honest question was how much it actually mattered. **It matters enough to
+> destroy a 12-frame animation the project paid to generate.** The frame budget is not a
+> nice-to-have; it is already costing shipped art. It should be treated as the phase's top
+> non-blocking priority, above further art spend.
+
+**Do not "fix" this by lowering the run fps.** The fps is *derived* (`renderFrames × TICK_HZ /
+simTicks`) and authoring it down to match a slow renderer would reintroduce vault 4.22's foot-slide —
+trading a visible defect for a worse invisible one. **Fix the frame rate, not the number.**
+
+---
+
+# Session 8 — 2026-08-12. **This section supersedes the playtest section above.**
+
+Plan: `C:\Users\royko\.claude\plans\resume-phase-5-combat-whimsical-lightning.md`, reviewed by the
+**eighth** Codex plan review (BLOCK, 2 blockers / 4 major / 2 minor, **all eight confirmed locally**
+— [reviews/phase-05-plan.md](../reviews/phase-05-plan.md)).
+
+## Four corrections to the inherited brief, all verified in the tree before any code was written
+
+The session-7 handoff and the session-8 prompt built on it were **wrong in four places**. Each was
+checked against the code, and each changed the work:
+
+| | the brief said | the tree says |
+|---|---|---|
+| **C1** | *"step 4b (the attack edge) runs unconditionally"* during `hurt`, so P3 needed to gate both movement and attack | **False.** `canAct` (`combat.ts:298-300`) is `!isCombatState(state)` and already gates the edge at `:286`. **Attacking during `hurt` was never possible.** P3 is movement-only — one condition, not two. |
+| **C2** | *"That test does not exist today, and its absence is exactly why P1 shipped"* | **It exists, and it is worse than absent.** `player-attack.test.ts` *"a dead enemy stops threatening"* stepped **30 ticks past hp=0** and asserted only the **player's** hp, on a fixture authored `patrolMin === patrolMax === 1000` so the clamp pinned the corpse. **A false negative, not a gap** — the test ran, passed, and could not see the defect it was named for. |
+| **C3** | *"a corpse still needs to be drawn … check what `enemyLayer`/`enemyView` expect of a 0-hp body before choosing"* | **Already resolved; the render side needed no change at all.** `enemyView.ts:49-54` and `:62-67` return `'death'` at `hp <= 0`, and `enemyLayer.ts:125-127` alphas the body to 0.35 with a comment explaining that a corpse vanishing on the frame it dies gives no feedback. Nothing splices or destroys a body anywhere in `src/`. **P1 was purely a sim fix.** |
+| **C4** | 5.11's spec needs a `window.__game` field to reach `isSprite` | **No.** TypeScript `private` is erased at runtime, so `__phaserGame.scene.getScene('Game').enemies.isSprite` is reachable through the seam the spec already uses for `bodies`. **The nine-field surface stays closed** and no STOP-and-ask was needed. |
+
+**The lesson is C2's.** A handoff that says *"no test covers this"* is a claim about the repository,
+and it was checked and found false. The dangerous case is not the missing test — it is **the test
+that exists, runs green, and is structurally incapable of failing.**
+
+## Two things the brief did not know
+
+- 🔴 **Knockback was never built.** Phase 5 §1 names it as scope, `tick.ts:245` and `combat.ts:15,25`
+  place step 4 before integration **specifically so knockback reaches the same tick's movement** —
+  and nothing has ever written `player.vx` on a hit. The only `vx` writes in `src/sim/` are
+  friction/accel in `player.ts` and the world-bounds clamp in `hazards.ts`. **The seam was built and
+  left empty for a whole phase**, and no criterion asked.
+- **Enemy `y` is frozen at spawn.** `enemyScavenger.ts:70` sets it and nothing writes it again; there
+  is no gravity or ground collision for enemies. So a scavenger that chases past its patrol bound
+  does not fall — **it floats at ledge height over the gap.** This is what made S2's clamp the
+  correct answer rather than merely the conservative one, and it was not visible from the defect
+  report.
+
+## User decisions, 2026-08-12
+
+| | decision | note |
+|---|---|---|
+| **E1** | Attack moves **`Z`/`J` → `F`/`L`** | The user reported the old placement as unnatural. No e2e spec pressed either key, so the rebind was free. |
+| **E2** | Hitstun hard-locks movement for **`ATTACK.startup` (6 ticks)**, then control returns while the `hurt` label runs its remaining 12 | Chosen over an authored 8 so the number **reuses a measured constant** rather than inventing one *(vault 5.3)*. |
+| **E3** | **Knockback ships**, impulse `walkMax` — **provisionally re-opened** | Codex finding 4 showed ground friction 3.69 cuts a 5.54 impulse to 1.85 px before its first integration, so `walkMax` buys ~2 px. The user chose it **before that was known**; the measured displacement goes back to them. |
+| **E4** | Scavenger dead zone **96 px**, holding facing **and** movement | One tile, 12× one tick of `chaseSpeed`. |
+| **E5** | **The chase clamps to the patrol bounds** | Makes both the 200 px teleport and the floating scavenger structurally impossible. |
+| **E6** | **New criterion 5.16** | Wording and rationale in [prd/phase-05-combat.md](../prd/phase-05-combat.md) §6. |
+| **E7** | Full scope, **including the 5.12 splits** | Splits run last, so nothing is split while it is also being edited. |
+
+## P1 — CLOSED
+
+`stepEnemies` now filters `hp > 0` on both loops (`enemyTurn.ts:31`, `:43-45`); `stepProjectiles`
+stays **outside** the guard so shots already in flight keep travelling. The guard is at the **call
+site**, not inside `stepSentry`/`stepScavenger`, which keeps both step functions pure and stops a
+corpse's `cooldownCounter` advancing — `sentryAnim` reads that counter, so a corpse whose counter
+kept moving would compete a `fire` pose against its own death pose.
+
+**Watched RED first**, as the whole point of the item: `expected 1 to be +0` on projectile count,
+`expected 650 to be 500` on the corpse's `x`.
+
+> 🔴 **A parity coincidence nearly produced a false green, in the very test written to catch a false
+> negative.** The first fixture put the player at the corpse's own x. A *live* scavenger there
+> oscillates around the player, so on an **even** tick count it lands back where it started — and the
+> test passed with the bug present. Both fixtures now keep the player outside the 480 px
+> `detectRadius`, so a live scavenger would only **patrol**, and patrol drift is monotonic. **"The
+> number did not change" is not evidence unless you know the bug would have changed it.**
+
+## P4 — H3 found, and it is a default nobody chose
+
+`GameScene.ts:522-529` registers every animation with `key`, `frames`, `frameRate` and `repeat` —
+and **never sets `skipMissedFrames`**, so it takes Phaser's default of **`true`**. That flag makes the
+engine **skip frames when playback lags wall-clock**: a 26.67 fps `run` cycle under a slow renderer
+does not slow down, **it drops poses**. That is precisely the reported symptom, and it explains why
+`run` — the fastest animation in the game — is where the frame budget first showed as an art defect.
+
+⚠️ **This does not license flipping the flag.** `skipMissedFrames: false` would show every pose while
+letting the cycle run *slow*, which is **vault 4.22 foot-slide** — a worse defect because it is
+invisible. H3 explains why the symptom is visible; **the fix is still the frame rate.**
+
+### 🔴 P4 DIAGNOSED — the parallax layers are 64 % of the frame budget *(headless)*
+
+> ⚠️ **This section said "SOLVED" and it was overstated. Read
+> [P4 on real hardware](#-p4-on-real-hardware--the-defect-is-a-software-rasteriser-artifact) below
+> before acting on anything here.** Every number in this section is headless SwiftShader. On a real
+> GPU the frame budget is **4.2 ms and 12/12 poses**, and the defect this section attributes to the
+> parallax layers **does not occur at all**. The A/B remains a correct measurement of the headless
+> harness; it is not a measurement of the shipped game.
+
+A controlled A/B in the identical harness, the fleet spawned exactly as criterion 5.11 spawns it,
+`brass-courier-run` sampled while the player held a sustained run:
+
+| | median frame | max | **run frames PAINTED per cycle** |
+|---|---:|---:|---|
+| parallax **ON** (shipped) | **70.30 ms** | 80.60 ms | **[12, 12, 7, 5, 7]** |
+| parallax **OFF** (probe) | **25.50 ms** | 30.20 ms | **[12, 12, 12]** |
+
+**The three background layers cost ~45 ms per frame.** With them removed the frame time drops by
+**64 %** and **every one of the twelve run frames is painted, every cycle.** That is P4, start to
+finish: the user's *"missing frames … not using the whole 12"* is 5–7 of 12 reaching the screen.
+
+They are three **5092 × 1080 RGBA** `TileSprite`s (`GameScene.ts:546-560`) drawn into a 1920 × 1080
+view — 21.3 MB of the 27.9 MB boot payload, and ~66 MB of texture sampled every frame.
+
+**H2 is REFUTED.** The animation is not restarting: its state machine passes through 11–12 of 12
+frames per cycle even at 70 ms. Nothing is wrong with the sheet, the catalog, the fps, or
+`playIfChanged`. **H3 is the mechanism, not the cause** — `skipMissedFrames: true` is why the cycle
+stays in time while dropping poses instead of running slow, which is the correct trade and must not
+be flipped.
+
+> 🔴 **Three metrics, and the first two both said "no defect". This is the finding under the finding.**
+>
+> 1. **Distinct frame indices over the whole sample → 12/12.** Useless: the sample spans ~19 cycles,
+>    so the UNION reaches 12 even if every single cycle drops half. It reported perfect coverage.
+> 2. **Distinct indices per cycle, off the `animationupdate` event → 11–12 of 12.** Still wrong, and
+>    much more convincingly: **the event fires when the animation STATE advances, and Phaser can
+>    advance several frames inside one rAF.** Every one fires the event; only the last is drawn.
+> 3. **The current frame sampled once per rAF, at paint time → 5–7 of 12.** The truth.
+>
+> **An event that fires when state advances is not evidence a frame was drawn.** The first two
+> metrics would each have closed P4 as "not reproducible" against a defect the user could see with
+> their own eyes.
+
+**Not measured:** whether real Chrome with a GPU holds 60 fps. The harness is headless with no
+`launchOptions`, therefore SwiftShader, and the interactive-browser run was not available. The A/B
+above is valid regardless — both arms ran in the identical environment — but the absolute
+millisecond figures are a software-rasteriser number and **must not be quoted as the shipped frame
+rate**.
+
+**The fix is not applied**, because every candidate changes shipped art bytes and that is the user's
+call: downscale the three sources to something nearer the 1920 px view; or split each into a smaller
+tile the `TileSprite` repeats; or drop a layer. **Do NOT lower the run fps** — it is derived, and
+authoring it down trades a visible defect for vault 4.22 foot-slide.
+
+### The retile was attempted, and it REFUTED the texture-size hypothesis
+
+User-approved, 2026-08-13: crop each layer to 960 px before the existing `mirrorLoop`, so it wraps at
+**1920 × 1080** instead of 5092 × 1080. The `TileSprite` already draws at 1:1 into a 1920-wide window,
+so the sharpness-preserving move is a crop and never a second resample. Shipped as `e1aaa92`.
+
+A same-session **interleaved** A/B — A,B,A,B,A,B in one Playwright session, so a load drift partway
+through cannot land entirely on one arm:
+
+| | median of medians | run frames PAINTED per cycle |
+|---|---:|---|
+| retiled parallax **ON** | **90.10 ms** | mostly 4–6 of 12 |
+| parallax **OFF** | **37.20 ms** | mostly 8–12 of 12 |
+
+**Ratio 2.42, against 2.76 before the retile.** Shrinking the texture 2.65× moved essentially
+nothing. **Texture size was never the mechanism** — the cost is three full-screen alpha-blended
+1920 × 1080 draws, and cropping the *source* removes not one *drawn* pixel. The earlier reading of
+"the layers are 64 % of the budget" was correct about *the layers*; it was silently assumed to be
+about *their size*, and that assumption is now dead.
+
+> The interleaving is why this comparison means anything. The first attempt measured the retiled
+> build at 85.80 ms and compared it to the 70.30 ms recorded a day earlier — on a machine that then
+> had ~24 concurrent `node.exe` processes on it. **That compares nothing**, and the agent that ran it
+> flagged its own confound rather than reporting a regression. Absolute ms figures from this harness
+> are not comparable across sessions; only within-session ratios are.
+
+**Kept anyway, on the payload win alone** (user decision, 2026-08-13): 21.4 MB → 7.5 MB of boot
+payload, 2.9× smaller, which also relieves the e2e serialization pressure. The cost is real and is
+recorded here rather than buried: each layer now holds only 960 px of unique art, so **the background
+repeats ~2.65× more often**. That is a visible art change, and it is a hands-on judgement no gate
+makes — it belongs in the next playtest.
+
+### 🔴 P4 on real hardware — the defect is a software-rasteriser artifact
+
+Run 2026-08-13, user-approved, in **real Chrome with a real GPU**: `ANGLE (NVIDIA, NVIDIA GeForce RTX
+4080 (0x00002704) Direct3D11 vs_5_0 ps_5_0, D3D11)`, confirmed in-page off
+`WEBGL_debug_renderer_info` before sampling rather than assumed. Dev build, `window.__game.ready`
+waited on, dev fleet spawned, `brass-courier-run` held, 4-second window, the **same** sampling method
+as the headless probe: the current animation frame index read once per `requestAnimationFrame` at
+paint time, aggregated in-page.
+
+| | headless (SwiftShader) | **real Chrome, RTX 4080** |
+|---|---:|---:|
+| median frame | 90.10 ms | **4.2 ms** |
+| p95 | — | **4.4 ms** |
+| max frame | ~95 ms | **4.8 ms** |
+| sustained | ~11 fps | **240 fps**, vsync-locked |
+| poses painted per cycle | 4–6 of 12 | **12, 12, 10, 12, 12, 12** |
+
+**Reproduced identically three times**, each after a page reload, with `runSamples` 745 and
+`completeCycles` 6 every run — not one number moved between runs.
+
+**P4, as measured, does not occur on real hardware.** The renderer never misses a 240 Hz vsync with
+three parallax layers, a 20-scavenger fleet and the player running. Five of six cycles paint all
+twelve poses; the worst paints ten.
+
+> **What this costs us in confidence, stated plainly.** Every P4 number that existed before today —
+> the 12–18 fps in criterion 5.11, the 70.30/25.50 A/B, the "64 % of the frame budget", the
+> 5-of-12 pose drop — came from headless Chromium with no `launchOptions`, therefore SwiftShader.
+> Three blended full-screen quads is punishing work for a CPU rasteriser and near-free for a GPU, so
+> the harness was measuring **itself**, not the game. The W7 plan called for exactly this real-browser
+> arm and it was skipped because the browser launch was unavailable; the whole retile was designed,
+> executed and shipped against a number that the very first real-hardware reading contradicts by
+> **21×**.
+>
+> The lesson is not "the headless harness is useless" — it is a fine *relative* instrument, and the
+> ON/OFF ratio it reports is real. The lesson is that **a performance criterion with an absolute
+> threshold cannot be owned by a software rasteriser.** 5.11's `medianMs < 100` was never a budget;
+> it was a sanity ceiling on a renderer nobody ships.
+
+**Open questions this does NOT close**, and they must not be quietly folded into the good news:
+
+1. **The user's original report was a real browser.** It was *"missing frames … not using the whole
+   12"* on their own machine, which is where the 4080 reading comes from. Either the retile and the
+   grey-box fix changed it, or the original observation was of something else — a state flicker, the
+   dev fleet, a different scene. **Not resolved. It needs a hands-on playtest, not another probe.**
+2. **One cycle in six painted 10 of 12, not 12.** Small, reproducible, and unexplained. It is not the
+   5-of-12 catastrophe, and it is not nothing.
+3. **240 Hz flatters the result.** A 240 Hz display samples a 26.67 fps animation ~9× per pose. On a
+   60 Hz display that margin is 4× smaller. Untested.
+4. **This was the DEV build over the Vite dev server**, not `dist/`. The production bundle is
+   smaller and drops the dev scenes, so it should only be faster — but "should" is not measured.
+
+## S1 and S2 — CLOSED, and fixing S2 blinded criterion 5.9's sweep
+
+`deadZone` is a **per-scavenger field**, not a module constant, because criterion 5.9's sweep runs
+through `enemyKnobs()` over **live entity fields** and a constant is invisible to it — Codex plan
+review 8, finding 5. It follows the exact shape `detectRadius` and `releaseRadius` already use, and
+`enemyTuning.ts`'s own docstring at `:17-23` already stated that adding a tunable field means adding
+it there. The chase clamp is now positional-only and shared by both paths; `facing` is decided per
+path, so a chaser pinned at its bound still faces the player.
+
+> 🔴 **Adding the knob turned `enemy-tuning.test.ts` RED — and the cause was this session's own S2
+> fix.** `scav0.deadZone moved no observable output in either placement`. Not a dead knob: a blind
+> fixture. In the `near` placement the scavenger chases the retreating player straight into
+> `patrolMin` and **clamps**, so total travel saturates at `3000 - 2600 = 400` px for *every* value
+> of `deadZone`. The clamp is S2's fix. **A gate can be made blind by a correct change to the thing
+> it measures**, and only a knob that happened to need close range revealed it.
+>
+> Repaired by adding a third placement, `contact`, with patrol bounds wider than the scavenger can
+> cross in 240 ticks — travel becomes speed-limited rather than clamp-limited — and the player
+> starting inside the dead zone. The assertion is `some()` across placements, so a third placement
+> can only make the sweep **more** sensitive: **broadening what the gate MEASURES, never loosening
+> what it TOLERATES.** Watched red by mutating the dead-zone check to `if (true)`, restored from a
+> fresh temp copy, revert verified **by count** (1 → 0 → 1, zero `if (true)` remaining).
+
+> 🔴 **The parity coincidence struck TWICE in one session**, in W1 and again in W2, and both times in
+> a test written to catch a false negative. A fixture with the player at the scavenger's own x makes
+> a *live* scavenger oscillate `500 → 508 → 500`, so on an **even** tick count it lands home and the
+> test passes with the bug present. **"The number did not change" is not evidence unless you know
+> the bug would have changed it.**
+
+## Phase 4 debt — 4.10 and 4.12 are RUN, and both PASS
+
+Both were on the §1b ledger and both were confirmed still unrun by the Codex implementation review.
+Closed with throwaway scratchpad probes; **no tracked file was changed to close either.**
+
+**4.10 — `gateReachBand` against the REAL shipped sheets.** All nine catalogued sheets swept, each
+with its own fresh call, and the gate's internal loop tracks a `best` across every frame rather than
+breaking on the first failure (`tools/gen/gates.mjs:211-244`) — so this is a sweep, not an instance,
+which is the standing correction to this phase's six stop-at-first-failure incidents. **Re-run
+independently by the orchestrator; every number below reproduced exactly.**
+
+| sheet | cell | frame | reachX | band y | movedPx |
+|---|---|---:|---:|---|---:|
+| `brass-courier-idle` | 288×384 | 7/12 | 199 | 242–254 | 14678 |
+| `brass-courier-walk` | 288×384 | 5/12 | 215 | 232–244 | 20455 |
+| `brass-courier-run` | 288×384 | 4/12 | 219 | 195–207 | 22741 |
+| `brass-courier-jump` | 288×384 | 1/6 | 227 | 216–232 | 22250 |
+| `brass-courier-fall` | 288×384 | 1/6 | 230 | 217–233 | 16687 |
+| `brass-courier-hurt` | 288×384 | 1/6 | 216 | 237–247 | 21707 |
+| `brass-courier-attack` | 288×384 | 3/8 | 269 | 148–152 | 23765 |
+| `brass-sentry-idle` | 288×384 | 3/8 | 260 | 237–248 | 19650 |
+| `rust-scavenger-walk` | **512**×384 | 6/12 | 403 | 288–293 | 33926 |
+
+**Nine PASS, zero FAIL, zero INDETERMINATE.** The per-slug cell is confirmed live in the audit — the
+scavenger is measured at 512, not at a global 288. **G5 does not substitute for this** (Codex impl
+finding 6): different audit, different question, and this is the one that had never produced a number.
+
+**4.12 — `findSource`'s deliberate-removal red run *(C1)*.** `_generated/sheets/brass-courier-attack-clip.png`
+(1,210,555 bytes) backed up to a fresh temp copy, `findSource` confirmed working on the positive case
+first, then the input removed. It threw, from `tools/gen/assetSources.mjs:36`:
+
+```
+assets:build: no source sheet for declared animation "attack" — expected
+C:\Claude\Steampunk Platformer\_generated\sheets\brass-courier-attack-clip.png.
+A declared input that cannot be found fails the build; it is never substituted (vault 4.16).
+```
+
+Restored and verified **by count (1 → 0 → 1)**, `cmp` byte-identical, and `findSource` resolving
+again afterwards. `_generated/` is gitignored, and `git status --porcelain` stayed empty throughout —
+which is exactly why the backup went to the scratchpad and **not** to `git stash`: the tree held two
+other agents' uncommitted work at the time.
+
+---
+
+## §6 gate — agent owners, run 2026-08-13 (session 8)
+
+Three owners, **two blind briefs each** *(A7)*. All six were dispatched **simultaneously**, which is
+what actually guarantees brief 2 never saw brief 1 — trusting the orchestrator not to leak it is a
+weaker guarantee than making the leak impossible. Every finding below is **applied or recorded with a
+reason** *(C11)*.
+
+Owners: `voltagent-qa-sec:qa-expert` (5.1, 5.2, 5.4c, 5.4d, 5.5, 5.6, 5.7, 5.9, 5.10, 5.15, 5.16) ·
+`voltagent-qa-sec:code-reviewer` (5.3, 5.12) · `voltagent-qa-sec:performance-engineer` (5.11).
+
+### Verdicts
+
+| # | verdict | the evidence that decides it |
+|---|---|---|
+| 5.1 | **PASS** | `enemySentry.ts` unchanged this session. Session 7's mutation stands: deleting the fire guard gives **265 shots in 270 ticks against 3**. Coverage gap recorded as **T6**. |
+| 5.2 | **PASS**, standing caveat | The criterion holds; the test *named* for it does not sweep `chaseSpeed` live. See **T1**. |
+| 5.3 | **PASS**, mutation-proven | Owner ran four mutations through a Vite alias (**no repo file edited**): commit floor → 2 red, hysteresis → 1 red, dead zone → 3 red, patrol clamp → 2 red; sentry cadence → 5 red across the full suite. The hysteresis failure reads `expected 36 to be less than or equal to 1` — **36 reproduces sessions 3 and 4 exactly**, from an independent harness. Also: `rollChance` has **zero production callers**, so there is no per-tick roll to commit in the first place. |
+| 5.4c | **PASS**, re-measured | Owner re-ran the real tool rather than inheriting the log: `node tools/gen/sheetGates.mjs brass-courier attack` → `G5 frame 3 (tick 9) lands inside the active window [6, 10)`. |
+| 5.4d | **PASS** | `enemy-view.test.ts` hand-computes `(4*60)/18` independently of the production formula *(C2)*, plus a non-vacuity check that a different `simTicks` yields a different fps. |
+| 5.5 | **PASS** | `combat.test.ts` walks **every** tick of the 20-tick swing and pins both boundary ticks by name. Three independent mutation classes each have their own assertion. |
+| 5.6 | **PASS** | Fixture runs `IFRAME_TICKS * 2` = 90 ticks and pins length, first index **and** last index separately. A length-only check would pass a window shifted by one tick. |
+| 5.7 | **PASS** on the unit half | Bar-fill math untouched this session. **Visual half NOT re-observed** — see **T3**. |
+| 5.9 | **PASS** | `enemy-tuning.test.ts` 12/12 including `scav0.deadZone`, asserting a behaviour signature computed by stepping the sim, not a knob readout. Weakness recorded as **T4**. |
+| 5.10 | **PASS** on what is asserted | Two genuinely different entities, not a symmetric fixture. Standing gap unchanged — see **T2**. |
+| 5.11 | **FAILING as a measurement** | The number is real; what it measures is not what the criterion claims. See **P1–P4**. |
+| 5.12 | **PASS at `ea0c6e4`, and it was FAILING when this table was written** | The owner measured **0 over 400** and was right about the eight files it checked — but `tick.ts` was **409** at the time, grown by my own `8bfeee5`, and nobody re-swept. Caught by the **Codex implementation review**. Repaired in `ea0c6e4` (`tick.ts` 409 → 307). Gate weaknesses recorded as **T7–T9**. |
+| 5.15 | **PASS** | `hazards.ts` untouched. The one place knockback could have disturbed it was checked directly: `applyWorldDamage` still tests `belowKillPlane` **first** and returns before every branch that now carries knockback. |
+| 5.16 | **PASS, first run** | Owner hand-traced both fixtures for non-vacuity rather than trusting them: an unfiltered sentry *would* fire on tick 1 (`windowOpen(90,90)` is false, `sentrySees` true), and an unfiltered scavenger *would* patrol monotonically off `xBefore`. Real red/green splits, and the player sits at `x:99999` so the parity trap is avoided. Vacuity in one clause recorded as **T5**. |
+
+### The 5.12 record earlier in this log is STALE and its verdict is BACKWARDS
+
+Finding **F2**, and this is the **second** occurrence of the S10 defect class in this same file.
+The verdict row says `5.12 | FAIL`, one section says *"Ten files exceed 400 lines"*, another says
+*"FAILING — 8 files over 400"*, and the table that calls itself the correction lists
+`GameScene.ts` **657**.
+
+**All of those predate `49a7d30` and `4eb08f3`.**
+
+> 🔴 **And this paragraph was itself FALSE when written — third occurrence, and this one is mine.**
+> It said *"the true count at HEAD is ZERO"*. At `78932a0` the count was **ONE**: `src/sim/tick.ts`
+> was **409 lines**, having grown 388 → 409 in `8bfeee5`, my own hitstun fix. Caught by the **Codex
+> implementation review**, not by me and not by any of the six gate briefs.
+>
+> **The failure was a sequencing error and it is worth naming exactly:** I ran the 400-line sweep,
+> *then* fixed F1 (+21 lines to `tick.ts`), *then* wrote the sweep's result into this log. Each step
+> was sound; the order made the record false. **A measurement written down after later edits is not
+> a measurement of the tree it claims to describe** — which is precisely the criticism this very
+> section levels at the two entries above it.
+>
+> Repaired in `ea0c6e4`: `createWorld` and `GREY_BOX_SOLIDS` extracted to `src/sim/world.ts` (120
+> lines), re-exported so all 17 importers are untouched, `tick.ts` **409 → 307**. The numbered step
+> order and its explanation were not touched. **Count re-swept at `ea0c6e4`: 0 over 400.**
+
+```
+gates.mjs      562 -> 373   + gatesBrassCap.mjs 191
+sheets.mjs     464 -> 254   + sheetsPack.mjs    231
+BootScene.ts   438 -> 200   + bootAssets.ts     284
+GameScene.ts   657 -> 378   + parallaxRig 34 - gameParallax 45 - gameInput 140
+                              - gameLevelDraw 129 - gameAnimations 47 - gameHud 38
+```
+
+Verified two ways: the owner reproduced `file-size.test.ts`'s own three globs and its own
+`lineCount()` (**170 files scanned, 0 over 400** — correct for the globs it ran, but run before `8bfeee5` grew `tick.ts` to 409; see the correction above), and a wider sweep across `.ts .mjs .js .mts .cjs`
+returns only the two vendored `.agents/skills/**` files already judged out of scope.
+
+Last time this log's 5.12 evidence rotted, the verdict was still honest. **This time the verdict
+itself was wrong, in the opposite direction.** A stale FAIL is not the safe direction to be wrong in:
+it is what a reviewer reads and believes.
+
+### Findings — every one applied or recorded *(C11)*
+
+**Applied this session:**
+
+| | sev | finding | what was done |
+|---|---|---|---|
+| **F1** | HIGH | **The player could jump out of hitstun.** `movementLocked` gated `dir`, which feeds step 5 only; step 7's jump had no hitstun test. Measured: `vy -48.6, grounded false` on the **first locked tick**, while both docstrings called the window *"not being in control"*. Jumping also took the player off the ground-friction path, partly cancelling knockback. | **FIXED**, `8bfeee5`. Re-probed after: `vy 0, grounded true`. Buffer decision **(b)**, deliberate: step 7's *execution* is gated, the latch untouched, so a press made during hitstun survives and fires the tick the lock lifts. Eating it would have been a balance change to a tuned forgiveness mechanic. A test pins **which tick** the jump returns. |
+| **F5** | MED | **`knockbackSettling` skipped friction for hits that applied no impulse.** It keyed on `state === 'hurt' && combatCounter === 1` — every hit. Hazards deliberately apply no knockback, yet collected the exemption: measured `vx -12.00 -> -12.00` where friction gives `-8.31`. | **FIXED**, `8bfeee5`. Gated on `knockbackPending`, one boolean on `PlayerSim`, cleared exactly once so the exemption stays one tick. `window.__game` untouched, still nine fields. Shipped numbers did not move: grounded **7.39 px**, airborne **25.59 px**. |
+| **F2** | HIGH | The 5.12 record was stale and its verdict backwards. | **FIXED** — the correction above. |
+
+**Recorded, not fixed — each with its reason:**
+
+| | sev | finding | why not fixed now |
+|---|---|---|---|
+| **P1** | HIGH | **5.11's `medianMs < 100` has never once been run on anything but a software rasteriser.** The 4.2 ms real-hardware figure came from a separate manual probe, not the spec that gates the criterion. The owner's four fresh runs: **95.5 / 96.4 / 97.0 / 95.6 ms** — passing with 3–5 ms of margin, against session 7's recorded 55.70 / 82.10 on the identical assertion. Two runs had `maxMs` over 100. | The criterion needs redesigning, not patching, and no baseline exists to redesign it against (S4, PRD §7). Six agents were loading this machine during those runs — the same confound that made the first parallax A/B meaningless — so **the 95–97 figure needs a re-measure on a quiet machine before anyone calls it a regression.** |
+| **P2** | HIGH | **The dev fleet spawns entirely outside the viewport.** `DEV_FLEET_OFFSET_X` 200 sim units × `RENDER_SCALE` 6 = **1200 screen px**; the visible half-width is 960 px = 160 sim units. **0 of 20** fleet members are on screen at spawn, and exactly **8 of 20** fall inside `detectRadius` 480. Verified independently by arithmetic. | Cross-confirms from an unrelated direction: 20 − 8 = **12**, exactly the Rectangle count the `isSprite` assertion caught earlier this session. The same geometry explains both findings. Changing the fixture changes what every recorded 5.11 number means, so it is a deliberate next-session decision, not a late edit. |
+| **P3** | MED | "Worst case" is **asserted, not derived**, and is **scavengers only** — no sentries, no projectiles in flight. `GameScene.ts`'s own comment concedes it is a design claim. Already recorded as S5. | Same reason as P2. |
+| **P4** | MED | The criterion ties its number to *enemy count*, but the dominant headless cost is parallax — 64%, and it does not vary with enemy count at all. No A/B has ever isolated what 20 scavengers alone cost. | Same reason as P2. |
+| **T1** | MED | **5.2's named tunability test doesn't test its title.** `enemy-ai.test.ts` sweeps only `patrolSpeed`; `chaseSpeed` is compared against two hardcoded constants. The real live sweep is in `enemy-tuning.test.ts` under 5.9's name. | Pre-existing, recorded by sessions 3 and 7, unchanged by this session's diff. The criterion *is* satisfied — by a different file than the one named. |
+| **T2** | MED | **Nothing swings the player's attack repeatedly against a live enemy and asserts death.** Both 5.10's and 5.16's tests set `hp = 0` directly. Found independently by **both** qa-expert briefs. | Pre-existing since session 3. Worth stating plainly: **this is the gap that let P1 ship past the entire gate.** First item for whoever next touches death handling. |
+| **T3** | LOW | 5.7's visual half (a live scavenger at 2/60 hp against `level-01`) was not re-observed — the owner was barred from binding port 5173 while other agents ran. | Coverage gap in the re-verification, not a suspected regression: the bar-drawing path is untouched this session. |
+| **T4** | MED | **5.9's sweep uses `.some()` across only two set-points** — the floor and roughly double. A knob whose only observable effect is at the *floor* passes even if it does nothing in the mid-range a designer would actually use. Saturating a knob to an extreme is not evidence the knob works. | Same shape as the `deadZone` clamp blind spot this session already hit and fixed by adding a third placement. A real weakness; the fix is a mid-range assertion, which is a criterion change. |
+| **T5** | MED | **5.16's "neither deals contact damage" is vacuous for the sentry** — `applyWorldDamage` has no sentry-contact path at all, so it is true by construction. Only the "zero shots" half is a real assertion for that enemy type. | Recorded rather than reworded: the criterion's other clauses are non-vacuous and were hand-traced. Reword when a sentry contact path exists, not before. |
+| **T6** | MED | **Criterion 5.1's vertical term is untested.** Every sentry fixture in `enemy-ai.test.ts` uses `y: 0` with `playerY: 0`, so `dy` in `withinRadius` is always 0. Delete `dy * dy` — collapsing detection to 1-D — and **not one test goes red**. Verified: 13 non-zero `playerY` fixtures exist and every one is `stepScavenger`; none is a sentry. | `withinRadius` is correct today, so this is missing coverage rather than a defect. Adding the fixture is a one-test change and the cheapest real improvement on this list — first item next session. |
+| **T7** | MED | **`file-size.test.ts`'s ceiling is now vacuous.** It asserts `over.length <= 10`; with 0 over it has ten free slots and cannot go red for the next ten regressions. The only remaining guard is a bare-basename `String.includes` across every `docs/qa/*.md` — and this log names all eight formerly-over files, pre-approving them. `GymScene.ts` sits at **399**, `phase-01-boot.spec.ts` at **398**. | ~~**User decision, 2026-08-13: leave the ceiling at 10 and record the weakness.** Tightening to `toBe(0)` changes a gate's tolerance, which is a STOP-and-ask; it was asked and declined.~~ 🔄 **REVERSED 2026-08-14 (D6b): both halves tightened** — ceiling `10 → 7`, basename fallback removed. Red-proved both ways. Full record in *Criterion 5.12* below. |
+| **T8** | MED | **`verify-dist`'s identifier checks cannot go red under minification.** Measured against the shipped bundle: `stepScavenger` **0** and `createScavenger` **0** — both unquestionably ship — proving the four identifier greps (`PlaygroundScene`, `ElementEditorScene`, `GymScene`, `spawnDevEnemies`) return 0 whether the code shipped or not. `spawnDevFleet` **does** survive (1 occurrence) and is **not** on the list. | **Partly a correction to the reviewer:** the scene-KEY check *is* real — `verify-dist` iterates backtick, single and double quotes, and the bundle carries backtick-quoted `Game` ×3 and `Boot` ×1, so a shipped `Playground` key would be caught. `__game`/`__phaserGame` are property names and survive minification, so those are real too. Only the four identifier greps are decoration. Benign today (`spawnDevFleet(){}` is an empty stub), so this is a **C2 defect in the gate, not in the bundle** — put to the Codex implementation review rather than changed at gate time. |
+| **T9** | MED | **The splits relocated complexity rather than reducing it**, and all 13 new modules have exactly one importer — literally the gaming vector `file-size.test.ts`'s own docstring names. | Recorded in the same breath as "0 over 400", per S9's precedent, because both facts are true. Mitigating and verified: the seams are cohesive, behaviour was preserved (multiset line-diff, **zero executable lines lost**), and **comment/doc lines grew in every split** — BootScene +29, gates +4, sheets +21, GameScene +58, tests +59 — so explanation was not deleted to hit the number, which is the failure mode the rule most fears. |
+| **T10** | MED | **5.3's commitment is not observable on screen.** `rust-scavenger-chase` is not in the catalog and `playIfChanged` no-ops on a missing key, so a scavenger committed to a 30-tick chase and one flapping every tick both draw `walk`. `window.__game` carries no enemy state, so no e2e can tell them apart either. | Genuine, and it means any *observational* evidence for 5.3 is vacuous. The criterion's method is **code review**, which was satisfied by mutation runs — so 5.3 stands. Resolved by shipping the chase sheet (post-phase art), not by a code change. |
+| **T11** | MED | `releaseRadius > detectRadius` is asserted on the **module constant**, never on the instance; `createScavenger` validates neither, and the only repair lives in a DEV-only scene behind a keypress. An instance with inverted radii is constructible and would strobe. | Not reachable from shipped content — `level-01` uses the defaults. A constructor invariant is the right fix and is a sim change; recorded for next session. |
+| **T12** | LOW | `deadZone` has `min: 0` and no invariant. At 0 the facing assignment becomes a genuine per-tick decision. The boundary probe writes its offsets as `deadZone ± 1`, so it tests the knob against itself and cannot express a floor. | Sound as tuned (96 px exceeds anything reachable in one tick), unsound as *tunable*. Same class as T11. |
+| **T13** | LOW | The six modules extracted from `GameScene.ts` have **no tests**. `parallaxRig.ts` returning `100 + i` instead of `-100 + i` would draw all three backgrounds *over* the player and every gate would stay green. | The same defect class as "deleting `renderPlayer()` left every Phase 2 test green" — reintroduced by a split. `parallaxRig.ts` is engine-free and directly unit-testable, which is exactly why it was extracted; the test is a next-session item. |
+| **T14** | LOW | `isSprite` is recorded once at creation and never re-derived from live visibility. A future `setVisible(false)` would keep `spriteCount` at 20/20 while drawing nothing. | Not present today (no `setVisible` anywhere in `enemyLayer.ts`). Vault 9.4 one layer deeper; recorded as a blind spot. |
+| **T15** | LOW | `NO_KEYS` (`gameInput.ts`) is a shared mutable module singleton returned to every keyboard-less scene; the pre-split code gave each scene its own `[]`. | Safe today — nothing mutates the arrays in place — but a footgun the split created. One-line fix, folded into the next touch of that file. |
+| **T16** | LOW | `build-world.mjs` cites *"(GameScene.ts ~548-554)"*; that file is now 378 lines. Same doc-rot class as F2, in a file this session touched. | Cosmetic; batched with the next `tools/gen/` edit. |
+| **T17** | LOW | `GameScene.ts` `protected groundLayer` is assigned and read nowhere. Pre-existing, but the split was the moment to drop it. | Deliberately not removed mid-gate: deleting a `protected` member touches two subclasses for zero behavioural gain. |
+| **T18** | LOW | Mixed line endings inside `src/sim/` — `combat.ts` is CRLF, its neighbours LF. Cost the reviewer one failed mutation batch to discover. | Harmless to `lineCount()`; it will bite the next exact-anchor edit. Recorded so it is diagnosed in seconds rather than minutes. |
+| **T19** | LOW | The e2e log carries an unhandled `TypeError: Cannot read properties of null (reading 'glTexture')` from `SubmitterTileSprite.run`. | **Found by me, diagnosed, not a defect.** It is the scene-restart fixture (`phase-01-boot.spec.ts:311`): the page boots fully, GameScene's parallax `TileSprite`s exist, then the spec deliberately invalidates a texture and restarts Boot, so live layers draw one frame against a cleared texture. Confirmed pre-existing — the parallax creation path is behaviourally identical before and after the split. Not adding production guards for a state only a fixture reaches. |
+
+### What the owners could not check
+
+Preserved verbatim, because a gate's blind spots are part of its result *(vault 9.3)*.
+
+- **No e2e was run by any owner** — port 5173 was reserved while six agents were live. The two split
+  spec files (`bootHelpers.ts`, `tilemapHelpers.ts`) are verified only by "no `test()` title was
+  lost"; they are **unproven at runtime by this gate**. This is the largest blind spot in the 5.12
+  result. *(The full suite — **47 passed** — was run by me separately, before the owners were
+  dispatched.)*
+- **`npm run test:sim-isolated` was forbidden** to every owner (it uninstalls Phaser), so criterion
+  1.3's regression was not re-confirmed by them after the sim changes. *(Run by me separately: 892
+  tests with Phaser uninstalled, `phaser@4.2.1` restored afterwards.)*
+- **No live-browser verification of the split scenes.** The five extracted `GameScene` modules are
+  verified by typecheck, the unit suite, static reading and the production bundle — **none of which
+  draws a frame.**
+- **The `medianMs > 0` floor was not mutation-tested.** The perf owner was barred from modifying
+  files, so "it is a real but weak guard" is reasoning from code, not an observed red.
+- **Real-hardware behaviour** was not reproducible by any owner; their environment is headless-only.
+  The 4.2 ms figure rests on my probe, cited, not on their measurement.
+- One owner disclosed that an analysis script wrote a stray zero-byte `nul` into the repo root, and
+  that it deleted it. Verified independently: `git status --porcelain` shows only the pre-existing
+  untracked `.claude/settings.json`.
+
+## Playtest, 2026-08-13 — real Chrome, real GPU, and the retile is REVERTED
+
+Driven with `playwright-cli` against the dev build in **real Chrome** (RTX 4080, D3D11/ANGLE),
+`window.__game.ready` waited on, never a sleep-to-pass.
+
+### 🔴 The retile is reverted, and the reason is one I got wrong when I proposed it
+
+When the crop was proposed I costed it as *"the background repeats ~2.65× more often"*. **That
+understated it, and the playtest showed why in the first screenshot.**
+
+Cropping to 960 makes `mirrorLoop` yield exactly **1920 — the view width**. The entire texture,
+the unique half *and* its mirror, is therefore on screen in **every frame**: the same three-dial
+gauge panel is visible twice at once, permanently, in the shipped level. At the full 2546 the same
+1920 view shows only **~38 %** of the texture, so a mirrored pair can appear near a seam rather
+than always.
+
+**User decision: revert.** `ca84554`. The three PNGs came back **byte-identical** to their
+pre-retile versions, which also demonstrates `build-world.mjs` is deterministic. Payload returns
+21.4 MB.
+
+Nothing performance-related was given up, because the crop never bought any: the interleaved A/B
+put it at ratio **2.42** against **2.76** before, and the defect it targeted **does not exist on
+real hardware**. The full reasoning is now written into `build-world.mjs` **at the point of
+temptation**, not only in the QA log — "crop the parallax to the viewport" is an obvious-looking
+optimisation that someone reading the payload size will propose again.
+
+> **The lesson, and it is mine rather than the reviewers':** I costed a visible art change in the
+> abstract ("repeats more often") and shipped it on that estimate. One screenshot showed the real
+> cost. A trade against *look* cannot be approved from arithmetic — the approval needs the picture.
+
+### `play`-owned criteria
+
+| # | evidence | verdict |
+|---|---|---|
+| **5.4** | Sampled the **scavenger's drawn frame index once per rAF at paint time** (never the `animationupdate` event, which fires when state advances and can advance several frames inside one rAF). `rust-scavenger-walk`, **11 distinct poses**, indices `[1,2,3,4,5,7,8,9,10,11,12]` — index 6 missing. | **PASS.** Advances far past frame 0. The one missing index matches the player-side real-GPU reading (12,12,10,12,12,12) and is recorded, not hidden. |
+| **5.8** | Screenshot at true sprite size against `level-01`'s cool background, scavenger at reduced hp. The bar renders as a **small red sliver** above the sprite — present and honest, but small. | **DEFERRED to the user.** This is a human judgement *(vault C4)* and an agent asserting "legible" would be reporting nothing. The screenshot is the evidence; the call is not mine. |
+
+### What playing it actually turned up
+
+- **Knockback reads correctly by hand.** Contact from a scavenger on the right gives `vx -1.85`,
+  state `hurt` — shove away from the source, as designed.
+- **A dead enemy stays dead and stays drawn.** No corpse activity observed, consistent with 5.16.
+- 🔴 **The player wedges against terrain at `x: 3198` with a scavenger in contact and drains
+  100 → 35 hp with no way past.** Movement is not blocked by the enemy (enemies have no push), so
+  this is terrain plus contact damage. **Not diagnosed, and not a Phase 5 criterion** — recorded
+  because it is the kind of thing only playing finds, and because "took 65 damage standing still"
+  did not read as a fight. First candidate for the next playtest.
+
+## 5.11 re-measured on a QUIET machine — P1's open question is closed
+
+Finding **P1** left one question open: the perf owner measured **95.5 / 96.4 / 97.0 / 95.6 ms**
+against session 7's recorded **55.70 / 82.10**, while six agents were loading this machine. It was
+recorded as *"needs a re-measure on a quiet machine before anyone calls it a regression."*
+
+Re-measured at `b988e66`, nothing else running, parallax back at full 5092 px:
+
+```
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.40ms, max 99.80ms
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.50ms, max 94.30ms
+[5.11] frame budget under 22 drawn enemy bodies: 90 frames, median 82.90ms, max 95.50ms
+```
+
+**Not a regression.** 82.4–82.9 ms, spread **0.5 ms** across three runs, and it lands on session 7's
+**82.10**. The 95–97 ms reading was machine load, exactly as the confound predicted. This is the
+**fourth** time this session that absolute milliseconds from the headless harness moved with
+background load — the first killed the original parallax A/B, and it is why the decisive A/B was run
+**interleaved**.
+
+**Margin against the 100 ms ceiling is ~17 ms**, and one run's `maxMs` reached **99.80**. `maxMs` is
+not asserted, but a ceiling a quiet machine approaches on a single frame is worth stating plainly.
+
+> The rule this earns: **an absolute millisecond threshold in this harness is only meaningful against
+> a same-session control.** Cross-session comparison of these numbers is not evidence in either
+> direction — which is finding P1's real content, and it survives the re-measure rather than being
+> dissolved by it.
+
+## User video playtest, 2026-08-13 — "missing frames" is LOW FRAME RATE, and the sentry fires from its belly
+
+A 6.5 s screen recording (2560x1392, 30 fps) supplied by the user. Frames extracted at full rate
+and analysed; the recording is in the session scratchpad, not the repo.
+
+### 🔴 Nothing is dropping frames. The animations do not HAVE enough frames.
+
+A 24-frame montage of consecutive captures during a run shows the pose advancing on essentially
+every captured frame — no stalls, no held poses. What is wrong is the rate each animation plays at:
+
+| animation | frames | fps | ms per pose |
+|---|---:|---:|---:|
+| **walk** | 12 | **15.65** | 63.9 |
+| **jump / fall** | 6 | **20.00** | 50.0 |
+| run | 12 | 26.67 | 37.5 |
+| idle | 12 | 8.00 | 125.0 |
+| attack | 8 | 24.00 | 41.7 |
+
+**Cinema is 24 fps.** Walk at 15.65 and jump at 20 sit below the rate at which motion fuses, so the
+eye resolves individual poses — which is exactly what "missing frames" describes. The user reported
+them in the order **walk, run, jump**, and the table matches: walk is worst.
+
+It falls out of the derivation rather than a bug. `simTicks` is stride-locked — a walk cycle must
+span 46 ticks to match ground speed — and there are only 12 frames to spread over it:
+`12 x 60 / 46 = 15.65`. Nothing is broken; there is not enough art per cycle.
+
+### The fix is FREE for walk, jump and fall — the frames are already paid for
+
+Every source clip is **97 frames, 24 fps, 4.04 s**, on disk under `_generated/video/`. The sampler
+(`tools/gen/sampler.mjs`, `chooseCycleWindow`) takes the frame count as a **parameter**, so a denser
+sample is a re-run, not a regeneration. Cycle periods measured by autocorrelation of frame-to-frame
+distance over the stable middle of each clip:
+
+| | now | source | achievable | verdict |
+|---|---|---|---|---|
+| **walk** | 12 fr, 15.65 fps | **28 fr/cycle** | **24 fr → 31.3 fps** | **free, and the biggest win** |
+| **jump / fall** | 6 fr, 20 fps | 97 fr clip (one-shot) | **12 fr → 40.0 fps** | **free** |
+| run | 12 fr, 26.67 fps | **13 fr/cycle** | 13 fr → 28.9 fps | **at the ceiling — needs new art** |
+
+`run`'s source clip holds only ~13 distinct frames per cycle and the sheet already uses 12, so
+sampling denser would duplicate poses. Improving it means a fresh generation, i.e. **spend**. At
+26.67 fps it is already above the fusion threshold and is the least broken of the three.
+
+⚠️ Check the texture width before choosing 28 over 24 for walk: at a 288 px cell, 24 frames is
+6912 px and 28 is 8064 px, which is close to the 8192 px limit some GPUs still enforce.
+
+### 🔴 The sentry fires from the centre of its body, not from the cannon
+
+`src/sim/enemyTurn.ts:61`:
+
+```js
+fireProjectile(sentry.x, muzzleY, player.x, chestY, SENTRY.projectileSpeed, SENTRY.damage)
+```
+
+`sentry.x` is the body's **centre** and `muzzleY` is `sentry.y - (SENTRY_BOX.h / 2) * scale`, the
+vertical **middle**. **There is no muzzle offset anywhere.** The shot is born inside the machine.
+
+Three defects compound into the one thing the user saw:
+
+1. **No muzzle offset** — the above.
+2. **No facing** — the sentry had none until `facing` was added this session, so there was no
+   direction to offset *along*. The two defects were linked, which is why the muzzle offset could
+   not have been written earlier.
+3. **No firing animation** — `brass-sentry-fire` was generated and **never adopted**, so the sentry
+   plays `idle` while shooting. `enemyView.ts:35` documents "how long the muzzle animation plays
+   after a shot leaves" for a sheet that is not in the catalog.
+
+The sim already stores `lastFireDx` / `lastFireDy` with a comment saying they are frozen at fire
+time **"so a renderer that recomputed this would not swing the barrel after the shot left"** — and
+**no renderer reads either field.** The aiming data exists; the barrel does not.
+
+**Recorded, not fixed — user decision, 2026-08-13.** Fixing it changes sim behaviour after the
+Codex 5.14 review signed off, and the user chose to keep this session's gate results intact.
+
+### Four enemy sheets are already paid for and unadopted
+
+`brass-sentry-fire`, `brass-sentry-death`, `rust-scavenger-chase` and `rust-scavenger-death` all
+have logged request IDs, surviving `.mp4` sources with retries (3–5 takes each) and 6 extracted
+frames each under `_generated/framing-frames/`. **Adopting them costs $0** — extraction, chroma key
+and packing are local tooling. The generation log notes an audit judged the sentry clips *"cropped
+at the left and right"*, which is where adoption appears to have stopped; that must be re-checked
+against the pipeline's own gates before forcing them through.
+
+This also **dissolves finding T10**, which recorded that 5.3's chase commitment is unobservable and
+"resolves by shipping the chase sheet (post-phase art)". The chase sheet was already bought.
+
+---
+
+## Session 10 — two reversed decisions, and the scavenger's own foot-plant
+
+Both entries below reverse a decision that is written down with a rationale, so both are recorded
+here as reversals rather than applied as silent knob edits. Both are the user's calls, taken
+2026-08-14 off a screen recording of live play.
+
+### 🔴 Aggro is PERMANENT. `releaseRadius` and `CHASE_COMMIT_TICKS` are deleted.
+
+**Reverses:** `enemyScavenger.ts`'s *"`chaseSpeed` sits between `walkMax` and `runMax` —
+**deliberately escapable**. A chaser faster than the player's run means fleeing is never an option,
+and with no stamina system that is not tension, it is a tax."* That reasoning stands on its own
+terms; the user simply wants a different game. Their words: **"it should keep coming until I kill
+it."**
+
+**And it was already the source of a reported defect.** The second half of the same report —
+*"after it sees me, it gets stuck after I get far from him"* — was the 720 px `releaseRadius`
+combined with the patrol clamp: driven past its patrol bound, a chasing scavenger was pinned there
+playing a run animation while covering no ground, until the player crossed the release threshold and
+it went back to patrolling. On screen that reads as broken, not as territorial.
+
+| | before | after |
+|---|---|---|
+| enter a chase | inside `detectRadius` 480 | unchanged |
+| leave a chase | outside `releaseRadius` 720, after `CHASE_COMMIT_TICKS` 30 | **only death** |
+| reach of a chase | clamped to `patrolMin`/`patrolMax` | **bounded by ground** |
+| anti-flap mechanism | hysteresis gap + commitment floor | **unreachable by construction** |
+
+**The anti-flap machinery went with it, and nothing was lost.** Hysteresis existed so a player
+straddling the boundary could not toggle patrol↔chase every tick, which restarts the animation every
+tick (vault 5.1's render-side consequence). With one one-way transition, **a state with no exit
+cannot flap.** The flap test in `enemy-ai.test.ts` is kept *unchanged* and still passes: it asserts
+the property (the drawn state does not oscillate), not the mechanism, so it outlived the mechanism.
+Re-proved red against the current code by making the chase clearable — 1 state change becomes ~300.
+
+**Ground-following replaced the patrol clamp.** A patrol bound is a level-design number about where
+an idle machine walks; it was never the reach of a hunt. A chase now steps only where the body's
+**leading edge** still has ground — `groundUnder` in `enemyGeometry.ts`, probed at
+`x + dir × halfWidth`. The centre probe the first draft used would walk half a 120 px body over the
+void (Codex plan review finding 7), and since enemies have no gravity it would *hang there* rather
+than fall, which is worse than either. `stepScavenger` takes the footing as a **required** argument
+for the same reason `createWorld`'s `scale` is required (vault 2.11): a caller that forgot it would
+get the old pinned-at-the-bound behaviour, silently.
+
+**Death is now the only exit, so it had to be written down.** `stepEnemies` clears `chasing` and
+`chaseCounter` on `hp <= 0` — one place, covering every cause of death. Codex plan review finding 3:
+the existing test for this was **vacuous**, setting `hp = 0` on a scavenger that had never chased,
+so it passed on the field's initial value. Replaced with a scavenger that is chasing first and then
+killed **by real swings through `tick`**, which also closes finding **T2** (nothing in the suite
+killed a live enemy with the real attack path; 5.10 and 5.16 both assigned `hp = 0`).
+
+**⚠️ Owed, and not done this session: the hands-on check at `x: 3198`.** A recorded playtest bug
+wedges the player against terrain with a scavenger in contact, draining 100 → 35 hp with no way
+past. It was never diagnosed and is not a Phase 5 criterion. A scavenger that never gives up *and*
+follows out of its patrol zone turns that wedge from "escapable by breaking line of sight" into a
+guaranteed death. **If it is now unsurvivable, that is a blocker to raise, not something to absorb.**
+
+### 🔴 `chaseSpeed` 8 → 6, because it is a measurement now and not a taste
+
+**Reverses** nothing written down — 8 was never justified against the art. It is recorded here
+because the number moved and because the *method* is now binding on every future locomotion sheet.
+
+The user reported *"when Scavenger is running fast, the animation is not smooth like the character."*
+Correct, and the cause is the defect the player's own locomotion had until earlier the same session:
+the chase shipped at **2 ticks/frame against `chaseSpeed` 8**, so the body advanced 16 px per drawn
+frame while the art moved the planted foot **18**. Nothing was watching, because the scavenger's foot
+travel had never been measured at all.
+
+Measured off the shipped `chase.png` with the courier's planted-foot tracker; the derivation, the two
+agreeing contact bands and the excluded foot-switch frames are in
+`character-bounds-rust-scavenger.json` → `_footPxPerFrame`, which is the copy of record.
+
+| | before | after |
+|---|---|---|
+| `chase` cadence | 12 frames / 24 ticks — 2 ticks/frame, 30 fps | 12 / 36 — **3 ticks/frame, 20 fps** |
+| `chaseSpeed` | 8 | **6.0** |
+| body px per drawn frame | 16.0 | **18.0** |
+| foot slide | **+12.5 %** | **0.00 %** |
+
+**The decided value was unreachable, and that is worth stating plainly.** The session's earlier
+decision was *"three quarters of the run speed"* — 6.75 at `runMax` 9.0. Planted feet require
+`ticksPerFrame × speed === footPxPerFrame` with a **whole** `ticksPerFrame`, so the chase speed is
+`18 / n` and the only values that exist are **18, 9, 6 and 4.5**. 6.75 is not among them. 6.0 was
+taken as the nearest reachable value below it — two thirds of the player's run rather than three
+quarters. 9.0 was rejected as the alternative: it is exactly the player's run speed, and with aggro
+now permanent that would make combat mandatory rather than chosen.
+
+**`tests/unit/foot-plant.test.ts` gained a `rust-scavenger-chase` block** so the next slug is a rule
+rather than a second discovery. `catalogTimings.mjs`'s mirrored `SCAVENGER_CHASE_SPEED` caught its
+own drift on the same run the sim constant moved, which is the whole justification for a hand-copied
+constant existing there.
+
+### Red-proofs *(C1/C12)* — every mutation verified applied by count, and reverted
+
+| mutation | result |
+|---|---|
+| delete the death transition in `stepEnemies` | `Tests 1 failed` — "a CHASING scavenger, killed by real swings, stops chasing" |
+| centre probe instead of the leading edge | `Tests 1 failed` — "stops before its LEADING EDGE leaves the floor" |
+| `CHASE_TICKS_PER_FRAME` 3 → 2 | `Tests 2 failed` — the whole-dwell and the plant-invariant assertions |
+| make the chase clearable again (`if (!detects(...)) chasing = false`) | `Tests 7 failed`, including the untouched flap test |
+
+Each verified as *content changed AND the original count dropped by one*, restored, and confirmed
+byte-identical with `cmp` — never as "the original count is now zero" *(C12)*.
+
+### One e2e flake, recorded rather than smoothed over
+
+The first full `npm run test:e2e` after this change failed criterion 5.11's sanity ceiling at
+`medianMs 102.3` against `< 100`. Four subsequent runs of that spec passed, as did a second full
+sweep (**48/48**). It is recorded, not dismissed: the ceiling is a headless SwiftShader figure that
+HANDOFF §14 measures at ~21× the real GPU, on a box that had just run the whole vitest suite — which
+is exactly why **W10 rewrites what 5.11 measures**. It is not evidence about this change, and it is
+not evidence the gate is sound either.
+
+### 🔴 The scavenger was STILL not smooth, and the cadence was never the whole cause
+
+The user re-reported it after the chase was planted: *"the scavenger, his animation is not smoothing
+like my character."* Re-timing `chase` was correct and insufficient, because **two different defects
+look alike at a glance** and only one of them had been fixed.
+
+**Session 9 gave the interpolation to the player and to nobody else.** `src/render/interpolate.ts`
+blends a drawn position across the leftover accumulator, and `interpolate.test.ts` gates that
+function thoroughly. **What no test asked was who calls it** — the answer was
+`GameScene.renderPlayer`, and only that. `enemyLayer.sync` wrote `body.setPosition(desc.x, desc.y)`,
+the raw tick position, so every enemy was drawn as three identical frames followed by a jump on any
+display faster than 60 Hz. The defect had become *more* visible for having been fixed on the
+character standing next to it, which is exactly the comparison the user's words name.
+
+| | player | enemies, before | enemies, after |
+|---|---|---|---|
+| drawn position | blended across the accumulator | **raw tick position** | blended, same accumulator |
+| snapshot taken | before the last tick of a batch | — | before the last tick of a batch |
+| gated by | `phase-02-movement.spec.ts` lag test | **nothing** | unit + e2e, both red-proved |
+
+**Fix.** `EnemyLayer` gains `snapshot()` and `sync(alpha)`. `GameScene` calls the first at the exact
+seam it captures `prevPlayer`, and feeds the second `renderAlpha(this.accumulatorMs)` — the same
+factor from the same accumulator, so the two can never disagree about what "now" means on screen.
+The sentries-then-scavengers ordering moved into one private `subjects()` used by `create`,
+`snapshot` and `sync` alike *(vault 5.3)*: a snapshot walked in a different order would blend each
+enemy toward a **different enemy's** position.
+
+**Health bars ride the drawn body**, shifted by the same delta. `healthBarDesc` is positioned from
+the sim, so without that shift the bar would hang still while the body slid underneath it — the same
+defect one layer up, and more obvious for the two being inches apart.
+
+**Projectiles are deliberately NOT interpolated.** A shot is created and destroyed by the sim, so
+`world.projectiles[i]` is not the same bolt from tick to tick, and index-matched blending would slide
+a *new* bolt out of a *different* one's position. Doing it properly needs an id per shot, which is
+`projectileView.ts` (W16, unbuilt). At `projectileSpeed` 9 px/tick it is also the smallest of the
+three steps by some distance.
+
+**Two gates, because one of them could not see the bug.**
+`tests/unit/enemy-interpolation.test.ts` gates the layer's arithmetic against a mock scene — it
+sweeps alpha across the open interval and demands the drawn x actually vary, which is the assertion a
+layer ignoring alpha cannot satisfy. But a unit test cannot see whether `GameScene` ever calls
+`snapshot()`, and **that call site is precisely where the original hole was**. So the e2e in
+`phase-05-combat.spec.ts` mirrors the player's own ghost test: sample `simX - drawnX` once per
+animation frame, in-page, and require at least one non-zero.
+
+| mutation | result |
+|---|---|
+| `setPosition(desc.x, desc.y)` — the original defect | unit: `Tests 3 failed` |
+| delete `this.enemies.snapshot()` in `GameScene` | unit: **all green** · e2e: `1 failed` |
+
+That second row is the entry worth keeping: **the unit gate alone would have passed a game with the
+bug still in it.** The e2e is not redundant coverage, it is the only thing watching the wiring.
+
+### W5 — level-01 traversal, proved by simulation. Two long-standing unknowns closed.
+
+Codex plan review finding 5 killed the hand arithmetic this was going to rest on — it had the pit at
+192 px (real: 288) and the airtime at 37 ticks (real: 35). `tests/unit/level-traversal.test.ts` runs
+the **real** `tick` over the **real** shipped `.tmj` rectangles with the **real** collider and
+acceleration curve, and reports what happened. Nothing in it is computed.
+
+It found more than it was aimed at.
+
+#### 🔴 The spike strip was impassable at any speed, and had been since Phase 4
+
+| width | run-up | standing jump |
+|---|---|---|
+| 96 – 216 | clear | clear |
+| **192 (now shipped)** | **clear** | **clear** |
+| 240 | clear | **hit** |
+| 252 – 384 | **hit** | **hit** |
+| **384 (was shipped)** | **hit, −20 hp, stops at x 2554** | hit |
+
+Nothing caught it because **the only reach gate in the suite was vertical**:
+`tilemap-data.test.ts` asks whether every platform is within the measured apex, which cannot see a
+gap too wide to cross.
+
+**240 px was measured as the width where a run-up is REQUIRED but possible, and was deliberately not
+taken.** That window is **12 px wide** — 252 already fails — so it exists only at exactly top speed
+and would break silently on the next tuning pass. 192 is the user's approved value: crossing costs a
+deliberate jump input, and walking into it still hurts. The test asserts the second fact rather than
+a knife-edge one it cannot honestly hold.
+
+**The narrowing was made in `make-greybox-level.mjs`, not in the `.tmj`.** The first attempt edited
+the level file by hand and `level-entities.test.ts` caught it within one run: gid 13 was suddenly
+drawn both inside and outside the hazard, i.e. two columns of spikes the player walks through. The
+hazard rectangle is *derived* from the `SPIKES` array precisely so drawn-and-harmless cannot happen
+again — Phase 4 shipped exactly that from two lists that drifted. Editing the output put the drift
+back.
+
+#### 🔴 `x: 3198` is DIAGNOSED. It is not a wedge and there is no bug.
+
+Recorded 2026-08-12 as *"the player wedges against terrain, 100 → 35 hp, no way past"*, never
+diagnosed, carried as an open unknown through two sessions. The first draft of the pit test reported
+the player stalling at **x 3198** — the same coordinate, reproduced by accident.
+
+`3198 + 66` (half the player's 132 px box) is **exactly 3264**: the left face of the level's 96 × 288
+pillar, a solid the player is meant to **jump**. Running right into it stops you dead, which is a
+collider working correctly. What made it read as a trap was taking contact damage there with no idea
+why forward movement had stopped. Pinned now, both halves — blocked on the ground, clearable with a
+run-up — so a future layout edit that makes the pillar genuinely unclimbable fails here instead of
+being re-reported as the same mystery.
+
+#### 🔴 The permanent-aggro blocker is SETTLED, and the answer is terrain
+
+The plan raised it and was right to: a scavenger that never gives up *and* leaves its patrol zone
+could turn the `x: 3198` stall into a guaranteed death.
+
+**It cannot.** `level-01` stands its scavenger on the floor section beginning at **x 4128**, and the
+pit at **3840–4128** separates that section from the pillar. Ground-following stops the chase at the
+pit's eastern lip, over **400 px** from the player. The terrain that makes the pit an obstacle for
+the player is the same terrain that makes it impassable for the enemy.
+
+Asserted, not reasoned — and red-proved: **with the ground veto removed the scavenger closes to
+92 px of the stall**, which is the blocker arriving exactly as predicted. The veto is what prevents
+it, and the test says so in its failure message.
+
+### W6 — criterion 5.8's health-bar block was measuring a width the game never draws
+
+`enemy-view.test.ts` hardcoded `SLOT = 120`. The shipped slot is `barSlotWidth(RENDER_SCALE)` =
+24 × 6 = **144**; 120 predates Phase 4's 3× rescale and nothing updated it because nothing connected
+it to `BAR_LOCAL`. An entire `describe` — including the premise the criterion rests on — was
+evaluated against a fiction. `barSlotWidth` is exported now and the test derives it.
+
+**Correcting it exposed a second, worse problem.** At the real 144 px against 60 max hp, the naive
+`Math.max(MIN, ratio × slot)` floor and the shipped compression behave **almost identically**: the
+floor only bites at 1 hp, so no two adjacent hp values are flattened onto each other. The test
+written specifically to distinguish the two implementations — *"1 hp and 2 hp are
+distinguishable"* — **passed against the naive floor.** Found by mutation, not by reading; all 17
+assertions stayed green.
+
+`healthBarFillWidth` is a pure function of three arguments, so it is now also exercised at a geometry
+where the difference lives (120 px / 100 max hp, the case it was designed for), with an explicit
+premise assertion that two adjacent living hp values really do round below the floor there. Both
+blocks are kept: the shipped one proves the criterion holds where the game runs, the dense one
+proves the implementation is the right one and can still go red.
+
+Stale prose in `enemyHealthBar.ts`'s header corrected too — it cited *"2 of 100 against a 120 px
+slot"*, and no enemy in the game has 100 max hp.
+
+### W7 / T6 — `withinRadius` had no direct test, and `dy` was decorative
+
+Every fixture that reached it did so through a sentry or a scavenger, and **every one placed the
+enemy and the player at the same `y`**. With `dy === 0` the vertical term contributes nothing, so
+deleting it from the distance entirely left the whole suite green — the radius was only ever tested
+as a horizontal one. That matters in the shipped level, which stands its sentry four tiles above the
+player.
+
+Direct tests added for both shared geometry predicates, including a 3-4-5 diagonal (each leg inside
+480, the hypotenuse outside) that a per-axis test cannot express. Red-proved: deleting `dy * dy`
+now fails two named assertions.
+
+### Red-proofs this pass *(C1/C12)*
+
+| mutation | result |
+|---|---|
+| spike strip back to 384 px | `Tests 2 failed` — the run-up and the pillar clearance |
+| hand-edit the `.tmj` instead of the generator | `Tests 1 failed` — gid 13 inside and outside the hazard |
+| remove the chase's ground veto | `Tests 1 failed` — scavenger reaches within 92 px of the x:3198 stall |
+| `healthBarFillWidth` → naive `Math.max` floor | `Tests 2 failed` (was: **0 failed**, before the dense-geometry block) |
+| delete `dy * dy` from `withinRadius` | `Tests 2 failed` (was: **0 failed**) |
+
+Two of those five previously turned nothing red at all.
+
+### A harness bug worth recording, because reading two failures together is what caught it
+
+`level-traversal.test.ts`'s first draft took a `runUpTicks` argument and every call passed `999`
+meaning *"jump whenever the trigger says"*. It actually meant *"wait 999 ticks"*, the loop runs 600,
+and the player therefore **never jumped in any test**. The tell was a run-up that failed and a
+standing hop that succeeded **in the same run** — impossible for any real geometry. The parameter is
+gone. A test harness that can produce a contradiction is worth more than one that quietly produces a
+plausible wrong answer.
+
+### W2 — the catalog could ship a row describing a sheet that no longer exists
+
+Codex plan review findings 2, 4 and 9, in one pass.
+
+#### The hole
+
+`build-assets.mjs` wrote a catalog row inside `if (hasCatalogTiming(slug, action))` **with no
+`else`**, and `catalogWrite.mjs`'s `upsertCatalogSheets` deliberately leaves keys it was not handed
+untouched. Together: a sheet rebuilt **without** a timing rule keeps shipping the row describing its
+**previous** self — different frame count, different dimensions, same key, and the game slices the
+new PNG by the old numbers. Silently. It bit `brass-courier/idle` in play.
+
+The review also rejected the first proposed fix — a warning log — and was right to. The stale row
+still ships, and one more line in a build that prints thirty is not a gate.
+
+**A rebuilt sheet with no timing rule and an existing row now FAILS the build.** That is the only
+safe answer of the three: writing a row means inventing a timing, which `timingFor` throws rather
+than do; deleting the row silently removes an animation the game is currently registering, turning a
+data problem into a missing-texture problem at runtime.
+
+Proved against the **real build**, not just the unit: deleting `chase` from `AUTHORED_LOOPS` and
+running `assets:build rust-scavenger chase` now aborts with the pair named, the stale key named, and
+both repair routes spelled out. Before, it wrote the PNG and left the old row in place.
+
+#### The check that could not fail
+
+The plan's dimension check compared a row's `frameWidth × frameCount` against dimensions
+`sheetsPack.mjs` had just constructed **from those same numbers** — tautological, and
+`sheet-packing.test.ts` already covers the packer's arithmetic (finding 4).
+
+`validateCatalogRows(rows, measure)` takes the measurement as a **function**. The production caller
+decodes the PNG bytes off disk; the tests hand it a deliberately inconsistent object. That injection
+is the only reason the check can go red at all, and it now refuses four distinct cases: a narrower
+sheet, a different height, an unmeasurable file, and a non-function measurer (which would otherwise
+pass every row unchecked — the same failure one level up).
+
+#### The 400-line rule, obeyed rather than negotiated
+
+`build-assets.mjs` was **406 lines before this session added anything to it** (finding 9), and
+`file-size.test.ts` was green only because it tolerates ten named offenders. Adding the catalog fix
+took it to **430**.
+
+Extractions, in the order they were tried:
+
+| what moved | to | result |
+|---|---|---|
+| the catalog decision + the two row shapes | `catalogDecision.mjs` | 430 → 427 — **barely anything**, because object literals became argument lists of the same length |
+| the whole `--derive-scale` command mode | `deriveScale.mjs` | 427 → **393** |
+
+The second is the real cut and the reason is worth keeping: `--derive-scale` reads frames, prints a
+number and **returns before anything is written**. It shared argument parsing with the build and
+nothing else, so `main()` was a function with two unrelated halves. Splitting by *what a thing does*
+moved 34 lines; splitting by *object shape* moved 3.
+
+Both command modes were re-run afterwards and produce byte-identical output: `assets:build
+rust-scavenger chase` rewrites the same sheet and the same row, and `--derive-scale` still prints
+**0.56074766**, the value the config carries.
+
+#### Red-proofs
+
+| mutation | result |
+|---|---|
+| `if (false && hasExistingRow)` — the missing `else`, restored | `Tests 2 failed` |
+| delete `chase` from `AUTHORED_LOOPS`, run the REAL build | build aborts, PNG written, **catalog untouched** |
+| measurer returns a narrower / shorter / unreadable sheet | `Tests 3 failed` |
+
+`tools/gen/catalogDecision.d.mts` follows the hand-written declaration pattern `png.d.mts` and
+`edgeExceptions.d.mts` already use — the implementation stays `.mjs` outside the tsconfig `include`,
+so its `node:` imports never drag `@types/node` into a project whose dependencies are frozen.
+
+### 🔴 Death never ended. The game had no respawn at all.
+
+**Reported 2026-08-14:** *"I cannot die. It gets stuck before I actually see the kill. [It] stops
+getting low health when I get hit. Also, the animation doesn't play anymore for anything."*
+
+Every clause is one bug with four faces, and all four are now closed.
+
+| # | what | evidence |
+|---|---|---|
+| 1 | **`combatCounter` never advanced in `death`** | `stepCombat` excluded the state from its expiry block outright, so the counter sat at 0 forever and the death window could never close |
+| 2 | **Nothing anywhere respawned the player** | `DEATH_TICKS`'s docstring said *"45 ticks before the respawn"*; `stepCombat` said *"the respawn is the caller's decision"*; **no caller decided** |
+| 3 | **`brass-courier-death` was not in the catalog** | so `playAnim` no-ops and the corpse holds whichever frame it was on — *"the animation doesn't play anymore"* |
+| 4 | **A corpse could be walked around** | `movementLocked` tested `hurt` only; `canAct` blocks a dead player from ATTACKING and nothing blocked them from MOVING |
+
+**`hazards.ts` had recorded the missing respawn as deliberate Phase-4 debt** — *"bolting a respawn
+onto a game with no health model would have had to be undone here"*. Phase 5 built the health model
+and never came back for it. The note was right when written and became the defect it was deferring.
+
+**Not one test caught any of it, because every test asserted that dying HAPPENS.** Nothing asked what
+happens *next*. Vault 9.4's shape, applied to the terminal state of the whole game.
+
+#### The fix
+
+- **`stepCombat` advances the counter for every combat state**, `death` included. What has NOT
+  changed is that death is terminal *there* — it still never releases itself into `idle`, because
+  that would let a corpse walk. The counter advances so the window can be *asked about*.
+- **`deathWindowClosed` is an exported predicate**, not an inequality restated at the call site
+  *(vault 5.3)*: the window belongs to the module that declares `DEATH_TICKS`, and two statements of
+  one window is where the off-by-one lives.
+- **`tick.ts` gains step 4c**, before step 5, so the respawned player is alive for the whole of that
+  tick's movement rather than being a corpse's pose in a new position.
+- **`World` gains `spawn`.** It was previously a `createWorld` *argument* that initialised the player
+  and was then forgotten, which is precisely why nothing knew where to put a player back. Keeping it
+  on the world rather than in the scene is what lets the respawn stay inside `tick()`; a scene-driven
+  one would be a second place deciding when a death ends, and the tick contract would stop describing
+  the whole simulation.
+- **`movementLocked` locks `death` too**, with no window on that half — death is locked for as long
+  as it lasts, which is what the respawn now bounds. Friction still applies, so a body killed
+  mid-run slides to a stop rather than stopping dead.
+- **`respawned` joins `TickEvents`** as an edge (vault 2.5). A consumer cannot reconstruct it: a
+  respawn restores full hp, so "hp went up" is also what a pickup looks like. `GameScene` drops
+  `prevPlayer` on it — `interpolatedPosition` already snaps past `MAX_LEAP_PX`, but only past it, and
+  a player who dies within 48 px of the spawn would otherwise be blended across the gap.
+
+**What the respawn deliberately does NOT do: reset the world.** Enemies you killed stay dead, shots
+in flight keep flying. A life is not a checkpoint restart. Recorded as a decision because the missing
+respawn itself was once read as one.
+
+It also closes the **Phase 4 "fall forever" defect** as a side effect: the kill plane now leads
+somewhere.
+
+#### Red-proofs *(C1/C12)*
+
+| mutation | result |
+|---|---|
+| delete step 4c — the pre-fix behaviour | `Tests 5 failed` |
+| freeze the death counter again | `Tests 6 failed` |
+| let a corpse walk again | `Tests 1 failed` |
+
+⚠️ Mutation 3 initially reported *"changed=NO"* from a `perl` substitution that silently matched
+nothing: **`combat.ts` is CRLF and its neighbours are LF** (recorded finding T18). Verifying the
+mutation applied by `cmp` rather than by exit code is what caught it — a "refused" mutation that
+looks applied is exactly the C12 failure mode, and this is the first time T18 has actually bitten.
+
+### The player's death sheet, and the cell that had to widen
+
+`brass-courier/death` was bought in an earlier session and **could not pack**: `packStrip` refused
+seven of ten frames against the 288 px cell, needing **332 px at frame 9**. A falling body is wider
+than a standing one. Vault 4.14 and the packer's own error say the same thing — **widen the cell,
+never rescale the animation to fit** — so the courier's cell is **336** now, four pixels over the
+true maximum, the same margin convention as the scavenger's 512 over its 510.
+
+Widening is visually neutral: `packStrip` centres each frame and the sprite draws at origin (0.5, 1)
+on the feet. It costs payload and nothing else. It had been parked as a STOP-and-ask while it was
+only a missing animation; it stopped being optional when dying read as a freeze.
+
+#### 🔴 The W2 gate caught a live instance of its own defect, within the hour
+
+Widening the cell repacks every courier sheet — and the build **aborted** on `brass-courier/jump`:
+
+> `catalog: "brass-courier/jump" was rebuilt but has no timing rule, and index.json already carries
+> a "brass-courier-jump" row. That row describes the PREVIOUS sheet and would ship unchanged.`
+
+`jump` and `fall` were the last two "Phase-4 row, no rule" pairs — the exact hole `idle` had been
+in, and `catalogTimings.mjs`'s own docstring already records the lesson: *"A Phase-4 row is not a
+reason to have no rule; it is a row nobody can correct."* Without the gate, `jump.png` would have
+shipped at 336 px with the catalog still saying 288, and Phaser would have sliced it into garbage.
+
+Both now have rules. **18 ticks is the jump's RISE time** — `jumpVelocity / gravity` = 48.6 / 2.7 —
+which is a sim quantity, as `asset-catalog.test.ts` requires of any non-looping row. The shipped
+values are reproduced exactly, so the catalog does not move; it just becomes correctable.
+
+#### Three stale gates, and one that was measuring the wrong number
+
+Packing `death` fired four expiry tests on schedule (catalog count, `PENDING_ART`, the shipped-sheet
+list, the lift-profile action list) — all updated, all still able to go red.
+
+The fifth was **not** an expiry: `sheet-packing.test.ts` re-derived every animation's `liftPx` using
+`liftProfile.scale`, the **slug-wide** figure. Two courier actions carry a per-action override —
+`attack` at 0.6 and `death` at 0.60504202, against the slug's 0.23723229 — so the re-derivation was
+out by 2.55×. It went unnoticed while `attack` was the only override because its lifts round to the
+same small integers either way; `death` made it fail loudly. It reads `anim.scale` now, which the
+profile records precisely so this is re-derivable, and the assertion is strictly stronger: it can
+now catch a per-action scale that disagrees with the strip it produced.
+
+#### One change nobody asked for, recorded rather than buried
+
+Rebuilding `fall` produced **8 frames where the shipped sheet had 6** — a fuller extraction of the
+same clip (verified by eye; the two extra poses are real, not a split frame), because the packed
+sheet was stale relative to its source. It ships, because reverting one sheet while the rest move to
+336 px is exactly the art/catalog divergence this session closed.
+
+**The cost is an uneven dwell**: 8 frames over 18 ticks is **2.25 ticks/frame**, against `jump`'s
+even 3. That is the judder mechanism session 9 fixed for loops. It cannot be fixed here without
+either pinning the frame count (no lever exists — the count comes from silhouette detection) or
+letting a one-shot carry an authored cadence, **which is a gate rule change and therefore a
+STOP-and-ask**. Flagged, not absorbed.
+
+### 🔴 The sentry shrank when it fired, and shrank further when it died — twice, the same mistake
+
+Reported on 2026-08-14, in two parts:
+
+> *"This is a K-1 animation now for stationary, but when you shoot, the animation becomes smaller."*
+> *"The stationary character, when it dies, when they play the K/O animation, it becomes smaller."*
+
+**The second was introduced while fixing the first**, by the same method, which is why the fix below
+is a landmark rather than a number.
+
+#### Why the obvious measurement is the wrong one
+
+A per-action scale is derived by matching the drawn figure to the slug's `renderHeightPx`. The
+tempting landmark is the **silhouette** — the opaque bounding box — and for a walk cycle it is fine.
+
+It is wrong for anything carrying an **effect**. The sentry's clips have a muzzle flash, a steam
+plume and a debris spray, and every one inflates the bounding box **without making the machine any
+bigger**. Match that box to a target and the machine shrinks by exactly what the effect added.
+
+| | derived from | tripod span | vs `idle` |
+|---|---|---|---|
+| `idle` | the slug scale | 205 px | — |
+| `fire` @ 0.42572062 | mean silhouette height | 198 px | −3 % (barely visible) |
+| `death` @ 0.34408602 | its first frame's silhouette height | **160 px** | **−22 % (obvious)** |
+
+The `death` note in the bounds file even recorded *why* the mean was rejected — the eight frame
+heights run 558…722, a 26.7 % spread, "because a wreck legitimately GROWS as its debris spreads" —
+and then used the **first frame's silhouette instead**, which has the same disease in a smaller dose.
+
+#### The landmark that works: the tripod base
+
+It is the same physical object in all three sheets, it sits at the bottom of the frame, and **no
+effect in any of these clips touches it** — steam rises, debris falls outward, the muzzle flash is at
+barrel height. Its span across the bottom 24 rows measures the **machine**, not the picture.
+
+Correcting each to idle's 205 px gives **0.44077135** (fire) and **0.44086021** (death) — agreeing to
+**0.02 %**. That agreement is the real finding: both clips were shot from the same padded anchor, so
+**one scale was always right for both**, and two independently-derived numbers were never justified.
+Shipped at their mean, **0.44081578**. Re-measured after repacking: **205, 205, 205**.
+
+#### The scavenger is NOT the same defect
+
+*"When he dies, the animation of the kill becomes bigger for each character."* Measured: `death`
+frame 0 stands **240 px** against the walk's **239** — correctly scaled. What grows is the
+**explosion**: the debris reaches **476 px** wide against a 200 px body, which is the art doing what
+an explosion does. Asserted in both directions, so "it is the explosion" is not an explanation for
+something that never happens.
+
+#### A landmark has to be chosen per body plan
+
+`tests/unit/sprite-size-consistency.test.ts`'s first version applied the tripod landmark to the
+scavenger too and failed by **56 %**. Not a scale error: the sentry's tripod is a **rigid** frame and
+the scavenger's legs are not. In `walk` frame 0 one foot is planted and the other mid-swing (a 42 px
+footprint); in `chase` frame 0 both legs extend (143 px). **Its footprint is a pose**, and comparing
+poses across two gaits measures the gait.
+
+Height is the landmark that survives for a legged body, and the scavenger's own bounds file already
+derives its slug scale from exactly that. `brass-courier` is deliberately not gated at all: a person
+legitimately changes both footprint and height between standing, running and lying down.
+
+That generalisation is the entry worth keeping. **The gate is per body plan, not per project.**
+
+#### Red-proof
+
+Restoring `death` to the shipped 0.34408602 and repacking turns the new gate red with the diagnosis
+in the failure message: *"brass-sentry-death frame 0 has a 160px base against idle's 205px — −22.0 %
+… almost certainly a per-action scale derived from the SILHOUETTE."* The file also carries a
+sensitivity assertion, so a gate that could not tell that from correct would itself be red.
+
+### 🔴 Five one-shots juddered, and the reason recorded for two of them was wrong
+
+Session 9 fixed the ghosting by making every drawn frame of a **loop** occupy a whole number of
+60 Hz ticks. `tests/unit/loop-dwell.test.ts` gated that — and gated only loops, carrying a
+`KNOWN_UNEVEN_ONE_SHOTS` list which recorded `brass-courier-attack` (2.5 refreshes a frame) and
+`rust-scavenger-death` (4.5) as permanent, with this reason:
+
+> *"A one-shot's `simTicks` is a SIM WINDOW … Rounding one to suit the art would be a balance
+> change wearing an animation change's clothes … The honest fix is a frame count that divides the
+> window — which is a re-pack of the art, not an edit here."*
+
+**The first half is right and the second half is false.** The list named the fix and then called it
+out of reach, on a belief that a one-shot's frame count is detected from the art. It is not: it is
+**declared**, in `VIDEO_MOTIONS[key].frames`, and `build-clips.mjs:293` samples exactly that many
+source frames out of the clip. The window is the sim's and was never touched. The count was ours the
+whole time.
+
+Widening the gate to every row found **five**, not two — the flagged `fall` among them:
+
+| row | window | frames | refreshes/frame | now |
+|---|---|---|---|---|
+| `brass-courier-attack` | 20 | 8 | 2.500 | **10 frames, 2.000** |
+| `brass-courier-death` | 45 | 10 | 4.500 | **9 frames, 5.000** |
+| `rust-scavenger-death` | 45 | 10 | 4.500 | **9 frames, 5.000** |
+| `brass-sentry-death` | 45 | 8 | **5.625** | **9 frames, 5.000** |
+| `brass-courier-fall` | 18 | 8 | 2.250 | ⚠️ blocked — see below |
+
+All four re-extracted and repacked cleanly at $0; `brass-sentry/death` re-declared its existing
+`ACCEPTED_EDGE_BLEED` waiver on the way through, printed as it is designed to be. Deaths land on
+9 frames rather than 15 deliberately: 5 refreshes reads fine for a collapse and 15 would have added
+50 % to a sheet on a boot payload already pinned to `workers: 1`.
+
+#### `fall` is blocked on the ART, and the shipped sheet never passed G6
+
+Re-extracting `fall` at 9 frames throws:
+
+> `assets:clips: "fall" frame 0 of 9 fails G6 edge bleed — left 0px, right 0px, top 0px, bottom 76px`
+
+Measured across all nine sampled frames: **0–4 FAIL, 5–8 PASS** (margins 46–148 px). The failing
+edges carry contiguous opaque runs of 138 px (top), 60 px (left) and 50 px (right), so this is a
+real mask reaching the edge and not speckle — but the frame itself, looked at at full resolution,
+shows the courier with clean green on every side. What survives keying is green that differs enough
+from `borderKey`'s sample to stay opaque, on the highest-motion frames of the clip.
+
+**`windowIndices` starts every sampling at the measured motion onset**, so frame 0 is the same
+source frame whether 6, 8 or 9 frames are asked for. All three fail identically — which means:
+
+🔴 **The `fall` sheet that ships today never passed G6.** `build-clips.mjs:300-301` calls
+`extract()` and *then* `gateSheetEdges()`, so a failing extraction leaves a complete, usable strip
+on disk that `assets:build` will pack without complaint. Regenerating the 8-cell strip and repacking
+reproduced `public/assets/characters/brass-courier/sheets/fall.png` **byte for byte against HEAD**,
+which is how that path was confirmed rather than guessed. The file's own comment shows the hole was
+half-seen: the geometry sidecar is written after the gate *"so a strip that fails G6 … cannot be
+packed by the new path either"* — and the sentence continues *"consumers treat a missing sidecar as
+use the old detection"*, which is the path that packed this one.
+
+`brass-courier/jump` is the same batch and is already recorded as failing G6 on both rounds while
+shipping. **`fall` was not recorded, and now is.**
+
+**STOP-and-ask, not absorbed.** Three unblocks exist and each needs a decision: a chroma keying
+tolerance (a gate parameter — never to be loosened to clear a red), an `ACCEPTED_EDGE_BLEED` entry
+(which requires a reason someone can state, and "green that did not key" is not yet one), or a
+re-shoot (money). Until one is taken, `fall` holds 8 frames at 2.25 refreshes.
+
+#### A spec and its strip had silently drifted
+
+`motion.mjs` declared `fall: frames: 6`. `_generated/sheets/fall-clip.png` held **8** cells. The
+catalog shipped **8**. `assets:build` packs whatever the strip contains and never reads the spec, so
+`assets:clips` and `assets:build` can be run at different times against different declarations and
+nothing compares them. The spec now says 8, which is what actually ships.
+
+#### The two gates, and both watched red
+
+`tests/unit/loop-dwell.test.ts` now covers **every** row, not only loops, and its failure message
+names the right lever per kind — an authored cadence for a loop, a divisor frame count for a
+one-shot. `tests/unit/one-shot-divisor.test.ts` is new and checks the **head** of the chain: the
+declared count divides the window *before* ffmpeg is invoked, and the shipped `frameCount` equals
+the declared one, which is the assertion the drift above walked straight through.
+
+| mutation | result |
+|---|---|
+| widen `loop-dwell` to every row, against the catalog as it stood | **5 failed** — the exact five rows above, each naming its lever |
+| `brass-courier/attack` frames 10 → 8 | **3 failed** — divisor rule, spec-vs-catalog drift, *and* the "the blocked list must not grow quietly" cross-check |
+
+Restored and confirmed byte-identical with `cmp` *(C12)*. `BLOCKED_ON_ART` lives in
+`tests/unit/blockedDwell.ts` so both files skip the same row from one definition *(vault 5.3)*, and
+it is asserted in **both** directions: red if `fall` leaves the catalog, red if its dwell changes at
+all — including if the art is fixed and the row turns even — and red if any second row joins it.
+
+### 🔴 Criterion 5.11 — rebuilt. Every number it had reported was measuring something else
+
+5.11 asks for the *"frame budget under worst-case enemy count"*. It has been failing **as a
+measurement** since session 8, and W10 replaces it. Four separate defects, each fixed:
+
+| | before | after |
+|---|---|---|
+| **what ran it** | default headless Chromium — **SwiftShader**, a software rasteriser | a headed real-GPU project, `chromium-gpu`, scoped to one spec |
+| **what was drawn** | `DEV_FLEET_OFFSET_X` 200 sim px against a **160 sim px** visible half-width — **0 of 20** enemies on screen | spread symmetrically about the player, all 20 inside the view |
+| **which enemies** | scavengers only | scavengers **and** sentries, alternating, with bolts in flight |
+| **what was sampled** | rAF **interval** over 90 frames vs a 100 ms ceiling | rAF **work**, every frame, vs a control measured in the same page |
+
+The second is the one that made the whole criterion vacuous. The fixture stepped 20 enemies in the
+sim and the renderer culled all 20 — so the number that came back was reassuring precisely because
+nothing extra had been drawn. Vault 9.4, on the criterion whose entire subject is cost.
+
+#### The old ceiling was a hang detector wearing a budget's clothes
+
+HANDOFF §14 measured the harness directly: the same scene reports **90.10 ms** headless against
+**4.2 ms** on the real GPU, a factor of **21**. A 100 ms ceiling set against the first number cannot
+fail for any reason short of a hang — and the old comment said as much in its own words. This is why
+the fix is a different **measurement** and not a different tolerance.
+
+#### `long-animation-frame` was tried first and cannot gate this
+
+The plan called for `PerformanceObserver` on `long-animation-frame`, and it was built that way.
+Measured on the GPU, **both halves reported zero entries and zero blocking time**: LoAF only emits
+for frames over **50 ms**, and this game runs at **4.16 ms** a frame on a 240 Hz display. The ratio
+was `0 / 0` and the gate could not be made to fail — decoration *(C2)*.
+
+It is kept and reported, because *"no frame in the window exceeded 50 ms"* is true and worth having.
+**Nothing is asserted on it.**
+
+#### What gates instead: rAF's own timestamp
+
+`requestAnimationFrame` hands its callback the frame's start time. Read at the top of a callback
+registered **after** the game loop's, `performance.now() - frameStart` is the main-thread time that
+frame has already spent — `update()`, the sim ticks inside it, and the render submission. It reports
+on every frame rather than only slow ones, and it moves when the scene gets heavier.
+
+The ordering holds because rAF runs callbacks in registration order and both parties re-register
+from inside their own callback, so the sampler stays behind the work it measures. A median of 0
+would mean it had got in front, and that is asserted, not assumed.
+
+#### The gate is a RATIO, against a control in the same page
+
+⚠️ **An absolute millisecond figure from this harness is uninterpretable** *(HANDOFF §14)*. So the
+identical sampler runs **twice in one page, seconds apart** — first against the level's own 2
+enemies, then against 22. Machine, driver, Vite still compiling, whatever else is on the box: all of
+it is present in both halves and divides out. What survives is what 5.11 actually asks — *what
+adding 20 enemies costs*.
+
+**Recorded baseline**, four runs on this machine (240 Hz display, real GPU, 120-frame windows):
+
+| | baseline, 2 bodies | fleet, 22 bodies | ratio |
+|---|---|---|---|
+| run 1 | 0.90 ms median | 0.90 ms | 1.00x |
+| run 2 | 0.70 ms | 0.80 ms | 1.14x |
+| run 3 | 0.70 ms | 0.80 ms | 1.14x |
+| run 4 | 0.70 ms | 0.80 ms | 1.17x |
+
+**11x the enemies costs about 1.1x the frame work**, peak 8–9 bolts in flight, zero frames over
+50 ms in any run. `performance.now()` is coarsened to 100 µs in Chrome, which is why the ratios land
+on a coarse grid at this magnitude — it is the reason the bound is 4x and not 1.5x.
+
+`MAX_WORK_RATIO = 4` is set to catch a cost that grows **faster than the enemy count** — an O(n²)
+sweep, a per-enemy texture upload, a per-frame allocation storm — not to pin today's number.
+
+#### Red-proof *(C1/C12)*
+
+An O(n²) sweep injected into `EnemyLayer.sync` (every subject against every subject, 3000 `sqrt`
+each):
+
+```
+baseline  2 bodies: work median 0.70ms   <- unchanged
+fleet    22 bodies: work median 4.50ms, p95 7.70ms
+work ratio 6.43x for 11.0x the enemies   -> 1 failed
+```
+
+**The control did not move and only the fleet half did** — which is the proof that the measurement
+isolates the enemy count rather than the machine. Restored and confirmed byte-identical with `cmp`;
+re-ran green at 1.17x.
+
+#### A false red found on the way, in a different test
+
+The first full sweep after the split failed `the drawn enemy is interpolated between ticks` with
+**every one of 90 lags exactly 0** — and it passed twice in isolation. Interpolation is only
+observable while the subject is moving, and a patrol reversal or a chase paused inside the dead zone
+holds the scavenger still; a window that catches that reports exactly what the defect reports. The
+test now records the scavenger's own position alongside the lag and asserts it moved, in those
+words, and samples 240 frames instead of 90. **The tolerance did not change** — what changed is that
+the two causes are now distinguishable. Full sweep after: **49 passed**.
+
+## The session-10 QA gate — three owners, two briefs each *(A7)*
+
+Run at `21c56ff`, sequentially per owner, with brief 1's findings withheld from brief 2. Every
+finding below is **applied** or **recorded with a reason** *(C11)*. Nothing was dropped.
+
+The adversarial briefs earned their place again: **brief 1 reported no failures for `qa-expert` and
+a PASS-with-defects for `code-reviewer`; brief 2 of each found the two worst defects of the
+session** — a free mid-air jump out of every respawn, and a teleport guard smaller than the
+simulation's own maximum. Vault A7, for the fourth phase running.
+
+### Applied
+
+| # | owner | sev | finding | what was done |
+|---|---|---|---|---|
+| **H1** | code-reviewer | HIGH | **`MAX_LEAP_PX = 48` was smaller than the sim's own vertical maximum.** Its docstring claimed *"48 px is four ticks of `runMax` (12 px/tick) … vertical travel is capped by terminal velocity, which is smaller"* — both halves false. `runMax` is **9** (it moved when locomotion was planted against the art) and `maxFallSpeed` is **51.6**, `jumpVelocity` **48.6**. So the takeoff tick of every jump and every tick at terminal velocity were drawn as **teleports**: 51 of 120 ticks over a jump plus a run off a ledge. The ghosting session 9 removed horizontally was still live vertically. | ✅ Derived from `DEFAULT_TUNING` at 2x the true maximum, never typed. `interpolate.test.ts` now **imports the tuning** and asserts the relationship per knob, on both axes — it previously restated a stale literal `12`, which is exactly why the constant survived two speed changes. Red-proved: restoring `48` fails with *"jumpVelocity is 48.6 px in one tick, which the 48px teleport guard would treat as a teleport"*. |
+| **H2** | code-reviewer | HIGH | **The respawn handed out a free mid-air jump.** `respawnPlayer`'s docstring said *"`grounded` false and `ticksSinceGrounded` saturated, so a respawn cannot hand out a free coyote jump"*; the code cleared only `grounded`. A corpse stays grounded for the whole death window, so step 10 re-armed `ticksSinceGrounded = 0` on all 45 ticks and step 7 of the respawn tick read a wide-open coyote window. Jump held while dead — what a player does — launched the courier **216 px above the spawn, in mid-air**. The test named for it asserted `grounded`, a different field from the one the comment named. | ✅ Both forgiveness counters saturated, from the **caller's** tuning as a required argument *(vault 2.11)*, so a feel variant closes its own window. New test drives the real `tick()` with jump held through the death. Red-proved at `vy = -48.6`. ⚠️ Its first draft was **green against the unfixed code** — `jumpPressed` is a latched edge that `consumeJumpPress` clears, so setting it once left it false by the respawn tick. Re-armed every tick; that is the fixture, and it is commented as such. |
+| **B6** | code-reviewer 2 | HIGH | **`advance()` dropped four of seven events.** It OR-accumulated `jumped`, `landed`, `leftGround` by name while `TickEvents` had grown to seven, so `attackStarted`, `hitActive`, `hitLanded` and `respawned` never left the batch. `GameScene` read `events.respawned` as **always false** — the interpolation guard added earlier this same session could never fire. `respawn.test.ts` calls `tick()` directly, so the seam no test crossed is the seam the field was dropped in. | ✅ Walks `Object.keys(total)`, so a new edge is accumulated the moment `noEvents()` declares it. New `tick-events.test.ts` runs the same scenario through `tick()` by hand and through `advance()` and asserts they agree **field by field**, over the declared list rather than a named one. Red-proved: **2 failed**, naming `attackStarted` first. |
+| **P5/T14** | performance-engineer | LOW→ | **5.11 asserted visibility by arithmetic, never against the camera.** `DEV_FLEET_SPREAD_SIM_PX = 288` assumes the camera is centred on the player, which it is not once `cameraRig`'s bounds clamp engages. True today only because `level-01` spawns at x 624 of an 8640 px level. | ✅ The spec now reads `camera.worldView` and asserts all 20 spawned bodies are inside it. Red-proved by widening the spread: *"only 16 of the 20 spawned bodies are inside camera.worldView"*. Narrows T14 too — the off-camera half of "counted as drawn but isn't" is now caught directly. |
+| **A1** | performance-engineer 2 | HIGH | **The 5.11 sample window was shorter than the sentry cooldown.** Every sentry starts ready to fire, so all ten volley on one tick and go silent for 90. At 240 Hz a 120-**frame** window is half a second — a third of one cooldown — so the synchronised volley, the exact batched cost an O(n²) sweep would appear in, could fall entirely outside the window or into the untimed gap before it. | ✅ The window is bounded in **sim ticks** now, read off `__game.tick`, at `2 x SENTRY_COOLDOWN_TICKS` — at least two full volleys per half at any refresh rate. The retyped cooldown is asserted against the live sim so it cannot rot. |
+| **A2** | performance-engineer 2 | HIGH | **`workP95Ms` was computed, printed, and asserted on nowhere.** A volley is a handful of frames in hundreds and a median is blind to it by construction — so the one statistic capable of showing a burst was being reported to a human and gated by nothing. | ✅ `MAX_BURST_RATIO = 6` gates the p95 ratio beside the median's 4. Looser because a p95 over a few hundred samples is noisier, not because bursts matter less. |
+| **A4** | performance-engineer 2 | MED | **Order asymmetry biased the ratio downward.** The control is sampled first, on cold JIT; the fleet half runs warm. That makes the ratio look better than the truth — the one direction a gate must not be biased in. | ✅ A discarded warm-up window of one cooldown runs through the same code paths before the control. |
+| **M1** | code-reviewer | MED | **`src/sim/enemies.ts`'s barrel docstring documented two deleted mechanisms** — hysteresis via `releaseRadius`, and a `CHASE_COMMIT_TICKS` floor. Both went when aggro became permanent; three other files were updated and the barrel every importer reads first was not. Finding S6's shape, in the file that names criterion 5.3's own vault items. | ✅ Rewritten to describe what actually commits: a one-way flag nothing inside `stepScavenger` can clear — a stronger guarantee than two thresholds, because there is no gap to stand in the middle of. |
+| **M2** | code-reviewer | MED | **`SCAVENGER.contactCooldown: 45` was dead.** One grep hit across `src/`, `tests/` and `tools/` — its own declaration. The real contact cadence is the shared `IFRAME_TICKS`. Two statements of one quantity agreeing at 45 by coincidence, in the block a tuner reaches for first *(vault 5.3)*. | ✅ Deleted, with a note where it stood. A knob nobody reads is worse than no knob: it invites someone to turn it. |
+| **M3** | code-reviewer | MED | **A tuned sentry cooldown pinned its fire episode open forever.** `sentryAnim` derives the episode as `windowOpen(cooldownCounter, SENTRY_FIRE_TICKS)` while `stepSentry` **saturates** that counter at `cooldown`, so any `cooldown <= 18` leaves a counter that can never reach 18. At 18: `fire` on **400 of 400** ticks, `idle` on none — an episode that never closes, which is the exact failure 5.3 forbids, fifteen keypresses from the default through the knob 5.9 requires to be sweepable. | ✅ The knob floors at `SENTRY_FIRE_TICKS + 1`. Gated as a **relationship**, not the number 19, plus a non-vacuity test that at the floor the episode genuinely opens *and* closes. |
+| **5.4c** | qa-expert 2 | HIGH | **5.4c's evidence was stale, and this session made it stale.** The recorded PASS (*"frame 3, tick 9"*) was measured against the **8-frame** attack sheet; `d0fac00` repacked it to **10** and did not re-run G5, which is a CLI wired into no automated gate. | ✅ Re-run: `PASS brass-courier/attack G5 frame 4 (tick 9) lands inside the active window [6, 10)`. No defect — but the evidence needed refreshing and the structural hole is recorded below. |
+| **5.12a** | code-reviewer 2 | HIGH | **The size gate's path resolution was dead for every test file.** `repoPath` string-stripped `../../`, but Vite resolves keys against `tests/unit/`, so everything under `tests/` came back as `../e2e/…` or `./…` — a form no log could contain. Only the basename fallback worked, which is how a 648-line file counted as "recorded" via an unrelated citation. | ✅ Resolved properly against the base directory rather than string-stripped. |
+| **5.12b** | code-reviewer 2 | HIGH | **`tests/e2e/phase-05-perf.spec.ts` was 480 lines** — the size gate was genuinely **red** at `21c56ff`. | ✅ Split at a real seam: `perfSampler.ts` holds the instrument (what a sample is, why work and not interval, why the window is in ticks), the spec holds what 5.11 asks and asserts. 218 + 291. |
+
+### Recorded, with reasons — not applied
+
+| # | owner | finding | why not |
+|---|---|---|---|
+| **B3** | code-reviewer 2 | A chasing scavenger that **cannot move** — inside `deadZone`, or vetoed by the ledge probe — still plays the `chase` cycle in place, violating the foot-plant invariant by 18 px a frame. Under the old release radius this ended; with permanent aggro it never does. | Real. The fix needs a stationary pose the scavenger **does not have**: `rust-scavenger/idle` was explicitly descoped in session 4 as art whose sim state does not exist. Choosing between buying that art and deriving the animation from actual travel is a design decision plus possible spend — **STOP-and-ask**, raised with the user. |
+| **B4** | code-reviewer 2 | **Aggro survives the player's death.** Nothing clears `chasing` on respawn, so scavengers walk to the new spawn and never patrol again; repeated deaths converge them on the spawn point. | Real, and a direct consequence of the permanent aggro the user asked for on 2026-08-14. Whether death should release aggro is a **balance decision, not a repair** *(vault 5.9)* — and `level-01` has one scavenger, so the convergence is currently invisible. Raised with the user. |
+| **B5** | code-reviewer 2 | The **sentry re-derives `facing` every tick** with no dead zone, so a player oscillating around `sentry.x` strobes `flipX` at 60 Hz. Its docstring claims the scavenger's rule (*"HELD otherwise — same rule and same shape"*), which is what a reviewer checks against instead of the code. | Real, and the docstring is wrong. Deferred with the user's knowledge rather than fixed blind: it is a **visual** claim nobody has observed, `setFlipX` does not restart an animation so no gate sees it, and mirroring the dead zone is a behaviour change to a shipped enemy at the end of a long session. Next session's first candidate, with the docstring correction. |
+| **P1** | performance-engineer | **GPU work is invisible** to a main-thread timestamp. A regression made of overdraw, alpha blending or draw-call count leaves `workMedianMs` flat. | ~~Structural. The honest closure is a GPU timer query, which is not reachable without a new dependency.~~ ✅ **CLOSED 2026-08-14 — and that reason was WRONG.** It is a WebGL extension, reachable from the page, no package involved. See the entry below. |
+
+### ✅ P1 CLOSED — the GPU timer, and two false "unreachable" claims
+
+**Both recorded reasons were wrong**, in two separate files:
+
+| where | claim |
+|---|---|
+| `tests/e2e/phase-05-perf.spec.ts:50` | *"a GPU timer query, **which is not reachable from here**"* |
+| this log, finding P1 | *"not reachable **without a new dependency**"* |
+
+It is a **WebGL extension**, available from the page itself. No package, no change to the frozen
+dependency list. *A blind spot recorded with a wrong reason is worse than one recorded with none,
+because the wrong reason is what stops the next person looking.*
+
+#### 🔴 The plan named the wrong extension, and probing first is what caught it
+
+The session plan specified `EXT_disjoint_timer_query_webgl2`. Probed before writing anything:
+Phaser's context here is **`WebGL 1.0 (OpenGL ES 2.0 Chromium)`**, so that extension *cannot* exist
+on this machine. Had this been built from the plan it would have found nothing and been "correctly"
+skipped — **recording a third false unreachability on top of the two above.**
+
+What is present is `EXT_disjoint_timer_query`, the WebGL 1 sibling, with its own `*EXT` API. Probed
+on the RTX 4080 via ANGLE/D3D11: **64 counter bits, 27 samples in 30 frames, 0 disjoint, median
+0.104 ms** — real numbers, not the `0 / 0` that killed `long-animation-frame`.
+
+#### 🔴 Two instrument bugs, both caught by numbers that were impossible rather than merely wrong
+
+**1. Cumulative state.** `sample()` runs three times per page (warm-up, control, fleet) against one
+installed timer, and the accumulators were never reset — so the control reported warm-up + control
+and the fleet reported all three. It presented as **1075 GPU samples from 720 rAF frames** at one
+query per frame. The ratio built on it read **0.38x**: the fleet apparently costing *less* GPU than
+the control, which is the direction that makes a gate silently unfailable.
+
+**2. The bracket was too wide.** Bracketing on the sampler's own rAF callback spans nearly a whole
+frame interval, so it contains the GPU's **idle wait for vsync**, which `TIME_ELAPSED_EXT` on
+ANGLE/D3D11 does not reliably exclude. It showed as a **bimodal baseline across identical runs**:
+
+| run | baseline GPU median | ratio |
+|---|---|---|
+| 1 | 0.195 ms | 1.52x |
+| 2 | 0.197 ms | 1.51x |
+| 3 | **2.654 ms** | **0.13x** |
+
+A 13x swing in the *denominator* — again the dangerous direction, since an inflated baseline divides
+a real regression away into a passing ratio.
+
+Fixed by bracketing on Phaser's own `prerender` / `postrender` events, which fire either side of the
+render pass. *(`renderer.events` does not exist on Phaser 4's `WebGLRenderer` — the renderer **is**
+the emitter, so it is `renderer.on(...)`. Probed, not assumed.)* Three consecutive runs afterwards:
+
+| | baseline median | fleet median | ratio |
+|---|---|---|---|
+| 1 | 0.111 ms | 0.241 ms | **2.18x** |
+| 2 | 0.116 ms | 0.246 ms | **2.12x** |
+| 3 | 0.116 ms | 0.246 ms | **2.12x** |
+
+Stable to ±3 %. `MAX_GPU_RATIO = 5` — shaped to catch super-linear growth, not to pin 2.12.
+
+#### The mutation, and why it is the whole point
+
+`src/scenes/enemyLayer.ts` `setFlipX(desc.flipX)` → `setScale(4)`: identical draw-call count,
+identical batch, one extra multiply on the main thread, **16x the fill per body**.
+
+| | clean | mutated |
+|---|---|---|
+| main-thread ratio | 1.14x | **1.17x** — unchanged; `MAX_WORK_RATIO = 4` passes happily |
+| GPU ratio | 2.12x | **12.61x** — fails, by name |
+
+*"adding 20 on-screen enemies multiplied per-frame GPU time by 12.61x (0.119ms -> 1.498ms) while
+main-thread work moved 1.17x."* This is a defect the existing gate structurally **cannot** see and
+the new one catches — demonstrated, not argued. C12: `setFlipX(desc.flipX)` in `enemyLayer.ts` 2 → 1,
+`setScale(4)` 0 → 1; restored byte-identical by `cmp`.
+
+#### ⚠️ The GPU p95 is measured, printed, and deliberately NOT gated
+
+Across the same three runs the p95 *ratio* swung **0.08x, 1.78x, 0.23x** — a 20x spread driven by
+compositor spikes in the baseline p95 (3.460 ms, 0.147 ms, 1.137 ms), not by the fleet. A bound loose
+enough to survive that catches nothing; one tight enough to mean something fails at random and trains
+the next reader to dismiss a red run. Same treatment as `long-animation-frame`, for the same reason,
+and said out loud rather than quietly dropped *(vault 9.3)*.
+| **P4/A3** | performance-engineer | Spawn cost and the patrol→chase transition burst fall **between** the two windows; the ratio is of **total** frame work, so a large fixed overhead dilutes a bad per-enemy cost. | Both true, both stated in the header. The first is deliberate — a one-off spawn spike is a different question from a frame budget. The second has no cheap fix that does not require isolating enemy-only cost, which the renderer does not expose. |
+| **P6** | performance-engineer | **No enemy dies during the window**, so the death animation, the alpha fade and the never-removed corpses are never measured. | Stated in the header. Adding deaths to the fixture changes what "worst case" means and wants its own decision. |
+| **S5** | performance-engineer | `DEV_FLEET_COUNT = 20` is a chosen multiple, **not a bound** — nothing in `src/sim/` or the level format caps concurrent enemies. | Already recorded as S5, still open, unchanged. Capping it is a design decision. |
+| **L1** | code-reviewer | `chaseCounter` has **no production reader** — vault 5.1's "one flag plus one counter" is in practice one flag plus a write-only odometer. | Correct, and deliberate: Codex plan review finding 6 required keeping it. The commitment is the flag's one-wayness; the counter is the episode's age and is what the aggro tests assert against. |
+| **L2** | code-reviewer | The `chaseSpeed` knob steps by 0.5 with **no snap**, so it can leave the foot-plant set (`18 / n`: 18, 9, 6, 4.5) and silently reintroduce foot-slide. | Real and cheap, but it is a **dev-only tuner**, and its whole purpose is exploring values off the shipped set before one is chosen. Snapping it would remove the exploration. Recorded; the invariant is already stated in red at the top of `enemyScavenger.ts`. |
+| **T1 · T4 · T5 · 5.10** | qa-expert | 5.2's named tunability test sweeps only `patrolSpeed`; 5.9's sweep uses two set-points per knob; 5.16's "no contact damage" is vacuous for the sentry; 5.10's named test proves a hp ratio, not a live kill. | All four **pre-existing and already recorded**, all confirmed unchanged. 5.10's substance is now demonstrated by the real-swing kill test added this session — filed under 5.16 rather than 5.10, which is a filing problem, not a coverage one. Tightening 5.9's sweep is a **criterion change** and therefore a STOP-and-ask that was already asked and declined. |
+| **5.4d** | qa-expert | The log cited `asset-catalog.test.ts:192-199` as re-deriving fps *"for every shipped row"*; that `it.each` covers only `walk/run/jump/fall/idle` and never names `attack`, `hurt` or `death`. | Citation drift, not a coverage gap: the combat rows are covered by `catalog-timings.test.ts`, which imports **both** the sim constants and the build-time mirrors and asserts they agree, plus `asset-catalog.test.ts`'s generic identity loop over all rows. Corrected here. |
+| **M4** | code-reviewer | A **47.9 MB screen recording is still tracked in git**. `.gitignore` gained `Recording*.mp4` but that has no effect on an already-tracked file, so merging puts 48 MB into `main` permanently. | Real and needs doing before the merge. It is the **user's own file** and deleting a file is a STOP-and-ask — raised with them rather than removed. |
+
+### 🔴 The structural hole 5.4c sits in, which is worse than the stale number
+
+G5 — *"the contact frame lands inside the active window"* — runs **only** from
+`node tools/gen/sheetGates.mjs <slug> <action>`, by hand. `reachGate.mjs` is unit-tested against
+synthetic fixtures and **never against the shipped `attack.png`**. So repacking the sheet
+invalidated the recorded evidence and **nothing went red**; the criterion kept reading PASS against
+a sheet that no longer existed.
+
+This is the shape vault 3.1 exists for — *the unit suite runs the real validator over the shipped
+bytes* — and the art gates are the one place this project does not do it. Recorded as the first
+candidate for next session; closing it means calling `reachGate` from a unit test over
+`public/assets/`, which is the same move `tilemap-data.test.ts` already makes for levels.
+
+#### ✅ CLOSED, 2026-08-14 — and it cost far less than the entry above assumed
+
+The harness did not need building. **`tests/unit/sheet-gates.test.ts` already decoded a shipped PNG
+off disk inside vitest and called `runSheetGates('brass-sentry', 'idle')`.** It reported G5 as `N/A`
+because that action has no attack window, and `brass-courier/attack` is the *only* pair in
+`ATTACK_WINDOWS` — so the one line that would have exercised G5 against real bytes was simply never
+written. The decode path, the catalog lookup and the window table were all already in-process.
+
+Now wired, with three assertions the hand-run CLI could never have made:
+
+| pinned | value | why the verdict alone is not enough |
+|---|---|---|
+| `peakFrame` | 4 | — |
+| `peakTick` | **9** against a window closing at **10** | one tick of margin; a re-shoot that walks the peak one frame later flips PASS → FAIL with no prior warning |
+| plateau tie-break | first of frames 4/5/6 | **the shipped sheet passes only because of it** |
+
+**The plateau is the real finding.** The shipped reach profile ties at 293 px across *three* frames.
+`gateReachWindow` documents that the first of a tie wins; that is not a formality here —
+
+| tie-break | peakFrame | peakTick | inside [6, 10)? |
+|---|---|---|---|
+| **first (shipped)** | 4 | 9 | ✅ |
+| second | 5 | 11 | ❌ |
+| last | 6 | 13 | ❌ |
+
+`facing` is never supplied by `sheetGates.mjs`, so `gateReachWindow` defaults to `'right'`
+(`tools/gen/reachGate.mjs:124`). Recorded as **deliberate and correct**, not merely untested, and
+pinned by a test asserting a left-facing measurement of the same sheet gives a *different* peak — if
+it did not, `facing` would be inert and G5 direction-blind.
+
+**Red-proved three ways**, each restored byte-identical by `cmp`:
+
+1. Declared window → `[1, 3)` — the exact mutation that stayed green in session 10. → **4 failed**,
+   including the shipped-sheet case, `"frame 4 (tick 9) misses the active window [1, 3)"`.
+2. `PLAY_LAG_TICKS` `1 → 0` — **the important one.** `peakTick` becomes 8, which is *still inside*
+   the window, so **the verdict stays `PASS` and every other assertion in the file stays green**.
+   Only the `peakTick` pin catches it: → **1 failed**, `expected 8 to be 9`. This is the precise
+   demonstration that a verdict-only assertion is blind to margin erosion.
+3. Plateau tie-break `find` → `findLast` — → **3 failed**, and the shipped art now FAILs G5, which is
+   what proves the documented rule is load-bearing rather than decorative.
+
+Criterion **5.4e's structural hole is closed**: G5 now runs over the shipped bytes on every
+`npm test`, so repacking `attack.png` can no longer invalidate the evidence silently.
+
+### Criterion 5.12 — the EIGHT files over 400 lines, each with its reason
+
+The rule permits a file over the limit **with a written justification in the phase's QA log**. This
+is that justification, and it is the first one this phase has actually had: the previous verdict
+(*"0 project files over 400"*) was measured at `ea0c6e4` and has been stale for two sessions.
+
+| file | lines | why it is not split |
+|---|---|---|
+| `tests/unit/enemy-ai.test.ts` | ~~648~~ **701** | One subject — the enemy AI — across five criteria (5.1, 5.2, 5.3, 5.9, 5.16). Splitting by criterion would put the same fixtures in five files; splitting by enemy would separate the sentry and scavenger tests that assert **against each other** (5.10's "two different entities"). The length is fixtures and their reasoning, not logic. |
+| `src/scenes/GameScene.ts` | 515 | Already split five ways — `gameInput`, `gameHud`, `gameLevelDraw`, `gameParallax`, `devSpawn`. What remains is the seam itself: the accumulator, the tick drain, the render pass and the debug surface, which is the one thing that cannot be moved without moving the thing this file exists to be. Its own comment claiming the split *"keeps this file under the 400-line rule"* is now stale and is corrected. |
+| `src/sim/combat.ts` | 468 | Grew 448 → 468 with the respawn's window-closing fix. Every export is one step of the tick's step 4 plus the constants Phase 5's art is generated against; the docstrings are the balance record the art pipeline reads. Splitting the constants from the machine that consumes them is exactly the two-definitions risk *(vault 5.3)* this file's own header is about. |
+| `src/sim/player.ts` | 446 | The movement resolver and `DEFAULT_TUNING`. Same argument: the knobs and the code that reads them, together, one file, no second copy. |
+| `tools/gen/motion.mjs` | 415 | **Crossed 400 in this session's own `d0fac00`, 390 → 425, entirely from one docstring** — and the size gate stayed green only because the basename appeared in a log for an unrelated reason. Trimmed to 415 by removing the half that duplicated `tests/unit/blockedDwell.ts`; the rest is the paid-for prompt lessons this project exists to keep. Deleting more would be getting under the limit by deleting the knowledge. |
+| `tests/e2e/phase-04-assets.spec.ts` | 407 | Phase 4's asset spec, untouched this phase. |
+| `tests/unit/sheet-packing.test.ts` | 402 | Crossed at 405 in Phase 4 when per-animation lift landed; recorded there, unchanged here. |
+| `tools/gen/motionCombat.mjs` | **426** | **New 2026-08-14**, from the scavenger's `idle` and `attack` records. Roughly two thirds of this file is **literal prompt text sent to fal** — shortening it changes the art that gets generated, which is not a refactor. Both new docstrings were trimmed twice, with their analysis **relocated** to `docs/generations/phase-05-scavenger-{idle,attack}.md` rather than deleted. A split was **considered and rejected**: the scavenger block calls `poseSpan`, so moving it would deepen the `motion.mjs` ↔ `motionCombat.mjs` cycle whose failure mode is a *silently incomplete* `VIDEO_MOTIONS` spread under Vite — a worse risk than the line count. |
+
+#### ⚠️ The ceiling moved 7 → 8, and it was lowered to 7 EARLIER THE SAME DAY
+
+`file-size.test.ts`'s ratchet was tightened `10 → 7` this session (D6b), and this entry raises it to
+**8**. That is a loosening of a gate tightened hours before, so it is recorded rather than edited
+quietly — a ceiling that moves without a note is how the rule decays.
+
+What makes it legitimate rather than convenient: **the ratchet did its job.** It went red the moment
+a new over-limit file appeared, which is exactly what its own docstring says it exists for
+(*"so that ADDING a new over-limit file is red even if a QA log happens to mention its name for
+another reason"*). The file then had to earn its row in the table above, and the alternatives were
+tried first and are written down — trimmed twice, analysis relocated, split considered and rejected
+**for a stated technical reason**, not for effort.
+
+The 400-line rule itself was never bent: it permits a file over the limit *with a written
+justification in the phase's QA log*, and that is what the row above is.
+
+#### 🔄 REVERSAL, 2026-08-14 — T7 was reopened and both halves are now tightened
+
+The paragraph that stood here said the ceiling was *"still `<= 10` with seven over"*, that ratcheting
+it *"was **declined on 2026-08-13** (finding T7) and is not reopened here"*. **That decision has been
+reversed by the user (D6b, 2026-08-14).** It is recorded as a reversal with its date rather than as a
+fresh decision, because a rule that flips silently is a rule the next reader argues with — the
+decline was itself a STOP-and-ask that was properly asked and answered, and so was the reopening.
+
+Both loose halves are now closed:
+
+| half | was | is | cost |
+|---|---|---|---|
+| basename fallback | `!allLogs.includes(f.path)` **`\|\| basename`** | path citation only | **zero** — all 7 files above already cite a full path |
+| ceiling | `toBeLessThanOrEqual(10)` | `toBeLessThanOrEqual(7)` | zero — set to the actual count |
+
+The fallback is the one that had already failed in the field: `tools/gen/motion.mjs` in the table
+above records the size gate staying green *"only because the basename appeared in a log for an
+unrelated reason"*. Removing it costs nothing precisely **because** the path check was repaired
+first; the two changes had to land in that order.
+
+**Red-proved, both, 2026-08-14** — each restored from a backup taken immediately before it and
+`cmp`'d byte-identical:
+
+- **fallback:** rewrote the one path citation of `tools/gen/motion.mjs` in this file down to the bare
+  `motion.mjs`, leaving 5 basename occurrences. → `Tests 1 failed`, naming
+  `tools/gen/motion.mjs (415 lines)`. With the fallback still present this passes, which is the proof
+  that removing it is what catches it.
+- **ceiling:** added an 8th over-limit file (421 lines) under `src/game/`. → `Tests 2 failed`, one of
+  them `expected 8 to be less than or equal to 7`. At the old `10` this passes.
+
+⚠️ **The count reached seven only after a split made in this same session.** See the note below.
+
+#### The table above was stale within the session that wrote it
+
+Re-measured on 2026-08-14 before the ratchet, the set was **eight**, not seven, and two rows were
+wrong:
+
+- `tests/unit/enemy-ai.test.ts` is **701**, not 648 — grown by this session's own dead-zone tests.
+- **`tests/unit/enemy-view.test.ts` had crossed to 455** and was a genuinely *new* over-limit file,
+  pushed there by this session's own exhaustiveness-test rewrite. It carried **no path citation**,
+  only a basename — so it was exactly the case the fallback existed to mask, created hours after the
+  fallback was scheduled for removal.
+
+Rather than ratchet to 8 and accept a file this session had bloated, it was **split** — the order of
+preference the rule states. `enemy-health-bar.test.ts` now holds criterion 5.7 (197 lines) and
+`enemy-view.test.ts` holds 5.4 / 5.4d (278 lines). The seam is the **criterion boundary** and the two
+halves share no fixture; this is deliberately not a `-helpers` module that one file imports, which
+`file-size.test.ts:18-27` names as the way to game this gate. 28 tests, all preserved.
+
+That restored the count to exactly seven and let the approved ratchet land at the approved number.
+**The lesson is the one this gate keeps teaching: a table of measurements goes stale inside the
+session that writes it.** Re-measure before quoting.
+
+---
+
+# Session 11 — the locomotion retune that was measured and then NOT applied
+
+**Decision: no speed change. The shipped tune stands.** Recorded because the measurement behind it
+cost real work, closes a question that will be asked again, and would otherwise have to be re-derived
+by the next person who thinks the game moves too fast.
+
+## The request, and why the obvious answer does not exist
+
+The player, 2026-08-15, after playing the session's art: *"I think we need to slow down the game of
+the character and the enemies. I think maybe another 10%. I think the all move is a bit fast."*
+
+**10% is not a value locomotion speed can take.** Planted feet require
+`ticksPerFrame × speed === footPxPerFrame` with a WHOLE `ticksPerFrame`, so the only run speeds that
+exist are `18 / n` — **18, 9, 6, 4.5**. From today's 9.0 the next one down is 6.0, a **33%** cut.
+This is the same wall session 10 hit, from the same request, and it is now hit twice.
+
+Two options were put to the player:
+
+- **A — take the reachable step.** Two integers (`LOCOMOTION_TICKS_PER_FRAME` 2→3,
+  `CHASE_TICKS_PER_FRAME` 3→4) plus the authored fps that must move with them. Free, minutes.
+- **B — re-cut the three locomotion sheets** at new frame counts so the speed lands near 10%. No new
+  art and no money (the clips are on disk), but the foot travel must be **re-measured** on the new
+  sheets, and 1–2 hours with a real chance the loop gates fail at a new frame count.
+
+A was chosen deliberately as the cheap probe: ten minutes to find out whether 33% was simply wrong,
+rather than arguing arithmetic.
+
+## 🔴 A was built, and it broke the LEVEL — which nobody had predicted as a hard failure
+
+`tests/unit/level-traversal.test.ts` went red on both crossings:
+
+```
+the pit between the two floor sections can be crossed with a run-up
+  fell or stalled crossing a 288px pit at x 3840; furthest x 4020.525
+the spike strip can be cleared with a run-up
+  lost 20 hp and reached x 2798 against a 192px strip starting at 2304
+```
+
+**Short by roughly 107 px.** The risk had been flagged before the change ("a slower run means you
+clear less gap per jump") but as a *possibility*; it is a certainty, and the traversal gate is what
+turned it from a guess into a number within one run. **This is the file earning its keep** — a
+vertical-apex gate could not see it, and the failure would otherwise have surfaced as an
+unplayable level in a playtest.
+
+## The measured ceiling — this is the number worth keeping
+
+Swept with a scratch probe reusing `level-traversal.test.ts`'s own `attempt()`, over the real shipped
+`.tmj`, varying `runMax` and scaling every horizontal knob by the same factor `SPEED_SCALE` does:
+
+| `runMax` | vs today | pit (288 px @ 3840) | spikes (192 px @ 2304) |
+|---|---|---|---|
+| 9.00 | 100% | ✅ | ✅ |
+| 8.10 | 90% | ✅ | ✅ |
+| **7.80** | **87%** | ✅ | ✅ |
+| **7.70** | **86%** | ❌ **falls in** | ✅ |
+| 7.20 | 80% | ❌ | ❌ |
+| 6.00 | 67% *(option A)* | ❌ | ❌ |
+
+**`level-01` tolerates at most a 13% slowdown, and it is a cliff rather than a slope.** One notch
+past 7.80 the jump no longer reaches. The spike strip is the looser of the two constraints (fails at
+7.20); **the pit is what binds.**
+
+So the player's instinct was right and A's arithmetic was not: **10% was very nearly the only cut
+that fits**, and only B could have reached it.
+
+> ⚠️ **The first sweep reported EVERY row failing, including today's shipped 9.0.** The probe set
+> `latchJumpPress` true for one tick and false after, so `jumpCutDivisor: 3` chopped every jump to a
+> third of its height. The real harness holds `input.jumpHeld = true` for the whole attempt and
+> comments that releasing early *is* the jump cut. **A sweep that fails at the known-good control is
+> reporting on the harness, not the subject** — the control row is what caught it, which is the
+> argument for always including one.
+
+## Outcome: reverted, and the player accepted the shipped speed
+
+A was reverted in full — six files restored with `git show HEAD:path > path`, never `git checkout`,
+and the suite returned to 1134 green. **Nothing was committed.** The player's call on being shown
+the 13% ceiling: *"it's still good enough to me."*
+
+**What is now known and must not be re-derived:**
+
+1. Locomotion speed is quantised to `footPxPerFrame / n`. Any request phrased as a percentage has to
+   be checked against that set **before** it is agreed to.
+2. `level-01` has **13% of headroom** and the binding obstacle is the 288 px pit at x 3840.
+3. Anything slower than that is **a level edit**, not a tuning change — which is a different
+   decision with a different owner. `level-traversal.test.ts`'s own failure message already says so:
+   *"widen the jump only by changing the LEVEL."*
+4. The enemy half is cheaper than the player half and was never the blocker: `chase` at
+   `18/4 = 4.5` breaks nothing, because no enemy has to clear the pit. If the request ever returns as
+   *"the enemies specifically feel fast"*, that half can land alone.
+
+⚠️ **A side effect A would have shipped, recorded so it is priced next time.** The player is cut 33%
+and the scavenger 25% — those are the steps that exist, not a choice — so the ratio moves
+**0.667 → 0.75** and the ground gained by running drops from 3.0 px/tick to **1.5**. Since aggro is
+permanent (session 10), the escape margin is load-bearing, and *any* future slowdown must re-check it
+rather than assume it survives.
+
+The scratch probe is not committed. It is reproducible in ten minutes from
+`level-traversal.test.ts`'s `attempt()` plus a per-world tuning multiply.
+
+---
+
+# The session-11 QA gate — three owners, two briefs each *(A7)*
+
+Run 2026-08-15 against HEAD `4b305e2`. Three agent owners, brief 1 then brief 2, **brief 1's findings
+withheld from brief 2**, fresh agents so nothing carried over. Every finding is applied or recorded
+with a reason *(C11)*, and every claim was **re-verified locally** before being acted on — including
+one of my own that the checking found overstated.
+
+**Two criteria came back FAIL, and the gate is the only reason either was known.**
+
+## Three real defects in shipped behaviour — all introduced this session
+
+| # | Finding | Disposition |
+|---|---|---|
+| **B1** | **The attack trigger was one-dimensional.** `Math.abs(playerX - x) <= attackRange`, no `y` term, while every other perception goes through the exported 2-D `withinRadius`. Measured: player 900 px straight up, `dx = 0`, giving 3 swings in 200 ticks, 108 of 200 ticks drawn as `attack`, and a patrol that travelled 50 px instead of 500. Reachable in `level-01` — a solid at `x 6144-6720` sits directly over the scavenger band. | **APPLIED.** Uses `withinRadius`. |
+| **B2** | **The same block ran before detection and unconditionally**, so `detectRadius: 0` — documented as *"the AI off-switch several combat fixtures rely on"* — still swung and still dealt damage. | **APPLIED.** Gated on `chasing`, ordered after detection. Costs nothing in play: `detectRadius` 480 is 3.3x `attackRange`. |
+| **B3** | **`facing` was written at two sites and only one carried the dead-zone guard.** The swing-commit site was unguarded. Measured at `deadZone: 0`: **144 flips in 300 ticks**. `ENEMY_DEAD_ZONE`'s own docstring says this defect *"has to be prevented rather than detected"* because `setFlipX` restarts nothing and no frame gate can see it. | **APPLIED.** Both sites guarded. |
+
+## The gates that could not go red
+
+| # | Finding | Disposition |
+|---|---|---|
+| **G1** | **5.4c — `rust-scavenger/attack` had no G5 window at all.** `ATTACK_WINDOWS` held one row, so `attackWindowFor` returned `null`, `runSheetGates` printed `N/A`, and a criterion whose text says *"every attack sheet"* read as satisfied against a table with one entry. Found independently by **both** 5.4c briefs. | **APPLIED — and it FAILED on first run.** See below. |
+| **G2** | **5.4d — three mirrors nothing pinned.** `SCAVENGER_ATTACK_TOTAL_TICKS` and the startup/active copies in `sheetGates.mjs`, each carrying a docstring claiming *"pinned equal to the real export by tests/unit/sheet-gates.test.ts"*. **No test pinned any of them.** | **APPLIED.** All three locked in `catalog-timings.test.ts`. |
+| **G3** | **5.16's damage clause was vacuous.** The fixture placed the scavenger at patrol `700-1300` against a spawn at `x 400` with `attackRange 144` — unreachable **even alive**, so deleting both death guards left it green. | **APPLIED.** Rewritten to arm a dead scavenger mid-strike on top of the player, **with a live control that must take damage** or the fixture is unreachable geometry again. |
+| **G4** | **5.5 — nothing walked `attackIsLive` per tick**, and the closest coverage stopped at the first hit, so it never re-checked recovery. i-frames would swallow a second hit anyway, masking a boundary that stayed live. | **APPLIED.** Full 36-tick walk with named endpoints, plus a whole-swing damage-once assertion. |
+| **G5** | **5.11 — the "worst case" was not connected to anything.** The spec hardcoded `DEV_FLEET_COUNT = 20`; `MAX_LEVEL_ENEMIES` appeared **zero times** under `tests/e2e/`. The measured 22 matched the cap by coincidence. The adversarial brief found the sharper half: a level shipping 10 enemies is legal and would make the test measure **30**, a total the production cap forbids. | **APPLIED.** The load is asserted equal to `MAX_LEVEL_ENEMIES`. |
+| **G6** | **5.11 — the gate would pass with a fully INVISIBLE fleet, and pass more easily.** `counts()` read body count, a creation-time `isSprite` flag and a POSITION — never `alpha` or `visible` — and a transparent sprite is cheaper to composite, so both ratios come in *lower*. The live trigger is `enemyLayer.ts`'s `setAlpha(... ? 1 : 0.35)`. **This project has shipped this exact shape twice** — grey-box Rectangles standing in for Sprites, and a death fade one frame early that played a whole KO at 35% opacity while the sampler reported every pose painted. Vault 9.4. | **APPLIED.** `counts()` reports `opaque`; the spec asserts it at both ends of the window. **Red-proved**: forcing `setAlpha(0.35)` fails with *"only 0 of the 20 spawned bodies are visible at full alpha"*. |
+
+### G1's consequence: the scavenger's strike was drawn AFTER the damage
+
+Run for the first time, G5 failed against the shipped bytes:
+
+```
+FAIL  rust-scavenger/attack  G5  frame 5 (tick 21) misses the active window [14, 20)
+                                 — contact is drawn after the strike
+```
+
+9 frames over 36 ticks, 4 ticks each; furthest claw extension is **frame 5** (ticks 20-23) and the
+window closed at 20. **The player was damaged on ticks 14-19 and the claw reached them on tick 21 —
+hit first, drawn second.**
+
+Fixed by moving the **sim** window (`startup` 14 to 18, `recovery` 16 to 12, total still 36) rather
+than the art: the art is bought and paid for, the tick counts are free, and 36 must stay divisible by
+the sheet's 9 frames. The window is now **centred** on the drawn strike, three ticks of margin either
+side. `activeFrames` moves from `[3,4]` to `[4,5]`.
+
+> WARNING — **that retune moved the only window in which this creature can hurt anything, and not one
+> test in the suite went red.** The mirror locks (G2) and the shipped-bytes G5 case now both catch
+> it, verified by mutation: reverting `startup` to 14 turns exactly those two red, by name.
+
+## Findings applied beyond the FAIL criteria
+
+| # | Finding | Disposition |
+|---|---|---|
+| **S1** | **`attackIsLive` restated the hit window inline** — six lines below its own comment warning that *"two copies of `counter >= startup && counter < startup + active` would be two definitions that happen to match today"*. It then wrote that expression. | **APPLIED.** Calls `hitWindowOpen`, which is what G5 measures the art against. |
+| **S2** | **The `deadZone` knob had a floor and no ceiling.** Five presses past `attackRange` and the gait key flaps: **132 animation restarts in 300 ticks**, measured, with every gate green. | **APPLIED**, per user decision 2026-08-15. `createScavenger` throws on `deadZone >= attackRange` and the knob caps below it — the same shape as the sentry cooldown floor. **Stated limitation: this makes the flap unreachable rather than removing it.** Hysteresis would remove it at source and was declined, because it re-adds the machinery this phase deliberately deleted when aggro became permanent. |
+| **S3** | **`behaviourSignature` never measured `facing`**, so the sweep could not see a knob whose entire job is to stop the sprite mirroring. | **APPLIED.** Flips are counted. |
+| **S4** | **The knob sweep went blind to `deadZone`** the moment S2's invariant landed — inside the band a swing plants the feet, so the dead zone's effect on travel is masked by construction. Measured **identical to the pixel** at `deadZone` 0, 96 and 143 across all three retreating placements. | **APPLIED.** A fourth placement, `stand`, with the retreat removed — which the file's own `RETREAT` docstring had predicted needing. **Second time a sim change silently cost this sweep its sensitivity, and it reported the knob dead rather than itself blind.** |
+| **S5** | **The 5.12 justification table was stale by up to 32 lines**, on rows written one session earlier — and `motion.mjs`'s whole justification was a trim since undone by more than it recovered. | **APPLIED.** The table below is freshly measured. |
+| **S6** | **The 7-to-8 ceiling raise leaned on a removable obstacle.** `motionCombat.mjs` "could not" be split because it imported `poseSpan` from `motion.mjs`, closing a cycle. `poseSpan` is a dependency-free string builder. | **APPLIED — the raise is undone by doing the work.** `poseSpan` moved to the leaf `motionClauses.mjs`; **the cycle is gone entirely**, verified by importing `motionCombat.mjs` first — the order that used to truncate — and reading a complete 17-entry table. The file then split per subject. **Every motion record was hashed before and after: byte-identical.** |
+| **S7** | Two stale claims in `phase-05-perf.spec.ts`'s blind-spot header: *"none of these are closable without a new dependency"* one line above the one closed with none, and *"nothing in the level format caps concurrent enemies"* after a cap was added. | **APPLIED.** Both corrected in place, struck through rather than deleted. |
+
+## Recorded, not fixed — with the reason *(C11)*
+
+| # | Finding | Why not fixed |
+|---|---|---|
+| **R1** | **5.3's own flap test cannot go red for any input.** `chasing` has no clearing path inside `stepScavenger`, so `changes <= 1` is a theorem about the code, not a measurement — and its only red-proof is a source mutation, which the file's own docstring admits. | Real, and the fix is a design question rather than an edit: making it input-falsifiable means driving death and respawn through `tick`. **Recorded as open.** The property it asserts is still true; what is false is the claim that the test proves it. |
+| **R2** | **The 5.12 ceiling is a count, not a set** — it cannot see one file leaving the list while another joins, and "named in a QA log" is a substring match that pre-approves roughly 48 files already cited for other reasons. | Both true. A membership-set gate is a different design and a bigger change than this gate should absorb mid-QA. **Recorded as the known ceiling of what a line-count test can do**, which its own header already says. |
+| **R3** | **Glob blind spots**: root configs, `tools/**/*.d.mts`, `src/**/*.mjs`, `.mts`/`.tsx`. The sanity check (`SOURCES > 30`) is satisfied by one glob alone, so it would not notice. | Re-verified: still nothing near the limit. **Recorded** — finding S8's judgement re-checked rather than assumed to still hold. |
+| **R4** | **The frame-0 e2e gate samples a patroller that cannot flap**, and its assertion (`distinctFrames > 1`) is weaker than its title — a walk pinned to frames 0 and 1 passes on a 12-frame sheet. | Real. Left for the phase's own e2e pass rather than edited mid-gate; **recorded with the exact weakness named** so it is not re-derived. |
+| **R5** | **`releaseAggro` does not clear `attackCounter`.** A scavenger mid-swing when the player dies carries the window through respawn. | Harmless today only because the respawn point is distant — which is a coincidence, not a design. **Recorded as open.** |
+| **R6** | **`attackRange` and `attackCooldown` have no Gym knob**, so the phase's newest mechanic has zero tunability and the 5.9 sweep cannot report them either way. | Real scope gap. Adding knobs mid-gate changes the very surface the sweep measures. **Recorded for the next tuning pass.** |
+| **R7** | **5.16 is vacuous for the SENTRY** — it never had a contact-damage mechanic, so "the dead sentry deals no contact damage" is unfalsifiable for one of the two entities it names. | Vault 5.5's shape: a measurement of exactly zero where the branch does not exist. Addressed by the criterion wording change rather than by a test that cannot fail. |
+| **R8** | **A7 is structurally compromised for 5.12, permanently.** Brief 1's findings are quoted **verbatim inside `file-size.test.ts`** — the file brief 2 was sent to attack. A second reviewer cannot read it without reading the first's conclusions, and the rule exists precisely because *"a second pass that has read the first one confirms it instead of attacking it."* | **Cannot be fixed without deleting the institutional knowledge those comments carry**, which is the failure mode the same file names first. Recorded as a standing limitation of gating a file that documents its own audit history. **Found by the agent, not by me** — and arguably the most valuable finding of the six reviews, because it is about the process rather than the code. |
+
+## The size table, FRESHLY MEASURED — 7 files over 400
+
+Measured at the end of the gate, not quoted from the previous session. That is S5's whole lesson.
+
+> ⚠️ **This table read "9 files" and listed two that were no longer on it, until the end of the
+> session.** `src/sim/enemyScavenger.ts` (464) and `tests/unit/enemy-tuning.test.ts` (401) were split
+> after it was written, and it was not re-measured. **S5's own finding, repeated inside the section
+> that records S5.** Re-measured against the tree, not against this file.
+
+| lines | path | justification |
+|---|---|---|
+| 727 | `tests/unit/enemy-ai.test.ts` | The AI's whole behavioural surface; split once already into `enemy-view` and `enemy-health-bar`. |
+| 517 | `src/scenes/GameScene.ts` | Phase 4 debt, recorded there. |
+| **486** | **`src/sim/player.ts`** | Tuning, the state machine and `toWorld` — the locomotion quantisation record lives here, and now the airborne-window reversal below it. **446 → 486 this session.** |
+| 468 | `src/sim/combat.ts` | The combat contract and its documented windows. |
+| **436** | **`tools/gen/motion.mjs`** | Mostly literal prompt text; **shortening it changes the generated art.** `poseSpan` left it this session (S6). |
+| 407 | `tests/e2e/phase-04-assets.spec.ts` | Phase 4, recorded there. |
+| 402 | `tests/unit/sheet-packing.test.ts` | Phase 4, recorded there. |
+
+**No longer over 400, and the ceiling stayed at 7 because of it:** `src/sim/enemyScavenger.ts` 464 →
+313, `tests/unit/enemy-tuning.test.ts` 401 → split to `enemy-constructor-guards.test.ts`. The
+airborne-window record was kept to a **pointer** in `tilemap-data.test.ts` and `anim-timing.test.ts`,
+with the one full copy in `foot-plant.test.ts`, for the same reason: three copies of one explanation
+pushed `tilemap-data.test.ts` to 420 and the honest fix was to stop restating it, not to raise the
+ceiling.
+
+**Split this session rather than justified:** `tests/unit/tick-world-damage.test.ts` 479 to **352**,
+with the claw window moving to `tests/unit/scavenger-claw.test.ts` (160) on the criterion seam; and
+`tools/gen/motionCombat.mjs` 426 to **264**, with the scavenger's five records moving to
+`tools/gen/motionCombatScavenger.mjs` (195) per subject. Neither is a `-helpers` module that one file
+imports, which `file-size.test.ts` names as the way to game this gate.
+
+---
+
+## The airborne window doubled — a REVERSAL, 2026-08-15
+
+The user played the shipped build and asked for one change: *"maybe it's slowing down when I fall or
+when I jump, so I can see the animation more easily."* At the shipped tune `jump` ran at **20 fps**
+and `fall` at **30 fps**, over an 18-tick rise and an 18-tick fall. Nine drawn frames of `fall`
+crossed the screen in 0.3 s.
+
+**What changed, and it is two knobs only:**
+
+| knob | was | now |
+|---|---|---|
+| `gravity` | 2.7 | **0.675** |
+| `jumpVelocity` | 48.6 | **24.3** |
+| `maxFallSpeed` | 51.6 | **51.6 — deliberately unchanged** |
+
+Consequences, all measured rather than predicted:
+
+| | was | now |
+|---|---|---|
+| rise / fall / airtime, ticks | 18 / 18 / 37 | **36 / 36 / 73** |
+| `jump` fps (derived, vault 4.22) | 20 | **10** |
+| `fall` fps (derived) | 30 | **15** |
+| continuous apex `v²/2g`, px | 437.4 | **437.4 — identical** |
+| `apexPx` as the discrete sim measures it | 461.7 | **449.5** |
+| apex in body heights | 1.60 | **1.56** |
+
+### Why this is a reversal and not a tweak
+
+`tests/unit/foot-plant.test.ts` carried an explicit guard titled *"leaves every VERTICAL knob
+untouched, so the tick contract is not a locomotion casualty"*, and `tilemap-data.test.ts` carried
+the matching note that *"`tick.ts`'s numbered order is declared authoritative and Phase 5's combat
+windows are written against it, so airtime is not a free variable."*
+
+**That stated reason was wrong about what it protected.** The tick contract fixes the ORDER of the
+fourteen steps. It says nothing about how many ticks a jump lasts, and every combat window —
+`SCAVENGER_ATTACK` 18/6/12, `HURT_LOCK_TICKS`, `IFRAME_TICKS` — is an independent integer that reads
+no vertical knob. Nothing downstream of the tick contract moved.
+
+What the guard was *actually* for was collateral damage: session 10 retuned every horizontal knob to
+plant the feet, and froze the six vertical knobs as a tripwire so a locomotion fix could not drag the
+jump along unnoticed. That purpose is preserved — the four knobs the locomotion retune must not touch
+are still frozen, and the two that moved are now held to the **relationship** that made the move safe
+(`v²/2g` = 437.4) instead of to a literal. `gravity` and `jumpVelocity` can be re-scaled together
+again without editing a test, and cannot be moved apart without failing one.
+
+### Why 36 and not some other number
+
+`simTicks % frameCount === 0` must hold for both one-shot rows. `jump` is 6 drawn frames and `fall`
+is 9, so the window must be a whole multiple of 18. 18 → 36 is the next step up, and it is the only
+one reachable without re-cutting either sheet.
+
+### Why `maxFallSpeed` was left out of the rescale
+
+Halving it to 25.8 would have weakened `tests/unit/tick-world-damage.test.ts`'s tunnelling fixture,
+which is a gate. **Never loosen a gate to make a change fit.** The accepted consequence is that the
+`maxFallSpeed / jumpVelocity` ratio doubled: a fall now takes 77 ticks to reach the clamp instead of
+20. That is a real feel change, and it is the one the user asked for.
+
+### Four fixtures that broke, all with the SAME root cause
+
+Every one of them was sized for the old gravity and could no longer reach the state it measures.
+None was a defect in the change; each was a measuring instrument that had a constant baked into it.
+
+| fixture | what it could no longer reach | fix |
+|---|---|---|
+| `knob-sweep.test.ts`, `maxFallSpeed` | the clamp — the knob went **dead in the sweep** | `TALL_WORLD` `heightPx` 8000, `longFall` 26 → 100 ticks, `FLOOR_ONLY` y 6000 |
+| `tick-world-damage.test.ts` tunnelling probe | enough speed to tunnel | `TALL` bounds 4000, 60 → 90 ticks, both worlds |
+| `derived.ts` `DEEP_FALL` | terminal velocity — reported **49.95 against a 51.6 knob** | `DEEP_BOUNDS` `heightPx` 9000 alongside the floor |
+| `coyote-time.test.ts` buffered jump | the buffer window before touchdown | the landing tick is now **measured on a probe world**, not derived from geometry |
+
+> 🔴 **The recurring shape, named once.** In three of the four the floor was not the constraint — the
+> **KILL PLANE** was. `createWorld` defaults `bounds` to the grey-box 1080 px extent *whatever
+> `solids` says*, so a fixture that moves its floor to y 4000 and says nothing about bounds is still
+> killing the player at 1080. At `gravity` 2.7 that was invisible because every window was short
+> enough. At 0.675 three separate fixtures were caught measuring the world's height instead of the
+> tuning. **A fixture that injects `solids` for depth must inject `bounds` too.**
+
+> ⚠️ **And one repair that looked right and was not.** `coyote-time.test.ts`'s first fix derived the
+> press moment from the trajectory: `distance-to-floor <= vy × (jumpBufferTicks - 1)`. It has to name
+> a floor, and `player.y` is the FEET while the surface the player lands on in that fixture is not
+> `GREY_BOX_SOLIDS[0]`. It silently never fired and the test stayed red. Measuring the landing tick
+> on an identical throwaway world knows nothing about gravity, floors or spawn heights, so it cannot
+> drift from them again — and `ticksToLand()`, ten lines above in the same file, was already doing
+> exactly that.
+
+### Red-proofs *(C1, C12)*
+
+| gate | mutation | observed |
+|---|---|---|
+| apex relationship | `jumpVelocity` 24.3 → 24.0 alone | `holds jump APEX…` fails, *expected 426.67 to be close to 437.4* |
+| `maxFallSpeed` exclusion | the same mutation | `records that maxFallSpeed was deliberately left out…` fails, 2.15 vs 2.123 |
+| buffered-jump tick semantics | `toBe(landedAt + 1)` → `toBe(landedAt)` | fails, *expected 27 to be 26* — it still tells touchdown from the tick after |
+| `DEEP_FALL` depth | *(observed before the fix, not staged)* | `terminalFallSpeed` read 49.95 against 51.6 |
+
+Both mutations verified applied by content-changed **and** original count dropped by one, and both
+restored with `cmp` byte-identical against a backup taken immediately before that mutation.
+
+### Traversal re-checked before anything else
+
+Level 01 is still crossable and the standing hop still cannot clear the pit — the same two facts that
+vetoed the 33 % locomotion slowdown earlier in this session. Verified before the fixtures were
+touched, because a change that breaks the level is not worth repairing tests for.
+
+### Full sweep
+
+`typecheck` clean · **1146 unit tests pass** · `test:sim-isolated` **1146 pass** with Phaser
+uninstalled, reinstalled at `4.2.1` exact · `build` + `verify-dist` ok · **e2e 49 passed** · port
+5173 clear *(C13)*.

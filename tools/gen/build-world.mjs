@@ -41,7 +41,44 @@ function runtimeTileSize() {
   return Number(match[1]);
 }
 
+/**
+ * The view width, read from the same source for the same reason as {@link runtimeTileSize}.
+ *
+ * A parallax layer's loop is only meaningful relative to how much of it is on screen at once, so
+ * the gate below cannot be written against a literal without going stale the moment the viewport
+ * changes — which is exactly how `TILE_SIZE` earned its own parser.
+ */
+function runtimeGameWidth() {
+  const src = readFileSync('src/game/constants.ts', 'utf8');
+  const match = /export const GAME_WIDTH = (\d+);/.exec(src);
+  if (!match) {
+    throw new Error(
+      'assets:world: could not read GAME_WIDTH from src/game/constants.ts. That file is the one ' +
+        'source for the viewport; this script must not carry its own copy.',
+    );
+  }
+  return Number(match[1]);
+}
+
 const TILE_SIZE = runtimeTileSize();
+const GAME_WIDTH = runtimeGameWidth();
+
+/**
+ * How many view widths a mirrored parallax loop must span before it is allowed to ship.
+ *
+ * **This is the invariant the 2026-08-13 crop violated, asserted instead of remembered.** That crop
+ * cut each layer to 960 px, which `mirrorLoop` doubles to exactly 1920 — the view width. A mirrored
+ * texture whose loop is no wider than the view shows its unique half AND its mirror in EVERY frame,
+ * so a duplicated feature is permanently on screen: in the shipped level the same three-dial gauge
+ * panel appeared twice at once.
+ *
+ * The comment further down records that defect in prose. Prose is not a gate: it was written by the
+ * person who had just been burned, and the next person to reach for the same 21.4 MB saving reads
+ * the diff, not the paragraph. At 2 the shipped layers sit at 2.65 and the reverted crop scores
+ * 1.00, so the number separates the two cases with real margin rather than by a hair.
+ */
+const MIN_LOOP_VIEWS = 2;
+
 const RAW = '_generated/world';
 
 function raw(prefix) {
@@ -199,7 +236,40 @@ function buildParallax() {
     // THEN mirror. Mirroring first would double the work for an identical result.
     const target = 1080;
     const scaled = downscale(image, Math.round((image.width * target) / image.height), target);
+
+    // 🔴 **Do NOT crop this to the viewport width.** It was tried on 2026-08-13 and reverted the
+    // same day, and the reason is not obvious enough to survive being rediscovered:
+    //
+    // Cropping to 960 makes `mirrorLoop` yield exactly 1920 — **the view width**. The whole
+    // texture, meaning the unique half AND its mirror, is then on screen in EVERY frame, so a
+    // duplicated feature is permanently visible: in the shipped level you could see the same
+    // three-dial gauge panel twice at once. At the full 2546 the same 1920 view shows only ~38 %
+    // of the texture, so a mirrored pair can appear near a seam rather than always.
+    //
+    // It bought 21.4 MB -> 7.5 MB of boot payload, and it was NOT worth it. It also did not do
+    // the thing it was built for: a same-session interleaved A/B measured the retiled layers at
+    // 90.10 ms against 37.20 ms with parallax off — ratio 2.42 against 2.76 before — so shrinking
+    // the texture 2.65x moved essentially nothing. The cost is three full-screen alpha-blended
+    // 1920x1080 draws, and cropping the SOURCE removes not one DRAWN pixel.
+    //
+    // And the defect that motivated all of it does not exist on real hardware: an RTX 4080 runs
+    // this at 4.2 ms median, 240 fps, 12/12 poses painted. Every number that argued for the crop
+    // came from headless SwiftShader. Full record in docs/qa/phase-05-combat.md.
     const looped = mirrorLoop(scaled);
+
+    // The invariant the comment above describes, now enforced rather than remembered.
+    const loopViews = looped.width / GAME_WIDTH;
+    if (!(loopViews >= MIN_LOOP_VIEWS)) {
+      throw new Error(
+        `assets:world: ${depth}'s mirrored loop is ${looped.width}px = ${loopViews.toFixed(2)} view ` +
+          `widths, under the ${MIN_LOOP_VIEWS} minimum. A loop this short puts the unique half AND ` +
+          `its mirror on screen in every frame, so a duplicated feature is permanently visible — ` +
+          `this is the 2026-08-13 crop, which shipped the same gauge panel twice at once and was ` +
+          `reverted the same day. See the comment above: cropping the SOURCE removes not one DRAWN ` +
+          `pixel, so it does not buy frame rate either.`,
+      );
+    }
+
     const after = gateSeam(looped);
     if (after.status !== PASS) {
       throw new Error(

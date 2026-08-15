@@ -1,0 +1,251 @@
+/**
+ * Enemy sheet timing -> catalog provenance, for `build-assets.mjs`'s catalog rows.
+ *
+ * **`tools/gen/*.mjs` cannot import TypeScript anywhere in this repo** (`tools/gen` is outside
+ * tsconfig's include). `tools/gen/reachGate.mjs` hit this exact wall for `PLAY_LAG_TICKS` and solved
+ * it by MIRRORING the constant and pinning the mirror equal to the real TS export with a dedicated
+ * test — this module follows the same pattern rather than inventing a third approach.
+ * `tests/unit/catalog-timings.test.ts` pins every constant below equal to its real export in
+ * `src/render/animTiming.ts`, `src/sim/combat.ts` and `src/render/enemyView.ts`.
+ *
+ * `fps` is DERIVED, never authored (vault 4.22): `deriveFps` mirrors
+ * `src/render/animTiming.ts`'s function of the same name and the same test pins the two equal.
+ */
+
+/** Simulation rate. Mirrors `TICK_HZ` (`src/game/constants.ts`). */
+export const TICK_HZ = 60;
+
+/** Mirrors `IDLE_TICKS` (`src/render/animTiming.ts`) — the authored breathing cycle. */
+export const IDLE_TICKS = 96;
+
+/** Mirrors `SCAVENGER_ATTACK_TICKS` (`src/sim/scavengerAttack.ts`) — startup 18 + active 6 + recovery 12. */
+export const SCAVENGER_ATTACK_TOTAL_TICKS = 36;
+
+/** Mirrors `DEATH_TICKS` (`src/sim/combat.ts`). */
+export const DEATH_TICKS = 45;
+
+/** Mirrors `SENTRY_FIRE_TICKS` (`src/render/enemyView.ts`). */
+export const SENTRY_FIRE_TICKS = 18;
+
+/** Mirrors `attackTotalTicks(ATTACK)` (`src/sim/combat.ts`) — startup 6 + active 4 + recovery 10. */
+export const ATTACK_TOTAL_TICKS = 20;
+
+/** Mirrors `HURT_TICKS` (`src/sim/combat.ts`). */
+export const HURT_TICKS = 18;
+
+/**
+ * The RISE half of a full-height jump, in ticks: `DEFAULT_TUNING.jumpVelocity / gravity`
+ * = 24.3 / 0.675 = **36**.
+ *
+ * 🔴 **18 → 36 on 2026-08-15**, because the airborne window doubled so the jump and fall animations
+ * could be READ. The jump height did not move — see `DEFAULT_TUNING` in `src/sim/player.ts` for the
+ * solved pair and why 36 is the only reachable step. This is a mirror of a sim quantity, so it moves
+ * when the physics does and never on its own; `asset-catalog.test.ts` derives the same number by
+ * running the real sim and fails if these two disagree.
+ *
+ * 🔴 It is what `jump` and `fall` have always been timed to — their shipped rows say 18 — but until
+ * 2026-08-14 there was **no rule saying so**, only two Phase-4 catalog rows nobody could correct.
+ * That is the same hole `idle` was in (see FIXED_TIMINGS below), and it bit the same way: widening
+ * the courier's cell to 336 rewrote `jump.png` while the catalog kept saying 288, and the build
+ * refused. Without `decideCatalogRow` it would have shipped a sheet Phaser slices by the wrong
+ * width.
+ *
+ * It is a SIM quantity, not an authored one, and that distinction is enforced —
+ * `asset-catalog.test.ts` forbids `derivedFrom: 'authored'` on any non-looping row and names `jump`
+ * and `fall` while doing it. There is no fixed airborne WINDOW (airtime varies with the jump cut),
+ * but the rise is exact: velocity over acceleration, both integers of the tick contract.
+ */
+export const JUMP_RISE_TICKS = 36;
+
+/** Mirrors `SCAVENGER.patrolSpeed` (`src/sim/enemyScavenger.ts`), px/tick. */
+export const SCAVENGER_PATROL_SPEED = 2.5;
+
+/**
+ * Mirrors `SCAVENGER.chaseSpeed` (`src/sim/enemyScavenger.ts`), px/tick.
+ *
+ * 8 → 6 on 2026-08-14, when the chase was planted against its own art. The mirror gate in
+ * `tests/unit/catalog-timings.test.ts` caught the drift the same run the sim constant moved, which
+ * is the entire reason a hand-copied constant is allowed to exist here at all.
+ */
+export const SCAVENGER_CHASE_SPEED = 6;
+
+/**
+ * Ticks one locomotion cycle occupies, from the art's stride and the sim's speed. Mirrors
+ * `strideTicks` (`src/render/animTiming.ts`) — rounded to an integer, never the raw quotient, for
+ * the same reason as the original: every duration here is an integer tick count.
+ */
+export function strideTicks(stridePx, speedPxPerTick) {
+  if (!(stridePx > 0) || !Number.isFinite(stridePx)) {
+    throw new Error(`strideTicks: stridePx must be a finite number > 0, got ${stridePx}`);
+  }
+  if (!(speedPxPerTick > 0) || !Number.isFinite(speedPxPerTick)) {
+    throw new Error(`strideTicks: speed must be a finite number > 0, got ${speedPxPerTick}`);
+  }
+  return Math.max(1, Math.round(stridePx / speedPxPerTick));
+}
+
+/**
+ * Fixed (non-measured) timing rows, by slug and action. Only the actions THIS PHASE packs a
+ * catalog row for — `idle/walk/run/jump/fall` already have Phase-4 rows and are out of scope here.
+ */
+const FIXED_TIMINGS = {
+  'brass-sentry': {
+    idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
+    fire: { simTicks: SENTRY_FIRE_TICKS, loop: false, derivedFrom: 'sim' },
+    death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
+  },
+  'rust-scavenger': {
+    /**
+     * FIXED, not `AUTHORED_LOOPS`. The two locomotion loops derive their fps from the speed the
+     * body actually travels — that is what `foot-plant.test.ts` gates. `idle` has no travel by
+     * construction (it is selected only when `moving === false`), so there is no speed to derive
+     * from and the cycle length is authored: `IDLE_TICKS` over 8 frames = 12 ticks/frame, fps 5,
+     * `brass-sentry-idle`'s spec exactly. 8 is a divisor of 96, which is what `loop-dwell` requires.
+     */
+    idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
+    /**
+     * The swing's own window, mirrored from `SCAVENGER_ATTACK` in `src/sim/scavengerAttack.ts`.
+     * `tools/gen/*.mjs` cannot import TypeScript, so the 36 is restated here and pinned equal to the
+     * real export by `tests/unit/sheet-gates.test.ts`'s mirror lock. 36 / 9 frames = 4 ticks/frame.
+     */
+    attack: { simTicks: SCAVENGER_ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },
+    death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
+  },
+  'brass-courier': {
+    // Added session 9 (second pass). `idle` was left out as an "already has a Phase-4 row" action,
+    // and that row then went STALE the moment `IDLE_TICKS` moved 90 -> 96: the packer rewrote the
+    // strip, printed `ok`, and wrote no row, because no rule existed to write one. The catalog kept
+    // saying 90 ticks over 12 frames — 7.5 refreshes per frame — while the constant said otherwise.
+    // A Phase-4 row is not a reason to have no rule; it is a row nobody can correct.
+    idle: { simTicks: IDLE_TICKS, loop: true, derivedFrom: 'authored' },
+    // `jump` and `fall` were the LAST two "Phase-4 row, no rule" pairs, added 2026-08-14 for exactly
+    // the reason the note above gives. ⚠️ This said "both reproduce the rows that already
+    // shipped — 6 frames, 18 ticks, 20 fps"; that is true of `jump` and was never true of `fall`,
+    // whose extracted strip held 8 cells. `fall` ships **8** frames over the same 18-tick window
+    // (26.67 fps) and is the one row in the catalog that does not divide evenly — see
+    // `tests/unit/blockedDwell.ts` for the measurement and why it cannot be fixed yet.
+    jump: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
+    fall: { simTicks: JUMP_RISE_TICKS, loop: false, derivedFrom: 'sim' },
+    attack: { simTicks: ATTACK_TOTAL_TICKS, loop: false, derivedFrom: 'sim' },
+    hurt: { simTicks: HURT_TICKS, loop: false, derivedFrom: 'sim' },
+    death: { simTicks: DEATH_TICKS, loop: false, derivedFrom: 'sim' },
+  },
+};
+
+/**
+ * 🔴 **Looping locomotion rows, whose cadence is AUTHORED (session 9).**
+ *
+ * These used to be "measured": `simTicks = round(stridePxPerCycle / speed)`. That made a number
+ * nobody can measure load-bearing, and it shipped as visible foot-slide — the user's report was
+ * "moves too fast, like a ghost", and the planted foot was slipping 17 % of every step on the
+ * player's run. Four independent methods put the true strides 20 % apart, which is vault 4.18's
+ * INDETERMINATE condition. Full reasoning in `src/render/animTiming.ts`'s header and in
+ * `character-bounds.json`'s `_loopFps`.
+ *
+ * A loop has no simulation window to outrun, which is the same reason `idle` has always been
+ * authored. The cadence now comes from `animations.<action>.fps` in the slug's bounds file, set by
+ * a human watching the character. **`chase` becomes packable for the first time because of this**:
+ * it was blocked for two sessions purely on an unmeasured stride.
+ */
+const AUTHORED_LOOPS = {
+  'brass-courier': ['walk', 'run'],
+  'rust-scavenger': ['walk', 'chase'],
+};
+
+/**
+ * Is `(slug, action)` a pair this module has ANY timing rule for — fixed or measured — regardless
+ * of whether `timingFor` can resolve it right now? This is the per-(slug, action) gate
+ * `build-assets.mjs` writes a catalog row against, replacing a per-SLUG check that silently
+ * skipped `brass-courier`'s combat rows (only some of its actions have timings) and would have
+ * thrown PARTWAY through a build that gated on the slug alone.
+ */
+export function hasCatalogTiming(slug, action) {
+  return Boolean(FIXED_TIMINGS[slug]?.[action]) || Boolean(AUTHORED_LOOPS[slug]?.includes(action));
+}
+
+/**
+ * `(slug, action)` -> `{ simTicks, loop, derivedFrom }`. Throws rather than guessing a timing —
+ * including for a known-but-unmeasured MEASURED_TIMINGS pair with no `stridePxPerCycle` in
+ * `context`. A guessed stride is the exact failure this module exists to prevent.
+ */
+export function timingFor(slug, action, context = {}) {
+  const fixed = FIXED_TIMINGS[slug]?.[action];
+  if (fixed) {
+    return fixed;
+  }
+
+  if (AUTHORED_LOOPS[slug]?.includes(action)) {
+    const { authoredFps, renderFrames } = context;
+    if (authoredFps == null) {
+      throw new Error(
+        `catalogTimings: "${slug}/${action}" is a looping locomotion row and needs an authored ` +
+          `cadence — set animations.${action}.fps in character-bounds-${slug}.json. It is a ` +
+          `number a human picks by WATCHING the character, not one derived from the art; see this ` +
+          `module's AUTHORED_LOOPS note for why that changed.`,
+      );
+    }
+    if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+      throw new Error(
+        `catalogTimings: "${slug}/${action}" needs its packed frame count to turn an authored ` +
+          `cadence into simTicks, got ${renderFrames}.`,
+      );
+    }
+    return { simTicks: cadenceTicks(renderFrames, authoredFps), loop: true, derivedFrom: 'authored' };
+  }
+
+  throw new Error(
+    `catalogTimings: no fixed timing for "${slug}/${action}". If this is a looping locomotion ` +
+      `row (walk/chase), it needs an authored cadence in the slug's bounds file — see this ` +
+      `module's header.`,
+  );
+}
+
+/**
+ * Ticks a LOOPING cycle occupies, from an authored cadence. Mirrors `cadenceTicks` in
+ * `src/render/animTiming.ts`, and `catalog-timings.test.ts` pins the two equal.
+ */
+export function cadenceTicks(renderFrames, authoredFps) {
+  if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+    throw new Error(`cadenceTicks: renderFrames must be a positive integer, got ${renderFrames}`);
+  }
+  if (!(authoredFps > 0) || !Number.isFinite(authoredFps)) {
+    throw new Error(`cadenceTicks: authored fps must be a finite number > 0, got ${authoredFps}`);
+  }
+  // Rounds the TICKS PER FRAME, so the cycle is an exact multiple of the frame count and every
+  // drawn frame is held for the same number of 60 Hz refreshes. See the TS original.
+  const ticksPerFrame = Math.max(1, Math.round(TICK_HZ / authoredFps));
+  return renderFrames * ticksPerFrame;
+}
+
+/** `renderFrames * TICK_HZ / simTicks`. Mirrors `deriveFps` in `src/render/animTiming.ts`. */
+export function deriveFps(renderFrames, simTicks) {
+  if (!Number.isInteger(renderFrames) || renderFrames < 1) {
+    throw new Error(`deriveFps: renderFrames must be a positive integer, got ${renderFrames}`);
+  }
+  if (!Number.isInteger(simTicks) || simTicks < 1) {
+    throw new Error(`deriveFps: simTicks must be a positive integer, got ${simTicks}`);
+  }
+  return (renderFrames * TICK_HZ) / simTicks;
+}
+
+/**
+ * One `public/assets/index.json` `sheets` row (see `src/game/assetCatalog.ts`'s `SheetEntry`),
+ * built from what `build-assets.mjs` measured off the packed strip plus the timing this module
+ * mirrors. The single place a catalog row is assembled, so a sheet cannot acquire a hand-typed
+ * `fps` or `simTicks` on its way into the catalog. `context` carries a measured row's stride (see
+ * `timingFor`); a fixed row ignores it.
+ */
+export function catalogRowFor(slug, action, sheet, context = {}) {
+  const { simTicks, loop, derivedFrom } = timingFor(slug, action, context);
+  return {
+    key: `${slug}-${action}`,
+    url: sheet.url,
+    frameWidth: sheet.frameWidth,
+    frameHeight: sheet.frameHeight,
+    frameCount: sheet.frameCount,
+    simTicks,
+    fps: deriveFps(sheet.frameCount, simTicks),
+    loop,
+    derivedFrom,
+  };
+}

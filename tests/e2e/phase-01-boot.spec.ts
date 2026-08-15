@@ -21,13 +21,11 @@ import { CRISP_IMAGE_RENDERING } from '../../src/game/constants';
 // Moved to ./debugView.ts in Phase 2: a second spec declaring the same global with a different
 // shape is a TS2717 build failure, and two hand-maintained copies of one contract drift.
 import type { GameDebugView } from './debugView';
-
-/**
- * `loader.maxRetries` is 2 in Phaser 4, so a 404 is attempted THREE times before `loaderror`
- * fires. Sized for that: too tight and a correct refusal fails as a timeout, which reads as
- * a hang and sends you debugging the wrong thing.
- */
-const REFUSAL_TIMEOUT = 20_000;
+// Fixtures and page-driving helpers extracted to a sibling module when this file crossed 400
+// lines — DATA and SETUP only, every `test()`/`expect` verifying a criterion stays here. Not
+// named `*.spec.ts` so Playwright's testMatch does not collect it as an empty spec. See
+// bootHelpers.ts.
+import { catalogWith, collectConsoleErrors, firstImage, REFUSAL_TIMEOUT, waitForTerminalState } from './bootHelpers';
 
 /**
  * ADDED IN PHASE 3, and recorded in QA-LOG.md as a deliberate regression-set change.
@@ -39,34 +37,6 @@ const REFUSAL_TIMEOUT = 20_000;
  * six sharp gates would quietly become one blunt one.
  */
 
-/**
- * A catalog-injection body built FROM the shipped catalog, with only the field under test replaced.
- *
- * **Phase 4 repeated the mistake the paragraph above predicts, and this is the fix for the class
- * rather than the instance.** `sheets` became a required, non-empty catalog field; every fixture
- * below still carried only `images` and `levels`, so each one refused for *"missing its sheets
- * list"* instead of for the defect it was written to test. Five sharp gates became one blunt one,
- * exactly as forecast — and a hardcoded `VALID_SHEETS` would go stale again the moment Phase 6 adds
- * HUD sheets or Phase 7 adds audio cues.
- *
- * Reading the real catalog means a fixture only ever differs from a working boot by the one thing
- * it is testing, whatever fields the catalog grows later.
- */
-async function catalogWith(page: Page, override: Record<string, unknown>): Promise<string> {
-  const response = await page.request.get('/assets/index.json');
-  expect(response.ok(), 'the shipped catalog did not load over HTTP').toBe(true);
-  return JSON.stringify({ ...(await response.json()), ...override });
-}
-
-/** The first catalog image — the entry `?breakAsset=corrupt` redirects, derived rather than named. */
-async function firstImage(page: Page): Promise<{ key: string; url: string }> {
-  const response = await page.request.get('/assets/index.json');
-  expect(response.ok(), 'the shipped catalog did not load over HTTP').toBe(true);
-  const [first] = ((await response.json()) as { images: { key: string; url: string }[] }).images;
-  expect(typeof first?.key, 'the catalog lists no images to break').toBe('string');
-  return first;
-}
-
 function readGame(page: Page): Promise<GameDebugView> {
   return page.evaluate(() => {
     if (!window.__game) {
@@ -74,27 +44,6 @@ function readGame(page: Page): Promise<GameDebugView> {
     }
     return window.__game;
   });
-}
-
-async function waitForTerminalState(page: Page, timeout: number): Promise<void> {
-  // Waits on a CONDITION, never a fixed sleep. A sleep long enough to pass here would also be
-  // long enough to hide the hang that F1 describes.
-  await page.waitForFunction(
-    () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
-    undefined,
-    { timeout },
-  );
-}
-
-function collectConsoleErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      errors.push(msg.text());
-    }
-  });
-  page.on('pageerror', (err) => errors.push(String(err)));
-  return errors;
 }
 
 test.describe('Phase 1 — Boot', () => {

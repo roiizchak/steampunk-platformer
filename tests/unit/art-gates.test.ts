@@ -11,8 +11,12 @@
  * is constructed in memory. That is also what lets it run on a fresh clone where `_generated/` is
  * gitignored, and under `npm run test:sim-isolated` with Phaser uninstalled.
  *
- * `selfTest()` lives beside the gates rather than here so the BUILD runs it too, not only CI. This
- * file asserts that it ran and that each case genuinely discriminates.
+ * `selfTest()` is re-exported from `gates.mjs` (its implementation lives in
+ * `gatesSelfTest.mjs`, split out to keep that file under the 400-line limit) so it stays
+ * importable beside the gates it tests. Nothing under `tools/` calls it at build time —
+ * `npm run build` is `tsc --noEmit && vite build` plus `verify-dist`, and `assets:build` is
+ * `build-assets.mjs`; this test file is `selfTest()`'s only caller. This file asserts that it ran
+ * and that each case genuinely discriminates.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -31,9 +35,11 @@ import {
   gateReachBand,
   gateSeam,
   regionStats,
-  selfTest,
   summarise,
 } from '../../tools/gen/gates.mjs';
+// `fill` and `selfTest` come from the self-test module directly. They used to be re-exported by
+// `gates.mjs`, which made the two files mutually dependent; that cycle was removed in session 7.
+import { selfTest } from '../../tools/gen/gatesSelfTest.mjs';
 import { blank, decodePng, encodePng } from '../../tools/gen/png.mjs';
 
 const solid = (w: number, h: number, rgba: [number, number, number, number]) =>

@@ -1,5 +1,3 @@
-import type { Rect } from '../sim/types';
-
 /**
  * Tiled `.tmj` -> the plain data the simulation and the camera need.
  *
@@ -31,6 +29,36 @@ import type { Rect } from '../sim/types';
  * failure mode the editor was built to find, made representable.
  */
 
+import { ENEMY_SLUGS, type EnemySlug, type EnemySpawn } from '../sim/enemies';
+import { MAX_LEVEL_ENEMIES } from './constants';
+import type { Rect } from '../sim/types';
+import {
+  allObjects,
+  boolProperty,
+  hasGroundBelow,
+  isEnemyObject,
+  isHazardObject,
+  isRecord,
+  isSolidObject,
+  positiveInt,
+  stringProperty,
+  type TiledLayer,
+  type TiledMap,
+  type TiledObject,
+} from './tiledObjects';
+
+/**
+ * Re-exported, not re-implemented. `ElementEditorScene` and the unit tests have imported these
+ * from `tilemap` since Phase 3; the Phase 5 split moved the definitions, not the entry point.
+ */
+export { isHazardObject, isSolidObject } from './tiledObjects';
+
+/**
+ * Re-exported from the sim, which owns the roster and the constructors. See `EnemySpawn` there
+ * for what each field means and why a rectangle declares all of them.
+ */
+export type { EnemySpawn };
+
 /** A parsed, validated level. Every pixel figure is MEASURED from the file, never assumed. */
 export interface LevelData {
   /** Catalog id, e.g. `level-01`. Supplied by the caller; the file does not name itself. */
@@ -46,91 +74,10 @@ export interface LevelData {
   solids: Rect[];
   /** The player's feet at level start: `x` is the horizontal centre, `y` is the sole. */
   spawn: { x: number; y: number };
-}
-
-interface TiledProperty {
-  name?: unknown;
-  value?: unknown;
-}
-
-interface TiledObject {
-  x?: unknown;
-  y?: unknown;
-  width?: unknown;
-  height?: unknown;
-  properties?: unknown;
-}
-
-interface TiledLayer {
-  type?: unknown;
-  objects?: unknown;
-  data?: unknown;
-}
-
-interface TiledMap {
-  width?: unknown;
-  height?: unknown;
-  tilewidth?: unknown;
-  tileheight?: unknown;
-  layers?: unknown;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/** A type guard, not a boolean helper — so the checks below narrow `unknown` for the caller. */
-function positiveInt(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
-}
-
-/**
- * Read a boolean custom property by name.
- *
- * Tiled stores custom properties as `[{ name, type, value }]`, so this is a lookup in DATA. It
- * deliberately does not fall back to the object's `name` or `type` field when the property is
- * absent — a fallback would make vault 3.3's rename test pass while the parser still keyed off a
- * name in the case that actually matters, the one where the data is missing.
- */
-function boolProperty(object: TiledObject, name: string): boolean {
-  if (!Array.isArray(object.properties)) {
-    return false;
-  }
-  for (const entry of object.properties as TiledProperty[]) {
-    if (isRecord(entry) && entry.name === name) {
-      return entry.value === true;
-    }
-  }
-  return false;
-}
-
-/**
- * Is this object a collision strip? Exported so the Element Editor selects strips with the SAME
- * predicate that produced them.
- *
- * The editor used to re-implement this as `properties.some(p => p.name === 'solid' && p.value)`,
- * which is not the same function: `boolProperty` reads the FIRST property with that name and
- * stops. Given `[{solid:false},{solid:true}]` the two disagree, the editor's Nth-object walk
- * desynchronises from `world.solids[N]`, and every strip from that point on is written its
- * neighbour's coordinates — a structurally valid level with everything shifted. Found by the
- * code-reviewer gate owner (brief 2). One predicate, one answer.
- */
-export function isSolidObject(object: unknown): boolean {
-  return isRecord(object) && boolProperty(object as TiledObject, 'solid');
-}
-
-/** Every object on every object layer, flattened. Layer names are never consulted (vault 3.3). */
-function allObjects(layers: TiledLayer[]): TiledObject[] {
-  const objects: TiledObject[] = [];
-  for (const layer of layers) {
-    if (layer.type === 'objectgroup' && Array.isArray(layer.objects)) {
-      // `.filter(isRecord)` because a null entry in the array would throw inside `boolProperty`,
-      // and an exception in the boot validator is a HANG rather than a refusal — the one outcome
-      // the whole refuse-to-route design exists to prevent (vault 1.4).
-      objects.push(...(layer.objects as unknown[]).filter(isRecord));
-    }
-  }
-  return objects;
+  /** Damaging geometry — `World.hazards`. Never solid: you do not stand on spikes. */
+  hazards: Rect[];
+  /** Where each enemy starts, read from the file rather than hardcoded in a scene. */
+  enemies: EnemySpawn[];
 }
 
 /**
@@ -238,6 +185,23 @@ export function describeLevelProblem(raw: unknown): string | null {
     }
   }
 
+  // Hazards get the same shape checks as solids and for the same reason: a zero-size hazard is
+  // invisible to the swept contact test and to the eye, so it reads as "the spikes do nothing"
+  // rather than as a malformed level. Deliberately NOT checked for ground beneath — a hazard
+  // hanging in mid-air is a legitimate thing to author (a steam jet, a saw on a chain).
+  const hazards = objects.filter(isHazardObject);
+  for (const [index, hazard] of hazards.entries()) {
+    if (typeof hazard.x !== 'number' || typeof hazard.y !== 'number') {
+      return `hazard #${index} has a non-numeric position`;
+    }
+    if (typeof hazard.width !== 'number' || typeof hazard.height !== 'number') {
+      return `hazard #${index} has a non-numeric size`;
+    }
+    if (!(hazard.width > 0) || !(hazard.height > 0)) {
+      return `hazard #${index} has a non-positive size, ${hazard.width} x ${hazard.height}`;
+    }
+  }
+
   const spawns = objects.filter((object) => boolProperty(object, 'spawn'));
   if (spawns.length === 0) {
     return 'no object carries the `spawn` property';
@@ -295,14 +259,55 @@ export function describeLevelProblem(raw: unknown): string | null {
   // concern borrowed from the sim's grey-box spawn, not a property a level file has to have. A
   // player that spawns a few pixels above the ground falls onto it; one that spawns a few pixels
   // inside it is pushed out on the first tick. Neither is a broken level. A pit is.
-  const groundBelow = solids.some(
-    (solid) =>
-      (solid.y as number) + (solid.height as number) >= (spawn.y as number) &&
-      (spawn.x as number) > (solid.x as number) &&
-      (spawn.x as number) < (solid.x as number) + (solid.width as number),
-  );
-  if (!groundBelow) {
+  if (!hasGroundBelow(solids, spawn.x as number, spawn.y as number)) {
     return `spawn (${spawn.x}, ${spawn.y}) has no solid beneath it — the player falls out of the world`;
+  }
+
+  const enemyObjects = objects.filter(isEnemyObject);
+  if (enemyObjects.length > MAX_LEVEL_ENEMIES) {
+    // Refuse, never truncate. Silently dropping the 23rd enemy is a fallback for a bad input —
+    // vault 1.3's named bug — and the level would boot looking merely *empty*, which is the exact
+    // failure the unknown-slug rule above already refuses for the same reason.
+    return (
+      `${enemyObjects.length} enemies, over the ${MAX_LEVEL_ENEMIES} the frame budget has been ` +
+      `measured at (criterion 5.11). Raising this cap means RE-MEASURING 5.11, not editing the ` +
+      `number — see MAX_LEVEL_ENEMIES.`
+    );
+  }
+
+  for (const [index, enemy] of enemyObjects.entries()) {
+    const slug = stringProperty(enemy, 'enemy');
+    if (slug === null) {
+      return `enemy #${index} declares an \`enemy\` property that is not a string`;
+    }
+    if (!(ENEMY_SLUGS as readonly string[]).includes(slug)) {
+      // Without this the level boots one enemy short and looks merely empty. The roster lives in
+      // `src/sim/enemies.ts` — the module that constructs them — so a slug cannot be known here
+      // and unbuildable there.
+      return `enemy #${index} has unknown slug \`${slug}\` — known slugs are ${ENEMY_SLUGS.join(', ')}`;
+    }
+    if (typeof enemy.x !== 'number' || typeof enemy.y !== 'number') {
+      return `enemy #${index} \`${slug}\` has a non-numeric position`;
+    }
+    // A point-authored enemy would collapse its patrol beat to a single x and put its feet at the
+    // rectangle's top — mirroring, and inverted from, the spawn's must-be-a-point rule.
+    if (
+      typeof enemy.width !== 'number' ||
+      typeof enemy.height !== 'number' ||
+      !(enemy.width > 0) ||
+      !(enemy.height > 0)
+    ) {
+      return `enemy #${index} \`${slug}\` must be a rectangle — its width and height are its patrol beat and its height, got ${String(enemy.width)} x ${String(enemy.height)}`;
+    }
+    // BOTH ends of the beat, not the centre: a patrol that overhangs its platform walks on air at
+    // one end only, and the centre cannot see that. Same predicate as the spawn check above, so
+    // the two cannot drift apart (vault 5.3).
+    const feet = enemy.y + enemy.height;
+    for (const edge of [enemy.x, enemy.x + enemy.width]) {
+      if (!hasGroundBelow(solids, edge, feet)) {
+        return `enemy #${index} \`${slug}\` has no solid beneath its patrol at x ${edge} — it would walk on air`;
+      }
+    }
   }
 
   return null;
@@ -329,14 +334,27 @@ export function parseLevel(id: string, raw: unknown): LevelData {
   const { width: widthTiles, height: heightTiles, tilewidth: tileWidth, tileheight: tileHeight } = map;
 
   const objects = allObjects(map.layers);
-  const solids: Rect[] = objects
-    .filter((object) => boolProperty(object, 'solid'))
-    .map((object) => ({
-      x: object.x as number,
-      y: object.y as number,
-      w: object.width as number,
-      h: object.height as number,
-    }));
+  const toRect = (object: TiledObject): Rect => ({
+    x: object.x as number,
+    y: object.y as number,
+    w: object.width as number,
+    h: object.height as number,
+  });
+  const solids: Rect[] = objects.filter(isSolidObject).map(toRect);
+  const hazards: Rect[] = objects.filter(isHazardObject).map(toRect);
+
+  // Every field is derived from the one rectangle — see `EnemySpawn`. Tiled reports `y` as the
+  // TOP, so the feet are `y + height`.
+  const enemies: EnemySpawn[] = objects.filter(isEnemyObject).map((object) => {
+    const rect = toRect(object);
+    return {
+      slug: stringProperty(object, 'enemy') as EnemySlug,
+      x: rect.x + rect.w / 2,
+      y: rect.y + rect.h,
+      patrolMin: rect.x,
+      patrolMax: rect.x + rect.w,
+    };
+  });
 
   const spawnObject = objects.find((object) => boolProperty(object, 'spawn'))!;
 
@@ -350,5 +368,7 @@ export function parseLevel(id: string, raw: unknown): LevelData {
     heightPx: heightTiles * tileHeight,
     solids,
     spawn: { x: spawnObject.x as number, y: spawnObject.y as number },
+    hazards,
+    enemies,
   };
 }

@@ -1,21 +1,26 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
-import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE, TILE_SIZE } from '../game/constants';
+import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import { parseLevel, type LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
-import {
-  TILESET_FIRST_GID,
-  TILESET_TILE_COUNT,
-  groundTileGid,
-  hasSolidAbove,
-  isGreyboxFill,
-} from '../render/groundTiles';
 import { playerRenderDesc } from '../render/playerView';
-import { createSnapshot, latchJumpPress } from '../sim/input';
+import { interpolatedPosition, renderAlpha, type Point } from '../render/interpolate';
+import { registerCatalogAnimations } from './gameAnimations';
+import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
+import { createFeelTuner } from './devFeelTuner';
+import { createMotionProbe, type MotionProbe } from './devMotionProbe';
+import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
+import { EnemyLayer } from './enemyLayer';
+import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
+import { createHud, renderHud } from './gameHud';
+import { drawLevelLayer } from './gameLevelDraw';
+import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
+import { playIfChanged } from './playAnim';
+import { createSnapshot } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
-import type { InputSnapshot, Rect, World } from '../sim/types';
+import type { InputSnapshot, World } from '../sim/types';
 
 /**
  * The production play scene: it owns the clock, the keyboard, and the drawing. It owns no game
@@ -31,6 +36,33 @@ import type { InputSnapshot, Rect, World } from '../sim/types';
 const SIM_SEED = 20260806;
 
 /**
+ * DEV-only spawn constants for criteria 5.11 and 5.7 — the two things combat itself cannot produce
+ * (see `docs/qa/` for why). Every value here is a fixed constant, never dragged or typed, which is
+ * what keeps `N`/`M` a QA fixture instead of a cheat menu.
+ *
+ * `DEV_FLEET_COUNT` 20: the shipped level places 2 enemies total (1 sentry, 1 scavenger), so 20 is a
+ * deliberate 10x stress multiple — comfortably a "worst case" no authored level approaches, while
+ * staying small enough to reason about and cheap to eyeball in Playwright.
+ */
+const DEV_FLEET_COUNT = 20;
+const DEV_FLEET_HP = 60;
+/**
+ * How wide the fleet is spread, in SIM px, centred on the player.
+ *
+ * 🔴 This replaces `DEV_FLEET_OFFSET_X = 200`, which put the whole fleet **off camera**. The view
+ * is 1920 drawn px at `RENDER_SCALE` 6, so the visible half-width is `960 / 6` = **160 sim px** —
+ * the old fixture started 40 sim px past the right edge and ran 760 further, and 5.11 measured a
+ * frame that drew none of its twenty bodies.
+ *
+ * 288 is `160 * 2 * 0.9`: the full visible width less a 10 % margin, so every body stays inside the
+ * view even as the player drifts a little between the keypress and the sample.
+ */
+const DEV_FLEET_SPREAD_SIM_PX = 288;
+/** 2 of 60: below the 3-swing floor (60 hp / 20 dmg per swing) combat can ever land on. */
+const DEV_LOW_HP = 2;
+const DEV_LOW_HP_OFFSET_X = 200;
+
+/**
  * Re-exported so the e2e specs can derive the drawn player's size instead of hardcoding it.
  * The value itself lives in `src/game/constants.ts` — one source, so a doc, a scene and a test
  * cannot each hold their own copy (Codex P8).
@@ -41,14 +73,26 @@ export class GameScene extends Phaser.Scene {
   private world!: World;
   private input$!: InputSnapshot;
   private accumulatorMs = 0;
+  /**
+   * The player's position immediately BEFORE the most recent tick, or `null` before any tick has
+   * run. Read only by `renderPlayer` — see `src/render/interpolate.ts`.
+   *
+   * A plain copy rather than a reference: `world.player` is mutated in place by the sim, so holding
+   * a reference would make `prev` and `cur` the same object and the blend a no-op.
+   */
+  private prevPlayer: Point | null = null;
   private playerSprite!: Phaser.GameObjects.Sprite;
-  private parallax: { image: Phaser.GameObjects.TileSprite; factor: number }[] = [];
+  private enemies!: EnemyLayer;
+  private hudFill!: Phaser.GameObjects.Graphics;
+  private parallax: ParallaxImage[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
-  private heldLeft: Phaser.Input.Keyboard.Key[] = [];
-  private heldRight: Phaser.Input.Keyboard.Key[] = [];
-  private heldJump: Phaser.Input.Keyboard.Key[] = [];
-  private heldWalk: Phaser.Input.Keyboard.Key[] = [];
+  /** Bound and sampled in `src/scenes/gameInput.ts`; see `bindKeys`/`sampleHeldKeys` below. */
+  private held: HeldKeys = { left: [], right: [], jump: [], walk: [], attack: [] };
+  /** DEV ONLY — see `devFeelTuner.ts`. Undefined in production, where the branch is compiled out. */
+  private feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void;
+  /** DEV ONLY — see `devMotionProbe.ts`. The ghost-report falsifier, `?probe=1`. */
+  private motionProbe?: MotionProbe;
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -78,9 +122,11 @@ export class GameScene extends Phaser.Scene {
    */
   init(): void {
     this.accumulatorMs = 0;
-    this.heldLeft = [];
-    this.heldRight = [];
-    this.heldJump = [];
+    // Cleared with the accumulator: a stale `prev` from the previous level would blend the first
+    // drawn frame between two different levels. `interpolatedPosition` also snaps on a leap, but
+    // the honest reset is here rather than relying on that guard to catch a restart.
+    this.prevPlayer = null;
+    this.held = { left: [], right: [], jump: [], walk: [], attack: [] };
   }
 
   create(): void {
@@ -93,7 +139,14 @@ export class GameScene extends Phaser.Scene {
       // plain data since Phase 2.
       solids: level.solids,
       spawn: level.spawn,
+      // Phase 5, and all four from the SAME parsed level — the world's edges, the spikes that now
+      // hurt, and both enemies. Nothing here is a scene constant; move an enemy in Tiled and it
+      // moves in the game.
+      bounds: { widthPx: level.widthPx, heightPx: level.heightPx },
+      hazards: level.hazards,
+      enemies: level.enemies,
     });
+    this.applyFeelVariant();
     this.input$ = createSnapshot();
 
     this.createParallax();
@@ -106,6 +159,9 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10);
     this.playerSprite.play(desc.animKey);
 
+    this.enemies = new EnemyLayer(this, this.world);
+    this.enemies.create();
+
     this.createHud();
     this.bindKeys();
     this.add
@@ -116,6 +172,27 @@ export class GameScene extends Phaser.Scene {
       })
       .setScrollFactor(0);
 
+    if (import.meta.env.DEV) {
+      // DEV ONLY — the live locomotion tuner (`?tune=1`). Off by default so an ordinary dev run is
+      // not covered in an overlay, and absent entirely from production.
+      const params = new URLSearchParams(globalThis.location?.search ?? '');
+      if (params.get('tune') === '1') {
+        const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
+        const fpsOf = (key: string): number =>
+          catalog?.sheets.find((s) => s.key === key)?.fps ?? 24;
+        this.feelTuner = createFeelTuner(this, this.world, {
+          runFps: fpsOf('brass-courier-run'),
+          walkFps: fpsOf('brass-courier-walk'),
+        });
+      }
+      // DEV ONLY — the ghost-report falsifier (`?probe=1`). Two copies of one FROZEN pose, one
+      // moved on whole ticks and one moved every refresh, so position schedule is the only
+      // variable. See devMotionProbe.ts for how to read the three possible outcomes.
+      if (params.get('probe') === '1') {
+        this.motionProbe = createMotionProbe(this, 'brass-courier-run');
+      }
+    }
+
     this.followPlayer(level);
 
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
@@ -123,8 +200,9 @@ export class GameScene extends Phaser.Scene {
     // create, `ready` stays false with `bootError` null — the third state, a hang, which the QA
     // gate can see precisely because it is distinct from both of the others (vault 1.4).
     //
-    // `levelId` fills the slot Phase 1 cut on the nine-field debug surface and left null. No new
-    // field, so the surface is still closed at nine (a tenth needs a STOP-and-ask).
+    // `levelId` fills the slot Phase 1 cut on the eight-field debug surface and left null. No new
+    // field, so the surface is still closed at eight (a ninth needs a STOP-and-ask). The count read
+    // "nine" here and in three documents until 2026-08-14; `src/debug/globals.ts` is the authority.
     updateDebugState({
       sceneKey: this.scene.key,
       ready: true,
@@ -136,7 +214,7 @@ export class GameScene extends Phaser.Scene {
 
   protected helpText(): string {
     // SHIFT is a PRODUCTION control, so it belongs in `base` and not behind the DEV branch below.
-    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk';
+    const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack';
     // The dev-scene keys are bound only under `import.meta.env.DEV`, so advertising them in a
     // production build offers the player two keys that do nothing. Vite folds this to `base`.
     // Caught by the code-reviewer gate owner (brief 2), which also noticed that verify-dist's
@@ -167,78 +245,89 @@ export class GameScene extends Phaser.Scene {
     // Called even when `ticks === 0`, and that case is load-bearing: it must NOT consume the
     // input snapshot. A frame too short to produce a whole tick that ate a jump press is vault
     // 2.4's "a tick ran is not your input was consumed", inverted.
-    advance(this.world, this.input$, ticks);
+    //
+    // 🔴 The batch is SPLIT so `prevPlayer` is the state immediately before the LAST tick, which is
+    // what `interpolatedPosition` needs. Snapshotting before the whole batch was the first draft
+    // and the Codex plan review rejected it (finding 1): a healthy 30 Hz frame drains two ticks —
+    // routine here, not a stall, and `frame-clock.test.ts` covers it — so blending across the whole
+    // batch would add ~33 ms of render lag on every frame. Total ticks run is unchanged, and the
+    // split is safe because an input EDGE is cleared by the first tick rather than re-consumed.
+    if (ticks > 0) {
+      if (ticks > 1) advance(this.world, this.input$, ticks - 1);
+      this.prevPlayer = { x: this.world.player.x, y: this.world.player.y };
+      // The enemies' half of the same snapshot, taken at the same instant and for the same reason.
+      // It was missing until 2026-08-14, which left every enemy drawn at raw tick positions while
+      // the player was blended — three still frames then a jump, at 240 Hz. The user reported it as
+      // the scavenger "not smooth like my character", and the comparison in those words is literally
+      // what the code was doing.
+      this.enemies.snapshot();
+      const events = advance(this.world, this.input$, 1);
+      // A respawn moves the player the width of the level in one tick. `interpolatedPosition`
+      // already snaps past `MAX_LEAP_PX`, but only past it — a player who dies within 48px of the
+      // spawn would be blended across the gap instead. Dropping the snapshot says "there is no
+      // previous position to come from", which is the truth about a respawn and needs no threshold.
+      if (events.respawned) {
+        this.prevPlayer = null;
+      }
+    } else {
+      advance(this.world, this.input$, 0);
+    }
 
     this.renderPlayer();
+    this.renderHud();
+    this.enemies.sync(renderAlpha(this.accumulatorMs));
     this.renderParallax();
+    // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
+    // lane advances between ticks and the other does not.
+    this.motionProbe?.update(delta);
     this.publishDebugState();
   }
 
   /**
-   * Held state is polled; the jump EDGE is not (vault 2.5).
-   *
-   * `Phaser.Input.Keyboard.JustDown()` would look like the obvious tool and is a trap here: it is
-   * a consuming read that resets when checked, so two readers in one frame lose the edge. Polling
-   * `isDown` is worse — a press and release inside one frame is invisible to it entirely. The
-   * edge therefore arrives by event, in `bindKeys()`.
+   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts` (split out to
+   * keep this file smaller; it is 515 lines and OVER the 400-line rule, justified in
+   * `docs/qa/phase-05-combat.md`). This scene still owns `playerInputEnabled` and the
+   * DEV scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
    */
   private sampleHeldKeys(): void {
-    if (!this.playerInputEnabled) {
-      // Not just "read nothing" — actively clear. Leaving the last sampled values in place would
-      // keep the player walking in whatever direction was held when the editor opened.
-      this.input$.left = false;
-      this.input$.right = false;
-      this.input$.jumpHeld = false;
-      this.input$.walkHeld = false;
-      return;
-    }
-
-    this.input$.left = this.heldLeft.some((key) => key.isDown);
-    this.input$.right = this.heldRight.some((key) => key.isDown);
-    this.input$.jumpHeld = this.heldJump.some((key) => key.isDown);
-    this.input$.walkHeld = this.heldWalk.some((key) => key.isDown);
+    sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
   }
 
   private bindKeys(): void {
-    const keyboard = this.input.keyboard;
-    if (!keyboard) {
-      return;
-    }
-
-    const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT } = Phaser.Input.Keyboard.KeyCodes;
-
-    // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
-    // second; with repeats enabled every one would latch a fresh jump edge, and holding the
-    // button would auto-bunny-hop through the jump buffer. A press is one edge, however long the
-    // finger stays down.
-    const addKey = (code: number) => keyboard.addKey(code, true, false);
-
-    this.heldLeft = [addKey(LEFT), addKey(A)];
-    this.heldRight = [addKey(RIGHT), addKey(D)];
-    this.heldJump = [addKey(SPACE), addKey(UP), addKey(W)];
-    // The walk modifier. Persistent state, sampled every frame in `sampleHeldKeys` — no `down`
-    // listener, because unlike jump it is not an edge and has nothing to latch.
-    this.heldWalk = [addKey(SHIFT)];
-
-    for (const key of this.heldJump) {
-      key.on('down', () => {
-        if (this.playerInputEnabled) {
-          latchJumpPress(this.input$);
+    const dev = import.meta.env.DEV
+      ? {
+          togglePlayground: () => this.togglePlayground(),
+          toggleElementEditor: () => this.toggleElementEditor(),
+          toggleGym: () => this.toggleGym(),
+          spawnDevFleet: () => this.spawnDevFleet(),
+          spawnDevLowHpEnemy: () => this.spawnDevLowHpEnemy(),
         }
+      : undefined;
+    this.held = bindPlayerKeys(this, this.input$, () => this.playerInputEnabled, dev);
+  }
+
+  /** DEV ONLY (5.11 fixture). Guard repeated inside the body — see `togglePlayground`'s docstring. */
+  protected spawnDevFleet(): void {
+    if (import.meta.env.DEV) {
+      spawnDevFleet(this.world, {
+        count: DEV_FLEET_COUNT,
+        hp: DEV_FLEET_HP,
+        x: this.world.player.x,
+        y: this.world.player.y,
+        spreadSimPx: DEV_FLEET_SPREAD_SIM_PX,
       });
     }
+  }
 
-    // Without capture the browser scrolls the page on arrows and space — which also corrupts a
-    // Playwright key drive, so this is a test-correctness fix as much as a UX one.
-    keyboard.addCapture('SPACE,LEFT,RIGHT,UP,DOWN,W,A,D');
-
-    // DEV ONLY, on the same side of the build gate as the scene itself (vault 1.6). Without this
-    // guard the key would still be bound in production and would call `scene.start('Playground')`
-    // on a scene that is not registered there — a silent no-op at best. Codex review 2, finding I2.
+  /** DEV ONLY (5.7 fixture). Guard repeated inside the body — see `togglePlayground`'s docstring. */
+  protected spawnDevLowHpEnemy(): void {
     if (import.meta.env.DEV) {
-      addKey(P).on('down', () => this.togglePlayground());
-      addKey(O).on('down', () => this.toggleElementEditor());
-      addKey(G).on('down', () => this.toggleGym());
+      spawnDevEnemies(this.world, {
+        count: 1,
+        hp: DEV_LOW_HP,
+        x: this.world.player.x + DEV_LOW_HP_OFFSET_X,
+        y: this.world.player.y,
+      });
     }
   }
 
@@ -299,83 +388,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Draw the level's tile layer.
-   *
-   * **CPU `TilemapLayer`, not `TilemapGPULayer`.** The game runs `Phaser.AUTO` with a live Canvas
-   * fallback, and the GPU layer is WebGL-only: `TilemapGPULayerRender.js` installs a no-op Canvas
-   * renderer, so on a Canvas fallback the entire level would draw nothing while every collision
-   * test stayed green. Same reasoning ENGINE-NOTES.md already records for tint.
-   *
-   * The tile layer is ART. Collision came from the object layer, and the two are authored to
-   * agree — proving they still agree is what the drawn-tile assertions in the Phase 3 e2e spec
-   * are for, and making them disagree is what the Element Editor is for.
+   * Draw the level's tile layer. The tileset/layer resolution and the brass-cap surface rule live
+   * in `src/scenes/gameLevelDraw.ts` — split out to keep this file smaller (it is still over the
+   * 400-line rule, justified in `docs/qa/phase-05-combat.md`); the
+   * logic is pure scene-Phaser plumbing with no subclass override.
    */
   private drawLevel(level: LevelData): void {
-    const map = this.make.tilemap({ key: this.levelKey });
-
-    /**
-     * Resolved by POSITION, not by name.
-     *
-     * This used to hardcode `addTilesetImage('greybox', ...)` and `createLayer('ground', ...)`,
-     * which both the code-reviewer gate owner and Codex flagged, and the consequence was worse
-     * than the vault 3.3 style violation: `describeLevelProblem` never reads layer or tileset
-     * names, so a level with a renamed layer PASSED the boot gate and then threw here — leaving
-     * `ready` false with `bootError` null, which is the third state (a hang) that the whole
-     * refuse-to-route design exists to make impossible.
-     *
-     * Taking the first tileset and the first tile layer is data-driven, so a rename cannot break
-     * it, and it matches what `parseLevel` does — it reads every tile layer and never a name.
-     */
-    const tilesetName = (map.tilesets[0] as { name?: string } | undefined)?.name;
-    if (!tilesetName) {
-      throw new Error(`GameScene: level ${level.id} declares no tileset`);
-    }
-    const tileset = map.addTilesetImage(tilesetName, 'tiles-industrial', TILE_SIZE, TILE_SIZE);
-    if (!tileset) {
-      // Returns null with only a console warning. Silently drawing nothing is precisely the
-      // failure this scene must not have.
-      throw new Error(`GameScene: tileset "${tilesetName}" could not be bound in level ${level.id}`);
-    }
-
-    /**
-     * **`addTilesetImage`'s `gid` argument does nothing here, and relying on it cost a defect.**
-     *
-     * The `.tmj` already declares this tileset, so Phaser finds it by name, calls `setImage` and
-     * returns early — `firstgid` keeps whatever the level file said, and the `gid` argument is
-     * only ever read on the branch that CONSTRUCTS a tileset. An earlier version passed `1` here
-     * and read it back as if it had been applied.
-     *
-     * `setImage` does recompute `total` from the texture, so the 4x4 packed sheet becomes 16 tiles
-     * even though the grey-box `.tmj` declares `tilecount: 1`. That is what makes the extra tiles
-     * reachable at all — and it is also why the two facts `groundTiles.ts` indexes against are
-     * asserted here rather than assumed. Phaser draws NOTHING for a gid outside the tileset, with
-     * no warning at draw time, so a mismatch is invisible until someone looks at the floor.
-     */
-    const bound = tileset as unknown as { firstgid: number; total: number };
-    if (bound.firstgid !== TILESET_FIRST_GID || bound.total !== TILESET_TILE_COUNT) {
-      throw new Error(
-        `GameScene: tileset "${tilesetName}" bound as firstgid ${bound.firstgid} with ` +
-          `${bound.total} tiles; src/render/groundTiles.ts indexes ${TILESET_TILE_COUNT} tiles ` +
-          `from firstgid ${TILESET_FIRST_GID}. Every ground tile would be the wrong one.`,
-      );
-    }
-
-    const layerName = map.layers[0]?.name;
-    if (layerName === undefined) {
-      throw new Error(`GameScene: level ${level.id} has no tile layer`);
-    }
-    const layer = map.createLayer(layerName, tileset, 0, 0);
-    if (!layer) {
-      throw new Error(`GameScene: tile layer "${layerName}" could not be created in ${level.id}`);
-    }
-    // `createLayer` is typed `TilemapLayer | TilemapGPULayer` whatever the `gpu` argument is, so
-    // the CPU choice is asserted at runtime rather than cast away. If a later edit passes
-    // `gpu: true` this throws instead of silently drawing nothing on the Canvas fallback.
-    if (!(layer instanceof Phaser.Tilemaps.TilemapLayer)) {
-      throw new Error('GameScene: expected a CPU TilemapLayer; the GPU layer has no Canvas fallback');
-    }
-    this.applySurfaceTiles(layer, level.solids);
-    this.groundLayer = layer;
+    this.groundLayer = drawLevelLayer(this, level, this.levelKey);
   }
 
   /** Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4). */
@@ -390,7 +409,14 @@ export class GameScene extends Phaser.Scene {
 
   private renderPlayer(): void {
     const desc = playerRenderDesc(this.world.player, this.world.scale);
-    this.playerSprite.setPosition(desc.x, desc.y);
+    // Drawn BETWEEN the last two ticks, not at the current one. Without this the sprite is held
+    // still on every frame `drainTicks` returns 0 ticks for — three refreshes out of four at
+    // 240 Hz — and then jumps 12 px, which is the "ghost / double image" the user reported and
+    // which the `?probe=1` falsifier reproduced with the animation frozen. See
+    // `src/render/interpolate.ts`. `this.accumulatorMs` is already the time since the last whole
+    // tick, so it is exactly the blend factor.
+    const drawn = interpolatedPosition(this.prevPlayer, desc, renderAlpha(this.accumulatorMs));
+    this.playerSprite.setPosition(drawn.x, drawn.y);
 
     // A real flip at last. Phase 2 drew facing as a "nose" rectangle because Phaser 4's Flip
     // component is mixed into Sprite and Image but NOT into Shape, so the grey-box `Rectangle`
@@ -399,143 +425,79 @@ export class GameScene extends Phaser.Scene {
     // one-for-one replacement rather than new behaviour.
     this.playerSprite.setFlipX(desc.flipX);
 
-    // Restart only on a CHANGE of animation. Calling play() every frame with the same key would
-    // reset the clip to frame 0 on every render, so a looping walk cycle would freeze on its
-    // first pose while `__game` cheerfully reported the right state.
-    if (this.playerSprite.anims.getName() !== desc.animKey) {
-      this.playerSprite.play(desc.animKey);
+    // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
+    // used to reimplement inline (R10).
+    playIfChanged(this.playerSprite, desc.animKey);
+
+    // DEV ONLY — the live locomotion tuner's per-frame update. Guarded at the point of use so the
+    // branch and its import are tree-shaken out of `dist/`; `verify-dist` proves the absence.
+    if (import.meta.env.DEV) {
+      this.feelTuner?.(this.playerSprite);
     }
   }
 
-  /**
-   * Register one Phaser animation per catalog sheet, with the frame rate DERIVED from the sim.
-   *
-   * **The fps handed to Phaser comes from the CATALOG, and this comment used to claim otherwise.**
-   *
-   * It said the value came from `animTimings()` and that retuning `runMax` would change the run
-   * animation on the next boot with no asset rebuild. Neither is true: this file does not import
-   * `animTimings`, and the line below passes `sheet.fps` straight from `index.json`. The Codex
-   * implementation review caught it (finding 1); I had read the comment and believed it.
-   *
-   * What IS true, and is the property vault 4.22 actually needs: the catalog's numbers cannot
-   * disagree with the simulation, because `tests/unit/asset-catalog.test.ts` derives
-   * `fps = renderFrames x TICK_HZ / simTicks` from the live `DEFAULT_TUNING` and the shipped
-   * strides and asserts equality per animation. Retune a knob without rebuilding and that suite
-   * goes RED — the drift is caught, it is simply caught at test time rather than absorbed at boot.
-   *
-   * Deriving here would need the per-cycle strides, which live in `character-bounds.json` and are
-   * NOT loaded at runtime — the catalog has no field for them. Adding one is a schema change that
-   * touches `describeCatalogProblem`, every boot fixture and `verify-dist`, which is the cost
-   * ASSET-MANIFEST section 4 documents. Deliberately not done inside a phase that is already
-   * reported failing; recorded in `docs/qa/phase-04-art.md` instead.
-   */
+  /** Registration logic lives in `src/scenes/gameAnimations.ts` — see its header. */
   private registerAnimations(): void {
-    const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
-    if (!catalog) {
-      throw new Error('GameScene: the asset catalog is missing after boot approved it');
-    }
-    for (const sheet of catalog.sheets) {
-      if (this.anims.exists(sheet.key)) {
-        this.anims.remove(sheet.key);
-      }
-      this.anims.create({
-        key: sheet.key,
-        frames: this.anims.generateFrameNumbers(sheet.key, {
-          start: 0,
-          end: sheet.frameCount - 1,
-        }),
-        frameRate: sheet.fps,
-        repeat: sheet.loop ? -1 : 0,
-      });
-    }
-  }
-
-  /**
-   * Three scrolling background layers, drawn behind everything.
-   *
-   * `TileSprite` rather than `Image` because it wraps its texture natively, and the layers were
-   * built to wrap: `build-world.mjs` mirrors each one so both its middle join and its end wrap
-   * repeat a source column exactly. `gateSeam` went from FAIL to PASS across that step, which is
-   * what makes the wrap safe to rely on here.
-   *
-   * `setScrollFactor(0)` pins them to the camera and the scroll is applied by hand in
-   * `renderParallax`, because Phaser's own scroll factor moves the OBJECT while a TileSprite needs
-   * its texture offset moved instead — otherwise the layer slides off its own edges.
-   */
-  private createParallax(): void {
-    const layers: { key: string; factor: number }[] = [
-      { key: 'bg-far', factor: 0.15 },
-      { key: 'bg-mid', factor: 0.35 },
-      { key: 'bg-near', factor: 0.6 },
-    ];
-    this.parallax = layers.map(({ key, factor }, i) => {
-      const image = this.add
-        .tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, key)
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(-100 + i);
-      return { image, factor };
-    });
-  }
-
-  /**
-   * Give the tile layer a brass-capped TOP and plain masonry beneath it.
-   *
-   * The rule and the two GIDs live in `src/render/groundTiles.ts`, engine-free, so
-   * `tests/unit/ground-tiles.test.ts` can check them against the pixels of the shipped sheet.
-   * They were scene-local literals until both turned out to be wrong — see that file's header.
-   *
-   * **`tile.index` is a GID.** `groundTileGid` returns one; do not put a local sheet index here.
-   *
-   * **"Buried" is decided from the SOLIDS, not from the tile layer.** It used to read
-   * `layer.getTileAt(tile.x, tile.y - 1)` — *is any tile drawn above me* — while calling the answer
-   * `hasSolidAbove`. Decoration standing on the floor therefore buried the floor: the spike run at
-   * row 19 cost the ground beneath it its brass cap across four tiles, and that edge is the only
-   * thing STYLE.md §5 RULE ONE lets a player read as "floor". Solidity comes from the object layer
-   * *(vault 3.3)*, so that is what the question has to be asked of.
-   *
-   * This also retires the old mutation-during-iteration note. That note argued the loop was safe
-   * *because* `getTileAt` could only be asked whether a tile was present, never which one. The
-   * predicate no longer reads the layer at all, so the loop's rewrites cannot influence its own
-   * answers — the hazard the note was managing does not exist any more.
-   */
-  private applySurfaceTiles(layer: Phaser.Tilemaps.TilemapLayer, solids: readonly Rect[]): void {
-    layer.forEachTile((tile) => {
-      // Authored art is left exactly as the level file wrote it. Only the grey-box fill is the
-      // rule's to reinterpret — see `GREYBOX_FILL_GID`.
-      if (tile.index < 0 || !isGreyboxFill(tile.index)) {
+    if (import.meta.env.DEV) {
+      // DEV ONLY — the locomotion-feel A/B (`?feel=1`). Guarded at the point of use so the whole
+      // branch, and the import it reaches, are tree-shaken out of `dist/`; `verify-dist` proves it.
+      // Only locomotion is re-paced: `simTicks` for a one-shot like `attack` is a COMBAT WINDOW
+      // written against `tick.ts`'s numbered order, and scaling it would be a balance change
+      // wearing an animation change's clothes.
+      const variant = variantFromSearch(globalThis.location?.search ?? '');
+      if (variant.strideScale !== 1 || variant.speedScale !== 1) {
+        registerCatalogAnimations(this, (sheet) =>
+          LOCOMOTION_KEYS.has(sheet.key)
+            ? tunedFps(sheet.frameCount, sheet.simTicks, variant)
+            : sheet.fps,
+        );
         return;
       }
-      tile.index = groundTileGid(hasSolidAbove(solids, tile.x, tile.y));
-    });
+    }
+    registerCatalogAnimations(this);
   }
 
   /**
-   * The HUD: portrait medallion plus one continuous health bar, pinned to the camera.
+   * DEV ONLY — apply the locomotion-feel variant's speed scale to this world's tuning.
    *
-   * Drawn at the assembly's authored size with `setScrollFactor(0)` so it never scrolls, and at a
-   * high depth so nothing in the world can cover it.
+   * `world.tuning` is a per-world copy (`createTuning()`), so this cannot leak into another world
+   * or into `DEFAULT_TUNING`. Speed and stride are deliberately separate knobs: scaling speed alone
+   * does NOT change foot-slide, because ground travel per cycle is `simTicks * topSpeed` and
+   * `simTicks` is itself derived from the speed.
+   *
+   * ⚠️ `KNOCKBACK_SPEED` is bound to `DEFAULT_TUNING.walkMax` at module load, so it does NOT scale
+   * with this. That is fine for judging locomotion and would NOT be fine for shipping a retune —
+   * recorded rather than papered over.
    */
+  private applyFeelVariant(): void {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+    const variant = variantFromSearch(globalThis.location?.search ?? '');
+    if (variant.speedScale === 1) {
+      return;
+    }
+    this.world.tuning.runMax *= variant.speedScale;
+    this.world.tuning.walkMax *= variant.speedScale;
+  }
+
+  /** Layer specs live engine-free in `src/render/parallaxRig.ts`; this applies them. */
+  private createParallax(): void {
+    this.parallax = createParallax(this);
+  }
+
+  /** The HUD's fill geometry is `src/render/playerHud.ts`; this owns the Phaser objects. */
   private createHud(): void {
-    this.add
-      .image(24, 24, 'hud-health')
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(1000);
+    this.hudFill = createHud(this);
+  }
+
+  private renderHud(): void {
+    renderHud(this.hudFill, this.world.player.hp, this.world.player.maxHp);
   }
 
   private renderParallax(): void {
-    // `setScrollFactor(0)` already pins these to the camera, so their position is in SCREEN space
-    // and stays at the origin. Setting it to the camera's scroll — which is what the first version
-    // did — double-applies the scroll and slides the layer down and right off the viewport, which
-    // showed up as a black band above a strip of background. Only the TEXTURE offset moves.
-    const scrollX = this.cameras.main.scrollX;
-    for (const { image, factor } of this.parallax) {
-      image.tilePositionX = scrollX * factor;
-    }
+    renderParallax(this.parallax, this.cameras.main.scrollX);
   }
-
-
 
   /** The read-only debug view every e2e spec is written against. Dev build only. */
   private publishDebugState(): void {
@@ -543,6 +505,9 @@ export class GameScene extends Phaser.Scene {
     updateDebugState({
       tick: this.world.tickCount,
       player: { x: player.x, y: player.y, vx: player.vx, vy: player.vy, state: player.state },
+      // `health` has been on the eight-field surface since Phase 1 and permanently 0 until now.
+      // Filling it is not widening the surface — the field already existed and was a lie.
+      health: player.hp,
     });
   }
 

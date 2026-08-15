@@ -22,10 +22,25 @@
 import { advance, createWorld } from './tick';
 import { createSnapshot } from './input';
 import { TILE_SIZE } from '../game/constants';
+import type { WorldBounds } from './hazards';
 import type { Rect, TuningKnobs } from './types';
 
-/** A drop tall enough for terminal velocity to actually be reached. */
-const DEEP_FALL: Rect[] = [{ x: 0, y: 4000, w: 4000, h: 120 }];
+/**
+ * A drop tall enough for terminal velocity to actually be reached.
+ *
+ * 🔴 **The floor alone is not what makes it deep — the KILL PLANE is.** `createWorld` defaults
+ * `bounds` to the grey-box 1080 px extent whatever `solids` says, and `belowKillPlane` fires on
+ * `feetY > bounds.heightPx`. So until 2026-08-15 this scratch world killed and respawned the player
+ * roughly every 30 ticks and `terminalFallSpeed` was reporting the fastest speed reached *between
+ * deaths*. At `gravity` 2.7 that was invisible: the clamp needs 20 ticks and the fall gave more.
+ * At 0.675 it needs **77**, the readout fell to 49.95 against a 51.6 knob, and the instrument was
+ * caught measuring the world's height instead of the tuning.
+ *
+ * Both numbers are stated here together for that reason: a floor with no matching bounds is a
+ * fall that ends early for a reason nothing in this file mentions.
+ */
+const DEEP_FALL: Rect[] = [{ x: 0, y: 8000, w: 4000, h: 120 }];
+const DEEP_BOUNDS: WorldBounds = { widthPx: 4000, heightPx: 9000 };
 
 export interface DerivedFeel {
   /** Peak height of a full held jump, in pixels and tiles. */
@@ -66,8 +81,8 @@ export interface DerivedFeel {
   bufferMs: number;
 }
 
-function scratch(tuning: TuningKnobs, solids?: Rect[]) {
-  const world = createWorld({ seed: 1, scale: 1, solids });
+function scratch(tuning: TuningKnobs, solids?: Rect[], bounds?: WorldBounds) {
+  const world = createWorld({ seed: 1, scale: 1, solids, bounds });
   Object.assign(world.tuning, tuning);
   return { world, input: createSnapshot() };
 }
@@ -175,7 +190,7 @@ export function derivedFeel(tuning: TuningKnobs, ticksToMs: (t: number) => numbe
   const airDriftPx = air.world.player.x - driftFrom;
 
   // Terminal velocity needs a drop long enough to actually reach it.
-  const drop = scratch(tuning, DEEP_FALL);
+  const drop = scratch(tuning, DEEP_FALL, DEEP_BOUNDS);
   let fastest = 0;
   for (let i = 0; i < 400; i += 1) {
     advance(drop.world, drop.input, 1);

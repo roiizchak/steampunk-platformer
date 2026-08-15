@@ -24,6 +24,14 @@ import { expect, test } from '@playwright/test';
 import { DEFAULT_TUNING } from '../../src/sim/player';
 import { BOOT_TIMEOUT, bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 
+/**
+ * One tick of top-speed travel, in WORLD pixels — the bound on how far the drawing may lag the sim
+ * once render interpolation is in play. Deliberately NOT multiplied by `RENDER_SCALE`:
+ * `playerRenderDesc` passes `player.x` through verbatim, so a scaled bound would be six times too
+ * wide (Codex plan review, finding 4).
+ */
+const RUN_MAX_PX_PER_TICK = DEFAULT_TUNING.runMax;
+
 test.describe('Phase 2 — player movement', () => {
   test('the simulation actually ticks in a headless browser', async ({ page }) => {
     // The prerequisite for every other test here, and a real hazard: a headless browser can
@@ -121,6 +129,9 @@ test.describe('Phase 2 — player movement', () => {
     const still = await readBoth();
     expect(still.drawn).not.toBeNull();
     expect(typeof still.drawn?.x).toBe('number');
+    // Standing still, prev and cur are the same point, so any blend of them is that point. Exact
+    // equality still holds here and is kept exact deliberately: it is the half of this criterion
+    // that interpolation cannot excuse.
     expect(still.drawn?.x).toBe(still.sim.x);
     expect(still.drawn?.y).toBe(still.sim.y);
 
@@ -130,9 +141,83 @@ test.describe('Phase 2 — player movement', () => {
     const moving = await readBoth();
     await page.keyboard.up('ArrowRight');
 
-    expect(moving.drawn?.x).toBe(moving.sim.x);
-    expect(moving.drawn?.y).toBe(moving.sim.y);
+    /**
+     * 🔴 **No longer exact equality, and the loosening is bounded and paid for.**
+     *
+     * Session 9 added render interpolation (`src/render/interpolate.ts`): the sprite is drawn
+     * between the last two ticks so it advances on frames the sim does not tick, which on the
+     * user's 240 Hz display is three refreshes out of four. The drawing therefore lags the sim by
+     * up to ONE tick of travel.
+     *
+     * `RUN_MAX_PX_PER_TICK` is `DEFAULT_TUNING.runMax` and is NOT multiplied by `RENDER_SCALE` —
+     * `playerRenderDesc` passes `player.x` through verbatim because the sim already resolved
+     * collisions in world pixels (vault 2.11). Scaling it would make the bound 72 px, six times too
+     * wide, which the Codex plan review caught in the first draft of this change.
+     *
+     * The lag is asserted from BOTH sides, because a bound alone would be satisfied by the old
+     * non-interpolated renderer too (lag exactly 0) — Codex finding 2, "every proposed verification
+     * can pass with interpolation absent". The `> 0` half is what actually proves it is wired.
+     */
+    const lagX = (moving.sim.x ?? 0) - (moving.drawn?.x ?? 0);
+    expect(lagX).toBeGreaterThanOrEqual(0);
+    expect(lagX).toBeLessThanOrEqual(RUN_MAX_PX_PER_TICK);
+    expect(Math.abs((moving.sim.y ?? 0) - (moving.drawn?.y ?? 0))).toBeLessThanOrEqual(
+      RUN_MAX_PX_PER_TICK,
+    );
+    // The original regression this test was written for: deleting `renderPlayer()` leaves the
+    // drawable frozen while `__game` still advances. Unaffected by the tolerance above.
     expect(moving.drawn?.x).toBeGreaterThan(still.drawn?.x ?? 0);
+  });
+
+  /**
+   * Interpolation is ACTUALLY WIRED — the assertion the tolerance above cannot make.
+   *
+   * Relaxing exact equality to a one-tick bound is satisfied by a renderer with no interpolation at
+   * all, whose lag is exactly zero on every frame. So this samples many frames and requires the
+   * drawing to be strictly behind the sim on at least one of them. Remove the interpolation call in
+   * `GameScene.renderPlayer` and every lag becomes 0 and this goes red; that is the point.
+   *
+   * Sampling happens INSIDE the page, once per animation frame, and returns an aggregate — a
+   * `waitTicks(N)` then a single read cannot bound a sampling window, and produced both a false
+   * green and a false red in this suite before (CLAUDE.md §5).
+   */
+  test('2.1 the drawing advances BETWEEN sim ticks — interpolation is wired, not just tolerated', async ({
+    page,
+  }) => {
+    await bootToGame(page);
+    await page.keyboard.down('ArrowRight');
+    await waitTicks(page, 20);
+
+    const lags = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const scene = (
+            window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+          ).__phaserGame.scene.getScene('Game') as { children: { list: Record<string, unknown>[] } };
+          const out: number[] = [];
+          let n = 0;
+          const step = (): void => {
+            const drawn = scene.children.list.find((o) => {
+              const key = (o.texture as { key?: string } | undefined)?.key;
+              return typeof key === 'string' && key.startsWith('brass-courier-');
+            }) as { x: number } | undefined;
+            const sim = window.__game?.player as { x?: number } | null | undefined;
+            if (drawn && typeof sim?.x === 'number') out.push(sim.x - drawn.x);
+            if (++n < 90) requestAnimationFrame(step);
+            else resolve(out);
+          };
+          requestAnimationFrame(step);
+        }),
+    );
+    await page.keyboard.up('ArrowRight');
+
+    expect(lags.length).toBeGreaterThan(30);
+    // Strictly behind on at least one frame. Exactly zero everywhere means the sprite is pinned to
+    // the sim tick and the ghosting defect is back.
+    expect(Math.max(...lags)).toBeGreaterThan(0);
+    // And never ahead, and never further behind than one tick of travel.
+    expect(Math.min(...lags)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...lags)).toBeLessThanOrEqual(RUN_MAX_PX_PER_TICK);
   });
 
   test('2.1 holding Left decreases x, and facing follows', async ({ page }) => {

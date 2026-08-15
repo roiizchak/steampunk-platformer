@@ -54,6 +54,14 @@
  *   the key off the image, so a field that drifts or speckles costs alpha at the edges.
  */
 
+import { COMBAT_MOTIONS } from './motionCombat.mjs';
+/**
+ * ⚠️ Safe to import here, and the reason is specific. `motionClauses.mjs` is a **leaf** — it imports
+ * nothing at all — so it cannot widen the `motion.mjs` ↔ `motionCombat.mjs` cycle this file's own
+ * consumers are careful to enter from the right side. Verified, not assumed.
+ */
+import { FRAME_MARGIN, poseSpan } from './motionClauses.mjs';
+
 /**
  * Appended to every ONE-SHOT motion (`jump`, `fall`), never to a cyclic one.
  *
@@ -62,6 +70,16 @@
  * reads as a stutter. Forbidding both "hold still" and "repeat" is what makes every sampled frame
  * carry new information.
  */
+/**
+ * 🔴 **Re-exported, not defined here, since 2026-08-15.** `poseSpan` moved to the leaf
+ * `motionClauses.mjs` to BREAK the `motion.mjs` ↔ `motionCombat.mjs` import cycle: `motionCombat`
+ * needed exactly this one function from here, and nothing else. The cycle's failure mode is a
+ * SILENTLY truncated `VIDEO_MOTIONS` under Vite when the two are touched in the wrong order — a
+ * defect that costs a paid generation, not a test. Kept re-exported so no consumer's import moves in
+ * the same commit that moves the definition.
+ */
+export { poseSpan };
+
 export const SPAN_CLIP =
   'Perform this single motion slowly and steadily so that it fills the ENTIRE clip from the very ' +
   'first moment to the very last: extending through the first half and returning through the ' +
@@ -147,6 +165,25 @@ const HOLD = [
 ].join(' ');
 
 /**
+ * The two clauses of `HOLD` that are true of ANY subject, so an enemy can reuse them.
+ *
+ * Split out in Phase 5. `HOLD` above opens with *"this is the same man… brass goggles… satchel"* —
+ * feeding that to a turret would ask the model to grow a courier out of it, and a fallback that
+ * quietly did so is exactly the class of bug `videoPrompt` already refuses for a missing motion.
+ * So identity is now per subject and REQUIRED for every namespaced entry; only the camera lock and
+ * the chroma field are shared, because neither says anything about who is in frame.
+ */
+const HOLD_CAMERA =
+  'CAMERA: the camera is completely locked. It never pans, never zooms, never dollies and never ' +
+  'rotates. The subject stays at exactly the same size and stays in the same place in the frame ' +
+  'for the whole clip, and is never cropped by any edge.';
+
+const HOLD_BACKGROUND =
+  'BACKGROUND: perfectly flat uniform chroma green, RGB 0 255 0, edge to edge, for the whole clip. ' +
+  'No texture, no speckle, no gradient, no shadow, no floor, no ground line, no platform, no ' +
+  'scenery. It stands on nothing and touches nothing.';
+
+/**
  * One motion brief per animation. `cyclic` decides the prompt tail and how the clip is sampled.
  *
  * **The asked-for cycle count is not the delivered one, and the sampler does not trust it.** Every
@@ -194,7 +231,7 @@ export const VIDEO_MOTIONS = Object.freeze({
    */
   walk: {
     cyclic: true,
-    frames: 12,
+    frames: 24,
     motion:
       'walks forward to the RIGHT with a complete and clearly visible walking cycle, repeated ' +
       'steadily for the whole clip: he lifts one boot right off the ground, swings that leg ' +
@@ -206,7 +243,26 @@ export const VIDEO_MOTIONS = Object.freeze({
   },
   run: {
     cyclic: true,
-    frames: 12,
+    /**
+     * 🔴 **15, not 12, and the reason is the SPEED — not the animation.**
+     *
+     * Foot travel per drawn frame is `stridePerCycle / frames`, and planted feet require
+     * `ticksPerFrame × topSpeed === footPxPerFrame` with `ticksPerFrame` a whole number. Substitute
+     * and the speed collapses to `stridePerCycle / (frames × ticksPerFrame)` — so with 12 frames the
+     * ONLY planted run speeds are `270/24 = 11.25` and `270/36 = 7.5`, and nothing in between exists.
+     *
+     * 7.5 was too slow and 11.25 is within 6 % of the 12.0 the user had already rejected as *"moves
+     * very fast"*. Changing the frame count is the one lever that reaches between them: **15 frames
+     * at 2 ticks/frame gives `270/30 = 9.0`**, with zero slide. The user chose it over accepting a
+     * 20 % slide at the same speed.
+     *
+     * ⚠️ **It costs pose distinctness, and that is the recorded trade.** The clip carries roughly 13
+     * genuinely distinct poses per cycle, so 15 sampled frames necessarily repeats some — the same
+     * mild defect already measured on the walk sheet (pairs 1-2, 4-5, 14-15, 18-19). `gateMotionFloor`
+     * cannot catch it: it compares every frame to frame 0 and keeps the maximum, never adjacent
+     * pairs. Buying real distinctness here needs a longer or higher-frame-rate clip, i.e. money.
+     */
+    frames: 15,
     motion:
       'runs hard to the RIGHT with a complete and clearly visible running cycle, repeated steadily ' +
       'for the whole clip: he drives one knee high in front of him, reaches that leg forward, ' +
@@ -255,6 +311,7 @@ export const VIDEO_MOTIONS = Object.freeze({
    */
   jump: {
     cyclic: false,
+    airborne: true,
     frames: 6,
     motion:
       'is airborne, caught in the middle of a leap.\n' +
@@ -274,7 +331,23 @@ export const VIDEO_MOTIONS = Object.freeze({
   },
   fall: {
     cyclic: false,
-    frames: 6,
+    airborne: true,
+    /**
+     * 🔴 6 → 8 corrected a DESYNC: this said 6 while the extracted strip held 8 cells and the
+     * catalog shipped 8, because `assets:build` packs the strip and never reads this file.
+     *
+     * ✅ **8 → 9 on 2026-08-15, and this is the number that closes the judder.** 8 does not divide
+     * the 18-tick fall, so the sheet dwelt unevenly — some cells held two ticks and some three, and
+     * that is what reads as a stutter. 9 gives a flat **2 ticks per frame**. It was blocked on the
+     * art because re-extracting the OLD clip at any count still failed G6; `fall-r2.mp4` is the
+     * re-shoot that unblocks it, so the count and the clip move together in one commit.
+     *
+     * ⚠️ **Order is forced and not a style choice.** `build-clips.mjs` reads `frames` to decide the
+     * sample count, so it must be 9 before `assets:clips` runs — but bumping it while
+     * `BLOCKED_ON_ART` still lists the key turns `one-shot-divisor.test.ts` red on the spot. Shoot →
+     * adopt → 9 → `assets:clips` → `assets:build` → empty `BLOCKED_ON_ART`, all one commit.
+     */
+    frames: 9,
     motion:
       'is airborne, caught in the middle of a fall.\n' +
       '\n' +
@@ -288,8 +361,27 @@ export const VIDEO_MOTIONS = Object.freeze({
       'boots directly below his hips, both arms drawn down and in close to his sides.\n' +
       'He is at a different point along that path in every frame, and he never doubles back toward ' +
       'a shape he has already passed through.' +
+      /**
+       * 🔴 Added 2026-08-15 for the re-shoot, and **it is NOT redundant with `UPRIGHT_IN_AIR`.**
+       *
+       * That tail already says *"No part of him is ever cut off by the top, bottom, left or right
+       * edge"* — and `fall` was cut on the left and the right anyway. The difference is the one
+       * STYLE.md §6 keeps charging this project for: that sentence is a **negation**, which this
+       * model weakens rather than obeys, and it names no width the model can measure itself
+       * against. `FRAME_MARGIN` is the positive ruler — *the middle 70% of the frame width* — and it
+       * is the clause both courier clips that PASS G6 carry.
+       *
+       * It sits BEFORE the tail deliberately. `UPRIGHT_IN_AIR` must stay whole and stay last: two
+       * generations were paid to learn that inserting into that paragraph makes him somersault.
+       *
+       * ⚠️ **One record, not the shared clause.** Putting this inside `UPRIGHT_IN_AIR` would change
+       * `jump`'s prompt too, for a shoot nobody approved and no budget covers.
+       */
+      `${FRAME_MARGIN}` +
       `${UPRIGHT_IN_AIR}`,
   },
+
+  ...COMBAT_MOTIONS,
 });
 
 /**
@@ -304,10 +396,36 @@ export function videoPrompt(template, action, blocks) {
         `rather than falling back to another action's motion (vault 4.16).`,
     );
   }
+  /**
+   * Identity is per subject and has **no fallback**, for the same reason a missing motion throws.
+   * `HOLD` opens with *"this is the same man… brass goggles… satchel"*; a turret handed that would
+   * be asked to grow a courier out of itself, and it would try. The legacy bare keys (`idle`,
+   * `walk`, `run`, `jump`, `fall`) are the courier's and keep `HOLD`; every namespaced `slug/action`
+   * must declare its own.
+   */
+  const namespaced = action.includes('/');
+  if (namespaced && !spec.identity) {
+    throw new Error(
+      `motion: "${action}" is namespaced but declares no identity clause. An enemy inheriting the ` +
+        `courier's identity is a worse failure than a missing prompt (vault 4.16).`,
+    );
+  }
+  const hold = namespaced
+    ? [spec.identity, HOLD_CAMERA, HOLD_BACKGROUND].join(' ')
+    : HOLD;
+
+  /**
+   * The one-shot tail. `span` wins when the motion does NOT return (`death`, `fire`); otherwise a
+   * non-cyclic motion gets `SPAN_CLIP`, which is only correct for a motion that extends and comes
+   * back. Cyclic motions get neither — their count is in the brief.
+   */
+  const tail = spec.span ?? (spec.cyclic ? '' : SPAN_CLIP);
+
   return [
-    `A single continuous shot of THIS EXACT CHARACTER, who ${spec.motion}`,
+    `A single continuous shot of THIS EXACT SUBJECT, which ${spec.motion}`,
+    ...(tail ? ['', tail] : []),
     '',
-    HOLD,
+    hold,
     '',
     blocks.rendering,
     '',

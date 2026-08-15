@@ -1741,8 +1741,8 @@
         0,
         13,
         13,
-        13,
-        13,
+        0,
+        0,
         0,
         0,
         0,
@@ -2127,6 +2127,60 @@
           "width": 0,
           "x": 624,
           "y": 1920
+        },
+        {
+          "height": 96,
+          "id": 8,
+          "name": "",
+          "properties": [
+            {
+              "name": "hazard",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 192,
+          "x": 2304,
+          "y": 1824
+        },
+        {
+          "height": 192,
+          "id": 9,
+          "name": "",
+          "properties": [
+            {
+              "name": "enemy",
+              "type": "string",
+              "value": "brass-sentry"
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 192,
+          "x": 4800,
+          "y": 1344
+        },
+        {
+          "height": 240,
+          "id": 10,
+          "name": "",
+          "properties": [
+            {
+              "name": "enemy",
+              "type": "string",
+              "value": "rust-scavenger"
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 1152,
+          "x": 6528,
+          "y": 1680
         }
       ],
       "opacity": 1,
@@ -2137,7 +2191,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 8,
+  "nextobjectid": 11,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",

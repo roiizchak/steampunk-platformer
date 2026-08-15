@@ -1,0 +1,191 @@
+/**
+ * Enemy sim state -> render descriptor. **Engine-free** (vault 2.12), mirroring `playerView.ts`.
+ *
+ * ## Guard G3 — the frame-0 bug, closed at the source
+ *
+ * Phaser's `play()` stops and restarts a looping animation on every call, so a scene that plays the
+ * current key each frame never leaves frame 0 — a walk cycle that looks like a statue. The fix has
+ * two halves and this module is the first: **one key per state, decided here**, so the scene has a
+ * stable value to compare against and calls `sprite.play(key, true)` with `ignoreIfPlaying`. The
+ * second half is the e2e sampling `anims.currentFrame.index` inside the page, once per animation
+ * frame, across a whole patrol.
+ *
+ * ## Guard G2 — every key has a sim duration behind it
+ *
+ * An animation named here is an animation `animTiming.ts` must be able to derive an fps for, and
+ * `deriveFps` needs `simTicks`. So the key set is exactly what the simulation can express today:
+ *
+ *   - `brass-sentry`: `idle`, `fire`, `death`
+ *   - `rust-scavenger`: `idle`, `walk`, `chase`, `attack`, `death`
+ *
+ * The rule behind that list has not changed: **an animation named here needs a sim window behind
+ * it**, because `deriveFps` needs `simTicks`, and inventing a window to justify a sheet is how vault
+ * 4.22's *"0.43 s of art over a 0.25 s move"* happens.
+ *
+ * ⚠️ This said **six** clips and listed the scavenger as `walk, chase, death`, with the reasoning
+ * *"the scavenger has no attack state because its BODY is the hazard — contact damage, no swing"*.
+ * Both halves are now out of date, and each was retired by a decision rather than by drift:
+ *
+ *  - **`idle`** (2026-08-14, D3) — permanent aggro created a standing state. A chasing scavenger
+ *    held inside `deadZone` or vetoed by the ledge probe covers 0 px while `chase` moves the foot
+ *    17.5 px per frame, and nothing ends it.
+ *  - **`attack`** (2026-08-14) — the player reported *"the scavenger does not have an attack
+ *    animation"*. It is a real sim window now (`SCAVENGER_ATTACK`, startup/active/recovery), and
+ *    damage moved from any overlap to the active window only. That is a balance change, taken
+ *    deliberately, and it is what gives the sheet a duration to derive an fps from.
+ *
+ * `hurt` remains absent, for the original reason restated correctly: it is a named descope lever
+ * (`docs/prd/phase-05-combat.md`), covered by a tint flash instead of a sheet.
+ */
+
+import type { EnemySlug, Scavenger, Sentry } from '../sim/enemies';
+import { attackInProgress, SCAVENGER_BOX, SENTRY_BOX, SENTRY_FIRE_TICKS } from '../sim/enemies';
+import { windowOpen } from '../sim/windows';
+
+/**
+ * Re-exported from `src/sim/enemySentry.ts`, where it now lives — see that file for the reasoning.
+ *
+ * It moved on 2026-08-14 because `createSentry` must reject a `cooldown` this value makes
+ * unrepresentable, and `src/sim/` may not import from `src/render/`. Re-exported rather than
+ * relocated-and-updated at ~10 call sites, so there is still exactly one definition *(vault 5.3)*
+ * and every existing consumer — `animTiming.ts`, `enemyTuning.ts`, four test files and the
+ * `catalogTimings.mjs` mirror lock — keeps working unchanged.
+ */
+export { SENTRY_FIRE_TICKS };
+
+export type SentryAnim = 'idle' | 'fire' | 'death';
+export type ScavengerAnim = 'idle' | 'walk' | 'chase' | 'attack' | 'death';
+export type EnemyAnim = SentryAnim | ScavengerAnim;
+
+/** Which animation a sentry is playing. Death outranks everything — a corpse does not shoot. */
+export function sentryAnim(sentry: Sentry): SentryAnim {
+  if (sentry.hp <= 0) {
+    return 'death';
+  }
+  return windowOpen(sentry.cooldownCounter, SENTRY_FIRE_TICKS) ? 'fire' : 'idle';
+}
+
+/**
+ * Which animation a scavenger is playing.
+ *
+ * 🔴 **`idle` exists now, and it is selected from the MOTION, not the intent.** This used to read
+ * `chasing ? 'chase' : 'walk'` and this comment used to say *"There is no `idle`: it patrols
+ * continuously, so a standing pose would never be reached and a sheet for it would be money spent
+ * on a state the sim cannot enter."* That was true when a chase could lapse. **Permanent aggro
+ * created the state**: a chasing scavenger held inside `deadZone` or vetoed by the ledge probe
+ * covers 0 px while `chase` moves the foot 17.5 px per frame, and nothing ends it.
+ *
+ * So the question this asks is `moving`, not `chasing` — see `Scavenger.moving`, which is a readback
+ * of `x` across the step rather than a second state axis. `chasing` still chooses *which* gait once
+ * the body is actually travelling.
+ *
+ * Death outranks everything, and is tested first: a corpse's `moving` is not read at all, which is
+ * why `stepEnemies`' death reset does not need to clear it.
+ */
+export function scavengerAnim(scavenger: Scavenger): ScavengerAnim {
+  if (scavenger.hp <= 0) {
+    return 'death';
+  }
+  // 🔴 **Attack outranks the gait, and it must outrank `idle` too.**
+  //
+  // A swing plants the feet, so `moving` is false for its whole 36 ticks. Tested after `moving` the
+  // swing would draw as `idle` and never appear at all — the windup, the strike and the recovery
+  // would all be a creature standing still, which is precisely the "no attack animation" the player
+  // reported. Precedence, not exclusion: a scavenger may be chasing AND swinging, and this is where
+  // that pair resolves.
+  //
+  // `attackInProgress` is imported from the sim rather than restated as a counter comparison here —
+  // `worldDamage.ts` gates damage on the same module's `attackIsLive`, so what hurts you and what
+  // you see are derived from one definition *(vault 5.3)*.
+  if (attackInProgress(scavenger)) {
+    return 'attack';
+  }
+  if (!scavenger.moving) {
+    return 'idle';
+  }
+  return scavenger.chasing ? 'chase' : 'walk';
+}
+
+const ANIMS_BY_SLUG: Record<EnemySlug, readonly EnemyAnim[]> = {
+  'brass-sentry': ['idle', 'fire', 'death'],
+  'rust-scavenger': ['idle', 'walk', 'chase', 'attack', 'death'],
+};
+
+/** `brass-sentry` + `fire` -> `brass-sentry-fire`. The catalog namespace is flat. */
+export function enemyAnimKey(slug: EnemySlug, anim: EnemyAnim): string {
+  return `${slug}-${anim}`;
+}
+
+/** Every key an enemy can ask for, so the scene registers exactly the set that gets played. */
+export function enemyAnimKeys(): string[] {
+  return Object.entries(ANIMS_BY_SLUG).flatMap(([slug, anims]) =>
+    anims.map((anim) => enemyAnimKey(slug as EnemySlug, anim)),
+  );
+}
+
+export interface EnemyRenderDesc {
+  /** World position of the FEET, like the player's. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  originX: number;
+  originY: number;
+  flipX: boolean;
+  /** Grey-box fill, `0xRRGGBB`. Kept past the art for the same reason `playerView` keeps its. */
+  colour: number;
+  animKey: string;
+  /**
+   * The slug's always-shipped base action — `walk` for the scavenger, `idle` for the sentry —
+   * FIX 1. `addBody` decides Sprite-vs-Rectangle from `desc.animKey` alone, and `animKey` is
+   * transient (a scavenger mid-chase asks for `chase`). If `chase` is not yet catalogued, a body
+   * created on that tick became a Rectangle forever — `addBody` runs once, so it never upgrades
+   * when the enemy stops chasing. A body must be a Sprite whenever the slug has ANY catalogued
+   * sheet; which action it happens to be performing at birth must not decide its representation
+   * for the rest of its life. `playIfChanged` already no-ops on a missing key, so a Sprite created
+   * on this fallback and later asked for `chase` simply keeps playing `walk` — the existing,
+   * intended partial-catalog behaviour, unchanged.
+   */
+  fallbackAnimKey: string;
+}
+
+/**
+ * Grey-box palette. Cool for the static threat, warm for the one that comes at you — so a playtest
+ * can tell them apart before either has art, and before the health bar is even looked at.
+ */
+const SENTRY_COLOUR = 0x6f8fa6;
+const SCAVENGER_COLOUR = 0xb5713f;
+
+export function sentryRenderDesc(sentry: Sentry, scale: number): EnemyRenderDesc {
+  return {
+    x: sentry.x,
+    y: sentry.y,
+    w: SENTRY_BOX.w * scale,
+    h: SENTRY_BOX.h * scale,
+    originX: 0.5,
+    originY: 1,
+    // Read from `facing`, never re-derived from velocity — the same rule as the player and the
+    // scavenger (`enemyView.ts:144`). A sentry that cannot see the player holds its last facing.
+    flipX: sentry.facing === -1,
+    colour: SENTRY_COLOUR,
+    animKey: enemyAnimKey('brass-sentry', sentryAnim(sentry)),
+    fallbackAnimKey: enemyAnimKey('brass-sentry', 'idle'),
+  };
+}
+
+export function scavengerRenderDesc(scavenger: Scavenger, scale: number): EnemyRenderDesc {
+  return {
+    x: scavenger.x,
+    y: scavenger.y,
+    w: SCAVENGER_BOX.w * scale,
+    h: SCAVENGER_BOX.h * scale,
+    originX: 0.5,
+    originY: 1,
+    // Read from `facing`, never re-derived from velocity — the same rule as the player, and for the
+    // same reason: a scavenger stopped at a patrol turn has no velocity to read a direction from.
+    flipX: scavenger.facing === -1,
+    colour: SCAVENGER_COLOUR,
+    animKey: enemyAnimKey('rust-scavenger', scavengerAnim(scavenger)),
+    fallbackAnimKey: enemyAnimKey('rust-scavenger', 'walk'),
+  };
+}

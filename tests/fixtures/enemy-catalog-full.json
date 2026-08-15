@@ -1,0 +1,77 @@
+{
+  "_comment": "A hypothetical FUTURE catalog carrying all six enemyAnimKeys() rows. Never shipped, never read by BootScene — see tests/unit/enemy-layer-catalog.test.ts, the expiry test for enemyLayer.ts's Rectangle fallback.",
+  "sheets": [
+    {
+      "key": "brass-sentry-idle",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": true
+    },
+    {
+      "key": "brass-sentry-fire",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": false
+    },
+    {
+      "key": "brass-sentry-death",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": false
+    },
+    {
+      "key": "rust-scavenger-idle",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": true
+    },
+    {
+      "key": "rust-scavenger-walk",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": true
+    },
+    {
+      "key": "rust-scavenger-chase",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": true
+    },
+    {
+      "key": "rust-scavenger-attack",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": false
+    },
+    {
+      "key": "rust-scavenger-death",
+      "frameWidth": 1,
+      "frameHeight": 1,
+      "frameCount": 1,
+      "simTicks": 1,
+      "fps": 1,
+      "loop": false
+    }
+  ]
+}

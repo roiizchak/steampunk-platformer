@@ -20,8 +20,10 @@ export { TICK_HZ, TILE_SIZE, GAME_WIDTH, GAME_HEIGHT } from '../game/constants';
 
 export type {
   AdvanceEvents,
+  CombatState,
   InputSnapshot,
   LocalBox,
+  MovementState,
   PlayerSim,
   PlayerState,
   Rect,
@@ -31,7 +33,13 @@ export type {
   World,
 } from './types';
 
-export { consumeJumpPress, createSnapshot, latchJumpPress } from './input';
+export {
+  consumeAttackPress,
+  consumeJumpPress,
+  createSnapshot,
+  latchAttackPress,
+  latchJumpPress,
+} from './input';
 export { createRng, nextFloat, nextU32, rollChance } from './rng';
 export {
   DEFAULT_TUNING,
@@ -45,6 +53,66 @@ export {
   toWorld,
 } from './player';
 export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
+export { advanceWindow, windowOpen } from './windows';
+export type { Clampable, WorldBounds } from './hazards';
+export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, segmentHitsRect } from './hazards';
+export type { Projectile } from './projectiles';
+export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
+export { KNOCKBACK_SPEED, applyWorldDamage } from './worldDamage';
+export { ATTACK_BOX, PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from './playerAttack';
+export { stepEnemies } from './enemyTurn';
+export type { AttackPhase, CombatStep, CombatTiming } from './combat';
+export {
+  ATTACK,
+  DEATH_TICKS,
+  HURT_LOCK_TICKS,
+  HURT_TICKS,
+  IFRAME_TICKS,
+  PLAYER_MAX_HP,
+  PLAY_LAG_TICKS,
+  attackPhase,
+  attackTotalTicks,
+  canAct,
+  combatStateTicks,
+  damagePlayer,
+  enterCombatState,
+  hitWindowOpen,
+  invulnerable,
+  isCombatState,
+  knockbackSettling,
+  movementLocked,
+  stepCombat,
+} from './combat';
+export type {
+  EnemySet,
+  EnemySlug,
+  EnemySpawn,
+  Scavenger,
+  ScavengerFooting,
+  ScavengerOptions,
+  Sentry,
+  SentryOptions,
+  Sighting,
+} from './enemies';
+export {
+  CHASE_FOOT_PX_PER_FRAME,
+  CHASE_TICKS_PER_FRAME,
+  ENEMY_SLUGS,
+  SCAVENGER_BOX,
+  SENTRY_BOX,
+  groundUnder,
+  overlapsScavenger,
+  scavengerFooting,
+  spawnEnemies,
+  SCAVENGER,
+  SENTRY,
+  createScavenger,
+  createSentry,
+  detects,
+  sentrySees,
+  stepScavenger,
+  stepSentry,
+} from './enemies';
 
 /** Convert an integer tick count to whole milliseconds. Ticks are the unit; ms is for display. */
 export function ticksToMs(ticks: number): number {

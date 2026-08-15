@@ -57,8 +57,34 @@ const EXPECTED_KNOBS = [
  * before the scenario ended, so the `maxFallSpeed * 2` perturbation never saturated the clamp and
  * contributed nothing. The knob passed on its halved case alone. Review brief 1 found this: the
  * sweep was non-vacuous but weaker than it read.
+ *
+ * 🔴 **y 2400 → 6000 on 2026-08-15, and it is the SAME lesson a third time.** Doubling the airborne
+ * window dropped `gravity` to 0.675, so reaching the 51.6 clamp now takes **77 ticks and ~2027 px**
+ * rather than 19 ticks and a few hundred. The old floor gave ~1440 px of drop, so the clamp became
+ * unreachable in every perturbation and the sweep reported `maxFallSpeed` as a DEAD KNOB — while it
+ * was demonstrably live.
+ *
+ * That is the third time this session a physics change silently cost a sweep its sensitivity and
+ * the sweep blamed the knob rather than itself (`deadZone` was the other two). **The floor and the
+ * window are properties of the tuning, not constants** — anything that lowers gravity has to move
+ * them or this gate quietly stops measuring. 6000 leaves headroom for the doubled-clamp
+ * perturbation, which falls furthest (~3409 px in the window) precisely because it never saturates.
  */
-const FLOOR_ONLY: Rect[] = [{ x: 0, y: 2400, w: 1920, h: 120 }];
+const FLOOR_ONLY: Rect[] = [{ x: 0, y: 6000, w: 1920, h: 120 }];
+
+/**
+ * 🔴 **The real reason `maxFallSpeed` went dead, and it was not the floor.**
+ *
+ * `createWorld` defaults to 1920x1080 and `belowKillPlane` is `feetY > bounds.heightPx` — so the
+ * player CROSSES THE KILL PLANE at 1080 px of fall, dies, and respawns. Every perturbation then
+ * converges to the same resting fingerprint and the knob reads dead.
+ *
+ * That was survivable at `gravity` 2.7: 26 ticks fell ~900 px and stayed inside the box. At 0.675
+ * the clamp needs **77 ticks and ~2027 px**, which is nearly twice the whole default world. **No
+ * floor position could have fixed it** — the world itself had to get taller. Worth stating because
+ * the first fix moved the floor and changed nothing, which is how a wrong diagnosis looks.
+ */
+const TALL_WORLD = { widthPx: 1920, heightPx: 8000 };
 
 /** A reproducible fingerprint of a trajectory. Any change in behaviour changes this string. */
 function signature(world: World, jumps: number): string {
@@ -74,8 +100,15 @@ function withTuning(
   tuning: TuningKnobs,
   solids: Rect[] | undefined,
   run: (world: World, input: ReturnType<typeof createSnapshot>) => number,
+  /**
+   * 🔴 Optional TALLER world, added 2026-08-15. The default is 1920x1080 and `belowKillPlane` fires
+   * at `feetY > heightPx`, so a scenario that wants a long fall must say so or the player DIES
+   * mid-measurement and respawns — converging every perturbation to one fingerprint and reporting a
+   * live knob as dead. See `longFall`.
+   */
+  bounds?: { widthPx: number; heightPx: number },
 ): string {
-  const world = createWorld({ seed: 11, scale: 1, solids });
+  const world = createWorld({ seed: 11, scale: 1, solids, bounds });
   Object.assign(world.tuning, tuning);
   const input = createSnapshot();
   const jumps = run(world, input);
@@ -194,12 +227,17 @@ const SCENARIOS: Record<string, Scenario> = {
   /**
    * A long unobstructed drop — the only scenario that saturates maxFallSpeed.
    *
-   * 26 ticks: the default clamp of 17 px/tick is reached around tick 19, so BOTH perturbations
-   * are observable — halving it saturates earlier and doubling it never saturates at all. Still
-   * stopped in mid-air, because landing converges every tuning to the same resting fingerprint.
+   * **100 ticks**, measured against the shipped tuning rather than guessed: the 51.6 px/tick clamp
+   * is reached at tick **77** at `gravity` 0.675, so both perturbations are observable — halving it
+   * saturates at tick 39, doubling it never saturates inside the window at all. Still stopped in
+   * mid-air, because landing converges every tuning to the same resting fingerprint.
+   *
+   * ⚠️ Was **26 ticks against a clamp the docstring called "17 px/tick"** — a number that had not
+   * been true since the Phase 4 rescale, describing a saturation point that moved twice under it.
+   * Re-derive both numbers whenever `gravity` or `maxFallSpeed` moves; neither is a constant.
    */
   longFall: (tuning) =>
-    withTuning(tuning, FLOOR_ONLY, (world, input) => countJumps(world, input, 26)),
+    withTuning(tuning, FLOOR_ONLY, (world, input) => countJumps(world, input, 100), TALL_WORLD),
 
   /** Coyote time: walk off the ledge, wait, then press. */
   coyote: (tuning) =>

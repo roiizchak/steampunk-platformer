@@ -19,6 +19,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { playerRenderDesc } from '../../src/render/playerView';
+import { IFRAME_TICKS, PLAYER_MAX_HP } from '../../src/sim/combat';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { createWorld } from '../../src/sim/tick';
 import type { PlayerSim } from '../../src/sim/types';
@@ -35,6 +36,11 @@ function playerAt(overrides: Partial<PlayerSim> = {}): PlayerSim {
     ticksSinceGrounded: 0,
     ticksSinceJumpPressed: 0,
     jumpCutPending: false,
+    hp: PLAYER_MAX_HP,
+    maxHp: PLAYER_MAX_HP,
+    combatCounter: 0,
+    iFrameCounter: IFRAME_TICKS,
+    knockbackPending: false,
     ...overrides,
   };
 }
