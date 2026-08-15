@@ -14,7 +14,7 @@ import { playIfChanged } from '../../src/scenes/playAnim';
 // Raw source via Vite's `import.meta.glob`, matching the pattern already established in
 // `docs-contract.test.ts` and `enemy-layer-catalog.test.ts` — this project's tests do not read the
 // filesystem with node:fs.
-const SOURCES = import.meta.glob(['../../src/scenes/enemyLayer.ts', '../../src/scenes/GameScene.ts'], {
+const SOURCES = import.meta.glob(['../../src/scenes/enemyLayer.ts', '../../src/scenes/gamePlayerDraw.ts'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -64,13 +64,17 @@ describe('both call sites route through the helper (R10)', () => {
     expect(src).toContain('playIfChanged(sprite, desc.animKey)');
   });
 
-  it("GameScene.ts's renderPlayer imports playIfChanged and never calls playerSprite.play() directly", () => {
-    const src = sourceOf('GameScene.ts');
+  // `renderPlayer` moved from `GameScene.ts` to `gamePlayerDraw.ts` on 2026-08-15 (criterion
+  // 4.16 / 5.12), so this guard follows it. The assertion is unchanged in substance: the player's
+  // draw path routes through `playIfChanged` and must never call `play()` on the sprite itself.
+  it("gamePlayerDraw.ts's renderPlayerSprite imports playIfChanged and never calls sprite.play() directly", () => {
+    const src = sourceOf('gamePlayerDraw.ts');
     expect(src).toMatch(/import\s*\{\s*playIfChanged\s*\}\s*from\s*'\.\/playAnim'/);
-    expect(src).toContain('playIfChanged(this.playerSprite, desc.animKey)');
-    // The old inline getName()-guarded call must be gone from renderPlayer, not just added
+    expect(src).toContain('playIfChanged(sprite, desc.animKey)');
+    // The old inline getName()-guarded call must be gone from the draw path, not just added
     // alongside it.
-    const renderPlayer = src.slice(src.indexOf('private renderPlayer('), src.indexOf('private renderPlayer(') + 800);
-    expect(renderPlayer).not.toContain('this.playerSprite.play(desc.animKey)');
+    const start = src.indexOf('export function renderPlayerSprite(');
+    const renderPlayer = src.slice(start, start + 800);
+    expect(renderPlayer).not.toContain('sprite.play(desc.animKey)');
   });
 });

@@ -139,7 +139,7 @@ left applied, but a *fix* removed by the restore.
 | 3.7 | Element Editor shows and edits a collision strip; the edit persists | **PASS** — mechanically, and by the user's hands-on pass; the saved file is `level-01.tmj` at the repo root — see below |
 | 3.8 | No file > 400 lines; diff reviewed; adversarial pass | **PASS, after a violation was found and fixed** — `voltagent-qa-sec:code-reviewer` ×2 briefs |
 | 3.9 | Codex plan review ran; every finding applied or recorded | **PASS** — 10 applied, 1 rejected with a reason |
-| 3.10 | Codex implementation review ran; every finding applied or recorded | **PASS** — 6 applied, 3 recorded with reasons; [phase-03-impl.md](reviews/phase-03-impl.md) |
+| 3.10 | Codex implementation review ran; every finding applied or recorded | **PASS** — 6 applied, 3 recorded with reasons; [phase-03-impl.md](../reviews/phase-03-impl.md) |
 
 **Regression set:** Phases 1–2, specs 01–02 — **re-verified, not merely re-run**, because the
 character contract changed the knobs those tests were written against.
@@ -220,7 +220,7 @@ is a change like any other, and needs the workflow it constrains exercised again
 
 `code-reviewer` brief 2 and the Codex implementation review ran on the same diff and **neither found
 the other's headline defect**, which is the case for running both. Codex's report and full triage are
-in [phase-03-impl.md](reviews/phase-03-impl.md); the highlights either found:
+in [phase-03-impl.md](../reviews/phase-03-impl.md); the highlights either found:
 
 - **A level could pass the boot gate and then hang the game.** `GameScene` hardcoded
   `addTilesetImage('greybox')` and `createLayer('ground')` while `describeLevelProblem` reads no
@@ -323,7 +323,7 @@ here would move the strips the Phase 3 e2e oracles derive their expectations fro
 ## Vault-out — Phase 3
 
 **High value: the vault had ZERO tilemap coverage before this phase** *(vault A3)*. Everything below
-is new. The engine-level notes went into [ENGINE-NOTES.md](ENGINE-NOTES.md) under **Tilemaps** and
+is new. The engine-level notes went into [ENGINE-NOTES.md](../ENGINE-NOTES.md) under **Tilemaps** and
 **Cameras**; these are the lessons that generalise past Phaser.
 
 ### New lessons
@@ -380,7 +380,7 @@ thing being covered.
 
 ### For Phase 4
 
-- The art contract is published in [ASSET-PIPELINE.md](ASSET-PIPELINE.md) §0a and **pinned against
+- The art contract is published in [ASSET-PIPELINE.md](../ASSET-PIPELINE.md) §0a and **pinned against
   the runtime constants by a test** — cell size, zoom, viewport, world extent, camera travel,
   character collision box, render height and `RENDER_SCALE`. Changing any of them turns that test
   red, which is the intended approval checkpoint.

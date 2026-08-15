@@ -244,7 +244,7 @@ M16 now fails at full parallelism.
 
 ### Criterion 2.11 — the Codex implementation review
 
-Full report and triage in [reviews/phase-02-impl.md](reviews/phase-02-impl.md). Six findings, **all
+Full report and triage in [reviews/phase-02-impl.md](../reviews/phase-02-impl.md). Six findings, **all
 six applied**, and it opened with *"Phase 2 is not ready to report complete."* It was right.
 
 | # | Finding | Sev | Applied as |

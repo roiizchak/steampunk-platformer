@@ -257,7 +257,7 @@ phase that a test which cannot fail is worth nothing: the rules looked correct a
 
 ### Criterion 1.11 — the Codex implementation review
 
-Full report and triage: [`reviews/phase-01-impl.md`](reviews/phase-01-impl.md).
+Full report and triage: [`reviews/phase-01-impl.md`](../reviews/phase-01-impl.md).
 **8 findings, 2 of them blockers. All 8 applied, none rejected.**
 
 **Two blockers survived the correctness review AND the adversarial review.** Both are the same shape

@@ -12,13 +12,19 @@ document** — `tests/unit/docs-contract.test.ts` addresses each log by that nam
 directories cannot drift apart. Split out on 2026-08-07, when this file reached 1473 lines and was
 gaining roughly 350 a phase. A new phase adds `docs/qa/<its prd filename>` — nothing else moves.
 
+**When one phase's log gets long, it splits into flat siblings** — `phase-05-combat-01-timings.md`,
+not `phase-05-combat/01-timings.md`. `tests/unit/file-size.test.ts` globs `docs/qa/*.md`
+**non-recursively** to check that every source file over 400 lines is recorded somewhere in here, so
+a subdirectory silently un-records everything in it. The phase's own file keeps its name and becomes
+the index — `docs-contract.test.ts` addresses it by that name.
+
 | Phase | QA log | Phase doc | Codex reviews |
 |---|---|---|---|
 | 1 — Boot | [qa/phase-01-boot.md](qa/phase-01-boot.md) | [prd/phase-01-boot.md](prd/phase-01-boot.md) | [plan](reviews/phase-01-plan.md) · [impl](reviews/phase-01-impl.md) |
 | 2 — Player controller + Character Playground | [qa/phase-02-player.md](qa/phase-02-player.md) | [prd/phase-02-player.md](prd/phase-02-player.md) | [plan](reviews/phase-02-plan.md) · [impl](reviews/phase-02-impl.md) |
 | 3 — Tiled tilemap pipeline + Element Editor | [qa/phase-03-tilemap.md](qa/phase-03-tilemap.md) | [prd/phase-03-tilemap.md](prd/phase-03-tilemap.md) | [plan](reviews/phase-03-plan.md) · [impl](reviews/phase-03-impl.md) |
-| 4 — fal art production + Character Gym | [qa/phase-04-art.md](qa/phase-04-art.md) | [prd/phase-04-art.md](prd/phase-04-art.md) | [plan](reviews/phase-04-plan.md) · [impl](reviews/phase-04-impl.md) |
-| 5 — Combat, enemies and hazards | [qa/phase-05-combat.md](qa/phase-05-combat.md) | [prd/phase-05-combat.md](prd/phase-05-combat.md) | [plan](reviews/phase-05-plan.md) · [impl](reviews/phase-05-impl.md) |
+| 4 — fal art production + Character Gym | [qa/phase-04-art.md](qa/phase-04-art.md) + [gate](qa/phase-04-art-gate.md) | [prd/phase-04-art.md](prd/phase-04-art.md) | [plan](reviews/phase-04-plan.md) · [impl](reviews/phase-04-impl.md) |
+| 5 — Combat, enemies and hazards | [qa/phase-05-combat.md](qa/phase-05-combat.md) + [9 parts](qa/) | [prd/phase-05-combat.md](prd/phase-05-combat.md) | [plan](reviews/phase-05-plan.md) · [impl](reviews/phase-05-impl.md) |
 
 > Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
 > not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads
@@ -329,3 +335,115 @@ verified state — a mutation left applied in a green tree is the exact failure 
 specific commit; rewriting them would falsify the record rather than repair it. They were already
 stale-prone before this split, and what they cite is reachable at
 `git show 83daaa6:docs/QA-LOG.md`.
+
+## Cross-phase — four long documents split (2026-08-15)
+
+**Not a phase.** A documentation audit run after Phase 5 merged, on the observation that four
+documents had passed 500 lines and two of them are documents a session is *instructed* to read on
+the way in.
+
+| Was | Is | Lines |
+|---|---|---|
+| `qa/phase-05-combat.md` 3167 | index (summary + vault-out) + 9 flat siblings | 314 + 271…370 |
+| `HANDOFF.md` 1604 | index + §14/§15 + 4 files in [`docs/handoff/`](handoff/) | 360 + 179…404 |
+| `reviews/phase-05-plan.md` 1069 | index + 3 files, grouped by review | 23 + 246…419 |
+| `qa/phase-04-art.md` 518 | narrative + [`qa/phase-04-art-gate.md`](qa/phase-04-art-gate.md) | 300 + 232 |
+
+**All four hubs kept their paths.** ~35 things point at `HANDOFF.md` and ~20 at the Phase 5 QA log,
+including `src/`, `tests/`, `tools/` and `playwright.config.ts`; `docs/prd/phase-05-combat.md`
+writes the plan-review path into criterion 5.13 itself. Moving a hub breaks all of those; making it
+an index breaks none. This is the `QA-LOG.md` rule of 2026-08-07, applied again.
+
+**Two mechanical constraints decided the shape, and neither is visible in the documents.**
+
+`tests/unit/file-size.test.ts:35` globs `docs/qa/*.md` **non-recursively**, and four source files
+over 400 lines (`src/sim/combat.ts`, `src/sim/player.ts`, `tools/gen/motion.mjs`,
+`tests/unit/enemy-ai.test.ts`) are recorded **only** inside the Phase 5 log — in the deep sections
+that moved out. A `docs/qa/phase-05-combat/` subdirectory would have un-recorded all four while
+looking tidier. **The QA parts are therefore flat siblings**, and mutation M3 below is the proof
+that this is a rule rather than a preference.
+
+`tests/unit/docs-contract.test.ts:260` slices `docs/qa/phase-05-combat.md` between `## Phase 5 `
+and the vault-out heading and requires all 20 criterion ids inside that slice. **The index
+therefore keeps both headings, character for character, with the summary table between them** —
+and the vault-out's twelve distilled lessons stayed with it, which is where they belong anyway.
+
+**Losslessness was proved, not asserted** — the 2026-08-07 procedure, unchanged. A script rebuilt
+each original by concatenating the pieces from disk, stripping the added navigation and index
+blocks by exact line-for-line match, and compared byte for byte against `git show HEAD:<path>`;
+a second, independent check did the byte arithmetic from `stat` sizes:
+
+```
+PASS identity   — rebuilt 255516 bytes, identical to HEAD:docs/qa/phase-05-combat.md
+PASS accounting — 258808 new bytes − 3292 added = 255516 original bytes
+PASS identity   — rebuilt 107302 bytes, identical to HEAD:docs/HANDOFF.md          [before link repair]
+PASS accounting — 108537 new bytes − 1235 added = 107302 original bytes            [before link repair]
+PASS identity   — rebuilt  86558 bytes, identical to HEAD:docs/reviews/phase-05-plan.md
+PASS accounting —  88422 new bytes −  1864 added =  86558 original bytes
+PASS identity   — rebuilt  41775 bytes, identical to HEAD:docs/qa/phase-04-art.md
+PASS accounting —  42586 new bytes −   811 added =  41775 original bytes
+```
+
+The strip step throws if an added block is missing **or** appears twice, and asserts the leftover
+line count equals the declared segment lengths — so a mis-declared block fails loudly instead of
+reconstructing something plausible and wrong.
+
+**Then the move's one real regression was repaired, as a separate and fully accounted step.** A
+link check over all 441 relative links in `docs/` and `CLAUDE.md` found 13 broken in
+`docs/handoff/`: they were written relative to `docs/`, and moving them one directory down broke
+every one. Repaired by prefixing `../`. Re-running the proof after the repair gives the delta
+exactly, and the delta is the repair and nothing else:
+
+```
+FAIL identity   — rebuilt 107341 bytes, DIFFERS from HEAD:docs/HANDOFF.md
+FAIL accounting — 108576 new bytes − 1235 added = 107341 (expected 107302) original bytes
+```
+
+107341 − 107302 = **39 bytes = 13 links × 3 characters**, and a line-by-line diff of the rebuild
+against `HEAD` shows **13 differing lines, all 1604 lines still present**, each differing only
+inside the link target — the link text was not touched. The other three documents stayed byte
+identical through the repair, because their links were already correct.
+
+**Six more broken links were found in the same check and fixed, and they are not from this split.**
+`docs/qa/phase-01-boot.md`, `phase-02-player.md`, `phase-03-tilemap.md` and
+`docs/lessons/phase-03-tilemap.md` all pointed at `reviews/…`, `ENGINE-NOTES.md` and
+`ASSET-PIPELINE.md` without the `../`. `git log` puts them in `a136c9b docs: split QA-LOG into one
+log per phase` — **the identical defect, from the 2026-08-07 split, undetected for eight days.**
+Both splits proved their *content* lossless byte for byte and neither checked whether the content
+still *pointed* anywhere. Byte identity is not link integrity: a link is correct relative to where
+the file sits, so the one thing a verbatim move is guaranteed to break is the one thing a byte
+comparison cannot see. **The link check belongs in the procedure**, next to the reconstruction
+proof. All 441 links resolve as of this entry.
+
+**Watched fail before trusted** *(C1)*, redness read positively from the named failing spec and its
+message, never from an exit code:
+
+| # | Mutation | Message |
+|---|---|---|
+| M1 | rename `docs/qa/phase-05-combat.md` → `phase-05-fight.md` | `document not found: /docs/qa/phase-05-combat.md` |
+| M2 | delete the `\| 5.7 \|` row from the index's summary table | `phase 5 criterion 5.7 has no QA-LOG row` |
+| M3 | move the nine parts into `docs/qa/parts/` | `over 400 lines and not named in any docs/qa/ log` — naming exactly the four files above, and no others |
+
+M2's application was confirmed by **content changed AND the row count dropping 20 → 19** *(C12)*,
+never by "the count is now zero". All three were confirmed reverted by content hash and by the
+count returning to its original value, and the reconstruction proof was re-run afterwards to
+establish the tree was back to the verified state.
+
+**M3 is the one worth keeping.** It is the only positive evidence that the flat-sibling rule is
+load-bearing; without it the rule is a sentence in a document, which is exactly the failure mode
+the 2026-08-07 split record describes for the naming convention it had to go back and enforce.
+
+**Not updated, deliberately:** the ~30 `file.md:NN` citations pointing into these four documents
+from `docs/reviews/`, `src/` and `tests/`, and the `§N` prose citations to `HANDOFF.md`. The § ones
+still resolve — they land on the index, one hop from the section. The line numbers do not, and they
+already did not: they are dated records of a file at a commit, and rewriting them would falsify the
+record rather than repair it. What they cite is reachable at `git show HEAD~1:<path>`.
+
+**Recorded, not fixed:** `docs/qa/phase-04-art.md` has **no vault-out heading at all**, and phase 4
+is not marked ✅ in PRD.md, so `docs-contract.test.ts` does not read it yet. Whoever marks phase 4
+done must add that heading and check that the criterion table — now in `phase-04-art-gate.md` —
+lands inside the slice the test takes. Inventing its position now would guess at work not yet done.
+
+**What this does not cover.** No test enforces a line ceiling on documents. Criterion 5.12's
+400-line rule covers source only. This split is the first time in eleven sessions that the document
+sizes mattered, so the ceiling stays a judgement call rather than a gate.

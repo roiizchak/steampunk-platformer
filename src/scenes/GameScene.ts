@@ -6,9 +6,7 @@ import { drainTicks } from '../game/frameClock';
 import { parseLevel, type LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
-import { interpolatedPosition, renderAlpha, type Point } from '../render/interpolate';
-import { registerCatalogAnimations } from './gameAnimations';
-import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
+import { renderAlpha, type Point } from '../render/interpolate';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
@@ -17,7 +15,7 @@ import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
 import { createHud, renderHud } from './gameHud';
 import { drawLevelLayer } from './gameLevelDraw';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
-import { playIfChanged } from './playAnim';
+import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
 import { createSnapshot } from '../sim/input';
 import { advance, createWorld } from '../sim/tick';
 import type { InputSnapshot, World } from '../sim/types';
@@ -408,77 +406,21 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderPlayer(): void {
-    const desc = playerRenderDesc(this.world.player, this.world.scale);
-    // Drawn BETWEEN the last two ticks, not at the current one. Without this the sprite is held
-    // still on every frame `drainTicks` returns 0 ticks for — three refreshes out of four at
-    // 240 Hz — and then jumps 12 px, which is the "ghost / double image" the user reported and
-    // which the `?probe=1` falsifier reproduced with the animation frozen. See
-    // `src/render/interpolate.ts`. `this.accumulatorMs` is already the time since the last whole
-    // tick, so it is exactly the blend factor.
-    const drawn = interpolatedPosition(this.prevPlayer, desc, renderAlpha(this.accumulatorMs));
-    this.playerSprite.setPosition(drawn.x, drawn.y);
-
-    // A real flip at last. Phase 2 drew facing as a "nose" rectangle because Phaser 4's Flip
-    // component is mixed into Sprite and Image but NOT into Shape, so the grey-box `Rectangle`
-    // had no `setFlipX` — the typechecker caught that, not a test. The decision was exercised
-    // anyway so it would not arrive untested in this phase, which is why this line is a
-    // one-for-one replacement rather than new behaviour.
-    this.playerSprite.setFlipX(desc.flipX);
-
-    // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
-    // used to reimplement inline (R10).
-    playIfChanged(this.playerSprite, desc.animKey);
-
-    // DEV ONLY — the live locomotion tuner's per-frame update. Guarded at the point of use so the
-    // branch and its import are tree-shaken out of `dist/`; `verify-dist` proves the absence.
-    if (import.meta.env.DEV) {
-      this.feelTuner?.(this.playerSprite);
-    }
+    renderPlayerSprite(
+      this.playerSprite,
+      this.world,
+      this.prevPlayer,
+      this.accumulatorMs,
+      import.meta.env.DEV ? this.feelTuner : undefined,
+    );
   }
 
-  /** Registration logic lives in `src/scenes/gameAnimations.ts` — see its header. */
   private registerAnimations(): void {
-    if (import.meta.env.DEV) {
-      // DEV ONLY — the locomotion-feel A/B (`?feel=1`). Guarded at the point of use so the whole
-      // branch, and the import it reaches, are tree-shaken out of `dist/`; `verify-dist` proves it.
-      // Only locomotion is re-paced: `simTicks` for a one-shot like `attack` is a COMBAT WINDOW
-      // written against `tick.ts`'s numbered order, and scaling it would be a balance change
-      // wearing an animation change's clothes.
-      const variant = variantFromSearch(globalThis.location?.search ?? '');
-      if (variant.strideScale !== 1 || variant.speedScale !== 1) {
-        registerCatalogAnimations(this, (sheet) =>
-          LOCOMOTION_KEYS.has(sheet.key)
-            ? tunedFps(sheet.frameCount, sheet.simTicks, variant)
-            : sheet.fps,
-        );
-        return;
-      }
-    }
-    registerCatalogAnimations(this);
+    registerAnimations(this);
   }
 
-  /**
-   * DEV ONLY — apply the locomotion-feel variant's speed scale to this world's tuning.
-   *
-   * `world.tuning` is a per-world copy (`createTuning()`), so this cannot leak into another world
-   * or into `DEFAULT_TUNING`. Speed and stride are deliberately separate knobs: scaling speed alone
-   * does NOT change foot-slide, because ground travel per cycle is `simTicks * topSpeed` and
-   * `simTicks` is itself derived from the speed.
-   *
-   * ⚠️ `KNOCKBACK_SPEED` is bound to `DEFAULT_TUNING.walkMax` at module load, so it does NOT scale
-   * with this. That is fine for judging locomotion and would NOT be fine for shipping a retune —
-   * recorded rather than papered over.
-   */
   private applyFeelVariant(): void {
-    if (!import.meta.env.DEV) {
-      return;
-    }
-    const variant = variantFromSearch(globalThis.location?.search ?? '');
-    if (variant.speedScale === 1) {
-      return;
-    }
-    this.world.tuning.runMax *= variant.speedScale;
-    this.world.tuning.walkMax *= variant.speedScale;
+    applyFeelVariant(this.world);
   }
 
   /** Layer specs live engine-free in `src/render/parallaxRig.ts`; this applies them. */

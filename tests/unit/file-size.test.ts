@@ -136,8 +136,26 @@ describe('the 400-line rule', () => {
     // with their docstrings intact, which is the distinction this file's own header draws between
     // splitting and gaming.
     //
+    // 🔴 **7 -> 1 on 2026-08-15**, when the phase owner asked whether Phase 4 could be marked done
+    // and criterion 4.16 ("no file > 400 lines") turned out to be the only one of its three FAILs
+    // that work could close. Six files came off the list, every one by moving whole concerns with
+    // their docstrings intact:
+    //   - `enemy-ai.test.ts` 727 -> 203, the scavenger and the lifecycle to two siblings.
+    //   - `GameScene.ts` 517 -> 459, the player draw path to `gamePlayerDraw.ts`.
+    //   - `player.ts` 486 -> 274, the hand-tuned constants to the `playerTuning.ts` leaf.
+    //   - `combat.ts` 468 -> 351, the frozen timings to the `combatTiming.ts` leaf.
+    //   - `motion.mjs` 436 -> 277, the two airborne motions to the `motionAirborne.mjs` leaf.
+    //   - `phase-04-assets.spec.ts` 407 -> 286 and `sheet-packing.test.ts` 402 -> 215.
+    //
+    // **`GameScene.ts` at 459 is the one that did not close, and it is deliberate.** What is left
+    // is `create()`, `update()`, and five `protected` methods two subclasses inherit
+    // (`PlaygroundScene`, `ElementEditorScene`) — so moving them changes a class API. The three
+    // scene toggles cannot shrink at all: their `'Gym'` / `'Playground'` / `'ElementEditor'`
+    // literals must stay inside `import.meta.env.DEV` or the key ships in `dist/` and
+    // `verify-dist.mjs` fails the build. Justification in `docs/qa/phase-04-art.md`.
+    //
     // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
     // the way past is to split the file or write the justification, in that order of preference.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(7);
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(1);
   });
 });

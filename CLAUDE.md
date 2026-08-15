@@ -204,13 +204,13 @@ Each rule below cost a real false green or false red. **The evidence for every o
 
 | Document | What it is | When to read it |
 |---|---|---|
-| [docs/HANDOFF.md](docs/HANDOFF.md) | **Where the last session stopped**, what is blocked, and the traps not visible in the code. | **First, when resuming a phase mid-flight.** |
+| [docs/HANDOFF.md](docs/HANDOFF.md) · [docs/handoff/](docs/handoff/) | **Where the last session stopped**, what is blocked, and the traps not visible in the code. HANDOFF.md is the index and the live sessions; `docs/handoff/` holds the superseded ones. **The § numbers did not change when it was split** — a citation to "HANDOFF.md §9" still lands on the index. | **First, when resuming a phase mid-flight.** |
 | [docs/PRD.md](docs/PRD.md) | **The spine.** Phase table, Global Constraints, file structure, the QA agent and Codex review protocols. | Once per session, first. |
 | `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
 | [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
 | [docs/TESTING-RULES.md](docs/TESTING-RULES.md) | The evidence behind every §5 rule. | Before writing a gate — or before arguing with §5. |
 | [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) · [docs/lessons/](docs/lessons/) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. LESSONS-APPLIED.md is the root rule, §A/§B/§C and the index; `docs/lessons/phase-NN-*.md` is one vault-in checklist per phase. | **The phase file when executing that phase**; the hub when a citation is unfamiliar. |
-| [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) · [docs/evidence/](docs/evidence/) | Every decision, measurement and deliberate non-fix, plus the captured evidence. QA-LOG.md is the index and cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. | **Before re-measuring anything.** |
+| [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) · [docs/evidence/](docs/evidence/) | Every decision, measurement and deliberate non-fix, plus the captured evidence. QA-LOG.md is the index and cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. A long log splits into **flat siblings** (`phase-05-combat-NN-*.md`), never a subdirectory — `tests/unit/file-size.test.ts` globs `docs/qa/*.md` non-recursively. | **Before re-measuring anything.** |
 | [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. | Before planning a phase — what the last one was warned about. |
 | [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. | Any art work. |
 | [docs/FAL-MODELS.md](docs/FAL-MODELS.md) | Every fal endpoint: schema, price, gotchas. | Before any generating phase — **and re-run `genmedia schema`**; a documented schema is a snapshot. |
