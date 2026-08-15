@@ -43,11 +43,13 @@
  * dependency or a design decision. They are listed here rather than in a document because the next
  * person to trust this number will read this file.
  *
- *  - **GPU work is invisible to it.** `Phaser.AUTO` resolves to WebGL here, and draw-call
- *    *submission* is cheap on the main thread even when rasterisation is not. A regression made of
- *    overdraw, alpha blending or draw-call count would leave `workMedianMs` flat. This is the same
- *    shape as the interval-vs-work defect this spec was built to fix, one layer further down; the
- *    honest closure is a GPU timer query, which is not reachable from here.
+ *  - ~~**GPU work is invisible to it.**~~ ✅ **CLOSED 2026-08-14, and the recorded reason was wrong.**
+ *    This said *"the honest closure is a GPU timer query, **which is not reachable from here**"*, and
+ *    `docs/qa/phase-05-combat.md` finding P1 said *"not reachable **without a new dependency**"*.
+ *    Both false: it is a **WebGL extension**, available from the page, no package involved. A blind
+ *    spot recorded with a wrong reason is worse than one recorded with none — the wrong reason is
+ *    what stops the next person looking. Now measured via `EXT_disjoint_timer_query` and gated as a
+ *    ratio beside the main-thread one; see `gpuTimer.ts`.
  *  - **It measures steady state.** Bulk sprite creation for twenty bodies, and the near-simultaneous
  *    patrol→chase transition that follows a spawn inside `detectRadius`, both land in the gap
  *    between the two windows. That is deliberate — a one-off spawn spike is a different question
@@ -63,19 +65,18 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { installGpuTimer } from './gpuTimer';
 import {
   DEV_FLEET_COUNT,
   MAX_BURST_RATIO,
+  MAX_GPU_RATIO,
   MAX_WORK_RATIO,
+  MIN_GPU_SAMPLES,
   MIN_SAMPLES,
   SAMPLE_TICKS,
   SENTRY_COOLDOWN_TICKS,
-  counts,
-  sample,
-  SOFTWARE_RENDERERS,
-  waitForBodyCount,
-  webglRenderer,
-} from './perfSampler';
+} from './perfBudget';
+import { SOFTWARE_RENDERERS, counts, sample, waitForBodyCount, webglRenderer } from './perfSampler';
 import { bootToGame } from './gameHarness';
 
 test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fleet', () => {
@@ -105,6 +106,10 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     // would be measuring "some enemies vs no enemies", a different and much easier question.
     expect(before.bodies).toBeGreaterThan(0);
 
+    // The GPU timer needs `__phaserGame.renderer.gl`, so it is installed after boot rather than as
+    // an init script. Before the warm-up, so the warm-up exercises the same code path it will.
+    await installGpuTimer(page);
+
     // 🔴 A discarded warm-up, and it is a correctness fix rather than politeness. The baseline is
     // sampled first, so without it the control runs on cold JIT while the fleet half runs on hot —
     // a bias that makes the ratio look BETTER than the truth, in the one direction a gate must not
@@ -123,6 +128,27 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     expect(baseline.frames, 'the control window sampled too few frames').toBeGreaterThanOrEqual(MIN_SAMPLES);
     expect(baseline.ticks).toBeGreaterThanOrEqual(SAMPLE_TICKS);
     expect(baseline.elapsedMs).toBeGreaterThan(0);
+
+    // 🔴 Three assertions that stop the GPU half becoming a second `long-animation-frame` — a gate
+    // that reported 0/0 on both halves and therefore could not fail *(vault C2)*. Support, a real
+    // denominator, and enough samples to have a median at all.
+    expect(
+      baseline.gpuSupported,
+      'EXT_disjoint_timer_query is unavailable, so GPU cost is unmeasured. DO NOT soften this into ' +
+        'a skip — the whole point is that this blind spot was recorded as unreachable twice and was ' +
+        'reachable both times. If the renderer moved to WebGL 2, gpuTimer.ts must be updated to ask ' +
+        'for EXT_disjoint_timer_query_webgl2 deliberately, not widened to try both.',
+    ).toBe(true);
+    expect(
+      baseline.gpuMedianMs,
+      'the control measured zero GPU time — the exact assertion long-animation-frame could not ' +
+        'satisfy. A zero denominator makes every ratio below meaningless.',
+    ).toBeGreaterThan(0);
+    expect(
+      baseline.gpuSamples,
+      `only ${baseline.gpuSamples} non-disjoint GPU samples (${baseline.gpuDisjointFrames} frames ` +
+        `were disjoint, ${baseline.gpuAbandoned} queries never read back). A median needs samples.`,
+    ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
 
     // ---- the fleet ---------------------------------------------------------------------------
     await page.keyboard.press('n');
@@ -197,6 +223,8 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
 
     const ratio = fleet.workMedianMs / baseline.workMedianMs;
     const burstRatio = fleet.workP95Ms / baseline.workP95Ms;
+    const gpuRatio = fleet.gpuMedianMs / baseline.gpuMedianMs;
+    const gpuBurstRatio = fleet.gpuP95Ms / baseline.gpuP95Ms;
     const report =
       `[5.11] ${SAMPLE_TICKS}-tick interleaved pair (>= 2 sentry volleys each), same page, real GPU.\n` +
       `       baseline ${before.bodies} bodies: work median ${baseline.workMedianMs.toFixed(2)}ms, ` +
@@ -207,7 +235,13 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
       `frames / ${fleet.ticks} ticks, interval ${fleet.intervalMs.toFixed(2)}ms, ` +
       `${fleet.loafCount} frames over 50ms, peak ${fleet.maxProjectiles} bolts in flight\n` +
       `       ratios: median ${ratio.toFixed(2)}x, p95 ${burstRatio.toFixed(2)}x, ` +
-      `for ${(after.bodies / before.bodies).toFixed(1)}x the enemies`;
+      `for ${(after.bodies / before.bodies).toFixed(1)}x the enemies\n` +
+      `       GPU: baseline median ${baseline.gpuMedianMs.toFixed(3)}ms / p95 ` +
+      `${baseline.gpuP95Ms.toFixed(3)}ms over ${baseline.gpuSamples} samples ` +
+      `(${baseline.gpuDisjointFrames} disjoint, ${baseline.gpuAbandoned} abandoned); fleet median ` +
+      `${fleet.gpuMedianMs.toFixed(3)}ms / p95 ${fleet.gpuP95Ms.toFixed(3)}ms over ` +
+      `${fleet.gpuSamples} samples (${fleet.gpuDisjointFrames} disjoint, ${fleet.gpuAbandoned} ` +
+      `abandoned); ratios median ${gpuRatio.toFixed(2)}x, p95 ${gpuBurstRatio.toFixed(2)}x`;
     // eslint-disable-next-line no-console
     console.log(report);
 
@@ -232,5 +266,30 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
         `middle is a BURST — the ten sentries firing on the same tick, or a per-enemy allocation ` +
         `that only bites when they all act at once.`,
     ).toBeLessThan(MAX_BURST_RATIO);
+
+    // 🔴 The GPU half — the blind spot two documents called unreachable. This is what the two
+    // assertions above structurally cannot see: a regression that draws far more PIXELS through the
+    // same number of draw calls costs the main thread nothing and the GPU a great deal. The proving
+    // mutation is `enemyLayer.ts`'s `setFlipX(desc.flipX)` -> `setScale(4)`: identical draw-call
+    // count, identical batch, one extra multiply on the main thread, 16x the fill per body.
+    expect(
+      gpuRatio,
+      `adding ${DEV_FLEET_COUNT} on-screen enemies multiplied per-frame GPU time by ` +
+        `${gpuRatio.toFixed(2)}x (${baseline.gpuMedianMs.toFixed(3)}ms -> ` +
+        `${fleet.gpuMedianMs.toFixed(3)}ms) while main-thread work moved ${ratio.toFixed(2)}x. GPU ` +
+        `cost growing far faster than submission cost is overdraw, alpha blending or a per-enemy ` +
+        `render target — not drawing more sprites.`,
+    ).toBeLessThan(MAX_GPU_RATIO);
+
+    // ⚠️ **`gpuBurstRatio` is REPORTED and deliberately NOT asserted**, and the measurement is why.
+    // Across three consecutive runs the GPU median was stable to ±3 % (2.18x, 2.12x, 2.12x) while
+    // the p95 ratio swung **0.08x, 1.78x, 0.23x** — a 20x spread driven by occasional compositor
+    // spikes in the *baseline* p95 (3.460ms, 0.147ms, 1.137ms), not by the fleet.
+    //
+    // A bound loose enough to survive that is loose enough to catch nothing, and a bound tight
+    // enough to mean something would fail at random and train the next reader to dismiss a red run.
+    // Same treatment, for the same reason, as `long-animation-frame` two assertions up: measured,
+    // printed, gated by nothing, and said out loud rather than quietly dropped *(vault 9.3)*.
+    expect(typeof gpuBurstRatio, 'the GPU p95 stopped being computed').toBe('number');
   });
 });

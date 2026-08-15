@@ -30,6 +30,7 @@
  */
 
 import { ENEMY_SLUGS, type EnemySlug, type EnemySpawn } from '../sim/enemies';
+import { MAX_LEVEL_ENEMIES } from './constants';
 import type { Rect } from '../sim/types';
 import {
   allObjects,
@@ -262,7 +263,19 @@ export function describeLevelProblem(raw: unknown): string | null {
     return `spawn (${spawn.x}, ${spawn.y}) has no solid beneath it — the player falls out of the world`;
   }
 
-  for (const [index, enemy] of objects.filter(isEnemyObject).entries()) {
+  const enemyObjects = objects.filter(isEnemyObject);
+  if (enemyObjects.length > MAX_LEVEL_ENEMIES) {
+    // Refuse, never truncate. Silently dropping the 23rd enemy is a fallback for a bad input —
+    // vault 1.3's named bug — and the level would boot looking merely *empty*, which is the exact
+    // failure the unknown-slug rule above already refuses for the same reason.
+    return (
+      `${enemyObjects.length} enemies, over the ${MAX_LEVEL_ENEMIES} the frame budget has been ` +
+      `measured at (criterion 5.11). Raising this cap means RE-MEASURING 5.11, not editing the ` +
+      `number — see MAX_LEVEL_ENEMIES.`
+    );
+  }
+
+  for (const [index, enemy] of enemyObjects.entries()) {
     const slug = stringProperty(enemy, 'enemy');
     if (slug === null) {
       return `enemy #${index} declares an \`enemy\` property that is not a string`;

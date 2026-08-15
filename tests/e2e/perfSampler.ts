@@ -46,57 +46,6 @@ import { BOOT_TIMEOUT } from './gameHarness';
 
 type Page = import('@playwright/test').Page;
 
-/** Mirrors `DEV_FLEET_COUNT` in `src/scenes/GameScene.ts` — a private const there, not exported. */
-export const DEV_FLEET_COUNT = 20;
-
-/**
- * Mirrors `SENTRY.cooldown` (`src/sim/enemySentry.ts`) — 90 ticks, 1.5 s, between shots.
- *
- * Retyped rather than imported because this value has to reach *inside* `page.evaluate`, where no
- * module from this repository exists. `expect`ed against the live sim below, so the copy cannot rot.
- */
-export const SENTRY_COOLDOWN_TICKS = 90;
-
-/**
- * How long each half of the interleaved measurement runs, **in sim ticks**.
- *
- * 🔴 It was 120 rAF *frames*, and the criterion's own adversarial gate owner showed why that could
- * not work. Every sentry starts ready to fire (`createSentry` sets `cooldownCounter = cooldown`), so
- * all ten dev sentries volley on the same tick and then go silent for a full 90 ticks. At the 240 Hz
- * this project runs at, 120 frames is **half a second** — a third of one cooldown. The synchronised
- * volley, which is exactly the batched per-enemy cost an O(n²) sweep or an allocation storm would
- * show up in, could therefore fall entirely outside the sampled window, or in the untimed gap
- * between the spawn and the sample, and the fleet half would measure ten idle turrets.
- *
- * Ticks are the right unit because the thing being caught recurs on a tick schedule, and because a
- * frame count means a different amount of game time on every display. `2 x` the cooldown guarantees
- * **at least two full volleys** inside every window at any refresh rate.
- */
-export const SAMPLE_TICKS = SENTRY_COOLDOWN_TICKS * 2;
-
-/** A window that produced fewer samples than this measured too little to take a median of. */
-export const MIN_SAMPLES = 60;
-
-/**
- * The ceiling on `fleet / baseline` blocking-time-per-frame.
- *
- * Set from the interleaved baseline recorded in `docs/qa/phase-05-combat.md`, rounded well clear of
- * it — it exists to catch a regression whose cost grows faster than the enemy count (an O(n²) sweep,
- * a per-enemy texture upload, a per-frame allocation storm), not to pin today's number. 11x the
- * enemies costing more than 4x the frame work is that shape of defect.
- */
-export const MAX_WORK_RATIO = 4;
-
-/**
- * The same ceiling for the 95th percentile — the frames a median cannot see.
- *
- * Looser than the median's because a p95 taken over a few hundred samples is a noisier statistic and
- * a single GC pause lands in it. Not looser because bursts matter less: this is the assertion that
- * covers the synchronised ten-sentry volley, which is a handful of frames in the window and the
- * likeliest place for a per-enemy blow-up to appear.
- */
-export const MAX_BURST_RATIO = 6;
-
 export interface Sample {
   /** rAF callbacks actually served across the tick window. */
   frames: number;
@@ -129,6 +78,39 @@ export interface Sample {
   blockingMs: number;
   /** False when the browser has no `long-animation-frame` support — asserted, never assumed. */
   loafSupported: boolean;
+
+  /**
+   * GPU time per frame, from `EXT_disjoint_timer_query` — the blind spot two documents recorded as
+   * unreachable. Full argument in `gpuTimer.ts`.
+   *
+   * This is what `workMedianMs` structurally cannot see: a change that draws far more PIXELS through
+   * the same number of draw calls costs the main thread nothing and the GPU a great deal.
+   */
+  gpuSupported: boolean;
+  /** Non-disjoint results collected. Below `MIN_GPU_SAMPLES` a median is not a measurement. */
+  gpuSamples: number;
+  /** Frames where the GPU was interrupted; every query in flight was DROPPED, never clamped. */
+  gpuDisjointFrames: number;
+  gpuMedianMs: number;
+  gpuP95Ms: number;
+  /** Queries unread when the bounded drain expired. Non-zero means readback never landed. */
+  gpuAbandoned: number;
+}
+
+/** The in-page handle `installGpuTimer` puts on `window.__gpuTimer`. */
+interface GpuTimerHandle {
+  supported: boolean;
+  drainFrames: number;
+  onFrameTop(): void;
+  onFrameBottom(): void;
+  finish(): {
+    supported: boolean;
+    samples: number;
+    disjointFrames: number;
+    medianMs: number;
+    p95Ms: number;
+    abandoned: number;
+  };
 }
 
 /**
@@ -239,7 +221,15 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
         // this frame: the game loop's `update()`, the sim ticks inside it, and the render
         // submission. The sampler registers after the game loop is running, and both re-register
         // from inside their own callbacks, so this one stays behind the work it is measuring.
+        // The GPU timer, installed on the window by `installGpuTimer`. Absent only if the caller
+        // forgot to install it — which the `gpuSupported` assertion in the spec turns into a loud
+        // failure rather than a silently missing measurement.
+        const gpu = (window as unknown as { __gpuTimer?: GpuTimerHandle }).__gpuTimer;
+
         const step = (frameStart: number): void => {
+          // TOP of the callback: close the query opened at the bottom of the previous one. The
+          // span it just measured is Phaser's render submission for THIS frame — see gpuTimer.ts.
+          gpu?.onFrameTop();
           work.push(performance.now() - frameStart);
           const live = (
             window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
@@ -248,6 +238,10 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
             maxProjectiles = live.world.projectiles.length;
           }
           if (game.__game.tick - firstTick < wantTicks) {
+            // BOTTOM: open the next frame's query. Only while the window is still running — once
+            // the tick condition is met nothing further is submitted, so the drain below collects
+            // in-flight results rather than chasing a moving tail.
+            gpu?.onFrameBottom();
             requestAnimationFrame(step);
             return;
           }
@@ -257,18 +251,42 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
           observer?.disconnect();
           const sorted = [...work].sort((a, b) => a - b);
           const at = (q: number): number => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
-          resolve({
-            frames: work.length,
-            ticks: game.__game.tick - firstTick,
-            elapsedMs,
-            intervalMs: elapsedMs / work.length,
-            workMedianMs: at(0.5),
-            workP95Ms: at(0.95),
-            maxProjectiles,
-            loafCount,
-            blockingMs,
-            loafSupported: supported,
-          });
+
+          // 🔴 A **bounded** drain, never a wait-until-ready. GPU readback lags submission by a
+          // frame or two, so resolving immediately would throw away the last few queries. Bounding
+          // it means a driver that never signals fails the sample-count assertion loudly instead of
+          // hanging the spec until Playwright's timeout, where it would look like a boot hang.
+          let drained = 0;
+          const drain = (): void => {
+            gpu?.onFrameTop();
+            if (drained < (gpu?.drainFrames ?? 0)) {
+              drained += 1;
+              requestAnimationFrame(drain);
+              return;
+            }
+            const gpuTiming = gpu?.finish() ?? {
+              supported: false, samples: 0, disjointFrames: 0, medianMs: 0, p95Ms: 0, abandoned: 0,
+            };
+            resolve({
+              frames: work.length,
+              ticks: game.__game.tick - firstTick,
+              elapsedMs,
+              intervalMs: elapsedMs / work.length,
+              workMedianMs: at(0.5),
+              workP95Ms: at(0.95),
+              maxProjectiles,
+              loafCount,
+              blockingMs,
+              loafSupported: supported,
+              gpuSupported: gpuTiming.supported,
+              gpuSamples: gpuTiming.samples,
+              gpuDisjointFrames: gpuTiming.disjointFrames,
+              gpuMedianMs: gpuTiming.medianMs,
+              gpuP95Ms: gpuTiming.p95Ms,
+              gpuAbandoned: gpuTiming.abandoned,
+            });
+          };
+          drain();
         };
         requestAnimationFrame(step);
       }),

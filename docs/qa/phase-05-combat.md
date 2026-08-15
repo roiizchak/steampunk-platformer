@@ -2457,7 +2457,87 @@ simulation's own maximum. Vault A7, for the fourth phase running.
 | **B3** | code-reviewer 2 | A chasing scavenger that **cannot move** — inside `deadZone`, or vetoed by the ledge probe — still plays the `chase` cycle in place, violating the foot-plant invariant by 18 px a frame. Under the old release radius this ended; with permanent aggro it never does. | Real. The fix needs a stationary pose the scavenger **does not have**: `rust-scavenger/idle` was explicitly descoped in session 4 as art whose sim state does not exist. Choosing between buying that art and deriving the animation from actual travel is a design decision plus possible spend — **STOP-and-ask**, raised with the user. |
 | **B4** | code-reviewer 2 | **Aggro survives the player's death.** Nothing clears `chasing` on respawn, so scavengers walk to the new spawn and never patrol again; repeated deaths converge them on the spawn point. | Real, and a direct consequence of the permanent aggro the user asked for on 2026-08-14. Whether death should release aggro is a **balance decision, not a repair** *(vault 5.9)* — and `level-01` has one scavenger, so the convergence is currently invisible. Raised with the user. |
 | **B5** | code-reviewer 2 | The **sentry re-derives `facing` every tick** with no dead zone, so a player oscillating around `sentry.x` strobes `flipX` at 60 Hz. Its docstring claims the scavenger's rule (*"HELD otherwise — same rule and same shape"*), which is what a reviewer checks against instead of the code. | Real, and the docstring is wrong. Deferred with the user's knowledge rather than fixed blind: it is a **visual** claim nobody has observed, `setFlipX` does not restart an animation so no gate sees it, and mirroring the dead zone is a behaviour change to a shipped enemy at the end of a long session. Next session's first candidate, with the docstring correction. |
-| **P1** | performance-engineer | **GPU work is invisible** to a main-thread timestamp. A regression made of overdraw, alpha blending or draw-call count leaves `workMedianMs` flat. | Structural. The honest closure is a GPU timer query, which is not reachable without a new dependency. **Stated in `perfSampler.ts`'s own header** as a named blind spot rather than in a document *(vault 9.3)* — the next person to trust the number reads that file. |
+| **P1** | performance-engineer | **GPU work is invisible** to a main-thread timestamp. A regression made of overdraw, alpha blending or draw-call count leaves `workMedianMs` flat. | ~~Structural. The honest closure is a GPU timer query, which is not reachable without a new dependency.~~ ✅ **CLOSED 2026-08-14 — and that reason was WRONG.** It is a WebGL extension, reachable from the page, no package involved. See the entry below. |
+
+### ✅ P1 CLOSED — the GPU timer, and two false "unreachable" claims
+
+**Both recorded reasons were wrong**, in two separate files:
+
+| where | claim |
+|---|---|
+| `tests/e2e/phase-05-perf.spec.ts:50` | *"a GPU timer query, **which is not reachable from here**"* |
+| this log, finding P1 | *"not reachable **without a new dependency**"* |
+
+It is a **WebGL extension**, available from the page itself. No package, no change to the frozen
+dependency list. *A blind spot recorded with a wrong reason is worse than one recorded with none,
+because the wrong reason is what stops the next person looking.*
+
+#### 🔴 The plan named the wrong extension, and probing first is what caught it
+
+The session plan specified `EXT_disjoint_timer_query_webgl2`. Probed before writing anything:
+Phaser's context here is **`WebGL 1.0 (OpenGL ES 2.0 Chromium)`**, so that extension *cannot* exist
+on this machine. Had this been built from the plan it would have found nothing and been "correctly"
+skipped — **recording a third false unreachability on top of the two above.**
+
+What is present is `EXT_disjoint_timer_query`, the WebGL 1 sibling, with its own `*EXT` API. Probed
+on the RTX 4080 via ANGLE/D3D11: **64 counter bits, 27 samples in 30 frames, 0 disjoint, median
+0.104 ms** — real numbers, not the `0 / 0` that killed `long-animation-frame`.
+
+#### 🔴 Two instrument bugs, both caught by numbers that were impossible rather than merely wrong
+
+**1. Cumulative state.** `sample()` runs three times per page (warm-up, control, fleet) against one
+installed timer, and the accumulators were never reset — so the control reported warm-up + control
+and the fleet reported all three. It presented as **1075 GPU samples from 720 rAF frames** at one
+query per frame. The ratio built on it read **0.38x**: the fleet apparently costing *less* GPU than
+the control, which is the direction that makes a gate silently unfailable.
+
+**2. The bracket was too wide.** Bracketing on the sampler's own rAF callback spans nearly a whole
+frame interval, so it contains the GPU's **idle wait for vsync**, which `TIME_ELAPSED_EXT` on
+ANGLE/D3D11 does not reliably exclude. It showed as a **bimodal baseline across identical runs**:
+
+| run | baseline GPU median | ratio |
+|---|---|---|
+| 1 | 0.195 ms | 1.52x |
+| 2 | 0.197 ms | 1.51x |
+| 3 | **2.654 ms** | **0.13x** |
+
+A 13x swing in the *denominator* — again the dangerous direction, since an inflated baseline divides
+a real regression away into a passing ratio.
+
+Fixed by bracketing on Phaser's own `prerender` / `postrender` events, which fire either side of the
+render pass. *(`renderer.events` does not exist on Phaser 4's `WebGLRenderer` — the renderer **is**
+the emitter, so it is `renderer.on(...)`. Probed, not assumed.)* Three consecutive runs afterwards:
+
+| | baseline median | fleet median | ratio |
+|---|---|---|---|
+| 1 | 0.111 ms | 0.241 ms | **2.18x** |
+| 2 | 0.116 ms | 0.246 ms | **2.12x** |
+| 3 | 0.116 ms | 0.246 ms | **2.12x** |
+
+Stable to ±3 %. `MAX_GPU_RATIO = 5` — shaped to catch super-linear growth, not to pin 2.12.
+
+#### The mutation, and why it is the whole point
+
+`src/scenes/enemyLayer.ts` `setFlipX(desc.flipX)` → `setScale(4)`: identical draw-call count,
+identical batch, one extra multiply on the main thread, **16x the fill per body**.
+
+| | clean | mutated |
+|---|---|---|
+| main-thread ratio | 1.14x | **1.17x** — unchanged; `MAX_WORK_RATIO = 4` passes happily |
+| GPU ratio | 2.12x | **12.61x** — fails, by name |
+
+*"adding 20 on-screen enemies multiplied per-frame GPU time by 12.61x (0.119ms -> 1.498ms) while
+main-thread work moved 1.17x."* This is a defect the existing gate structurally **cannot** see and
+the new one catches — demonstrated, not argued. C12: `setFlipX(desc.flipX)` in `enemyLayer.ts` 2 → 1,
+`setScale(4)` 0 → 1; restored byte-identical by `cmp`.
+
+#### ⚠️ The GPU p95 is measured, printed, and deliberately NOT gated
+
+Across the same three runs the p95 *ratio* swung **0.08x, 1.78x, 0.23x** — a 20x spread driven by
+compositor spikes in the baseline p95 (3.460 ms, 0.147 ms, 1.137 ms), not by the fleet. A bound loose
+enough to survive that catches nothing; one tight enough to mean something fails at random and trains
+the next reader to dismiss a red run. Same treatment as `long-animation-frame`, for the same reason,
+and said out loud rather than quietly dropped *(vault 9.3)*.
 | **P4/A3** | performance-engineer | Spawn cost and the patrol→chase transition burst fall **between** the two windows; the ratio is of **total** frame work, so a large fixed overhead dilutes a bad per-enemy cost. | Both true, both stated in the header. The first is deliberate — a one-off spawn spike is a different question from a frame budget. The second has no cheap fix that does not require isolating enemy-only cost, which the renderer does not expose. |
 | **P6** | performance-engineer | **No enemy dies during the window**, so the death animation, the alpha fade and the never-removed corpses are never measured. | Stated in the header. Adding deaths to the fixture changes what "worst case" means and wants its own decision. |
 | **S5** | performance-engineer | `DEV_FLEET_COUNT = 20` is a chosen multiple, **not a bound** — nothing in `src/sim/` or the level format caps concurrent enemies. | Already recorded as S5, still open, unchanged. Capping it is a design decision. |

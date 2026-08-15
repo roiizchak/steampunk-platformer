@@ -153,6 +153,10 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     ['enemy-unknown-slug', /unknown slug `brass-gorilla`/],
     ['enemy-not-a-rect', /must be a rectangle/],
     ['enemy-over-a-pit', /no solid beneath/],
+    // 23 enemies, one over MAX_LEVEL_ENEMIES. Every one stands on a continuous floor so BOTH
+    // patrol edges have ground beneath them — without that it would fail on `hasGroundBelow`,
+    // which fires earlier, and prove nothing about the cap.
+    ['too-many-enemies', /23 enemies, over the 22/],
   ];
 
   it.each(cases)('%s', (name, reason) => {
