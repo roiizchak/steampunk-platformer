@@ -44,6 +44,11 @@ section moves to `docs/handoff/`. The live sessions stay in this file.
 
 ## 16. Phase 6, session 1 — 2026-08-15. **This section supersedes §15 and everything above it.**
 
+> 🔴 **RESUMING PHASE 6? READ [handoff/phase-06-owed.md](handoff/phase-06-owed.md) FIRST.**
+> It is the complete list of what is left, with two options and a recommendation on each, and it is
+> the document the next session was written for. **Phase 6 is NOT done** — criterion 6.9's
+> frame-budget half is unrun — and the branch `phase-06-hud` is not merged.
+
 **Phase 5 is done.** Closed 2026-08-15, merged at `c38c76b`, and `b8546a8` then took the over-400-line
 file count from seven to one. **`src/scenes/GameScene.ts` at 459 lines is now the only file over the
 ceiling, and `tests/unit/file-size.test.ts` allows exactly one** — so any new Phase 6 file that
