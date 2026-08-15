@@ -239,15 +239,49 @@ describe('jump buffering (criterion 2.4, vault 2.7)', () => {
     input.jumpHeld = false;
     expect(world.player.grounded).toBe(false);
 
-    // Press again early enough to be inside the window when the player lands.
+    /**
+     * When to press, measured rather than guessed.
+     *
+     * 🔴 **It was `y > 700` — a literal — until 2026-08-15.** That was ~7 ticks of fall at
+     * `gravity` 2.7, comfortably inside the 8-tick buffer. When the airborne window was doubled
+     * (`gravity` 0.675, so the jump and fall sheets could be read) the same height became ~11
+     * ticks, the buffer expired before touchdown, and no jump fired. The test went red on correct
+     * code — honestly, which is the good failure, but it was measuring the fixture's geometry and
+     * not the buffer.
+     *
+     * ⚠️ **The obvious repair is also wrong**, and was tried first: `distance-to-floor <= vy ×
+     * (jumpBufferTicks - 1)` derives the moment from the trajectory, but it has to name a floor,
+     * and `player.y` is the FEET while the surface the player actually lands on in this fixture is
+     * not `GREY_BOX_SOLIDS[0]`. It silently never fired.
+     *
+     * So the landing tick is **measured, in an identical throwaway world that never presses**, and
+     * the real attempt then presses `jumpBufferTicks - 1` ticks before it. Nothing here knows the
+     * gravity, the floor or the spawn height, so nothing here can drift from them again.
+     */
+    const landingTick = (() => {
+      const probeWorld = createWorld({ seed: 2, scale: 1 });
+      const probeInput = createSnapshot();
+      advance(probeWorld, probeInput, 10);
+      probeInput.jumpHeld = true;
+      latchJumpPress(probeInput);
+      advance(probeWorld, probeInput, 1);
+      probeInput.jumpHeld = false;
+      for (let t = 1; t < 400; t += 1) {
+        if (advance(probeWorld, probeInput, 1).landed) {
+          return t;
+        }
+      }
+      return -1;
+    })();
+    expect(landingTick).toBeGreaterThan(world.tuning.jumpBufferTicks);
+
+    const pressAt = landingTick - (world.tuning.jumpBufferTicks - 1);
     let landedAt = -1;
     let jumpedAt = -1;
     let pressed = false;
 
     for (let t = 1; t < 400; t += 1) {
-      // Press exactly `jumpBufferTicks - 1` ticks before the landing is due. The landing tick is
-      // not known in advance, so press once the player is close to the ground instead.
-      if (!pressed && world.player.vy > 0 && world.player.y > 700) {
+      if (t === pressAt) {
         latchJumpPress(input);
         pressed = true;
       }
@@ -264,6 +298,8 @@ describe('jump buffering (criterion 2.4, vault 2.7)', () => {
     }
 
     expect(pressed).toBe(true);
+    // The probe and the real run must agree, or the press perturbed the fall it was timed against.
+    expect(landedAt).toBe(landingTick);
     expect(landedAt).toBeGreaterThan(0);
     expect(jumpedAt).toBeGreaterThan(0);
     // The documented semantics, asserted exactly: one tick after touchdown, never on it.

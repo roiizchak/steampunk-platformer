@@ -179,9 +179,49 @@ export const DEFAULT_TUNING: TuningKnobs = {
   walkMax: FOOT_PX_PER_FRAME.walk / LOCOMOTION_TICKS_PER_FRAME,
   groundFriction: 3.69 * SPEED_SCALE,
   airFriction: 0.51 * SPEED_SCALE,
-  gravity: 2.7,
+  /**
+   * 🔴 **`gravity` 2.7 → 0.675 and `jumpVelocity` 48.6 → 24.3 on 2026-08-15 — the AIRBORNE WINDOW
+   * DOUBLED, and the jump height did not move by a pixel.**
+   *
+   * The player asked to see the jump and fall animations more easily. That could not be done in the
+   * art: `fall`'s `simTicks` is **measured**, not chosen — `derived.ts` counts the ticks the player
+   * actually spends falling — so slowing the animation alone would draw an arc lasting twice the
+   * motion it depicts, which is vault 4.22 running backwards. `asset-catalog.test.ts` refused it,
+   * correctly, when it was tried.
+   *
+   * So the motion slowed instead. The pair is solved, not tuned:
+   *
+   * ```
+   *   rise ticks = v / g        = 24.3 / 0.675 = 36     (was 18)
+   *   apex px    = v² / 2g      = 590.49 / 1.35 = 437.4 (was 437.4 — IDENTICAL)
+   * ```
+   *
+   * **36 is the only reachable step, and that is arithmetic rather than taste.** `jump` ships 6
+   * frames and `fall` ships 9, and a one-shot's window must divide by its frame count or the frames
+   * dwell unevenly — which is the judder session 9 shipped a fix for. So the window can only be a
+   * multiple of **18**, and 36 is the next one up. `fall` now draws at 4 ticks/frame (15 fps) where
+   * it was the fastest one-shot in the project at 2 ticks/frame (30 fps).
+   *
+   * ⚠️ **`maxFallSpeed` is deliberately NOT scaled.** Preserving its old ratio to `jumpVelocity`
+   * would drop it to 25.8 — and `hazards.test.ts` builds its tunnelling fixture at exactly this
+   * speed, so halving it would quietly halve the worst case a swept hazard test is required to
+   * survive. **That is loosening a safety gate as a side effect of a feel change**, and it stays at
+   * 51.6. The cost is that terminal velocity now takes 76 ticks to reach rather than 19, which only
+   * a very long fall sees.
+   *
+   * ⚠️ **This REVERSES a recorded decision**, and it is written as a reversal rather than a fresh
+   * choice. The paragraph below and `foot-plant.test.ts` both stated that no vertical knob moves,
+   * because the tick contract is *"declared authoritative"*. What that contract actually fixes is
+   * `tick.ts`'s numbered STEP ORDER, which is untouched here — no step moved, none was renumbered.
+   * The combat windows expressed against it (`ATTACK`, `SCAVENGER_ATTACK`, `IFRAME_TICKS`,
+   * `HURT_TICKS`) are independent integers and **none of them derives from the rise**; that was
+   * checked rather than assumed. What genuinely moves is jump distance, which doubles — so
+   * `level-traversal.test.ts` was re-run first: the pit is still crossable **and a standing hop
+   * still cannot clear it**, which is the half that keeps the jump a skill.
+   */
+  gravity: 0.675,
   maxFallSpeed: 51.6,
-  jumpVelocity: 48.6,
+  jumpVelocity: 24.3,
   jumpCutDivisor: 3,
   coyoteTicks: 7,
   jumpBufferTicks: 8,

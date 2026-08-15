@@ -66,11 +66,19 @@ describe('jump and fall durations are COUNTED from the sim (Codex finding 9)', (
     expect(naive).not.toBe(f.fallTicks);
   });
 
+  /**
+   * **37 / 18 / 18 until 2026-08-15.** The airborne window was doubled — `gravity` 2.7 → 0.675 and
+   * `jumpVelocity` 48.6 → 24.3 — so the jump and fall sheets play at half speed and can be read.
+   * Apex is unchanged in the continuous form (`v²/2g` is 437.4 either way); only the tick count
+   * moved, and these three numbers are the tick count. Editing them is the deliberate act this test
+   * exists to force. The consequence downstream is that `jump` and `fall` now derive **10 fps** and
+   * **15 fps** instead of 20 and 30 — see `public/assets/index.json`.
+   */
   it('pins the measured values on the shipped tuning', () => {
     const f = feel();
-    expect(f.airtimeTicks).toBe(37);
-    expect(f.riseTicks).toBe(18);
-    expect(f.fallTicks).toBe(18);
+    expect(f.airtimeTicks).toBe(73);
+    expect(f.riseTicks).toBe(36);
+    expect(f.fallTicks).toBe(36);
   });
 
   it('rise matches the closed form, so the counter is not counting something else', () => {

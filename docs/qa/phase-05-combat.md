@@ -2979,24 +2979,145 @@ side. `activeFrames` moves from `[3,4]` to `[4,5]`.
 | **R7** | **5.16 is vacuous for the SENTRY** — it never had a contact-damage mechanic, so "the dead sentry deals no contact damage" is unfalsifiable for one of the two entities it names. | Vault 5.5's shape: a measurement of exactly zero where the branch does not exist. Addressed by the criterion wording change rather than by a test that cannot fail. |
 | **R8** | **A7 is structurally compromised for 5.12, permanently.** Brief 1's findings are quoted **verbatim inside `file-size.test.ts`** — the file brief 2 was sent to attack. A second reviewer cannot read it without reading the first's conclusions, and the rule exists precisely because *"a second pass that has read the first one confirms it instead of attacking it."* | **Cannot be fixed without deleting the institutional knowledge those comments carry**, which is the failure mode the same file names first. Recorded as a standing limitation of gating a file that documents its own audit history. **Found by the agent, not by me** — and arguably the most valuable finding of the six reviews, because it is about the process rather than the code. |
 
-## The size table, FRESHLY MEASURED — 9 files over 400
+## The size table, FRESHLY MEASURED — 7 files over 400
 
 Measured at the end of the gate, not quoted from the previous session. That is S5's whole lesson.
+
+> ⚠️ **This table read "9 files" and listed two that were no longer on it, until the end of the
+> session.** `src/sim/enemyScavenger.ts` (464) and `tests/unit/enemy-tuning.test.ts` (401) were split
+> after it was written, and it was not re-measured. **S5's own finding, repeated inside the section
+> that records S5.** Re-measured against the tree, not against this file.
 
 | lines | path | justification |
 |---|---|---|
 | 727 | `tests/unit/enemy-ai.test.ts` | The AI's whole behavioural surface; split once already into `enemy-view` and `enemy-health-bar`. |
 | 517 | `src/scenes/GameScene.ts` | Phase 4 debt, recorded there. |
+| **486** | **`src/sim/player.ts`** | Tuning, the state machine and `toWorld` — the locomotion quantisation record lives here, and now the airborne-window reversal below it. **446 → 486 this session.** |
 | 468 | `src/sim/combat.ts` | The combat contract and its documented windows. |
-| **464** | **`src/sim/enemyScavenger.ts`** | **This session's growth, justified rather than split.** Carries the explanation of B1, B2, B3 and S2 — a 1-D predicate, an ungated `facing` write, an off-switch that stopped switching off, and a knob with no ceiling. The swing already split out to `scavengerAttack.ts`; what remains is one creature's perception and locomotion, which has no second seam. |
-| 446 | `src/sim/player.ts` | Tuning, the state machine and `toWorld` — the locomotion quantisation record lives here. |
 | **436** | **`tools/gen/motion.mjs`** | Mostly literal prompt text; **shortening it changes the generated art.** `poseSpan` left it this session (S6). |
 | 407 | `tests/e2e/phase-04-assets.spec.ts` | Phase 4, recorded there. |
 | 402 | `tests/unit/sheet-packing.test.ts` | Phase 4, recorded there. |
-| **401** | **`tests/unit/enemy-tuning.test.ts`** | **This session's growth, one line over.** Carries S2's guard tests, S3's `facing` counting and S4's fourth placement, each with the measurement that justifies it. |
+
+**No longer over 400, and the ceiling stayed at 7 because of it:** `src/sim/enemyScavenger.ts` 464 →
+313, `tests/unit/enemy-tuning.test.ts` 401 → split to `enemy-constructor-guards.test.ts`. The
+airborne-window record was kept to a **pointer** in `tilemap-data.test.ts` and `anim-timing.test.ts`,
+with the one full copy in `foot-plant.test.ts`, for the same reason: three copies of one explanation
+pushed `tilemap-data.test.ts` to 420 and the honest fix was to stop restating it, not to raise the
+ceiling.
 
 **Split this session rather than justified:** `tests/unit/tick-world-damage.test.ts` 479 to **352**,
 with the claw window moving to `tests/unit/scavenger-claw.test.ts` (160) on the criterion seam; and
 `tools/gen/motionCombat.mjs` 426 to **264**, with the scavenger's five records moving to
 `tools/gen/motionCombatScavenger.mjs` (195) per subject. Neither is a `-helpers` module that one file
 imports, which `file-size.test.ts` names as the way to game this gate.
+
+---
+
+## The airborne window doubled — a REVERSAL, 2026-08-15
+
+The user played the shipped build and asked for one change: *"maybe it's slowing down when I fall or
+when I jump, so I can see the animation more easily."* At the shipped tune `jump` ran at **20 fps**
+and `fall` at **30 fps**, over an 18-tick rise and an 18-tick fall. Nine drawn frames of `fall`
+crossed the screen in 0.3 s.
+
+**What changed, and it is two knobs only:**
+
+| knob | was | now |
+|---|---|---|
+| `gravity` | 2.7 | **0.675** |
+| `jumpVelocity` | 48.6 | **24.3** |
+| `maxFallSpeed` | 51.6 | **51.6 — deliberately unchanged** |
+
+Consequences, all measured rather than predicted:
+
+| | was | now |
+|---|---|---|
+| rise / fall / airtime, ticks | 18 / 18 / 37 | **36 / 36 / 73** |
+| `jump` fps (derived, vault 4.22) | 20 | **10** |
+| `fall` fps (derived) | 30 | **15** |
+| continuous apex `v²/2g`, px | 437.4 | **437.4 — identical** |
+| `apexPx` as the discrete sim measures it | 461.7 | **449.5** |
+| apex in body heights | 1.60 | **1.56** |
+
+### Why this is a reversal and not a tweak
+
+`tests/unit/foot-plant.test.ts` carried an explicit guard titled *"leaves every VERTICAL knob
+untouched, so the tick contract is not a locomotion casualty"*, and `tilemap-data.test.ts` carried
+the matching note that *"`tick.ts`'s numbered order is declared authoritative and Phase 5's combat
+windows are written against it, so airtime is not a free variable."*
+
+**That stated reason was wrong about what it protected.** The tick contract fixes the ORDER of the
+fourteen steps. It says nothing about how many ticks a jump lasts, and every combat window —
+`SCAVENGER_ATTACK` 18/6/12, `HURT_LOCK_TICKS`, `IFRAME_TICKS` — is an independent integer that reads
+no vertical knob. Nothing downstream of the tick contract moved.
+
+What the guard was *actually* for was collateral damage: session 10 retuned every horizontal knob to
+plant the feet, and froze the six vertical knobs as a tripwire so a locomotion fix could not drag the
+jump along unnoticed. That purpose is preserved — the four knobs the locomotion retune must not touch
+are still frozen, and the two that moved are now held to the **relationship** that made the move safe
+(`v²/2g` = 437.4) instead of to a literal. `gravity` and `jumpVelocity` can be re-scaled together
+again without editing a test, and cannot be moved apart without failing one.
+
+### Why 36 and not some other number
+
+`simTicks % frameCount === 0` must hold for both one-shot rows. `jump` is 6 drawn frames and `fall`
+is 9, so the window must be a whole multiple of 18. 18 → 36 is the next step up, and it is the only
+one reachable without re-cutting either sheet.
+
+### Why `maxFallSpeed` was left out of the rescale
+
+Halving it to 25.8 would have weakened `tests/unit/tick-world-damage.test.ts`'s tunnelling fixture,
+which is a gate. **Never loosen a gate to make a change fit.** The accepted consequence is that the
+`maxFallSpeed / jumpVelocity` ratio doubled: a fall now takes 77 ticks to reach the clamp instead of
+20. That is a real feel change, and it is the one the user asked for.
+
+### Four fixtures that broke, all with the SAME root cause
+
+Every one of them was sized for the old gravity and could no longer reach the state it measures.
+None was a defect in the change; each was a measuring instrument that had a constant baked into it.
+
+| fixture | what it could no longer reach | fix |
+|---|---|---|
+| `knob-sweep.test.ts`, `maxFallSpeed` | the clamp — the knob went **dead in the sweep** | `TALL_WORLD` `heightPx` 8000, `longFall` 26 → 100 ticks, `FLOOR_ONLY` y 6000 |
+| `tick-world-damage.test.ts` tunnelling probe | enough speed to tunnel | `TALL` bounds 4000, 60 → 90 ticks, both worlds |
+| `derived.ts` `DEEP_FALL` | terminal velocity — reported **49.95 against a 51.6 knob** | `DEEP_BOUNDS` `heightPx` 9000 alongside the floor |
+| `coyote-time.test.ts` buffered jump | the buffer window before touchdown | the landing tick is now **measured on a probe world**, not derived from geometry |
+
+> 🔴 **The recurring shape, named once.** In three of the four the floor was not the constraint — the
+> **KILL PLANE** was. `createWorld` defaults `bounds` to the grey-box 1080 px extent *whatever
+> `solids` says*, so a fixture that moves its floor to y 4000 and says nothing about bounds is still
+> killing the player at 1080. At `gravity` 2.7 that was invisible because every window was short
+> enough. At 0.675 three separate fixtures were caught measuring the world's height instead of the
+> tuning. **A fixture that injects `solids` for depth must inject `bounds` too.**
+
+> ⚠️ **And one repair that looked right and was not.** `coyote-time.test.ts`'s first fix derived the
+> press moment from the trajectory: `distance-to-floor <= vy × (jumpBufferTicks - 1)`. It has to name
+> a floor, and `player.y` is the FEET while the surface the player lands on in that fixture is not
+> `GREY_BOX_SOLIDS[0]`. It silently never fired and the test stayed red. Measuring the landing tick
+> on an identical throwaway world knows nothing about gravity, floors or spawn heights, so it cannot
+> drift from them again — and `ticksToLand()`, ten lines above in the same file, was already doing
+> exactly that.
+
+### Red-proofs *(C1, C12)*
+
+| gate | mutation | observed |
+|---|---|---|
+| apex relationship | `jumpVelocity` 24.3 → 24.0 alone | `holds jump APEX…` fails, *expected 426.67 to be close to 437.4* |
+| `maxFallSpeed` exclusion | the same mutation | `records that maxFallSpeed was deliberately left out…` fails, 2.15 vs 2.123 |
+| buffered-jump tick semantics | `toBe(landedAt + 1)` → `toBe(landedAt)` | fails, *expected 27 to be 26* — it still tells touchdown from the tick after |
+| `DEEP_FALL` depth | *(observed before the fix, not staged)* | `terminalFallSpeed` read 49.95 against 51.6 |
+
+Both mutations verified applied by content-changed **and** original count dropped by one, and both
+restored with `cmp` byte-identical against a backup taken immediately before that mutation.
+
+### Traversal re-checked before anything else
+
+Level 01 is still crossable and the standing hop still cannot clear the pit — the same two facts that
+vetoed the 33 % locomotion slowdown earlier in this session. Verified before the fixtures were
+touched, because a change that breaks the level is not worth repairing tests for.
+
+### Full sweep
+
+`typecheck` clean · **1146 unit tests pass** · `test:sim-isolated` **1146 pass** with Phaser
+uninstalled, reinstalled at `4.2.1` exact · `build` + `verify-dist` ok · **e2e 49 passed** · port
+5173 clear *(C13)*.

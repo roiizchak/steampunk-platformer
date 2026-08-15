@@ -211,12 +211,66 @@ describe('the retune preserved what it claimed to preserve', () => {
     expect(DEFAULT_TUNING.walkMax / DEFAULT_TUNING.runMax).not.toBeCloseTo(5.54 / 12.0, 3);
   });
 
-  it('leaves every VERTICAL knob untouched, so the tick contract is not a locomotion casualty', () => {
-    expect(DEFAULT_TUNING.gravity).toBe(2.7);
-    expect(DEFAULT_TUNING.jumpVelocity).toBe(48.6);
+  /**
+   * 🔴 **This assertion was REVERSED on 2026-08-15. Read the reversal before editing it again.**
+   *
+   * It was titled *"leaves every VERTICAL knob untouched, so the tick contract is not a locomotion
+   * casualty"* and pinned `gravity` 2.7 and `jumpVelocity` 48.6. Two of the six have now moved, on
+   * purpose, and the guard is rewritten rather than re-valued so the next reader gets the reasoning
+   * and not just a different literal.
+   *
+   * **What the original guard was actually for.** Session 10 retuned every HORIZONTAL knob to plant
+   * the feet. The fear was collateral: that a locomotion fix would drag the jump along with it and
+   * nobody would notice, because no test compared a vertical knob to anything. So the six were
+   * frozen as a group — a tripwire on the locomotion work, not a claim that the jump was sacred.
+   *
+   * **What the docstring said instead**, and what was wrong with it: that `tick.ts`'s numbered order
+   * is declared authoritative and Phase 5's combat windows are written against it, "so airtime is
+   * not a free variable". The tick contract fixes the ORDER of the fourteen steps. It says nothing
+   * about how many ticks a jump lasts, and every combat window — `SCAVENGER_ATTACK` 18/6/12,
+   * `HURT_LOCK_TICKS`, `IFRAME_TICKS` — is an independent integer that reads no vertical knob. The
+   * rule was quoted to defend something it does not cover, which is the most expensive kind of
+   * comment this project keeps finding.
+   *
+   * **The change.** The user could not read the jump and fall animations. `gravity` 2.7 → 0.675 and
+   * `jumpVelocity` 48.6 → 24.3 doubles the airborne window (rise 18 → 36 ticks), which halves the
+   * derived frame rates to 10 and 15 fps, and leaves the continuous apex identical at `v²/2g` =
+   * 437.4 px. **36 is the only reachable step**: `jump` is 6 drawn frames and `fall` is 9, so the
+   * window has to be a whole multiple of 18 for `simTicks % frameCount === 0` to hold on both.
+   *
+   * **What the guard protects now.** The locomotion tripwire is kept — the four knobs the retune
+   * genuinely must not touch are still frozen — and the two that moved are held to the RELATIONSHIP
+   * that made the move safe, rather than to a literal. Apex is what the level geometry depends on,
+   * so apex is what is asserted; `gravity` and `jumpVelocity` may be re-scaled together again
+   * without editing this test, and may not be moved apart without failing it.
+   */
+  it('holds the four vertical knobs the locomotion retune must not touch', () => {
     expect(DEFAULT_TUNING.maxFallSpeed).toBe(51.6);
     expect(DEFAULT_TUNING.jumpCutDivisor).toBe(3);
     expect(DEFAULT_TUNING.coyoteTicks).toBe(7);
     expect(DEFAULT_TUNING.jumpBufferTicks).toBe(8);
+  });
+
+  it('holds jump APEX, so gravity and jumpVelocity can only move together', () => {
+    // v²/2g — the continuous apex, unchanged across the 2026-08-15 airborne-window change and the
+    // whole reason that change was safe to make. Halving one knob without the other moves this.
+    const apex =
+      (DEFAULT_TUNING.jumpVelocity * DEFAULT_TUNING.jumpVelocity) / (2 * DEFAULT_TUNING.gravity);
+    expect(apex).toBeCloseTo(437.4, 4);
+  });
+
+  /**
+   * `maxFallSpeed` was deliberately NOT scaled with the other two, and this records why so it does
+   * not get "finished" later: it is the clamp `tests/unit/tick-world-damage.test.ts`'s tunnelling
+   * fixture drives, and halving it would weaken that gate. The consequence is that the ratio below
+   * doubled — a fall now takes twice as long to reach the same clamp — which is a real feel change
+   * and an accepted one, not an oversight.
+   */
+  it('records that maxFallSpeed was deliberately left out of the rescale', () => {
+    expect(DEFAULT_TUNING.maxFallSpeed / DEFAULT_TUNING.jumpVelocity).toBeCloseTo(51.6 / 24.3, 6);
+    expect(DEFAULT_TUNING.maxFallSpeed / DEFAULT_TUNING.jumpVelocity).not.toBeCloseTo(
+      51.6 / 48.6,
+      3,
+    );
   });
 });

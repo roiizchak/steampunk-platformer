@@ -333,19 +333,20 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     // assertion in the repository that could see it.
     expect(bodyHeightPx).toBe(288);
     expect(PLAYER_BOX.w * RENDER_SCALE).toBe(132);
-    expect(feel.apexPx).toBeCloseTo(461.7, 1);
+    expect(feel.apexPx).toBeCloseTo(449.5, 1);
 
-    // UNCHANGED, and the reason the re-tune scaled `jumpVelocity` and `gravity` together rather
-    // than picking them freely: `tick.ts`'s numbered order is declared authoritative and Phase 5's
-    // combat windows are written against it, so airtime is not a free variable.
-    expect(feel.airtimeTicks).toBe(37);
-    expect(feel.riseTicks).toBe(18);
-    expect(feel.fallTicks).toBe(18);
+    // 🔴 REVERSED 2026-08-15: 37/18/18 -> 73/36/36, apexPx 461.7 -> 449.5. These carried a note
+    // claiming the tick contract made airtime unfree; it does not. Full record, in ONE place
+    // rather than restated per file: `tests/unit/foot-plant.test.ts`.
+    expect(feel.airtimeTicks).toBe(73);
+    expect(feel.riseTicks).toBe(36);
+    expect(feel.fallTicks).toBe(36);
 
     // Jump height in body heights — the ratio that actually describes how the game feels, and the
     // one number a uniform scaling of every knob does NOT leave alone. It moved on purpose: 3.13
     // body heights was 28 % of the screen at the old scale and would have been 84 % at this one.
-    expect(feel.apexPx / bodyHeightPx).toBeCloseTo(1.6, 2);
+    // 1.60 -> 1.56 with the 2026-08-15 airborne-window change, from discretisation alone.
+    expect(feel.apexPx / bodyHeightPx).toBeCloseTo(1.56, 2);
     /**
      * Top speed in body heights per second — the measure the user's "moves too fast" was about,
      * and the one a pure re-scale leaves at 6.5 no matter how big the character gets.

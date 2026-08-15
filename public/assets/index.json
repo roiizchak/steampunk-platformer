@@ -73,8 +73,8 @@
       "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 6,
-      "simTicks": 18,
-      "fps": 20,
+      "simTicks": 36,
+      "fps": 10,
       "loop": false,
       "derivedFrom": "sim"
     },
@@ -84,8 +84,8 @@
       "frameWidth": 336,
       "frameHeight": 384,
       "frameCount": 9,
-      "simTicks": 18,
-      "fps": 30,
+      "simTicks": 36,
+      "fps": 15,
       "loop": false,
       "derivedFrom": "sim"
     },

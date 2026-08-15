@@ -118,14 +118,27 @@ describe('hazards hurt through the tick loop (criterion 5.15)', () => {
     // The band is DERIVED from the real trajectory, not guessed. A hand-picked y is a coin flip:
     // the first version of this test put the hazard where a tick happened to land inside it, which
     // makes the whole point of the assertion evaporate without the test looking any different.
+    /**
+     * 🔴 **A TALL world and 90 ticks, from 2026-08-15.** Both were 1080 px and 60 ticks, sized for
+     * `gravity` 2.7 where a 42 px tick step arrived by tick 16. At 0.675 — the airborne window
+     * doubled so the jump and fall animations could be read — that step is not reached until
+     * **tick 63, after ~1361 px of fall**, which is past both the old tick budget AND the kill
+     * plane at `BOUNDS.heightPx`. The probe then found no qualifying gap and the test failed
+     * honestly, saying so: *"the fixture cannot express tunnelling"*.
+     *
+     * ⚠️ Note what it did NOT do: pass with a smaller step. The fixture refuses to measure a
+     * tunnelling case it cannot construct, which is why this surfaced as a red gate rather than as
+     * a quietly weaker one. Re-derive both numbers whenever `gravity` moves.
+     */
+    const TALL = { widthPx: BOUNDS.widthPx, heightPx: 4000 };
     const trace: number[] = [];
-    const probe = worldWith({ solids: [], spawn: { x: 500, y: 0 } });
-    for (let i = 0; i < 60; i += 1) {
+    const probe = worldWith({ solids: [], spawn: { x: 500, y: 0 }, bounds: TALL });
+    for (let i = 0; i < 90; i += 1) {
       tick(probe, { ...IDLE });
       trace.push(probe.player.y);
     }
     const gapAt = trace.findIndex(
-      (y, i) => i > 0 && y - trace[i - 1]! > 42 && y < BOUNDS.heightPx,
+      (y, i) => i > 0 && y - trace[i - 1]! > 42 && y < TALL.heightPx,
     );
     expect(gapAt, 'no tick step exceeded 42px — the fixture cannot express tunnelling').toBeGreaterThan(0);
 
@@ -133,10 +146,13 @@ describe('hazards hurt through the tick loop (criterion 5.15)', () => {
     const thin: Rect = { x: 0, y: trace[gapAt - 1]! + 1, w: 4000, h: 40 };
     expect(thin.y + thin.h).toBeLessThan(trace[gapAt]!);
 
-    const world = worldWith({ solids: [], spawn: { x: 500, y: 0 }, hazards: [thin] });
+    // Same TALL world and tick budget as the probe above — the hazard is derived from that trace,
+    // so measuring it in the default 1080px world would put it below the kill plane and kill the
+    // player before they ever reach it.
+    const world = worldWith({ solids: [], spawn: { x: 500, y: 0 }, hazards: [thin], bounds: TALL });
 
     const sampledInside: number[] = [];
-    for (let i = 0; i < 60; i += 1) {
+    for (let i = 0; i < 90; i += 1) {
       tick(world, { ...IDLE });
       const feet = world.player.y;
       if (feet >= thin.y && feet <= thin.y + thin.h) {

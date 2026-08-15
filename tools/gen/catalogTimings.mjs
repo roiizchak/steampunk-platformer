@@ -35,7 +35,13 @@ export const HURT_TICKS = 18;
 
 /**
  * The RISE half of a full-height jump, in ticks: `DEFAULT_TUNING.jumpVelocity / gravity`
- * = 48.6 / 2.7 = **18**.
+ * = 24.3 / 0.675 = **36**.
+ *
+ * 🔴 **18 → 36 on 2026-08-15**, because the airborne window doubled so the jump and fall animations
+ * could be READ. The jump height did not move — see `DEFAULT_TUNING` in `src/sim/player.ts` for the
+ * solved pair and why 36 is the only reachable step. This is a mirror of a sim quantity, so it moves
+ * when the physics does and never on its own; `asset-catalog.test.ts` derives the same number by
+ * running the real sim and fails if these two disagree.
  *
  * 🔴 It is what `jump` and `fall` have always been timed to — their shipped rows say 18 — but until
  * 2026-08-14 there was **no rule saying so**, only two Phase-4 catalog rows nobody could correct.
@@ -49,7 +55,7 @@ export const HURT_TICKS = 18;
  * and `fall` while doing it. There is no fixed airborne WINDOW (airtime varies with the jump cut),
  * but the rise is exact: velocity over acceleration, both integers of the tick contract.
  */
-export const JUMP_RISE_TICKS = 18;
+export const JUMP_RISE_TICKS = 36;
 
 /** Mirrors `SCAVENGER.patrolSpeed` (`src/sim/enemyScavenger.ts`), px/tick. */
 export const SCAVENGER_PATROL_SPEED = 2.5;
