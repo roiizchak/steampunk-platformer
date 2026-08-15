@@ -94,7 +94,7 @@ export default defineConfig({
       // spec, and Phase 6's HUD spec, which reads actual PIXELS. SwiftShader is a software
       // rasteriser, so its output is not what a player's GPU draws — a colour assertion taken from
       // it is a measurement of the wrong thing, which is the root rule's whole complaint.
-      testIgnore: /phase-0(5-perf|6-hud)\.spec\.ts/,
+      testIgnore: /phase-0(5-perf|6-hud|6-chrome)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -119,7 +119,7 @@ export default defineConfig({
       // asserts the health bar's drawn rectangle and 6.8 inspects the chroma-keyed art. Both are
       // claims about rasterised output, and both are meaningless taken from SwiftShader.
       name: 'chromium-gpu',
-      testMatch: /phase-0(5-perf|6-hud)\.spec\.ts/,
+      testMatch: /phase-0(5-perf|6-hud|6-chrome)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,
