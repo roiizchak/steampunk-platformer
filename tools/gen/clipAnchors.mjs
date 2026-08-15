@@ -244,6 +244,31 @@ export const PADDED_ANCHORS = Object.freeze({
   }),
 
   /**
+   * 🔴 **Keyed by the BARE string `fall`, and that is not a typo — do not "fix" it.**
+   *
+   * `clipJobs.mjs` looks this table up with `PADDED_ANCHORS[key]` where `key` walks
+   * `Object.keys(VIDEO_MOTIONS)` (`allMotionKeys`). The five Phase 4 motions are keyed there as bare
+   * strings — `idle`, `walk`, `run`, `jump`, `fall` — with no slug prefix; only the Phase 5 combat
+   * entries are namespaced. So `'brass-courier/fall'` here would resolve to `undefined`, `padded`
+   * would fall to `null`, and the job would **silently shoot the UNPADDED 1536 × 2752 anchor at
+   * 9:16** — the exact framing that made this clip need a re-shoot. $1.19 spent testing the
+   * treatment by not applying it.
+   *
+   * Same padded canvas, url and sha as `brass-courier/attack` above: one PNG serves every courier
+   * action, and the two clips that carry it are the only two courier clips that pass G6.
+   *
+   * ⚠️ **Attribution is deliberately spent here.** This shoot applies BOTH levers at once — this
+   * padded canvas AND `FRAME_MARGIN` on the `fall` record — because together they reproduce the
+   * exact configuration of `attack` and `death`. Applying one reproduces nothing. A pass will not
+   * say which lever did it, and that trade was accepted before the money moved.
+   */
+  fall: Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
+    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
+    source: '_generated/anchors-padded/brass-courier-padded.png',
+  }),
+
+  /**
    * **`brass-courier/hurt` is deliberately absent.** It extracts CLEAN — 6 frames, one-shot from
    * motion onset at frame 8 — and is NOT being re-shot. Only the per-action sweep found that, and it
    * saved $1.19. Do not add a record here "for consistency": a padded record is an instruction to

@@ -25,7 +25,7 @@
  * way for the same reason.
  */
 import { describe, expect, it } from 'vitest';
-import { videoPrompt } from '../../tools/gen/motion.mjs';
+import { VIDEO_MOTIONS, videoPrompt } from '../../tools/gen/motion.mjs';
 import { COMBAT_MOTIONS } from '../../tools/gen/motionCombat.mjs';
 import { styleTemplate, templateBlock } from '../../tools/gen/prompt.mjs';
 
@@ -71,6 +71,46 @@ describe('every combat motion carries the frame-margin clause', () => {
     expect(cyclic).toContain('rust-scavenger/walk');
     expect(cyclic).toContain('rust-scavenger/chase');
     for (const key of cyclic) expect(renderedPrompt(key)).toContain(MARGIN_CLAUSE);
+  });
+});
+
+/**
+ * 🔴 **The LEGACY BARE keys carried no margin gate at all**, and `fall` is the one being re-shot.
+ *
+ * Every assertion above iterates `Object.keys(COMBAT_MOTIONS)`. The five Phase 4 keys — `idle`,
+ * `walk`, `run`, `jump`, `fall` — live in `VIDEO_MOTIONS` only, so the whole file was blind to them.
+ * That is the same shape of omission the header describes twice already: a clause appended record by
+ * record, and a table nobody widened afterwards.
+ *
+ * `fall` is asserted, and the other four deliberately are NOT. This is a gate on the record about to
+ * be submitted, not a retrofit: `idle`/`walk`/`run` are cyclic locomotion whose shipped sheets pass
+ * G6 as they are, and re-shooting `jump` is a separate unapproved spend. Adding the clause to a
+ * record changes the prompt, and a prompt change with no shoot behind it is a claim about art that
+ * nobody has bought. **If `jump` is ever re-shot, add it here in the same commit as its clause.**
+ */
+describe('the fall record carries the frame-margin clause', () => {
+  it('finds fall as a bare legacy key, not a namespaced combat one', () => {
+    // Guards against a rename quietly turning both assertions below vacuous.
+    expect(Object.keys(VIDEO_MOTIONS)).toContain('fall');
+    expect(COMBAT_KEYS).not.toContain('fall');
+  });
+
+  it('states where the subject may reach at full extension', () => {
+    expect(renderedPrompt('fall')).toContain(MARGIN_CLAUSE);
+  });
+
+  it('keeps the upright-in-air tail LAST, after the margin clause', () => {
+    /**
+     * Ordering, not just presence. `UPRIGHT_IN_AIR` closes the record with its camera lock, and
+     * `videoPrompt` appends the STYLE.md CONSTRAINTS tail after that. A margin clause pasted at the
+     * end would land inside — or after — the geometry paragraph the airborne records exist to keep
+     * whole, and `motion.mjs` records two generations paid to learn that this specific paragraph's
+     * shape is load-bearing (a monotonicity clause added to it somersaulted the courier).
+     */
+    const prompt = renderedPrompt('fall');
+    const cameraLock = prompt.indexOf('Locked camera.');
+    expect(cameraLock, 'UPRIGHT_IN_AIR no longer ends with its camera lock').toBeGreaterThan(0);
+    expect(prompt.indexOf(MARGIN_CLAUSE)).toBeLessThan(cameraLock);
   });
 });
 

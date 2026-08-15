@@ -83,9 +83,9 @@
       "url": "assets/characters/brass-courier/sheets/fall.png",
       "frameWidth": 336,
       "frameHeight": 384,
-      "frameCount": 8,
+      "frameCount": 9,
       "simTicks": 18,
-      "fps": 26.666666666666668,
+      "fps": 30,
       "loop": false,
       "derivedFrom": "sim"
     },

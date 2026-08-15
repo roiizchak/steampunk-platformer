@@ -55,6 +55,12 @@
  */
 
 import { COMBAT_MOTIONS } from './motionCombat.mjs';
+/**
+ * ⚠️ Safe to import here, and the reason is specific. `motionClauses.mjs` is a **leaf** — it imports
+ * nothing at all — so it cannot widen the `motion.mjs` ↔ `motionCombat.mjs` cycle this file's own
+ * consumers are careful to enter from the right side. Verified, not assumed.
+ */
+import { FRAME_MARGIN } from './motionClauses.mjs';
 
 /**
  * Appended to every ONE-SHOT motion (`jump`, `fall`), never to a cyclic one.
@@ -337,13 +343,22 @@ export const VIDEO_MOTIONS = Object.freeze({
   fall: {
     cyclic: false,
     airborne: true,
-    // 🔴 6 -> 8 corrects a DESYNC: this said 6 while the extracted strip held 8 cells and
-    // the catalog shipped 8, because `assets:build` packs the strip and never reads this file.
-    // ⚠️ 8 does not divide the 18-tick rise, and **9 is the known fix, blocked on the art** —
-    // the full measurement, and why re-extracting at ANY count fails G6, is in
-    // `tests/unit/blockedDwell.ts`. Kept there rather than restated here: one description of
-    // one blocker, next to the gate that skips on it (vault 5.3).
-    frames: 8,
+    /**
+     * 🔴 6 → 8 corrected a DESYNC: this said 6 while the extracted strip held 8 cells and the
+     * catalog shipped 8, because `assets:build` packs the strip and never reads this file.
+     *
+     * ✅ **8 → 9 on 2026-08-15, and this is the number that closes the judder.** 8 does not divide
+     * the 18-tick fall, so the sheet dwelt unevenly — some cells held two ticks and some three, and
+     * that is what reads as a stutter. 9 gives a flat **2 ticks per frame**. It was blocked on the
+     * art because re-extracting the OLD clip at any count still failed G6; `fall-r2.mp4` is the
+     * re-shoot that unblocks it, so the count and the clip move together in one commit.
+     *
+     * ⚠️ **Order is forced and not a style choice.** `build-clips.mjs` reads `frames` to decide the
+     * sample count, so it must be 9 before `assets:clips` runs — but bumping it while
+     * `BLOCKED_ON_ART` still lists the key turns `one-shot-divisor.test.ts` red on the spot. Shoot →
+     * adopt → 9 → `assets:clips` → `assets:build` → empty `BLOCKED_ON_ART`, all one commit.
+     */
+    frames: 9,
     motion:
       'is airborne, caught in the middle of a fall.\n' +
       '\n' +
@@ -357,6 +372,23 @@ export const VIDEO_MOTIONS = Object.freeze({
       'boots directly below his hips, both arms drawn down and in close to his sides.\n' +
       'He is at a different point along that path in every frame, and he never doubles back toward ' +
       'a shape he has already passed through.' +
+      /**
+       * 🔴 Added 2026-08-15 for the re-shoot, and **it is NOT redundant with `UPRIGHT_IN_AIR`.**
+       *
+       * That tail already says *"No part of him is ever cut off by the top, bottom, left or right
+       * edge"* — and `fall` was cut on the left and the right anyway. The difference is the one
+       * STYLE.md §6 keeps charging this project for: that sentence is a **negation**, which this
+       * model weakens rather than obeys, and it names no width the model can measure itself
+       * against. `FRAME_MARGIN` is the positive ruler — *the middle 70% of the frame width* — and it
+       * is the clause both courier clips that PASS G6 carry.
+       *
+       * It sits BEFORE the tail deliberately. `UPRIGHT_IN_AIR` must stay whole and stay last: two
+       * generations were paid to learn that inserting into that paragraph makes him somersault.
+       *
+       * ⚠️ **One record, not the shared clause.** Putting this inside `UPRIGHT_IN_AIR` would change
+       * `jump`'s prompt too, for a shoot nobody approved and no budget covers.
+       */
+      `${FRAME_MARGIN}` +
       `${UPRIGHT_IN_AIR}`,
   },
 

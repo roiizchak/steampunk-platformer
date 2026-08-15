@@ -179,7 +179,18 @@ const CLIP_FILES = Object.freeze({
   walk: 'walk.mp4',
   run: 'run.mp4',
   jump: 'jump.mp4',
-  fall: 'fall.mp4',
+  /**
+   * The re-shoot that closes the `fall` judder (D1). `request_id 01a003ea-9fee-7080-9d8e-053c205f7cc4`,
+   * seed 1749000706, 2026-08-15, $1.19 — **first take, adopted.**
+   *
+   * Round 1 (`fall.mp4`) was shot `9:16` from the unpadded 1536 × 2752 anchor and cut on the left,
+   * the right AND the top. This round applies **both** courier levers at once: the padded 5050²
+   * canvas at `1:1` (`PADDED_ANCHORS.fall`) and `FRAME_MARGIN` on the motion record. That is
+   * deliberately the exact configuration of `attack` and `death` — the only two courier clips that
+   * pass G6 — rather than a single-variable trial. **The cost is attribution: a pass does not say
+   * which lever did it**, and that trade was taken before the money moved.
+   */
+  fall: 'fall-r2.mp4',
 });
 
 /**

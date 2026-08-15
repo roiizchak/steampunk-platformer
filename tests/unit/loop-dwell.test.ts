@@ -126,8 +126,18 @@ describe('the row whose fix is blocked on art, not on arithmetic', () => {
     });
   }
 
-  it('is exactly one row — every other one-shot was fixed, and the list must not grow quietly', () => {
-    expect(Object.keys(BLOCKED_ON_ART)).toHaveLength(1);
+  /**
+   * ✅ **1 → 0 on 2026-08-15.** `brass-courier/fall` was the last entry and its art was bought
+   * (`fall-r2.mp4`, 9 frames, 18 ticks, a flat 2 per frame). The loop below therefore generates no
+   * cases at all now, which is why this assertion is the one carrying the claim.
+   *
+   * ⚠️ Read what the second line does at zero: `uneven` must equal `[]`, so **no catalog row may be
+   * uneven at all**. That is strictly stronger than the same line was yesterday, when exactly one
+   * row was permitted to be — the exception is not merely unused, it is gone, and a new uneven row
+   * is now red on arrival rather than needing someone to notice the list grew.
+   */
+  it('is empty — every one-shot now divides, and the list must not grow quietly', () => {
+    expect(Object.keys(BLOCKED_ON_ART)).toHaveLength(0);
     const uneven = rows.filter((r) => !Number.isInteger(r.simTicks / r.frames)).map((r) => r.key);
     expect(uneven).toEqual(Object.keys(BLOCKED_ON_ART));
   });

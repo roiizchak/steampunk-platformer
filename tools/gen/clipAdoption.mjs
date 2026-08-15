@@ -39,6 +39,18 @@ export const SUPERSEDED_CLIPS = Object.freeze({
   jump: Object.freeze(['jump-r2.mp4']),
 
   /**
+   * Round 1 of `fall`: `9:16` from the unpadded courier anchor, cut left, right and top. Superseded
+   * by `fall-r2.mp4` (see `CLIP_FILES` for the request_id and what changed). Kept, never deleted —
+   * paid, non-regenerable input, and the before-column for the framing comparison.
+   *
+   * Note this is the **opposite** disposition to `jump` directly above, from the same Phase 4 pair:
+   * `jump-r2` traded a horizontal crop for a vertical one and was rejected, so `jump.mp4` is still
+   * the declared file. Newest does not win; a human says which, and that is the whole point of this
+   * table.
+   */
+  fall: Object.freeze(['fall.mp4']),
+
+  /**
    * Round 1 everywhere below: shot `9:16` from a `1:1` anchor — session 1's parameter error, and the
    * reframe defect that cut 7 of 7 reframed clips. Superseded by the `1:1` round, kept on disk.
    */
