@@ -30,7 +30,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | ⚠️ **merged 2026-08-09 with known debt** — approved and merged while **reported failing**. Open: **4.27** only (needs a pre-generation anchor gate; next generating phase). 4.10/4.12 closed in Phase 5, **4.16 closed in Phase 6**, **4.2b closed 2026-08-16 by owner amendment** — ceiling raised to $50. Triage: [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md) |
 | 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | ✅ **done** 2026-08-15 |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | ✅ **done** 2026-08-16 |
-| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | — |
+| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | ✅ **done** 2026-08-16 |
 | 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
 | 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — |
 | 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything | — |
