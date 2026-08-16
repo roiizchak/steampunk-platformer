@@ -99,6 +99,21 @@ function applyKnockback(player: PlayerSim, sourceX: number): void {
 }
 
 /**
+ * What this tick's world damage actually did — Phase 7's hurt and death cues (vault 2.5).
+ *
+ * The two are **mutually exclusive**: a lethal hit reports `died`, never both. Before Phase 7 this
+ * function returned `void` and `damagePlayer`'s "did it land" boolean died at the call site, so the
+ * only marker left was `combatCounter === 0`, which survives one tick and is lost by any render
+ * frame draining more than one.
+ */
+export interface WorldDamageResult {
+  /** Damage landed and the player survived it. False on a refused hit — i-frames, already dead. */
+  hurt: boolean;
+  /** The player entered `death` on THIS tick, by damage **or** by the kill plane. */
+  died: boolean;
+}
+
+/**
  * Apply every world damage source to the player, in a fixed order.
  *
  * **The kill plane is first and exclusive.** Falling out of the world is not survivable, so it does
@@ -111,15 +126,30 @@ function applyKnockback(player: PlayerSim, sourceX: number): void {
  * which source gets attributed, and hazards come first because they are the only one the player
  * chose to touch.
  */
-export function applyWorldDamage(world: World, previousX: number, previousY: number): void {
+export function applyWorldDamage(
+  world: World,
+  previousX: number,
+  previousY: number,
+): WorldDamageResult {
   const { player } = world;
+  const wasDead = player.state === 'death';
 
   if (belowKillPlane(player.y, world.bounds)) {
     killPlayer(player);
-    return;
+    // 🔴 This branch NEVER reaches `damagePlayer` — the kill plane must not be survivable, so it
+    // deliberately routes around the i-frame check. Phase 7's death cue is built here as well as on
+    // the lethal-damage path for exactly that reason: an edge derived only from `damagePlayer`'s
+    // return leaves falling out of the world silent (Codex plan review F4). `killPlayer` is
+    // idempotent, so `wasDead` is what keeps this to one edge rather than one per tick of the corpse.
+    return { hurt: false, died: !wasDead && player.state === 'death' };
   }
 
   const box = toWorld(PLAYER_BOX, player.x, player.y, player.facing, world.scale);
+  // Whether ANY of the three sources below actually cost hp this tick. `damagePlayer` returns false
+  // for a refused hit — i-frames, already dead — and a cue played on a refused hit is a sound with
+  // no event behind it. Each source ORs into this rather than overwriting, because a later refusal
+  // must not erase an earlier landing.
+  let landed = false;
 
   const hazard = hazardHit(previousX, previousY, player.x, player.y, world.hazards);
   if (hazard !== null) {
@@ -130,7 +160,7 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
     // walking INTO, and reversing the player's own travel double-counts a wall or floor collision
     // that has already stopped them this same tick. Decided rather than left to fall out of the
     // code by accident (Codex plan review correction 3).
-    damagePlayer(player, HAZARD_DAMAGE);
+    landed = damagePlayer(player, HAZARD_DAMAGE) || landed;
   }
 
   const shot = projectileHit(world.projectiles, box);
@@ -139,7 +169,9 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
     // what tells a refused hit (i-frames, already dead) from a landed one, and `player.hp > 0` is
     // "no shove on a corpse" — `combat.ts`'s step-4 ordering exists so a lethal hit does not also
     // move the body it just killed (Codex plan review correction 1).
-    if (damagePlayer(player, shot.damage) && player.hp > 0) {
+    const hit = damagePlayer(player, shot.damage);
+    landed = hit || landed;
+    if (hit && player.hp > 0) {
       applyKnockback(player, shot.x);
     }
     // Consumed on impact, whether or not it actually cost hp. A shot left flying through an
@@ -168,10 +200,17 @@ export function applyWorldDamage(world: World, previousX: number, previousY: num
       continue;
     }
     if (overlapsScavenger(scavenger, box, world.scale)) {
-      if (damagePlayer(player, SCAVENGER.damage) && player.hp > 0) {
+      const hit = damagePlayer(player, SCAVENGER.damage);
+      landed = hit || landed;
+      if (hit && player.hp > 0) {
         applyKnockback(player, scavenger.x);
       }
       break;
     }
   }
+
+  // One cue per event. A lethal hit is `died`, never both — otherwise the hurt sound plays over the
+  // death sound on the one tick both are true, and the player hears the less important of the two.
+  const died = landed && !wasDead && player.state === 'death';
+  return { hurt: landed && !died, died };
 }

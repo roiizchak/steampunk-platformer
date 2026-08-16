@@ -68,10 +68,26 @@ function overlaps(a: Rect, b: Rect): boolean {
 }
 
 /**
+ * What one tick of the player's swing did — hits landed and enemies killed.
+ *
+ * **`kills` implies `hits`, always.** An enemy taken to zero was struck to get there, and `strike()`
+ * counts that blow like any other. Phase 7's criterion 7.2 sums both cues on the same tick because
+ * of this, and the Codex plan review (F1) caught a worst-case stack that had omitted the hit.
+ */
+export interface PlayerAttackResult {
+  /** Enemies whose hp this swing reduced on this tick. */
+  hits: number;
+  /** Of those, how many reached zero hp on this tick — Phase 7's kill cue. */
+  kills: number;
+}
+
+/**
  * Resolve the player's live hitbox against every enemy.
  *
- * Returns the number of enemies hit this tick, so the caller can turn it into an event rather than
+ * Returns what the swing did this tick, so the caller can turn it into an event rather than
  * re-deriving one by comparing hp across ticks *(vault 2.5 — edges are emitted, never reconstructed)*.
+ * A kill in particular has **no** state marker to fall back on: enemies carry no death tick and no
+ * `alive` flag, and `enemyTurn` only notices `hp <= 0` on the FOLLOWING tick.
  *
  * Runs BEFORE the enemies' own damage in step 9b, so a killing blow lands first and a corpse cannot
  * also hurt you on the tick it dies. That ordering is a deliberate choice — trading hits with
@@ -88,15 +104,16 @@ function overlaps(a: Rect, b: Rect): boolean {
  * It stops being masked the moment `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`, which is
  * a plausible retune. If that happens, the case becomes reachable and needs a gate.
  */
-export function applyPlayerAttack(world: World): number {
+export function applyPlayerAttack(world: World): PlayerAttackResult {
   const { player } = world;
   if (player.state !== 'attack' || !hitWindowOpen(player.combatCounter, ATTACK)) {
-    return 0;
+    return { hits: 0, kills: 0 };
   }
 
   const swing = world.tickCount - player.combatCounter;
   const reach = toWorld(ATTACK_BOX, player.x, player.y, player.facing, world.scale);
   let hits = 0;
+  let kills = 0;
 
   const strike = (enemy: Hittable, box: LocalBox): void => {
     if (enemy.hp <= 0 || enemy.lastHitSwing === swing) {
@@ -108,6 +125,11 @@ export function applyPlayerAttack(world: World): number {
     enemy.lastHitSwing = swing;
     enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE);
     hits += 1;
+    // The `hp > 0` guard at the top of this closure means a corpse is never struck twice, so this
+    // counts the transition to zero rather than the state of being at zero.
+    if (enemy.hp === 0) {
+      kills += 1;
+    }
   };
 
   for (const sentry of world.enemies.sentries as Sentry[]) {
@@ -117,5 +139,5 @@ export function applyPlayerAttack(world: World): number {
     strike(scavenger, SCAVENGER_BOX);
   }
 
-  return hits;
+  return { hits, kills };
 }

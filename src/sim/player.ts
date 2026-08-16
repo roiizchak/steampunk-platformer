@@ -17,6 +17,7 @@ import { isCombatState, knockbackSettling } from './combat';
 import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './types';
 import {
   DEFAULT_TUNING,
+  FOOTSTEP_TICKS,
   PLAYER_BOX,
 } from './playerTuning';
 
@@ -24,6 +25,7 @@ import {
 // themselves moved to `playerTuning.ts` on 2026-08-15 (criterion 4.16 / 5.12).
 export {
   DEFAULT_TUNING,
+  FOOTSTEP_TICKS,
   FOOT_PX_PER_FRAME,
   LOCOMOTION_TICKS_PER_FRAME,
   PLAYER_BOX,
@@ -119,6 +121,30 @@ export function resolveState(
   }
   const walking = walkHeld && Math.abs(player.vx) <= tuning.walkMax;
   enterState(player, walking ? 'walk' : 'run');
+}
+
+/**
+ * Advance the stride counter and report whether a foot planted on this tick — Phase 7's cue.
+ *
+ * Called AFTER `resolveState`, because the cadence depends on which locomotion state the tick
+ * actually resolved to. Lives here, beside that decision, rather than in `tick.ts`: the two are one
+ * concept and splitting them is how the cadence and the drawn feet drift apart.
+ *
+ * The counter is zeroed whenever the feet are not planted and moving — airborne, idle, hurt, dead —
+ * so a jump cannot carry half a stride into the landing, and a footstep never fires on the tick a
+ * player touches down. That moment already has its own cue: `landed`.
+ */
+export function advanceStride(player: PlayerSim): boolean {
+  if (!player.grounded || (player.state !== 'walk' && player.state !== 'run')) {
+    player.strideCounter = 0;
+    return false;
+  }
+  player.strideCounter += 1;
+  if (player.strideCounter < FOOTSTEP_TICKS[player.state]) {
+    return false;
+  }
+  player.strideCounter = 0;
+  return true;
 }
 
 /**
