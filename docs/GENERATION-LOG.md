@@ -205,3 +205,25 @@ and `scale` is stored per SLUG**, so the padded courier `attack` packed at 114 p
 > three prompt clauses) — and `attack` now ships at 289px. Full account:
 > [generations/phase-05-padded-round.md](generations/phase-05-padded-round.md)'s own dated
 > supersession entry.
+
+## Phase 7 — audio
+
+**11 generations, `$0.23` of the `$5` audio ceiling. No cue needed a re-shoot.** Every
+`request_id`, seed, prompt and shipped measurement:
+[generations/phase-07-audio.md](generations/phase-07-audio.md).
+
+Three things there are worth reading even if the numbers are not:
+
+- **`duration` caps at 120 s** on `stable-audio-3/small`, and nothing documents it. Both bed
+  requests were submitted at 180 s and both returned HTTP 422 *before inference* — so the cap cost
+  nothing but the beds loop every two minutes instead of three. Neither `genmedia schema` nor
+  FAL-MODELS.md § 6 records it; this is the only place it is written down.
+- **`bed-ambience` was generated on the SFX endpoint, not the music one.** The plan said both beds
+  would use `music/text-to-audio`. Only `bed-music` did. Recorded rather than corrected — the result
+  is good and it is `$0.0011` cheaper — but the plan and the artefact disagree and the artefact
+  wins.
+- **`hit` has no log JSON.** It was vault 7.2's mandatory single-cue probe, run before the logging
+  path existed. Its `request_id` survives in the master's filename and its prompt in the phase doc,
+  but **its seed does not** — it is the one Phase 7 cue that cannot be re-generated identically.
+  Same class of gap as [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md),
+  caught one phase earlier and one recovery cheaper.

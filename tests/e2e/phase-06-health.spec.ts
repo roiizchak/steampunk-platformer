@@ -26,6 +26,7 @@
 
 import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
+import { waitForHud } from './hudHelpers';
 
 test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () => {
   /**
@@ -42,6 +43,12 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
    */
   test('at 99 of 100 hp the bar draws a visible spent portion', async ({ page }) => {
     await bootToGame(page);
+    // 🔴 `bootToGame` waits on `window.__game.ready`, which `GameScene.create()` sets — but the HUD
+    // is a QUEUED parallel scene, so at that instant `UIScene.create()` has not run and
+    // `hudObjects()` returns unbuilt fields. This test reaches `hudObjects()` directly rather than
+    // through `readHud`, which guards itself, so the guard has to be here. It worked only because a
+    // CDP round-trip happens to outlast one Phaser step — a latent flake, not a guarantee.
+    await waitForHud(page);
 
     /**
      * Drive the shipped draw path at a given hp and return the mean luminance of an 8 px column of
@@ -181,6 +188,12 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
     page,
   }) => {
     await bootToGame(page);
+    // 🔴 `bootToGame` waits on `window.__game.ready`, which `GameScene.create()` sets — but the HUD
+    // is a QUEUED parallel scene, so at that instant `UIScene.create()` has not run and
+    // `hudObjects()` returns unbuilt fields. This test reaches `hudObjects()` directly rather than
+    // through `readHud`, which guards itself, so the guard has to be here. It worked only because a
+    // CDP round-trip happens to outlast one Phaser step — a latent flake, not a guarantee.
+    await waitForHud(page);
 
     const commandsAt = async (hp: number): Promise<number> =>
       page.evaluate((forcedHp) => {
@@ -239,6 +252,12 @@ test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () =
   test('the bar the GAME LOOP draws tracks real damage, twice', async ({ page }) => {
     test.setTimeout(90_000);
     await bootToGame(page);
+    // 🔴 `bootToGame` waits on `window.__game.ready`, which `GameScene.create()` sets — but the HUD
+    // is a QUEUED parallel scene, so at that instant `UIScene.create()` has not run and
+    // `hudObjects()` returns unbuilt fields. This test reaches `hudObjects()` directly rather than
+    // through `readHud`, which guards itself, so the guard has to be here. It worked only because a
+    // CDP round-trip happens to outlast one Phaser step — a latent flake, not a guarantee.
+    await waitForHud(page);
 
     /**
      * The drawn spent rectangle's width, straight off the live `Graphics` command buffer.

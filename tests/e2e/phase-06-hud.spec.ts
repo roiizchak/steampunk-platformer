@@ -25,7 +25,7 @@
 
 import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
-import { collectGears, readHud, visibleGearCount } from './hudHelpers';
+import { collectGears, readHud, visibleGearCount, waitForHud } from './hudHelpers';
 
 
 test.describe('criterion 6.1 — the gear counter', () => {
@@ -114,6 +114,12 @@ test.describe('criterion 6.1 — the gear counter', () => {
    */
   test('a gear flies to the counter — the tween exists and then cleans up', async ({ page }) => {
     await bootToGame(page);
+    // 🔴 `bootToGame` waits on `window.__game.ready`, which `GameScene.create()` sets — but the HUD
+    // is a QUEUED parallel scene, so at that instant `UIScene.create()` has not run and
+    // `hudObjects()` returns unbuilt fields. This test reaches `hudObjects()` directly rather than
+    // through `readHud`, which guards itself, so the guard has to be here. It worked only because a
+    // CDP round-trip happens to outlast one Phaser step — a latent flake, not a guarantee.
+    await waitForHud(page);
 
     // Walk INTO a gear while sampling. Without this the sampler below runs over a game in which
     // nothing was ever collected, and every assertion about a flying gear would be vacuous.
