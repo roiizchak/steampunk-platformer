@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "assets:audio": "node tools/gen/build-audio.mjs",
     "assets:build": "node tools/gen/build-assets.mjs",
     "assets:clips": "node tools/gen/build-clips.mjs",
     "assets:prompts": "node tools/gen/write-prompts.mjs",

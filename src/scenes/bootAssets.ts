@@ -67,6 +67,22 @@ export function queueCatalog(
     });
   }
 
+  for (const cue of catalog.audio) {
+    // Same removal rule as images and sheets, and the same reason: an audio key already in the
+    // cache makes the loader skip the entry silently, after which an existence check passes for a
+    // file that was never fetched. A scene restart — which Boot performs on every refusal test —
+    // would otherwise turn this into a no-op the first time it mattered.
+    if (scene.cache.audio.exists(cue.key)) {
+      scene.cache.audio.remove(cue.key);
+    }
+    // A single URL, not the usual cross-browser array. The formats are chosen per file and are
+    // deliberate: WAV for the nine cues, because vault 7.1 requires them trimmed and a RIFF trim is
+    // thirty lines with no new dependency; OGG for the two beds, because they loop whole and need no
+    // local edit. Chromium decodes both. `docs/qa/phase-07-audio.md` records the browser-support
+    // trade this accepts.
+    scene.load.audio(cue.key, cue.url);
+  }
+
   // Loading and verification both live beside this function — see the header.
   queueLevels(scene, catalog.levels);
 }
