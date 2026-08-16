@@ -144,7 +144,9 @@ test.describe('Phase 5 — combat', () => {
     await bootToGame(page);
     const before = await snapshot(page);
 
-    await page.keyboard.press('m');
+    // `k`, not `m`. Phase 7 took `M` for mute — a shipped, player-facing control — so the DEV-only
+    // low-hp spawn moved. This line is the reason that move needed checking rather than assuming.
+    await page.keyboard.press('k');
     await waitForScavengerCount(page, before.scavengers.length + 1);
 
     const after = await snapshot(page);

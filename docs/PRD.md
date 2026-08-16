@@ -30,7 +30,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | ⚠️ **merged 2026-08-09 with known debt** — approved and merged while **reported failing**. Open: **4.27** only (needs a pre-generation anchor gate; next generating phase). 4.10/4.12 closed in Phase 5, **4.16 closed in Phase 6**, **4.2b closed 2026-08-16 by owner amendment** — ceiling raised to $50. Triage: [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md) |
 | 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | ✅ **done** 2026-08-15 |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | ✅ **done** 2026-08-16 |
-| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | — |
+| 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | ✅ **done** 2026-08-16 |
 | 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
 | 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — |
 | 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything | — |
@@ -74,6 +74,12 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   clips ran before anyone read an invoice: **read the invoice before the next batch, not after it.**
   The ceiling bounds the damage; the ordering is what makes the bound reachable. This is the *art*
   ceiling — a new medium (audio, Phase 7) needs its own number set before its first real batch.
+- **The fal audio-spend ceiling is `$5`**, set by owner decision on 2026-08-16 **before Phase 7's
+  first generation** — which is the half of 4.2b that no ceiling could fix. It is a separate number
+  from the art ceiling because audio is a separate medium, and it is deliberately generous: both
+  Phase 7 endpoints price **flat per generation** (`$0.0206` SFX, `$0.0217` music), so `$5` buys
+  ~240 generations against a realistic need of nine. **The ordering carries the rule, not the
+  number** — probe one cue, read the invoice, batch, read the invoice again.
 - **STOP and ask** before: any new dependency, deleting any file, any fal batch over 5 generations,
   or contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md.
 - **A phase with a failing or unrun criterion is reported failing.** Never as done.

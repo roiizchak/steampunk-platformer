@@ -41,6 +41,28 @@ export interface SheetEntry extends CatalogEntry {
   derivedFrom: 'sim' | 'measured' | 'authored';
 }
 
+/**
+ * One audio cue or bed in the catalog. Phase 7.
+ *
+ * `gain` is the load-bearing field, and it is the one place criterion 7.2's clipping budget is
+ * written down. It is `(1 / the master's own peak) × a role weight × one solved headroom scalar` —
+ * see `tools/gen/build-audio.mjs`, which computes it by summing the worst-case simultaneous stack
+ * and solving for the number that lands it at target. Editing it by hand invalidates that
+ * measurement *(vault 7.4: cue volume is a clipping budget, and the ceiling is measured)*.
+ *
+ * It lives here rather than baked into the samples so the shipped file stays exactly what the model
+ * produced — the gate then measures the cue, not the build step — and so one number feeds the
+ * manager, the unit gate and the e2e stack instead of three.
+ *
+ * `loop` is true for the two beds and false for every cue. A one-shot that loops never stops, which
+ * is the same class of claim `SheetEntry.loop` records *(vault 4.23)*.
+ */
+export interface AudioEntry extends CatalogEntry {
+  /** Playback gain, `0 < gain <= 1`. Solved, not chosen. */
+  gain: number;
+  loop: boolean;
+}
+
 export interface AssetCatalog {
   images: CatalogEntry[];
   /**
@@ -60,6 +82,13 @@ export interface AssetCatalog {
    * perfectly happy about it.
    */
   sheets: SheetEntry[];
+  /**
+   * Audio cues and beds. **Required and non-empty**, for the identical reason `levels` and `sheets`
+   * are: an optional list is how a typo'd key ships a game with no audio and a boot that is
+   * perfectly happy about it. That failure ships as *silence*, which is the one defect a player is
+   * most likely to blame on their own speakers rather than report.
+   */
+  audio: AudioEntry[];
 }
 
 export const CATALOG_KEY = 'asset-catalog';
@@ -86,6 +115,9 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
   if (!Array.isArray(catalog.sheets)) {
     return 'assets/index.json missing its sheets list';
   }
+  if (!Array.isArray(catalog.audio)) {
+    return 'assets/index.json missing its audio list';
+  }
 
   if (catalog.images.length === 0) {
     return 'assets/index.json lists no images';
@@ -95,6 +127,9 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
   }
   if (catalog.sheets.length === 0) {
     return 'assets/index.json lists no sheets';
+  }
+  if (catalog.audio.length === 0) {
+    return 'assets/index.json lists no audio';
   }
 
   // One namespace, checked once. A level key that collides with a texture key is not a problem
@@ -106,6 +141,7 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
     ['image', catalog.images],
     ['level', catalog.levels],
     ['sheet', catalog.sheets],
+    ['audio', catalog.audio],
   ] as const) {
     for (const entry of entries) {
       if (!entry || typeof entry !== 'object') {
@@ -150,6 +186,22 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
         if (!['sim', 'measured', 'authored'].includes(sheet.derivedFrom)) {
           return `sheet "${entry.key}" has derivedFrom ${JSON.stringify(sheet.derivedFrom)}; ` +
             `provenance must be recorded so an authored rate cannot read as a derived one`;
+        }
+      }
+
+      if (kind === 'audio') {
+        const cue = entry as AudioEntry;
+        // Both bounds matter and for different reasons. At or below 0 the cue loads, plays and is
+        // inaudible — vault 7.1's failure arriving through a data file instead of through a prompt.
+        // Above 1 it amplifies past the level criterion 7.2's clipping budget was solved for, which
+        // is the ONLY way to break that budget without touching code.
+        if (typeof cue.gain !== 'number' || !Number.isFinite(cue.gain) || cue.gain <= 0 || cue.gain > 1) {
+          return `audio "${entry.key}" has gain ${JSON.stringify(cue.gain)}; ` +
+            `it must be a finite number in (0, 1] — see tools/gen/build-audio.mjs, which solves it`;
+        }
+        if (typeof cue.loop !== 'boolean') {
+          return `audio "${entry.key}" is missing its loop flag; a loop is a CLAIM (vault 4.23), ` +
+            `and a one-shot that loops never stops`;
         }
       }
     }

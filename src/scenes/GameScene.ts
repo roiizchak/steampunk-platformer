@@ -19,6 +19,8 @@ import {
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
 import { attachHud } from './gameHud';
+import { createAudio, type AudioManager } from '../game/audio';
+import { audioCues } from '../sim/audioCues';
 import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
@@ -67,6 +69,8 @@ export class GameScene extends Phaser.Scene {
   private gears!: GearLayer;
   /** The parallel HUD scene. Optional at the type level: `launch` is async, so a frame can beat it. */
   private ui?: UIScene;
+  /** Phase 7's sound manager. Optional for the same reason `ui` is: a frame can beat `create()`. */
+  private audio?: AudioManager;
   private parallax: ParallaxImage[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
@@ -152,6 +156,10 @@ export class GameScene extends Phaser.Scene {
     // why that removes vault 6.1's reciprocal-ignore-list hazard instead of managing it.
     ({ ui: this.ui, gears: this.gears } = attachHud(this, this.world));
 
+    // Phase 7. A plain module, not a scene, and torn down in `BootScene.init()` rather than from a
+    // SHUTDOWN handler here — `src/game/audio.ts` carries the reasoning, which is Phase 6's HUD
+    // lesson applied to a manager that is game-global rather than scene-owned.
+    this.audio = createAudio(this, this.catalog());
 
     this.bindKeys();
     addHelpBanner(this, this.helpText());
@@ -232,6 +240,12 @@ export class GameScene extends Phaser.Scene {
       this.prevPlayer = null;
     }
 
+    // Cues come from the batch's OR-accumulated edges, which is what makes them survive a frame
+    // that drained five ticks — the whole reason `TickEvents` exists rather than a state diff
+    // *(vault 2.5)*. `audioCues` is pure and lives in `src/sim/`, so what plays here and what the
+    // unit suite asserts are one definition, not two that agree on the happy path.
+    this.audio?.playCues(audioCues(events));
+
     this.renderPlayer();
     this.renderHud();
     this.gears.sync();
@@ -244,10 +258,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts` (split out to
-   * keep this file smaller; it is 515 lines and OVER the 400-line rule, justified in
-   * `docs/qa/phase-05-combat.md`). This scene still owns `playerInputEnabled` and the
-   * DEV scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
+   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts`, split out to
+   * keep this file smaller. This scene still owns `playerInputEnabled` and the DEV
+   * scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
+   *
+   * 🔴 The line count that used to be quoted here — "it is 515 lines" — was wrong in both directions
+   * over time: the file was 386 on `main` before Phase 7 and is 427 now. A hardcoded line count in a
+   * comment is a fact with an expiry date and no test, so it is gone rather than corrected. The live
+   * number is `tests/unit/file-size.test.ts`'s, and the current justification is in
+   * `docs/qa/phase-07-audio.md`.
    */
   private sampleHeldKeys(): void {
     sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
@@ -263,7 +282,22 @@ export class GameScene extends Phaser.Scene {
           spawnDevLowHpEnemy: () => this.spawnDevLowHpEnemy(),
         }
       : undefined;
-    this.held = bindPlayerKeys(this, this.input$, () => this.playerInputEnabled, dev);
+    this.held = bindPlayerKeys(
+      this,
+      this.input$,
+      () => this.playerInputEnabled,
+      dev,
+      // A getter, not the manager: `bindKeys` runs during `create()` and a captured reference
+      // would go stale the moment Boot tore the manager down and `create()` built a new one.
+      //
+      // 🔴 Passed UNCONDITIONALLY. It read `this.audio ? () => this.audio! : undefined`, which
+      // decided whether the mute and volume keys exist at all from the field's value at bind time —
+      // correct today only because `createAudio` happens to run two lines above `bindKeys`. Any
+      // reorder, or a subclass that binds before creating audio, would ship a build with no mute key
+      // and no error. `gameInput.ts` does the nullish check per press instead, where it is cheap and
+      // where a null manager is a no-op rather than a missing feature.
+      () => this.audio,
+    );
   }
 
   /**
@@ -294,9 +328,21 @@ export class GameScene extends Phaser.Scene {
     startDevScene(this, 'Gym');
   }
 
-  protected loadLevel(): LevelData {
+  /**
+   * The validated catalog. Boot refuses to route without one, so reaching here means it exists —
+   * this throws rather than returning `undefined` because a silent `?.` is how a missing catalog
+   * becomes a game with no audio and no complaint.
+   */
+  protected catalog(): AssetCatalog {
     const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
-    const entry = catalog?.levels?.[0];
+    if (!catalog) {
+      throw new Error('GameScene: no asset catalog in cache; Boot should have refused to route');
+    }
+    return catalog;
+  }
+
+  protected loadLevel(): LevelData {
+    const entry = this.catalog().levels[0];
     if (!entry) {
       throw new Error('GameScene: the catalog lists no levels; Boot should have refused to route');
     }

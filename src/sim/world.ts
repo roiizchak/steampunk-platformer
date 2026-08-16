@@ -127,6 +127,8 @@ export function createWorld({
       iFrameCounter: IFRAME_TICKS,
       // FIX 2: no impulse has landed yet.
       knockbackPending: false,
+      strideCounter: 0,
+      strideGait: null,
     },
   };
 }

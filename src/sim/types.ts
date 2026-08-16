@@ -222,6 +222,20 @@ export interface PlayerSim {
    * by `stepHorizontal`'s `knockbackSettling` branch (`player.ts`) so the exemption stays ONE tick.
    */
   knockbackPending: boolean;
+
+  /* --- Phase 7 audio. --- */
+
+  /**
+   * Ticks spent in the CURRENT locomotion state since the last footfall — Phase 7's `footstep` cue.
+   *
+   * Zeroed whenever the feet are not planted and moving, so a jump does not carry a half-stride into
+   * the landing. Compared against `FOOTSTEP_TICKS[state]`, which is derived from the drawn animation
+   * loop rather than from a speed — see `playerTuning.ts` for why a distance accumulator was
+   * rejected.
+   */
+  strideCounter: number;
+  /** Which gait `strideCounter` counts for. Two cadences share one counter — see `advanceStride`. */
+  strideGait: 'walk' | 'run' | null;
 }
 
 /** Per-tick event edges (vault 2.5). Emitted, never reconstructed from a state comparison. */
@@ -267,6 +281,51 @@ export interface TickEvents {
    * render layer reads `GearSim.collectedTick` instead. See `pickups.ts`.
    */
   gearCollected: boolean;
+
+  /* --- Phase 7 audio cues. Every one is an edge; none is reconstructable (vault 2.5). --- */
+
+  /**
+   * The player took damage and SURVIVED it, on this tick — Phase 7's hurt cue.
+   *
+   * `damagePlayer` already returned whether a hit landed (`combat.ts`), and `applyWorldDamage` threw
+   * that boolean away. Without the edge the only marker is `combatCounter === 0 && state === 'hurt'`,
+   * which survives exactly one tick and is therefore lost by any render frame draining more than one.
+   *
+   * Deliberately false on the killing blow — that is `playerDied`. One cue per event, or the hurt
+   * sound plays over the death sound on the tick both would be true.
+   */
+  playerHurt: boolean;
+  /**
+   * The player died on this tick, by **either** route — Phase 7's death cue.
+   *
+   * 🔴 There are two, and only one goes through `damagePlayer`. The kill plane calls `killPlayer` and
+   * **early-returns** (`worldDamage.ts`), so an edge built from `damagePlayer`'s return alone leaves
+   * falling out of the world — the most common death in a platformer — silent, while every test using
+   * ordinary lethal damage passes. Codex plan review F4 caught it before any code existed.
+   *
+   * Fires once. `killPlayer` is idempotent, and re-entering `death` every tick would also reset the
+   * death animation to its first frame.
+   */
+  playerDied: boolean;
+  /**
+   * The player's swing took an enemy to zero hp on this tick — Phase 7's kill cue.
+   *
+   * The only cue with no state marker of any kind to fall back on: enemies carry no death tick, no
+   * death counter and no `alive` flag, so death is otherwise inferred by comparing `hp` against the
+   * previous tick — exactly what vault 2.5 forbids. `enemyTurn` notices `hp <= 0` a tick LATE.
+   *
+   * ⚠️ `hitLanded` is **necessarily** true whenever this is: `strike()` increments the hit count on
+   * the killing blow like any other. Criterion 7.2's clipping stack must sum both.
+   */
+  enemyKilled: boolean;
+  /**
+   * A foot planted on this tick — Phase 7's footstep cue.
+   *
+   * Cadence comes from `FOOTSTEP_TICKS`, derived from the drawn animation loop, so the sound lands
+   * with the frame the player is watching rather than with a distance the sim happens to have
+   * covered. See `playerTuning.ts`.
+   */
+  footstep: boolean;
 }
 
 /**

@@ -66,16 +66,28 @@ read state back from the WebAudio API rather than from our own flag?** *(7.5.)*
 ### 6. QA gate
 | # | Criterion | Method | Owner |
 |---|---|---|---|
-| 7.1 | Every cue plays at its event; no unloaded-sound errors | e2e | e2e |
-| 7.2 | Worst-case simultaneous cue stack measured ≤ −1.0 dBFS. **The ceiling is chosen from what is correct — standard digital headroom below 0 dBFS clipping — not fitted to what our files happen to do.** What is *measured* is our stack against it. *(9.2)* | float decode *(7.3/7.4)* | `voltagent-qa-sec:qa-expert` |
+| 7.1 | Every cue plays at its event; no unloaded-sound errors. **Includes death by kill plane** — that path early-returns before `damagePlayer` and would otherwise be silent *(plan review F4)* | e2e | e2e |
+| 7.2 | Worst-case simultaneous cue stack measured ≤ −1.0 dBFS. **The ceiling is chosen from what is correct — standard digital headroom below 0 dBFS clipping — not fitted to what our files happen to do.** What is *measured* is our stack against it. *(9.2)* **Summed in ONE calculation over both containers**, because the stack mixes WAV cues with OGG beds and two correct halves that never meet do not measure the whole *(F2)*. The stack is eight sources: an enemy kill necessarily also raises `hitLanded` *(F1)* | float decode *(7.3/7.4)* | `voltagent-qa-sec:qa-expert` |
 | 7.3 | No cue is silent — measured floor, not listened-to | float decode *(7.1)* | `voltagent-qa-sec:qa-expert` |
-| 7.4 | Mute/volume persist across reload; asserted on **our** flag, not the getter | unit *(7.5)* | `voltagent-qa-sec:qa-expert` |
+| 7.4 | Mute/volume persist across reload **and are re-applied to playback afterwards** — a stored record alone can pass while nothing is attenuated *(F5)*. Asserted on **our** flag, never the getter | unit *(7.5)* | `voltagent-qa-sec:qa-expert` |
 | 7.5 | Scene round-trip does not accumulate tracks | repeat transitions, count *(7.5)* | `voltagent-qa-sec:qa-expert` |
-| 7.5b | Every audio cue has a **catalog entry in `index.json`**, and every generation a **request id** in GENERATION-LOG.md | audit *(4.15/4.17)* | — |
+| 7.5b | Every audio cue has a **catalog entry in `index.json`**, every generation a **request id** in GENERATION-LOG.md, **and the bytes reached `dist/`** — a catalog row proves authorship, not deployment *(F6)* | audit *(4.15/4.17)* | — |
 | 7.6 | Cues emitted from the producing tick, not a state comparison | code review *(2.5)* | `voltagent-qa-sec:code-reviewer` |
 | 7.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` | — |
 | 7.8 | **Codex plan review ran; every finding applied or recorded** | `docs/reviews/phase-07-plan.md` | — |
 | 7.9 | **Codex implementation review ran on the diff; every finding applied or recorded** | `docs/reviews/phase-07-impl.md` | codex |
+| 7.10 | **Every cue heard in context** — fires on the right event, no wind-up trimmed off its own attack, both beds loop without an objectionable seam, and the mix is not muddy | hands-on with `playwright-cli`, on the GPU browser | play |
+
+**7.10 exists because nothing else in this table listens.** The plan review's question 6 — which the
+phase doc itself asked — came back: *"none of the §6 audio criteria is verified by listening… a loud
+but semantically wrong cue, a badly cut wind-up, or an ugly loop can clear every numbered audio
+criterion."* 7.1 instruments events, 7.2–7.3 decode numbers, the rest count and audit. A jump cue
+fired on a landing is measurably perfect. *(vault C4, plan review F9)*
+
+**Every criterion in this table is measured on `chromium-gpu`, headed, on the real GPU** — not
+headless SwiftShader. Milliseconds there are ~21× inflated, headless Chromium's audio stack is not
+the one the player runs, and the WebAudio unlock is a user-gesture path that deserves a real browser.
+Assert the renderer string before trusting any number.
 
 **Regression set:** Phases 1–6, specs 01–06.
 

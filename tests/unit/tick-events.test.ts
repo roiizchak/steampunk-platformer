@@ -30,6 +30,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSnapshot } from '../../src/sim/input';
+import { PLAYER_ATTACK_DAMAGE } from '../../src/sim/playerAttack';
 import { createWorld, tick } from '../../src/sim/tick';
 import { advance } from '../../src/sim/tick';
 import type { InputSnapshot, TickEvents, World } from '../../src/sim/types';
@@ -99,6 +100,11 @@ describe('advance() carries every edge a tick can emit', () => {
       const target = world.enemies.scavengers[0]!;
       target.detectRadius = 0;
       target.patrolSpeed = 0;
+      // Left on exactly one blow's worth of hp, so the single swing this scenario gets also KILLS.
+      // `advance()` takes one snapshot for the whole batch and `consumeAttackPress` clears the edge
+      // on the first tick, so a scenario that needs two swings cannot exist here — pre-damaging the
+      // target is what makes `enemyKilled` reachable at all. Phase 7, Codex plan review F7.
+      target.hp = PLAYER_ATTACK_DAMAGE;
       // NO jump here. Holding jump made the player leave the ground and the swing never reached
       // its active window - `hitActive` stayed false and the strengthened check below said so.
       // A standing swing at a parked enemy is what actually lands a hit.
@@ -117,6 +123,29 @@ describe('advance() carries every edge a tick can emit', () => {
       input.jumpPressed = true;
       return { world, input };
     },
+    /**
+     * Damage the player SURVIVES — Phase 7's `playerHurt`.
+     *
+     * Separate from `death` rather than folded into it: that scenario starts on 1 hp so the first
+     * hazard tick is lethal, which reaches `playerDied` and `respawned` but never `playerHurt`. Full
+     * hp against the same hazard reaches the other edge. One scenario cannot do both, because they
+     * are mutually exclusive by construction (`worldDamage.ts`).
+     */
+    hurt: () => {
+      const world = fresh();
+      world.hazards = [{ x: SPAWN.x - 100, y: 900, w: 200, h: 200 }];
+      return { world, input: createSnapshot() };
+    },
+    /**
+     * A player walking on the ground — Phase 7's `footstep`.
+     *
+     * `FOOTSTEP_TICKS.walk` is 24, so a 90-tick batch contains three footfalls. Nothing else in this
+     * file moves the player horizontally, and a stationary player never plants a foot.
+     */
+    walk: () => ({
+      world: fresh(),
+      input: { ...createSnapshot(), right: true, walkHeld: true },
+    }),
   };
 
   const TICKS = 90;
@@ -175,7 +204,22 @@ describe('advance() carries every edge a tick can emit', () => {
    */
   it('...and the scenarios really do emit every edge this file exists to protect', () => {
     const fired = firedAcrossScenarios();
-    for (const key of ['respawned', 'attackStarted', 'hitActive', 'hitLanded'] as const) {
+    // 🔴 The four Phase 7 names are here because the OR-contract test above **cannot** see them.
+    // It discovers fields automatically, which sounds like it covers anything new — but it compares
+    // by-hand against `advance()`, and both lanes agree on `false === false`. A field added to
+    // `TickEvents` that never fires anywhere passes every other assertion in this file, and its
+    // accumulation could be deleted unnoticed. Codex plan review F7 caught that before the fields
+    // existed; extending this list is what closes it.
+    for (const key of [
+      'respawned',
+      'attackStarted',
+      'hitActive',
+      'hitLanded',
+      'playerHurt',
+      'playerDied',
+      'enemyKilled',
+      'footstep',
+    ] as const) {
       expect(
         [...fired].sort(),
         `"${key}" never fired in either scenario, so the comparison above proves nothing about it`,

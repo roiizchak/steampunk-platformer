@@ -100,7 +100,14 @@ export default defineConfig({
       // produced three — silently opted the new file back into SwiftShader unless someone
       // remembered to edit two regexes in lockstep. A spec that quietly runs on the wrong
       // rasteriser still passes; it just stops measuring the thing it names.
-      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+)\.spec\.ts/,
+      //
+      // 🔴 **Phase 7 (audio) joins on the same prefix, and for THREE reasons rather than one.**
+      // The frame-budget argument above is only the first. Headless Chromium's audio stack is also
+      // not the one a player runs, so a cue that decodes and plays there proves less than it looks;
+      // and the WebAudio unlock is a real user-gesture path, which deserves a real browser rather
+      // than a headless approximation of one. Criteria 7.1, 7.2 and 7.5 all measure sound, not
+      // pixels, and all three are worth taking on the substrate the player has.
+      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -125,7 +132,7 @@ export default defineConfig({
       // asserts the health bar's drawn rectangle and 6.8 inspects the chroma-keyed art. Both are
       // claims about rasterised output, and both are meaningless taken from SwiftShader.
       name: 'chromium-gpu',
-      testMatch: /phase-0(5-perf|6-[a-z0-9-]+)\.spec\.ts/,
+      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,

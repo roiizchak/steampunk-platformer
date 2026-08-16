@@ -91,7 +91,14 @@
  */
 
 import { consumeJumpPress } from './input';
-import { PLAYER_BOX, resolveCollisions, resolveState, stepHorizontal, stepVertical } from './player';
+import {
+  PLAYER_BOX,
+  advanceStride,
+  resolveCollisions,
+  resolveState,
+  stepHorizontal,
+  stepVertical,
+} from './player';
 import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
 import { releaseAggro } from './enemies';
 import { stepEnemies } from './enemyTurn';
@@ -116,6 +123,10 @@ export function noEvents(): TickEvents {
     hitLanded: false,
     respawned: false,
     gearCollected: false,
+    playerHurt: false,
+    playerDied: false,
+    enemyKilled: false,
+    footstep: false,
   };
 }
 
@@ -268,8 +279,13 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
   //     The player's own swing resolves FIRST, so a killing blow lands before the thing it killed
   //     can trade a hit back — see `playerAttack.ts`, which also records why that is ungated.
-  events.hitLanded = applyPlayerAttack(world) > 0;
-  applyWorldDamage(world, previousX, previousY);
+  const swing = applyPlayerAttack(world);
+  events.hitLanded = swing.hits > 0;
+  events.enemyKilled = swing.kills > 0;
+
+  const damage = applyWorldDamage(world, previousX, previousY);
+  events.playerHurt = damage.hurt;
+  events.playerDied = damage.died;
 
   // 9c. Pickups — gears the player's body crossed this tick. Beside 9b because it needs the same two
   //     endpoints of this tick's motion, and AFTER it so a tick that both hurts and rewards does
@@ -301,6 +317,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   resolveState(player, dir !== 0 || player.vx !== 0, input.walkHeld, tuning);
 
   // 12. Emit edges (vault 2.5) — returned, never reconstructed by comparing state across frames.
+  //
+  //     The footstep is the only edge decided HERE rather than at the step that caused it, and it is
+  //     not an exception to that rule: its cause IS the state step 11 just resolved. The cadence
+  //     depends on whether this tick ended up `walk` or `run`, so it cannot be known any earlier.
+  //     `advanceStride` lives beside `resolveState` in `player.ts` for the same reason.
+  events.footstep = advanceStride(player);
 
   // 13. Advance every window counter, LAST, after every test of one.
   //

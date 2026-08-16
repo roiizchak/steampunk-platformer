@@ -127,6 +127,35 @@ if (existsSync(builtCatalog)) {
       problems.push(`catalog image "${entry.key}" points at ${entry.url}, which is not in dist/`);
     }
   }
+  // 🔴 Audio, byte for byte — criterion 7.5b. Before Phase 7 this script existence-checked only
+  // `levels` and `images`, so audio could fail to reach `dist/` and the build stayed green. 7.5b as
+  // originally written asked for a catalog row and a `request_id`, and neither proves DEPLOYMENT:
+  // both are satisfied by a file that exists on the author's disk and nowhere else. Codex plan
+  // review F6.
+  //
+  // Byte-equality as well as existence, matching the `.tmj` rule above. A truncated or re-encoded
+  // cue is a cue whose measured dBFS is no longer the number criterion 7.2 passed on — the gate
+  // would be describing a file the player never hears.
+  // 🔴 `?? []` was here and made the whole check optional: a `dist/assets/index.json` that lost its
+  // audio array passed with a cheerful "0 audio file(s) shipped byte-identical". An absent array is
+  // the failure, not the empty case.
+  if (!Array.isArray(catalog.audio) || catalog.audio.length === 0) {
+    problems.push('catalog has no audio array; criterion 7.5b cannot be satisfied by zero files');
+  }
+  for (const entry of catalog.audio ?? []) {
+    const built = join(root, 'dist', entry.url);
+    if (!existsSync(built)) {
+      problems.push(`catalog audio "${entry.key}" points at ${entry.url}, which is not in dist/`);
+      continue;
+    }
+    const source = join(root, 'public', entry.url);
+    if (existsSync(source) && !readFileSync(source).equals(readFileSync(built))) {
+      problems.push(
+        `catalog audio "${entry.key}" differs between public/ and dist/; ` +
+          'its measured level is no longer the level that ships',
+      );
+    }
+  }
   const authoredCatalog = readFileSync(join(root, 'public/assets/index.json'));
   if (!authoredCatalog.equals(readFileSync(builtCatalog))) {
     problems.push('dist/assets/index.json differs from public/assets/index.json');
@@ -139,7 +168,12 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+const shippedAudio = existsSync(builtCatalog)
+  ? (JSON.parse(readFileSync(builtCatalog, 'utf8')).audio ?? []).length
+  : 0;
+
+
 console.log(
-  `verify-dist ok: ${authored.length} level(s) shipped byte-identical, ` +
-    `no DEV-only scene key or debug surface in ${bundles.length} bundle(s)`,
+  `verify-dist ok: ${authored.length} level(s) and ${shippedAudio} audio file(s) shipped ` +
+    `byte-identical, no DEV-only scene key or debug surface in ${bundles.length} bundle(s)`,
 );

@@ -26,10 +26,12 @@ the index — `docs-contract.test.ts` addresses it by that name.
 | 4 — fal art production + Character Gym | [qa/phase-04-art.md](qa/phase-04-art.md) + [gate](qa/phase-04-art-gate.md) | [prd/phase-04-art.md](prd/phase-04-art.md) | [plan](reviews/phase-04-plan.md) · [impl](reviews/phase-04-impl.md) |
 | 5 — Combat, enemies and hazards | [qa/phase-05-combat.md](qa/phase-05-combat.md) + [9 parts](qa/) | [prd/phase-05-combat.md](prd/phase-05-combat.md) | [plan](reviews/phase-05-plan.md) · [impl](reviews/phase-05-impl.md) |
 | 6 — Collectibles, HUD, steampunk UI chrome | [qa/phase-06-hud.md](qa/phase-06-hud.md) | [prd/phase-06-hud.md](prd/phase-06-hud.md) | [plan](reviews/phase-06-plan.md) · [impl](reviews/phase-06-impl.md) |
+| 7 — Audio | [qa/phase-07-audio.md](qa/phase-07-audio.md) + [gate owners](qa/phase-07-audio-02-gate-owners.md) | [prd/phase-07-audio.md](prd/phase-07-audio.md) | [plan](reviews/phase-07-plan.md) · [impl](reviews/phase-07-impl.md) |
 
 > Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
 > not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads
 > the per-phase files by path, so a missing row here costs discoverability rather than a red suite.
+> Phase 7's row was added in the session that wrote the log, on the strength of that note.
 
 Each file holds that phase's `## Phase N —` section and its `## Vault-out — Phase N` section, moved
 verbatim. `tests/unit/docs-contract.test.ts` reads them by that path — see the split record at the

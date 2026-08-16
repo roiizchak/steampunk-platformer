@@ -98,6 +98,37 @@ export const LOCOMOTION_TICKS_PER_FRAME = 2;
 export const FOOT_PX_PER_FRAME = { run: 18.0, walk: 9.0 } as const;
 
 /**
+ * Ticks between footfalls, per locomotion state — Phase 7's `footstep` audio cue.
+ *
+ * **Derived from the shipped animation loop, not from a speed.** A locomotion cycle is two footfalls,
+ * and the cycle length is `frameCount × LOCOMOTION_TICKS_PER_FRAME`:
+ *
+ * ```
+ *            frames   ticks/frame   cycle       2 footfalls
+ *   walk     24       2             48 ticks    every 24
+ *   run      15       2             30 ticks    every 15
+ * ```
+ *
+ * ⚠️ **Do not re-derive this from `stridePxPerCycle`.** That figure — `{walk: 254, run: 320}` in
+ * `character-bounds.json` — is retired: `animTiming.ts` records it as "no longer used for timing",
+ * kept only because the asset file still holds the measurement. Phase 7's plan reached for it, and
+ * the Codex plan review (F8) caught that the number still written down was not the number still
+ * read. The live travel is `frameCount × FOOT_PX_PER_FRAME` — 216 px walking, 270 px running.
+ *
+ * **Ticks rather than pixels, and that is the load-bearing part.** A single distance constant cannot
+ * serve both loops (108 px vs 135 px per footfall), and a per-state distance table would still drift
+ * out of phase with the drawn feet whenever speed is not exactly at cap — during every acceleration
+ * ramp, every knockback settle, every slope. A tick count is locked to the animation the player is
+ * watching, and is natively an integer count of 60 Hz ticks *(vault 2.1)* rather than only
+ * incidentally so.
+ *
+ * Mirrored from `public/assets/index.json`'s `simTicks / 2`, exactly as `FOOT_PX_PER_FRAME` is
+ * mirrored from `character-bounds.json` — `src/sim/` may not read a file. `audio-cue-edges.test.ts`
+ * pins the two against the catalog so this cannot drift the way a retyped constant does.
+ */
+export const FOOTSTEP_TICKS = { walk: 24, run: 15 } as const;
+
+/**
  * Starting values, tuned by hand in the Playground.
  *
  * ## Phase 5 session 10 — the speed came DOWN, and it is now DERIVED

@@ -67,6 +67,22 @@ export function queueCatalog(
     });
   }
 
+  for (const cue of catalog.audio) {
+    // Same removal rule as images and sheets, and the same reason: an audio key already in the
+    // cache makes the loader skip the entry silently, after which an existence check passes for a
+    // file that was never fetched. A scene restart — which Boot performs on every refusal test —
+    // would otherwise turn this into a no-op the first time it mattered.
+    if (scene.cache.audio.exists(cue.key)) {
+      scene.cache.audio.remove(cue.key);
+    }
+    // A single URL, not the usual cross-browser array. The formats are chosen per file and are
+    // deliberate: WAV for the nine cues, because vault 7.1 requires them trimmed and a RIFF trim is
+    // thirty lines with no new dependency; OGG for the two beds, because they loop whole and need no
+    // local edit. Chromium decodes both. `docs/qa/phase-07-audio.md` records the browser-support
+    // trade this accepts.
+    scene.load.audio(cue.key, cue.url);
+  }
+
   // Loading and verification both live beside this function — see the header.
   queueLevels(scene, catalog.levels);
 }
@@ -138,6 +154,42 @@ export function verifySheets(scene: Phaser.Scene, catalog: AssetCatalog | undefi
       );
     }
     texture.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  }
+  return problems;
+}
+
+/**
+ * Every catalogued audio key is in the audio cache — the refuse-to-route pass images, sheets and
+ * levels each already had, and audio did not.
+ *
+ * 🔴 **A decode failure is SILENT, and that is why this exists.** Phaser's `WebAudioFile` routes a
+ * failed decode to `onProcessError`, which logs to the console, emits no event and does not
+ * increment `totalFailed`. So the loader completes, boot routes, and the key is simply absent from
+ * `cache.audio`. `AudioManager.playCues` then skips it through its own `exists()` guard and
+ * `startBeds` warns and continues — by design, because neither should crash the game.
+ *
+ * The result is a build that boots clean, plays fine, and **has no sound**, blamed by the player on
+ * their own speakers. `assetCatalog.ts`'s `audio` docstring names that as the defect the catalog
+ * validation guards against; nothing actually enforced it until here.
+ *
+ * The gate owner's brief found this by comparing the three existing verifiers against the new
+ * fourth asset kind that never got one.
+ *
+ * Same `describeCatalogProblem` guard the other three carry, and for the reason vault 1.4 records:
+ * `create()` collects problems and only then calls `refuseToRoute`, so a verifier that THROWS while
+ * collecting means the refusal never happens and boot hangs at `ready:false` / `bootError:null` —
+ * the exact state refuse-to-route exists to prevent.
+ */
+export function verifyAudio(scene: Phaser.Scene, catalog: AssetCatalog | undefined): string[] {
+  if (describeCatalogProblem(catalog) || !catalog) {
+    return [];
+  }
+
+  const problems: string[] = [];
+  for (const entry of catalog.audio) {
+    if (!scene.cache.audio.exists(entry.key)) {
+      problems.push(`audio "${entry.key}" did not decode (${entry.url})`);
+    }
   }
   return problems;
 }

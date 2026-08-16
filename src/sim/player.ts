@@ -17,6 +17,7 @@ import { isCombatState, knockbackSettling } from './combat';
 import type { LocalBox, PlayerSim, PlayerState, Rect, TuningKnobs } from './types';
 import {
   DEFAULT_TUNING,
+  FOOTSTEP_TICKS,
   PLAYER_BOX,
 } from './playerTuning';
 
@@ -24,6 +25,7 @@ import {
 // themselves moved to `playerTuning.ts` on 2026-08-15 (criterion 4.16 / 5.12).
 export {
   DEFAULT_TUNING,
+  FOOTSTEP_TICKS,
   FOOT_PX_PER_FRAME,
   LOCOMOTION_TICKS_PER_FRAME,
   PLAYER_BOX,
@@ -119,6 +121,71 @@ export function resolveState(
   }
   const walking = walkHeld && Math.abs(player.vx) <= tuning.walkMax;
   enterState(player, walking ? 'walk' : 'run');
+}
+
+/**
+ * Advance the stride counter and report whether a foot planted on this tick — Phase 7's cue.
+ *
+ * Called AFTER `resolveState`, because the cadence depends on which locomotion state the tick
+ * actually resolved to. Lives here, beside that decision, rather than in `tick.ts`: the two are one
+ * concept and splitting them is how the cadence and the drawn feet drift apart.
+ *
+ * The counter is zeroed whenever the feet are not planted and moving — airborne, idle, hurt, dead —
+ * so a jump cannot carry half a stride into the landing, and a footstep never fires on the tick a
+ * player touches down. That moment already has its own cue: `landed`.
+ *
+ * ## 🔴 Two things `state` alone could not tell this function, both measured
+ *
+ * **A state of `run` does not mean the player is moving.** `resolveState` takes
+ * `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into a wall keeps the state
+ * at `run` after the collision has zeroed `vx`. The first version of this guard tested only
+ * grounded-and-locomoting, and so played a footstep every fifteen ticks, indefinitely, for a player
+ * standing still against a wall — 13 of them in 200 ticks when the gate owner measured it. `vx` is
+ * therefore tested directly. It is exactly zero after a collision resolves, so this needs no
+ * epsilon; `resolveState` keeps its own `dir !== 0` term, which exists for animation reasons that
+ * have nothing to do with cadence.
+ *
+ * **`walk` and `run` are different cadences sharing one counter.** 24 ticks against 15, and the
+ * counter used to carry across a change of gait — so releasing the walk modifier at a count of 20
+ * fired instantly, because 20 already exceeds `run`'s threshold. On that same tick `playIfChanged`
+ * restarts the sprite at frame 0, so the cue landed at the *start* of a stride rather than on a
+ * plant: precisely the phase relationship a tick-locked cadence is supposed to buy. Every tap of
+ * the walk key did this. The gait is now remembered and a change restarts the count.
+ *
+ * ## ⚠️ What the `vx` reset costs, and why it is still the right trade
+ *
+ * Codex implementation review C1. The cadence is **locked, not phase-locked**. While the player is
+ * pinned against a wall the state stays `run`, so `playIfChanged` sees no key change and the run
+ * animation keeps cycling — but this counter is now zeroed. Reversing away in the same gait
+ * therefore restarts the count against an animation that is mid-cycle, and the cue no longer lands
+ * on the drawn plant frame.
+ *
+ * Kept anyway: silence at a standstill is a smaller defect than a footstep every 250 ms at a
+ * standstill, which is what the alternative shipped.
+ *
+ * 🔴 **The root cause is not here.** The character *animates a run cycle while motionless*, because
+ * `resolveState` takes `movingHorizontally = dir !== 0 || vx !== 0`. Fix that and both readings
+ * agree without this function knowing anything about it. It is deliberately not fixed in an audio
+ * phase: that `dir !== 0` term exists for animation reasons predating Phase 7 and changing it moves
+ * every locomotion assertion from Phase 2 onward.
+ */
+export function advanceStride(player: PlayerSim): boolean {
+  const gait = player.state === 'walk' || player.state === 'run' ? player.state : null;
+  if (!player.grounded || gait === null || player.vx === 0) {
+    player.strideCounter = 0;
+    player.strideGait = null;
+    return false;
+  }
+  if (player.strideGait !== gait) {
+    player.strideGait = gait;
+    player.strideCounter = 0;
+  }
+  player.strideCounter += 1;
+  if (player.strideCounter < FOOTSTEP_TICKS[gait]) {
+    return false;
+  }
+  player.strideCounter = 0;
+  return true;
 }
 
 /**

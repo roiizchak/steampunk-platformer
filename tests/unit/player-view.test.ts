@@ -41,6 +41,8 @@ function playerAt(overrides: Partial<PlayerSim> = {}): PlayerSim {
     combatCounter: 0,
     iFrameCounter: IFRAME_TICKS,
     knockbackPending: false,
+    strideCounter: 0,
+    strideGait: null,
     ...overrides,
   };
 }
