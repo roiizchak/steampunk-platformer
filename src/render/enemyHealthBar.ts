@@ -87,9 +87,39 @@ export interface BarSubject {
  * Clamped at both ends and monotone in between. `hp <= 0` is the ONLY input that yields 0 — that
  * equivalence is the criterion, and `fillIsHonest` states it as a predicate.
  */
-export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): number {
+export function healthBarFillWidth(
+  hp: number,
+  maxHp: number,
+  slotW: number,
+  maxPartialFraction = 1,
+): number {
   if (!(maxHp > 0)) {
     throw new Error(`healthBarFillWidth: maxHp must be greater than 0, got ${maxHp}`);
+  }
+  if (!(maxPartialFraction > 0) || maxPartialFraction > 1) {
+    throw new Error(
+      `healthBarFillWidth: maxPartialFraction must be in (0, 1], got ${maxPartialFraction}`,
+    );
+  }
+  // 🔴 The compressed range must have room for the floor, or the mapping INVERTS.
+  //
+  // `liveMax - BAR_MIN_FILL_PX` goes negative once the slot is narrow enough, and a healthier
+  // player then draws a NARROWER bar: the adversarial QA brief executed it — at slotW 3,
+  // `healthBarFillWidth(1, 3, 3, 0.92)` returned 3 and `(2, 3, 3, 0.92)` returned 2. Dead in
+  // practice today because the only 4-argument caller passes a fixed 239 px slot, but this function
+  // is generic and exported, and this phase has already watched the HUD plate change size once.
+  // Throwing beats silently inverting a health bar.
+  if (Math.floor(slotW * maxPartialFraction) <= BAR_MIN_FILL_PX) {
+    throw new Error(
+      `healthBarFillWidth: slot ${slotW} at fraction ${maxPartialFraction} leaves no room above ` +
+        `the ${BAR_MIN_FILL_PX}px floor — the mapping would invert and a healthier bar would draw ` +
+        `narrower.`,
+    );
+  }
+  if (!Number.isFinite(hp)) {
+    // NaN skips both the `<= 0` and `>= maxHp` branches below and propagates through `Math.round`
+    // into `fillRect`, which Canvas drops in silence — a bar that is wrong without being broken.
+    throw new Error(`healthBarFillWidth: hp must be a finite number, got ${hp}`);
   }
   if (hp <= 0) {
     return 0;
@@ -99,7 +129,18 @@ export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): nu
   }
   // The compression. `BAR_MIN_FILL_PX` is the floor of the live range, not a special case bolted
   // onto the outside of it — which is what keeps the mapping monotone.
-  return Math.round(BAR_MIN_FILL_PX + (hp / maxHp) * (slotW - BAR_MIN_FILL_PX));
+  //
+  // `maxPartialFraction` is the CEILING of that live range, and it is the vault 6.4 countermeasure:
+  // below max health the bar is compressed into the first fraction of the slot, so full width is
+  // reserved for actually-full. It defaults to 1, which is Phase 5's behaviour exactly — an enemy
+  // bar makes no readiness claim and is entitled to look full at 99%. The player's HUD passes
+  // `HUD_READY_FRACTION`; see `playerHud.ts`.
+  //
+  // Compressing the RANGE rather than clamping the top is what keeps this monotone. Subtracting a
+  // few pixels near the end would make two different health values draw the same width, which is a
+  // second lie in place of the first one.
+  const liveMax = Math.floor(slotW * maxPartialFraction);
+  return Math.round(BAR_MIN_FILL_PX + (hp / maxHp) * (liveMax - BAR_MIN_FILL_PX));
 }
 
 /**
@@ -108,11 +149,44 @@ export function healthBarFillWidth(hp: number, maxHp: number, slotW: number): nu
  * Stated as an equivalence rather than a one-way check: a living enemy must draw a visible bar, AND
  * a dead one must draw nothing. Only asserting the first direction passes a bar that is always full.
  */
-export function fillIsHonest(fillW: number, slotW: number, hp: number): boolean {
+export function fillIsHonest(
+  fillW: number,
+  slotW: number,
+  hp: number,
+  maxHp?: number,
+  maxPartialFraction?: number,
+): boolean {
+  // 🔴 Supplying `maxHp` without the fraction used to default it to 1, which collapses the vault
+  // 6.4 branch below to `fillW <= slotW` — something the range check two lines down has ALREADY
+  // guaranteed. So a four-argument call read as if it had opted into the "never full below max"
+  // check and actually checked nothing, returning `true` for precisely the defect the predicate
+  // exists to reject. Confirmed by execution in the adversarial QA brief:
+  // `fillIsHonest(239, 239, 99, 100)` was `true`.
+  //
+  // The two arguments are one decision, so they are required together.
+  if ((maxHp === undefined) !== (maxPartialFraction === undefined)) {
+    throw new Error(
+      'fillIsHonest: pass BOTH maxHp and maxPartialFraction, or neither. Supplying maxHp alone ' +
+        'silently disables the very check it looks like it is enabling.',
+    );
+  }
   if (hp <= 0) {
     return fillW === 0;
   }
-  return fillW >= BAR_MIN_FILL_PX && fillW <= slotW;
+  if (!(fillW >= BAR_MIN_FILL_PX && fillW <= slotW)) {
+    return false;
+  }
+  // The vault 6.4 half, and it is deliberately OPT-IN through `maxHp`.
+  //
+  // Criterion 5.7's call sites pass three arguments and mean the Phase 5 claim: a living bar is
+  // visible, a dead one is empty. Criterion 6.4's call sites pass five and mean that AND "a bar
+  // below max does not draw full". Extending the predicate rather than writing a second one is what
+  // keeps a single definition of "this bar is honest" — two predicates that agree on the happy path
+  // are not one gate *(vault 5.3)*.
+  if (maxHp !== undefined && maxPartialFraction !== undefined && hp < maxHp) {
+    return fillW <= Math.floor(slotW * maxPartialFraction);
+  }
+  return true;
 }
 
 /** Each subject's body height in local units, so the bar clears the head rather than the feet. */

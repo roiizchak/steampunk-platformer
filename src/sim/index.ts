@@ -52,10 +52,13 @@ export {
   stepVertical,
   toWorld,
 } from './player';
-export { GREY_BOX_SOLIDS, advance, createWorld, tick } from './tick';
+export { GREY_BOX_SOLIDS, advance, createWorld, noEvents, tick } from './tick';
+export { advanceSplit, mergeEvents } from './advanceSplit';
 export { advanceWindow, windowOpen } from './windows';
 export type { Clampable, WorldBounds } from './hazards';
 export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, segmentHitsRect } from './hazards';
+export type { GearSim, GearSpawn } from './pickups';
+export { GEAR_BOX, collectGears, spawnGears } from './pickups';
 export type { Projectile } from './projectiles';
 export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
 export { KNOCKBACK_SPEED, applyWorldDamage } from './worldDamage';

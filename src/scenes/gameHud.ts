@@ -1,38 +1,45 @@
 import type Phaser from 'phaser';
-import { HUD_SLOT, playerHudFill } from '../render/playerHud';
+import { UIScene } from './UIScene';
+import { GearLayer } from './gearLayer';
+import type { World } from '../sim/types';
 
 /**
- * The HUD: portrait medallion plus one continuous health bar, pinned to the camera. Split out of
- * `GameScene.ts` to keep that file under the 400-line rule — the fill geometry decision already
- * lives engine-free in `src/render/playerHud.ts`; this is only the Phaser plumbing around it.
+ * The seam between `GameScene` and everything that draws the player's status.
  *
- * Drawn at the assembly's authored size with `setScrollFactor(0)` so it never scrolls, and at a
- * high depth so nothing in the world can cover it.
+ * ## What this file used to be
+ *
+ * Until Phase 6 it owned the HUD outright: it added `hud-health` at `setScrollFactor(0)` on
+ * `GameScene`'s own display list and painted the spent portion of the bar over it. That worked and
+ * it was wrong for one reason — **a zero scroll factor pins an object against camera pan but not
+ * against camera zoom** *(vault 6.1)*. The HUD was correct only because `CAMERA_ZOOM` happens to be
+ * 1; the first zoom would have scaled it with the world.
+ *
+ * The HUD moved to a parallel `UIScene`, which has its own camera and its own display list. This
+ * file kept its name and its job description — *the Phaser plumbing around the HUD* — and is now
+ * the two lines of plumbing that remain. It is not deleted because `GameScene` is this project's
+ * only file over the 400-line ceiling, and every line kept out of it is load-bearing.
  */
-export function createHud(scene: Phaser.Scene): Phaser.GameObjects.Graphics {
-  scene.add
-    .image(24, 24, 'hud-health')
-    .setOrigin(0, 0)
-    .setScrollFactor(0)
-    .setDepth(1000);
-  // Drawn OVER the art, at a higher depth. Phase 4 shipped the image alone, so the bar was full
-  // gold at any hp — a bar that lies, on the player's own health. Found by playtesting; no unit
-  // test in the suite looks at the HUD, which is exactly vault C4.
-  return scene.add.graphics().setScrollFactor(0).setDepth(1001);
+
+/** What `GameScene` holds on to after attaching the HUD. */
+export interface HudAttachment {
+  ui: UIScene;
+  gears: GearLayer;
 }
 
-export function renderHud(hudFill: Phaser.GameObjects.Graphics, hp: number, maxHp: number): void {
-  const fill = playerHudFill(hp, maxHp, 24, 24);
-  hudFill.clear();
+/**
+ * Launch the parallel HUD scene and build the world's gear bodies.
+ *
+ * `launch`, never `start`: `start` would stop the calling scene, which is the entire difference
+ * between a HUD that runs alongside the game and a HUD that replaces it. The `isActive` guard is
+ * for the restart path — an e2e spec re-entering `BootScene` runs `create()` again, and launching a
+ * scene that is already running stacks a second copy of every HUD object.
+ */
+export function attachHud(scene: Phaser.Scene, world: World): HudAttachment {
+  const gears = new GearLayer(scene, world);
+  gears.create();
 
-  // The EMPTY portion is what gets painted, not the full one. `hud-health.png` already contains a
-  // completely full gold bar, so drawing a gold fill over it was invisible — gold on gold, which
-  // is how the first version of this fix looked identical to the bug it was fixing. Blanking the
-  // spent part turns the art's bar into the lit portion and the drawn rectangle into the drained
-  // one, which also means the bezel and highlights in the art survive untouched.
-  const spentX = fill.x + fill.w;
-  const spentW = HUD_SLOT.w - fill.w;
-  if (spentW > 0) {
-    hudFill.fillStyle(0x241c18, 0.92).fillRect(spentX, fill.y, spentW, fill.h);
+  if (!scene.scene.isActive('UI')) {
+    scene.scene.launch('UI');
   }
+  return { ui: scene.scene.get('UI') as UIScene, gears };
 }

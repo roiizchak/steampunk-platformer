@@ -1,14 +1,20 @@
-# Session handoff — Phase 5 (combat, enemies, hazards)
+# Session handoff — Phase 6 (collectibles, HUD, steampunk UI chrome)
 
-**Branch:** `phase-05-combat`. **Written:** 2026-08-09 (session 1), amended each session since.
-**§14 (session 8, 2026-08-13) supersedes §13 and everything above it. Read §14 first.**
+**Branch:** `phase-06-hud`. **Written:** 2026-08-09 (Phase 5, session 1), amended each session since.
+**§16 (2026-08-15) supersedes §15 and everything above it. Read §16 first.**
 > ⚠️ **This document is stale from the first commit of any session that will rewrite it.**
 > Two Codex blockers and one QA brief in session 7 were caused by reading it mid-flight.
 > If you are reviewing during a session, ask which sections are known stale.
-**Phase 5 is NOT complete and must not be reported complete.**
+
+🔴 **§14 and §15 below say "Phase 5 is FAILING". That was true when they were written and is not
+true now** — Phase 5 closed on 2026-08-15 and merged at `c38c76b`. **This header was itself the
+example**: it carried "Phase 5 is NOT complete" for eleven days past the merge, while
+[PRD.md](PRD.md) marked the phase done, and the Phase 6 plan review had to be told which documents
+to disbelieve. Sections are superseded, never edited in place; the header is the one place that
+tracks the truth, so it is the one place to look first.
 
 Read this first, then [PRD.md](PRD.md), then
-[prd/phase-05-combat.md](prd/phase-05-combat.md) §6 (the gate), then
+[prd/phase-06-hud.md](prd/phase-06-hud.md) §6 (the gate), then
 [qa/phase-05-combat.md](qa/phase-05-combat.md) (what has already been decided and measured — **read
 it before re-measuring anything**).
 
@@ -32,6 +38,52 @@ section moves to `docs/handoff/`. The live sessions stay in this file.
 | §12, §12b, §13 | sessions 6–7 — 2026-08-11/12 | [handoff/sessions-06-07.md](handoff/sessions-06-07.md) |
 | §14 | session 8 — 2026-08-13 | below |
 | §15 | sessions 9–10 — 2026-08-13/14 | below |
+| §16 | Phase 6, session 1 — 2026-08-15 | below |
+| §17 | **Phase 6, session 2 — 2026-08-16. Phase 6 CLOSED.** | below |
+
+---
+
+## 16. Phase 6, session 1 — 2026-08-15. **This section supersedes §15 and everything above it.**
+
+> 🔴 **RESUMING PHASE 6? READ [handoff/phase-06-owed.md](handoff/phase-06-owed.md) FIRST.**
+> It is the complete list of what is left, with two options and a recommendation on each, and it is
+> the document the next session was written for. **Phase 6 is NOT done** — criterion 6.9's
+> frame-budget half is unrun — and the branch `phase-06-hud` is not merged.
+
+**Phase 5 is done.** Closed 2026-08-15, merged at `c38c76b`, and `b8546a8` then took the over-400-line
+file count from seven to one. **`src/scenes/GameScene.ts` at 459 lines is now the only file over the
+ceiling, and `tests/unit/file-size.test.ts` allows exactly one** — so any new Phase 6 file that
+crosses 400 is a hard red, and `tilemap.ts` (374), `GymScene.ts` (399) and `build-assets.mjs` (398)
+are all close enough that an ordinary edit tips them.
+
+**Phase 6 opened on `phase-06-hud`.** Baseline before the first change: typecheck clean · 1146 unit
+tests pass · `npm run build` + `verify-dist` ok.
+
+### Four things the code does not tell you, found while planning this phase
+
+- 🔴 **The player's health bar already has the vault 6.4 defect.** `healthBarFillWidth(99, 100, 156)`
+  returns **154 of 156 px** — a visually full bar at 99 % health, which is vault 6.4's "315 of 318 px"
+  case on the bar that matters most. It shipped in Phase 5 and no gate looks at it.
+- 🔴 **The canvas is centred twice.** [index.html](../index.html) gives `#game` a flex centre while
+  `config.ts:30` sets `autoCenter: CENTER_BOTH`, which writes CSS margins. Vault 6.6/6.7 exactly, and
+  it is what criterion 6.7 exists to catch.
+- 🔴 **`GameScene.update()` throws away events.** The split batch at `GameScene.ts:253-262` keeps only
+  the last tick's events and discards those from `advance(world, input, ticks - 1)`. **This is a
+  Phase 5 defect, not a Phase 6 one** — any edge landing in a dropped tick is silently lost — and no
+  Phase 5 gate found it. Codex's plan review did (finding F8).
+- **The HUD is not missing.** `assets/hud/health-assembly.png` ships, is catalogued as `hud-health`,
+  and was generated on the **current** model, not a retired one. The phase doc's "drawn by a model we
+  no longer use" is about the HUD *inside the anchor scene image*. The user chose to re-shoot anyway
+  with that stated; the cost is a hand re-measure of `HUD_SLOT`, which no gate can catch.
+
+### Decisions taken before any code
+
+Recorded here because none of them is derivable from the diff: minimum supported resolution is
+**both** 1280×720 and 852×480 · gears come from a **Tiled object layer**, like hazards and enemies ·
+up to **10 fal generations** authorised · **every pixel, screenshot and timing number in this phase
+comes from the `chromium-gpu` Playwright project**, headed and on a real GPU — the headless project
+is for logic regression only, because SwiftShader inflates milliseconds ~21× and is not the
+rasteriser a player sees.
 
 ---
 
@@ -358,3 +410,59 @@ bytes* — and the art gates are the one place this project does not do it.
   name appeared in an unrelated citation.
 - **The e2e suite now has two Playwright projects.** `chromium` for everything, and `chromium-gpu`
   — headed, real GPU — for `phase-05-perf.spec.ts` only. It opens a window when it runs.
+
+---
+
+## 17. Phase 6, session 2 — 2026-08-16. **This section supersedes §16.**
+
+> ✅ **Phase 6 is DONE and marked ✅ in [PRD.md](PRD.md).** Criterion 6.9's frame budget — the
+> blocker — is measured. The ten-item owed list is resolved. The A7 shortfall is closed: all three
+> missing brief 2s ran, and eight gate-owner runs happened in total. Codex's implementation review
+> ran a second time.
+>
+> **Not merged.** Stopped for approval, per the phase workflow.
+
+**State, all re-run after the last edit:** typecheck clean · **1224 unit tests pass** · **1224 pass
+with Phaser uninstalled** · `npm run build` + `verify-dist` ok · **48/48 headless e2e** · **23/23 on
+`chromium-gpu`, 1 skipped** · port 5173 clear · Phaser 4.2.1 restored.
+
+**The measurement that closed the phase.** The HUD costs **~0.1 ms of main thread and ~0.003 ms of
+GPU per frame** — 0.6 % and 0.02 % of a 16.67 ms frame — measured as three interleaved
+HUD-on/HUD-off pairs on a real GPU, in a damaged state so the bar actually draws. Full table,
+bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
+
+### The three things worth knowing before the next session
+
+1. **The recorded "false green the suite cannot catch" does not exist.** Vitest fails both shapes —
+   an unimportable test file and a file with zero tests — and exits non-zero. What happened in
+   session 1 was a misread: the `Tests N passed` line stays green and merely *drops*, while the
+   redness is on the `Test Files` line and in the exit code. No gate was built; building one would
+   have been decoration.
+2. **HUD lifetime by scene-event ordering is a trap.** Three implementations: a `GameScene` SHUTDOWN
+   handler (deleted the HUD on restart — both code-reviewer briefs traced it from Phaser's sources
+   before any test caught it), `attachHud` stop-then-launch (broke the dev-toggle teardown), and
+   finally `UIScene.update()` retiring itself when `GameScene`'s status `>= SLEEPING`. Only the
+   condition is order-independent. **PAUSED still renders and must be kept** — criterion 6.4's spec
+   pauses `Game` deliberately.
+3. **A real defect was found and fixed in the boot path.** A refusal that follows a *successful*
+   boot left the HUD frozen over the error screen, with the render loop throwing
+   `TypeError: … reading 'glTexture'`. The stop was in the right place but ran too late: on a restart
+   the play scenes render on through the reload that frees their textures, and the crash kills the
+   loop before `refuseToRoute` can stop anything. **Fixed by stopping `Game` and `UI` in
+   `BootScene.init()`** — a no-op on a fresh boot. Found only by writing the test Codex said was
+   missing; the old one used a fresh page where the HUD was never running, so it could not go red for
+   the line it named.
+
+### Carried forward
+
+- **Phase 7:** the three `hudObjects()` call sites that bypass `waitForHud`.
+- **Phase 8:** the gear-burial check misses a gear on the **seam between two floor rects** — a 96 px
+  grid makes that the default authoring outcome, and Phase 8 is the phase that authors multi-rect
+  floors. Also re-measure counter contrast against any new palette: the fill alone is 3.13:1 on
+  mid-grey and 1.13:1 on bright sky.
+- **Phase 9:** `addHelpBanner`'s literal `18px` (~8 physical px at 852×480 — **confirmed illegible in
+  the playtest screenshot**) and its `setScrollFactor(0)`, which re-creates vault 6.1's pattern
+  outside `UIScene`; DPR ≠ 1 centring; the collect-tween polish.
+- **Phase 4 debt:** only **4.2b** (owner decision — an ordering violation no work can undo) and
+  **4.27** remain. 4.10/4.12 were already closed; **4.16 closed this session**. The PRD row was
+  stale and is corrected.

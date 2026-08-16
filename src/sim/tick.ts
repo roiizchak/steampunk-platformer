@@ -20,6 +20,7 @@
  *   8.  Integrate, semi-implicit Euler: v first, then position     (2.14)
  *   9.  Collide and resolve -> grounded, then clamp to the world's three solid edges
  *   9b. World-geometry damage: kill plane, hazards, projectiles, enemy contact  (Phase 5)
+ *   9c. Pickups: gears the player's body crossed this tick                      (Phase 6)
  *   10. Window arming: left the ground this tick -> open coyote
  *   11. State transition, through the one door                     (2.6)
  *   12. Emit this tick's event edges                               (2.5)
@@ -45,6 +46,10 @@
  * number because renumbering this list is a balance change to a phase that has spent money on art,
  * and because 9b genuinely is part of resolving where the body ended up. Full reasoning, and the
  * one-tick knockback delay it costs, in `worldDamage.ts`.
+ *
+ * **9c was INSERTED, not renumbered in** (Phase 6). It is a letter for the same reason 9b is: it
+ * needs both endpoints of this tick's motion, and the list itself must not shift. It sits after 9b
+ * so a tick that both hurts and rewards does both. See `pickups.ts`.
  *
  * **State moved from step 4 to step 11 after Codex implementation review I4.** Resolved before
  * integration, the state published each tick described the position of the PREVIOUS one: a jump's
@@ -91,6 +96,7 @@ import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './
 import { releaseAggro } from './enemies';
 import { stepEnemies } from './enemyTurn';
 import { clampToBounds } from './hazards';
+import { collectGears } from './pickups';
 import { applyPlayerAttack } from './playerAttack';
 import { applyWorldDamage } from './worldDamage';
 import { nextFloat } from './rng';
@@ -100,7 +106,7 @@ import { advanceWindow, windowOpen } from './windows';
 export { GREY_BOX_SOLIDS, createWorld } from './world';
 export type { CreateWorldOptions } from './world';
 
-function noEvents(): TickEvents {
+export function noEvents(): TickEvents {
   return {
     jumped: false,
     landed: false,
@@ -109,6 +115,7 @@ function noEvents(): TickEvents {
     hitActive: false,
     hitLanded: false,
     respawned: false,
+    gearCollected: false,
   };
 }
 
@@ -263,6 +270,14 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     can trade a hit back — see `playerAttack.ts`, which also records why that is ungated.
   events.hitLanded = applyPlayerAttack(world) > 0;
   applyWorldDamage(world, previousX, previousY);
+
+  // 9c. Pickups — gears the player's body crossed this tick. Beside 9b because it needs the same two
+  //     endpoints of this tick's motion, and AFTER it so a tick that both hurts and rewards does
+  //     both: damage swallowing a pickup is a silent loss the player reads as the pickup not
+  //     working. See `pickups.ts` for why the count and the edge are kept from one number.
+  const gearsTaken = collectGears(world, previousX, previousY);
+  world.gearsCollected += gearsTaken;
+  events.gearCollected = gearsTaken > 0;
 
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at
   //     step 8 and must not reopen it here, or every jump would buy a second one in mid-air.

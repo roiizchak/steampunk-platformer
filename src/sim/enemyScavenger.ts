@@ -2,7 +2,7 @@ import type { Rect } from './types';
 import type { Sighting } from './enemies';
 import { ENEMY_DEAD_ZONE, groundUnder, withinRadius } from './enemyGeometry';
 import { TILE_SIZE } from '../game/constants';
-import { attackInProgress, maybeStartSwing } from './scavengerAttack';
+import { SCAVENGER_ATTACK_TICKS, attackInProgress, maybeStartSwing } from './scavengerAttack';
 
 /* ------------------------------------------------------------------ *
  * rust-scavenger — patrols, detects, then chases until it is killed.
@@ -219,6 +219,31 @@ export function detects(scavenger: Scavenger, at: Sighting): boolean {
 export function releaseAggro(scavenger: Scavenger): void {
   scavenger.chasing = false;
   scavenger.chaseCounter = 0;
+  /**
+   * 🔴 Phase 5 finding **R5**, closed in Phase 6.
+   *
+   * A swing in progress is part of what aggro produced, so releasing aggro has to end it too.
+   * Without this line a scavenger caught mid-windup when the player died carried the live strike
+   * window through the respawn — recorded in Phase 5 as harmless *because `level-01`'s respawn
+   * point is far away*, which is a fact about one level's geometry rather than about this code.
+   *
+   * ## Why `SCAVENGER_ATTACK_TICKS` and not `attackCooldown`
+   *
+   * It was `attackCooldown` — "idle and ready", the value `createScavenger` starts at — and both
+   * code-reviewer briefs caught that this **refunds the entire cooldown**. `attackCounter` counts
+   * up, a swing begins by resetting it to 0, and a new swing is gated on
+   * `attackCounter >= attackCooldown`. So saturating it means a scavenger that had just swung is
+   * *instantly re-armed* by the player dying, where before it had up to a full cooldown of grace.
+   * That is a balance change smuggled inside a bug fix, and it points the wrong way — `tick.ts`
+   * says plainly that each death must not leave the level harder than the last.
+   *
+   * `SCAVENGER_ATTACK_TICKS` is the end of the swing window and nothing more: it ends the strike
+   * (`windowOpen` is false at exactly the window length) while leaving the cooldown to keep running
+   * from there. `Math.max` so a scavenger already past the window is never wound *backwards*.
+   *
+   * R5 asked that the live strike window end. This ends it, and changes nothing else.
+   */
+  scavenger.attackCounter = Math.max(scavenger.attackCounter, SCAVENGER_ATTACK_TICKS);
 }
 
 /**

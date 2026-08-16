@@ -82,7 +82,9 @@ and nothing else moves.**
 
 | [generations/phase-05-fall-reshoot.md](generations/phase-05-fall-reshoot.md) | Phase 5 — `brass-courier/fall` (D1). Both courier levers at once, G6 5-of-8 → **0 of 9**; first take adopted, second authorised attempt not spent. Empties `BLOCKED_ON_ART` | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
 
-**Phase 5 running total: $47.31 of the $55 ceiling. $7.69 remains.**
+| [generations/phase-06-hud.md](generations/phase-06-hud.md) | Phase 6 — the gear pickup, and the HUD re-shot on the user's decision. Both first takes, both adopted. The re-shoot came back **413 × 128 where the retired plate was 305 × 128**, and every constant measured off the old one was wrong the moment it landed | `fal-ai/nano-banana-pro` | 2 · $0.30 |
+
+**Running total after Phase 6: $47.61 of the $55 ceiling. $7.39 remains.**
 
 > 🔴 This line read **"25 generations, $23.51 of the $40 ceiling"** until 2026-08-14 — stale by two
 > ceiling raises and four gate groups, and the three rows above were missing from the table entirely.

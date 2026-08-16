@@ -29,8 +29,7 @@
  * failure mode the editor was built to find, made representable.
  */
 
-import { ENEMY_SLUGS, type EnemySlug, type EnemySpawn } from '../sim/enemies';
-import { MAX_LEVEL_ENEMIES } from './constants';
+import { type EnemySlug, type EnemySpawn } from '../sim/enemies';
 import type { Rect } from '../sim/types';
 import {
   allObjects,
@@ -46,12 +45,19 @@ import {
   type TiledMap,
   type TiledObject,
 } from './tiledObjects';
+import {
+  describeEnemyProblem,
+  describeGearProblem,
+  gearSpawns,
+  isGearObject,
+} from './tiledEntities';
 
 /**
  * Re-exported, not re-implemented. `ElementEditorScene` and the unit tests have imported these
  * from `tilemap` since Phase 3; the Phase 5 split moved the definitions, not the entry point.
  */
 export { isHazardObject, isSolidObject } from './tiledObjects';
+export { isGearObject } from './tiledEntities';
 
 /**
  * Re-exported from the sim, which owns the roster and the constructors. See `EnemySpawn` there
@@ -78,6 +84,8 @@ export interface LevelData {
   hazards: Rect[];
   /** Where each enemy starts, read from the file rather than hardcoded in a scene. */
   enemies: EnemySpawn[];
+  /** Gear pickups — centres, world space. Points in the file; `GEAR_BOX` gives them their size. */
+  gears: { x: number; y: number }[];
 }
 
 /**
@@ -263,51 +271,25 @@ export function describeLevelProblem(raw: unknown): string | null {
     return `spawn (${spawn.x}, ${spawn.y}) has no solid beneath it — the player falls out of the world`;
   }
 
-  const enemyObjects = objects.filter(isEnemyObject);
-  if (enemyObjects.length > MAX_LEVEL_ENEMIES) {
-    // Refuse, never truncate. Silently dropping the 23rd enemy is a fallback for a bad input —
-    // vault 1.3's named bug — and the level would boot looking merely *empty*, which is the exact
-    // failure the unknown-slug rule above already refuses for the same reason.
-    return (
-      `${enemyObjects.length} enemies, over the ${MAX_LEVEL_ENEMIES} the frame budget has been ` +
-      `measured at (criterion 5.11). Raising this cap means RE-MEASURING 5.11, not editing the ` +
-      `number — see MAX_LEVEL_ENEMIES.`
-    );
+  // The entity rules live in `tiledEntities.ts` — see that file's header for why they moved. Both
+  // return the same one-line-reason-or-null this function does, so they compose without unwrapping.
+  const enemyProblem = describeEnemyProblem(objects.filter(isEnemyObject), solids);
+  if (enemyProblem !== null) {
+    return enemyProblem;
   }
 
-  for (const [index, enemy] of enemyObjects.entries()) {
-    const slug = stringProperty(enemy, 'enemy');
-    if (slug === null) {
-      return `enemy #${index} declares an \`enemy\` property that is not a string`;
-    }
-    if (!(ENEMY_SLUGS as readonly string[]).includes(slug)) {
-      // Without this the level boots one enemy short and looks merely empty. The roster lives in
-      // `src/sim/enemies.ts` — the module that constructs them — so a slug cannot be known here
-      // and unbuildable there.
-      return `enemy #${index} has unknown slug \`${slug}\` — known slugs are ${ENEMY_SLUGS.join(', ')}`;
-    }
-    if (typeof enemy.x !== 'number' || typeof enemy.y !== 'number') {
-      return `enemy #${index} \`${slug}\` has a non-numeric position`;
-    }
-    // A point-authored enemy would collapse its patrol beat to a single x and put its feet at the
-    // rectangle's top — mirroring, and inverted from, the spawn's must-be-a-point rule.
-    if (
-      typeof enemy.width !== 'number' ||
-      typeof enemy.height !== 'number' ||
-      !(enemy.width > 0) ||
-      !(enemy.height > 0)
-    ) {
-      return `enemy #${index} \`${slug}\` must be a rectangle — its width and height are its patrol beat and its height, got ${String(enemy.width)} x ${String(enemy.height)}`;
-    }
-    // BOTH ends of the beat, not the centre: a patrol that overhangs its platform walks on air at
-    // one end only, and the centre cannot see that. Same predicate as the spawn check above, so
-    // the two cannot drift apart (vault 5.3).
-    const feet = enemy.y + enemy.height;
-    for (const edge of [enemy.x, enemy.x + enemy.width]) {
-      if (!hasGroundBelow(solids, edge, feet)) {
-        return `enemy #${index} \`${slug}\` has no solid beneath its patrol at x ${edge} — it would walk on air`;
-      }
-    }
+  // The map's own extent, measured from the file rather than assumed (vault 3.2). Both casts are
+  // discharged by the positive-integer checks above.
+  const gearProblem = describeGearProblem(
+    objects.filter(isGearObject),
+    {
+      widthPx: (map.width as number) * (map.tilewidth as number),
+      heightPx: (map.height as number) * (map.tileheight as number),
+    },
+    solids,
+  );
+  if (gearProblem !== null) {
+    return gearProblem;
   }
 
   return null;
@@ -370,5 +352,6 @@ export function parseLevel(id: string, raw: unknown): LevelData {
     spawn: { x: spawnObject.x as number, y: spawnObject.y as number },
     hazards,
     enemies,
+    gears: gearSpawns(objects.filter(isGearObject)),
   };
 }

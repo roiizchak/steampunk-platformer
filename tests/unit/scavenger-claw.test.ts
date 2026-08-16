@@ -20,7 +20,7 @@ import {
 } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
-import { stepScavenger } from '../../src/sim/enemies';
+import { attackInProgress, releaseAggro, stepScavenger } from '../../src/sim/enemies';
 import type { World } from '../../src/sim/types';
 
 const IDLE = createSnapshot();
@@ -233,5 +233,56 @@ describe('the swing only fires at a player it has actually seen and can actually
     // predicate swings here and the new one must not.
     const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
     expect(swingsIn(s, AT(140, -60), 200)).toBe(0);
+  });
+});
+
+/**
+ * Phase 5 finding **R5**, carried into Phase 6 and closed here.
+ *
+ * `releaseAggro` cleared `chasing` and `chaseCounter` and left `attackCounter` untouched, so a
+ * scavenger caught mid-swing when the player died carried the live strike window straight through
+ * the respawn. The Phase 5 log recorded it as harmless *because the respawn point happens to be far
+ * away* — which is a property of `level-01`'s geometry, not of the code, and the next level is under
+ * no obligation to preserve it.
+ *
+ * `attackCounter` SATURATES to mean "idle, ready" — `createScavenger` starts it at `attackCooldown`
+ * for exactly that reason — so releasing aggro restores it to saturated, not to 0. Zero would mean
+ * "a swing just began", which is the opposite of the intent.
+ */
+describe('R5 — releasing aggro also ends any swing in progress', () => {
+  const AT_R5 = (x: number, y: number) => ({ playerX: x, playerY: y });
+  const GROUND_R5 = { solids: [{ x: -100000, y: 200, w: 200000, h: 100 }], halfWidthPx: 60 };
+
+  it('a scavenger mid-swing is no longer mid-swing once aggro is released', () => {
+    const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
+
+    // Drive it into a swing: adjacent player, stepped until the window opens.
+    let started = false;
+    for (let i = 0; i < 200 && !started; i += 1) {
+      stepScavenger(s, AT_R5(100, 0), GROUND_R5);
+      started = attackInProgress(s);
+    }
+    expect(started, 'the scavenger never began a swing, so there is nothing to release').toBe(true);
+    expect(attackInProgress(s)).toBe(true);
+
+    // The player dies; the world releases every scavenger's aggro.
+    releaseAggro(s);
+
+    expect(s.chasing, 'aggro was not released').toBe(false);
+    expect(
+      attackInProgress(s),
+      'the scavenger is STILL mid-swing after aggro was released — the strike window survives the ' +
+        'player respawning, and can land on a player who was somewhere else when it started',
+    ).toBe(false);
+    // The END of the swing window, not the end of the COOLDOWN. Saturating to `attackCooldown`
+    // would refund the whole cooldown and re-arm the scavenger instantly on the player's death —
+    // a balance change pointing the wrong way, caught by both code-reviewer briefs.
+    expect(s.attackCounter, 'the swing window should be closed, not the cooldown refunded').toBe(
+      SCAVENGER_ATTACK_TICKS,
+    );
+    expect(
+      s.attackCounter,
+      'releasing aggro refunded the cooldown — the scavenger can swing again immediately',
+    ).toBeLessThan(s.attackCooldown);
   });
 });

@@ -110,3 +110,70 @@ export const MAX_GPU_RATIO = 5;
  * The p95 is still measured and printed by the spec. It is simply not gated, exactly as
  * long-animation-frame is not gated, and for the same reason.
  */
+
+/* -------------------------------------------------------------------------------------------- *
+ *  Phase 6 — criterion 6.9. The HUD's own per-frame cost.                                        *
+ *                                                                                                *
+ *  Every bound below was set AFTER the measurement, never before. Three consecutive runs of      *
+ *  `phase-06-perf.spec.ts` on this box (RTX 4080, ANGLE/D3D11), each three interleaved           *
+ *  HUD-on/HUD-off pairs of 180 ticks, one page:                                                  *
+ *                                                                                                *
+ *  | run | work on -> off      | work ratio | GPU on -> off        | GPU ratio |                 *
+ *  |-----|---------------------|------------|----------------------|-----------|                 *
+ *  | 1   | 0.500ms -> 0.400ms  | 1.250x     | 0.186ms -> 0.183ms   | 1.017x    |                 *
+ *  | 2   | 0.500ms -> 0.400ms  | 1.250x     | 0.173ms -> 0.171ms   | 1.012x    |                 *
+ *  | 3   | 0.500ms -> 0.400ms  | 1.250x     | 0.201ms -> 0.198ms   | 1.016x    |                 *
+ *                                                                                                *
+ *  So the whole HUD costs ~0.1ms of main thread and ~0.003ms of GPU per frame — 0.6 % and 0.02 % *
+ *  of a 16.67ms frame at 60 Hz.                                                                  *
+ * -------------------------------------------------------------------------------------------- */
+
+/**
+ * The ceiling on `HUD-on / HUD-off` **main-thread** work per frame.
+ *
+ * ⚠️ **Not tighter, and the reason is resolution rather than caution.** `workMedianMs` quantises to
+ * 0.1ms on this box, and the measurement sits at 0.5 over 0.4 — so the *neighbouring representable
+ * ratios* are 1.0 (0.4/0.4) and 1.5 (0.6/0.4). A bound anywhere near the measured 1.25 would be
+ * decided by rounding, fail at random, and train the next reader to raise it.
+ *
+ * At 2.0 the HUD has to cost ~0.4ms — **four times** what it measures — before this trips. That is
+ * still a real gate: the proving mutation (queueing `drawHealth`'s rectangle many times over)
+ * blows straight through it.
+ *
+ * Read together with `MAX_HUD_WORK_DELTA_MS`, which is the bound that survives the quantisation.
+ */
+export const MAX_HUD_WORK_RATIO = 2;
+
+/**
+ * The ceiling on `HUD-on / HUD-off` **GPU** time per frame.
+ *
+ * Tighter than the work ratio because the quantity is better resolved: the GPU timer reports
+ * microseconds, the three measured ratios span 1.012-1.017, and the run-to-run drift in the
+ * *baseline* (0.171 -> 0.198ms) moves both arms together and so cancels.
+ *
+ * 1.25 leaves roughly fifteen times the measured HUD delta as headroom while still catching the
+ * failure this half exists for: a HUD that starts costing real fill rate — a full-screen scrim, an
+ * alpha-blended overlay, a per-frame render target — which main-thread work would not see at all.
+ */
+export const MAX_HUD_GPU_RATIO = 1.25;
+
+/**
+ * The **absolute** ceiling on the HUD's added main-thread milliseconds per frame.
+ *
+ * This is the assertion that actually expresses "frame budget", and it is here because the ratio
+ * above cannot: with a 0.4ms denominator, a ratio is a statement about a very small number divided
+ * by another very small number, and 0.1ms of quantisation moves it 25 %. Milliseconds against the
+ * 16.67ms frame do not have that problem.
+ *
+ * Measured at ~0.1ms. **Bounded at 1.0ms**, 6 % of a frame.
+ *
+ * 🔴 It was 2.0ms, and the performance owner's adversarial brief was right that this is the
+ * load-bearing bound of the three — the ratio is decorative at 0.1ms quantisation — and that 2.0ms
+ * left room for a **10-19x** regression to pass. 1.0ms halves that.
+ *
+ * Not tighter than 1.0ms, and the reason is the same quantisation: both arms round to 0.1ms, so a
+ * delta measured at 0.1ms can legitimately read anywhere in 0.0-0.2ms on a noisier run. 1.0ms is
+ * five times the worst honest reading — tight enough to matter, loose enough not to fail at random
+ * and teach the next reader to raise it.
+ */
+export const MAX_HUD_WORK_DELTA_MS = 1;

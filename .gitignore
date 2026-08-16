@@ -15,3 +15,7 @@ _generated/
 
 # The user's own screen recordings, kept out of the repo
 Recording*.mp4
+
+# Scratch screenshots taken while playtesting. Three of these were committed by a `git add -A`
+# in Phase 6 before anyone noticed; evidence belongs in docs/evidence/, not the repo root.
+/*.png
