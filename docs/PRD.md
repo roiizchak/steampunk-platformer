@@ -27,7 +27,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 1 | Boot | [phase-01-boot.md](prd/phase-01-boot.md) | — | ✅ **done** 2026-08-05 |
 | 2 | Player controller + Character Playground | [phase-02-player.md](prd/phase-02-player.md) | 1 | ✅ **done** 2026-08-06 |
 | 3 | Tiled → Phaser tilemap + Element Editor | [phase-03-tilemap.md](prd/phase-03-tilemap.md) | 2 | ✅ **done** 2026-08-07 |
-| 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | ⚠️ **merged 2026-08-09 with known debt** — approved and merged while **reported failing**. Open: **4.2b** (owner decision — an ordering violation no work can undo) and **4.27** (needs a pre-generation anchor gate; next generating phase). 4.10/4.12 closed in Phase 5, **4.16 closed in Phase 6**. Triage: [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md) |
+| 4 | fal art production + Character Gym | [phase-04-art.md](prd/phase-04-art.md) | **3** (grid size) | ⚠️ **merged 2026-08-09 with known debt** — approved and merged while **reported failing**. Open: **4.27** only (needs a pre-generation anchor gate; next generating phase). 4.10/4.12 closed in Phase 5, **4.16 closed in Phase 6**, **4.2b closed 2026-08-16 by owner amendment** — ceiling raised to $50. Triage: [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md) |
 | 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | ✅ **done** 2026-08-15 |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | ✅ **done** 2026-08-16 |
 | 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | — |
@@ -68,6 +68,12 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   a document is a snapshot; upstream endpoints change under us.
 - **Every generation logged** to [GENERATION-LOG.md](GENERATION-LOG.md): model, prompt, seed, cost,
   path, kept/discarded.
+- **The fal art-spend ceiling is `$50`**, raised from `$25` by owner amendment on 2026-08-16 after
+  Phase 4 came in at `$31.39` against an estimate that `genmedia pricing` had understated by ~21×.
+  **The ceiling is not the whole rule.** Phase 4 had a ceiling and overran it anyway, because 22
+  clips ran before anyone read an invoice: **read the invoice before the next batch, not after it.**
+  The ceiling bounds the damage; the ordering is what makes the bound reachable. This is the *art*
+  ceiling — a new medium (audio, Phase 7) needs its own number set before its first real batch.
 - **STOP and ask** before: any new dependency, deleting any file, any fal batch over 5 generations,
   or contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md.
 - **A phase with a failing or unrun criterion is reported failing.** Never as done.

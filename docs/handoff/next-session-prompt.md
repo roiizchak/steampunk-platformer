@@ -21,6 +21,8 @@ down with an owner.
 
 ## The prompt to paste next session
 
+> +500k
+>
 > Continue with Phase 7 (Audio), per `docs/prd/phase-07-audio.md`. Follow the full workflow:
 > vault-in from `docs/lessons/phase-07-audio.md`, invoke the phase's §2 skills at the stage that
 > needs them, Codex plan review before any code, build, then the QA gate — the agent owners in the
@@ -31,32 +33,33 @@ down with an owner.
 > from Phase 6 that apply directly to a parallel audio manager.
 >
 > Before planning, give me the decisions below with options, the way the last two sessions did.
+> Note that 4.2b and the session size are already decided — the art ceiling is `$50` and the
+> ordering rule stands, so the open one is the **audio** budget and when to set it.
 
 ---
 
 ## Decisions — nothing here is technical, all of it is yours
 
-### 1. 🔴 Phase 4's criterion 4.2b — the art spend. Open since 2026-08-09.
+### 1. ✅ Phase 4's criterion 4.2b — DECIDED 2026-08-16
 
-The invoice came to **$31.39 against a $25 ceiling — $6.39 over**. Worse than the money: 22 clips
-were generated *before* anyone read an invoice, which the criterion forbids. **No work can undo the
-ordering**, so this cannot be closed by fixing anything.
+**The art-spend ceiling is raised from `$25` to `$50`, and 4.2b is closed.** Phase 4's `$31.39` now
+sits inside it with `$18.61` of headroom. Recorded in
+[qa/phase-04-art.md](../qa/phase-04-art.md) and declared in
+[PRD.md § Global Constraints](../PRD.md#global-constraints); Phase 4's PRD row now shows **4.27 as
+its only open item**.
 
-| Option | What it means |
-|---|---|
-| **A — Raise the ceiling** | Amend criterion 4.2b to a number that reflects what the art actually costs. Say the number. 4.2b then closes PASS and the PRD's Phase 4 row becomes clean. |
-| **B — Accept a permanent recorded fail** | The criterion stands, 4.2b stays FAIL forever, and Phase 4 keeps its ⚠️ row as an honest scar. |
+**What survived the amendment**, and it is the half that matters: 22 clips ran before anyone read an
+invoice, and no ceiling makes that fine. **Read the invoice before the next batch, not after it.**
+Phase 4 had a ceiling and overran it anyway, precisely because nothing was measured until the money
+was gone.
 
-**I lean A**, with the ceiling set from the real Phase 4 total rather than a round number — but this
-is money and process, not code, so it is genuinely yours. **B is not the worse choice**; it just
-means the PRD keeps saying so.
-
-Whichever you pick, the *ordering* rule should survive: read the invoice before the next batch.
-That part is cheap and it is the half that actually protects you.
+**Nothing to decide here next session.** It is listed so the next reader sees it was settled
+deliberately rather than quietly dropped.
 
 ### 2. How much art does Phase 7 need, if any?
 
-Phase 7 is Audio. Audio is not fal image generation, so the $25-class ceiling may not apply at all.
+Phase 7 is Audio. Audio is not fal image generation, so the **$50 art ceiling does not cover it** —
+it is the *art* ceiling, and a new medium needs its own number.
 
 | Option | What it means |
 |---|---|
@@ -66,19 +69,17 @@ Phase 7 is Audio. Audio is not fal image generation, so the $25-class ceiling ma
 **I lean B then A** — prove the hooks with placeholder audio, then set a ceiling before the real
 batch. That is the same order Phase 4 got wrong.
 
-### 3. Session size
+### 3. ✅ Session size — DECIDED 2026-08-16: run it large
 
 The last three sessions each ran long — Phase 6's closing session did eight agent runs, two Codex
-reviews, a hands-on playtest and a full regression sweep.
+reviews, a hands-on playtest and a full regression sweep, and the gate is where the defects were
+actually caught.
 
-| Option | What it means |
-|---|---|
-| **A — Same depth, and say so up front** | Type a budget directive (for example `+500k`) at the start of the session so the work is not paced against a limit it will hit mid-gate. |
-| **B — Split Phase 7** | Mechanics and hooks in one session, the QA gate and generation in the next. |
-
-**I lean A.** The gate is what catches the defects — Phase 6's second Codex review alone produced
-five applied fixes and uncovered a live bug — and it is the part that gets squeezed when a session
-runs short.
+**Start the next session with a budget directive**, e.g. `+500k`, in the same message as the prompt
+below. That is a thing only you can type; there is no setting on this side. Without it the session
+is paced against a limit it will meet somewhere in the middle of the QA gate, which is the worst
+possible place to run short — the second Codex review alone produced five applied fixes and
+uncovered a live crash.
 
 ---
 
@@ -95,7 +96,7 @@ These have owners and will be picked up by the phase named. Listed so nothing is
 | **Phase 9** | That same banner uses `setScrollFactor(0)` on `GameScene` — vault 6.1's exact pattern, re-created outside the HUD. Harmless only because `CAMERA_ZOOM` is 1. |
 | **Phase 9** | DPR ≠ 1 centring is unexercised; `autoRound` floors CSS sizes and could round asymmetrically at 125 %/150 % Windows scaling. |
 | **Phase 9** | Collect-tween polish: a burst of gears produces overlapping identical flyers, and the counter has no arrival punctuation. |
-| **Phase 4 (open)** | **4.2b** — decision 1 above. **4.27** — needs a pre-generation anchor-geometry gate; belongs to the next *generating* phase, which may be Phase 7 if audio takes anchors. |
+| **Phase 4 (open)** | **4.27** only — needs a pre-generation anchor-geometry gate; belongs to the next *generating* phase, which may be Phase 7 if audio takes anchors. 4.2b is closed. |
 | **Phase 5 (open)** | R1, R2, R3, R4, R6, R7, R8 — recorded-not-fixed with reasons in `docs/qa/phase-05-combat-09-session-11.md`. R5 was fixed this session. |
 
 ---

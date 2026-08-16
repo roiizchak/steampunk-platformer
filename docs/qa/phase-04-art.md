@@ -319,7 +319,7 @@ failing *(CLAUDE.md §3)*, so PRD.md keeps `⚠️ merged with known debt` rathe
 | 4.0d | **PASS** | [`ASSET-PIPELINE.md:25`](../ASSET-PIPELINE.md) — `## 0a. The Phase 4 art contract — PUBLISHED by Phase 3`, carrying the zoom and viewport this phase generated against. |
 | 4.1 | **PASS** | Lane C, shot 1: standing on flat ground at true size, `x 624, y 1920, idle`. *"The character reads clearly against the industrial background at 1x — criterion 4.1."* |
 | 4.2 | **UNRUN** | No record of a batch estimate being presented and approved before 4b. The spend ceiling was raised twice later, in Phase 5, which is a different decision. |
-| 4.2b | **FAIL**, a *closed* fail rather than an open unknown | The invoice was read on 2026-08-09: **$31.39, over the $25 ceiling by $6.39.** The criterion is two claims and only one holds. The probe ran *(4.2c)*. But it requires reconciliation **before any animation batch**, and 22 clips were generated before any invoice was read — **an ordering violation no later measurement can undo**, so it cannot be turned green retroactively and is not. What the number bought: the ~22× rate dispute is settled in favour of the pessimistic source, and `genmedia pricing` is now recorded as unusable for projection. |
+| 4.2b | ✅ **CLOSED 2026-08-16 by owner amendment — ceiling raised to $50.** The original verdict is kept verbatim below, because the ordering violation it records is real history. | The invoice was read on 2026-08-09: **$31.39, over the $25 ceiling by $6.39.** The criterion is two claims and only one holds. The probe ran *(4.2c)*. But it requires reconciliation **before any animation batch**, and 22 clips were generated before any invoice was read — **an ordering violation no later measurement can undo**, so it cannot be turned green retroactively and is not. What the number bought: the ~22× rate dispute is settled in favour of the pessimistic source, and `genmedia pricing` is now recorded as unusable for projection. |
 | 4.2c | **PASS** | The 4 s Seedance 2 probe ran and its real fps and frame count were read by `ffprobe` rather than assumed — the half of 4.2b that does hold. |
 | 4.3 | **UNRUN** | No dimensions audit recorded. `shipped-sheets.test.ts` pins the sheets that ship, which is a narrower claim than *every asset's dimensions read from the file and recorded*. |
 | 4.4 | **UNRUN** | Chroma keying is implemented and was exercised on the real art, but no run of *alpha read directly, per asset, recorded* exists in this log. |
@@ -390,8 +390,40 @@ production scene, not a move, and it is not attempted here.
 | # | Fixable by | Note |
 |---|---|---|
 | 4.16 | **work, mostly done** | 7 offenders → 1. Only `GameScene.ts` (459) remains, and closing it means restructuring `create()`/`update()`. |
-| 4.2b | **nothing** | An ordering violation. The invoice cannot be read before a batch that already ran. Closable only by the owner amending the criterion or accepting it as a permanent recorded fail. |
+| 4.2b | ✅ **the owner, and they did** | An ordering violation — the invoice cannot be read before a batch that already ran. Closed 2026-08-16 by amendment, not by work, which is what this row always said the only route was. |
 | 4.27 | **work, then nothing** | A pre-generation anchor-geometry gate can be built, but it cannot retroactively have run before this phase's art. Same shape as 4.2b for Phase 4 itself; worth building for every phase after. |
+
+### 🔴 Criterion 4.2b — the owner's amendment, 2026-08-16
+
+**The art-spend ceiling is raised from `$25` to `$50`, and 4.2b is closed.** Recorded here rather
+than edited into the history above, because two different things are true at once and collapsing
+them would lose the part that still matters.
+
+**What the amendment settles.** The overspend claim is void: Phase 4's `$31.39` is inside a `$50`
+ceiling, with `$18.61` of headroom for Phases 7–10. The `$25` figure was set before anyone had a
+real invoice, against a `genmedia pricing` quote later shown to be **wrong by ~21×** — so it was
+never a measured number, and holding a phase to it permanently was holding it to an estimate that
+the phase itself disproved.
+
+**What the amendment does NOT undo, and must not be read as undoing.** 22 clips were generated
+before any invoice was read. That ordering violation happened, it is why the overrun was invisible
+until it was already spent, and **no ceiling makes it fine**. The rule it broke survives the
+amendment intact and is restated here as a standing constraint:
+
+> **Read the invoice before the next batch, not after it.** A ceiling is a bound on damage; the
+> ordering is what makes the bound reachable at all. Phase 4 had a ceiling and still overran it,
+> precisely because nothing was measured until the spend was over.
+
+**Why closed rather than left failing.** The row two tables down has always said this was closable
+*only* by the owner amending the criterion or accepting a permanent recorded fail — the two options
+were put to the owner on 2026-08-16 and the amendment was chosen. The criterion is closed; the
+lesson is kept; the history above is untouched.
+
+**Bearing on later phases.** Phase 7 is audio, and audio is not fal image generation, so the `$50`
+ceiling is the *art* ceiling and does not silently become an audio one. Set an audio budget before
+the first real batch — which is the same ordering rule, applied one medium over, and the one thing
+Phase 4 would tell you if it could.
+
 
 **Thirteen UNRUN**, all owned by `voltagent-qa-sec:qa-expert` except 4.0b–4.0d's siblings: 4.0, 4.0a,
 4.2, 4.3, 4.4, 4.7, 4.9, 4.13, 4.15. These are gate runs nobody performed, not defects — several may
