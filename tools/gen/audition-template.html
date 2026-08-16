@@ -315,12 +315,37 @@ __BED_ROWS__
     if (master) master.gain.value = v;
   });
 
+  /**
+   * Base64 -> ArrayBuffer, WITHOUT fetch().
+   *
+   * This is the second silent failure on this page. The cues were loaded with
+   * `fetch(dataUri).arrayBuffer()`, and a `data:` URL counts as `connect-src` under the artifact's
+   * content-security policy - which blocks it. The beds kept working because an `<audio src="data:">`
+   * is `media-src` instead. The fetch rejected, `playCue` died on an unhandled rejection, and the
+   * engine still reported `running`: audible nothing, visible nothing.
+   *
+   * `atob` needs no network permission at all, so there is nothing left to block.
+   */
+  function bytesOf(dataUri) {
+    const binary = atob(dataUri.slice(dataUri.indexOf(',') + 1));
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+    return out.buffer;
+  }
+
   async function load(key) {
     if (buffers.has(key)) return buffers.get(key);
-    const bytes = await (await fetch(SRC[key])).arrayBuffer();
-    const buf = await ctx.decodeAudioData(bytes);
+    const buf = await ctx.decodeAudioData(bytesOf(SRC[key]));
     buffers.set(key, buf);
     return buf;
+  }
+
+  /** Surface a failure instead of swallowing it - the whole point of this phase. */
+  function fail(what, err) {
+    const el = document.getElementById('state');
+    el.className = 'state dead';
+    el.innerHTML = 'audio engine: <strong>' + what + ' failed</strong> &middot; ' + String(err && err.message ? err.message : err);
+    document.getElementById('fallbackNote').hidden = false;
   }
 
   /** Play one cue at its shipped gain, driving the row meter from a real analyser. */
@@ -361,10 +386,11 @@ __BED_ROWS__
     const btn = e.target.closest('[data-play]');
     if (!btn) return;
     const row = btn.closest('tr');
-    playCue(btn.dataset.play, row.querySelector('.meter span'));
+    playCue(btn.dataset.play, row.querySelector('.meter span')).catch((err) => fail(btn.dataset.play, err));
   });
 
   document.getElementById('fire').addEventListener('click', async () => {
+    try {
     await unlock();
     const peakEl = document.getElementById('peak');
     const analyser = ctx.createAnalyser();
@@ -393,6 +419,9 @@ __BED_ROWS__
       if (performance.now() - started < 2500) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
+    } catch (err) {
+      fail('worst-case stack', err);
+    }
   });
 
   for (const btn of document.querySelectorAll('[data-seam]')) {
