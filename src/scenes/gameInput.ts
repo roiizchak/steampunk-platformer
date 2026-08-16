@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
+import type { AudioManager } from '../game/audio';
 
 /**
  * The keyboard half of `GameScene`: binding keys to `Phaser.Input.Keyboard.Key` objects and
@@ -45,13 +46,14 @@ export function bindPlayerKeys(
   input$: InputSnapshot,
   isPlayerInputEnabled: () => boolean,
   dev?: DevKeyActions,
+  audio?: () => AudioManager,
 ): HeldKeys {
   const keyboard = scene.input.keyboard;
   if (!keyboard) {
     return NO_KEYS;
   }
 
-  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M } =
+  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M, K, OPEN_BRACKET, CLOSED_BRACKET } =
     Phaser.Input.Keyboard.KeyCodes;
 
   // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
@@ -89,6 +91,31 @@ export function bindPlayerKeys(
     });
   }
 
+  // Phase 7's audio controls. SHIPPED, not dev-only — mute and volume are player-facing, and the
+  // whole point of criterion 7.4 is that a player's choice survives a reload.
+  //
+  // `audio` is passed as a getter rather than a manager, because `bindPlayerKeys` runs during
+  // `create()` and the binding must not capture whatever the field held at that instant.
+  //
+  // 🔴 **Gated on `isPlayerInputEnabled`, and the brackets are why.** `ElementEditorScene` extends
+  // `GameScene`, so it inherits these bindings — and it already binds `[` and `]` to "select the
+  // previous/next collision strip". Ungated, one press would both move the selection AND change the
+  // volume, persisting a change the user never asked for to `localStorage`. The editor sets
+  // `playerInputEnabled = false`, which is exactly the "is the keyboard driving the game" flag this
+  // question needs, so the collision resolves through a mechanism that already exists rather than
+  // through a second one invented here. Muting still SURVIVES into the editor; only the keys stop.
+  if (audio) {
+    const audioKey = (code: number, act: (manager: AudioManager) => void) =>
+      addKey(code).on('down', () => {
+        if (isPlayerInputEnabled()) {
+          act(audio());
+        }
+      });
+    audioKey(M, (manager) => manager.toggleMute());
+    audioKey(OPEN_BRACKET, (manager) => manager.nudgeVolume(-1));
+    audioKey(CLOSED_BRACKET, (manager) => manager.nudgeVolume(1));
+  }
+
   // Without capture the browser scrolls the page on arrows and space — which also corrupts a
   // Playwright key drive, so this is a test-correctness fix as much as a UX one.
   keyboard.addCapture('SPACE,LEFT,RIGHT,UP,DOWN,W,A,D');
@@ -103,7 +130,14 @@ export function bindPlayerKeys(
     // Criterion 5.11: a worst-case fleet at full hp.
     addKey(N).on('down', () => dev.spawnDevFleet());
     // Criterion 5.7: one scavenger at 2/60 hp, below anything combat itself can land on.
-    addKey(M).on('down', () => dev.spawnDevLowHpEnemy());
+    // 🔴 Moved from `M` to `K` in Phase 7. `M` is the universal mute key and mute SHIPS, so the
+    // player-facing binding wins and the dev one moves.
+    //
+    // **`tests/e2e/phase-05-combat.spec.ts` drives this key** and was updated with it. The first
+    // attempt claimed nothing depended on `M`, on the strength of a grep that returned no output —
+    // and an empty result is not evidence, it is an unread command. The e2e suite said otherwise by
+    // timing out. Any future re-binding here needs the spec checked, not assumed.
+    addKey(K).on('down', () => dev.spawnDevLowHpEnemy());
   }
 
   return held;

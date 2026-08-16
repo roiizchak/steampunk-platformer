@@ -107,7 +107,11 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
  * literal, and the sweep looks for a quoted `Playground`.
  */
 export function helpLine(): string {
-  const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack';
+  // Phase 7's audio keys are in the SHIPPED half deliberately. A mute control the player cannot
+  // discover is a mute control they do not have, and this banner is the only place the game
+  // currently tells anyone what the keys are.
+  const base =
+    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume';
   return import.meta.env.DEV
     ? `${base}  ·  P playground  ·  O element editor  ·  G gym`
     : base;

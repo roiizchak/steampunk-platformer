@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, describeCatalogProblem, type AssetCatalog } from '../game/assetCatalog';
+import { destroyAudio } from '../game/audio';
 import { queueCatalog, verifyExpectedTextures, verifySheets, assertFilteringPinned } from './bootAssets';
 import { verifyLevels } from './bootLevels';
 
@@ -45,6 +46,14 @@ export class BootScene extends Phaser.Scene {
      */
     this.scene.stop('Game');
     this.scene.stop('UI');
+    // Phase 7, and it belongs HERE for the same reason those two stops do. `this.sound` is one
+    // manager for the whole game and is not cleaned up on scene shutdown, so a looping bed survives
+    // a restart and a second one starts on top of it — criterion 7.5. A `GameScene` SHUTDOWN handler
+    // is the shape Phase 6 tried twice and discarded, because the operation is queued and drains
+    // after the next `create()`. `init()` runs before any load on every boot, restart and refusal,
+    // and `destroyAudio` is idempotent, so there is no ordering to get wrong and this is a no-op on
+    // a fresh boot.
+    destroyAudio(this);
     updateDebugState({
       sceneKey: this.scene.key,
       tick: 0,
