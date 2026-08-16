@@ -112,12 +112,28 @@ test.describe('Phase 7 — 7.1 every cue plays at its event', () => {
     await waitForCue(page, 'sfx-death');
   });
 
-  test('no unloaded-sound error reaches the console during ordinary play', async ({ page }) => {
-    const errors: string[] = [];
+  test('no unloaded-sound error, and every audio file was served', async ({ page }) => {
+    const audioErrors: string[] = [];
+    const badAudioResponses: string[] = [];
+    const audioRequests: string[] = [];
+
     page.on('console', (message) => {
-      if (message.type() === 'error') errors.push(message.text());
+      // 🔴 Scoped to AUDIO, and that scope was earned rather than assumed. The first version
+      // asserted zero console errors of any kind and went red on a `favicon.ico` 404 — pre-existing,
+      // unrelated, and invisible to `page.on('response')` because the browser issues that request
+      // outside the page's request graph, which is why the two listeners appeared to disagree.
+      // Filtering it out without identifying it would have been the wrong move; so would asserting
+      // something this criterion does not claim.
+      if (message.type() === 'error' && /audio|sound|decode|\.wav|\.ogg/i.test(message.text())) {
+        audioErrors.push(message.text());
+      }
     });
-    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('pageerror', (error) => audioErrors.push(error.message));
+    page.on('response', (response) => {
+      if (!/\.(wav|ogg)$/.test(response.url())) return;
+      audioRequests.push(response.url());
+      if (response.status() >= 400) badAudioResponses.push(`${response.status()} ${response.url()}`);
+    });
 
     await bootToGame(page);
     await page.keyboard.press('Space');
@@ -126,7 +142,11 @@ test.describe('Phase 7 — 7.1 every cue plays at its event', () => {
     await waitTicks(page, 90);
     await page.keyboard.up('ArrowRight');
 
-    expect(errors, `console errors during play: ${errors.join(' | ')}`).toEqual([]);
+    // The positive half, and it is the half that matters: "no errors" is satisfied by a build that
+    // requested nothing at all. Eleven files, every one served.
+    expect(audioRequests, 'no audio was requested at all').toHaveLength(11);
+    expect(badAudioResponses, `audio failed to load: ${badAudioResponses.join(' | ')}`).toEqual([]);
+    expect(audioErrors, `audio errors during play: ${audioErrors.join(' | ')}`).toEqual([]);
   });
 });
 
