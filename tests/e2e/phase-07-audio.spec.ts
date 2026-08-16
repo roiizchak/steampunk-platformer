@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { bootToGame, waitTicks } from './gameHarness';
 import {
+  cueTick,
   cuesPlayed,
   liveTrackCount,
   liveTrackKeys,
@@ -51,15 +52,47 @@ test.describe('Phase 7 — 7.1 every cue plays at its event', () => {
     expect((await liveTrackKeys(page)).sort()).toEqual(['bed-ambience', 'bed-music']);
   });
 
-  test('jumping plays the jump cue, and landing plays the land cue', async ({ page }) => {
+  /**
+   * 🔴 Codex implementation review C3: this asserted only that both cues appeared.
+   *
+   * `waitForCue` checks a cumulative "has this key been seen", so Codex's proposed mutation —
+   * setting `events.landed = true` in the TAKEOFF branch beside `events.jumped` — made both cues
+   * fire on the same tick and **the test still passed**. It was an existence assertion standing in
+   * for a timing claim, which the project's testing rules forbid by name.
+   *
+   * The comment underneath even claimed the wait "makes this a timing claim". It did not. The tick
+   * each cue started on is now recorded and compared, which is the only thing that can tell a
+   * landing from a takeoff.
+   *
+   * 🔴 And recording the tick immediately exposed a SECOND defect in the same test, which survived
+   * the revert of Codex's mutation: it read `land` at a tick BEFORE `jump`. **The player spawns
+   * airborne and lands at boot**, so the `sfx-land` the original test matched was the spawn landing
+   * — it would have passed on a build where jumping produced no landing cue at all. The recorder is
+   * therefore cleared after the spawn settles, so the only landing in the log is the one this test
+   * caused.
+   */
+  test('the land cue fires on touchdown, tens of ticks after the jump cue', async ({ page }) => {
     await bootToGame(page);
     await startCueRecorder(page);
 
+    // Let the spawn drop finish and its cue decay, THEN start counting.
+    await waitForQuiet(page);
+    await resetCues(page);
+
     await page.keyboard.press('Space');
     await waitForCue(page, 'sfx-jump');
-    // The landing is a separate edge, arriving many ticks later. Waiting for it rather than
-    // sampling once is what makes this a timing claim rather than an existence claim.
     await waitForCue(page, 'sfx-land');
+
+    const jumpTick = await cueTick(page, 'sfx-jump');
+    const landTick = await cueTick(page, 'sfx-land');
+    expect(typeof jumpTick, 'no tick recorded for the jump cue').toBe('number');
+    expect(typeof landTick, 'no tick recorded for the land cue').toBe('number');
+
+    // A full jump arc is tens of ticks. The bound is loose because the exact apex depends on tuning
+    // this test does not own — but it is nowhere near zero, which is the whole point: a `land` fired
+    // on takeoff lands in the same frame as the jump and fails here.
+    const airborne = landTick! - jumpTick!;
+    expect(airborne, `land fired ${airborne} ticks after jump — a takeoff, not a landing`).toBeGreaterThan(20);
   });
 
   test('walking plays footsteps, and they are paced rather than continuous', async ({ page }) => {

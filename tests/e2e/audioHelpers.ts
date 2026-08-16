@@ -39,10 +39,16 @@ interface PhaserHandle {
   };
 }
 
+/** One contiguous run of a cue, and the sim tick it started on. */
+export interface CuePlay {
+  key: string;
+  tick: number;
+}
+
 declare global {
   interface Window {
     /** Installed by `startCueRecorder`. Test-only; never part of the product. */
-    __cuesPlayed?: string[];
+    __cuesPlayed?: CuePlay[];
   }
 }
 
@@ -77,9 +83,15 @@ export async function startCueRecorder(page: Page): Promise<void> {
       for (const sound of game.sound.sounds) {
         if (sound.isPlaying) playingNow.add(sound.key);
       }
+      // 🔴 The TICK is recorded, not just the key. Codex implementation review C3: the jump/land
+      // spec asserted only that both cues appeared, and `waitForCue` checks a cumulative
+      // `includes()` — so moving `events.landed = true` into the TAKEOFF branch made both cues fire
+      // on the same tick and the test still passed. An existence assertion cannot verify a timing
+      // claim; the cue's tick is what makes "landing plays the land cue" mean anything.
+      const tick = (window as unknown as { __game?: { tick?: number } }).__game?.tick ?? -1;
       for (const key of playingNow) {
         // One entry per contiguous run of a key, so a 180 ms cue is one footstep rather than eleven.
-        if (!seenThisRun.has(key)) window.__cuesPlayed!.push(key);
+        if (!seenThisRun.has(key)) window.__cuesPlayed!.push({ key, tick });
       }
       seenThisRun.clear();
       for (const key of playingNow) seenThisRun.add(key);
@@ -108,13 +120,29 @@ export async function waitForQuiet(page: Page, timeout = 15_000): Promise<void> 
   );
 }
 
-/** Everything recorded so far. */
-export async function cuesPlayed(page: Page): Promise<string[]> {
+/** Everything recorded so far, with the tick each cue started on. */
+export async function cuePlays(page: Page): Promise<CuePlay[]> {
   const cues = await page.evaluate(() => window.__cuesPlayed);
   // Type before value (vault C1): an undefined recorder returns undefined, and `[].includes` on
   // undefined would throw rather than fail — a red for the wrong reason.
   expect(Array.isArray(cues), 'the cue recorder was never installed').toBe(true);
-  return cues as string[];
+  return cues as CuePlay[];
+}
+
+/** Just the keys, in order. */
+export async function cuesPlayed(page: Page): Promise<string[]> {
+  return (await cuePlays(page)).map((play) => play.key);
+}
+
+/**
+ * The sim tick a cue FIRST played on, or `null`.
+ *
+ * This is what a timing claim needs. `waitForCue` proves a cue happened; only a tick can say it
+ * happened at the right moment, and the two are not interchangeable — Codex C3.
+ */
+export async function cueTick(page: Page, key: string): Promise<number | null> {
+  const play = (await cuePlays(page)).find((p) => p.key === key);
+  return play ? play.tick : null;
 }
 
 /** Clear the recording without re-installing the listener. */
@@ -134,7 +162,11 @@ export async function resetCues(page: Page): Promise<void> {
  */
 export async function waitForCue(page: Page, key: string, timeout = 10_000): Promise<void> {
   try {
-    await page.waitForFunction((k) => (window.__cuesPlayed ?? []).includes(k), key, { timeout });
+    await page.waitForFunction(
+      (k) => (window.__cuesPlayed ?? []).some((play) => play.key === k),
+      key,
+      { timeout },
+    );
   } catch {
     // 🔴 AWAITED. This read was `JSON.stringify(page.evaluate(...))` without an await, which
     // stringifies a pending Promise to `{}` — so the one message whose entire job is to say what

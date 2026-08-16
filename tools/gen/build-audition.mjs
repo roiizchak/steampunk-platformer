@@ -38,6 +38,7 @@ const cueRows = cues
   <td class="num">${attack}<span class="u">ms</span></td>
   <td class="num">${r.gain.toFixed(4)}</td>
   <td class="meter"><span class="fill"></span></td>
+  <td class="plain"><audio controls preload="none" src="${dataUri(r.url)}"></audio></td>
   <td class="note">${warn ? `<span class="flag">${warn}</span>` : ''}</td>
 </tr>`;
   })

@@ -71,6 +71,20 @@
   h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
 
   /* ---- the worst-case control, the page's one loud element ---- */
+  .engine {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--hair); border-radius: 4px;
+  }
+  .state { font-size: 12px; color: var(--ink-soft); }
+  .state strong { color: var(--brass); }
+  .state.live strong { color: var(--verdigris); }
+  .state.dead strong { color: var(--oxide); }
+  .lvl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-soft); margin-left: auto; }
+  .lvl input { accent-color: var(--brass); }
+  #boostv { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 40px; }
+  .warnrow { margin: 0; font-size: 13px; color: var(--oxide); }
+  td.plain audio { width: 190px; height: 30px; display: block; }
+
   .stack {
     background: var(--panel); border: 1px solid var(--hair); border-radius: 4px;
     padding: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
@@ -171,6 +185,18 @@
       be — not by me.</strong> These are the exact bytes the game ships, at the exact gains it plays
       them, so the judgement that needs ears takes about two minutes.
     </p>
+    <div class="engine">
+      <button id="enable" class="fire">Enable sound</button>
+      <span class="state" id="state" role="status">audio engine: <strong>not started</strong></span>
+      <label class="lvl">Audition level
+        <input type="range" id="boost" min="1" max="8" step="0.5" value="1" />
+        <span id="boostv">1.0&times;</span>
+      </label>
+    </div>
+    <p class="warnrow" id="fallbackNote" hidden>
+      WebAudio is not running in this frame. Every cue also has a plain player in the table below,
+      which does not depend on it.
+    </p>
   </header>
 
   <section>
@@ -204,6 +230,7 @@
             <th class="num">Attack</th>
             <th class="num">Gain</th>
             <th>Level</th>
+            <th>Plain player</th>
             <th>Measured note</th>
           </tr>
         </thead>
@@ -250,42 +277,78 @@ __BED_ROWS__
   const STACK = __STACK__;
 
   let ctx = null;
+  let master = null;
   const buffers = new Map();
-  const ac = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)());
+
+  /**
+   * Create the context and resume it, SYNCHRONOUSLY at the top of a gesture handler.
+   *
+   * This is the bug that made the first version silent. `new AudioContext()` was reached only after
+   * `await fetch(...)` and `await arrayBuffer()`, by which point the click's user-gesture window had
+   * expired - so the context was born `suspended` and nothing ever resumed it. No error, no console
+   * warning, just no sound: the same failure shape as the silent audio decode this phase's boot gate
+   * was added to catch.
+   */
+  function unlock() {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!master) {
+      master = ctx.createGain();
+      master.gain.value = Number(document.getElementById('boost').value);
+      master.connect(ctx.destination);
+    }
+    const done = ctx.state === 'running' ? Promise.resolve() : ctx.resume();
+    return done.then(report, report);
+  }
+
+  function report() {
+    const el = document.getElementById('state');
+    const state = ctx ? ctx.state : 'not started';
+    el.className = 'state ' + (state === 'running' ? 'live' : 'dead');
+    el.innerHTML = 'audio engine: <strong>' + state + '</strong>' + (ctx ? ' &middot; ' + ctx.sampleRate + ' Hz' : '');
+    document.getElementById('fallbackNote').hidden = state === 'running';
+  }
+
+  document.getElementById('enable').addEventListener('click', unlock);
+  document.getElementById('boost').addEventListener('input', function (e) {
+    const v = Number(e.target.value);
+    document.getElementById('boostv').textContent = v.toFixed(1) + '\u00d7';
+    if (master) master.gain.value = v;
+  });
 
   async function load(key) {
     if (buffers.has(key)) return buffers.get(key);
     const bytes = await (await fetch(SRC[key])).arrayBuffer();
-    const buf = await ac().decodeAudioData(bytes);
+    const buf = await ctx.decodeAudioData(bytes);
     buffers.set(key, buf);
     return buf;
   }
 
   /** Play one cue at its shipped gain, driving the row meter from a real analyser. */
   async function playCue(key, meterEl) {
+    await unlock();
     const buf = await load(key);
-    const src = ac().createBufferSource();
+    const src = ctx.createBufferSource();
     src.buffer = buf;
-    const gain = ac().createGain();
-    gain.gain.value = GAIN[key] ?? 1;
-    const analyser = ac().createAnalyser();
+    const gain = ctx.createGain();
+    gain.gain.value = GAIN[key] || 1;
+    const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
-    src.connect(gain).connect(analyser).connect(ac().destination);
+    src.connect(gain).connect(analyser).connect(master);
     src.start();
 
     if (meterEl) {
-      // The meter is the analyser's own reading, not an animation timed to the clip length — a bar
+      // The meter is the analyser's own reading, not an animation timed to the clip length - a bar
       // that fills on a schedule would look identical for a cue that failed to decode.
       const data = new Float32Array(analyser.fftSize);
       let running = true;
-      const tick = () => {
+      const tick = function () {
         analyser.getFloatTimeDomainData(data);
         let peak = 0;
-        for (const s of data) peak = Math.max(peak, Math.abs(s));
-        meterEl.style.boxShadow = `inset ${(peak * 150).toFixed(1)}px 0 0 var(--verdigris)`;
+        for (const v of data) peak = Math.max(peak, Math.abs(v));
+        meterEl.style.boxShadow = 'inset ' + (peak * 150).toFixed(1) + 'px 0 0 var(--verdigris)';
         if (running) requestAnimationFrame(tick);
       };
-      src.onended = () => {
+      src.onended = function () {
         running = false;
         meterEl.style.boxShadow = 'none';
       };
@@ -302,22 +365,23 @@ __BED_ROWS__
   });
 
   document.getElementById('fire').addEventListener('click', async () => {
+    await unlock();
     const peakEl = document.getElementById('peak');
-    const analyser = ac().createAnalyser();
+    const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
-    analyser.connect(ac().destination);
+    analyser.connect(master);
 
-    await Promise.all(
-      STACK.map(async (key) => {
-        const buf = await load(key);
-        const src = ac().createBufferSource();
-        src.buffer = buf;
-        const gain = ac().createGain();
-        gain.gain.value = GAIN[key] ?? 1;
-        src.connect(gain).connect(analyser);
-        src.start();
-      }),
-    );
+    // Decode everything FIRST, then start them together - awaiting inside the loop would stagger the
+    // starts by one decode each and measure a mix the game never produces.
+    const bufs = await Promise.all(STACK.map(function (key) { return load(key); }));
+    STACK.forEach(function (key, i) {
+      const src = ctx.createBufferSource();
+      src.buffer = bufs[i];
+      const gain = ctx.createGain();
+      gain.gain.value = GAIN[key] || 1;
+      src.connect(gain).connect(analyser);
+      src.start();
+    });
 
     const data = new Float32Array(analyser.fftSize);
     let peak = 0;
@@ -334,11 +398,12 @@ __BED_ROWS__
   for (const btn of document.querySelectorAll('[data-seam]')) {
     btn.addEventListener('click', () => {
       const el = document.querySelector(`[data-bed="${btn.dataset.seam}"]`);
-      el.volume = Math.min(1, (GAIN[btn.dataset.seam] ?? 1) * 6);
+      el.volume = Math.min(1, (GAIN[btn.dataset.seam] ?? 1) * 6 * Number(document.getElementById('boost').value));
       el.currentTime = Math.max(0, (el.duration || 120) - 4);
       el.play();
     });
   }
+  report();
   for (const btn of document.querySelectorAll('[data-stop]')) {
     btn.addEventListener('click', () => {
       const el = document.querySelector(`[data-bed="${btn.dataset.stop}"]`);
