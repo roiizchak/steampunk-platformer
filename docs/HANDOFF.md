@@ -1,4 +1,55 @@
-# Session handoff — Phase 6 (collectibles, HUD, steampunk UI chrome)
+# Session handoff — Phase 7 (audio)
+
+> ## 👉 Resuming? Read [handoff/next-session-prompt.md](handoff/next-session-prompt.md) first.
+>
+> **Phase 7 is done, merged and pushed** (`main` at `3f46c7f`, 2026-08-16). Phases 1–7 are ✅.
+>
+> The next session is **scoped by the owner to exactly three gate defects** and explicitly **not**
+> to Phase 8. That file is the whole brief; everything below it is history.
+>
+> Phase 7's own record: [qa/phase-07-audio.md](qa/phase-07-audio.md) ·
+> [qa/phase-07-audio-02-gate-owners.md](qa/phase-07-audio-02-gate-owners.md) ·
+> [reviews/phase-07-impl.md](reviews/phase-07-impl.md) ·
+> [generations/phase-07-audio.md](generations/phase-07-audio.md)
+
+## 18. Phase 7 — 2026-08-16. **This section supersedes §17.**
+
+**Done and merged, all ten criteria passing.** 7.10 was closed by the owner listening to
+`docs/evidence/phase-07-audition.html`; every other criterion is measured on `chromium-gpu` with the
+renderer string recorded. Spend `$0.23` of a `$5` ceiling declared before the first generation.
+
+Six gate-owner briefs (two per owner, brief 1 withheld from brief 2) produced **31 findings — 18
+applied, 12 recorded, 1 rejected**. Both Codex reviews ran.
+
+**What the gate caught that the code did not:** a footstep every 250 ms while standing still against
+a wall; an out-of-phase footstep on every walk↔run change; death playing over hurt across a
+multi-tick frame; and boot routing green on audio that never decoded, because Phaser's decode
+failure emits no event and increments no counter.
+
+**Two gates that could not go red, and one test with two false greens in four lines** — the full
+account is in the QA log. The transferable lesson: **at ~240 fps against a 60 Hz sim, a percentile
+over rAF frames cannot see a cost carried by under ~2 % of frames.** That is finding 1 of the next
+session's three.
+
+### Left open, deliberately, and now scoped as the next session's entire brief
+
+1. **`MAX_BURST_RATIO` (Phase 5) is probably blind** for the same reason, and its only red-proof is
+   a per-frame cost the median catches anyway.
+2. **Criterion 6.9 fails under full-suite load**, proven pre-existing by re-running the suite on
+   pre-audio `main` in a worktree.
+3. **`GameScene.ts` is 432 lines**, and `file-size.test.ts` permitted the crossing on a Phase 4
+   citation two phases stale.
+
+### Flagged, and NOT in the next session's scope by owner instruction
+
+**Criterion 4.23 is RED on `main`** — the drawn bottom sits 14.75 px off the sim feet y. It fails
+identically on pre-audio `main` (14.70 px) and began failing after an `npm ci`, so it is
+environmental rather than a source change. Recorded as **D8b**. Worth raising with the owner before
+Phase 8, because Phase 8 is level design and 4.23 is about the character meeting the ground.
+
+---
+
+# Superseded — Phase 6 (collectibles, HUD, steampunk UI chrome)
 
 **Branch:** `phase-06-hud`. **Written:** 2026-08-09 (Phase 5, session 1), amended each session since.
 **§16 (2026-08-15) supersedes §15 and everything above it. Read §16 first.**
@@ -455,7 +506,9 @@ bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
 
 ### Carried forward
 
-- **Phase 7:** the three `hudObjects()` call sites that bypass `waitForHud`.
+- ~~**Phase 7:** the three `hudObjects()` call sites that bypass `waitForHud`.~~ **Closed in Phase 7
+  — there were four, not three:** `phase-06-hud.spec.ts:139` and `phase-06-health.spec.ts:101`,
+  `:211`, `:268`. All four now call `waitForHud` before reaching `hudObjects()`.
 - **Phase 8:** the gear-burial check misses a gear on the **seam between two floor rects** — a 96 px
   grid makes that the default authoring outcome, and Phase 8 is the phase that authors multi-rect
   floors. Also re-measure counter contrast against any new palette: the fill alone is 3.13:1 on
