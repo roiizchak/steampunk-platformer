@@ -4,8 +4,9 @@
 >
 > **Phase 7 is done, merged and pushed** (`main` at `3f46c7f`, 2026-08-16). Phases 1–7 are ✅.
 >
-> The next session is **scoped by the owner to exactly three gate defects** and explicitly **not**
-> to Phase 8. That file is the whole brief; everything below it is history.
+> The next session is **scoped by the owner to exactly four items** — three gate defects plus
+> criterion 4.23, which is red on `main` — and explicitly **not** to Phase 8. That file is the whole
+> brief; everything below it is history.
 >
 > Phase 7's own record: [qa/phase-07-audio.md](qa/phase-07-audio.md) ·
 > [qa/phase-07-audio-02-gate-owners.md](qa/phase-07-audio-02-gate-owners.md) ·
@@ -39,13 +40,17 @@ session's three.
    pre-audio `main` in a worktree.
 3. **`GameScene.ts` is 432 lines**, and `file-size.test.ts` permitted the crossing on a Phase 4
    citation two phases stale.
+4. **Criterion 4.23 is RED on `main`** — the drawn bottom sits **14.75 px** off the sim feet y while
+   the player is vertically still. Added to scope by the owner after being shown it. Recorded as
+   **D8b**.
 
-### Flagged, and NOT in the next session's scope by owner instruction
-
-**Criterion 4.23 is RED on `main`** — the drawn bottom sits 14.75 px off the sim feet y. It fails
-identically on pre-audio `main` (14.70 px) and began failing after an `npm ci`, so it is
-environmental rather than a source change. Recorded as **D8b**. Worth raising with the owner before
-Phase 8, because Phase 8 is level design and 4.23 is about the character meeting the ground.
+🔴 **D8b's "environmental" reading has since weakened and the prompt says so.** Phase 7 recorded it
+that way because it began after an `npm ci`. But the installed tree was afterwards checked against
+the lockfile and **matches it exactly**, so the current tree is the canonical one — and
+`test:sim-isolated` mutates `node_modules` on every run, which is the obvious way the earlier
+*passing* tree drifted from it. The likelier story is that **4.23 is genuinely broken and the greens
+were masking it.** It is the criterion that says the character's feet meet the ground, and Phase 8
+is level design, so it is the right thing to settle first.
 
 ---
 

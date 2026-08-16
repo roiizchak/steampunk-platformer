@@ -1,4 +1,4 @@
-# Next session — three gate defects, and nothing else
+# Next session — three gate defects and one red criterion
 
 ← [HANDOFF.md](../HANDOFF.md) · [PRD.md § The phases](../PRD.md#the-phases)
 
@@ -17,21 +17,23 @@ tests · 1350 with Phaser uninstalled · `build` + `verify-dist` with 11 audio f
 
 Phase 8 (Level design and progression) is next in the plan. **It is not this session's work.**
 
-### 🔴 This session is scoped to exactly three things
+### 🔴 This session is scoped to exactly four things
 
-The owner's instruction, verbatim: *"the 3 that you flagged, we'll do them only in the next session.
-**only them**."*
+The owner scoped it to the three flagged gate defects — *"only them"* — and then, on being shown that
+criterion 4.23 was sitting red on `main`, added it: *"add it too."*
 
-All three are **defects in the project's own gates**, not in the game. Each one is a gate that is
-green while it cannot see the thing it was written to catch, or a rule that is satisfied by a
-citation that expired. None of them changes what a player experiences, and that is exactly why they
-are easy to keep deferring.
+Items **1–3** are defects in the project's own **gates**, not in the game: a gate that is green while
+it cannot see what it was written to catch, or a rule satisfied by a citation that expired. None of
+them changes what a player experiences, which is exactly why they are easy to keep deferring.
 
-Do **not** start Phase 8. Do **not** fix criterion 4.23 (see the note at the bottom).
+Item **4** is different — it is a **currently failing test on `main`**, and the most likely reading
+is that it is a real defect that was being masked rather than a flake.
+
+Do **not** start Phase 8.
 
 ---
 
-## The three
+## The four
 
 ### 1. `MAX_BURST_RATIO` in Phase 5 is probably blind, and was never red-proved
 
@@ -155,6 +157,72 @@ audio. So the file crossed 400 in Phase 7 with the gate green.
 
 ---
 
+### 4. Criterion 4.23 is RED on `main`, and the "flake" reading is probably wrong
+
+**Where:** `tests/e2e/phase-04-assets.spec.ts:150` — *"the sprite is drawn from its feet, and its
+bottom never leaves the sim feet y"*. Headless `chromium` only; Phase 4 specs are excluded from the
+`chromium-gpu` project by `playwright.config.ts`.
+
+**The failing assertion.** The spec runs right, jumps, and lands, sampling `drawnBottom` against
+`simY` each frame. It then filters to samples where **`simVy === 0`** — vertically still, so render
+interpolation cannot be blamed — and asserts the worst gap is **exactly 0**:
+
+```
+Error: the drawn bottom left the sim feet y while NOT moving vertically
+  — interpolation cannot excuse this
+Expected: 0
+Received: 14.750099999999748
+```
+
+**What is known, all measured:**
+
+| | |
+|---|---|
+| this branch, isolation | fails, **14.7501 px** |
+| pre-audio `main`, worktree, isolation | fails, **14.7015 px** |
+| earlier the same session, full suite | **passed** |
+| trigger | began after `npm ci` rebuilt `node_modules` |
+
+**🔴 The reframing that matters, and it argues against calling this environmental.** The Phase 7
+session recorded this as "environmental" because it started after an `npm ci`. That was a reasonable
+first reading, but the installed tree has since been checked against the lockfile and **matches it
+exactly** — `@playwright/test` 1.62.1, `playwright-core` 1.62.1, `vite` 8.2.0, `typescript` 7.0.2,
+`phaser` 4.2.1.
+
+So the current tree is the **canonical** one. Whatever tree the earlier green runs used, it differed
+from the lockfile — and `npm run test:sim-isolated` mutates `node_modules` on every run
+(`npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact`), which is the obvious way it
+drifted. **The likely story is therefore that 4.23 is genuinely broken and the earlier greens were
+run against a drifted tree, not that a clean install broke it.** That makes this a real defect on a
+merged phase, not a flake, and it should be approached that way.
+
+**Why it matters now.** 4.23 is the criterion that says *the character's feet meet the ground*.
+**Phase 8 is level design.** Authoring levels against a renderer that draws the character 14.75 px
+off the floor is the worst possible order to do those two things in.
+
+**What to do.**
+
+1. **Establish it independently of the test.** Boot the game and read `drawnBottom - simY` directly
+   while standing still. 14.75 px against a 288 px drawn character is ~5 % of its height, which
+   should be visible on a screenshot at the feet — confirm it is or is not.
+2. **Find out whether the offset is constant.** The two runs differ slightly (14.7501 vs 14.7015),
+   so it is not a fixed constant — it varies with position or camera scroll, which points at a
+   rounding or camera-transform interaction rather than a wrong origin. Note the spec already
+   asserts `originY === 1` separately **and that assertion passes**, so the anchor itself is right.
+3. **Check `roundPixels`, camera `zoom`, and `RENDER_SCALE` interaction.** 14.75 px at
+   `RENDER_SCALE` 6 is ~2.46 source pixels — not a whole number, which is itself a clue.
+4. **Do not widen the tolerance to make it pass.** That assertion was deliberately made *tighter*
+   in session 9, and its docstring explains at length why a blanket `maxFallSpeed` tolerance was
+   rejected as wide enough to hide a broken anchor. If the exact-zero claim turns out to be wrong,
+   replace it with a bound derived from a mechanism, and say what the mechanism is.
+5. If it is real, it is a **Phase 4 criterion regressing**, so the fix and its evidence belong in
+   `docs/qa/phase-04-art.md` with a dated entry, not only in this session's notes.
+
+**Read first:** `docs/qa/phase-07-audio.md` deviation **D8b**, and the amended-in-session-9 docstring
+at `tests/e2e/phase-04-assets.spec.ts:176-191`, which explains what the assertion is protecting.
+
+---
+
 ## How to run this session
 
 Not a phase, so not the ten-phase workflow. But three rules still bind:
@@ -186,15 +254,6 @@ in the Phase 7 session and cost an `npm ci` and a full re-verification. Remove t
 
 ## Explicitly NOT in scope
 
-**Phase 8.** Do not start it.
-
-**Criterion 4.23 — `phase-04-assets.spec.ts:150`, currently RED on `main`.** The drawn bottom sits
-**14.75 px** off the sim feet y while the player is not moving vertically. It fails identically on
-pre-audio `main` (**14.70 px**), and it *passed earlier in the Phase 7 session* — it began failing
-after an `npm ci` rebuilt `node_modules`, so the trigger is environmental rather than a source
-change. Reproducible in isolation. Recorded as **D8b** in `docs/qa/phase-07-audio.md`.
-
-The owner scoped this session to the three items above and said *"only them"*, so **4.23 is out of
-scope.** It is named here rather than omitted because it is a merged phase's criterion sitting red
-on `main`, it is about the character meeting the ground, and **Phase 8 is level design** — so it is
-the obvious thing to raise with the owner before Phase 8 starts, not something to quietly fix now.
+**Phase 8.** Do not start it. Item 4 above is the thing that most needs settling *before* Phase 8
+begins — Phase 8 authors levels, and 4.23 is about the character meeting the ground — but settling
+it is this session's job, and starting Phase 8 is not.
