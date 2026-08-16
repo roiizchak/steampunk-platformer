@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test';
 
-import { SILENCE_FLOOR_DBFS, sumPeakDbfs, toDbfs } from '../../tools/gen/audioGate.mjs';
+import {
+  SILENCE_FLOOR_DBFS,
+  WORST_CASE_STACK,
+  sumPeakDbfs,
+  toDbfs,
+} from '../../tools/gen/audioGate.mjs';
 
 /**
  * Phase 7 — criterion 7.2, and it is the criterion Codex plan review F2 was written about.
@@ -33,29 +38,18 @@ import { SILENCE_FLOOR_DBFS, sumPeakDbfs, toDbfs } from '../../tools/gen/audioGa
 const MAX_STACK_DBFS = -1.0;
 
 /**
- * The worst case, and `hit` is in it because of Codex plan review F1.
+ * The worst case, as catalog keys.
  *
- * An enemy kill runs through `strike()`, which increments `hits` on the **killing** blow too
- * (`src/sim/playerAttack.ts:109-110`), so `hitLanded` is necessarily true whenever `enemyKilled` is.
- * The first draft of this list omitted `sfx-hit` and therefore measured a mix the game cannot
- * produce — quieter than reality, on the game's most important moment.
- *
- * Both beds are included because both are **always** sounding: they are the floor every cue lands on
- * top of, not an optional layer.
- *
- * The plausible one-frame coincidence: the player lands from a fall onto a gear while a scavenger's
- * contact damage registers and the same swing kills it.
+ * 🔴 **Imported, not re-declared.** This list was written out here AND in
+ * `tools/gen/build-audio.mjs`, with nothing asserting the two agreed — so a future combat change
+ * adding a ninth simultaneous source could be applied to the gain solver and not to the gate that
+ * checks it, and both would stay green while measuring different mixes. The gate owner's brief
+ * caught it. `audioGate.mjs` now owns the list and its rationale; this maps bare cue names onto the
+ * catalog's `sfx-` prefix.
  */
-const WORST_CASE_STACK = [
-  'sfx-land',
-  'sfx-footstep',
-  'sfx-hurt',
-  'sfx-hit',
-  'sfx-kill',
-  'sfx-pickup',
-  'bed-music',
-  'bed-ambience',
-] as const;
+const STACK_KEYS = WORST_CASE_STACK.map((name) =>
+  name.startsWith('bed-') ? name : `sfx-${name}`,
+);
 
 /**
  * `sumPeakDbfs` plus the closure it needs, as source text for `new Function`.
@@ -194,7 +188,7 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
         await context.close();
         return result;
       },
-      { gateSource: GATE_SOURCE, wanted: [...WORST_CASE_STACK], ceiling: MAX_STACK_DBFS },
+      { gateSource: GATE_SOURCE, wanted: STACK_KEYS, ceiling: MAX_STACK_DBFS },
     );
 
     // Type before value, and transport before measurement. A `NaN` compares false against every
@@ -204,7 +198,7 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
     );
     expect(Number.isFinite(measured.stackDbfs)).toBe(true);
     expect(measured.perSource, 'not every source in the worst case was measured').toHaveLength(
-      WORST_CASE_STACK.length,
+      STACK_KEYS.length,
     );
 
     // 🔴 Non-vacuity, and it is what stops this from being decoration. A stack of eight silent files

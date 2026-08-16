@@ -30,3 +30,9 @@ export function sumPeakDbfs(cues: Float32Array[][]): number;
 
 /** Peak and quietest-non-silent level for one cue — the shape criterion 7.3 reports. */
 export function measureCue(channels: Float32Array[]): { peakDbfs: number; floorDbfs: number };
+
+/**
+ * The sources that can sound on one tick, plus both beds — criterion 7.2's worst case, bare cue
+ * names. Single-sourced here because the gain solver and the gate that checks it each had a copy.
+ */
+export const WORST_CASE_STACK: readonly string[];

@@ -69,9 +69,19 @@ describe('the cases that stack', () => {
   });
 
   it('returns the worst-case stack criterion 7.2 measures, in full', () => {
-    // Every simultaneously-possible cue on one tick: the player lands on a hazard while a footfall
-    // plants, finishing an enemy with the same swing and crossing a gear. Contrived, and every pair
-    // in it is individually reachable — which is what a worst case has to be.
+    // The stack `tools/gen/build-audio.mjs` solves the shipped gains against, and the one
+    // `phase-07-clipping.spec.ts` measures. Both now import it from `audioGate.mjs`.
+    //
+    // 🔴 This comment used to claim "every pair in it is individually reachable". It is not true:
+    // `landed + footstep` and `hurt + footstep` are both impossible, because `advanceStride` zeroes
+    // the counter on every airborne tick and on every non-locomotion state, so a footstep can never
+    // land on a touchdown or a hurt tick — `advanceStride`'s own docstring says so. The gate owner's
+    // brief caught the contradiction between the two.
+    //
+    // The list is left over-conservative on purpose. Measured, dropping the unreachable `footstep`
+    // moves the WAV half of the sum from -4.55 to -4.72 dBFS, so keeping it makes every shipped cue
+    // 0.17 dB quieter than it strictly needs to be — an error in the safe direction, and the only
+    // direction a worst case is allowed to err in. Do not "fix" it.
     const cues = audioCues(
       eventsWith('landed', 'footstep', 'playerHurt', 'hitLanded', 'enemyKilled', 'gearCollected'),
     );
@@ -113,5 +123,32 @@ describe('no edge is left unaccounted for', () => {
     const reachable = new Set(Object.values(AUDIO_CUES));
     // Nine SFX. The two beds are not cues — nothing in the sim starts or stops them.
     expect(reachable.size).toBe(9);
+  });
+});
+
+/**
+ * 🔴 The per-tick exclusion that a multi-tick frame can defeat.
+ *
+ * `worldDamage.ts` returns `hurt` or `died`, never both, and both it and `types.ts` justify that the
+ * same way: *"otherwise the hurt sound plays over the death sound on the one tick both are true."*
+ *
+ * But `GameScene.update()` does not play a tick's events. It plays `mergeEvents`' OR over up to
+ * `MAX_TICKS_PER_FRAME` ticks, so a hazard hit on tick T and a kill plane on T+1 arrive in ONE batch
+ * with both edges set — and the outcome the per-tick exclusion exists to prevent happens anyway, one
+ * frame later than anyone was looking. Found by the code-reviewer's adversarial brief.
+ */
+describe('7.6 — death suppresses hurt within a single rendered frame', () => {
+  it('drops the hurt cue when the same batch also carries a death', () => {
+    const batch = { ...noEvents(), playerHurt: true, playerDied: true };
+    expect(audioCues(batch)).toEqual(['death']);
+  });
+
+  it('still plays hurt on its own', () => {
+    expect(audioCues({ ...noEvents(), playerHurt: true })).toEqual(['hurt']);
+  });
+
+  it('leaves every other cue in the batch alone', () => {
+    const batch = { ...noEvents(), playerHurt: true, playerDied: true, gearCollected: true };
+    expect(audioCues(batch)).toEqual(['death', 'pickup']);
   });
 });

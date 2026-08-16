@@ -3,9 +3,10 @@
  *
  * ## Why it moved here
  *
- * `GameScene.ts` is this project's only file over the 400-line ceiling, and
- * `tests/unit/file-size.test.ts` permits exactly one. Phase 6 pushed it from 459 to 471 by adding
- * the gear layer and the HUD launch, and the honest options were to record the growth or to stop
+ * `GameScene.ts` is the file this project keeps pushing at the 400-line ceiling, and
+ * `tests/unit/file-size.test.ts` permits exactly one file over it. Phase 6 pushed it from 459 to 471
+ * by adding the gear layer and the HUD launch, and the honest options were to record the growth or
+ * to stop
  * it. This is stopping it: the dev overlays, the dev fixtures and the dev scene toggles are a
  * coherent group that has nothing to do with the seam between real time and simulated time, which
  * is what `GameScene` is actually for.

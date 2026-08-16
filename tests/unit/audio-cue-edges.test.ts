@@ -133,13 +133,17 @@ describe('playerDied — both entry paths, because only one goes through damageP
     // edge derived from that function's return alone would never fire here.
     const world = worldWith({ solids: [], spawn: { x: 500, y: 0 } });
 
-    const { diedAt } = runToFirstDeath(world);
+    const { diedAt, hurtOn } = runToFirstDeath(world);
 
     expect(diedAt).not.toBeNull();
     expect(world.player.hp).toBe(0);
     expect(world.player.state).toBe('death');
-    // Nothing damaged the player on the way down — the kill plane is not damage.
-    expect(world.player.state).toBe('death');
+    // 🔴 Nothing damaged the player on the way down — the kill plane is not damage, and `hurt` and
+    // `died` are mutually exclusive by construction (`worldDamage.ts`). This line asserted
+    // `state === 'death'` a SECOND time, so the claim its own comment made went untested: a build
+    // that raised `playerHurt` alongside `playerDied` would have played the hurt cue over the death
+    // cue and passed. `runToFirstDeath` was already returning `hurtOn`; it was destructured away.
+    expect(hurtOn).toEqual([]);
   });
 
   it('fires on the tick lethal damage takes hp to zero, not on the hits before it', () => {
@@ -320,5 +324,77 @@ describe('footstep — a cadence the sim did not have', () => {
 
     // Guard the guard: without this the test passes on a player who never left the floor.
     expect(airborne.length).toBeGreaterThan(5);
+  });
+});
+
+/**
+ * 🔴 Two stride defects the code-reviewer's adversarial brief measured, and the steady-state tests
+ * above could not see.
+ *
+ * Both come from the same place: `advanceStride` decided "are the feet working" from `state` alone,
+ * and `state` is not a reliable answer to that question.
+ */
+describe('7.6 — the stride counter and the two states it could not tell apart', () => {
+  it('does not fire while running INTO A WALL, where the state stays run and vx is zero', () => {
+    // `resolveState` takes `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into
+    // a solid keeps the state `run` after the collision has zeroed `vx`. The player has not moved a
+    // pixel, and the old guard — grounded, and state is walk or run — was satisfied on every tick.
+    //
+    // Measured before the fix: 13 footsteps in 200 ticks, one every 15 ticks, forever, at a
+    // standstill. The existing "does not fire while standing still" test drives IDLE input, so it
+    // tests idle rather than standstill and could never catch this.
+    const world = worldWith({
+      solids: [
+        { x: 0, y: 960, w: 4000, h: 96 },
+        { x: 1100, y: 600, w: 200, h: 480 },
+      ],
+      spawn: { x: 1000, y: 864 },
+    });
+
+    const fired: number[] = [];
+    for (let n = 0; n < 200; n += 1) {
+      const events = tick(world, { ...IDLE, right: true });
+      if (events.footstep) fired.push(n);
+    }
+
+    expect(world.player.grounded, 'the player should be on the floor').toBe(true);
+    expect(Math.abs(world.player.vx), 'the player should be stopped against the wall').toBeLessThan(
+      0.01,
+    );
+    // Some footsteps are legitimate — the run up to the wall. None after it stops.
+    const afterContact = fired.filter((tick) => tick > 120);
+    expect(afterContact, 'footsteps while pinned motionless against a wall').toEqual([]);
+  });
+
+  it('restarts the cadence when the player changes between walk and run', () => {
+    // `walk` and `run` share one counter with different thresholds (24 and 15). Releasing the walk
+    // modifier at counter 20 used to fire on the VERY FIRST run tick, because 20 >= 15 — while
+    // `playIfChanged` simultaneously restarted the sprite at frame 0. The cue landed at the start of
+    // a stride instead of on the plant, which is the exact phase relationship `FOOTSTEP_TICKS`
+    // claims a tick count buys.
+    const world = worldWith({
+      solids: [{ x: 0, y: 960, w: 4000, h: 96 }],
+      spawn: { x: 500, y: 864 },
+    });
+
+    // Land first. Spawning above the floor costs sixteen ticks of `fall`, during which
+    // `advanceStride` zeroes the counter every tick — the first attempt at this test reached a
+    // counter of 7 and proved nothing.
+    while (!world.player.grounded) {
+      tick(world, IDLE);
+    }
+
+    // Twenty walk ticks. The walk threshold is 24, so no cue fires — but the counter is now well
+    // past `run`'s threshold of 15.
+    for (let n = 0; n < 20; n += 1) {
+      const events = tick(world, { ...IDLE, right: true, walkHeld: true });
+      expect(events.footstep, `a walk footstep at tick ${n} would invalidate the setup`).toBe(false);
+    }
+    expect(world.player.state).toBe('walk');
+    expect(world.player.strideCounter, 'the setup needs a counter above run threshold').toBe(20);
+
+    const onSwitch = tick(world, { ...IDLE, right: true });
+    expect(world.player.state, 'the setup needs the state to actually change').toBe('run');
+    expect(onSwitch.footstep, 'a footstep on the first tick of a new gait').toBe(false);
   });
 });

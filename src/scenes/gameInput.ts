@@ -6,7 +6,7 @@ import type { AudioManager } from '../game/audio';
 /**
  * The keyboard half of `GameScene`: binding keys to `Phaser.Input.Keyboard.Key` objects and
  * sampling them into the sim's `InputSnapshot` every frame. Split out to keep `GameScene.ts`
- * under the 400-line rule — this file has no subclass coupling of its own; the scene still owns
+ * smaller — this file has no subclass coupling of its own; the scene still owns
  * `playerInputEnabled` and the DEV scene switches, and passes them in.
  *
  * Held state is polled; the jump and attack EDGES are not (vault 2.5).
@@ -46,7 +46,7 @@ export function bindPlayerKeys(
   input$: InputSnapshot,
   isPlayerInputEnabled: () => boolean,
   dev?: DevKeyActions,
-  audio?: () => AudioManager,
+  audio?: () => AudioManager | undefined,
 ): HeldKeys {
   const keyboard = scene.input.keyboard;
   if (!keyboard) {
@@ -105,10 +105,16 @@ export function bindPlayerKeys(
   // question needs, so the collision resolves through a mechanism that already exists rather than
   // through a second one invented here. Muting still SURVIVES into the editor; only the keys stop.
   if (audio) {
+    // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
+    // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
+    // the mute key depend on `create()`'s statement order. Here a manager that is not yet built is
+    // simply a press that does nothing, which is the right failure for a key the player may hit
+    // during a scene transition.
     const audioKey = (code: number, act: (manager: AudioManager) => void) =>
       addKey(code).on('down', () => {
-        if (isPlayerInputEnabled()) {
-          act(audio());
+        const manager = audio();
+        if (isPlayerInputEnabled() && manager) {
+          act(manager);
         }
       });
     audioKey(M, (manager) => manager.toggleMute());

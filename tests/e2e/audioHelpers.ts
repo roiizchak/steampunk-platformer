@@ -133,13 +133,16 @@ export async function resetCues(page: Page): Promise<void> {
  * that happened to be too short.
  */
 export async function waitForCue(page: Page, key: string, timeout = 10_000): Promise<void> {
-  await page
-    .waitForFunction((k) => (window.__cuesPlayed ?? []).includes(k), key, { timeout })
-    .catch(() => {
-      throw new Error(
-        `cue "${key}" never played. Recorded: ${JSON.stringify(page.evaluate(() => window.__cuesPlayed))}`,
-      );
-    });
+  try {
+    await page.waitForFunction((k) => (window.__cuesPlayed ?? []).includes(k), key, { timeout });
+  } catch {
+    // 🔴 AWAITED. This read was `JSON.stringify(page.evaluate(...))` without an await, which
+    // stringifies a pending Promise to `{}` — so the one message whose entire job is to say what
+    // DID play printed `Recorded: {}`, and only ever on the failure path where nobody could see it
+    // was broken.
+    const recorded = await page.evaluate(() => window.__cuesPlayed).catch(() => undefined);
+    throw new Error(`cue "${key}" never played. Recorded: ${JSON.stringify(recorded)}`);
+  }
 }
 
 /** How many tracks the manager is holding. Criterion 7.5 counts exactly this. */

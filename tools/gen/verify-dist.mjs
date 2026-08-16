@@ -136,6 +136,12 @@ if (existsSync(builtCatalog)) {
   // Byte-equality as well as existence, matching the `.tmj` rule above. A truncated or re-encoded
   // cue is a cue whose measured dBFS is no longer the number criterion 7.2 passed on — the gate
   // would be describing a file the player never hears.
+  // 🔴 `?? []` was here and made the whole check optional: a `dist/assets/index.json` that lost its
+  // audio array passed with a cheerful "0 audio file(s) shipped byte-identical". An absent array is
+  // the failure, not the empty case.
+  if (!Array.isArray(catalog.audio) || catalog.audio.length === 0) {
+    problems.push('catalog has no audio array; criterion 7.5b cannot be satisfied by zero files');
+  }
   for (const entry of catalog.audio ?? []) {
     const built = join(root, 'dist', entry.url);
     if (!existsSync(built)) {
@@ -165,6 +171,7 @@ if (problems.length > 0) {
 const shippedAudio = existsSync(builtCatalog)
   ? (JSON.parse(readFileSync(builtCatalog, 'utf8')).audio ?? []).length
   : 0;
+
 
 console.log(
   `verify-dist ok: ${authored.length} level(s) and ${shippedAudio} audio file(s) shipped ` +

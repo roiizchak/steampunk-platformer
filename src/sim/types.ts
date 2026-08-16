@@ -234,6 +234,8 @@ export interface PlayerSim {
    * rejected.
    */
   strideCounter: number;
+  /** Which gait `strideCounter` counts for. Two cadences share one counter — see `advanceStride`. */
+  strideGait: 'walk' | 'run' | null;
 }
 
 /** Per-tick event edges (vault 2.5). Emitted, never reconstructed from a state comparison. */

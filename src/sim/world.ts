@@ -128,6 +128,7 @@ export function createWorld({
       // FIX 2: no impulse has landed yet.
       knockbackPending: false,
       strideCounter: 0,
+      strideGait: null,
     },
   };
 }

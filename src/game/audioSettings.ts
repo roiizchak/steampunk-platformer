@@ -67,12 +67,12 @@ function isUsableVolume(value: unknown): value is number {
 /**
  * Read the player's settings. Returns the defaults for anything unusable, and never throws.
  *
- * @param storage typically `window.localStorage`; a fake in tests.
+ * @param storage typically `safeLocalStorage()`; a fake in tests; `null` where storage is refused.
  */
-export function readAudioSettings(storage: SettingsStorage): AudioSettings {
+export function readAudioSettings(storage: SettingsStorage | null): AudioSettings {
   let stored: unknown;
   try {
-    const raw = storage.getItem(AUDIO_SETTINGS_KEY);
+    const raw = storage?.getItem(AUDIO_SETTINGS_KEY) ?? null;
     if (raw === null) {
       return { ...DEFAULT_AUDIO_SETTINGS };
     }
@@ -95,9 +95,9 @@ export function readAudioSettings(storage: SettingsStorage): AudioSettings {
 }
 
 /** Persist the settings, clamping the volume. Never throws — a full quota is not a crash. */
-export function writeAudioSettings(storage: SettingsStorage, settings: AudioSettings): void {
+export function writeAudioSettings(storage: SettingsStorage | null, settings: AudioSettings): void {
   try {
-    storage.setItem(
+    storage?.setItem(
       AUDIO_SETTINGS_KEY,
       JSON.stringify({ muted: settings.muted, volume: clampVolume(settings.volume) }),
     );
@@ -117,4 +117,26 @@ export function writeAudioSettings(storage: SettingsStorage, settings: AudioSett
  */
 export function stepVolume(volume: number, direction: 1 | -1): number {
   return clampVolume(Math.round((volume + direction * VOLUME_STEP) * 100) / 100);
+}
+
+/**
+ * `window.localStorage`, or `null` where the origin refuses it.
+ *
+ * 🔴 **The property getter itself throws** — this is not the same hazard as `getItem` throwing, and
+ * the difference is what the code-reviewer's brief caught. In Chrome with site data blocked, and
+ * inside a sandboxed iframe, merely *evaluating* `window.localStorage` raises `SecurityError`. Every
+ * `try` in this module wraps a call on an already-obtained `Storage`, so an access written as
+ * `readAudioSettings(window.localStorage)` throws at the argument, before any of that protection is
+ * reached — and it throws inside `GameScene.create()`, which is the `ready:false` / `bootError:null`
+ * hang this module's header says it exists to avoid.
+ *
+ * Kept here rather than in the caller so there is one place that knows the getter is dangerous, and
+ * `null` rather than a no-op fake so the "no storage" case stays visible in the types.
+ */
+export function safeLocalStorage(): SettingsStorage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }

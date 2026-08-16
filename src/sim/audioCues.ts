@@ -79,17 +79,32 @@ export const SILENT_EDGES = ['leftGround', 'hitActive', 'respawned'] as const sa
 )[];
 
 /**
- * The cues this tick should play, in `AUDIO_CUES` declaration order.
+ * The cues this batch should play, in `AUDIO_CUES` declaration order.
  *
  * Returns a new array every call and reads nothing but its argument — so it is safe to call from a
  * render frame, a test, or a replay, and two callers on the same events cannot disagree.
+ *
+ * 🔴 **Takes a BATCH, not a tick, and that distinction is load-bearing.** `GameScene.update()`
+ * passes `mergeEvents`' OR across up to `MAX_TICKS_PER_FRAME` ticks. So a pair of edges that
+ * `src/sim/` guarantees are mutually exclusive *per tick* can still both be set here — a hazard hit
+ * on tick T and a kill plane on T+1 arrive together — and the guarantee, which is real, stops being
+ * enough one layer up. The suppression below is therefore in the cue layer rather than in
+ * `worldDamage.ts`: it is the only layer that sees the batch.
  */
 export function audioCues(events: TickEvents): AudioCue[] {
   const cues: AudioCue[] = [];
   for (const [edge, cue] of Object.entries(AUDIO_CUES) as [keyof TickEvents, AudioCue][]) {
-    if (events[edge]) {
-      cues.push(cue);
+    if (!events[edge]) {
+      continue;
     }
+    // Death wins. `worldDamage.ts` already decides this per tick, for the reason its own comment
+    // gives — "the hurt sound plays over the death sound" — and a multi-tick frame is the one place
+    // that decision can be undone. Hurt is dropped rather than death because the player's death is
+    // the louder consequence and the one the scene is about to act on.
+    if (edge === 'playerHurt' && events.playerDied) {
+      continue;
+    }
+    cues.push(cue);
   }
   return cues;
 }

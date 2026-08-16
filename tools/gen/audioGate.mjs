@@ -144,3 +144,40 @@ export function measureCue(channels) {
     floorDbfs: quietest === Infinity ? SILENCE_FLOOR_DBFS : toDbfs(quietest),
   };
 }
+
+/**
+ * The sources that can sound on ONE tick, plus both beds — criterion 7.2's worst case.
+ *
+ * 🔴 **Here, rather than in either consumer, because it was written out twice.** The gain solver
+ * (`build-audio.mjs`) and the gate that checks its work (`phase-07-clipping.spec.ts`) each carried
+ * their own copy with nothing asserting the two agreed. A future combat change adding a ninth
+ * simultaneous source could be applied to one list and not the other, and both would stay green
+ * while the solver optimised a mix the gate no longer measured — the same "two correct halves that
+ * never meet" shape Codex plan review F2 caught one level down, in the arithmetic. The gate owner's
+ * brief caught it one level up, in the list.
+ *
+ * Names are bare cue names; the catalog prefixes the one-shots with `sfx-`.
+ *
+ * ⚠️ `hit` is in this list because `kill` is. `strike()` increments the hit count on the killing
+ * blow like any other, so `enemyKilled` is never raised without `hitLanded` (`playerAttack.ts`).
+ *
+ * `jump`, `attack` and `death` are absent, each for a reason rather than by oversight: a jump leaves
+ * the ground so it cannot also land or footstep on the same tick, an attack that connects started
+ * ticks earlier, and death replaces hurt rather than accompanying it (`worldDamage.ts` returns one
+ * or the other, never both).
+ *
+ * ⚠️ The list is over-conservative in two places and should stay that way: `land + footstep` and
+ * `hurt + footstep` are both unreachable, because `advanceStride` zeroes the counter unless the
+ * state resolved to `walk` or `run`, which neither a landing nor a hurt tick does. Over-stating the
+ * worst case errs in the safe direction; do not "fix" it.
+ */
+export const WORST_CASE_STACK = [
+  'land',
+  'footstep',
+  'hurt',
+  'hit',
+  'kill',
+  'pickup',
+  'bed-music',
+  'bed-ambience',
+];

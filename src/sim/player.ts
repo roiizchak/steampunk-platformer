@@ -133,14 +133,38 @@ export function resolveState(
  * The counter is zeroed whenever the feet are not planted and moving — airborne, idle, hurt, dead —
  * so a jump cannot carry half a stride into the landing, and a footstep never fires on the tick a
  * player touches down. That moment already has its own cue: `landed`.
+ *
+ * ## 🔴 Two things `state` alone could not tell this function, both measured
+ *
+ * **A state of `run` does not mean the player is moving.** `resolveState` takes
+ * `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into a wall keeps the state
+ * at `run` after the collision has zeroed `vx`. The first version of this guard tested only
+ * grounded-and-locomoting, and so played a footstep every fifteen ticks, indefinitely, for a player
+ * standing still against a wall — 13 of them in 200 ticks when the gate owner measured it. `vx` is
+ * therefore tested directly. It is exactly zero after a collision resolves, so this needs no
+ * epsilon; `resolveState` keeps its own `dir !== 0` term, which exists for animation reasons that
+ * have nothing to do with cadence.
+ *
+ * **`walk` and `run` are different cadences sharing one counter.** 24 ticks against 15, and the
+ * counter used to carry across a change of gait — so releasing the walk modifier at a count of 20
+ * fired instantly, because 20 already exceeds `run`'s threshold. On that same tick `playIfChanged`
+ * restarts the sprite at frame 0, so the cue landed at the *start* of a stride rather than on a
+ * plant: precisely the phase relationship a tick-locked cadence is supposed to buy. Every tap of
+ * the walk key did this. The gait is now remembered and a change restarts the count.
  */
 export function advanceStride(player: PlayerSim): boolean {
-  if (!player.grounded || (player.state !== 'walk' && player.state !== 'run')) {
+  const gait = player.state === 'walk' || player.state === 'run' ? player.state : null;
+  if (!player.grounded || gait === null || player.vx === 0) {
     player.strideCounter = 0;
+    player.strideGait = null;
     return false;
   }
+  if (player.strideGait !== gait) {
+    player.strideGait = gait;
+    player.strideCounter = 0;
+  }
   player.strideCounter += 1;
-  if (player.strideCounter < FOOTSTEP_TICKS[player.state]) {
+  if (player.strideCounter < FOOTSTEP_TICKS[gait]) {
     return false;
   }
   player.strideCounter = 0;

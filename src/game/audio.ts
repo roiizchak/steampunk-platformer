@@ -39,7 +39,9 @@ import type { AudioCue } from '../sim/audioCues';
 import type { AssetCatalog, AudioEntry } from './assetCatalog';
 import {
   type AudioSettings,
+  type SettingsStorage,
   readAudioSettings,
+  safeLocalStorage,
   stepVolume,
   writeAudioSettings,
 } from './audioSettings';
@@ -86,7 +88,10 @@ export function createAudio(scene: Phaser.Scene, catalog: AssetCatalog): AudioMa
 
   const sound = scene.sound;
   const gains = gainsFrom(catalog);
-  const settings: AudioSettings = readAudioSettings(window.localStorage);
+  // Obtained ONCE, through the guarded accessor: the `window.localStorage` property getter throws
+  // outright on a storage-refused origin, which no `try` inside `audioSettings` could catch.
+  const storage: SettingsStorage | null = safeLocalStorage();
+  const settings: AudioSettings = readAudioSettings(storage);
   const beds: Phaser.Sound.BaseSound[] = [];
 
   /** Apply our flag to Phaser. One direction only — see the header. */
@@ -143,14 +148,14 @@ export function createAudio(scene: Phaser.Scene, catalog: AssetCatalog): AudioMa
     toggleMute() {
       settings.muted = !settings.muted;
       apply();
-      writeAudioSettings(window.localStorage, settings);
+      writeAudioSettings(storage, settings);
       return settings.muted;
     },
 
     nudgeVolume(direction) {
       settings.volume = stepVolume(settings.volume, direction);
       apply();
-      writeAudioSettings(window.localStorage, settings);
+      writeAudioSettings(storage, settings);
       return settings.volume;
     },
 

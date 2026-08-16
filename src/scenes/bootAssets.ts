@@ -159,6 +159,42 @@ export function verifySheets(scene: Phaser.Scene, catalog: AssetCatalog | undefi
 }
 
 /**
+ * Every catalogued audio key is in the audio cache — the refuse-to-route pass images, sheets and
+ * levels each already had, and audio did not.
+ *
+ * 🔴 **A decode failure is SILENT, and that is why this exists.** Phaser's `WebAudioFile` routes a
+ * failed decode to `onProcessError`, which logs to the console, emits no event and does not
+ * increment `totalFailed`. So the loader completes, boot routes, and the key is simply absent from
+ * `cache.audio`. `AudioManager.playCues` then skips it through its own `exists()` guard and
+ * `startBeds` warns and continues — by design, because neither should crash the game.
+ *
+ * The result is a build that boots clean, plays fine, and **has no sound**, blamed by the player on
+ * their own speakers. `assetCatalog.ts`'s `audio` docstring names that as the defect the catalog
+ * validation guards against; nothing actually enforced it until here.
+ *
+ * The gate owner's brief found this by comparing the three existing verifiers against the new
+ * fourth asset kind that never got one.
+ *
+ * Same `describeCatalogProblem` guard the other three carry, and for the reason vault 1.4 records:
+ * `create()` collects problems and only then calls `refuseToRoute`, so a verifier that THROWS while
+ * collecting means the refusal never happens and boot hangs at `ready:false` / `bootError:null` —
+ * the exact state refuse-to-route exists to prevent.
+ */
+export function verifyAudio(scene: Phaser.Scene, catalog: AssetCatalog | undefined): string[] {
+  if (describeCatalogProblem(catalog) || !catalog) {
+    return [];
+  }
+
+  const problems: string[] = [];
+  for (const entry of catalog.audio) {
+    if (!scene.cache.audio.exists(entry.key)) {
+      problems.push(`audio "${entry.key}" did not decode (${entry.url})`);
+    }
+  }
+  return problems;
+}
+
+/**
  * THE load-bearing refusal check. Every failure mode below is caught here; the other two
  * signals are defence in depth.
  *

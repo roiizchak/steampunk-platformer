@@ -39,7 +39,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { peakDbfs, sumPeakDbfs } from './audioGate.mjs';
+import { WORST_CASE_STACK, peakDbfs, sumPeakDbfs } from './audioGate.mjs';
 import { decodeWav, encodeWav, trimToEvent } from './wav.mjs';
 
 const MASTERS = '_generated/audio';
@@ -85,19 +85,8 @@ const MIX_DB = {
  */
 const TARGET_STACK_DBFS = -3.0;
 
-/**
- * The cues that can sound on ONE tick, plus both beds — criterion 7.2's worst case.
- *
- * ⚠️ `hit` is in this list because `kill` is. `strike()` increments the hit count on the killing blow
- * like any other, so `enemyKilled` is never raised without `hitLanded` (`playerAttack.ts`). The
- * plan's first draft omitted it and the Codex plan review (F1) caught that.
- *
- * `jump`, `attack` and `death` are absent, and each for a reason rather than by oversight: a jump
- * leaves the ground so it cannot also land or footstep on the same tick, an attack that connects
- * started ticks earlier, and death replaces hurt rather than accompanying it (`worldDamage.ts`
- * returns one or the other, never both).
- */
-const WORST_CASE_STACK = ['land', 'footstep', 'hurt', 'hit', 'kill', 'pickup', 'bed-music', 'bed-ambience'];
+// `WORST_CASE_STACK` is imported from `audioGate.mjs` — see its docstring for what is in it and
+// why. It used to be declared here AND in the e2e gate, with nothing keeping the two in step.
 
 /** Masters are named `<cue>-<request_id>.<ext>`; the probe generation is the `hit` cue. */
 function masterFor(cue) {

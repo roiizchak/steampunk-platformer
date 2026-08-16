@@ -2,7 +2,13 @@ import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, describeCatalogProblem, type AssetCatalog } from '../game/assetCatalog';
 import { destroyAudio } from '../game/audio';
-import { queueCatalog, verifyExpectedTextures, verifySheets, assertFilteringPinned } from './bootAssets';
+import {
+  queueCatalog,
+  verifyAudio,
+  verifyExpectedTextures,
+  verifySheets,
+  assertFilteringPinned,
+} from './bootAssets';
 import { verifyLevels } from './bootLevels';
 
 /**
@@ -125,6 +131,9 @@ export class BootScene extends Phaser.Scene {
     problems.push(...verifyExpectedTextures(this, catalog));
     problems.push(...verifySheets(this, catalog));
     problems.push(...verifyLevels(this, catalog));
+    // Phase 7. A failed audio decode is silent in Phaser — see `verifyAudio` — so without this a
+    // soundless build boots green.
+    problems.push(...verifyAudio(this, catalog));
 
     // Fault injection runs BEFORE the assertion, not inside it: an `assert*` function that
     // mutates the thing it inspects is a trap for the next editor.

@@ -258,10 +258,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts` (split out to
-   * keep this file smaller; it is 515 lines and OVER the 400-line rule, justified in
-   * `docs/qa/phase-05-combat.md`). This scene still owns `playerInputEnabled` and the
-   * DEV scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
+   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts`, split out to
+   * keep this file smaller. This scene still owns `playerInputEnabled` and the DEV
+   * scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
+   *
+   * 🔴 The line count that used to be quoted here — "it is 515 lines" — was wrong in both directions
+   * over time: the file was 386 on `main` before Phase 7 and is 427 now. A hardcoded line count in a
+   * comment is a fact with an expiry date and no test, so it is gone rather than corrected. The live
+   * number is `tests/unit/file-size.test.ts`'s, and the current justification is in
+   * `docs/qa/phase-07-audio.md`.
    */
   private sampleHeldKeys(): void {
     sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
@@ -284,7 +289,14 @@ export class GameScene extends Phaser.Scene {
       dev,
       // A getter, not the manager: `bindKeys` runs during `create()` and a captured reference
       // would go stale the moment Boot tore the manager down and `create()` built a new one.
-      this.audio ? () => this.audio! : undefined,
+      //
+      // 🔴 Passed UNCONDITIONALLY. It read `this.audio ? () => this.audio! : undefined`, which
+      // decided whether the mute and volume keys exist at all from the field's value at bind time —
+      // correct today only because `createAudio` happens to run two lines above `bindKeys`. Any
+      // reorder, or a subclass that binds before creating audio, would ship a build with no mute key
+      // and no error. `gameInput.ts` does the nullish check per press instead, where it is cheap and
+      // where a null manager is a no-op rather than a missing feature.
+      () => this.audio,
     );
   }
 
