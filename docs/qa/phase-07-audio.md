@@ -26,12 +26,25 @@ number comes from headless SwiftShader.
 | 7.6 | Cues emitted from the producing tick, not a state comparison | `code-reviewer` ×2 | ✅ | Traced cue by cue in brief 1; both death paths set the edge. |
 | 7.7 | No file > 400 lines without justification; diff review; adversarial pass; frame budget | `code-reviewer` ×2 + `performance-engineer` ×2 | ✅ | Justification below. Frame budget: **0.000 ms** added, **0 frames** lost of 479. Two watched red runs. |
 | 7.8 | Codex **plan** review ran; every finding applied or recorded | — | ✅ | [`../reviews/phase-07-plan.md`](../reviews/phase-07-plan.md) — applied 9, recorded 1, rejected 0. |
-| 7.9 | Codex **implementation** review ran on the diff | `codex` | ⬜ | See [`../reviews/phase-07-impl.md`](../reviews/phase-07-impl.md). |
+| 7.9 | Codex **implementation** review ran on the diff | `codex` | ✅ | [`../reviews/phase-07-impl.md`](../reviews/phase-07-impl.md) — 5 answers, applied 1, recorded 3, confirmed-clean 1. Its C3 mutation was re-run locally and **passed**, proving the false green; fixing it exposed a second one underneath. |
 | 7.10 | Every cue heard in context: right event, no clipped wind-up, bed loops without a seam | `play` | ⬜ | Measurable half done (below). **The listening half is the owner's and has not happened.** |
 
-**Phase 7 is therefore reported FAILING.** 7.9 and 7.10 are unrun. A phase with an unrun criterion
+**Phase 7 is therefore reported FAILING.** 7.10 is unrun. A phase with an unrun criterion
 is never reported as done, and 7.10 is the one criterion in this phase that no measurement can
 close — which is exactly why Codex's plan review (F9) argued for adding it.
+
+🔴 **And the owner's first attempt at 7.10 immediately paid for itself, twice.** The audition page
+was silent, and diagnosing why produced a wrong hypothesis before a right one: the shipped mix puts
+`footstep` at **−21.8 dBFS, only 3.8 dB above the ambience bed**, which looked like the cause. It was
+not. The owner reported the game itself sounds correct in play, which outranks any measurement taken
+against the audition page, and **no gain was changed**. The real cause was the page fetching a
+`data:` URI, which the artifact CSP blocks under `connect-src` while leaving `<audio src="data:">`
+alone — so the beds played and the cues did not. Recorded because the near-miss is the lesson: a
+hands-on criterion produced a real finding on its first contact, and the finding was nearly acted on
+in the wrong direction.
+
+The `footstep` headroom figure stands as an observation worth a listening judgement in its own
+right. It is **not** logged as a defect.
 
 ### 7.7 — the 400-line justification
 
@@ -166,7 +179,7 @@ every statistic here. This gate catches stalls, not call counts.
 | D5 | `favicon.ico` 404s on every page load | **Pre-existing, not fixed.** Cosmetic, unrelated to audio, and invisible to `page.on('response')` because the browser issues it outside the page's request graph — which is why two probes appeared to disagree. Diagnosed rather than filtered. |
 | D6 | `npx vitest run <file>` prints `PASS (0) FAIL (0)` and **exits 0** on an unimportable file | **Recorded, no fix.** It is this terminal's output wrapper, not vitest — the JSON reporter correctly reports `success: false`. `npm test <file>` gives the honest `Tests N failed` line. The same wrapper swallows Playwright `console.log`. A false-green surface worth knowing about. |
 | D7 | `GameScene.ts` at 432 lines, not split | **Recorded above**, with the reason and the stale-citation hole it exposed. |
-| D8 | Phase 6's criterion 6.9 GPU ratio failed once at **2.5× vs 1.25**, in a full-suite run | **Pre-existing fragility, not Phase 7.** Absolute values were 0.037 → 0.092 ms, five times *smaller* than the 0.171–0.198 ms baseline the bound was set against. Passed twice in isolation immediately after. Corroborates the performance owner's finding that a gate whose margin is one frame in 479 is noise-sensitive in both directions. |
+| D8 | **Phase 6's criterion 6.9 fails under full-suite load and passes in isolation** — twice failing, three times passing on this branch | **Pre-existing, and PROVEN so rather than asserted.** The full suite was re-run on pre-audio `main` in a worktree (zero audio rows in the catalog) and **the same spec failed there too** — on the main-thread ratio at 2.333× rather than the GPU one, which is the same instability wearing a different hat. So Phase 7 is not the cause. On this branch the two failures disagreed with each other as well: 0.037 → 0.092 ms (2.5×), then 0.176 → 0.623 ms (3.53×) — one baseline five times *below* the documented 0.171–0.198 ms and one inside it. Numbers that unstable are measuring the machine, not the HUD. The GPU project alone passes 38/38, so the trigger is the 47 preceding headless tests. Corroborates the performance owner's finding G37 that a gate whose clean margin is one frame in 479 is noise-sensitive in both directions. **Flagged to the owner as a real defect in Phase 6's gate, out of Phase 7's scope to fix.** |
 | D9 | `file-size.test.ts` cannot tell a current justification from an expired one | **Deliberate non-fix.** Tightening it re-opens every existing citation; it belongs to the session that splits `GameScene.ts`. |
 | D10 | A cue's *count* is not the tick's count | **By design, recorded.** `advance()` ORs `TickEvents` over up to `MAX_TICKS_PER_FRAME` ticks, so two pickups in one rendered frame play one cue. Cadence cues cannot be lost (15 ticks > 5), but simultaneous hits collapse. |
 

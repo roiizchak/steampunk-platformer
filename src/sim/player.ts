@@ -151,6 +151,23 @@ export function resolveState(
  * restarts the sprite at frame 0, so the cue landed at the *start* of a stride rather than on a
  * plant: precisely the phase relationship a tick-locked cadence is supposed to buy. Every tap of
  * the walk key did this. The gait is now remembered and a change restarts the count.
+ *
+ * ## ⚠️ What the `vx` reset costs, and why it is still the right trade
+ *
+ * Codex implementation review C1. The cadence is **locked, not phase-locked**. While the player is
+ * pinned against a wall the state stays `run`, so `playIfChanged` sees no key change and the run
+ * animation keeps cycling — but this counter is now zeroed. Reversing away in the same gait
+ * therefore restarts the count against an animation that is mid-cycle, and the cue no longer lands
+ * on the drawn plant frame.
+ *
+ * Kept anyway: silence at a standstill is a smaller defect than a footstep every 250 ms at a
+ * standstill, which is what the alternative shipped.
+ *
+ * 🔴 **The root cause is not here.** The character *animates a run cycle while motionless*, because
+ * `resolveState` takes `movingHorizontally = dir !== 0 || vx !== 0`. Fix that and both readings
+ * agree without this function knowing anything about it. It is deliberately not fixed in an audio
+ * phase: that `dir !== 0` term exists for animation reasons predating Phase 7 and changing it moves
+ * every locomotion assertion from Phase 2 onward.
  */
 export function advanceStride(player: PlayerSim): boolean {
   const gait = player.state === 'walk' || player.state === 'run' ? player.state : null;
