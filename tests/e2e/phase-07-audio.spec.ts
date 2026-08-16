@@ -238,8 +238,23 @@ test.describe('Phase 7 — 7.5 a scene round-trip does not accumulate tracks', (
 
     // Two. Not "at most twelve", not "it did not grow much" — a leak of one per restart is exactly
     // what a passing-looking implementation produces.
-    expect(await liveTrackKeys(page), 'tracks after five restarts').toHaveLength(2);
-    expect((await liveTrackKeys(page)).sort()).toEqual(['bed-ambience', 'bed-music']);
+    //
+    // 🔴 ONE polled read, not two sequential ones, and that cost a red run to learn. This was an
+    // exact-length assertion followed by an exact-contents assertion, each calling `liveTrackKeys`
+    // — and it failed once with `["bed-ambience", "bed-music", "sfx-land"]`. Not a leak: the
+    // restarted player spawns in the air, so `waitForQuiet` can legitimately be satisfied *before*
+    // the fall completes and the landing cue starts a frame later. Reading a moving value twice is
+    // the defect; the product was correct.
+    //
+    // Polling is right rather than lenient here, because the two failures stay distinguishable: a
+    // one-shot in flight clears within its own duration and the poll goes green, while a leaked bed
+    // never leaves `sound.sounds` and the poll fails on the full timeout with the leak named.
+    await expect
+      .poll(async () => (await liveTrackKeys(page)).sort().join(','), {
+        timeout: 10_000,
+        message: 'tracks after five Boot restarts',
+      })
+      .toBe('bed-ambience,bed-music');
   });
 
   test('one-shot cues do not accumulate either', async ({ page }) => {

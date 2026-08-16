@@ -177,3 +177,47 @@ export const MAX_HUD_GPU_RATIO = 1.25;
  * and teach the next reader to raise it.
  */
 export const MAX_HUD_WORK_DELTA_MS = 1;
+
+/**
+ * Criterion 7.7 — the ceiling on `frames-without-audio / frames-with-audio` over one fixed window.
+ *
+ * **This is the load-bearing bound of criterion 7.7's frame-budget half, and it is a frame COUNT
+ * rather than a millisecond figure. That choice was forced by a measurement, not preferred.**
+ *
+ * 🔴 The first two versions of this gate asserted on `workMedianMs`, then on `workP95Ms`, and a
+ * proving mutation of **30 ms of blocking work per cue** moved the p95 by 0.400 ms — nothing. The
+ * reason is structural and worth keeping written down, because it applies to every spec that reduces
+ * `sample()` with a percentile:
+ *
+ *   this machine serves **~479 rAF frames per 120 sim ticks** — about 240 fps against a 60 Hz sim,
+ *   four frames per tick. A cue fires roughly eight times in that window, so cue frames are **1.9 %
+ *   of frames**. The 95th percentile is the 21st slowest of 479 and never lands on one.
+ *
+ * A percentile cannot see a cost carried by 2 % of frames. Frames-served can, because blocking the
+ * main thread costs frames directly: the mutation above dropped the window from **479 to 425**
+ * frames, and 54 lost frames at a 4.4 ms interval is 238 ms — the eight 30 ms stalls, recovered
+ * almost exactly.
+ *
+ * Clean spread is **479 / 479 / 479** against **479 / 478 / 479**, one frame. Bounded at **1.02** —
+ * ten times the observed noise, and the mutation clears it at 1.127.
+ *
+ * ⚠️ Its demonstrated floor: **`sound.play()` is so cheap that 500x the shipped call rate stayed
+ * invisible.** This gate catches stalls, not call counts, and the QA log says so.
+ */
+export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.02;
+
+/**
+ * Criterion 7.7 — the ceiling on the milliseconds audio adds to the MEDIAN frame.
+ *
+ * Kept alongside the frame count because the two catch different defects, and this one catches the
+ * defect the frame count is worst at: a cost that leaks into **every** frame — an audio poll in
+ * `update()`, a per-frame scan of `sound.sounds` — is exactly what a median sees and what a handful
+ * of dropped frames would not distinguish from noise.
+ *
+ * Measured at **0.000 ms** (0.500 against 0.500, three pairs). Bounded at **0.5 ms**, five
+ * quantisation steps and 3 % of a 16.67 ms frame.
+ *
+ * It is NOT the bound that proves this criterion — see `MAX_AUDIO_FRAME_LOSS_RATIO` for why a
+ * time-per-frame statistic is blind here.
+ */
+export const MAX_AUDIO_WORK_DELTA_MS = 0.5;
