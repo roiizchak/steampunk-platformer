@@ -28,15 +28,18 @@ import { cuesPlayed, resetCues, startCueRecorder } from './audioHelpers';
  *
  * ## What the toggle actually is, and why it is the honest one
  *
- * The off arm **removes the nine `sfx-*` buffers from `scene.cache.audio`**. `AudioManager.playCues`
- * already tests `scene.cache.audio.exists(key)` and skips, so the sim still ticks, still emits the
- * same cue edges, and `playCues` still iterates them — only the `Sound` construction and the
- * `AudioBufferSourceNode` start disappear. That isolates the cost this criterion is about instead of
- * also switching off the code path that decides there is a cost.
+ * The off arm **detaches the audio manager from `GameScene`**, so `this.audio?.playCues(...)`
+ * short-circuits and neither `audioCues` nor `playCues` nor `sound.play` runs at all. The off arm is
+ * the game with the audio feature absent.
  *
- * Muting was the obvious alternative and it is the wrong instrument: `setMute` sets a gain to zero
- * and every node is still built and started, so a muted arm measures the same work and the ratio
- * would read 1.0 for a reason that has nothing to do with the budget.
+ * Two narrower toggles were tried and rejected, each for a measured reason:
+ *
+ *  - **Muting** — `setMute` zeroes a gain while building and starting every node, so both arms do
+ *    identical work and the comparison reads 1.0 for a reason unrelated to the budget.
+ *  - **Emptying the sfx cache** — this was the shipped toggle until a mutation killed it. It left
+ *    `audioCues` and `playCues` running in both arms, so 2 ms of per-frame work injected into
+ *    `playCues` moved the median to 2.600 ms in BOTH arms and the delta stayed at 0.000. See
+ *    `setAudio` below.
  *
  * ⚠️ **Stated limits** *(vault 9.3 — a gate's blind spots are part of its result)*:
  *
@@ -72,58 +75,53 @@ const AUDIO_SAMPLE_TICKS = 120;
 type Page = import('@playwright/test').Page;
 
 /**
- * Take the nine one-shot cues out of the audio cache, or put them back.
+ * Detach the whole audio manager from `GameScene`, or put it back.
  *
- * Stashed on `window`, not re-fetched: re-loading them would put a network fetch and a decode
- * inside the run, and a decode is the single most expensive audio operation there is.
+ * 🔴 **This replaced a narrower toggle, and a mutation is what forced the change.** The first
+ * version removed the nine `sfx-*` buffers from `scene.cache.audio`, so `playCues` skipped through
+ * its own `exists()` guard. That looked honest — and for `sound.play()` it was — but it left
+ * `audioCues(events)` and the whole of `playCues` running in BOTH arms.
+ *
+ * The consequence was measured, not guessed. Injecting 2 ms of work per frame at the top of
+ * `playCues` moved the median from 0.500 ms to **2.600 ms in both arms**, and the reported delta
+ * stayed at **0.000 ms**. A cost that appears in both arms cancels; a cost carried by 2 % of frames
+ * is invisible to a median. Between them, the old toggle's millisecond delta could not go red for
+ * any defect at all — decoration, in the sense the project's testing rules use the word.
+ *
+ * `GameScene.update()` calls `this.audio?.playCues(audioCues(events))`. Optional chaining
+ * short-circuits the **entire call expression**, so a `GameScene` with no `audio` evaluates neither
+ * `audioCues` nor `playCues` nor `sound.play` — the off arm is then the game with the audio feature
+ * absent, which is the comparison criterion 7.7 actually asks for.
+ *
+ * The beds keep playing in both arms either way: they are owned by the sound manager, not by the
+ * scene field, and they are mixed off the main thread. That is stated as a limit, not fixed here.
  */
-async function setCues(page: Page, on: boolean): Promise<void> {
+async function setAudio(page: Page, on: boolean): Promise<void> {
   await page.evaluate((wanted) => {
-    interface Cache {
-      exists(key: string): boolean;
-      get(key: string): unknown;
-      add(key: string, data: unknown): void;
-      remove(key: string): void;
-      entries: { keys(): string[] };
-    }
-    const scene = (
-      window as unknown as {
-        __phaserGame: { scene: { getScene(k: string): { cache: { audio: Cache } } } };
-      }
-    ).__phaserGame.scene.getScene('Game');
-    const cache = scene.cache.audio;
-    const stash = ((window as unknown as { __stashedCues?: Record<string, unknown> }).__stashedCues ??=
-      {});
-
+    const holder = window as unknown as {
+      __phaserGame: { scene: { getScene(k: string): { audio?: unknown } } };
+      __stashedAudio?: unknown;
+    };
+    const scene = holder.__phaserGame.scene.getScene('Game');
     if (!wanted) {
-      for (const key of cache.entries.keys()) {
-        if (!key.startsWith('sfx-')) continue;
-        stash[key] = cache.get(key);
-        cache.remove(key);
-      }
+      holder.__stashedAudio ??= scene.audio;
+      scene.audio = undefined;
       return;
     }
-    for (const [key, data] of Object.entries(stash)) {
-      if (!cache.exists(key)) cache.add(key, data);
+    if (holder.__stashedAudio !== undefined) {
+      scene.audio = holder.__stashedAudio;
     }
   }, on);
 
-  // Assert the toggle LANDED rather than assuming it did. A cache API that changed shape under a
-  // Phaser upgrade would otherwise leave both arms identical and the ratio at a passing 1.0.
-  const present = await page.evaluate(
+  // Assert the toggle LANDED rather than assuming it did. `audio` is `private` in TypeScript and
+  // therefore only a compile-time fiction; if it were ever renamed, the assignment above would
+  // silently create a dead property and both arms would measure the same game.
+  const attached = await page.evaluate(
     () =>
-      (
-        window as unknown as {
-          __phaserGame: {
-            scene: { getScene(k: string): { cache: { audio: { entries: { keys(): string[] } } } } };
-          };
-        }
-      ).__phaserGame.scene
-        .getScene('Game')
-        .cache.audio.entries.keys()
-        .filter((k: string) => k.startsWith('sfx-')).length,
+      (window as unknown as { __phaserGame: { scene: { getScene(k: string): { audio?: unknown } } } })
+        .__phaserGame.scene.getScene('Game').audio !== undefined,
   );
-  expect(present, `sfx cues in cache with audio ${on ? 'on' : 'off'}`).toBe(on ? 9 : 0);
+  expect(attached, `GameScene.audio attached with audio ${on ? 'on' : 'off'}`).toBe(on);
 }
 
 /** Put the player back on a known tile with no momentum, so every window starts identically. */
@@ -181,7 +179,7 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
       // warms up over the run biases whichever arm goes first, and holding that constant means the
       // bias sits in both pairs the same way instead of cancelling into noise nobody can see.
       for (const arm of ['on', 'off'] as const) {
-        await setCues(page, arm === 'on');
+        await setAudio(page, arm === 'on');
         await resetRun(page, start);
         await resetCues(page);
 
@@ -204,7 +202,7 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
       }
     }
 
-    await setCues(page, true);
+    await setAudio(page, true);
 
     // ── Guard 1: the arms really did differ in audio work ──────────────────────────────────────
     //

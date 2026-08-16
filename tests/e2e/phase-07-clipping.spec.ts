@@ -73,9 +73,19 @@ const GATE_SOURCE = [
 
 interface StackMeasurement {
   stackDbfs: number;
-  perSource: { key: string; gain: number; peakDbfs: number; seconds: number; channels: number }[];
+  perSource: {
+    key: string;
+    gain: number;
+    peakDbfs: number;
+    seconds: number;
+    channels: number;
+    /** Where in the file the peak sits. For a bed, the passage the cues are aligned against. */
+    peakAtSeconds: number;
+    looping: boolean;
+  }[];
   transportAgrees: boolean;
   sampleRate: number;
+  cueFrames: number;
 }
 
 test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip', () => {
@@ -96,7 +106,7 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
         const transportAgrees = Math.abs(sum([half(), half()]) - 0) < 1e-9;
 
         const catalog = (await (await fetch('/assets/index.json')).json()) as {
-          audio: { key: string; url: string; gain: number }[];
+          audio: { key: string; url: string; gain: number; loop: boolean }[];
         };
 
         // A shared context, so every source decodes at ONE sample rate. Decoding the beds on a
@@ -104,7 +114,8 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
         // would silently compare samples that do not represent the same instant.
         const context = new AudioContext();
         const perSource: StackMeasurement['perSource'] = [];
-        const stack: Float32Array[][] = [];
+        const decoded: { row: (typeof catalog.audio)[number]; channels: Float32Array[]; peakAt: number }[] =
+          [];
 
         for (const key of wanted) {
           const row = catalog.audio.find((entry) => entry.key === key);
@@ -116,6 +127,7 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
 
           const channels: Float32Array[] = [];
           let peak = 0;
+          let peakAt = 0;
           for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
             // `getChannelData` hands back the live array, so the gain is applied in place rather
             // than into a copy — the two beds alone are ~90 MB of Float32 at 120 seconds each.
@@ -123,20 +135,53 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
             for (let i = 0; i < samples.length; i += 1) {
               samples[i] *= row.gain;
               const magnitude = Math.abs(samples[i]);
-              if (magnitude > peak) peak = magnitude;
+              if (magnitude > peak) {
+                peak = magnitude;
+                peakAt = i;
+              }
             }
             channels.push(samples);
           }
 
-          stack.push(channels);
+          decoded.push({ row, channels, peakAt });
           perSource.push({
             key,
             gain: row.gain,
             peakDbfs: peak > 0 ? 20 * Math.log10(peak) : -300,
             seconds: buffer.duration,
             channels: buffer.numberOfChannels,
+            peakAtSeconds: peakAt / buffer.sampleRate,
+            looping: row.loop,
           });
         }
+
+        /**
+         * 🔴 The beds are aligned to their OWN LOUDEST PASSAGE, not to their sample zero.
+         *
+         * Summing everything from sample 0 is right for the six one-shot cues: they are triggered on
+         * the same tick, so their sample-zeros genuinely coincide. It is wrong for the beds. A bed is
+         * already playing and looping when a cue fires, so the cue lands on an arbitrary phase of a
+         * 120-second track — and with cues at most ~2 s long, a zero-aligned sum only ever tests the
+         * bed's first two seconds. **118 of every 120 seconds went unmeasured**, and a bed that is
+         * quiet at its start and loud in the middle would pass this gate while clipping in play.
+         *
+         * So each bed contributes the window around its own peak instead. The peak is placed a
+         * cue's-worth of preroll in from the window start, which puts the bed's loudest sample where
+         * a cue's transient is — cue transients sit near sample zero, because the trim tool cuts to
+         * the event with 30 ms of preroll.
+         *
+         * This is the worst case that can actually occur, and it is strictly louder than the old one.
+         */
+        const cueFrames = Math.max(
+          ...decoded.filter((d) => !d.row.loop).map((d) => Math.max(...d.channels.map((c) => c.length))),
+        );
+        const prerollFrames = Math.floor(0.03 * context.sampleRate);
+
+        const stack: Float32Array[][] = decoded.map(({ row, channels, peakAt }) => {
+          if (!row.loop) return channels;
+          const start = Math.max(0, peakAt - prerollFrames);
+          return channels.map((c) => c.subarray(start, Math.min(c.length, start + cueFrames)));
+        });
 
         void ceiling;
         const result: StackMeasurement = {
@@ -144,6 +189,7 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
           perSource,
           transportAgrees,
           sampleRate: context.sampleRate,
+          cueFrames,
         };
         await context.close();
         return result;
@@ -172,7 +218,10 @@ test.describe('Phase 7 — 7.2 the worst-case simultaneous stack does not clip',
     expect(measured.stackDbfs, 'the whole stack measured as near-silence').toBeGreaterThan(-30);
 
     const report = measured.perSource
-      .map((s) => `${s.key} ${s.peakDbfs.toFixed(2)} dBFS ×${s.gain}`)
+      .map(
+        (s) =>
+          `${s.key} ${s.peakDbfs.toFixed(2)} dBFS ×${s.gain}${s.looping ? ` peak@${s.peakAtSeconds.toFixed(1)}s of ${s.seconds.toFixed(0)}s` : ''}`,
+      )
       .join(' | ');
     expect(
       measured.stackDbfs,

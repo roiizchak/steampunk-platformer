@@ -209,15 +209,20 @@ export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.02;
 /**
  * Criterion 7.7 — the ceiling on the milliseconds audio adds to the MEDIAN frame.
  *
- * Kept alongside the frame count because the two catch different defects, and this one catches the
- * defect the frame count is worst at: a cost that leaks into **every** frame — an audio poll in
- * `update()`, a per-frame scan of `sound.sounds` — is exactly what a median sees and what a handful
- * of dropped frames would not distinguish from noise.
+ * Catches the defect the frame count is worst at: a cost that leaks into **every** frame — an audio
+ * poll in `update()`, a per-frame scan of `sound.sounds` — rather than into the 2 % of frames a cue
+ * fires on.
  *
- * Measured at **0.000 ms** (0.500 against 0.500, three pairs). Bounded at **0.5 ms**, five
- * quantisation steps and 3 % of a 16.67 ms frame.
+ * 🔴 **This bound was decoration until the A/B toggle was replaced, and the proof is on the record.**
+ * While the off arm merely emptied the sfx cache, `audioCues()` and `playCues()` ran in BOTH arms,
+ * so an every-frame cost appeared in both and cancelled. Injecting 2 ms per frame at the top of
+ * `playCues` moved the median from 0.500 ms to **2.600 ms in both arms** and left the reported delta
+ * at **0.000 ms** — the bound could not go red for the exact defect its own comment claimed it
+ * existed to catch. The performance owner's brief flagged it as untested; measuring it showed it was
+ * worse than untested.
  *
- * It is NOT the bound that proves this criterion — see `MAX_AUDIO_FRAME_LOSS_RATIO` for why a
- * time-per-frame statistic is blind here.
+ * The toggle now detaches `GameScene.audio` entirely, so the off arm runs no audio code at all and
+ * an every-frame leak lands in one arm only. Measured **0.100 ms** clean; bounded at **0.5 ms**,
+ * five quantisation steps and 3 % of a 16.67 ms frame; the 2 ms/frame leak clears it fourfold.
  */
 export const MAX_AUDIO_WORK_DELTA_MS = 0.5;
