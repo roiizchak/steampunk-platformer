@@ -74,6 +74,12 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   clips ran before anyone read an invoice: **read the invoice before the next batch, not after it.**
   The ceiling bounds the damage; the ordering is what makes the bound reachable. This is the *art*
   ceiling — a new medium (audio, Phase 7) needs its own number set before its first real batch.
+- **The fal audio-spend ceiling is `$5`**, set by owner decision on 2026-08-16 **before Phase 7's
+  first generation** — which is the half of 4.2b that no ceiling could fix. It is a separate number
+  from the art ceiling because audio is a separate medium, and it is deliberately generous: both
+  Phase 7 endpoints price **flat per generation** (`$0.0206` SFX, `$0.0217` music), so `$5` buys
+  ~240 generations against a realistic need of nine. **The ordering carries the rule, not the
+  number** — probe one cue, read the invoice, batch, read the invoice again.
 - **STOP and ask** before: any new dependency, deleting any file, any fal batch over 5 generations,
   or contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md.
 - **A phase with a failing or unrun criterion is reported failing.** Never as done.
