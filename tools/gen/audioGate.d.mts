@@ -13,6 +13,12 @@
 /** Reported for digital silence, in place of `-Infinity`. */
 export const SILENCE_FLOOR_DBFS: number;
 
+/**
+ * Amplitude → dBFS. Exported so criterion 7.2's spec can carry `sumPeakDbfs`'s closure into the
+ * browser; not otherwise part of the instrument's surface.
+ */
+export function toDbfs(amplitude: number): number;
+
 /** Largest absolute sample across every channel, as dBFS. May exceed 0 for a hot buffer. */
 export function peakDbfs(channels: Float32Array[]): number;
 

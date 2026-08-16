@@ -32,7 +32,19 @@
  */
 export const SILENCE_FLOOR_DBFS = -300;
 
-function toDbfs(amplitude) {
+/**
+ * Amplitude → dBFS.
+ *
+ * Exported only so criterion 7.2's Playwright spec can transport `sumPeakDbfs` into the page by
+ * `Function.prototype.toString()` — `sumPeakDbfs` closes over this, and a closure that is not
+ * carried across becomes a `ReferenceError` in the browser. Transporting the real source is what
+ * keeps 7.2 asserted against **one** definition of the arithmetic rather than two that agree on the
+ * happy path; the spec additionally checks the transported copy against this one on a fixture.
+ *
+ * @param {number} amplitude
+ * @returns {number}
+ */
+export function toDbfs(amplitude) {
   if (!(amplitude > 0)) {
     return SILENCE_FLOOR_DBFS;
   }
