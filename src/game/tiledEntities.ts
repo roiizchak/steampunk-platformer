@@ -39,6 +39,7 @@ export function isGearObject(object: unknown): boolean {
 export function describeGearProblem(
   gearObjects: TiledObject[],
   bounds: { widthPx: number; heightPx: number },
+  solids: TiledObject[],
 ): string | null {
   if (gearObjects.length > MAX_LEVEL_GEARS) {
     return (
@@ -72,6 +73,38 @@ export function describeGearProblem(
     const height = gear.height ?? 0;
     if (width !== 0 || height !== 0) {
       return `gear #${index} must be a POINT, not a ${String(width)} x ${String(height)} rectangle — a gear's size is GEAR_BOX in the sim, not a per-level number`;
+    }
+    /**
+     * 🔴 **Not buried inside a solid.** *(code-reviewer brief 2 #8.)*
+     *
+     * This check existed, but only as an assertion in a unit test, and only against `level-01` —
+     * so it protected the one level that ships and nothing else. A hand-authored gear inside the
+     * floor of a *future* level boots cleanly and is permanently uncollectable, which is the same
+     * "a level the player can never complete" the cap and the bounds check above both refuse for.
+     * Phase 8 is when that stops being hypothetical, so the rule moves to the layer every level
+     * passes through rather than staying in a test of one of them.
+     *
+     * Still not a reachability check — nothing here knows whether a gear can be jumped to. A gear
+     * *inside* geometry is a different and decidable question: the collision box can never overlap
+     * the player's, because the player can never be there.
+     */
+    // Hoisted: the `typeof` guards above narrow `gear.x`/`gear.y` in straight-line code, but that
+    // narrowing does not survive into the callback below.
+    const gx = gear.x;
+    const gy = gear.y;
+    const buried = solids.find(
+      (solid) =>
+        gx > (solid.x as number) &&
+        gx < (solid.x as number) + (solid.width as number) &&
+        gy > (solid.y as number) &&
+        gy < (solid.y as number) + (solid.height as number),
+    );
+    if (buried !== undefined) {
+      return (
+        `gear #${index} at (${gear.x}, ${gear.y}) is inside the solid at ` +
+        `(${buried.x}, ${buried.y}) ${buried.width} x ${buried.height} — the player can never ` +
+        `reach it, so the level can never be completed`
+      );
     }
   }
 

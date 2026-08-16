@@ -90,11 +90,17 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
-      // Everything except the two specs that need a browser this one cannot be: the frame-budget
-      // spec, and Phase 6's HUD spec, which reads actual PIXELS. SwiftShader is a software
-      // rasteriser, so its output is not what a player's GPU draws — a colour assertion taken from
-      // it is a measurement of the wrong thing, which is the root rule's whole complaint.
-      testIgnore: /phase-0(5-perf|6-hud|6-chrome)\.spec\.ts/,
+      // Everything except the specs that need a browser this one cannot be: the frame-budget spec,
+      // and EVERY Phase 6 spec, which read actual PIXELS. SwiftShader is a software rasteriser, so
+      // its output is not what a player's GPU draws — a colour assertion taken from it is a
+      // measurement of the wrong thing, which is the root rule's whole complaint.
+      //
+      // 🔴 The Phase 6 half is a PREFIX match (`6-[a-z]+`) rather than a list of file names, and
+      // deliberately so. It was `6-hud|6-chrome`, and every split of those files — this phase alone
+      // produced three — silently opted the new file back into SwiftShader unless someone
+      // remembered to edit two regexes in lockstep. A spec that quietly runs on the wrong
+      // rasteriser still passes; it just stops measuring the thing it names.
+      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -119,7 +125,7 @@ export default defineConfig({
       // asserts the health bar's drawn rectangle and 6.8 inspects the chroma-keyed art. Both are
       // claims about rasterised output, and both are meaningless taken from SwiftShader.
       name: 'chromium-gpu',
-      testMatch: /phase-0(5-perf|6-hud|6-chrome)\.spec\.ts/,
+      testMatch: /phase-0(5-perf|6-[a-z0-9-]+)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,

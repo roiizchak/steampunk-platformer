@@ -1,5 +1,16 @@
 # Phase 6 — what is left, and the decision on each
 
+> ## ✅ RESOLVED 2026-08-16 — this document is now history, not a to-do list.
+>
+> Every item was worked in the session of 2026-08-16. Outcomes, evidence and the findings from
+> eight gate-owner runs and a second Codex implementation review are in
+> [qa/phase-06-hud.md §Session 2](../qa/phase-06-hud.md). In brief: **item 1 (the blocker) is
+> measured**; items 2, 3, 4, 6, 7, 8, 9 fixed; item 5 **refuted — the hole did not exist**; item 10
+> half done with DPR deferred; item 12 triaged with three Phase 4 items closed; item 13 deferred to
+> Phase 9 as recommended. Phase 6 is marked ✅ done in PRD.md.
+>
+> Kept verbatim below because the questions it asked are the reason the answers exist.
+
 ← [HANDOFF.md](../HANDOFF.md) §16 · QA log: [qa/phase-06-hud.md](../qa/phase-06-hud.md) ·
 reviews: [plan](../reviews/phase-06-plan.md) · [impl](../reviews/phase-06-impl.md)
 

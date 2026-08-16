@@ -25,8 +25,6 @@
 import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
 import { readHud } from './hudHelpers';
-
-type Page = import('@playwright/test').Page;
 import { hudFits } from '../../src/render/hud';
 
 
@@ -102,10 +100,61 @@ test.describe('criterion 6.2 — the HUD is pinned under pan and under zoom', ()
     await bootToGame(page);
     const hud = await readHud(page);
 
+    // Image and Text render from a texture, so `willRender` is the right question for these three.
     expect(hud.plate.willRender).toBe(true);
-    expect(hud.barFill.willRender).toBe(true);
     expect(hud.gearIcon.willRender).toBe(true);
     expect(hud.counter.willRender).toBe(true);
+
+    /**
+     * 🔴 **`barFill` is a `Graphics`, and `willRender` is the wrong question for one** — Codex
+     * implementation finding C5. A Graphics reports `willRender` true whether or not a single
+     * command was ever queued into it, so this assertion passed on an empty command buffer. Its
+     * sibling in `phase-06-hud.spec.ts` was converted; this one was left behind.
+     *
+     * ⚠️ The buffer must be read in a **damaged** state, not at boot. `drawHealth` computes
+     * `spentW === 0` at full health and deliberately queues nothing — so asserting `length > 0`
+     * here on a freshly booted game would be a false RED, failing on correct behaviour. The
+     * synthetic render below forces the one state where a non-empty buffer is the correct answer.
+     */
+    const commands = await page.evaluate(() => {
+      const game = (
+        window as unknown as {
+          __phaserGame: {
+            scene: { getScene(k: string): unknown; pause(k: string): void; resume(k: string): void };
+          };
+        }
+      ).__phaserGame;
+      // Paused, or `GameScene.update()` overwrites the synthetic render before it can be read.
+      game.scene.pause('Game');
+      const gs = game.scene.getScene('Game') as unknown as {
+        world: Record<string, unknown> & { player: Record<string, unknown> };
+        cameras: { main: unknown };
+      };
+      const ui = game.scene.getScene('UI') as unknown as {
+        render(w: unknown, c: unknown): void;
+        hudObjects(): { barFill: { commandBuffer: unknown[] } };
+      };
+      ui.render(
+        {
+          ...gs.world,
+          player: { ...gs.world.player, hp: 50, maxHp: 100 },
+          gears: [],
+          gearsCollected: 0,
+          tickCount: 0,
+        },
+        gs.cameras.main,
+      );
+      const n = ui.hudObjects().barFill.commandBuffer.length;
+      game.scene.resume('Game');
+      return n;
+    });
+
+    expect(typeof commands, 'the command buffer stopped being readable').toBe('number');
+    expect(
+      commands,
+      'the health bar queued NO Graphics commands at 50 of 100 hp. `willRender` would still be ' +
+        'true here, which is exactly why it is not the assertion.',
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -152,6 +201,20 @@ test.describe('criterion 6.3 — built from the live game size', () => {
     const before = await readHud(page);
     expect(before.gameSize.height).toBe(1080);
 
+    /**
+     * The camera is checked at BOTH sizes, and the second check alone is not enough — found by the
+     * red run. A camera pinned to a literal that happens to equal the resize TARGET (1280 x 720)
+     * satisfies the after-check perfectly and is still vault 6.2's defect; it is simply wrong
+     * before the resize instead of after. Asserting only the end state made the gate pass on the
+     * mutation it exists to catch.
+     */
+    expect(
+      { w: before.uiCamera.width, h: before.uiCamera.height },
+      `the UI camera is ${before.uiCamera.width}x${before.uiCamera.height} at the design size ` +
+        `${before.gameSize.width}x${before.gameSize.height} — it was built from a literal, not ` +
+        `from the live game size`,
+    ).toEqual({ w: before.gameSize.width, h: before.gameSize.height });
+
     await page.evaluate(() => {
       (
         window as unknown as { __phaserGame: { scale: { resize(w: number, h: number): void } } }
@@ -168,6 +231,38 @@ test.describe('criterion 6.3 — built from the live game size', () => {
     expect(after.plate.w).toBeLessThan(before.plate.w);
     expect(hudFits(after.layout, 1280, 720, after.counter.w)).toBe(true);
     expect(after.plate.willRender).toBe(true);
+
+    /**
+     * 🔴 **The UI camera itself, read rather than inferred** — Codex implementation finding C4, and
+     * the qa-expert owner independently from the other side.
+     *
+     * Everything above asserts the *layout numbers* and `hudFits`. None of it looks at the camera
+     * the HUD is actually drawn through. The no-cropping guarantee holds today only because
+     * `UIScene` never creates an explicit camera and inherits one Phaser resizes for it — an
+     * emergent property. Vault 6.2's blocker is exactly the opposite case: a second camera built at
+     * an explicit size never auto-resizes, and at a hardcoded 1280 it cropped a whole HUD plate off
+     * a phone. Nothing in this suite would have noticed a regression that introduced one.
+     */
+    expect(
+      { w: after.uiCamera.width, h: after.uiCamera.height },
+      `the UI camera is ${after.uiCamera.width}x${after.uiCamera.height} after a resize to ` +
+        `${after.gameSize.width}x${after.gameSize.height}. A camera that does not track the game ` +
+        `size crops the HUD — vault 6.2, where a camera pinned at 1280 lost a whole plate.`,
+    ).toEqual({ w: after.gameSize.width, h: after.gameSize.height });
+
+    // Size alone is not enough: a correctly sized camera that is offset, scrolled or zoomed crops
+    // the HUD just as effectively, and `hudFits` works in layout space so it cannot see any of it.
+    expect(
+      {
+        x: after.uiCamera.x,
+        y: after.uiCamera.y,
+        scrollX: after.uiCamera.scrollX,
+        scrollY: after.uiCamera.scrollY,
+        zoom: after.uiCamera.zoom,
+      },
+      'the UI camera is no longer at the origin, unscrolled and unzoomed — the HUD is drawn ' +
+        'through it, so any of these silently shifts or scales the whole HUD',
+    ).toEqual({ x: 0, y: 0, scrollX: 0, scrollY: 0, zoom: 1 });
   });
 });
 
@@ -181,28 +276,69 @@ test.describe('criterion 6.7 — the canvas is centred once', () => {
    * against a correct 56 / 57. It looks almost right, which is why it survived five phases — and
    * why this is a measurement rather than a stylesheet review.
    */
-  test('a letterboxed viewport leaves equal gaps above and below', async ({ page }) => {
-    // Deliberately NOT 16:9: at the game's own aspect ratio the canvas fills the viewport and any
-    // centring bug is invisible. That is how this defect stayed hidden.
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await bootToGame(page);
+  /**
+   * Both boxing directions, because they are different code paths through `FIT`.
+   *
+   * 🔴 Until now only the **letterboxed** case was exercised (1400 × 900, taller than 16:9, so the
+   * fit is width-limited and the slack lands top and bottom). A **pillarboxed** viewport — wider
+   * than 16:9, height-limited, slack on the left and right — was never tested, and it is the other
+   * half of the same centring composition. *(qa-expert brief 2 #6.)*
+   *
+   * ⚠️ `deviceScaleFactor` other than 1 is still unexercised and is recorded as deferred: `autoRound`
+   * floors CSS sizes, so DPR 1.25/1.5 could round asymmetrically. It needs an ENGINE-NOTES pass on
+   * Phaser's rounding before a bound means anything, and it is carried to Phase 9 rather than
+   * guessed at here.
+   */
+  for (const [w, h, boxing] of [
+    [1400, 900, 'letterboxed'],
+    [2000, 900, 'pillarboxed'],
+  ] as const) {
+    test(`a ${boxing} viewport (${w}x${h}) leaves equal gaps on both sides`, async ({ page }) => {
+      // Deliberately NOT 16:9: at the game's own aspect ratio the canvas fills the viewport and any
+      // centring bug is invisible. That is how this defect stayed hidden for five phases.
+      await page.setViewportSize({ width: w, height: h });
+      await bootToGame(page);
 
-    const box = await page.evaluate(() => {
-      const c = document.querySelector('canvas')!;
-      const r = c.getBoundingClientRect();
-      return {
-        top: r.top,
-        bottom: window.innerHeight - r.bottom,
-        left: r.left,
-        right: window.innerWidth - r.right,
-      };
+      const box = await page.evaluate(() => {
+        const c = document.querySelector('canvas')!;
+        const r = c.getBoundingClientRect();
+        return {
+          top: r.top,
+          bottom: window.innerHeight - r.bottom,
+          left: r.left,
+          right: window.innerWidth - r.right,
+          width: r.width,
+          height: r.height,
+        };
+      });
+
+      expect(typeof box.top).toBe('number');
+      // 1px of tolerance for an odd number of leftover pixels, and no more: the defect was 28px.
+      expect(Math.abs(box.top - box.bottom), `${boxing}: vertical gaps unequal`).toBeLessThanOrEqual(1);
+      expect(Math.abs(box.left - box.right), `${boxing}: horizontal gaps unequal`).toBeLessThanOrEqual(1);
+
+      /**
+       * 🔴 Equal gaps are satisfied by a canvas of the WRONG SIZE that happens to be centred — a
+       * zero-width canvas has perfectly equal gaps. `FIT` must preserve the game's 16:9 aspect
+       * whichever axis is the limiting one, so that is what pins the size.
+       */
+      expect(box.width, `${boxing}: canvas has no width`).toBeGreaterThan(0);
+      expect(box.height, `${boxing}: canvas has no height`).toBeGreaterThan(0);
+      expect(
+        Math.abs(box.width / box.height - 16 / 9),
+        `${boxing}: the canvas is ${box.width}x${box.height}, aspect ` +
+          `${(box.width / box.height).toFixed(4)} against the game's 1.7778. FIT stretched or ` +
+          `mis-fitted it, which equal gaps alone cannot see.`,
+      ).toBeLessThan(0.01);
+      // The slack is on the axis this boxing NAMES. Without it, both cases could pass while FIT
+      // silently picked the wrong limiting axis.
+      if (boxing === 'letterboxed') {
+        expect(box.top, 'letterboxed: expected vertical slack').toBeGreaterThan(0);
+      } else {
+        expect(box.left, 'pillarboxed: expected horizontal slack').toBeGreaterThan(0);
+      }
     });
-
-    expect(typeof box.top).toBe('number');
-    // 1px of tolerance for an odd number of leftover pixels, and no more: the defect was 28px.
-    expect(Math.abs(box.top - box.bottom)).toBeLessThanOrEqual(1);
-    expect(Math.abs(box.left - box.right)).toBeLessThanOrEqual(1);
-  });
+  }
 
   test('the canvas is not pushed outside the viewport at any supported size', async ({ page }) => {
     for (const [w, h] of [
@@ -219,55 +355,5 @@ test.describe('criterion 6.7 — the canvas is centred once', () => {
       });
       expect(fits, `canvas overflows at ${w}x${h}`).toBe(true);
     }
-  });
-});
-
-test.describe('the boot gate still owns the HUD', () => {
-  /** Is a scene running right now, per Phaser's own scene manager? */
-  const uiActive = (page: Page): Promise<boolean> =>
-    page.evaluate(() => {
-      const game = (
-        window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }
-      ).__phaserGame;
-      return game.scene.isActive('UI');
-    });
-
-  test('a successful boot runs the HUD alongside the game', async ({ page }) => {
-    await bootToGame(page);
-    expect(await page.evaluate(() => window.__game?.ready)).toBe(true);
-    expect(await uiActive(page)).toBe(true);
-  });
-
-  /**
-   * 🔴 This test used to be called "a refused boot leaves no HUD drawn over the error screen" and
-   * **never refused a boot**. It called `bootToGame`, asserted `ready === true`, and then asserted
-   * the UI scene was ACTIVE — the opposite of the thing its name claimed. Deleting
-   * `this.scene.stop('UI')` from `BootScene.refuseToRoute` left it green, so the one line Phase 6
-   * added to `BootScene` had no coverage at all. The code-reviewer gate owner found it.
-   *
-   * `?breakAsset=corrupt` points the first catalog entry at a committed non-image, which is the
-   * repeatable refusal fixture Phase 1 built precisely so this path is a regression test rather
-   * than a ritual *(vault C2)*.
-   */
-  test('a REFUSED boot stops the HUD instead of drawing it over the error screen', async ({
-    page,
-  }) => {
-    await page.goto('/?breakAsset=corrupt');
-    await page.waitForFunction(
-      () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
-      undefined,
-      { timeout: 20_000 },
-    );
-
-    // The premise: this really is a refusal, not a slow boot. Without it the assertion below would
-    // pass on a game that simply had not started the HUD yet.
-    const view = await page.evaluate(() => window.__game);
-    expect(typeof view?.bootError).toBe('string');
-    expect(view?.bootError).not.toBe('');
-    expect(view?.ready).toBe(false);
-
-    // The HUD runs in parallel with Game, so a refusal that stopped only Game would leave a health
-    // bar and a gear counter drawn over the error screen — a refusal you can see straight through.
-    expect(await uiActive(page)).toBe(false);
   });
 });

@@ -39,6 +39,7 @@ section moves to `docs/handoff/`. The live sessions stay in this file.
 | §14 | session 8 — 2026-08-13 | below |
 | §15 | sessions 9–10 — 2026-08-13/14 | below |
 | §16 | Phase 6, session 1 — 2026-08-15 | below |
+| §17 | **Phase 6, session 2 — 2026-08-16. Phase 6 CLOSED.** | below |
 
 ---
 
@@ -409,3 +410,59 @@ bytes* — and the art gates are the one place this project does not do it.
   name appeared in an unrelated citation.
 - **The e2e suite now has two Playwright projects.** `chromium` for everything, and `chromium-gpu`
   — headed, real GPU — for `phase-05-perf.spec.ts` only. It opens a window when it runs.
+
+---
+
+## 17. Phase 6, session 2 — 2026-08-16. **This section supersedes §16.**
+
+> ✅ **Phase 6 is DONE and marked ✅ in [PRD.md](PRD.md).** Criterion 6.9's frame budget — the
+> blocker — is measured. The ten-item owed list is resolved. The A7 shortfall is closed: all three
+> missing brief 2s ran, and eight gate-owner runs happened in total. Codex's implementation review
+> ran a second time.
+>
+> **Not merged.** Stopped for approval, per the phase workflow.
+
+**State, all re-run after the last edit:** typecheck clean · **1224 unit tests pass** · **1224 pass
+with Phaser uninstalled** · `npm run build` + `verify-dist` ok · **48/48 headless e2e** · **23/23 on
+`chromium-gpu`, 1 skipped** · port 5173 clear · Phaser 4.2.1 restored.
+
+**The measurement that closed the phase.** The HUD costs **~0.1 ms of main thread and ~0.003 ms of
+GPU per frame** — 0.6 % and 0.02 % of a 16.67 ms frame — measured as three interleaved
+HUD-on/HUD-off pairs on a real GPU, in a damaged state so the bar actually draws. Full table,
+bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
+
+### The three things worth knowing before the next session
+
+1. **The recorded "false green the suite cannot catch" does not exist.** Vitest fails both shapes —
+   an unimportable test file and a file with zero tests — and exits non-zero. What happened in
+   session 1 was a misread: the `Tests N passed` line stays green and merely *drops*, while the
+   redness is on the `Test Files` line and in the exit code. No gate was built; building one would
+   have been decoration.
+2. **HUD lifetime by scene-event ordering is a trap.** Three implementations: a `GameScene` SHUTDOWN
+   handler (deleted the HUD on restart — both code-reviewer briefs traced it from Phaser's sources
+   before any test caught it), `attachHud` stop-then-launch (broke the dev-toggle teardown), and
+   finally `UIScene.update()` retiring itself when `GameScene`'s status `>= SLEEPING`. Only the
+   condition is order-independent. **PAUSED still renders and must be kept** — criterion 6.4's spec
+   pauses `Game` deliberately.
+3. **A real defect was found and fixed in the boot path.** A refusal that follows a *successful*
+   boot left the HUD frozen over the error screen, with the render loop throwing
+   `TypeError: … reading 'glTexture'`. The stop was in the right place but ran too late: on a restart
+   the play scenes render on through the reload that frees their textures, and the crash kills the
+   loop before `refuseToRoute` can stop anything. **Fixed by stopping `Game` and `UI` in
+   `BootScene.init()`** — a no-op on a fresh boot. Found only by writing the test Codex said was
+   missing; the old one used a fresh page where the HUD was never running, so it could not go red for
+   the line it named.
+
+### Carried forward
+
+- **Phase 7:** the three `hudObjects()` call sites that bypass `waitForHud`.
+- **Phase 8:** the gear-burial check misses a gear on the **seam between two floor rects** — a 96 px
+  grid makes that the default authoring outcome, and Phase 8 is the phase that authors multi-rect
+  floors. Also re-measure counter contrast against any new palette: the fill alone is 3.13:1 on
+  mid-grey and 1.13:1 on bright sky.
+- **Phase 9:** `addHelpBanner`'s literal `18px` (~8 physical px at 852×480 — **confirmed illegible in
+  the playtest screenshot**) and its `setScrollFactor(0)`, which re-creates vault 6.1's pattern
+  outside `UIScene`; DPR ≠ 1 centring; the collect-tween polish.
+- **Phase 4 debt:** only **4.2b** (owner decision — an ordering violation no work can undo) and
+  **4.27** remain. 4.10/4.12 were already closed; **4.16 closed this session**. The PRD row was
+  stale and is corrected.

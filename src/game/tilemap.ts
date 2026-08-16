@@ -280,10 +280,14 @@ export function describeLevelProblem(raw: unknown): string | null {
 
   // The map's own extent, measured from the file rather than assumed (vault 3.2). Both casts are
   // discharged by the positive-integer checks above.
-  const gearProblem = describeGearProblem(objects.filter(isGearObject), {
-    widthPx: (map.width as number) * (map.tilewidth as number),
-    heightPx: (map.height as number) * (map.tileheight as number),
-  });
+  const gearProblem = describeGearProblem(
+    objects.filter(isGearObject),
+    {
+      widthPx: (map.width as number) * (map.tilewidth as number),
+      heightPx: (map.height as number) * (map.tileheight as number),
+    },
+    solids,
+  );
   if (gearProblem !== null) {
     return gearProblem;
   }

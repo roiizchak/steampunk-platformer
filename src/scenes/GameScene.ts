@@ -152,6 +152,7 @@ export class GameScene extends Phaser.Scene {
     // why that removes vault 6.1's reciprocal-ignore-list hazard instead of managing it.
     ({ ui: this.ui, gears: this.gears } = attachHud(this, this.world));
 
+
     this.bindKeys();
     addHelpBanner(this, this.helpText());
 

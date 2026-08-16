@@ -24,6 +24,27 @@ export class BootScene extends Phaser.Scene {
    */
   init(): void {
     this.loadFailures = [];
+
+    /**
+     * 🔴 **Stop the play scenes BEFORE re-loading, not only when refusing.**
+     *
+     * `refuseToRoute` already stops `Game` and `UI`, and that is correct — but it runs at the END of
+     * a boot attempt, and on a **restart** the play scenes keep rendering all the way through the
+     * reload that precedes it. `preload` drops the cached catalog and textures on purpose (see
+     * below), so a still-rendering `GameScene` reaches a freed texture and throws
+     * `TypeError: Cannot read properties of null (reading 'glTexture')`. Once the render loop
+     * throws, nothing further runs — including `refuseToRoute`'s stops — and the HUD is left frozen
+     * over the error screen. A refusal you can see straight through, arrived at from a direction the
+     * Phase 6 fix could not reach.
+     *
+     * Found by writing the restart-based refusal test Codex's second implementation review asked
+     * for; the old test used a fresh page, where these scenes were never running.
+     *
+     * A no-op on a fresh boot — `scene.stop` on a scene that was never started does nothing — so
+     * this costs the normal path nothing and makes the restart path safe by construction.
+     */
+    this.scene.stop('Game');
+    this.scene.stop('UI');
     updateDebugState({
       sceneKey: this.scene.key,
       tick: 0,

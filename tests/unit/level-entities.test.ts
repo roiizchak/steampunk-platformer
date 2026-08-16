@@ -162,6 +162,12 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // placement check at all: enemies get ground under both patrol ends, the spawn gets ground
     // beneath it, and a gear could sit outside the map and simply never be collectable.
     ['gear-outside-map', /outside the map/],
+    // 🔴 "Not buried in a solid" used to be asserted only against `level-01`, further down this
+    // file — so it protected the one level that ships and no other. Moved into
+    // `describeGearProblem`, where every level passes through it, and gated by a fixture built
+    // from the shipped level with ONE gear's y moved from 1872 to 2016: inside the floor solid at
+    // y 1920, height 192. Nothing else in the file differs.
+    ['gear-inside-solid', /is inside the solid at/],
   ];
 
   it.each(cases)('%s', (name, reason) => {

@@ -126,19 +126,46 @@ test.describe('criterion 6.1 — the gear counter', () => {
         window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
       ).__phaserGame;
       const ui = game.scene.getScene('UI') as unknown as {
-        children: { list: { depth: number }[] };
+        children: { list: { depth: number; x: number; y: number }[] };
         tweens: { getTweens(): unknown[] };
+        hudObjects(): { gearIcon: { x: number; y: number } };
       };
 
       let peakTweens = 0;
       let peakObjects = 0;
       const baseline = ui.children.list.length;
 
+      // The destination the tween is aimed at, in the HUD's own screen space.
+      const icon = ui.hudObjects().gearIcon;
+      const target = { x: icon.x, y: icon.y };
+
+      /**
+       * Positions of ONE flyer, sampled once per animation frame.
+       *
+       * The flyer is the object at depth 1003 — above the plate (1000), bar (1001), icon (1002) —
+       * and it is the only thing `UIScene` ever adds after `build()`. Tracked by identity so a
+       * second collection mid-flight cannot splice two different arcs into one series.
+       */
+      let tracked: { depth: number; x: number; y: number } | null = null;
+      const path: { x: number; y: number }[] = [];
+
       const started = performance.now();
       await new Promise<void>((resolve) => {
         const step = (): void => {
           peakTweens = Math.max(peakTweens, ui.tweens.getTweens().length);
           peakObjects = Math.max(peakObjects, ui.children.list.length - baseline);
+
+          if (tracked && ui.children.list.includes(tracked)) {
+            path.push({ x: tracked.x, y: tracked.y });
+          } else {
+            if (tracked) tracked = null;
+            const flyer = ui.children.list.find((o) => o.depth === 1003);
+            if (flyer && path.length === 0) {
+              tracked = flyer;
+              path.push({ x: flyer.x, y: flyer.y });
+            }
+          }
+
           if (performance.now() - started > 2500) {
             resolve();
             return;
@@ -148,7 +175,7 @@ test.describe('criterion 6.1 — the gear counter', () => {
         requestAnimationFrame(step);
       });
 
-      return { peakTweens, peakObjects, baseline };
+      return { peakTweens, peakObjects, baseline, path, target };
     });
     // 🔴 Release the key BEFORE measuring what settled, then wait out one full tween.
     //
@@ -180,201 +207,64 @@ test.describe('criterion 6.1 — the gear counter', () => {
     // And it does not leak: one object per gear, destroyed on arrival. A HUD that keeps them is a
     // leak with a level-sized bound. The `waitForFunction` above IS the assertion — it times out
     // and fails the test if the flyers are never destroyed.
-  });
-});
-
-test.describe('criterion 6.4 — the health bar is gated on what is DRAWN', () => {
-  /**
-   * The pixel read Codex's F4 asked for.
-   *
-   * The unit suite proves `healthBarFillWidth(99, 100, 239)` cannot return a full-slot width. It
-   * cannot prove that the rectangle built from that width is drawn in the right place, in the right
-   * colour, at all — `UIScene.drawHealth` is a separate step and every one of its coordinates can be
-   * wrong while the arithmetic is right.
-   *
-   * 99 hp is unreachable by playing: the smallest damage in the game is a 20 hp hazard. So the real
-   * render path is driven with a synthetic world at 99 hp and the resulting pixels are read back.
-   * The path under test is the shipped one; only the input is synthetic.
-   */
-  test('at 99 of 100 hp the bar draws a visible spent portion', async ({ page }) => {
-    await bootToGame(page);
 
     /**
-     * Drive the shipped draw path at a given hp and return the mean luminance of an 8 px column of
-     * the slot, `fromRight` pixels in from the bar's right-hand end.
+     * 🔴 **It has to actually FLY** — Codex implementation finding C3.
      *
-     * Two things this has to get right, both learned by getting them wrong:
-     *
-     * 1. **`Game` is paused first.** `GameScene.update()` calls `ui.render(realWorld)` every frame,
-     *    so a synthetic render is overwritten before the screenshot is taken. The first version of
-     *    this test read the SAME luminance at 99 and at 100 hp — identical to the last decimal —
-     *    which is what a test measuring nothing looks like.
-     * 2. **It does not sample the last few pixels.** The bar ends in a rounded brass cap, so the
-     *    final column is bezel at any health and never changes. Sampling it produced a dark,
-     *    constant reading that looked like a legitimate measurement.
+     * Everything above proves a flyer object appeared and was later destroyed. Deleting the tween's
+     * `x`/`y` targets would leave every one of those assertions green: an object that is created at
+     * the gear and destroyed 250 ms later where it started still "exists and cleans up". The
+     * criterion says collect **→ scoreboard**, so the journey is the thing.
      */
-    const lumaAt = async (hp: number, fromRight: number): Promise<number> => {
-      const slot = await page.evaluate((forcedHp) => {
-        const game = (
-          window as unknown as {
-            __phaserGame: {
-              scale: { gameSize: { width: number; height: number } };
-              scene: { getScene(k: string): unknown; pause(k: string): void };
-            };
-          }
-        ).__phaserGame;
-        game.scene.pause('Game');
+    const { path, target } = flyers;
+    expect(Array.isArray(path), 'the trajectory sampler returned no array').toBe(true);
 
-        const gameScene = game.scene.getScene('Game') as unknown as {
-          world: Record<string, unknown> & { player: Record<string, unknown> };
-          cameras: { main: unknown };
-        };
-        const ui = game.scene.getScene('UI') as unknown as {
-          render(w: unknown, c: unknown): void;
-          hudObjects(): { layout: { slot: { x: number; y: number; w: number; h: number } } };
-        };
-        // The real world with hp forced. Only the INPUT is synthetic; the draw path is the shipped
-        // one, which is the whole point — 99 hp is unreachable by playing, because the smallest
-        // damage in the game is a 20 hp hazard.
-        ui.render(
-          {
-            ...gameScene.world,
-            player: { ...gameScene.world.player, hp: forcedHp, maxHp: 100 },
-            gears: [],
-            gearsCollected: 0,
-            tickCount: 0,
-          },
-          gameScene.cameras.main,
-        );
-        // 🔴 Converted from GAME space to CSS space before it leaves the page.
-        //
-        // `page.screenshot({clip})` clips in CSS pixels of the viewport; the layout is in the
-        // game's 1920 x 1080 design space, and under `FIT` the canvas is scaled to the viewport.
-        // Clipping with the raw game coordinates sampled a region that was not the bar at all —
-        // which read as a plausible, perfectly constant luminance at every health value, and is the
-        // second way this test managed to measure nothing.
-        const rect = document.querySelector('canvas')!.getBoundingClientRect();
-        const g = ui.hudObjects().layout.slot;
-        const k = rect.width / game.scale.gameSize.width;
-        return {
-          x: rect.left + g.x * k,
-          y: rect.top + g.y * k,
-          w: g.w * k,
-          h: g.h * k,
-          k,
-        };
-      }, hp);
+    /**
+     * A minimum sample count, because "ends near the target" alone passes an instantaneous
+     * TELEPORT — an object created at the destination satisfies a final-position check perfectly.
+     * The tween runs 15 ticks (250 ms), so a 60 Hz rAF loop sees roughly 15 frames of it; 5 is a
+     * floor loose enough for a loaded machine and still far more than a jump would produce.
+     */
+    expect(
+      path.length,
+      `only ${path.length} positions were sampled during the flight. A tween that covers its whole ` +
+        `distance in one frame is a teleport, not a flight.`,
+    ).toBeGreaterThanOrEqual(5);
 
-      // The band is expressed in GAME pixels and converted, so it stays inside the drained region
-      // whatever the viewport scale happens to be. At 99 hp the spent portion is 22 game px wide (239 slot - 217 fill);
-      // sampling 3..12 in from the right end is inside it and clear of the rounded brass cap.
-      const inner = Math.round((fromRight + 9) * slot.k);
-      const outer = Math.round(fromRight * slot.k);
-      const height = Math.max(1, Math.round(slot.h) - 8);
-      const shot = await page.screenshot({
-        clip: {
-          x: Math.round(slot.x + slot.w - inner),
-          y: Math.round(slot.y) + 4,
-          width: Math.max(1, inner - outer),
-          height,
-        },
-      });
-      expect(shot.byteLength).toBeGreaterThan(0);
+    const dist = (p: { x: number; y: number }): number => Math.hypot(p.x - target.x, p.y - target.y);
+    const first = dist(path[0]);
+    const last = dist(path[path.length - 1]);
 
-      return page.evaluate(
-        async ([dataUrl, w, h]) => {
-          const img = new Image();
-          await new Promise((res, rej) => {
-            img.onload = res;
-            img.onerror = rej;
-            img.src = dataUrl as string;
-          });
-          const c = document.createElement('canvas');
-          c.width = w as number;
-          c.height = h as number;
-          const ctx = c.getContext('2d')!;
-          ctx.drawImage(img, 0, 0);
-          const px = ctx.getImageData(0, 0, w as number, h as number).data;
-          let sum = 0;
-          for (let i = 0; i < px.length; i += 4) {
-            sum += 0.2126 * px[i]! + 0.7152 * px[i + 1]! + 0.0722 * px[i + 2]!;
-          }
-          return sum / (px.length / 4);
-        },
-        [
-          `data:image/png;base64,${shot.toString('base64')}`,
-          Math.max(1, inner - outer),
-          height,
-        ] as const,
-      );
-    };
+    // It started somewhere else. Without this, a flyer spawned ON the counter passes everything.
+    expect(
+      first,
+      'the flyer began at the counter — there was no distance to travel, so nothing was proven',
+    ).toBeGreaterThan(50);
 
-    // 3 game px in from the right end: inside the 14 px drained region, clear of the end cap.
-    const SPENT_BAND = 3;
-    const spentAt99 = await lumaAt(99, SPENT_BAND);
-    const sameBandAtFull = await lumaAt(100, SPENT_BAND);
+    // 🔴 It arrived. `Quad.easeIn` lands the flyer on the icon; a few px of tolerance covers the
+    // frame the sampler happened to catch it on, not a systematic miss.
+    expect(
+      last,
+      `the flyer ended ${last.toFixed(1)}px from the counter, having started ${first.toFixed(1)}px ` +
+        `away. It moved, but not to the scoreboard — which is the half of the criterion that names ` +
+        `a destination.`,
+    ).toBeLessThan(first * 0.25);
 
-    expect(typeof spentAt99).toBe('number');
-    expect(typeof sameBandAtFull).toBe('number');
-    // The SAME pixels, one hp apart. If the spent rectangle were never drawn — the defect this
-    // criterion exists for — these two readings would be identical, which is exactly what the first
-    // version of this test reported before `Game` was paused.
-    expect(spentAt99).toBeLessThan(sameBandAtFull * 0.6);
-  });
+    // 🔴 And it went there DIRECTLY. Monotonic approach rules out an arc that wanders off and is
+    // then snapped back, which the endpoints alone cannot distinguish from a clean flight.
+    for (let i = 1; i < path.length; i += 1) {
+      expect(
+        dist(path[i]),
+        `the flyer moved AWAY from the counter between sample ${i - 1} and ${i} ` +
+          `(${dist(path[i - 1]).toFixed(1)}px -> ${dist(path[i]).toFixed(1)}px)`,
+      ).toBeLessThanOrEqual(dist(path[i - 1]) + 1);
+    }
 
-  /**
-   * 🔴 This test asserted only `barFill.willRender === true` and `health === 100`, and could not
-   * fail for the reason its name states: a `Graphics` reports `willRender` true whether or not any
-   * rectangle was ever queued into it. The code-reviewer gate owner found it, in the spec whose own
-   * header forbids exactly this — asserting a value where the drawn thing is the criterion.
-   *
-   * The replacement reads Phaser's own **command buffer** — the list of drawing operations queued
-   * on the `Graphics` — which is the closest thing to "what did you actually draw" that is
-   * observable without sampling pixels, and which is empty by construction at full health because
-   * `drawHealth` skips the `fillRect` when `spentW <= 0`.
-   */
-  test('at full health the bar queues NO spent rectangle, and below it queues one', async ({
-    page,
-  }) => {
-    await bootToGame(page);
-
-    const commandsAt = async (hp: number): Promise<number> =>
-      page.evaluate((forcedHp) => {
-        const game = (
-          window as unknown as {
-            __phaserGame: { scene: { getScene(k: string): unknown; pause(k: string): void } };
-          }
-        ).__phaserGame;
-        game.scene.pause('Game');
-        const gs = game.scene.getScene('Game') as unknown as {
-          world: Record<string, unknown> & { player: Record<string, unknown> };
-          cameras: { main: unknown };
-        };
-        const ui = game.scene.getScene('UI') as unknown as {
-          render(w: unknown, c: unknown): void;
-          hudObjects(): { barFill: { commandBuffer: unknown[] } };
-        };
-        ui.render(
-          {
-            ...gs.world,
-            player: { ...gs.world.player, hp: forcedHp, maxHp: 100 },
-            gears: [],
-            gearsCollected: 0,
-            tickCount: 0,
-          },
-          gs.cameras.main,
-        );
-        return ui.hudObjects().barFill.commandBuffer.length;
-      }, hp);
-
-    const atFull = await commandsAt(100);
-    const atHalf = await commandsAt(50);
-
-    expect(typeof atFull).toBe('number');
-    expect(typeof atHalf).toBe('number');
-    // Nothing queued at full health — the art's own gold bar IS the full state.
-    expect(atFull).toBe(0);
-    // And something queued below it. If `drawHealth` stopped drawing entirely, this goes red.
-    expect(atHalf).toBeGreaterThan(0);
+    // At least one sample genuinely in transit, so the series is a flight and not two endpoints.
+    expect(
+      path.some((p) => dist(p) < first * 0.9 && dist(p) > last * 1.1),
+      'no sampled position was between the start and the counter — the flyer jumped rather than flew',
+    ).toBe(true);
   });
 });
+

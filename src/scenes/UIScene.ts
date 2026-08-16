@@ -129,6 +129,60 @@ export class UIScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * 🔴 The HUD owns its own lifetime, and stops itself once `GameScene` is no longer running.
+   *
+   * ## Why this, and not a SHUTDOWN handler on `GameScene`
+   *
+   * A parallel scene outlives the scene that started it, so leaving `GameScene` used to strand the
+   * HUD on top of whatever replaced it — a health bar and gear count belonging to a game that had
+   * stopped *(code-reviewer brief 2 #6)*.
+   *
+   * The obvious fix — `GameScene` stopping `'UI'` from its own SHUTDOWN — was written, and **both**
+   * code-reviewer briefs independently traced it breaking the restart path before any test caught
+   * it. `SceneManager.start('Game')` on a running Game calls `sys.shutdown()` synchronously, so the
+   * handler only *queues* `stop('UI')`; `GameScene` has no `preload`, so `create()` runs in that
+   * same call and `attachHud` sees `isActive('UI') === true` and skips the launch; the queue then
+   * drains and stops the HUD. Net: a running game with no HUD and no way back — exactly the Phase 7
+   * level transition the handler was written for. Reproduced in a browser, then discarded.
+   *
+   * Making `attachHud` `stop`-then-`launch` fixed the restart and broke the dev-scene teardown.
+   * Both attempts failed the same way: they depend on where an operation lands in Phaser's queue.
+   *
+   * This does not. It is a **condition, re-evaluated every frame**, and it is correct whatever the
+   * queue does: on a restart `GameScene` is RUNNING again before the next frame, so the HUD never
+   * sees it absent; on a dev-scene toggle it stays absent, and the HUD retires itself. There is no
+   * ordering to get wrong because there is no ordering.
+   */
+  update(): void {
+    /**
+     * ⚠️ **Status, not `isActive`.** `isActive` is `status === RUNNING`, so it answers *false* for a
+     * scene that is merely PAUSED or SLEEPING — and the HUD must outlive both. This was
+     * `!this.scene.isActive('Game')` for exactly one test run, and it retired the HUD the moment
+     * criterion 6.4's spec paused `Game` to read a synthetic render, which is also precisely the
+     * pause-screen case a reviewer flagged as the next thing to break.
+     *
+     * The threshold is `SLEEPING`, not `SHUTDOWN`, and Codex's second implementation review is why.
+     * The two non-running states are **not** alike:
+     *
+     *  - **PAUSED** still RENDERS. The world is on screen and frozen — a pause screen — so the HUD
+     *    belongs there and must survive. This is also what criterion 6.4's spec does to read a
+     *    synthetic render.
+     *  - **SLEEPING** renders nothing. The game is gone from the screen, so a HUD that outlived it
+     *    would float over whatever replaced it, showing a health bar for a game nobody can see —
+     *    the exact defect this method exists to prevent, in the one state the first threshold let
+     *    through.
+     *
+     * `SLEEPING`, `SHUTDOWN` and `DESTROYED` are the three highest statuses, so one comparison
+     * covers them and any future terminal state; `PAUSED` (6) sits just below and is kept.
+     */
+    const game = this.scene.get('Game') as Phaser.Scene | null;
+    const status = game?.sys?.settings?.status;
+    if (status === undefined || status >= Phaser.Scenes.SLEEPING) {
+      this.scene.stop();
+    }
+  }
+
   private build(): void {
     // The live size, never a literal (vault 6.2).
     const { width, height } = this.scale.gameSize;

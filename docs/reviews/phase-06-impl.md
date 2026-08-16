@@ -76,3 +76,56 @@ second is **not yet**.
   was applied.
 - Codex's line citations for findings 3, 4 and 5 were checked against the files by hand; all three
   are accurate.
+
+---
+
+## Review 2, round 2 — 2026-08-16, after the owed work
+
+Run with `/codex:rescue --wait --resume` and the mandatory `node_repl` preamble, after the eight
+gate-owner agent runs and before the phase was reported done. **Verdict: BLOCK.**
+
+Codex was asked the standard review-2 questions plus four specific to this session: whether C3/C4/C5
+were really closed, whether the new frame-budget spec can pass while the HUD is broken, whether the
+HUD teardown is correct across restart/pause/sleep/refusal/dev-exit, and whether the docs-contract
+row requirement holds now that Phase 6 is marked done.
+
+### The findings, verbatim in summary
+
+1. **Blocker** — Phase 6 marked done while the QA log's own banner and criterion 6.11's row still
+   said NOT DONE / BLOCK.
+2. **Blocker** — 6.9's PASS rests entirely on ratios, and `GearLayer.sync()` plus the `renderHud()`
+   call run in both arms and divide out, so the criterion's *frame budget* was only answered for the
+   part the A/B could vary.
+3. **Major** — the teardown predicate gets `SLEEPING` wrong: Phaser neither updates nor renders a
+   sleeping scene, so the HUD would survive over a game that is not on screen.
+4. **Major** — the refusal lifecycle test cannot go red for the line it names.
+5. **Major** — the correctness guard accepts a bar that paints no pixels: deleting `fillRect` while
+   leaving `fillStyle` keeps the command buffer non-empty and the parsed alpha healthy.
+6. **Minor** — a restart preserves an in-flight collect flyer; its test checks only liveness and
+   child count.
+
+It confirmed C3, C4 and C5 closed; no Phaser/clock/random/DOM in `src/sim/`; durations integer ticks;
+animation fps still derived; no file over 400 lines.
+
+### What Codex could not check — preserved verbatim
+
+> Codex could not run Git, Vitest, TypeScript, build, Playwright, browser, or GPU harness (sandboxed
+> shell cannot spawn processes). It reconstructed branch/diff state from `.git` objects via node_repl
+> file reads only. Recorded red runs, timing numbers, and visual/contrast evidence in the QA log
+> remain unexecuted claims from this review's perspective. No files were modified.
+
+### Triage
+
+| # | Disposition |
+|---|---|
+| 1 | **Applied** — banner rewritten (old text kept verbatim beneath it), 6.11's row updated to record both rounds |
+| 2 | **Applied** — an **absolute** bound added to `phase-06-perf.spec.ts`: the whole HUD-on frame must cost under a third of a 16.67 ms frame. Nothing divides out of it. The tween-transient limit stays stated |
+| 3 | **Applied** — threshold moved from `>= SHUTDOWN` to `>= SLEEPING` in `UIScene.update()`. PAUSED still renders and is correctly kept, which is also what criterion 6.4's spec relies on |
+| 4 | **Applied — and it found a live defect, which is now FIXED.** A restart-based refusal test was written and failed with `TypeError: … reading 'glTexture'`: on a refusal following a successful boot the play scenes render on through the reload, hit a freed texture, and kill the loop before `refuseToRoute`'s stops can run. Fixed by stopping `Game` and `UI` in `BootScene.init()` — a no-op on a fresh boot. The test is a live gate; the full suite is green |
+| 5 | **Applied** — `barWidestRect` reports the widest rectangle actually filled and is asserted `> 0` |
+| 6 | **Recorded** — bounded and cosmetic; the flyer destroys itself on completion |
+
+**Applied: 5. Recorded: 1. Rejected: 0.**
+
+Finding 4 is the one that paid for the review: a gate that could not go red was hiding a real bug,
+which is the exact shape this project's C2 rule exists to catch.
