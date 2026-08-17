@@ -49,7 +49,7 @@ import { expect, test } from '@playwright/test';
  * call in `GameScene.update()` also survive BOTH arms and so divide out — this measures `UIScene`.
  */
 
-import { GPU_DRAIN_FRAMES, installGpuTimer } from './gpuTimer';
+import { installGpuTimer } from './gpuTimer';
 import {
   MAX_HUD_GPU_RATIO,
   MAX_HUD_WORK_DELTA_MS,
@@ -60,44 +60,13 @@ import {
 } from './perfBudget';
 import { SOFTWARE_RENDERERS, counts, sample, webglRenderer } from './perfSampler';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
-import { hudDrawState } from './hudHelpers';
+import { hudDrawState, setHud } from './hudHelpers';
 
 /** Three pairs. Interleaved, so drift in the machine hits both arms alike. */
 const PAIRS = 3;
 
 /** The hazard's right edge in world px, from `level-01.tmj` object id 8 (x 2304, w 192). */
 const HAZARD_RIGHT_PX = 2304 + 192;
-
-/** Stops or starts the parallel HUD scene, and WAITS — scene ops are queued, not immediate. */
-async function setHud(page: import('@playwright/test').Page, on: boolean): Promise<void> {
-  await page.evaluate((wanted) => {
-    // `__phaserGame.scene` is the game-level SceneManager, NOT a Scene's ScenePlugin, so there is
-    // no `launch` here. `run` is the SceneManager's smart start: it boots a stopped scene and wakes
-    // a sleeping one, which is what "put the HUD back" has to mean after a `stop`.
-    const game = (
-      window as unknown as {
-        __phaserGame: { scene: { stop(k: string): void; run(k: string): void; isActive(k: string): boolean } };
-      }
-    ).__phaserGame;
-    if (wanted && !game.scene.isActive('UI')) game.scene.run('UI');
-    if (!wanted && game.scene.isActive('UI')) game.scene.stop('UI');
-  }, on);
-
-  // 🔴 The wait is not politeness. `ScenePlugin` QUEUES every operation and the SceneManager drains
-  // the queue at the top of the next step, so sampling immediately would straddle the toggle and
-  // average the two arms together — which biases the ratio toward 1.0, the direction that PASSES.
-  await page.waitForFunction(
-    (wanted) =>
-      (
-        window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }
-      ).__phaserGame.scene.isActive('UI') === wanted,
-    on,
-    { timeout: 10_000 },
-  );
-  // `launch` re-runs create() -> build(), which allocates the plate, Graphics and Text. That is a
-  // one-off cost and it must not land inside a measured window.
-  await waitTicks(page, GPU_DRAIN_FRAMES);
-}
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -292,67 +261,31 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     const onWork = median(on.map((s) => s.workMedianMs));
     const offWork = median(off.map((s) => s.workMedianMs));
     /**
-     * 🔴 **Criterion 6.9's GPU half was measured properly on 2026-08-17, and almost everything
-     * previously believed about it was wrong. The bound moved UP, on evidence, and that needs the
-     * argument spelled out because this project's standing rule is that a gate is never fixed by
-     * loosening it.**
+     * 🔴 **Re-measured 2026-08-17, and almost everything previously believed about this half was
+     * wrong. The run-by-run tables are in `docs/qa/session-gate-defects.md` § 6.9** — kept there
+     * rather than here because this file is at the 400-line rule and evidence is what `docs/qa/` is
+     * for. The conclusions, which belong beside the code:
      *
-     * ## It was never contention
+     *  - **It was never contention.** D8 blamed the 47 preceding headless tests. It fails in
+     *    ISOLATION — one isolated run read 1.319 against a 1.25 bound, another read 0.227.
+     *  - **The cause is signal-to-noise.** The HUD costs ~0.001 ms of GPU on a ~0.131 ms baseline.
+     *    One run's on-arm median came out four times BELOW its off-arm median.
+     *  - **Per-pair ratios do not fix it** — this session's plan; the same run reads 1.328, worse
+     *    than pooled, because contamination lands on one arm of one pair rather than being shared.
+     *  - **Minimum-per-arm does not either.** The theory was that GPU noise is one-sided; an OFF
+     *    window then read 0.095 ms, the cheapest reading anywhere, giving 1.419.
      *
-     * Deviation D8 recorded this as failing under full-suite load and passing in isolation, and
-     * blamed the 47 preceding headless tests. **It fails in isolation too.** Three consecutive
-     * GPU-project runs of this spec alone, nothing else on the box:
+     * So the median stays, and the bound moved 1.25 -> 2.0. **That is a bound moving UP against this
+     * project's standing rule, and the justification is that the rule's reason does not apply:** a
+     * bound is not allowed to be loosened because loose bounds hide the defect they exist to catch,
+     * and 1.25 could not catch it. Built and measured — one full-screen 1920x1080 alpha scrim, the
+     * old comment's own example, is INVISIBLE (0.932, 1.144). Five stacked read 2.688 - 5.641;
+     * twenty read 8.459. 1.25 sat below the noise floor AND below the smallest resolvable signal.
      *
-     * | run | on windows          | off windows         | median-of-medians | per-pair median | min/min |
-     * |-----|---------------------|---------------------|-------------------|-----------------|---------|
-     * | 1   | 0.132, 0.131, 0.131 | 0.131, 0.130, 0.131 | 1.000             | 1.008           | 1.008   |
-     * | 2   | 0.930, 0.134, 0.129 | 0.590, 0.905, 0.133 | **0.227**         | 0.970           | 0.970   |
-     * | 3   | 0.317, 0.139, 0.178 | 0.176, 0.135, 0.134 | **1.319 (RED)**   | **1.328 (RED)** | 1.037   |
-     *
-     * The cause is signal-to-noise: **the HUD costs ~0.001 ms of GPU on a ~0.131 ms baseline**, and
-     * one contaminated window swamps it. Run 2's on-arm median came out four times BELOW its off-arm
-     * median, which is not a thing the HUD can do.
-     *
-     * ## Two candidate statistics were tried and both refused
-     *
-     * **Per-pair ratios** were this session's plan. Run 3 gives 1.328, marginally worse than the
-     * pooled 1.319 — the contamination is not shared within a pair, it lands on one arm of one pair.
-     *
-     * **Minimum per arm** was tried next, on the theory that GPU noise is one-sided: a spike can only
-     * ADD time, so the cheapest window is the least contaminated. Three more runs refused that too —
-     * one produced an OFF window of **0.095 ms**, cheaper than any other reading anywhere, giving
-     * 1.419. Windows can read spuriously low as well as high, so the premise was false. Recorded
-     * because it was a reasonable theory and the measurement is what killed it.
-     *
-     * ## What the gate can actually see, measured
-     *
-     * The bound's own docstring says it exists to catch "a HUD that starts costing real fill rate —
-     * a full-screen scrim, an alpha-blended overlay, a per-frame render target". So that was built:
-     *
-     * | mutation in `UIScene.create()`        | GPU ratio       |
-     * |---------------------------------------|-----------------|
-     * | one full-screen 1920x1080 alpha scrim | **0.932, 1.144** — invisible |
-     * | five stacked scrims                   | **2.688, 5.641** |
-     * | twenty stacked scrims                 | **8.459**       |
-     *
-     * **The single scrim — the exact defect the old comment named — does not move this statistic at
-     * all.** On an RTX 4080 one full-screen blend over a scene that already draws three full-screen
-     * parallax layers is nothing. So `MAX_HUD_GPU_RATIO = 1.25` was not a tight bound protecting
-     * against overdraw; it was a bound below the noise floor that could only ever fire at random,
-     * and it did.
-     *
-     * ## Why raising it is not loosening it
-     *
-     * Clean spread across six runs is **0.227 - 1.319** by median. The smallest overdraw this
-     * harness can resolve reads **2.688 - 5.641** across two runs. Any bound in between is equally
-     * strong; **2.0** is chosen as ~1.5x the worst clean reading and below the weakest proven signal
-     * by 34 %. That margin is thinner than this file would like and it is the honest one. Nothing 1.25
-     * could catch is now missed, because 1.25 caught nothing except its own noise.
-     *
-     * ⚠️ **Demonstrated floor, stated rather than discovered later** *(vault 9.3)*: this gate cannot
-     * see a single full-screen alpha-blended layer. It catches gross overdraw — a render target per
-     * frame, a stack of full-screen passes — and nothing subtler. Written down so the next reader
-     * does not believe it is guarding what its old comment claimed.
+     * ⚠️ **Demonstrated floor** *(vault 9.3)*: this gate cannot see one full-screen alpha layer. It
+     * catches gross overdraw only, and the 34 % margin between 2.0 and the weakest proven signal is
+     * thinner than this suite's norm. Both stated so the next reader does not believe it guards what
+     * its old comment claimed.
      */
     const onGpu = median(on.map((s) => s.gpuMedianMs));
     const offGpu = median(off.map((s) => s.gpuMedianMs));

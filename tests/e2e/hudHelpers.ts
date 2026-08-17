@@ -12,6 +12,8 @@
  */
 
 import { expect } from '@playwright/test';
+import { GPU_DRAIN_FRAMES } from './gpuTimer';
+import { waitTicks } from './gameHarness';
 
 type Page = import('@playwright/test').Page;
 
@@ -310,3 +312,41 @@ export async function hudDrawState(page: Page): Promise<HudDrawProbe> {
     };
   });
 }
+
+/**
+ * Stops or starts the parallel HUD scene, and WAITS — scene ops are queued, not immediate.
+ *
+ * Moved here from `phase-06-perf.spec.ts` on 2026-08-17, when that file crossed the 400-line rule
+ * after criterion 6.9's GPU statistic was re-measured. It belongs with the other shared HUD probes:
+ * it is the only place that knows the UI scene's key and the queueing rule below.
+ */
+export async function setHud(page: Page, on: boolean): Promise<void> {
+  await page.evaluate((wanted) => {
+    // `__phaserGame.scene` is the game-level SceneManager, NOT a Scene's ScenePlugin, so there is
+    // no `launch` here. `run` is the SceneManager's smart start: it boots a stopped scene and wakes
+    // a sleeping one, which is what "put the HUD back" has to mean after a `stop`.
+    const game = (
+      window as unknown as {
+        __phaserGame: { scene: { stop(k: string): void; run(k: string): void; isActive(k: string): boolean } };
+      }
+    ).__phaserGame;
+    if (wanted && !game.scene.isActive('UI')) game.scene.run('UI');
+    if (!wanted && game.scene.isActive('UI')) game.scene.stop('UI');
+  }, on);
+
+  // 🔴 The wait is not politeness. `ScenePlugin` QUEUES every operation and the SceneManager drains
+  // the queue at the top of the next step, so sampling immediately would straddle the toggle and
+  // average the two arms together — which biases the ratio toward 1.0, the direction that PASSES.
+  await page.waitForFunction(
+    (wanted) =>
+      (
+        window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }
+      ).__phaserGame.scene.isActive('UI') === wanted,
+    on,
+    { timeout: 10_000 },
+  );
+  // `launch` re-runs create() -> build(), which allocates the plate, Graphics and Text. That is a
+  // one-off cost and it must not land inside a measured window.
+  await waitTicks(page, GPU_DRAIN_FRAMES);
+}
+

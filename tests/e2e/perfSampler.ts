@@ -52,19 +52,13 @@ export interface Sample {
   /**
    * Sim ticks the window actually spanned. Both halves must span the same, or nothing compares.
    *
-   * 🔴 **Corrected 2026-08-17. It was read AFTER the GPU drain, so it did not describe the same
-   * span as `frames`.** `frames` is `work.length`, which stops counting the moment the tick
-   * condition is met; `ticks` was then measured several rAF frames later, at the bottom of
-   * `drain()`, and so included ticks that elapsed while nothing was being counted.
-   *
-   * That gap is invisible to every assertion phrased as a ratio of medians, and **fatal to one
-   * phrased as a ratio of frame COUNTS** — which is what criterion 7.7's `MAX_AUDIO_FRAME_LOSS_RATIO`
-   * is, and what criterion 5.11's replacement now is. Two windows that both satisfy
-   * `ticks >= SAMPLE_TICKS` can span different numbers of ticks, so their raw frame counts are not
-   * comparable and their difference reads as a stall that never happened.
-   *
-   * Now captured at the stop condition, beside `elapsedMs`, so `frames`, `ticks` and `elapsedMs`
-   * all describe the identical window. Raised by the Codex plan review of 2026-08-17 (MAJOR 4).
+   * 🔴 **Corrected 2026-08-17: it was read AFTER the GPU drain, so it did not describe the same span
+   * as `frames`.** `frames` stops counting when the tick condition is met; `ticks` was measured
+   * several rAF frames later at the bottom of `drain()`. Invisible to a ratio of medians, **fatal to
+   * a ratio of frame COUNTS** — it put criterion 7.7 red on correct code. Now captured at the stop
+   * condition beside `elapsedMs`, so all three describe one window. Predicted by the Codex plan
+   * review from file evidence before it was observed; evidence in
+   * `docs/qa/session-gate-defects.md` § 7.7.
    */
   ticks: number;
   /** Wall-clock across the window. */
