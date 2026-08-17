@@ -116,6 +116,48 @@ describe('pickLevel routes the save through the unlock rule', () => {
     expect(() => pick(null, undefined, [])).toThrow(/lists no levels/);
   });
 
+  /**
+   * 🔴 The resume point is written when a level STARTS. Without it, `recordCompletion`'s `lastLevel` is
+   * the level just FINISHED, and a player who closes the tab after starting the next one comes back to
+   * a level they have already beaten. Found by the browser spec, which read `level-01` after advancing
+   * to level-02.
+   */
+  it('writes the resume point when a level starts', () => {
+    const scene = fakeScene();
+    const storage = store('{"version":1,"lastLevel":"level-01","levels":{"level-01":{"completed":true,"bestGears":3}}}');
+    pickLevel(scene as never, 'level-02', storage);
+    const saved = JSON.parse(storage.getItem(PROGRESS_KEY)!) as { lastLevel: string };
+    expect(saved.lastLevel, 'starting level-02 did not move the resume point').toBe('level-02');
+  });
+
+  /**
+   * ⚠️ A first boot DOES write, and that is correct rather than a leak.
+   *
+   * The draft above this one asserted no save appears until something is earned, on the reasoning that
+   * "completed nothing" and "never played" must stay distinguishable. They do: what distinguishes them
+   * is `levels`, which stays EMPTY, and `completedIds` reads only that. `lastLevel: 'level-01'` is
+   * simply true — it is the level the player is on — and it unlocks nothing.
+   */
+  it('a first boot records the resume point but earns nothing', () => {
+    const storage = store();
+    pickLevel(fakeScene() as never, null, storage);
+    const saved = JSON.parse(storage.getItem(PROGRESS_KEY)!) as { lastLevel: string; levels: object };
+    expect(saved.lastLevel).toBe('level-01');
+    expect(saved.levels, 'a first boot marked something completed').toEqual({});
+  });
+
+  /**
+   * ⚠️ And NOT from a dev scene. `PlaygroundScene` and `ElementEditorScene` both extend `GameScene` and
+   * come through `pickLevel` with an explicit id, so without the scene-key guard opening a dev tool
+   * would rewrite the player's resume point.
+   */
+  it('does not move the resume point from a dev scene', () => {
+    const storage = store('{"version":1,"lastLevel":"level-03","levels":{"level-01":{"completed":true,"bestGears":0},"level-02":{"completed":true,"bestGears":0}}}');
+    pickLevel(fakeScene(ORDER, 'ElementEditor') as never, 'level-01', storage);
+    const saved = JSON.parse(storage.getItem(PROGRESS_KEY)!) as { lastLevel: string };
+    expect(saved.lastLevel, 'opening the Element Editor moved the player resume point').toBe('level-03');
+  });
+
   it('returns the parsed level, not just its key', () => {
     const { level } = pick(null);
     expect(level.id).toBe('level-01');

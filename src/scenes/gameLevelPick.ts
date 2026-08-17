@@ -29,7 +29,7 @@
 import type Phaser from 'phaser';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { RENDER_SCALE } from '../game/constants';
-import { completedIds, readProgress, safeLocalStorage, type SettingsStorage } from '../game/save';
+import { completedIds, readProgress, safeLocalStorage, writeProgress, type SettingsStorage } from '../game/save';
 import { parseLevel, type LevelData } from '../game/tilemap';
 import { resolveEntryLevel } from '../sim/progress';
 import type { CreateWorldOptions } from '../sim/tick';
@@ -120,6 +120,27 @@ export function pickLevel(
   const key = resolveEntryLevel(requested, save.lastLevel, order, completedIds(save));
   if (key === null) {
     throw new Error('GameScene: the catalog lists no levels; Boot should have refused to route');
+  }
+
+  /**
+   * 🔴 The resume point is written when a level STARTS, not only when one finishes.
+   *
+   * `recordCompletion` sets `lastLevel` to the level just completed, which is the wrong thing to come
+   * back to: finish level-01, start level-02, close the tab, and the save still says level-01 — the
+   * player is sent back to a level they have already beaten. `progress.ts` says in as many words that
+   * resuming means *the level you were last on*, and this is what makes that true.
+   *
+   * ⚠️ Gated on the scene key, and for the same reason `openLevelSelect` is: `PlaygroundScene` and
+   * `ElementEditorScene` both extend `GameScene` and come through here with an explicit level id, so
+   * without the guard opening a dev tool would rewrite the player's resume point.
+   *
+   * Skipped when it already matches, so an ordinary boot performs no write at all — which is what keeps
+   * "a save appeared before anything was earned" false, and that distinction is what the unlock rule
+   * depends on.
+   */
+  if (scene.scene.key === 'Game' && save.lastLevel !== key) {
+    save.lastLevel = key;
+    writeProgress(storage, save);
   }
 
   const cached = scene.cache.tilemap.get(key) as { data?: unknown } | undefined;
