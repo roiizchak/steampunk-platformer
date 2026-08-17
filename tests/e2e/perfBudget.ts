@@ -221,15 +221,28 @@ export const MAX_HUD_WORK_RATIO = 2;
 /**
  * The ceiling on `HUD-on / HUD-off` **GPU** time per frame.
  *
- * Tighter than the work ratio because the quantity is better resolved: the GPU timer reports
- * microseconds, the three measured ratios span 1.012-1.017, and the run-to-run drift in the
- * *baseline* (0.171 -> 0.198ms) moves both arms together and so cancels.
+ * 🔴 **1.25 -> 2.0 on 2026-08-17, and this is the one place in this file where a bound moved UP.**
+ * The full measurement — six clean runs, two rejected statistics and a three-point overdraw sweep —
+ * is in `phase-06-perf.spec.ts` beside the reduction it justifies. In short:
  *
- * 1.25 leaves roughly fifteen times the measured HUD delta as headroom while still catching the
- * failure this half exists for: a HUD that starts costing real fill rate — a full-screen scrim, an
- * alpha-blended overlay, a per-frame render target — which main-thread work would not see at all.
+ *  - the paragraph this replaces claimed "the three measured ratios span 1.012-1.017". Re-measured,
+ *    the clean spread is **0.227 - 1.319**, and 1.319 is a FAILING run with nothing else on the box.
+ *    Deviation D8 blamed full-suite contention; **it fails in isolation**.
+ *  - the failure this half exists for — "a full-screen scrim, an alpha-blended overlay" — was built
+ *    and measured. One full-screen 1920x1080 alpha scrim reads **0.932 and 1.144: invisible**. Five
+ *    stacked read **2.688 and 5.641**; twenty read 8.459.
+ *
+ * So 1.25 sat *below* the noise floor and *below* the smallest signal it could ever resolve. It was
+ * not a tight bound being loosened; it was a bound that could only fire at random, and did.
+ *
+ * 2.0 is ~1.5x the worst clean reading and 34 % below the weakest proven signal. That margin is
+ * thinner than the rest of this file enjoys, and it is stated rather than rounded away. Nothing 1.25
+ * could catch is now missed, because 1.25 caught nothing but itself.
+ *
+ * ⚠️ Demonstrated floor: **this gate cannot see one full-screen alpha layer.** It catches gross
+ * overdraw only.
  */
-export const MAX_HUD_GPU_RATIO = 1.25;
+export const MAX_HUD_GPU_RATIO = 2;
 
 /**
  * The **absolute** ceiling on the HUD's added main-thread milliseconds per frame.

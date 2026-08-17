@@ -291,6 +291,69 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
 
     const onWork = median(on.map((s) => s.workMedianMs));
     const offWork = median(off.map((s) => s.workMedianMs));
+    /**
+     * 🔴 **Criterion 6.9's GPU half was measured properly on 2026-08-17, and almost everything
+     * previously believed about it was wrong. The bound moved UP, on evidence, and that needs the
+     * argument spelled out because this project's standing rule is that a gate is never fixed by
+     * loosening it.**
+     *
+     * ## It was never contention
+     *
+     * Deviation D8 recorded this as failing under full-suite load and passing in isolation, and
+     * blamed the 47 preceding headless tests. **It fails in isolation too.** Three consecutive
+     * GPU-project runs of this spec alone, nothing else on the box:
+     *
+     * | run | on windows          | off windows         | median-of-medians | per-pair median | min/min |
+     * |-----|---------------------|---------------------|-------------------|-----------------|---------|
+     * | 1   | 0.132, 0.131, 0.131 | 0.131, 0.130, 0.131 | 1.000             | 1.008           | 1.008   |
+     * | 2   | 0.930, 0.134, 0.129 | 0.590, 0.905, 0.133 | **0.227**         | 0.970           | 0.970   |
+     * | 3   | 0.317, 0.139, 0.178 | 0.176, 0.135, 0.134 | **1.319 (RED)**   | **1.328 (RED)** | 1.037   |
+     *
+     * The cause is signal-to-noise: **the HUD costs ~0.001 ms of GPU on a ~0.131 ms baseline**, and
+     * one contaminated window swamps it. Run 2's on-arm median came out four times BELOW its off-arm
+     * median, which is not a thing the HUD can do.
+     *
+     * ## Two candidate statistics were tried and both refused
+     *
+     * **Per-pair ratios** were this session's plan. Run 3 gives 1.328, marginally worse than the
+     * pooled 1.319 — the contamination is not shared within a pair, it lands on one arm of one pair.
+     *
+     * **Minimum per arm** was tried next, on the theory that GPU noise is one-sided: a spike can only
+     * ADD time, so the cheapest window is the least contaminated. Three more runs refused that too —
+     * one produced an OFF window of **0.095 ms**, cheaper than any other reading anywhere, giving
+     * 1.419. Windows can read spuriously low as well as high, so the premise was false. Recorded
+     * because it was a reasonable theory and the measurement is what killed it.
+     *
+     * ## What the gate can actually see, measured
+     *
+     * The bound's own docstring says it exists to catch "a HUD that starts costing real fill rate —
+     * a full-screen scrim, an alpha-blended overlay, a per-frame render target". So that was built:
+     *
+     * | mutation in `UIScene.create()`        | GPU ratio       |
+     * |---------------------------------------|-----------------|
+     * | one full-screen 1920x1080 alpha scrim | **0.932, 1.144** — invisible |
+     * | five stacked scrims                   | **2.688, 5.641** |
+     * | twenty stacked scrims                 | **8.459**       |
+     *
+     * **The single scrim — the exact defect the old comment named — does not move this statistic at
+     * all.** On an RTX 4080 one full-screen blend over a scene that already draws three full-screen
+     * parallax layers is nothing. So `MAX_HUD_GPU_RATIO = 1.25` was not a tight bound protecting
+     * against overdraw; it was a bound below the noise floor that could only ever fire at random,
+     * and it did.
+     *
+     * ## Why raising it is not loosening it
+     *
+     * Clean spread across six runs is **0.227 - 1.319** by median. The smallest overdraw this
+     * harness can resolve reads **2.688 - 5.641** across two runs. Any bound in between is equally
+     * strong; **2.0** is chosen as ~1.5x the worst clean reading and below the weakest proven signal
+     * by 34 %. That margin is thinner than this file would like and it is the honest one. Nothing 1.25
+     * could catch is now missed, because 1.25 caught nothing except its own noise.
+     *
+     * ⚠️ **Demonstrated floor, stated rather than discovered later** *(vault 9.3)*: this gate cannot
+     * see a single full-screen alpha-blended layer. It catches gross overdraw — a render target per
+     * frame, a stack of full-screen passes — and nothing subtler. Written down so the next reader
+     * does not believe it is guarding what its old comment claimed.
+     */
     const onGpu = median(on.map((s) => s.gpuMedianMs));
     const offGpu = median(off.map((s) => s.gpuMedianMs));
     const workRatio = onWork / offWork;
