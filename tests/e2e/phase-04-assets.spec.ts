@@ -1,13 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { parseLevel } from '../../src/game/tilemap';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
-import { DEFAULT_TUNING } from '../../src/sim/player';
-
-/**
- * One gravity step, world px/tick. Imported from the live knob, never retyped: it is the slack a
- * per-frame `|vy|` bound needs because the sample can land either side of step 6's integration.
- */
-const GRAVITY_PX = DEFAULT_TUNING.gravity;
 
 /**
  * Phase 4 — criteria 4.23 and 4.24, plus catalog/texture agreement.
@@ -70,8 +63,18 @@ async function groundTopAtSpawn(page: import('@playwright/test').Page): Promise<
 
 interface Sample {
   simY: number;
-  /** Sim vertical speed, px/tick. Bounds how far interpolation may place the drawing from the sim. */
+  /** Sim vertical speed, px/tick. Reported in the failure messages; NOT used as a bound — see 4.23. */
   simVy: number;
+  /**
+   * The player's sim `y` immediately BEFORE the most recent tick — `GameScene.prevPlayer.y`, the
+   * exact value `interpolatedPosition` blends FROM. `null` before the first tick and after a
+   * respawn, which is `prevPlayer`'s own way of saying "there is no previous position".
+   *
+   * 🔴 **This is what makes criterion 4.23 answerable.** The drawn position is
+   * `lerp(prevY, simY, alpha)`, so the only honest statements about it are statements about the
+   * segment `[prevY, simY]`. Every bound below is derived from this field; none is a constant.
+   */
+  prevY: number | null;
   drawnBottom: number;
   drawnY: number;
   frameIndex: number;
@@ -93,12 +96,18 @@ async function sampleDrawnVsSim(
     (count) =>
       new Promise<Sample[]>((resolve) => {
         const out: Sample[] = [];
+        // `prevPlayer` is `private` on GameScene, which is a COMPILE-TIME word — the field is a
+        // plain own property at runtime. Reaching it through `__phaserGame` is the idiom
+        // `phase-05-perf.spec.ts` already uses to read `scene.world`, and it is deliberately
+        // preferred over adding a ninth field to `window.__game`: that surface is closed at eight
+        // by a Phase 1 Codex ruling and widening it needs a STOP-and-ask.
         const scene = (
           window as unknown as {
             __phaserGame: { scene: { getScene(k: string): unknown } };
           }
         ).__phaserGame.scene.getScene('Game') as {
           children: { list: Record<string, unknown>[] };
+          prevPlayer: { y: number } | null;
         };
 
         const step = () => {
@@ -124,9 +133,9 @@ async function sampleDrawnVsSim(
           if (drawn && sim && typeof sim.y === 'number') {
             out.push({
               simY: sim.y,
-              // Sampled so the divergence bound below can be THIS frame's vertical speed rather
-              // than a blanket constant. See the assertion for why that matters.
               simVy: typeof sim.vy === 'number' ? sim.vy : 0,
+              // Read in the SAME callback as `drawn` and `sim`, so all three describe one moment.
+              prevY: scene.prevPlayer ? scene.prevPlayer.y : null,
               drawnY: drawn.y,
               drawnBottom: drawn.getBounds().bottom,
               frameIndex: Number(drawn.frame.name),
@@ -175,35 +184,98 @@ test.describe('4.23 — the drawn feet meet the surface', () => {
     expect([...new Set(all.map((s) => s.originY))]).toEqual([1]);
 
     /**
-     * 🔴 **Amended in session 9 for render interpolation — and made TIGHTER, not looser.**
+     * 🔴 **Rewritten 2026-08-17. Both claims below were wrong, and both failed on correct code.**
      *
-     * The sprite is now drawn between the last two ticks (`src/render/interpolate.ts`), so while
-     * the player is moving vertically the drawn bottom trails the sim's feet by a fraction of one
-     * tick's fall. Exact equality on every frame is no longer the right claim.
+     * ## What the old version claimed, and why it could not hold
      *
-     * The lazy amendment would be a blanket tolerance of `maxFallSpeed` (51.6 px) — nearly a fifth
-     * of the character's height, wide enough for a genuinely broken vertical anchor to pass. So the
-     * bound is THIS FRAME's actual vertical speed instead: interpolation can never place the
-     * drawing further from the sim than one tick of travel, and one tick of travel is `|vy|`, plus
-     * one `gravity` step for the sample landing either side of the integration.
+     * It filtered `simVy === 0` and called those samples *"vertically still, so interpolation
+     * cannot be blamed"*. **That inference is false, and it is false at exactly the moment this
+     * criterion cares most about: the landing tick.** `src/sim/player.ts` resolves a landing by
+     * setting `player.y` to the surface AND `player.vy` to 0 **in the same tick**, while
+     * `GameScene`'s `advanceSplit` callback snapshotted `prevPlayer` immediately *before* that
+     * tick. So a landing sample reads `vy === 0` with `prev.y !== cur.y`, and the drawing is
+     * legitimately mid-blend between them.
      *
-     * Where the player is NOT moving vertically the assertion stays EXACT, which is most of the
-     * window and is where a vertical-anchor defect would show anyway.
+     * The second claim bounded divergence by THIS frame's `|vy| + gravity`, which fails for the
+     * same reason — the travel being blended is the tick's, not this frame's velocity — and also
+     * rejects a legal takeoff, where the previous `vy` is 0 but the jump moves `jumpVelocity` px.
+     *
+     * **Measured on the running game, 2026-08-17** (`docs/qa/phase-04-art.md`, dated entry):
+     * standing still, worst gap over 240 frames was **exactly 0**. Across a run-and-jump,
+     * **4 of 313** `simVy === 0` samples had a moved sim, worst gap **22.18104000003086 px** —
+     * against `(1 - alpha) * |dy|` of **22.18104000003090 px**. Fourteen significant figures. The
+     * renderer was never wrong; the predicate was.
+     *
+     * ## What replaces them, and why it is TIGHTER rather than looser
+     *
+     * Both claims now come from `prevY`, the value interpolation actually blends from, so neither
+     * carries a tolerance constant at all:
+     *
+     *  1. **Exact**, where `prevY === simY`. The sim did not move the player between the two ticks
+     *     being blended, so `interpolatedPosition` is the identity for any alpha and the drawn
+     *     bottom must equal the sim feet y to the bit. No tolerance, no velocity, no filter that
+     *     can be fooled by a landing.
+     *  2. **Inside the segment**, for every sample. `lerp(prevY, simY, alpha)` with alpha in
+     *     `[0, 1]` cannot land outside `[prevY, simY]`. This is strictly stronger than the
+     *     `|vy| + gravity` bound it replaces — it is `|dy|` with no slack added — and it covers
+     *     takeoff, flight and landing with one expression.
+     *
+     * The blanket `maxFallSpeed` tolerance session 9 rejected is still rejected, and for the
+     * reason it gave: 51.6 px is nearly a fifth of the character's height, wide enough for a
+     * genuinely broken vertical anchor to pass.
      */
-    const grounded = all.filter((s) => s.simVy === 0);
-    expect(grounded.length, 'no vertically-still samples — the exact claim below is vacuous').toBeGreaterThan(10);
+    const withPrev = all.filter((s) => s.prevY !== null);
+    // `prevPlayer` is null only before the first tick and after a respawn. A window that is mostly
+    // null is a window that measured a respawn loop, not a jump.
     expect(
-      Math.max(...grounded.map((s) => Math.abs(s.drawnBottom - s.simY))),
-      'the drawn bottom left the sim feet y while NOT moving vertically — interpolation cannot excuse this',
+      withPrev.length,
+      'most samples had no previous tick position — the bounds below would be vacuous',
+    ).toBeGreaterThan(all.length - 10);
+
+    const settled = withPrev.filter((s) => s.prevY === s.simY);
+    expect(
+      settled.length,
+      'no samples where the sim left the player at the same y across a tick — the exact claim ' +
+        'below is vacuous',
+    ).toBeGreaterThan(10);
+    expect(
+      Math.max(...settled.map((s) => Math.abs(s.drawnBottom - s.simY))),
+      'the drawn bottom left the sim feet y on a tick where the sim did not move the player at ' +
+        'all — interpolation is the identity there, so this is the anchor itself',
     ).toBe(0);
 
-    const worst = Math.max(
-      ...all.map((s) => Math.abs(s.drawnBottom - s.simY) - (Math.abs(s.simVy) + GRAVITY_PX)),
-    );
-    expect(worst, 'the drawn bottom trailed the sim feet by more than one tick of fall').toBeLessThanOrEqual(0);
+    /**
+     * The segment claim, on both the bottom and the origin y. `originY` is 1, so these are the
+     * same number today; asserting both is what would catch an origin change that moved one and
+     * not the other.
+     *
+     * 🔴 **The first version of this measured `|drawn - simY| - |simY - prevY|`, and the red proof
+     * caught it: a drawing that OVERSHOOTS past `simY` is still close to `simY`, so an
+     * `alpha * 1.5` mutation in `interpolatedPosition` passed it.** The claim being made is
+     * containment in the segment, so containment is what it has to compute — distance from one
+     * endpoint is a different and weaker statement.
+     *
+     * `EPS` is float slack, not tolerance: `prev + dy * alpha` is computed in doubles, so a value
+     * that is mathematically on the segment can land an ulp outside it. Scaled to the magnitude of
+     * the coordinates in play (~2000 px), one ulp is ~2.3e-13, so 1e-9 is thousands of ulps of
+     * headroom and still fourteen orders of magnitude below the 22.18 px this criterion was
+     * failing by.
+     */
+    const EPS = 1e-9;
+    const outsideSegment = (drawn: number, s: Sample): number => {
+      const lo = Math.min(s.prevY!, s.simY);
+      const hi = Math.max(s.prevY!, s.simY);
+      return Math.max(lo - drawn, drawn - hi);
+    };
     expect(
-      Math.max(...all.map((s) => Math.abs(s.drawnY - s.simY) - (Math.abs(s.simVy) + GRAVITY_PX))),
-    ).toBeLessThanOrEqual(0);
+      Math.max(...withPrev.map((s) => outsideSegment(s.drawnBottom, s))),
+      'the drawn bottom was placed OUTSIDE the [prevY, simY] segment interpolation blends across ' +
+        '— no alpha in [0, 1] can produce that, so this is not interpolation lag',
+    ).toBeLessThanOrEqual(EPS);
+    expect(
+      Math.max(...withPrev.map((s) => outsideSegment(s.drawnY, s))),
+      'the drawn origin y was placed outside the [prevY, simY] segment',
+    ).toBeLessThanOrEqual(EPS);
 
     // ...and the window really did contain flight, so "never diverged" is not a claim about a
     // character that never left the ground.
