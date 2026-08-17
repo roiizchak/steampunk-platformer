@@ -29,7 +29,9 @@
  * failure mode the editor was built to find, made representable.
  */
 
+import { RENDER_SCALE } from './constants';
 import { type EnemySlug, type EnemySpawn } from '../sim/enemies';
+import { PLAYER_BOX } from '../sim/player';
 import type { Rect } from '../sim/types';
 import {
   allObjects,
@@ -51,6 +53,7 @@ import {
   gearSpawns,
   isGearObject,
 } from './tiledEntities';
+import { describeGoalProblem, goalRect, isGoalObject } from './tiledGoal';
 
 /**
  * Re-exported, not re-implemented. `ElementEditorScene` and the unit tests have imported these
@@ -86,6 +89,15 @@ export interface LevelData {
   enemies: EnemySpawn[];
   /** Gear pickups — centres, world space. Points in the file; `GEAR_BOX` gives them their size. */
   gears: { x: number; y: number }[];
+  /**
+   * The level EXIT — Phase 8. A volume the player's box enters, not a point.
+   *
+   * Non-optional, and that is the decision rather than an oversight: a level with no exit cannot be
+   * completed, which is the single defect this phase exists to make impossible. `describeGoalProblem`
+   * refuses a level without one, so every shipped `.tmj` has exactly one and `World.goal` is only
+   * `null` for the synthetic fixtures that build a world directly through `createWorld`.
+   */
+  goal: Rect;
 }
 
 /**
@@ -292,6 +304,25 @@ export function describeLevelProblem(raw: unknown): string | null {
     return gearProblem;
   }
 
+  // 🔴 THE GOAL BLOCK IS LAST, AND ITS POSITION IS LOAD-BEARING. Moving it earlier collapses the 23
+  // bad-level fixtures' distinct rejection reasons to one and turns that gate red with a message that
+  // reads like a test bug. Full reasoning in `tiledGoal.ts`'s header — read it before reordering.
+  const goalProblem = describeGoalProblem(
+    objects.filter(isGoalObject),
+    { x: spawn.x as number, y: spawn.y as number },
+    {
+      widthPx: (map.width as number) * (map.tilewidth as number),
+      heightPx: (map.height as number) * (map.tileheight as number),
+    },
+    solids,
+    // The player's standing box in WORLD pixels. `PLAYER_BOX` is local units (vault 2.11), so the
+    // scale is applied here rather than being a second literal inside the validator.
+    { w: PLAYER_BOX.w * RENDER_SCALE, h: PLAYER_BOX.h * RENDER_SCALE },
+  );
+  if (goalProblem !== null) {
+    return goalProblem;
+  }
+
   return null;
 }
 
@@ -353,5 +384,6 @@ export function parseLevel(id: string, raw: unknown): LevelData {
     hazards,
     enemies,
     gears: gearSpawns(objects.filter(isGearObject)),
+    goal: goalRect(objects.filter(isGoalObject)),
   };
 }

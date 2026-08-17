@@ -36,6 +36,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { levelObjects } from './levelObjects.mjs';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
@@ -110,11 +112,6 @@ function groundRuns(widthTiles, gaps) {
   return runs;
 }
 
-/** Tiled object-property helper. One shape, so no call site hand-writes the boilerplate. */
-function prop(name, value) {
-  return [{ name, type: typeof value === 'string' ? 'string' : 'bool', value }];
-}
-
 /**
  * Turn a layout into the `.tmj` map object.
  *
@@ -135,7 +132,22 @@ export function buildLevel(layout) {
     enemies = [],
     gears = [],
     spawnCol,
+    goal,
   } = layout;
+
+  /**
+   * Every level must declare an exit. `describeGoalProblem` refuses one that does not, so catching it
+   * here turns a boot refusal into a generation error with the layout's own name in it.
+   *
+   * `goal` is `{ col, row, tilesWide, tilesTall }` — `row` is the surface the doorway STANDS on, the
+   * same convention `enemies` uses for `standRow`, so the rect is emitted upward from it.
+   */
+  if (goal === undefined) {
+    throw new Error(
+      `levelBuilder ${id}: no goal. Every level needs an exit or describeGoalProblem refuses it — ` +
+        `add \`goal: { col, row, tilesWide, tilesTall }\` to the layout.`,
+    );
+  }
 
   /**
    * Vault 3.2, checked here rather than assumed: a side-scroller that cannot scroll looks identical
@@ -214,87 +226,39 @@ export function buildLevel(layout) {
     );
   }
 
-  let nextObjectId = 1;
-  const objects = strips.map((s) => ({
-    height: s.h,
-    id: nextObjectId++,
-    name: '',
-    properties: prop('solid', true),
-    rotation: 0,
-    type: '',
-    visible: true,
-    width: s.w,
-    x: s.x,
-    y: s.y,
-  }));
-
-  objects.push({
-    height: 0,
-    id: nextObjectId++,
-    name: '',
-    point: true,
-    properties: prop('spawn', true),
-    rotation: 0,
-    type: '',
-    visible: true,
-    width: 0,
-    // Feet: horizontal centre of the spawn tile, standing on the ground surface.
-    x: px(spawnCol) + TILE / 2,
-    y: px(groundTopRow),
-  });
-
-  // One hazard rectangle per spike run, from the same array that drew the tiles.
-  for (const { fromCol, toCol, row } of spikes) {
-    objects.push({
-      height: TILE,
-      id: nextObjectId++,
-      name: '',
-      properties: prop('hazard', true),
-      rotation: 0,
-      type: '',
-      visible: true,
-      width: px(toCol - fromCol + 1),
+  /**
+   * Everything below is converted to WORLD PIXELS here and handed to `levelObjects.mjs` as plain rects.
+   *
+   * That is the seam: this file owns the tile-to-pixel conversion and the layout conventions
+   * (`standRow` is the surface the feet rest on; `goal.row` likewise; a gear's row is a cell centre),
+   * and `levelObjects.mjs` owns what a Tiled object looks like. Neither re-derives the other's numbers.
+   */
+  const { objects, nextObjectId } = levelObjects({
+    strips,
+    spawn: { x: px(spawnCol) + TILE / 2, y: px(groundTopRow) },
+    hazards: spikes.map(({ fromCol, toCol, row }) => ({
       x: px(fromCol),
       y: px(row),
-    });
-  }
-
-  for (const { slug, fromCol, toCol, standRow, tilesTall } of enemies) {
-    const height = tilesTall * TILE;
-    objects.push({
-      height,
-      id: nextObjectId++,
-      name: '',
-      properties: prop('enemy', slug),
-      rotation: 0,
-      type: '',
-      visible: true,
-      width: px(toCol - fromCol + 1),
+      w: px(toCol - fromCol + 1),
+      h: TILE,
+    })),
+    enemies: enemies.map(({ slug, fromCol, toCol, standRow, tilesTall }) => ({
+      slug,
       x: px(fromCol),
       // Tiled's `y` is the TOP, and `standRow` is the surface the feet rest on.
-      y: px(standRow) - height,
-    });
-  }
-
-  // Gears, as POINTS. Tiled marks a point with `point: true` and zero width/height, and
-  // `describeGearProblem` refuses a rectangle: a gear's size is `GEAR_BOX` in the sim, one number for
-  // the whole game, so a per-object width would be a second definition a level file could disagree
-  // with. Centred in its cell, which is what makes the authored row read as "one tile above".
-  for (const { col, row } of gears) {
-    objects.push({
-      height: 0,
-      id: nextObjectId++,
-      name: '',
-      point: true,
-      properties: prop('gear', true),
-      rotation: 0,
-      type: '',
-      visible: true,
-      width: 0,
-      x: px(col) + TILE / 2,
-      y: px(row) + TILE / 2,
-    });
-  }
+      y: px(standRow) - tilesTall * TILE,
+      w: px(toCol - fromCol + 1),
+      h: tilesTall * TILE,
+    })),
+    gears: gears.map(({ col, row }) => ({ x: px(col) + TILE / 2, y: px(row) + TILE / 2 })),
+    goal: {
+      x: px(goal.col),
+      // Same convention as an enemy's `standRow`: the doorway STANDS on `goal.row`.
+      y: px(goal.row) - px(goal.tilesTall),
+      w: px(goal.tilesWide),
+      h: px(goal.tilesTall),
+    },
+  });
 
   return {
     map: {

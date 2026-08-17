@@ -134,4 +134,26 @@ export const level01 = {
   // inherited Phase 2 specs: one walks until |vx| saturates (5 ticks) and one asserts the player
   // lands back at exactly its starting y.
   spawnCol: 6,
+
+  /**
+   * The exit — Phase 8's new object type. `row` is the surface it stands on, like `enemies.standRow`.
+   *
+   * ## Scale, anchored to the character rather than eyeballed *(vault 8.4)*
+   *
+   * 2 tiles wide by 3 tall = 192 x 288 px. The player is 132 x 288, so the doorway is **exactly one
+   * character tall** and about 1.45 characters wide — a gate a person walks through, which is what
+   * makes it read as an exit at true sprite size rather than as a crate. Vault 8.4 says anchor prop
+   * scale to a human figure; the figure is the player, and 288 px is its measured body height from
+   * `PLAYER_BOX.h * RENDER_SCALE`. `level-goal.test.ts` bounds it on both sides, so a 20-tile archway
+   * would fail too.
+   *
+   * ## Placement
+   *
+   * Col 84 on the far ground run, past the scavenger's patrol (cols 68–79) so the last thing the level
+   * asks for is getting by it. 8064 px from a spawn at 624 — far over the one-viewport minimum
+   * `level-goal.test.ts` enforces, and off-screen from the start, so "this level is completable" is a
+   * claim about actually crossing the level. Watched failing at `col: 8` (280 px): the travel gate
+   * reported the exact distance and refused it.
+   */
+  goal: { col: 84, row: GROUND_TOP_ROW, tilesWide: 2, tilesTall: 3 },
 };

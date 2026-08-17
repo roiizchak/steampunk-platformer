@@ -128,10 +128,12 @@ describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => 
    * one, so a synthetic map with different dimensions is exactly right.
    */
   it('derives the extent from the data, rather than returning a constant', () => {
+    // 13 x 9 @ 48 px. Grown in Phase 8 from 7 x 5 @ 16: the old map was 112 px wide and the player is
+    // 132, so no goal could avoid overlapping the standing spawn box. See TINY_MAP's own note.
     const level = parseLevel('tiny', TINY_MAP);
-    expect(level.widthPx).toBe(112);
-    expect(level.heightPx).toBe(80);
-    expect(level.tileWidth).toBe(16);
+    expect(level.widthPx).toBe(624);
+    expect(level.heightPx).toBe(432);
+    expect(level.tileWidth).toBe(48);
   });
 
   it.each(SHIPPED_ENTRIES)('%s has at least a full viewport of scroll room on both axes', (id, raw) => {
