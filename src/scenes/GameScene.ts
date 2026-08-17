@@ -24,6 +24,7 @@ import { audioCues } from '../sim/audioCues';
 import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
+import { drawGoal } from './goalLayer';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
 import { createSnapshot } from '../sim/input';
@@ -78,6 +79,12 @@ export class GameScene extends Phaser.Scene {
   private parallax: ParallaxImage[] = [];
   protected levelKey = '';
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
+  /**
+   * The drawn exit — Phase 8. `protected`, so the e2e spec reaches it through `window.__phaserGame`
+   * the way `drawnVsSim.ts` and `perfSampler.ts` already read private scene state. That is the
+   * established alternative to a ninth `window.__game` field, which is closed by a Phase 1 ruling.
+   */
+  protected goalObject!: Phaser.GameObjects.GameObject;
   /** Bound and sampled in `src/scenes/gameInput.ts`; see `bindKeys`/`sampleHeldKeys` below. */
   private held: HeldKeys = { left: [], right: [], jump: [], walk: [], attack: [] };
   /** DEV ONLY — see `devFeelTuner.ts`. Undefined in production, where the branch is compiled out. */
@@ -139,6 +146,9 @@ export class GameScene extends Phaser.Scene {
       // Phase 6, from the same parsed level for the same reason: move a gear in Tiled and it moves
       // in the game. There is no scene-side list of pickups to drift out of step with the file.
       gears: level.gears,
+      // Phase 8: the exit. Step 9d tests the player's box against THIS rectangle, and `goalLayer`
+      // draws the same one — so the drawn doorway and the trigger volume cannot disagree.
+      goal: level.goal,
     });
     applyFeelVariant(this.world);
     this.input$ = createSnapshot();
@@ -147,6 +157,9 @@ export class GameScene extends Phaser.Scene {
     this.parallax = createParallax(this);
     // The tileset/layer resolution and the brass-cap surface rule live in `gameLevelDraw.ts`.
     this.groundLayer = drawLevelLayer(this, level, this.levelKey);
+    // Phase 8: the exit, drawn from the SAME rect step 9d triggers on. Codex's plan review found the
+    // phase had no renderer at all for it — an invisible trigger the player was meant to find (F4).
+    this.goalObject = drawGoal(this, level.goal);
     const desc = playerRenderDesc(this.world.player, this.world.scale);
     registerAnimations(this);
     this.playerSprite = this.add
