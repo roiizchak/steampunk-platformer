@@ -276,6 +276,8 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
       `(delta ${delta.toFixed(3)}) | cues/window ${arms.on.cues.join('/')} vs ` +
       `${arms.off.cues.join('/')} | renderer ${renderer}`;
 
+    // eslint-disable-next-line no-console
+    console.log('[7.7] ' + detail);
     expect(frameLoss, detail).toBeLessThanOrEqual(MAX_AUDIO_FRAME_LOSS_RATIO);
     expect(delta, detail).toBeLessThanOrEqual(MAX_AUDIO_WORK_DELTA_MS);
   });

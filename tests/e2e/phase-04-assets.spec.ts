@@ -1,6 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { parseLevel } from '../../src/game/tilemap';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
+// The REAL decision functions the scene uses, imported rather than restated. A criterion is
+// asserted against one definition, not two that agree on the happy path — the same rule that has
+// `cameraRig`'s predicates imported by both the unit suite and the e2e specs. What this spec adds
+// over `tests/unit/interpolate.test.ts` is that the SCENE feeds them the right inputs.
+import { interpolatedPosition, renderAlpha } from '../../src/render/interpolate';
+import { sampleDrawnVsSim, type Sample } from './drawnVsSim';
 
 /**
  * Phase 4 — criteria 4.23 and 4.24, plus catalog/texture agreement.
@@ -59,100 +65,6 @@ async function groundTopAtSpawn(page: import('@playwright/test').Page): Promise<
   );
   expect(strip, 'no collision strip under the spawn point').toBeDefined();
   return strip!.y;
-}
-
-interface Sample {
-  simY: number;
-  /** Sim vertical speed, px/tick. Reported in the failure messages; NOT used as a bound — see 4.23. */
-  simVy: number;
-  /**
-   * The player's sim `y` immediately BEFORE the most recent tick — `GameScene.prevPlayer.y`, the
-   * exact value `interpolatedPosition` blends FROM. `null` before the first tick and after a
-   * respawn, which is `prevPlayer`'s own way of saying "there is no previous position".
-   *
-   * 🔴 **This is what makes criterion 4.23 answerable.** The drawn position is
-   * `lerp(prevY, simY, alpha)`, so the only honest statements about it are statements about the
-   * segment `[prevY, simY]`. Every bound below is derived from this field; none is a constant.
-   */
-  prevY: number | null;
-  drawnBottom: number;
-  drawnY: number;
-  frameIndex: number;
-  state: string;
-  originY: number;
-}
-
-/**
- * Sample the drawn sprite and the sim together, once per animation frame, for `frames` frames.
- *
- * Both halves are read in the SAME callback so they describe the same moment. Reading them in two
- * evaluates would let a tick land between them and turn a correct renderer into a divergence.
- */
-async function sampleDrawnVsSim(
-  page: import('@playwright/test').Page,
-  frames: number,
-): Promise<Sample[]> {
-  return page.evaluate(
-    (count) =>
-      new Promise<Sample[]>((resolve) => {
-        const out: Sample[] = [];
-        // `prevPlayer` is `private` on GameScene, which is a COMPILE-TIME word — the field is a
-        // plain own property at runtime. Reaching it through `__phaserGame` is the idiom
-        // `phase-05-perf.spec.ts` already uses to read `scene.world`, and it is deliberately
-        // preferred over adding a ninth field to `window.__game`: that surface is closed at eight
-        // by a Phase 1 Codex ruling and widening it needs a STOP-and-ask.
-        const scene = (
-          window as unknown as {
-            __phaserGame: { scene: { getScene(k: string): unknown } };
-          }
-        ).__phaserGame.scene.getScene('Game') as {
-          children: { list: Record<string, unknown>[] };
-          prevPlayer: { y: number } | null;
-        };
-
-        const step = () => {
-          // The player is the only child carrying a brass-courier texture. Found by texture key
-          // rather than by size: the grey-box finder Phase 2 used matched on the collision box's
-          // dimensions, and the sprite is now 288 x 384, which is the CELL, not the box.
-          const drawn = scene.children.list.find((o) => {
-            const key = (o.texture as { key?: string } | undefined)?.key;
-            return typeof key === 'string' && key.startsWith('brass-courier-');
-          }) as
-            | {
-                y: number;
-                originY: number;
-                getBounds(): { bottom: number };
-                frame: { name: string };
-              }
-            | undefined;
-          const sim = window.__game?.player as
-            | { y?: number; vy?: number; state?: string }
-            | null
-            | undefined;
-
-          if (drawn && sim && typeof sim.y === 'number') {
-            out.push({
-              simY: sim.y,
-              simVy: typeof sim.vy === 'number' ? sim.vy : 0,
-              // Read in the SAME callback as `drawn` and `sim`, so all three describe one moment.
-              prevY: scene.prevPlayer ? scene.prevPlayer.y : null,
-              drawnY: drawn.y,
-              drawnBottom: drawn.getBounds().bottom,
-              frameIndex: Number(drawn.frame.name),
-              state: String(sim.state),
-              originY: drawn.originY,
-            });
-          }
-          if (out.length >= count) {
-            resolve(out);
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }),
-    frames,
-  );
 }
 
 test.describe('4.23 — the drawn feet meet the surface', () => {
@@ -224,58 +136,116 @@ test.describe('4.23 — the drawn feet meet the surface', () => {
      * reason it gave: 51.6 px is nearly a fifth of the character's height, wide enough for a
      * genuinely broken vertical anchor to pass.
      */
+    // Assert the TYPE of every field the claims below rest on, before any value (CLAUDE.md 5).
+    // `prevY` is reached through a `private` field, so a rename compiles fine and yields `undefined`;
+    // without this the failure reads "measured a respawn loop" instead of "the field is gone".
+    expect(typeof all[0].accumMs, 'GameScene.accumulatorMs is gone or renamed').toBe('number');
+    expect(
+      all.filter((s) => typeof s.prevY === 'number').length,
+      'GameScene.prevPlayer is gone or renamed - every sample read a null previous position',
+    ).toBeGreaterThan(0);
+
     const withPrev = all.filter((s) => s.prevY !== null);
-    // `prevPlayer` is null only before the first tick and after a respawn. A window that is mostly
-    // null is a window that measured a respawn loop, not a jump.
+    // `prevPlayer` is null only before the first tick and after a respawn.
     expect(
       withPrev.length,
-      'most samples had no previous tick position — the bounds below would be vacuous',
+      'most samples had no previous tick position - the claims below would be vacuous',
     ).toBeGreaterThan(all.length - 10);
 
+    /**
+     * 🔴 **The drawn position is PREDICTED and asserted exactly. There is no tolerance here.**
+     *
+     * This replaced a containment bound - `drawnBottom` inside `[prevY, simY]` - after the
+     * adversarial gate-owner brief showed containment is one-sided and produced three broken
+     * renderers that satisfy it: `renderAlpha(accumulatorMs * 0.5)`, `renderAlpha(0)` (interpolation
+     * off, which is the ghost defect `interpolate.ts` was written to remove) and an airborne-only
+     * offset. During a terminal-velocity fall containment admits a **51.6 px** window - the blanket
+     * `maxFallSpeed` tolerance session 9 rejected, returned as a data-dependent one.
+     *
+     * `interpolatedPosition` and `renderAlpha` are the SCENE'S OWN functions, imported rather than
+     * restated, so this is not a second implementation that agrees on the happy path. What it adds
+     * over `tests/unit/interpolate.test.ts` - which already covers the blend arithmetic - is that
+     * `GameScene` feeds them the right inputs and applies the result to the right object. That
+     * wiring is what a unit test cannot reach and what Phase 2 proved can rot silently: deleting
+     * `renderPlayer()` once left the whole Phase 2 suite green.
+     *
+     * `EPS` is float slack, not tolerance: both sides run the identical double arithmetic, so the
+     * difference should be 0, and 1e-9 is thousands of ulps at these ~2000 px coordinates while
+     * still being fourteen orders of magnitude below the 22.18 px this criterion was failing by.
+     */
+    const EPS = 1e-9;
+    const predicted = (s: Sample): number =>
+      interpolatedPosition({ x: 0, y: s.prevY! }, { x: 0, y: s.simY }, renderAlpha(s.accumMs)).y;
+    expect(
+      Math.max(...withPrev.map((s) => Math.abs(s.drawnY - predicted(s)))),
+      'the drawn y is not where interpolating between the last two ticks puts it. The scene is ' +
+        'not applying `interpolatedPosition(prevPlayer, desc, renderAlpha(accumulatorMs))` - a ' +
+        'wrong blend factor, a dropped snapshot, or an offset applied after the blend.',
+    ).toBeLessThanOrEqual(EPS);
+
+    /**
+     * The feet claim itself, which the prediction above does not make: the drawn BOTTOM is the drawn
+     * y. `originY` is 1, so `getBounds().bottom === sprite.y` for any texture, frame or trim - which
+     * is why this and `originY === 1` are asserted separately and why neither alone is the criterion.
+     *
+     * ⚠️ **Stated limit** *(vault 9.3)*: because that identity holds, this gate reads the
+     * sprite's TRANSFORM, not where the boots sit inside the frame. A sheet whose feet were 20 px
+     * above the cell bottom would draw floating boots with every assertion here green. That coverage
+     * is `sheet-packing.test.ts` (shipped bytes) and criterion 4.24 (`lift-profile.json`); the
+     * hands-on screenshot recorded in `docs/qa/phase-04-art.md` is what joins them in the real game.
+     */
+    expect(
+      Math.max(...all.map((s) => Math.abs(s.drawnBottom - s.drawnY))),
+      'the drawn bottom stopped being the sprite y - originY is no longer 1',
+    ).toBeLessThanOrEqual(EPS);
+
+    /**
+     * And where the sim did not move the player across the blended tick, interpolation is the
+     * identity for ANY alpha, so the drawn feet must sit on the sim feet exactly. Kept beside the
+     * prediction because it is the one claim that needs no reference to the accumulator: if the
+     * accumulator sampling itself were wrong, this would still catch a broken anchor.
+     */
     const settled = withPrev.filter((s) => s.prevY === s.simY);
     expect(
       settled.length,
-      'no samples where the sim left the player at the same y across a tick — the exact claim ' +
-        'below is vacuous',
+      'no samples where the sim left the player at the same y across a tick',
     ).toBeGreaterThan(10);
     expect(
       Math.max(...settled.map((s) => Math.abs(s.drawnBottom - s.simY))),
       'the drawn bottom left the sim feet y on a tick where the sim did not move the player at ' +
-        'all — interpolation is the identity there, so this is the anchor itself',
+        'all - interpolation is the identity there, so this is the anchor itself',
     ).toBe(0);
 
     /**
-     * The segment claim, on both the bottom and the origin y. `originY` is 1, so these are the
-     * same number today; asserting both is what would catch an origin change that moved one and
-     * not the other.
+     * 🔴 **The window must contain a LANDING, and until 2026-08-17 nothing checked that it did.**
      *
-     * 🔴 **The first version of this measured `|drawn - simY| - |simY - prevY|`, and the red proof
-     * caught it: a drawing that OVERSHOOTS past `simY` is still close to `simY`, so an
-     * `alpha * 1.5` mutation in `interpolatedPosition` passed it.** The claim being made is
-     * containment in the segment, so containment is what it has to compute — distance from one
-     * endpoint is a different and weaker statement.
+     * The whole diagnosis behind this rewrite is that the landing tick is where the old filter went
+     * wrong. But `sampleDrawnVsSim` counts rAF frames, not ticks: 130 frames is ~32 ticks at 240 Hz
+     * against a ~65-tick jump arc, so on a fast run the player is **still airborne when sampling
+     * stops**. `settled` would then be fed entirely by the 30 pre-jump grounded frames - a set that
+     * never saw the ground resolve a landing - and `settled.length > 10` would pass on it.
      *
-     * `EPS` is float slack, not tolerance: `prev + dy * alpha` is computed in doubles, so a value
-     * that is mathematically on the segment can land an ulp outside it. Scaled to the magnitude of
-     * the coordinates in play (~2000 px), one ulp is ~2.3e-13, so 1e-9 is thousands of ulps of
-     * headroom and still fourteen orders of magnitude below the 22.18 px this criterion was
-     * failing by.
+     * That is also the honest explanation of the original "flake": whether a landing fell inside the
+     * window was a coin flip, and the coverage of the exact claim flipped with it. Found by the
+     * adversarial gate-owner brief.
      */
-    const EPS = 1e-9;
-    const outsideSegment = (drawn: number, s: Sample): number => {
-      const lo = Math.min(s.prevY!, s.simY);
-      const hi = Math.max(s.prevY!, s.simY);
-      return Math.max(lo - drawn, drawn - hi);
-    };
+    const airborneAt = all.findIndex((s) => s.state === 'jump' || s.state === 'fall');
     expect(
-      Math.max(...withPrev.map((s) => outsideSegment(s.drawnBottom, s))),
-      'the drawn bottom was placed OUTSIDE the [prevY, simY] segment interpolation blends across ' +
-        '— no alpha in [0, 1] can produce that, so this is not interpolation lag',
-    ).toBeLessThanOrEqual(EPS);
+      airborneAt,
+      'no airborne sample - the window proves nothing about flight',
+    ).toBeGreaterThanOrEqual(0);
+    const landedAt = all.findIndex(
+      (s, i) => i > airborneAt && s.state !== 'jump' && s.state !== 'fall',
+    );
     expect(
-      Math.max(...withPrev.map((s) => outsideSegment(s.drawnY, s))),
-      'the drawn origin y was placed outside the [prevY, simY] segment',
-    ).toBeLessThanOrEqual(EPS);
+      landedAt,
+      'the window never came back down - it ended mid-flight, so the exact claim above was ' +
+        'answered entirely by pre-jump frames and this criterion did not test a landing',
+    ).toBeGreaterThan(airborneAt);
+    expect(
+      all.slice(landedAt).filter((s) => s.prevY !== null && s.prevY === s.simY).length,
+      'no settled sample AFTER the landing - the tick this criterion is about was not measured',
+    ).toBeGreaterThan(0);
 
     // ...and the window really did contain flight, so "never diverged" is not a claim about a
     // character that never left the ground.

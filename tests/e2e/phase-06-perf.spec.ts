@@ -267,7 +267,9 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * for. The conclusions, which belong beside the code:
      *
      *  - **It was never contention.** D8 blamed the 47 preceding headless tests. It fails in
-     *    ISOLATION — one isolated run read 1.319 against a 1.25 bound, another read 0.227.
+     *    ISOLATION — isolated runs read 1.319 and 1.396 against a 1.25 bound, and another 0.227.
+     *    The 1.396 arrived from the adversarial gate owner AFTER the bound was set: two extra
+     *    samples raised the ceiling, so the spread is a lower bound on the noise, not a range.
      *  - **The cause is signal-to-noise.** The HUD costs ~0.001 ms of GPU on a ~0.131 ms baseline.
      *    One run's on-arm median came out four times BELOW its off-arm median.
      *  - **Per-pair ratios do not fix it** — this session's plan; the same run reads 1.328, worse
