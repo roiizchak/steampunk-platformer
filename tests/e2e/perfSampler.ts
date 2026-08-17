@@ -49,7 +49,23 @@ type Page = import('@playwright/test').Page;
 export interface Sample {
   /** rAF callbacks actually served across the tick window. */
   frames: number;
-  /** Sim ticks the window actually spanned. Both halves must span the same, or nothing compares. */
+  /**
+   * Sim ticks the window actually spanned. Both halves must span the same, or nothing compares.
+   *
+   * 🔴 **Corrected 2026-08-17. It was read AFTER the GPU drain, so it did not describe the same
+   * span as `frames`.** `frames` is `work.length`, which stops counting the moment the tick
+   * condition is met; `ticks` was then measured several rAF frames later, at the bottom of
+   * `drain()`, and so included ticks that elapsed while nothing was being counted.
+   *
+   * That gap is invisible to every assertion phrased as a ratio of medians, and **fatal to one
+   * phrased as a ratio of frame COUNTS** — which is what criterion 7.7's `MAX_AUDIO_FRAME_LOSS_RATIO`
+   * is, and what criterion 5.11's replacement now is. Two windows that both satisfy
+   * `ticks >= SAMPLE_TICKS` can span different numbers of ticks, so their raw frame counts are not
+   * comparable and their difference reads as a stall that never happened.
+   *
+   * Now captured at the stop condition, beside `elapsedMs`, so `frames`, `ticks` and `elapsedMs`
+   * all describe the identical window. Raised by the Codex plan review of 2026-08-17 (MAJOR 4).
+   */
   ticks: number;
   /** Wall-clock across the window. */
   elapsedMs: number;
@@ -292,6 +308,10 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
             return;
           }
           const elapsedMs = performance.now() - start;
+          // Captured HERE, at the stop condition, not at the bottom of `drain()` below. `frames`
+          // stopped counting on this frame, so the tick span has to be read on this frame too or
+          // the two describe different windows — see the `ticks` docstring.
+          const measuredTicks = game.__game.tick - firstTick;
           // Disconnect BEFORE resolving: an observer left attached keeps firing into the closure of
           // a finished window and would leak its entries into the second half of the pair.
           observer?.disconnect();
@@ -315,7 +335,7 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
             };
             resolve({
               frames: work.length,
-              ticks: game.__game.tick - firstTick,
+              ticks: measuredTicks,
               elapsedMs,
               intervalMs: elapsedMs / work.length,
               workMedianMs: at(0.5),
