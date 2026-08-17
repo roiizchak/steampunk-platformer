@@ -301,6 +301,24 @@ export interface World {
    * anything else needs to write it.
    */
   gearsCollected: number;
+  /**
+   * The level's EXIT, or `null` for a world built without one — Phase 8.
+   *
+   * Nullable because `createWorld` has forty-odd fixture call sites that pass only `seed` and `scale`,
+   * and a required field would have meant editing every one to say "unchanged" — the reason `spawn`'s
+   * docstring gives for the same choice. Step 9d no-ops on `null`, and `goal-completion.test.ts` gates
+   * that no-op from both directions: a `null` world never completes however far the player walks, AND
+   * every shipped level parses to a non-null goal. Without the second half, "no-ops on null" quietly
+   * becomes "never fires".
+   */
+  goal: Rect | null;
+  /**
+   * Has the player finished this level? Latched — set once at step 9d and never cleared.
+   *
+   * 🔴 It is also **terminal**: `tick()` returns early while this is true, before step 1. See the
+   * freeze note at the top of `tick()` for why the alternative was not survivable.
+   */
+  completed: boolean;
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

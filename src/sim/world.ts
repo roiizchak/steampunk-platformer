@@ -73,6 +73,19 @@ export interface CreateWorldOptions {
    * would have meant editing forty call sites to say "unchanged".
    */
   spawn?: { x: number; y: number };
+  /**
+   * The level's exit — Phase 8. Defaults to `null`, and step 9d no-ops on that.
+   *
+   * Optional for the same reason `spawn` and `gears` are, and the reason is worth restating because
+   * the null default is load-bearing rather than lazy: this project has forty-odd fixtures that call
+   * `createWorld({ seed, scale })` and are entitled to a world with nothing to finish. A required
+   * field would have meant editing every one to say "no exit here".
+   *
+   * ⚠️ The cost is that "9d no-ops on null" can silently become "9d never fires", so
+   * `goal-completion.test.ts` gates it from BOTH directions: a null-goal world never completes however
+   * far the player walks, AND every shipped level parses to a non-null goal.
+   */
+  goal?: Rect | null;
 }
 
 export function createWorld({
@@ -84,6 +97,7 @@ export function createWorld({
   hazards,
   enemies,
   gears,
+  goal,
 }: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
@@ -104,6 +118,8 @@ export function createWorld({
     projectiles: [],
     gears: spawnGears(gears ?? []),
     gearsCollected: 0,
+    goal: goal ?? null,
+    completed: false,
     tuning,
     scale,
     player: {

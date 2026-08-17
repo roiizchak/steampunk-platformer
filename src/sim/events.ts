@@ -112,6 +112,18 @@ export interface TickEvents {
    * covered. See `playerTuning.ts`.
    */
   footstep: boolean;
+  /**
+   * The player entered the level's exit on this tick — Phase 8, step 9d.
+   *
+   * Fires **exactly once per world**, and structurally rather than by a flag someone remembered to
+   * check: `tick()` returns early while `world.completed` is true, so there is no second tick in which
+   * this could fire again.
+   *
+   * Classified as a SILENT edge in `audioCues.ts`, deliberately and with a reason: the level-complete
+   * overlay is the feedback, and a completion sting is Phase 9 work that costs fal spend against a
+   * declared ceiling. It is not silent because nobody decided — see `SILENT_EDGES`.
+   */
+  levelCompleted: boolean;
 }
 
 /**
@@ -121,3 +133,34 @@ export interface TickEvents {
  * two frames. Comparing state across frames would miss it entirely (vault 2.5).
  */
 export type AdvanceEvents = TickEvents;
+
+/**
+ * A record with every edge `false` — the zero value, and the thing that makes adding an edge safe.
+ *
+ * Lives here, with the interface it constructs, rather than in `tick.ts`: it is the object literal that
+ * makes an omission a **compile error** instead of a silent `undefined`, so it belongs next to the
+ * declaration it has to stay in step with. (Moved in Phase 8, when `tick.ts` needed the room; every
+ * existing `import { noEvents } from './tick'` still resolves through a re-export there.)
+ *
+ * 🔴 That compile error is load-bearing for two other functions. `advance()` and `mergeEvents()` both
+ * OR their fields by walking `Object.keys(noEvents())` rather than naming them — because they once
+ * named them, `TickEvents` grew to seven, and the four they forgot read as permanently `false` in the
+ * only production caller. Anything built from this record picks up a new edge automatically.
+ */
+export function noEvents(): TickEvents {
+  return {
+    jumped: false,
+    landed: false,
+    leftGround: false,
+    attackStarted: false,
+    hitActive: false,
+    hitLanded: false,
+    respawned: false,
+    gearCollected: false,
+    playerHurt: false,
+    playerDied: false,
+    enemyKilled: false,
+    footstep: false,
+    levelCompleted: false,
+  };
+}
