@@ -21,7 +21,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { describeLevelProblem, isHazardObject, isSolidObject, parseLevel } from '../../src/game/tilemap';
+import { MAX_LEVEL_ENEMIES } from '../../src/game/constants';
+import { describeLevelProblem, isHazardObject, isSolidObject, parseLevel, type LevelData } from '../../src/game/tilemap';
 import { ENEMY_SLUGS } from '../../src/sim/enemies';
 
 const SHIPPED = import.meta.glob('../../public/assets/levels/*.tmj', {
@@ -45,6 +46,12 @@ const MAP_01 = JSON.parse(RAW_01) as {
   layers: { type: string; data?: number[]; objects?: unknown[] }[];
 };
 const LEVEL_01 = parseLevel('level-01', JSON.parse(RAW_01) as unknown);
+
+/** Every shipped level, parsed. Phase 8: the enemy-roster assertions sweep all of them. */
+const SHIPPED_LEVELS: [string, LevelData][] = Object.keys(SHIPPED).map((path) => {
+  const id = path.slice(path.lastIndexOf('/') + 1).replace(/\.tmj$/, '');
+  return [id, parseLevel(id, JSON.parse(SHIPPED[path]!) as unknown)];
+});
 
 describe('hazards are read from a property, never from a name (vault 3.3)', () => {
   it('isHazardObject answers only to `hazard: true`', () => {
@@ -112,10 +119,32 @@ describe('the shipped spikes actually hurt (criterion 5.15, debt: Phase 4 world 
   });
 });
 
-describe('both enemies are authored into the level file', () => {
-  it('spawns one of every known slug, and nothing else', () => {
-    const slugs = LEVEL_01.enemies.map((enemy) => enemy.slug);
-    expect([...slugs].sort()).toEqual([...ENEMY_SLUGS].sort());
+describe('the enemies are authored into the level files', () => {
+  /**
+   * 🔴 Rewritten in Phase 8. It read `expect(slugs.sort()).toEqual(ENEMY_SLUGS.sort())` against
+   * `level-01` alone — exactly one of each type, per level. That is a constraint no five-level
+   * difficulty ramp can satisfy: the ramp's enemy count is one of the metrics that must rise.
+   *
+   * What it was actually protecting is worth keeping, and it is not "one of each": **an enemy type
+   * that exists in code but is authored into no level has never been played.** That is a per-project
+   * property, so it is asserted as the UNION across every shipped level. The dropped half — that no
+   * level names an unknown slug — is not lost either; `describeEnemyProblem` refuses one in
+   * production, which is a stronger place for it than a test.
+   */
+  it.each(SHIPPED_LEVELS)('%s names only known slugs, at least one, and no more than the cap', (id, level) => {
+    expect(level.enemies.length, `${id} ships no enemies`).toBeGreaterThan(0);
+    expect(level.enemies.length, `${id} exceeds MAX_LEVEL_ENEMIES`).toBeLessThanOrEqual(MAX_LEVEL_ENEMIES);
+    for (const enemy of level.enemies) {
+      expect(ENEMY_SLUGS, `${id} names an unknown slug`).toContain(enemy.slug);
+    }
+  });
+
+  it('every enemy type in the code is authored into at least one shipped level', () => {
+    // 🔴 The non-vacuity is `ENEMY_SLUGS.length > 1`: with a single slug the union below is satisfied
+    // by any level at all, and the gate would pass while a second type shipped in nothing.
+    expect(ENEMY_SLUGS.length, 'one slug makes the union assertion vacuous').toBeGreaterThan(1);
+    const union = new Set(SHIPPED_LEVELS.flatMap(([, level]) => level.enemies.map((e) => e.slug)));
+    expect([...union].sort()).toEqual([...ENEMY_SLUGS].sort());
   });
 
   it('a rectangle declares the beat: x is its centre, y its feet, patrol its horizontal span', () => {

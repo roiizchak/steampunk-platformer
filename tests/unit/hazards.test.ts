@@ -67,8 +67,18 @@ describe('segmentHitsRect — the tunnelling case', () => {
   });
 });
 
+/**
+ * ⚠️ Deliberately NOT the shipped level's extent.
+ *
+ * These bounds read `{ widthPx: 8640, heightPx: 2112 }` — level-01's exact size as Phase 7 shipped it —
+ * which made two unit tests of pure arithmetic look like tests of the shipped level, and would have
+ * gone stale the moment Phase 8 replaced it. `5000 x 3000` is obviously synthetic, so nothing here can
+ * be mistaken for a level assertion, and every number below is derived from `bounds` anyway.
+ */
+const SYNTHETIC_BOUNDS = { widthPx: 5000, heightPx: 3000 };
+
 describe('belowKillPlane', () => {
-  const bounds = { widthPx: 8640, heightPx: 2112 };
+  const bounds = SYNTHETIC_BOUNDS;
 
   it('fires the tick the feet pass the world floor, not a tick later', () => {
     expect(belowKillPlane(bounds.heightPx - 1, bounds)).toBe(false);
@@ -83,7 +93,7 @@ describe('belowKillPlane', () => {
 });
 
 describe('clampToBounds — the three edges that are collision, not death', () => {
-  const bounds = { widthPx: 8640, heightPx: 2112 };
+  const bounds = SYNTHETIC_BOUNDS;
   const halfWidth = 66; // PLAYER_BOX.w / 2 * RENDER_SCALE at scale 6
 
   it('stops the player at the left edge instead of letting them integrate forever', () => {

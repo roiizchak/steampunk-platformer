@@ -21,6 +21,43 @@ export const BAD_LEVELS = import.meta.glob('../fixtures/bad-levels/*.fixture', {
   eager: true,
 }) as Record<string, string>;
 
+/**
+ * Retired levels, kept byte for byte because a test PROBES them rather than describing them.
+ *
+ * ## 🔴 Why a frozen copy and not the shipped file
+ *
+ * Phase 8 replaced `level-01` outright. Roughly 28 assertions across the suite named its exact
+ * coordinates, and they split cleanly into two kinds:
+ *
+ * - **About the level** — extent, camera travel, the published-number table. Those get **re-pinned**
+ *   to the new level, because their subject moved.
+ * - **A probe of the renderer or the collider** — `hasSolidAbove` needing "decoration on a floor",
+ *   "two stacked rows", "a three-row pillar" and "three platforms at three heights"; the traversal
+ *   file's pillar-at-3264 and the pit between `floors[0]` and `floors[1]`. Those assertions exist for
+ *   the *edge case the geometry happens to construct*, and re-pinning them to a new level silently
+ *   deletes the case while leaving a green test behind.
+ *
+ * Frozen `.tmj` **data**, not a `.ts` module, so `file-size.test.ts` (which globs `tests/**\/*.ts`)
+ * does not count 700 lines of Tiled JSON against the 400-line ceiling.
+ *
+ * ⚠️ This is a RETIRED level. Nothing here describes what the game ships — it describes the shapes a
+ * particular test needs to exist somewhere. Live gates (spikes must hurt; an enemy must not reach a
+ * stall point) were deliberately NOT frozen; they sweep every shipped level in
+ * `level-hazards.test.ts` instead, because freezing them would have retired the gate along with the
+ * level *(vault 9.4)*.
+ */
+export const FROZEN_LEVELS = import.meta.glob('../fixtures/levels/*.tmj', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+/** `level-01` as Phase 7 shipped it: 90 x 22 @ 96 px, the pillar at 3264, the pit at 3840–4128. */
+export const PHASE07_LEVEL_01 = parseLevel(
+  'level-01-phase07',
+  JSON.parse(FROZEN_LEVELS['../fixtures/levels/level-01-phase07.tmj']!) as unknown,
+);
+
 export const CATALOG = import.meta.glob('../../public/assets/index.json', {
   query: '?raw',
   import: 'default',

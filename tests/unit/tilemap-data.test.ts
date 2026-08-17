@@ -171,8 +171,11 @@ describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => 
    * shipped `.tmj`'s own collision rectangles. A literal on either side would let a re-tune drift
    * back into the same hole.
    */
-  it('level-01 keeps every solid surface within reach of the measured jump', () => {
-    const level = parseLevel('level-01', JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown);
+  it.each(SHIPPED_ENTRIES)('%s keeps every solid surface within reach of the measured jump', (id, raw) => {
+    // 🔴 Swept over EVERY shipped level from Phase 8. It named `level-01` alone until then, which was
+    // correct while one level shipped and would have become the phase's worst hole the moment five
+    // did: four unplayable levels behind one green assertion.
+    const level = parseLevel(id, JSON.parse(raw) as unknown);
     const feel = derivedFeel(DEFAULT_TUNING, ticksToMs);
 
     // Distinct surface heights, top-most first. A player climbs them in order.
