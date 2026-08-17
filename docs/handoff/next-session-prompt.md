@@ -48,15 +48,29 @@ only thing that separated them was building the mutation and measuring.
 **If you add a perf assertion, build the mutation first.** Not the convenient one — the one the bound
 names.
 
-### ⚠️ Criterion 7.7's frame-loss half is KNOWN-WEAK and is open work
+### 🔴 Criterion 7.7's frame-budget half is REPORTED FAILING
+
+**Not "green but weak" — failing.** The Codex implementation review was right that labelling it and
+moving on breaks the project's own rule: *a phase with a failing or unrun criterion is reported
+failing*. A gate that cannot tell its proving mutation from a clean run is **unrun**, whatever colour
+the suite prints.
 
 `MAX_AUDIO_FRAME_LOSS_RATIO` is at **1.15** and **no longer catches its own proving mutation**. Twelve
 clean runs span 0.9331–1.0961; the 30 ms-per-cue mutation reads **1.0943**, below the worst clean run.
 Phase 7 recorded the clean spread as "one frame in 479"; that is not what twelve runs show.
 
 It is labelled in its own docstring, `MAX_AUDIO_WORK_DELTA_MS` is the load-bearing half meanwhile, and
-the honest fix — more pairs, a longer window, or a different statistic — **needs its own session**.
-Do not read a green 7.7 as evidence that audio costs nothing.
+the honest fix **needs its own session**. Do not read a green 7.7 as evidence that audio costs nothing.
+
+**Two concrete leads for that session**, both from the Codex implementation review:
+
+1. **Balance the pair ordering.** 7.7 *and* 6.9 always sample `on` then `off`, never `off` then `on`,
+   so warm-up and directional drift are attributed to the treatment arm instead of cancelling. AB/BA
+   is the cheapest thing to try first.
+2. **6.9's resolution floor is bracketed, not measured** — 1 full-screen scrim is invisible, 5 are
+   visible at 2.688, and nothing between was measured. So `MAX_HUD_GPU_RATIO = 2.0` accepts a stable
+   1.25–2.0 regression. The 2- and 3-layer runs were attempted here and interrupted; they are the
+   other half of the same follow-up.
 
 ---
 

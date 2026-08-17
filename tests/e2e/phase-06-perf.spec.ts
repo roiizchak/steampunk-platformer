@@ -58,7 +58,8 @@ import {
   MIN_SAMPLES,
   SAMPLE_TICKS,
 } from './perfBudget';
-import { SOFTWARE_RENDERERS, counts, sample, webglRenderer } from './perfSampler';
+import { counts, sample } from './perfSampler';
+import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 import { hudDrawState, setHud } from './hudHelpers';
 
@@ -94,17 +95,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     // REQUEST; Chromium answers a refused request by silently falling back to SwiftShader, ~21x
     // slower (HANDOFF §14). A budget measured on a software rasteriser is a measurement of the CPU
     // drawing pixels, and the fallback is invisible unless something asks.
-    const renderer = (await webglRenderer(page)).toLowerCase();
-    // eslint-disable-next-line no-console
-    console.log(`[6.9] WebGL renderer: ${renderer}`);
-    for (const software of SOFTWARE_RENDERERS) {
-      expect(
-        renderer,
-        `this ran on "${renderer}", a SOFTWARE rasteriser. Do not soften this into a skip — the ` +
-          `whole point of the chromium-gpu project is that the fallback is silent.`,
-      ).not.toContain(software);
-    }
-
+    await assertRealGpu(page, '6.9');
     // ---- put the HUD into a state where it actually DRAWS ------------------------------------
     // At full health `drawHealth` queues no rectangle (spentW === 0), so a HUD sampled at spawn is
     // nearly free. Real hazard damage, taken by playing, is what makes the bar a per-frame cost.
@@ -357,8 +348,9 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * the part of the HUD the A/B could vary.
      *
      * This is the whole frame with the HUD on, in milliseconds, against the 16.67ms a 60 Hz frame
-     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; bounded at a third of a frame,
-     * which is loose against the measurement and still fails long before 60 Hz is at risk.
+     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; **bounded at 1ms** — see
+     * `MAX_HUD_WORK_DELTA_MS`, halved from 2ms by the Phase 6 performance owner. This comment said
+     * "a third of a frame" until 2026-08-17 and was describing the old value.
      */
     expect(
       onWork,

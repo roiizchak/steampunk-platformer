@@ -52,6 +52,17 @@ export interface Sample {
   drawnY: number;
   frameIndex: number;
   state: string;
+  /**
+   * The sim's own `grounded` flag, read from `scene.world.player` in the same callback.
+   *
+   * 🔴 Added 2026-08-17. The landing assertion used to look for "the first sample after an airborne
+   * one whose state is neither `jump` nor `fall`", and the Codex implementation review showed that
+   * `hurt`, `attack`, `death` or a respawn all satisfy that without a landing having happened —
+   * combat states bypass the grounded-derived movement state entirely (`src/sim/player.ts`). This is
+   * the flag the sim actually resolves collision against, so a `!grounded -> grounded` transition is
+   * the landing itself rather than a proxy for it.
+   */
+  grounded: boolean;
   originY: number;
 }
 
@@ -85,6 +96,7 @@ export async function sampleDrawnVsSim(
           children: { list: Record<string, unknown>[] };
           prevPlayer: { y: number } | null;
           accumulatorMs: number;
+          world: { player: { grounded: boolean } };
         };
 
         const step = () => {
@@ -118,6 +130,7 @@ export async function sampleDrawnVsSim(
               drawnBottom: drawn.getBounds().bottom,
               frameIndex: Number(drawn.frame.name),
               state: String(sim.state),
+              grounded: scene.world.player.grounded,
               originY: drawn.originY,
             });
           }

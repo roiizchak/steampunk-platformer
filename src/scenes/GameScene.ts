@@ -58,7 +58,11 @@ export class GameScene extends Phaser.Scene {
   private accumulatorMs = 0;
   /**
    * The player's position immediately BEFORE the most recent tick, or `null` before any tick has
-   * run. Read only by `renderPlayer` — see `src/render/interpolate.ts`.
+   * run. Read by `renderPlayerSprite` (`gamePlayerDraw.ts`) and, deliberately, by criterion 4.23's
+   * e2e sampler — see `src/render/interpolate.ts` and `tests/e2e/drawnVsSim.ts`. **4.23 asserts the
+   * drawn position EXACTLY against this field**, so renaming it makes that spec fail loudly rather
+   * than quietly stop checking. (This said "read only by `renderPlayer`" until 2026-08-17; that
+   * method was inlined and the sampler had been added.)
    *
    * A plain copy rather than a reference: `world.player` is mutated in place by the sim, so holding
    * a reference would make `prev` and `cur` the same object and the blend a no-op.

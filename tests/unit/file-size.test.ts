@@ -125,14 +125,36 @@ function lineCount(text: string): number {
  * legitimate file. A marker no narrative would use removes that. Found by the criterion G7 gate owner.
  */
 const CITATION_MARKER = 'SIZE-EXEMPTION:';
-const CITATION_TOKEN = (lines: number): string => `lines=${lines}`;
 
-/** Every QA-log line that is an exemption record for this path. */
-function citationsFor(path: string, logLines: string[]): string[] {
-  return logLines.filter(
-    (line) =>
-      line.includes(CITATION_MARKER) && line.includes(path) && /\blines=\d+\b/.test(line),
-  );
+/**
+ * One exemption record: `SIZE-EXEMPTION: src/scenes/Foo.ts lines=432`, backticks optional.
+ *
+ * 🔴 **PARSED, not substring-matched, and the Codex implementation review is why.** The first
+ * version tested `line.includes(path) && line.includes('lines=' + count)`, and both halves were
+ * wrong in the same way:
+ *
+ *  - `'lines=4100'.includes('lines=410')` is **true**, so a citation for a 4100-line file exempted
+ *    a 410-line one;
+ *  - `'src/scenes/Example.tsx'.includes('src/scenes/Example.ts')` is **true**, so a `.tsx` citation
+ *    exempted the `.ts` file beside it.
+ *
+ * Both verified in a REPL before the fix. A gate written to stop one substring coincidence
+ * (the old bare-basename check) had reintroduced two more.
+ */
+const CITATION_RE = /SIZE-EXEMPTION:\s*`?([^\s`]+)`?\s+lines=(\d+)\b/;
+
+interface Citation {
+  path: string;
+  lines: number;
+}
+
+/** Every exemption record in the logs that names EXACTLY this path. */
+function citationsFor(path: string, logLines: string[]): Citation[] {
+  return logLines
+    .map((line) => CITATION_RE.exec(line))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => ({ path: m[1], lines: Number(m[2]) }))
+    .filter((c) => c.path === path);
 }
 
 /**
@@ -151,16 +173,17 @@ export function citationProblem(
 ): string | null {
   const cites = citationsFor(file.path, logLines);
   if (cites.length === 0) {
-    return `${file.path} (${file.lines} lines) — no active citation (no docs/qa/ line with ` +
-      `${CITATION_MARKER} <path> lines=N)`;
+    return `${file.path} (${file.lines} lines) — no active citation (no docs/qa/ line reading ` +
+      `${CITATION_MARKER} ${file.path} lines=${file.lines})`;
   }
   // Exactly one canonical entry per path. Two active citations means two logs disagree about why
   // the file is large, and the gate would pass on whichever happened to match.
   if (cites.length > 1) {
     return `${file.path} (${file.lines} lines) — ${cites.length} active citations; there must be exactly one`;
   }
-  if (!cites[0].includes(CITATION_TOKEN(file.lines))) {
-    return `${file.path} is ${file.lines} lines and its citation does not say ${CITATION_TOKEN(file.lines)}`;
+  // Numeric equality, never a substring: `lines=4100` must not satisfy a 410-line file.
+  if (cites[0].lines !== file.lines) {
+    return `${file.path} is ${file.lines} lines and its citation says lines=${cites[0].lines}`;
   }
   return null;
 }
@@ -296,7 +319,7 @@ describe('the citation rule itself', () => {
 
   it('rejects a STALE count — the defect that let Phase 4 cover Phase 7', () => {
     const problem = citationProblem(FILE, cite('SIZE-EXEMPTION: src/scenes/Example.ts lines=459 — an old reason'));
-    expect(problem).toContain('does not say lines=410');
+    expect(problem).toContain('citation says lines=459');
   });
 
   it('rejects two active citations, so two logs cannot disagree', () => {
@@ -312,6 +335,19 @@ describe('the citation rule itself', () => {
     expect(
       citationProblem(FILE, cite('SIZE-EXEMPTION: src/scenes/Example.ts lines=410 — the current reason')),
     ).toBeNull();
+  });
+
+  it('rejects a count that merely STARTS with the right digits — lines=4100 is not lines=410', () => {
+    expect(
+      citationProblem(FILE, cite('SIZE-EXEMPTION: src/scenes/Example.ts lines=4100 — a different file era')),
+    ).toContain('citation says lines=4100');
+  });
+
+  it('does not accept a citation for a DIFFERENT file whose path extends this one', () => {
+    // `'src/scenes/Example.tsx'.includes('src/scenes/Example.ts')` is true. It must not count.
+    expect(
+      citationProblem(FILE, cite('SIZE-EXEMPTION: src/scenes/Example.tsx lines=410 — the tsx one')),
+    ).toContain('no active citation');
   });
 
   it('ignores narrative prose that mentions a count but carries no marker', () => {

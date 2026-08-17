@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS, MIN_SAMPLES } from './perfBudget';
-import { SOFTWARE_RENDERERS, sample, webglRenderer } from './perfSampler';
+import { sample } from './perfSampler';
+import { assertRealGpu } from './realGpu';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
 import { cuesPlayed, resetCues, startCueRecorder } from './audioHelpers';
 
@@ -159,12 +160,7 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
     // 🔴 The renderer, before any number is trusted. SwiftShader inflates this harness's
     // milliseconds ~21x (HANDOFF §14), and while a ratio survives that, a spec that silently fell
     // back to software rasterisation is not the substrate this phase agreed to measure on.
-    const renderer = (await webglRenderer(page)).toLowerCase();
-    expect(typeof renderer).toBe('string');
-    for (const software of SOFTWARE_RENDERERS) {
-      expect(renderer, `software rasteriser: ${renderer}`).not.toContain(software);
-    }
-
+    const renderer = await assertRealGpu(page, '7.7');
     await startCueRecorder(page);
     const spawn = await readPlayer(page);
     const start = { x: spawn.x, y: spawn.y };

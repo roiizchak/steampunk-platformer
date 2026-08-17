@@ -89,6 +89,7 @@ import { installGpuTimer } from './gpuTimer';
 import {
   DEV_FLEET_COUNT,
   MAX_FLEET_MS_PER_TICK_RATIO,
+  MAX_FLEET_WORK_MS,
   MAX_GPU_RATIO,
   MAX_MS_PER_SIM_TICK,
   MAX_WORK_RATIO,
@@ -97,8 +98,10 @@ import {
   SAMPLE_TICKS,
   SENTRY_COOLDOWN_TICKS,
 } from './perfBudget';
-import { SOFTWARE_RENDERERS, counts, sample, waitForBodyCount, webglRenderer } from './perfSampler';
+import { counts, sample, waitForBodyCount } from './perfSampler';
+import { assertRealGpu } from './realGpu';
 import { bootToGame } from './gameHarness';
+import { frameBudgetReport } from './perfReport';
 // The sim's own tick period, imported rather than retyped: the ms-per-tick bounds below are
 // statements ABOUT it, so a retune of the tick rate must move them together (vault 5.3).
 import { MS_PER_TICK } from '../../src/game/constants';
@@ -114,18 +117,7 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     // REQUEST, and Chromium answers a refused request by falling back to SwiftShader — 21x slower
     // (HANDOFF §14) and the whole reason this spec has its own project. A number measured on a
     // software rasteriser is not a frame budget, and until now nothing checked.
-    const renderer = (await webglRenderer(page)).toLowerCase();
-    // eslint-disable-next-line no-console
-    console.log(`[5.11] WebGL renderer: ${renderer}`);
-    for (const software of SOFTWARE_RENDERERS) {
-      expect(
-        renderer,
-        `this ran on "${renderer}", a SOFTWARE rasteriser. Every number below would be a ` +
-          `measurement of the CPU drawing pixels, not of the frame budget. Do not soften this into ` +
-          `a skip: the point of the chromium-gpu project is that the fallback is invisible.`,
-      ).not.toContain(software);
-    }
-
+    await assertRealGpu(page, '5.11');
     const before = await counts(page);
     // The level's own enemies. Asserted, not assumed: if the baseline were empty the ratio below
     // would be measuring "some enemies vs no enemies", a different and much easier question.
@@ -298,26 +290,15 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     const msPerTickRatio = fleetMsPerTick / msPerTick(baseline);
     const gpuRatio = fleet.gpuMedianMs / baseline.gpuMedianMs;
     const gpuBurstRatio = fleet.gpuP95Ms / baseline.gpuP95Ms;
-    const report =
-      `[5.11] ${SAMPLE_TICKS}-tick interleaved pair (>= 2 sentry volleys each), same page, real GPU.\n` +
-      `       baseline ${before.bodies} bodies: work median ${baseline.workMedianMs.toFixed(2)}ms, ` +
-      `p95 ${baseline.workP95Ms.toFixed(2)}ms over ${baseline.frames} frames / ${baseline.ticks} ticks, ` +
-      `interval ${baseline.intervalMs.toFixed(2)}ms, ${baseline.loafCount} frames over 50ms\n` +
-      `       fleet    ${after.bodies} bodies (${after.inView} in view): work median ` +
-      `${fleet.workMedianMs.toFixed(2)}ms, p95 ${fleet.workP95Ms.toFixed(2)}ms over ${fleet.frames} ` +
-      `frames / ${fleet.ticks} ticks, interval ${fleet.intervalMs.toFixed(2)}ms, ` +
-      `${fleet.loafCount} frames over 50ms, peak ${fleet.maxProjectiles} bolts in flight\n` +
-      `       ratios: median ${ratio.toFixed(2)}x, p95 ${(fleet.workP95Ms / baseline.workP95Ms).toFixed(2)}x ` +
-      `(REPORTED, not gated — see perfBudget.ts), for ${(after.bodies / before.bodies).toFixed(1)}x the enemies\n` +
-      `       wall ms per sim tick: baseline ${msPerTick(baseline).toFixed(2)}ms, fleet ` +
-      `${fleetMsPerTick.toFixed(2)}ms, ratio ${msPerTickRatio.toFixed(3)}x, against a ` +
-      `${MS_PER_TICK.toFixed(2)}ms tick\n` +
-      `       GPU: baseline median ${baseline.gpuMedianMs.toFixed(3)}ms / p95 ` +
-      `${baseline.gpuP95Ms.toFixed(3)}ms over ${baseline.gpuSamples} samples ` +
-      `(${baseline.gpuDisjointFrames} disjoint, ${baseline.gpuAbandoned} abandoned); fleet median ` +
-      `${fleet.gpuMedianMs.toFixed(3)}ms / p95 ${fleet.gpuP95Ms.toFixed(3)}ms over ` +
-      `${fleet.gpuSamples} samples (${fleet.gpuDisjointFrames} disjoint, ${fleet.gpuAbandoned} ` +
-      `abandoned); ratios median ${gpuRatio.toFixed(2)}x, p95 ${gpuBurstRatio.toFixed(2)}x`;
+    const report = frameBudgetReport({
+      sampleTicks: SAMPLE_TICKS,
+      baseline,
+      fleet,
+      before,
+      after,
+      msPerTickOf: msPerTick,
+      perTickMs: MS_PER_TICK,
+    });
     // eslint-disable-next-line no-console
     console.log(report);
 
@@ -366,6 +347,22 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
         `${MS_PER_TICK.toFixed(2)}ms simulated tick — it is running behind real time, which is what ` +
         `a frame budget failure means to a player however the per-frame statistics read.`,
     ).toBeLessThan(MAX_MS_PER_SIM_TICK);
+
+    /**
+     * 🔴 **The absolute per-frame bound — the hole every other assertion here shares.**
+     *
+     * `ratio` and `msPerTickRatio` are RATIOS, so a cost in both arms divides out. `fleetMsPerTick`
+     * is blind to any uniform frame cost below ~83 ms because the tick clock self-balances, and
+     * `MIN_SAMPLES` only rejects the window above ~49 ms/frame. So a uniform **20 - 49 ms** per-frame
+     * regression passed every other assertion in this spec. Found by the Codex implementation review
+     * and confirmed against the real `drainTicks` arithmetic; the table is in `perfBudget.ts`.
+     */
+    expect(
+      fleet.workMedianMs,
+      `the median frame did ${fleet.workMedianMs.toFixed(2)}ms of blocking main-thread work with ` +
+        `the fleet on screen, against the ${MS_PER_TICK.toFixed(2)}ms a 60 Hz frame has. Nothing ` +
+        `above divides this out or self-balances it away.`,
+    ).toBeLessThan(MAX_FLEET_WORK_MS);
 
     // 🔴 The GPU half — the blind spot two documents called unreachable. This is what the two
     // assertions above structurally cannot see: a regression that draws far more PIXELS through the

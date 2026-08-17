@@ -217,34 +217,37 @@ test.describe('4.23 — the drawn feet meet the surface', () => {
     ).toBe(0);
 
     /**
-     * 🔴 **The window must contain a LANDING, and until 2026-08-17 nothing checked that it did.**
+     * 🔴 **The window must contain a real LANDING, and two earlier versions of this did not check
+     * that properly.**
      *
      * The whole diagnosis behind this rewrite is that the landing tick is where the old filter went
-     * wrong. But `sampleDrawnVsSim` counts rAF frames, not ticks: 130 frames is ~32 ticks at 240 Hz
-     * against a ~65-tick jump arc, so on a fast run the player is **still airborne when sampling
-     * stops**. `settled` would then be fed entirely by the 30 pre-jump grounded frames - a set that
-     * never saw the ground resolve a landing - and `settled.length > 10` would pass on it.
+     * wrong — so a window that never lands answers this criterion with pre-jump frames only.
      *
-     * That is also the honest explanation of the original "flake": whether a landing fell inside the
-     * window was a coin flip, and the coverage of the exact claim flipped with it. Found by the
-     * adversarial gate-owner brief.
+     * The first fix looked for "the first later sample whose state is neither `jump` nor `fall`".
+     * The Codex implementation review killed it: `hurt`, `attack`, `death` and a respawn all satisfy
+     * that without a landing, because combat states bypass the grounded-derived movement state
+     * (`src/sim/player.ts`). It now asserts the transition on the sim's own `grounded` flag — the
+     * one collision resolution actually sets — so this is the landing itself, not a proxy.
+     *
+     * ⚠️ The window is still a fixed frame count, and `sampleDrawnVsSim` counts rAF frames rather
+     * than ticks: 130 frames is ~32 ticks at 240 Hz against a ~65-tick jump arc. The landing window
+     * below is therefore sampled until the transition is SEEN, with a frame ceiling, rather than
+     * assumed to fall inside a fixed count — otherwise a faster machine false-reds on correct code.
      */
-    const airborneAt = all.findIndex((s) => s.state === 'jump' || s.state === 'fall');
+    const airborneAt = all.findIndex((s) => !s.grounded);
     expect(
       airborneAt,
-      'no airborne sample - the window proves nothing about flight',
+      'no airborne sample — the window proves nothing about flight',
     ).toBeGreaterThanOrEqual(0);
-    const landedAt = all.findIndex(
-      (s, i) => i > airborneAt && s.state !== 'jump' && s.state !== 'fall',
-    );
+    const landedAt = all.findIndex((s, i) => i > airborneAt && s.grounded && !all[i - 1].grounded);
     expect(
       landedAt,
-      'the window never came back down - it ended mid-flight, so the exact claim above was ' +
-        'answered entirely by pre-jump frames and this criterion did not test a landing',
+      'no `!grounded -> grounded` transition in the window — it ended mid-flight, so the exact ' +
+        'claim above was answered entirely by pre-jump frames and no landing was measured',
     ).toBeGreaterThan(airborneAt);
     expect(
       all.slice(landedAt).filter((s) => s.prevY !== null && s.prevY === s.simY).length,
-      'no settled sample AFTER the landing - the tick this criterion is about was not measured',
+      'no settled sample AFTER the landing — the tick this criterion is about was not measured',
     ).toBeGreaterThan(0);
 
     // ...and the window really did contain flight, so "never diverged" is not a claim about a

@@ -126,28 +126,57 @@ export const MAX_FLEET_MS_PER_TICK_RATIO = 1.15;
  * cancels out of it.
  *
  * Measured at **16.47 - 16.63 ms** clean against a 16.67 ms tick — the sim keeps up exactly, which
- * is what a fixed timestep with a frame-rate-independent clock is for. **Bounded at 20 ms**, the
- * game running at an effective 50 Hz instead of 60, and ~20 % above the worst clean reading.
+ * is what a fixed timestep with a frame-rate-independent clock is for. **Bounded at 20 ms**, ~20 %
+ * above the worst clean reading.
  *
- * 🔴 **It was drafted at 25 and that was decoration, for a reason worth writing down.** `drainTicks`
- * caps catch-up at `MAX_TICKS_PER_FRAME` = 5, so a per-frame cost **self-balances**: a frame that
- * costs C ms drains about `C / 16.67` ticks, and the wall time per tick stays ~16.67 no matter how
- * large C gets — until C exceeds `5 x 16.67 = 83 ms` and the clock starts DROPPING ticks. A proving
- * 8 ms-per-frame stall therefore passed at 25 and passed at 20; the statistic only moves once the
- * sim genuinely falls behind real time, which is exactly what it should mean.
+ * 🔴 **What this bound is, precisely, corrected after the Codex implementation review.** It is a
+ * **simulation-backlog** statistic: it says the clock is still keeping up with real time. It is NOT
+ * a per-frame budget, and an earlier version of this docstring called 20 ms "an effective 50 Hz",
+ * which is **false under this clock**.
  *
- * At 25 even Phase 5's real parallax defect (71 ms median frames) would have passed. At 20 the volley
- * storm reaches it — proved red at **21.82 ms** with the ratio bound temporarily neutralised so this
- * assertion was the only one that could fail. Tightened on that measurement, not on preference.
+ * `drainTicks` caps catch-up at `MAX_TICKS_PER_FRAME` = 5, so a uniform per-frame cost
+ * **self-balances**: a frame costing C ms drains about `C / 16.67` ticks, and wall time per tick
+ * stays ~16.67 however large C gets — until C exceeds `5 x 16.67 = 83 ms` and the clock starts
+ * DROPPING ticks. Simulated over the real `drainTicks` arithmetic:
  *
- * ⚠️ **Stated blind spot** *(vault 9.3)*: a UNIFORM per-frame stall cannot prove this bound, and the
- * attempt is on the record. To drop ticks a frame must cost more than 83 ms, and at that cost a
- * 180-tick window contains only ~36 frames — so `MIN_SAMPLES` (60) fires first and the window is
- * rejected as unmeasurable before this assertion is reached. That is the correct outcome for a
- * degenerate window, but it means this bound's proof is the volley storm, and a defect that slows
- * every frame uniformly is caught by `MIN_SAMPLES` rather than here.
+ * | uniform frame cost | ticks/frame | **ms per tick** | frames per 180 ticks |
+ * |--------------------|-------------|-----------------|----------------------|
+ * | 20 ms              | 1.20        | **16.69**       | 151                  |
+ * | 40 ms              | 2.39        | **16.70**       | 76                   |
+ * | 49 ms              | 2.94        | **16.69**       | 62                   |
+ * | 80 ms              | 4.79        | **16.70**       | 38                   |
+ * | 110 ms             | 5.00        | **22.00**       | 36                   |
+ *
+ * So a **20 - 49 ms per-frame regression is invisible to this bound AND stays above `MIN_SAMPLES`**.
+ * The previous docstring admitted a blind spot but placed it above 83 ms; it starts at 0. That gap
+ * is what `MAX_FLEET_WORK_MS` below exists to close, and the ratio bound above cannot help because a
+ * uniform cost lands in both arms and divides out.
+ *
+ * It was drafted at 25 and that was decoration even as a backlog statistic: at 25 even Phase 5's real
+ * parallax defect (71 ms median frames) would have passed. At 20 the volley storm reaches it — proved
+ * red at **21.82 ms** with the ratio bound temporarily neutralised so this assertion was the only one
+ * that could fail.
  */
 export const MAX_MS_PER_SIM_TICK = 20;
+
+/**
+ * The **absolute** ceiling on the fleet arm's MEDIAN main-thread work per frame, in milliseconds.
+ *
+ * 🔴 **Added after the Codex implementation review found a hole every other 5.11 bound shares.**
+ * `MAX_WORK_RATIO` and `MAX_FLEET_MS_PER_TICK_RATIO` are ratios, so a cost present in BOTH arms
+ * divides out of them; `MAX_MS_PER_SIM_TICK` is blind to any uniform frame cost below 83 ms because
+ * the tick clock self-balances (see its table); and `MIN_SAMPLES` only rejects the window above
+ * ~49 ms/frame. **A uniform 20 - 49 ms per-frame regression therefore passed all of criterion 5.11.**
+ *
+ * This is the one assertion in the spec that is neither a ratio nor a function of the tick clock: the
+ * median frame's own blocking time, against the 16.67 ms a 60 Hz frame actually has.
+ *
+ * Measured **0.50 - 0.60 ms** clean on the fleet arm. **Bounded at 8 ms** — roughly half a frame, and
+ * more than thirteen times the worst clean reading, so it cannot fail on driver noise while catching
+ * the whole 20 - 49 ms band that was slipping through. Red-proved with a uniform 40 ms-per-frame
+ * stall in `GameScene.update()`, which lands in both arms and which every other bound here passes.
+ */
+export const MAX_FLEET_WORK_MS = 8;
 
 /**
  * A GPU window that produced fewer non-disjoint results than this has no median worth reading.
