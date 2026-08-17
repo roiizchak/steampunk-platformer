@@ -55,6 +55,11 @@ export {
 export { GREY_BOX_SOLIDS, advance, createWorld, noEvents, tick } from './tick';
 export { advanceSplit, mergeEvents } from './advanceSplit';
 export { advanceWindow, windowOpen } from './windows';
+// Exported through the barrel so `sim-boundary.test.ts` walks it: that test import-evaluates THIS file
+// and inspects the transitive graph, so a module `src/sim/` holds but the barrel does not name is
+// outside the purity proof entirely.
+export type { CompletedLevels } from './progress';
+export { isUnlocked, nextLevelId, resolveEntryLevel, unlockedIds } from './progress';
 export type { Clampable, WorldBounds } from './hazards';
 export { HAZARD_DAMAGE, belowKillPlane, clampToBounds, hazardHit, segmentHitsRect } from './hazards';
 export type { GearSim, GearSpawn } from './pickups';
