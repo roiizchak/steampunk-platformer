@@ -32,9 +32,22 @@ export const level03 = {
   // 🔴 The first 3-tile gaps in the game. 288 px has no height to clear, which makes it a LONGER reach
   // than a 288 px hazard would be — `level-traversal.test.ts` crosses it with a run-up and not from
   // standing. Two of them, so the skill is asked for twice rather than once.
+  /**
+   * 🔴 The second gap moved from cols 88–90 to 94–96, and `level-completable.test.ts` is why.
+   *
+   * The ziggurat's last step ends at col 86, so a gap at 88 left exactly ONE tile of ground between the
+   * descent and a 288 px hole — 96 px of run-up for a jump that needs a full one. The auto-player fell in
+   * eleven times and never got past x 8670 of 12288. Nothing else in the suite could see it: the
+   * reachability graph proves the terrain connects (it does — from a standing start on that tile the
+   * jump is not provable, but the graph reaches the far side another way), the ramp table is unaffected,
+   * and the stall gate is about walls rather than holes. It took a run of the whole level, end to end,
+   * in the world the player gets.
+   *
+   * 94 leaves 7 tiles of clear ground after the descent, which is a real run-up.
+   */
   gaps: [
     { fromCol: 36, toCol: 38 },
-    { fromCol: 88, toCol: 90 },
+    { fromCol: 94, toCol: 96 },
   ],
 
   walls: [
@@ -73,7 +86,7 @@ export const level03 = {
     { slug: 'rust-scavenger', fromCol: 40, toCol: 42, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
     { slug: 'brass-sentry', fromCol: 52, toCol: 56, standRow: 12, tilesTall: 2 },
     { slug: 'brass-sentry', fromCol: 78, toCol: 82, standRow: 12, tilesTall: 2 },
-    { slug: 'rust-scavenger', fromCol: 92, toCol: 100, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
+    { slug: 'rust-scavenger', fromCol: 98, toCol: 102, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],
 
   gears: [
@@ -84,7 +97,7 @@ export const level03 = {
     { col: 47, row: 15 },
     { col: 56, row: 11 },
     { col: 80, row: 11 },
-    { col: 89, row: 18 },
+    { col: 95, row: 18 },
     { col: 115, row: 15 },
   ],
 
