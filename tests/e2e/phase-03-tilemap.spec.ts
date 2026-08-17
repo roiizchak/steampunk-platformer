@@ -98,9 +98,17 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     expect(run.maxX).toBe(wall.x - HALF_BODY);
 
     // And the wall the player stopped against is actually drawn there (Codex P4).
+    //
+    // ⚠️ The drawn cell must be INSIDE the wall's span, not at its left edge. This read
+    // `expect(tile!.pixelX).toBe(wall.x)`, which was only ever true because Phase 7's wall was exactly
+    // one tile wide: Phase 8 made it two columns of masonry, the sample at the wall's centre landed in
+    // the second column, and the assertion failed at 3360 against 3264 with a message about a missing
+    // tile. The claim being made is "the wall is painted where the collider stopped the player", and
+    // that claim does not care how wide the wall is.
     const tile = await drawnTileAt(page, wall.x + wall.w / 2, wall.y + wall.h / 2);
     expect(tile, 'no tile is drawn where the wall stopped the player').not.toBeNull();
-    expect(tile!.pixelX).toBe(wall.x);
+    expect(tile!.pixelX).toBeGreaterThanOrEqual(wall.x);
+    expect(tile!.pixelX).toBeLessThan(wall.x + wall.w);
   });
 
   test('3.4 the camera follows the player and never shows outside the map', async ({ page }) => {

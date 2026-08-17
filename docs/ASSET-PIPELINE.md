@@ -34,8 +34,8 @@ right in isolation *(Codex plan review P8; criteria 3.6 and 3.6b)*.
 | **Grid cell size** | **`96 × 96` px** | `TILE_SIZE` |
 | **Camera zoom** | **`1`** | `CAMERA_ZOOM` |
 | **Viewport / world view** | **`1920 × 1080` px = `20 × 11.25` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
-| **World extent (level-01)** | **`8640 × 2112` px = `90 × 22` tiles** | measured off the shipped `.tmj` |
-| **Camera travel** | **`6720 × 1032` px** | extent − world view |
+| **World extent (level-01)** | **`9216 × 2208` px = `96 × 23` tiles** | measured off the shipped `.tmj` |
+| **Camera travel** | **`7296 × 1128` px** | extent − world view |
 | **Character collision box** | **`132 × 288` px = `1.375 × 3.0` tiles** | `PLAYER_BOX × RENDER_SCALE` |
 | **Character render height** | **`288` px — 26.67 % of screen height** | `PLAYER_BOX.h × RENDER_SCALE` |
 | **Render scale** | **`RENDER_SCALE` 6** | `RENDER_SCALE` |

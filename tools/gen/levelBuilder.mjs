@@ -25,6 +25,19 @@
 // Solidity is a property, never a name (vault 3.3), and rectangles are the only representation that
 // can round-trip a sub-tile nudge back out of the Element Editor.
 //
+// THE DENSE LOOK, AND WHY IT IS STRUCTURAL MASS RATHER THAN DECORATION
+// Phase 8's owner decision was "dense, fully painted, bigger", keeping the 96 px grid and the 16-tile
+// industrial sheet. The way that is delivered here is `walls[].cols` and `platforms[].rows` — solids
+// with real thickness rather than one-tile lines — so the painted cell count rises and every painted
+// cell is still backed by a collision rectangle.
+//
+// 🔴 That is not a stylistic preference; it is the only version of "fully painted" that survives the
+// two gid traps documented at FILL_GID below. Free background decoration painted with gid 1 becomes a
+// brass cap floating in the sky, and a walkable top painted with any other gid loses its cap
+// altogether. Structural mass has neither failure by construction: a thick platform draws one brass
+// cap on its top row and brick beneath, which is exactly the look, and `applySurfaceTiles` does all of
+// it from the collision rects. Both traps are swept in `ground-tiles.test.ts`, in both directions.
+//
 // 🔴 **Every collision rect below is DERIVED from the same layout constants that paint the tiles.**
 // That is what makes "the drawn spikes hurt" and "the drawn floor is solid" true by construction
 // rather than by a second list someone has to remember to keep in step. Phase 4 shipped a spike run
@@ -174,11 +187,15 @@ export function buildLevel(layout) {
       for (let row = groundTopRow; row < H; row += 1) tiles[at(col, row)] = FILL_GID;
     }
   }
-  for (const { col, topRow, rows } of walls) {
-    for (let row = topRow; row < topRow + rows; row += 1) tiles[at(col, row)] = FILL_GID;
+  for (const { col, topRow, rows, cols = 1 } of walls) {
+    for (let row = topRow; row < topRow + rows; row += 1) {
+      for (let c = col; c < col + cols; c += 1) tiles[at(c, row)] = FILL_GID;
+    }
   }
-  for (const { fromCol, toCol, row } of platforms) {
-    for (let col = fromCol; col <= toCol; col += 1) tiles[at(col, row)] = FILL_GID;
+  for (const { fromCol, toCol, row, rows = 1 } of platforms) {
+    for (let col = fromCol; col <= toCol; col += 1) {
+      for (let r = row; r < row + rows; r += 1) tiles[at(col, r)] = FILL_GID;
+    }
   }
   for (const { fromCol, toCol, row } of spikes) {
     for (let col = fromCol; col <= toCol; col += 1) tiles[at(col, row)] = SPIKE_GID;
@@ -193,17 +210,17 @@ export function buildLevel(layout) {
       w: px(toCol - fromCol + 1),
       h: px(H - groundTopRow),
     })),
-    ...walls.map(({ col, topRow, rows }) => ({
+    ...walls.map(({ col, topRow, rows, cols = 1 }) => ({
       x: px(col),
       y: px(topRow),
-      w: TILE,
+      w: px(cols),
       h: px(rows),
     })),
-    ...platforms.map(({ fromCol, toCol, row }) => ({
+    ...platforms.map(({ fromCol, toCol, row, rows = 1 }) => ({
       x: px(fromCol),
       y: px(row),
       w: px(toCol - fromCol + 1),
-      h: TILE,
+      h: px(rows),
     })),
   ];
 

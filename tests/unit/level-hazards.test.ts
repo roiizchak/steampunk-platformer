@@ -120,7 +120,7 @@ function drive(
   dir: 1 | -1,
   ticks: number,
   jumpAtX?: number,
-): { x: number; vx: number; alive: boolean } {
+): { x: number; y: number; vx: number; alive: boolean } {
   const world = levelWorld(level, startX, false);
   const input: InputSnapshot = createSnapshot();
   if (dir === 1) input.right = true;
@@ -135,7 +135,24 @@ function drive(
     tick(world, input);
     if (world.player.hp <= 0) break;
   }
-  return { x: world.player.x, vx: world.player.vx, alive: world.player.hp > 0 };
+  return { x: world.player.x, y: world.player.y, vx: world.player.vx, alive: world.player.hp > 0 };
+}
+
+/**
+ * Could a player stand at `(x, spawn.y)` — solid ground beneath, and nothing solid where their body
+ * would be?
+ *
+ * The body is the full `PLAYER_BOX` at `RENDER_SCALE`, measured up from the feet, because a probe placed
+ * with its head inside a mass is not a walker approaching an obstacle; it is a walker inside one.
+ */
+function standableAt(level: LevelData, x: number): boolean {
+  const feet = level.spawn.y;
+  const bodyTop = feet - PLAYER_BOX.h * RENDER_SCALE;
+  const left = x - HALF_W;
+  const right = x + HALF_W;
+  const inside = level.solids.some((s) => s.x < right && s.x + s.w > left && s.y < feet && s.y + s.h > bodyTop);
+  if (inside) return false;
+  return level.solids.some((s) => s.y === feet && x > s.x && x < s.x + s.w);
 }
 
 /**
@@ -164,6 +181,12 @@ function stallPoints(level: LevelData): number[] {
       const face = dir === 1 ? solid.x : solid.x + solid.w;
       const startX = face - dir * 600;
       if (startX < HALF_W || startX > level.widthPx - HALF_W) continue;
+      // 🔴 And the probe must START somewhere a walker could actually be. The stepped masses this phase
+      // authored reach the ground, so "600 px back from the middle step's face" is often INSIDE the step
+      // below it — and a probe spawned inside a solid reports a stall against the geometry it was
+      // spawned in. It went red on all five levels that way. Reaching a step from the one beneath it is
+      // a climb, which is `level-reach.test.ts`'s question, not this file's.
+      if (!standableAt(level, startX)) continue;
 
       const walked = drive(level, startX, dir, 200);
       if (!walked.alive) continue;
@@ -171,11 +194,22 @@ function stallPoints(level: LevelData): number[] {
       if (Math.abs(walked.vx) > 1) continue;
       if (Math.abs(walked.x - (face - dir * HALF_W)) > PLAYER_BOX.w * RENDER_SCALE) continue;
 
-      // The escape test. `face` is the latest honest moment to press jump, so clearing from there
-      // means clearing from any earlier press too.
+      /**
+       * The escape test. `face` is the latest honest moment to press jump, so clearing from there means
+       * clearing from any earlier press too.
+       *
+       * 🔴 Escaping means **getting on top of the solid OR past it**, not getting past it. The first
+       * draft demanded the horizontal pass and reported every stepped mass in all five levels as a
+       * dead end: the player jumps onto the block correctly, keeps running along the top, and stops
+       * against the NEXT block's face — which is its own candidate and gets its own test. Landing on
+       * the thing you were meant to climb is not a soft-lock.
+       *
+       * Feet at or above `solid.y` is exactly "standing on its top surface, or higher".
+       */
       const jumped = drive(level, startX, dir, 400, face);
-      const gotPast = dir === 1 ? jumped.x > solid.x + solid.w : jumped.x < solid.x;
-      if (gotPast) continue;
+      const onTop = jumped.y <= solid.y;
+      const past = dir === 1 ? jumped.x > solid.x + solid.w : jumped.x < solid.x;
+      if (onTop || past) continue;
 
       points.push(walked.x);
     }

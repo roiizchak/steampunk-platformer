@@ -147,15 +147,24 @@ describe('world extent, measured not assumed (criterion 3.5, vault 3.2)', () => 
     expect(level.heightPx - viewH, `${id} has no vertical camera travel`).toBeGreaterThan(0);
   });
 
-  it('level-01 measures exactly the extent published for Phase 4', () => {
+  /**
+   * Re-pinned in Phase 8: 90 x 22 (8640 x 2112) -> 96 x 23 (9216 x 2208). The owner's decision was
+   * "bigger", and the extra row went into the ground stack rather than the sky — see `level-01.mjs`,
+   * whose depth is bounded above by the camera-clamp window `phase-03-tilemap.spec.ts` needs.
+   *
+   * This is the RE-PIN half of the Phase 8 migration: an assertion ABOUT the level, whose subject moved.
+   * The assertions that PROBE the level's shapes went to `tests/fixtures/levels/level-01-phase07.tmj`
+   * instead, because re-pinning those would have deleted the case while leaving a green test.
+   */
+  it('level-01 measures exactly the extent published in ASSET-PIPELINE.md', () => {
     const level = parseLevel('level-01', JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown);
 
-    expect(level.widthTiles).toBe(90);
-    expect(level.heightTiles).toBe(22);
-    expect(level.widthPx).toBe(8640);
-    expect(level.heightPx).toBe(2112);
-    expect(level.widthPx - GAME_WIDTH / CAMERA_ZOOM).toBe(6720);
-    expect(level.heightPx - GAME_HEIGHT / CAMERA_ZOOM).toBe(1032);
+    expect(level.widthTiles).toBe(96);
+    expect(level.heightTiles).toBe(23);
+    expect(level.widthPx).toBe(9216);
+    expect(level.heightPx).toBe(2208);
+    expect(level.widthPx - GAME_WIDTH / CAMERA_ZOOM).toBe(7296);
+    expect(level.heightPx - GAME_HEIGHT / CAMERA_ZOOM).toBe(1128);
   });
 
   /**

@@ -1,159 +1,132 @@
-// level-01 geometry. Stated entirely in TILES; `levelBuilder.mjs` multiplies by `TILE_SIZE`.
+// level-01 geometry, in TILES. `levelBuilder.mjs` multiplies by `TILE_SIZE`.
 //
-// These are the numbers the single-target `make-greybox-level.mjs` held as module constants, moved
-// here unchanged when Phase 8 split that script. Regenerating produced a byte-identical `.tmj`, which
-// is what proved the split behaviour-preserving.
+// ⚠️ **This level has less design freedom than any other in the game**, and the constraints are not
+// visible from here. Roughly nineteen Phase 1–7 e2e assertions read exact coordinates out of the
+// running game against `level-01` specifically, and they cannot be repointed at a fixture because their
+// subject is the live browser reading the shipped file.
 //
-// ⚠️ Phase 8 REDESIGNS this level — the owner's words were that it "was just something I made, I did
-// not actually plan it". What is here is throwaway grey-box: 197 of 1980 cells painted, no exit, and
-// no way to finish. It is kept intact for one commit so the builder can be proved against it, and
-// because level-01's exact geometry is still coordinate-pinned by Phase 3, 4 and 6 gates that have to
-// be migrated first (see docs/qa/phase-08-levels.md).
+// `tests/unit/level-01-contract.test.ts` encodes all of them and runs in milliseconds. **Change
+// anything here and run it before running the browser.** The four that are exact:
+//
+//  1. cols 24–27 at row 20 must be walkable tops, and row 21 must be buried under them —
+//     `phase-04-assets-tiles.spec.ts` is the only spec in the repo that reads a DRAWN tile index.
+//  2. col 34 must carry a solid standing on the ground, so the cell beneath it stays brick. Without
+//     that discriminating cell the four above pass on a mutant that caps every tile unconditionally.
+//  3. the first raised solid right of spawn must stop a right-held player at exactly `wall.x - 66`.
+//  4. the spawn's ground run must be collision object 0 — the Element Editor selects strip 0 on entry.
+//
+// Phase 7's version of this level is frozen at `tests/fixtures/levels/level-01-phase07.tmj`, because
+// four assertions probe shapes it happens to contain rather than describing what ships.
 
-import { GROUND_TOP_ROW_01 as GROUND_TOP_ROW } from './shared.mjs';
+import { CLEAN_RUN_TILES, GROUND_TOP_ROW_01 as GROUND_TOP_ROW } from './shared.mjs';
 
-/**
- * ## Phase 4 re-author — the jump got shorter, so the level had to move
- *
- * At `TILE_SIZE` 32 this was 180 x 48 tiles with platforms a 224 px rise apart. That rise is
- * **7 tiles**, and the Phase 4 re-tune puts the measured apex at **4.68 tiles** — so every raised
- * platform in the old layout became unreachable the moment the scale changed. Nothing would have
- * caught that: the level still validates, still draws, and the player simply cannot get up.
- *
- * The layout is also composed for the reference art the user is matching: stacked ledges at two
- * heights with short hops between them, rather than one long flat floor.
- *
- * ⚠️ The original file claimed every distance here was "checked against the measured jump at the
- * bottom of this file". **There was no such check** — the only self-check was the view-size one, and
- * the jump-reach gate lives in `tilemap-data.test.ts`. Phase 8 makes that claim true for real, in
- * `tests/unit/level-reach.test.ts`, by proving each transition with the actual sim.
- */
+/** The pinned wall — see note 3 above. Its column is read by `phase-04`'s discriminating cell too. */
+const WALL_COL = 34;
+
 export const level01 = {
   id: 'level-01',
 
-  widthTiles: 90, // 4.5 screens wide
-  heightTiles: 22, // 1.96 screens tall
+  // 96 x 23 @ 96 px = 9216 x 2208. Grown from Phase 7's 90 x 22 (8640 x 2112): "bigger" was the
+  // owner's decision, and the extra row goes into the ground stack rather than the sky.
+  widthTiles: 96,
+  heightTiles: 23,
 
   /**
-   * Two rows of fill below the walking surface, not four.
+   * A 3-row ground stack — 16 % of the level painted, against Phase 7's 9.9 %.
    *
-   * Four rows put 384 px of buried masonry on screen — **36 % of the viewport**, a solid brown band
-   * across the bottom third. The reference art has platforms standing over shadow, and the fill is
-   * not the subject of the shot. The camera clamps to the level's bottom, so the fill depth IS the
-   * amount of it the player sees; two rows lands it at ~18 %.
+   * 🔴 The depth is bounded on BOTH sides and the upper bound is the tight one. The camera's climb to
+   * come off its bottom clamp is `540 - groundDepth * 96`; at 5 rows that is 60 px and at 6 it goes
+   * negative, which means the camera starts unclamped and `phase-03-tilemap.spec.ts`'s vertical-follow
+   * assertion has nothing to observe. 3 rows leaves 252 px of climb against a 413 px apex — margin in
+   * both directions. See `shared.mjs`.
    */
   groundTopRow: GROUND_TOP_ROW,
 
-  // A 3-tile hole in the ground. The first jump the level actually requires.
-  gaps: [{ fromCol: 40, toCol: 42 }],
+  // One 2-tile hole, past the clean opening run. The first jump the level requires.
+  gaps: [{ fromCol: 40, toCol: 41 }],
 
-  // 3 rows tall: blocks a run, can be jumped. The Phase 3 e2e drives the player into its left face
-  // and asserts they settle at exactly `wall.x - 66`, so this wall is load-bearing for that spec.
-  walls: [{ col: 34, topRow: 17, rows: 3 }],
+  // Two columns thick, so it reads as masonry rather than a line. `x` is unchanged at col 34, which is
+  // what notes 2 and 3 above depend on.
+  walls: [{ col: WALL_COL, topRow: 17, rows: 3, cols: 2 }],
 
   /**
-   * Stacked ledges. Rises are 4 tiles (384 px) against a 4.68-tile apex, and the horizontal hops
-   * are 2 tiles (192 px) against the 2.25 tiles the character covers by apex at top speed — so each
-   * one is reachable while rising, not only at the top of the arc.
+   * 🔴 **Stepped masses that reach the ground — no overhangs.** The first draft floated the middle block
+   * with three rows of clearance beneath it, which is exactly the player's 288 px height, and
+   * `level-hazards.test.ts` reported a stall under it in ALL FIVE levels: the player fits in the tunnel
+   * but their head is already against the ceiling, so they cannot jump at all, and the block they need to
+   * climb is unclimbable from there — with an enemy 90 px away.
+   *
+   * A mass whose fill runs down to the walking surface has no such tunnel by construction, it paints
+   * more cells, and `applySurfaceTiles` caps each step's top row and bricks the rest. That is the dense
+   * look and the safe geometry in one decision. Rises are stated per level.
    */
   platforms: [
-    { fromCol: 48, toCol: 53, row: 16 },
-    { fromCol: 56, toCol: 61, row: 12 },
-    { fromCol: 64, toCol: 69, row: 16 },
+    { fromCol: 48, toCol: 54, row: 17, rows: 3 },
+    { fromCol: 55, toCol: 61, row: 14, rows: 6 },
+    { fromCol: 62, toCol: 68, row: 17, rows: 3 },
   ],
 
   /**
-   * 🔴 **Narrowed from four columns to two on 2026-08-14: 384 px was impassable at any speed.**
+   * 192 px, two tiles, at cols 24–25.
    *
-   * `tests/unit/level-traversal.test.ts` measures this with the real sim over the shipped `.tmj`, and
-   * the sweep is unambiguous — at 384 px the run-up takes 20 hp and stops at x 2554, and no take-off
-   * point or approach speed clears it. It had been that way since Phase 4's 3x rescale, and nothing
-   * caught it because the only reach gate in the suite was **vertical** (`tilemap-data.test.ts` asks
-   * whether platforms are within the apex, which cannot see a gap too wide to cross).
+   * The width is measured, not chosen: 216 px clears standing, 240 needs a run-up, 252 is impassable —
+   * a 12 px window that exists only at exactly top speed and would break on the next tuning pass. At
+   * 192 the strip costs a deliberate jump and walking into it hurts, both asserted with the real sim.
    *
-   * **This is the ONE place to change it.** The `hazard: true` rectangle is DERIVED from this array by
-   * the builder, which is what makes "the drawn spikes hurt" true by construction — Phase 4 shipped
-   * the run drawn and harmless from two lists that drifted. Editing the `.tmj` by hand puts that drift
-   * straight back: the first attempt at this narrowing did exactly that, and `level-entities.test.ts`'s
-   * gid-agreement test caught it immediately (gid 13 drawn both inside and outside the hazard, i.e.
-   * two columns of spikes you could walk through).
-   *
-   * 240 px was measured as the width where a run-up is REQUIRED but possible. It was not taken: the
-   * window is 12 px wide (252 already fails), which exists only at exactly top speed and would break
-   * silently on the next tuning pass. At 192 the strip costs a deliberate jump input and walking into
-   * it still hurts. Both facts are asserted in `level-traversal.test.ts`.
+   * **This is the ONE place to change it.** The `hazard: true` rect is DERIVED from this array, which is
+   * what makes "the drawn spikes hurt" true by construction. Phase 4 shipped the run drawn and harmless
+   * from two lists that had drifted.
    */
   spikes: [{ fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 }],
 
   /**
-   * Where the two enemies stand, and how far the patroller may walk.
-   *
    * A rectangle says all of it: its horizontal span IS the patrol beat, its bottom edge is where the
-   * feet rest, and `tilesTall` is the authored sprite height from the plan — `brass-sentry` 2 tiles
-   * against `rust-scavenger`'s 2.5 and the player's 3. Those three heights being distinct is a
-   * readability decision taken against the published contract in ASSET-PIPELINE.md §0a, before a
+   * feet rest, `tilesTall` is the authored sprite height — sentry 2 tiles, scavenger 2.5, player 3.
+   * Those three being distinct is a readability decision from ASSET-PIPELINE.md §0a, taken before a
    * prompt was written, so silhouette alone separates them at true sprite size.
    *
-   * Both beats sit strictly inside a ground strip. `describeLevelProblem` checks BOTH ends, so a
-   * patrol authored over the ground gap at cols 40–42 refuses to boot rather than walking on air.
+   * Both beats sit strictly inside a ground strip; `describeLevelProblem` checks BOTH ends, so a patrol
+   * authored over the gap refuses to boot rather than walking on air.
    */
   enemies: [
-    { slug: 'brass-sentry', fromCol: 50, toCol: 51, standRow: 16, tilesTall: 2 },
-    { slug: 'rust-scavenger', fromCol: 68, toCol: 79, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
+    { slug: 'brass-sentry', fromCol: 56, toCol: 60, standRow: 14, tilesTall: 2 },
+    { slug: 'rust-scavenger', fromCol: 78, toCol: 88, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],
 
   /**
-   * Gear pickups — Phase 6. Authored as POINTS at the centre of a named cell.
+   * Gears, authored as POINTS at a cell centre, each one a reason to do something the level already
+   * asks for. Three on the opening run to teach what a gear is — 🔴 the first two must be collectable by
+   * holding ArrowRight ALONE, because `hudHelpers.ts` presses no other key and waits 20 s. One over the
+   * gap, so the first real jump pays. One on each mass, so the climb pays at every height.
    *
-   * Placed against the layout above rather than scattered, so each one is a reason to do something
-   * the level already asks for: three along the opening run to teach what a gear is, one **over the
-   * ground gap** so the first real jump is rewarded, and one on each of the three stacked ledges so
-   * the climb has a payoff at every height.
-   *
-   * The row for each is one tile ABOVE the surface it belongs to. The player's box is 48 local units
-   * — 288 px, three tiles — measured up from the feet, so a gear one tile above a surface sits inside
-   * the body of a player standing on it.
-   *
-   * `tests/unit/level-entities.test.ts` re-derives these from the shipped `.tmj`: in bounds, not
-   * buried in a solid, not duplicated. **It does NOT test reachability**, which nothing does — a gear
-   * somewhere unjumpable would ship. Said out loud because this comment cited `tilemap-data.test.ts`
-   * until the code-reviewer gate owner found that file has no gear assertions *(vault C9)*.
-   * Phase 8's `level-reach.test.ts` closes it: every gear must sit over a reachable segment.
+   * A gear's row is one or two tiles above the surface it belongs to: the player's box is 288 px — three
+   * tiles — measured up from the feet, so it sits inside the body of someone standing there.
    */
   gears: [
-    { col: 8, row: 19 }, // opening run, flat ground
+    { col: 8, row: 19 },
     { col: 14, row: 19 },
     { col: 22, row: 19 },
-    { col: 41, row: 18 }, // over the 3-tile ground gap — the reward for the jump
-    { col: 50, row: 15 }, // first ledge (row 16)
-    { col: 58, row: 11 }, // top ledge (row 12)
-    { col: 66, row: 15 }, // third ledge (row 16)
+    { col: 40, row: 18 },
+    { col: 51, row: 16 },
+    { col: 58, row: 13 },
+    { col: 65, row: 16 },
   ],
 
-  // 6 tiles in, leaving a 28-tile flat run-up before the wall. That run is load-bearing for the
-  // inherited Phase 2 specs: one walks until |vx| saturates (5 ticks) and one asserts the player
-  // lands back at exactly its starting y.
+  // Col 6 leaves CLEAN_RUN_TILES of flat ground before anything happens, and puts the spawn at x 624 —
+  // inside half a viewport, which is what makes the camera LEFT-clamp and `view.x === 0` observable.
   spawnCol: 6,
 
   /**
-   * The exit — Phase 8's new object type. `row` is the surface it stands on, like `enemies.standRow`.
+   * The exit. 2 x 3 tiles = 192 x 288 px against a 132 x 288 player, so the doorway is exactly one
+   * character tall and about 1.45 wide — a gate a person walks through *(vault 8.4: anchor prop scale to
+   * a human figure)*. `level-goal.test.ts` bounds it on both sides, so a 20-tile archway fails too.
    *
-   * ## Scale, anchored to the character rather than eyeballed *(vault 8.4)*
-   *
-   * 2 tiles wide by 3 tall = 192 x 288 px. The player is 132 x 288, so the doorway is **exactly one
-   * character tall** and about 1.45 characters wide — a gate a person walks through, which is what
-   * makes it read as an exit at true sprite size rather than as a crate. Vault 8.4 says anchor prop
-   * scale to a human figure; the figure is the player, and 288 px is its measured body height from
-   * `PLAYER_BOX.h * RENDER_SCALE`. `level-goal.test.ts` bounds it on both sides, so a 20-tile archway
-   * would fail too.
-   *
-   * ## Placement
-   *
-   * Col 84 on the far ground run, past the scavenger's patrol (cols 68–79) so the last thing the level
-   * asks for is getting by it. 8064 px from a spawn at 624 — far over the one-viewport minimum
-   * `level-goal.test.ts` enforces, and off-screen from the start, so "this level is completable" is a
-   * claim about actually crossing the level. Watched failing at `col: 8` (280 px): the travel gate
-   * reported the exact distance and refused it.
+   * Col 90, past the scavenger's beat, so the last thing the level asks is getting by it. 8016 px from
+   * the spawn — far over the one-viewport minimum, and off-screen from the start, so "completable" is a
+   * claim about crossing the level rather than about touching something nearby.
    */
-  goal: { col: 84, row: GROUND_TOP_ROW, tilesWide: 2, tilesTall: 3 },
+  goal: { col: 90, row: GROUND_TOP_ROW, tilesWide: 2, tilesTall: 3 },
+
+  /** Used by `level-01-contract.test.ts`'s clean-run assertion; see `shared.mjs`. */
+  cleanRunTiles: CLEAN_RUN_TILES,
 };
