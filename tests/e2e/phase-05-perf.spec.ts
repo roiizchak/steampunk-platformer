@@ -88,8 +88,9 @@ import { expect, test } from '@playwright/test';
 import { installGpuTimer } from './gpuTimer';
 import {
   DEV_FLEET_COUNT,
-  MAX_BURST_RATIO,
+  MAX_FLEET_MS_PER_TICK_RATIO,
   MAX_GPU_RATIO,
+  MAX_MS_PER_SIM_TICK,
   MAX_WORK_RATIO,
   MIN_GPU_SAMPLES,
   MIN_SAMPLES,
@@ -98,6 +99,9 @@ import {
 } from './perfBudget';
 import { SOFTWARE_RENDERERS, counts, sample, waitForBodyCount, webglRenderer } from './perfSampler';
 import { bootToGame } from './gameHarness';
+// The sim's own tick period, imported rather than retyped: the ms-per-tick bounds below are
+// statements ABOUT it, so a retune of the tick rate must move them together (vault 5.3).
+import { MS_PER_TICK } from '../../src/game/constants';
 import { MAX_LEVEL_ENEMIES } from '../../src/game/constants';
 
 test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fleet', () => {
@@ -287,7 +291,11 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
     ).toBeGreaterThan(0);
 
     const ratio = fleet.workMedianMs / baseline.workMedianMs;
-    const burstRatio = fleet.workP95Ms / baseline.workP95Ms;
+    // Wall-clock ms per SIMULATED tick — how long the machine needed to simulate a fixed amount of
+    // game time. See `perfBudget.ts` for the measurement that replaced the p95 burst ratio with it.
+    const msPerTick = (s: typeof baseline): number => s.elapsedMs / s.ticks;
+    const fleetMsPerTick = msPerTick(fleet);
+    const msPerTickRatio = fleetMsPerTick / msPerTick(baseline);
     const gpuRatio = fleet.gpuMedianMs / baseline.gpuMedianMs;
     const gpuBurstRatio = fleet.gpuP95Ms / baseline.gpuP95Ms;
     const report =
@@ -299,8 +307,11 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
       `${fleet.workMedianMs.toFixed(2)}ms, p95 ${fleet.workP95Ms.toFixed(2)}ms over ${fleet.frames} ` +
       `frames / ${fleet.ticks} ticks, interval ${fleet.intervalMs.toFixed(2)}ms, ` +
       `${fleet.loafCount} frames over 50ms, peak ${fleet.maxProjectiles} bolts in flight\n` +
-      `       ratios: median ${ratio.toFixed(2)}x, p95 ${burstRatio.toFixed(2)}x, ` +
-      `for ${(after.bodies / before.bodies).toFixed(1)}x the enemies\n` +
+      `       ratios: median ${ratio.toFixed(2)}x, p95 ${(fleet.workP95Ms / baseline.workP95Ms).toFixed(2)}x ` +
+      `(REPORTED, not gated — see perfBudget.ts), for ${(after.bodies / before.bodies).toFixed(1)}x the enemies\n` +
+      `       wall ms per sim tick: baseline ${msPerTick(baseline).toFixed(2)}ms, fleet ` +
+      `${fleetMsPerTick.toFixed(2)}ms, ratio ${msPerTickRatio.toFixed(3)}x, against a ` +
+      `${MS_PER_TICK.toFixed(2)}ms tick\n` +
       `       GPU: baseline median ${baseline.gpuMedianMs.toFixed(3)}ms / p95 ` +
       `${baseline.gpuP95Ms.toFixed(3)}ms over ${baseline.gpuSamples} samples ` +
       `(${baseline.gpuDisjointFrames} disjoint, ${baseline.gpuAbandoned} abandoned); fleet median ` +
@@ -319,18 +330,42 @@ test.describe('Phase 5 — criterion 5.11, frame budget under the worst-case fle
         `upload or a per-frame allocation — not of drawing more sprites.`,
     ).toBeLessThan(MAX_WORK_RATIO);
 
-    // 🔴 The burst half. A median cannot see a cost that lands on a few frames in hundreds, and the
-    // synchronised ten-sentry volley is exactly that shape — so the assertion above, on its own,
-    // would pass through the one event most likely to expose a per-enemy blow-up. The bound is
-    // looser than the median's because a p95 is a noisier statistic, not because bursts matter less.
+    /**
+     * 🔴 **The burst half. This was a p95 ratio bounded at 6, and it was decoration — measured, on
+     * 2026-08-17, not argued.** A per-enemy allocation storm confined to the sentry fire tick, at
+     * TEN times the size needed to be obvious, produced a p95 ratio of 1.71 against a clean run's
+     * 1.86. The full table is in `perfBudget.ts`; the p95 is still printed above and gated by
+     * nothing, exactly as `gpuBurstRatio` is.
+     *
+     * What replaces it is wall-clock time per SIMULATED tick. The window is bounded in ticks, so a
+     * main-thread stall cannot shorten it — it can only make it take longer in real time, and that
+     * is the one place a burst lands in full instead of being spread thin.
+     */
     expect(
-      burstRatio,
-      `the worst frames got ${burstRatio.toFixed(2)}x more expensive with ${DEV_FLEET_COUNT} more ` +
-        `enemies (p95 ${baseline.workP95Ms.toFixed(2)}ms -> ${fleet.workP95Ms.toFixed(2)}ms) while ` +
-        `the median moved only ${ratio.toFixed(2)}x. A cost that shows up in the tail and not the ` +
-        `middle is a BURST — the ten sentries firing on the same tick, or a per-enemy allocation ` +
-        `that only bites when they all act at once.`,
-    ).toBeLessThan(MAX_BURST_RATIO);
+      msPerTickRatio,
+      `simulating one tick of game time cost ${msPerTickRatio.toFixed(3)}x more wall-clock time ` +
+        `with ${DEV_FLEET_COUNT} more enemies (${msPerTick(baseline).toFixed(2)}ms -> ` +
+        `${fleetMsPerTick.toFixed(2)}ms per tick, against a ${MS_PER_TICK.toFixed(2)}ms tick) ` +
+        `while the median frame moved only ${ratio.toFixed(2)}x. Time that appears here and not in ` +
+        `the median is a BURST — the ten sentries firing on the same tick, or a per-enemy ` +
+        `allocation that only bites when they all act at once.`,
+    ).toBeLessThan(MAX_FLEET_MS_PER_TICK_RATIO);
+
+    /**
+     * 🔴 **The absolute bound, which nothing divides out of.** The assertion above is a ratio, and a
+     * ratio can only see what DIFFERS between the arms — a cost that slows both, such as a per-frame
+     * leak in `GameScene.update()`, cancels out of it entirely. This is the window's real duration
+     * against the game time it was supposed to cover.
+     *
+     * Its blind spot is stated in `perfBudget.ts` and is deliberate: the volley storm does not reach
+     * 25 ms, so this bound is proved by its own mutation, never by that one.
+     */
+    expect(
+      fleetMsPerTick,
+      `with the fleet on screen the game needed ${fleetMsPerTick.toFixed(2)}ms of wall time per ` +
+        `${MS_PER_TICK.toFixed(2)}ms simulated tick — it is running behind real time, which is what ` +
+        `a frame budget failure means to a player however the per-frame statistics read.`,
+    ).toBeLessThan(MAX_MS_PER_SIM_TICK);
 
     // 🔴 The GPU half — the blind spot two documents called unreachable. This is what the two
     // assertions above structurally cannot see: a regression that draws far more PIXELS through the

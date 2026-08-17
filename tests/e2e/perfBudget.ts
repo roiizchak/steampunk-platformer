@@ -65,15 +65,89 @@ export const MIN_SAMPLES = 60;
  */
 export const MAX_WORK_RATIO = 4;
 
+/* -------------------------------------------------------------------------------------------- *
+ *  🔴 **`MAX_BURST_RATIO` is DELETED, and the measurement that killed it is below.**              *
+ *                                                                                                *
+ *  It was `fleet.workP95Ms / baseline.workP95Ms`, bounded at 6, and its stated purpose was to     *
+ *  catch the synchronised ten-sentry volley — "a handful of frames in the window and the likeliest *
+ *  place for a per-enemy blow-up to appear". Its only red-proof on record was a per-frame O(n^2)   *
+ *  sweep in `EnemyLayer.sync`, which is a cost on EVERY frame and which the median bound catches   *
+ *  on its own at 6.43x. **Nobody had ever injected a burst confined to the volley tick.**          *
+ *                                                                                                *
+ *  Done on 2026-08-17: a per-enemy allocation storm on `enemyTurn.ts`'s fire branch, so the cost   *
+ *  lands only on the tick a sentry actually shoots. Three runs each, real GPU, same box:           *
+ *                                                                                                *
+ *  | statistic                    | clean       | storm 1x    | storm 10x   | separates? |        *
+ *  |------------------------------|-------------|-------------|-------------|------------|        *
+ *  | `workP95Ms` ratio            | 0.82 - 1.86 | 1.25 - 2.00 | 1.38 - 1.71 | **no**     |        *
+ *  | frames per tick, ratio       | 0.97 - 1.07 | 1.06 - 1.09 | 1.01 - 1.04 | **no**     |        *
+ *  | wall-ms per sim tick, fleet  | 16.47-16.51 | 15.98-16.32 | 22.04-22.96 | **yes**    |        *
+ *  | that, as fleet/baseline      | 0.987-0.992 | 0.960-0.982 | 1.324-1.382 | **yes**    |        *
+ *                                                                                                *
+ *  At **ten times** the storm the p95 ratio read 1.71 — *lower than a clean run's 1.86*. A bound   *
+ *  of 6 was never going to fail for the defect it named. Deleted rather than loosened, because a   *
+ *  gate that cannot go red is decoration *(vault C2)*.                                             *
+ *                                                                                                *
+ *  ⚠️ **Frames-per-tick was the planned replacement, and it is decoration too.** Phase 7's audio    *
+ *  gate uses it and it works THERE, because a 30 ms blocking stall inside a cue starves rAF        *
+ *  directly. It does not work here: the window is bounded in TICKS, so a stalled main thread makes *
+ *  the window take longer in WALL time while rAF keeps serving frames throughout — the frame count *
+ *  barely moves and the tick count is fixed by construction. At 10x the storm it read 1.03 against *
+ *  a clean 1.06. Recorded because the plan specified it and the measurement refused it.            *
+ * -------------------------------------------------------------------------------------------- */
+
 /**
- * The same ceiling for the 95th percentile — the frames a median cannot see.
+ * The ceiling on `fleet / baseline` **wall-clock milliseconds per SIMULATED TICK**.
  *
- * Looser than the median's because a p95 taken over a few hundred samples is a noisier statistic and
- * a single GC pause lands in it. Not looser because bursts matter less: this is the assertion that
- * covers the synchronised ten-sentry volley, which is a handful of frames in the window and the
- * likeliest place for a per-enemy blow-up to appear.
+ * This is what the two bounds above structurally cannot see, and it is the quantity a player
+ * actually feels: not "how long did a frame take" but **"how long did the machine need to simulate
+ * a fixed amount of game time"**. A 60 Hz sim tick is 16.67 ms of game time; if a window of 180
+ * ticks takes more than 180 x 16.67 ms of wall time, the game is running slow — whatever the median
+ * frame, the percentile, or the frame count say.
+ *
+ * A burst is exactly the defect this sees and the others do not. The window is bounded in ticks, so
+ * a main-thread stall cannot shorten it — it can only make it take longer, and that lands here in
+ * full while being spread thin across every other statistic.
+ *
+ * Bounded at **1.15**. Clean spread is 0.987 / 0.992 / 0.987, so this is ~16 % above the worst clean
+ * reading; the proving storm clears it at **1.32 - 1.38**. A ratio rather than an absolute because
+ * the two arms are interleaved in one page seconds apart, so a contended box inflates both and
+ * divides out — the failure mode that makes criterion 6.9's GPU ratio noise-sensitive.
  */
-export const MAX_BURST_RATIO = 6;
+export const MAX_FLEET_MS_PER_TICK_RATIO = 1.15;
+
+/**
+ * The **absolute** ceiling on wall-clock ms per simulated tick, with the fleet on screen.
+ *
+ * Here for the reason `MAX_HUD_WORK_DELTA_MS` is here in Phase 6: **a ratio can only see what
+ * DIFFERS between the arms.** A cost that slows both — a per-frame leak in `GameScene.update()`,
+ * a browser-wide stall — divides out of the ratio above completely and is invisible to it. This is
+ * the whole window in milliseconds against the game time it was supposed to cover, and nothing
+ * cancels out of it.
+ *
+ * Measured at **16.47 - 16.63 ms** clean against a 16.67 ms tick — the sim keeps up exactly, which
+ * is what a fixed timestep with a frame-rate-independent clock is for. **Bounded at 20 ms**, the
+ * game running at an effective 50 Hz instead of 60, and ~20 % above the worst clean reading.
+ *
+ * 🔴 **It was drafted at 25 and that was decoration, for a reason worth writing down.** `drainTicks`
+ * caps catch-up at `MAX_TICKS_PER_FRAME` = 5, so a per-frame cost **self-balances**: a frame that
+ * costs C ms drains about `C / 16.67` ticks, and the wall time per tick stays ~16.67 no matter how
+ * large C gets — until C exceeds `5 x 16.67 = 83 ms` and the clock starts DROPPING ticks. A proving
+ * 8 ms-per-frame stall therefore passed at 25 and passed at 20; the statistic only moves once the
+ * sim genuinely falls behind real time, which is exactly what it should mean.
+ *
+ * At 25 even Phase 5's real parallax defect (71 ms median frames) would have passed. At 20 the volley
+ * storm reaches it — proved red at **21.82 ms** with the ratio bound temporarily neutralised so this
+ * assertion was the only one that could fail. Tightened on that measurement, not on preference.
+ *
+ * ⚠️ **Stated blind spot** *(vault 9.3)*: a UNIFORM per-frame stall cannot prove this bound, and the
+ * attempt is on the record. To drop ticks a frame must cost more than 83 ms, and at that cost a
+ * 180-tick window contains only ~36 frames — so `MIN_SAMPLES` (60) fires first and the window is
+ * rejected as unmeasurable before this assertion is reached. That is the correct outcome for a
+ * degenerate window, but it means this bound's proof is the volley storm, and a defect that slows
+ * every frame uniformly is caught by `MIN_SAMPLES` rather than here.
+ */
+export const MAX_MS_PER_SIM_TICK = 20;
 
 /**
  * A GPU window that produced fewer non-disjoint results than this has no median worth reading.
