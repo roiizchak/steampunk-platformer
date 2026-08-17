@@ -32,7 +32,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | ✅ **done** 2026-08-16 |
 | 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | ✅ **done** 2026-08-16 |
 | 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
-| 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — |
+| 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — · 🔴 **BLOCKED until the two open perf gates are fixed** — see below |
 | 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything | — |
 
 ### Phase dependency notes
@@ -42,6 +42,19 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 - **Phase 2 blocks Phase 5** — combat timing is expressed in the tick contract from Phase 2.
 - **Phase 4's 4a blocks 4b** — the hero-asset readability check gates the batch spend.
 - **Phases 7 and 9 are independent** of each other and could swap if needed.
+- 🔴 **A perf-gate session sits BETWEEN Phase 8 and Phase 9, and Phase 9 is blocked on it.** Added
+  2026-08-17. Two gates are knowingly blind, and Phase 9 is the phase most likely to trip them:
+    - **criterion 7.7's frame-budget half is REPORTED FAILING** — it cannot distinguish its own
+      30 ms-per-cue proving mutation (1.0943) from a clean run (1.0961) across twelve samples;
+    - **`MAX_HUD_GPU_RATIO`'s resolution floor is bracketed, not measured** — one full-screen scrim
+      is invisible, five read 2.688, and nothing between was measured, so a stable 1.25–2.0×
+      overdraw regression passes.
+
+  Phase 9 adds particles, juice and full-screen effects — **exactly the costs these two gates exist
+  to catch**. Going into it with both blind is the wrong order, and this project has already paid for
+  deferring gate defects four phases running. Not in Phase 8's scope: level design touches neither.
+  One session, owned by `voltagent-qa-sec:performance-engineer` with two briefs. Evidence and the two
+  leads: [qa/session-gate-defects.md](qa/session-gate-defects.md).
 - **Phase 5 onward runs `voltagent-qa-sec:performance-engineer`**; **Phase 6 onward runs
   `voltagent-qa-sec:ui-ux-tester`** and, for its WCAG criterion,
   `voltagent-qa-sec:accessibility-tester`; **Phase 10 additionally runs

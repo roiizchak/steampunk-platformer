@@ -62,6 +62,20 @@ Phase 7 recorded the clean spread as "one frame in 479"; that is not what twelve
 It is labelled in its own docstring, `MAX_AUDIO_WORK_DELTA_MS` is the load-bearing half meanwhile, and
 the honest fix **needs its own session**. Do not read a green 7.7 as evidence that audio costs nothing.
 
+### 📅 When the two open gate items get fixed — decided 2026-08-17
+
+**Before Phase 9, after Phase 8.** Not urgently, and explicitly **not inside Phase 8**.
+
+| | |
+|---|---|
+| **why not sooner** | Phase 8 is level design. It touches neither the audio frame budget nor the HUD's GPU cost, so neither gate is in its path. Pulling this into Phase 8 makes it a side quest, which is how the last four gate defects got deferred four phases in a row. |
+| **why not later** | **Phase 9 is polish, juice and particles** — the phase most likely to add per-frame cost and full-screen effects. That is exactly what these two gates exist to catch, and going into it with both blind is the wrong order. |
+| **scope** | One session. Both share a suspected root cause (see below), so they are one piece of work, not two. |
+| **owner** | `voltagent-qa-sec:performance-engineer`, two briefs *(A7)*, as this session used. |
+
+Until then: **criterion 7.7's frame-budget half is FAILING**, `MAX_AUDIO_WORK_DELTA_MS` is the
+load-bearing half, and `MAX_HUD_GPU_RATIO` catches gross overdraw only.
+
 **Two concrete leads for that session**, both from the Codex implementation review:
 
 1. **Balance the pair ordering.** 7.7 *and* 6.9 always sample `on` then `off`, never `off` then `on`,

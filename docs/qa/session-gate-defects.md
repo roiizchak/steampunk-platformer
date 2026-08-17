@@ -415,3 +415,28 @@ said its delta was bounded at 2 ms (it is 1 ms).
 builder → `perfReport.ts`, and the GPU-renderer assertion → `realGpu.ts`, the latter **deduplicating
 three copies** across the Phase 5, 6 and 7 perf specs. That is the fourth time this session's ratchet
 caught its own author.
+
+---
+
+## 📅 When the two open items get fixed
+
+**Decided 2026-08-17: a dedicated session BETWEEN Phase 8 and Phase 9. Phase 9 is blocked on it**
+([PRD.md § Phase dependency notes](../PRD.md#phase-dependency-notes)).
+
+- **Not in Phase 8.** Level design touches neither the audio frame budget nor the HUD's GPU cost.
+  Folding it in makes it a side quest, which is precisely how the four defects this session closed got
+  deferred four phases running.
+- **Not after Phase 9.** Phase 9 is polish, juice and particles — per-frame cost and full-screen
+  effects, which is exactly what these two gates exist to catch. Entering it with both blind is the
+  wrong order.
+- **One session, not two.** Both items share a suspected root cause: every A/B pair in 6.9 and 7.7
+  samples `on` then `off` and never the reverse, so warm-up and directional drift are charged to the
+  treatment arm instead of cancelling.
+- **Owner:** `voltagent-qa-sec:performance-engineer`, two briefs *(A7)*.
+
+Until then, and stated so no one reads a green suite as a clean bill of health:
+
+| gate | status |
+|---|---|
+| criterion **7.7**, frame-budget half | 🔴 **REPORTED FAILING.** `MAX_AUDIO_WORK_DELTA_MS` is the load-bearing half. |
+| **`MAX_HUD_GPU_RATIO`** | catches **gross overdraw only**; a stable 1.25–2.0× regression passes. |
