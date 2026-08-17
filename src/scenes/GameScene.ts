@@ -136,13 +136,15 @@ export class GameScene extends Phaser.Scene {
       // in the game. There is no scene-side list of pickups to drift out of step with the file.
       gears: level.gears,
     });
-    this.applyFeelVariant();
+    applyFeelVariant(this.world);
     this.input$ = createSnapshot();
 
-    this.createParallax();
-    this.drawLevel(level);
+    // Layer specs live engine-free in `src/render/parallaxRig.ts`; `gameParallax.ts` applies them.
+    this.parallax = createParallax(this);
+    // The tileset/layer resolution and the brass-cap surface rule live in `gameLevelDraw.ts`.
+    this.groundLayer = drawLevelLayer(this, level, this.levelKey);
     const desc = playerRenderDesc(this.world.player, this.world.scale);
-    this.registerAnimations();
+    registerAnimations(this);
     this.playerSprite = this.add
       .sprite(desc.x, desc.y, desc.animKey)
       .setOrigin(desc.originX, desc.originY)
@@ -171,7 +173,12 @@ export class GameScene extends Phaser.Scene {
       this.world,
     ));
 
-    this.followPlayer(level);
+    // Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4).
+    const camera = this.cameras.main;
+    const cam = cameraSetup(level, GAME_WIDTH, GAME_HEIGHT);
+    camera.setBounds(cam.bounds.x, cam.bounds.y, cam.bounds.w, cam.bounds.h);
+    camera.setZoom(cam.zoom);
+    camera.startFollow(this.playerSprite, false, cam.lerpX, cam.lerpY);
 
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
     // "the gate passed" and "the game is running" are different facts. If this scene fails to
@@ -214,7 +221,9 @@ export class GameScene extends Phaser.Scene {
     this.accumulatorMs = drain.remainderMs;
     const ticks = drain.ticks;
 
-    this.sampleHeldKeys();
+    // Binding and per-frame sampling both live in `src/scenes/gameInput.ts` — see its header. This
+    // scene still owns `playerInputEnabled` and the DEV scene-switch/fixture-spawn callbacks.
+    sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
     // Called even when `ticks === 0`, and that case is load-bearing: it must NOT consume the
     // input snapshot. A frame too short to produce a whole tick that ate a jump press is vault
     // 2.4's "a tick ran is not your input was consumed", inverted.
@@ -246,30 +255,25 @@ export class GameScene extends Phaser.Scene {
     // unit suite asserts are one definition, not two that agree on the happy path.
     this.audio?.playCues(audioCues(events));
 
-    this.renderPlayer();
-    this.renderHud();
+    renderPlayerSprite(
+      this.playerSprite,
+      this.world,
+      this.prevPlayer,
+      this.accumulatorMs,
+      import.meta.env.DEV ? this.feelTuner : undefined,
+    );
+    // The HUD lives in `UIScene`, so this hands it the world and this scene's camera. The camera
+    // goes across because the collect tween has to turn a gear's WORLD position into a screen
+    // position, and the camera's scroll and zoom are that transform — doing the conversion here
+    // would put HUD arithmetic in the one file this project cannot let grow.
+    this.ui?.render(this.world, this.cameras.main);
     this.gears.sync();
     this.enemies.sync(renderAlpha(this.accumulatorMs));
-    this.renderParallax();
+    renderParallax(this.parallax, this.cameras.main.scrollX);
     // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
     // lane advances between ticks and the other does not.
     this.motionProbe?.update(delta);
     this.publishDebugState();
-  }
-
-  /**
-   * Keyboard binding and per-frame sampling both live in `src/scenes/gameInput.ts`, split out to
-   * keep this file smaller. This scene still owns `playerInputEnabled` and the DEV
-   * scene-switch/fixture-spawn callbacks — see that file's header for why the split is safe.
-   *
-   * 🔴 The line count that used to be quoted here — "it is 515 lines" — was wrong in both directions
-   * over time: the file was 386 on `main` before Phase 7 and is 427 now. A hardcoded line count in a
-   * comment is a fact with an expiry date and no test, so it is gone rather than corrected. The live
-   * number is `tests/unit/file-size.test.ts`'s, and the current justification is in
-   * `docs/qa/phase-07-audio.md`.
-   */
-  private sampleHeldKeys(): void {
-    sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
   }
 
   private bindKeys(): void {
@@ -350,64 +354,6 @@ export class GameScene extends Phaser.Scene {
     const cached = this.cache.tilemap.get(entry.key) as { data?: unknown } | undefined;
     this.levelKey = entry.key;
     return parseLevel(entry.key, cached?.data);
-  }
-
-  /**
-   * Draw the level's tile layer. The tileset/layer resolution and the brass-cap surface rule live
-   * in `src/scenes/gameLevelDraw.ts` — split out to keep this file smaller (it is still over the
-   * 400-line rule, justified in `docs/qa/phase-05-combat.md`); the
-   * logic is pure scene-Phaser plumbing with no subclass override.
-   */
-  private drawLevel(level: LevelData): void {
-    this.groundLayer = drawLevelLayer(this, level, this.levelKey);
-  }
-
-  /** Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4). */
-  private followPlayer(level: LevelData): void {
-    const setup = cameraSetup(level, GAME_WIDTH, GAME_HEIGHT);
-    const camera = this.cameras.main;
-
-    camera.setBounds(setup.bounds.x, setup.bounds.y, setup.bounds.w, setup.bounds.h);
-    camera.setZoom(setup.zoom);
-    camera.startFollow(this.playerSprite, false, setup.lerpX, setup.lerpY);
-  }
-
-  private renderPlayer(): void {
-    renderPlayerSprite(
-      this.playerSprite,
-      this.world,
-      this.prevPlayer,
-      this.accumulatorMs,
-      import.meta.env.DEV ? this.feelTuner : undefined,
-    );
-  }
-
-  private registerAnimations(): void {
-    registerAnimations(this);
-  }
-
-  private applyFeelVariant(): void {
-    applyFeelVariant(this.world);
-  }
-
-  /** Layer specs live engine-free in `src/render/parallaxRig.ts`; this applies them. */
-  private createParallax(): void {
-    this.parallax = createParallax(this);
-  }
-
-  /**
-   * The HUD lives in `UIScene` now, so this hands it the world and this scene's camera.
-   *
-   * The camera goes across because the collect tween has to turn a gear's WORLD position into a
-   * screen position, and the camera's scroll and zoom are that transform. Doing the conversion here
-   * would put HUD arithmetic in the one file this project cannot let grow.
-   */
-  private renderHud(): void {
-    this.ui?.render(this.world, this.cameras.main);
-  }
-
-  private renderParallax(): void {
-    renderParallax(this.parallax, this.cameras.main.scrollX);
   }
 
   /** The read-only debug view every e2e spec is written against. Dev build only. */

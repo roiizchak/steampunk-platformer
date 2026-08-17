@@ -71,15 +71,43 @@ function lineCount(text: string): number {
   return text.endsWith('\n') ? text.split('\n').length - 1 : text.split('\n').length;
 }
 
+/**
+ * The token an ACTIVE citation must carry: `lines=432`, on the same log line as the path.
+ *
+ * 🔴 **A citation that names only the path expires silently, and this project has already paid for
+ * that.** `docs/qa/phase-04-art.md` justified `GameScene.ts` at **459 lines** on grounds — `create()`,
+ * `update()`, five `protected` methods, three DEV scene literals — that say nothing about audio.
+ * Phase 7 then added an `audio` field, `catalog()`, a `createAudio` call and one line in `update()`,
+ * carrying the file from 386 to 432, and **the gate stayed green the whole way**: the path was in a
+ * log, so the check passed. A rule satisfied by an expired citation is not a rule.
+ *
+ * Binding the count to the citation makes growth break its own justification. You cannot grow a file
+ * past its recorded size without editing the log line that permits it, which is precisely the moment
+ * someone should be asked whether the justification still holds.
+ *
+ * ⚠️ **An exact token, not a bare number, and not a substring.** A naive "the log line mentions the
+ * path and the current count somewhere" check false-greens on stale prose: the logs already record
+ * `GameScene.ts` at 459 AND at 432, so a file that later grew *back* to 459 would be covered by the
+ * Phase 4 sentence that has nothing to do with why it is large now. `lines=` is a marker a human
+ * writes on purpose; a number in a sentence is not.
+ */
+const CITATION_TOKEN = (lines: number): string => `lines=${lines}`;
+
+/** Every QA-log line that names this path AND carries any `lines=` marker. */
+function citationsFor(path: string, logLines: string[]): string[] {
+  return logLines.filter((line) => line.includes(path) && /\blines=\d+\b/.test(line));
+}
+
 describe('the 400-line rule', () => {
   const allLogs = Object.values(QA_LOGS).join('\n');
+  const logLines = allLogs.split('\n');
 
   it('finds the sources and the QA logs at all — an empty sweep proves nothing', () => {
     expect(Object.keys(SOURCES).length).toBeGreaterThan(30);
     expect(Object.keys(QA_LOGS).length).toBeGreaterThan(0);
   });
 
-  it('every file over the limit is named in a QA log', () => {
+  it('every file over the limit carries an ACTIVE citation — path and current line count', () => {
     const over = Object.entries(SOURCES)
       .map(([key, text]) => ({ path: repoPath(key), lines: lineCount(text) }))
       .filter((f) => f.lines > LIMIT)
@@ -96,14 +124,34 @@ describe('the 400-line rule', () => {
     // citation, verified file by file before the fallback was removed. See the reversal note in
     // `docs/qa/phase-05-combat.md` — the ratchet half of this was declined on 2026-08-13 as
     // finding T7 and has now been reopened and approved.
-    const unrecorded = over
-      .filter((f) => !allLogs.includes(f.path))
-      .map((f) => `${f.path} (${f.lines} lines)`);
+    //
+    // 🔴 **2026-08-17: the path check alone was not enough either, and D7/D9 named why.** See
+    // `CITATION_TOKEN` above. The citation must now state the count, and stale prose does not count.
+    const problems = over.flatMap((f) => {
+      const cites = citationsFor(f.path, logLines);
+      if (cites.length === 0) {
+        return [`${f.path} (${f.lines} lines) — no active citation (no docs/qa/ line with lines=N)`];
+      }
+      // Exactly one canonical entry per path. Two active citations means two logs disagree about
+      // why the file is large, and the gate would pass on whichever happened to match.
+      if (cites.length > 1) {
+        return [
+          `${f.path} (${f.lines} lines) — ${cites.length} active citations; there must be exactly one`,
+        ];
+      }
+      if (!cites[0].includes(CITATION_TOKEN(f.lines))) {
+        return [
+          `${f.path} is ${f.lines} lines and its citation does not say ${CITATION_TOKEN(f.lines)}`,
+        ];
+      }
+      return [];
+    });
 
     expect(
-      unrecorded,
-      'over 400 lines and not named in any docs/qa/ log. Split it, or record it there with a ' +
-        'reason — and do not get under the limit by deleting the comments that explain the code.',
+      problems,
+      'over 400 lines without a CURRENT justification. Split it, or record it in a docs/qa/ log ' +
+        'on one line naming the path and its count as `lines=N` — and do not get under the limit ' +
+        'by deleting the comments that explain the code.',
     ).toEqual([]);
   });
 
@@ -154,8 +202,20 @@ describe('the 400-line rule', () => {
     // literals must stay inside `import.meta.env.DEV` or the key ships in `dist/` and
     // `verify-dist.mjs` fails the build. Justification in `docs/qa/phase-04-art.md`.
     //
+    // 🔴 **1 -> 0 on 2026-08-17.** `GameScene.ts` was 432 and came off the list at **378**, by
+    // inlining the eight `private` one-line wrappers that only forwarded to `gameParallax.ts`,
+    // `gameHud.ts`, `gamePlayerDraw.ts`, `gameLevelDraw.ts` and `gameInput.ts`, and relocating each
+    // docstring to the call site or the module it describes. All eight were `private`, so no
+    // subclass could override them; not one line of explanation was deleted.
+    //
+    // **Zero does not delete the escape hatch above** — the project rule still permits a file over
+    // 400 with a written justification, and the citation check is what enforces the writing. It
+    // means only that today nothing is over, so a file crossing the limit is red on BOTH tests, and
+    // clearing it needs a deliberate ratchet raise here as well as an active citation there. That
+    // is the same ratchet this comment has always described, one notch further down.
+    //
     // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
     // the way past is to split the file or write the justification, in that order of preference.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(1);
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(0);
   });
 });
