@@ -41,5 +41,12 @@ export function attachHud(scene: Phaser.Scene, world: World): HudAttachment {
   if (!scene.scene.isActive('UI')) {
     scene.scene.launch('UI');
   }
-  return { ui: scene.scene.get('UI') as UIScene, gears };
+  const ui = scene.scene.get('UI') as UIScene;
+  // 🔴 Phase 8. `UIScene` is PARALLEL, so it survives the `scene.start('Game', {levelId: next})` that
+  // loads the next level — and with it, level-01's "LEVEL COMPLETE" panel. Clearing it here rather
+  // than in `gameComplete` is the honest place: this is the one call that runs on every entry into a
+  // level, including the restart path an e2e spec drives through Boot. On the first launch of the
+  // frame this is a no-op, because `create()` has not run yet and there is nothing to clear.
+  ui.levelComplete?.(null);
+  return { ui, gears };
 }

@@ -111,8 +111,10 @@ export function helpLine(): string {
   // Phase 7's audio keys are in the SHIPPED half deliberately. A mute control the player cannot
   // discover is a mute control they do not have, and this banner is the only place the game
   // currently tells anyone what the keys are.
+  // `ESC levels` is in the shipped half too, and for the identical reason: Phase 8 put the level menu
+  // behind a key rather than in front of the game, so this banner is the only thing that says so.
   const base =
-    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume';
+    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume  ·  ESC levels';
   return import.meta.env.DEV
     ? `${base}  ·  P playground  ·  O element editor  ·  G gym`
     : base;
@@ -153,9 +155,20 @@ export function addHelpBanner(scene: Phaser.Scene, text: string): void {
  * claimed otherwise and the code-reviewer gate owner measured it and was right. `verify-dist.mjs`
  * asserts the correct thing — quoted scene keys — so the build gate cannot cry wolf over a name.
  */
-export function startDevScene(scene: Phaser.Scene, key: 'Playground' | 'ElementEditor' | 'Gym'): void {
+export function startDevScene(
+  scene: Phaser.Scene,
+  key: 'Playground' | 'ElementEditor' | 'Gym',
+  /**
+   * 🔴 Phase 8. `PlaygroundScene` and `ElementEditorScene` both `extends GameScene`, so they now go
+   * through `pickLevel` too — which resumes whatever the SAVE says. That would make both dev tools
+   * open whichever level was last played, and `tests/e2e/phase-03-element-editor.spec.ts` asserts
+   * against level-01's collision strips specifically. Passing the first catalogued level makes the dev
+   * tools deterministic regardless of the save; `GymScene` ignores it, having no level at all.
+   */
+  levelId?: string,
+): void {
   if (import.meta.env.DEV) {
-    scene.scene.start(key);
+    scene.scene.start(key, { levelId });
   }
 }
 

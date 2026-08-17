@@ -82,3 +82,31 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
   gate.fillRect(goal.x + frame, goal.y + frame, goal.w - frame * 2, goal.h - frame);
   return gate.setDepth(7);
 }
+
+/** How long the exit's reached-it flourish runs. Shorter than `hudFade`'s fade, so it reads first. */
+export const GOAL_PULSE_MS = 260;
+
+/**
+ * The exit's `animate` step — criterion 8.6.
+ *
+ * A two-hop alpha pulse rather than a scale or a rotation, and the reason is the grey-box branch: a
+ * `Graphics` object draws in WORLD coordinates with its transform left at the origin, so scaling it
+ * would move the drawn rectangle away from `goal` — the one thing `goalLayer`'s header says must never
+ * happen, because that rect is also the trigger volume. Alpha is the only channel that cannot
+ * desynchronise the drawing from the collision.
+ *
+ * `yoyo` returns it to full opacity, so a spec sampling after the tween sees the exit still drawn
+ * rather than a half-faded object it has to reason about.
+ */
+export function animateGoalReached(
+  scene: Phaser.Scene,
+  goalObject: Phaser.GameObjects.GameObject,
+): void {
+  scene.tweens.add({
+    targets: goalObject,
+    alpha: 0.25,
+    duration: GOAL_PULSE_MS / 2,
+    yoyo: true,
+    repeat: 1,
+  });
+}

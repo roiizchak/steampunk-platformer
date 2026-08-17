@@ -1,9 +1,8 @@
 import Phaser from 'phaser';
 import { updateDebugState } from '../debug/globals';
-import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
-import { parseLevel, type LevelData } from '../game/tilemap';
+import type { LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import { renderAlpha, type Point } from '../render/interpolate';
@@ -24,6 +23,8 @@ import { audioCues } from '../sim/audioCues';
 import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
+import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor } from './gameLevelPick';
+import { onLevelCompleted } from './gameComplete';
 import { drawGoal } from './goalLayer';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
@@ -42,8 +43,10 @@ import type { InputSnapshot, World } from '../sim/types';
  * refuses to see one. The accumulator below is the only place the conversion happens.
  */
 
-/** Seed for the sim's RNG. Fixed so an e2e run and a hands-on run are the same run (vault 2.3). */
-const SIM_SEED = 20260806;
+/** What `scene.start('Game', data)` may carry. Phase 8; `null` means "resume what the save says". */
+export interface GameSceneData {
+  levelId?: string | null;
+}
 
 
 /**
@@ -78,6 +81,8 @@ export class GameScene extends Phaser.Scene {
   private audio?: AudioManager;
   private parallax: ParallaxImage[] = [];
   protected levelKey = '';
+  /** The id `init(data)` was started with. `null` on a plain boot: resume whatever the save says. */
+  private requestedLevelId: string | null = null;
   protected groundLayer!: Phaser.Tilemaps.TilemapLayer;
   /**
    * The drawn exit — Phase 8. `protected`, so the e2e spec reaches it through `window.__phaserGame`
@@ -118,7 +123,11 @@ export class GameScene extends Phaser.Scene {
    * constructor runs once while `init` runs on every start AND restart — state initialised in the
    * constructor survives a restart and makes the second run differ from the first.
    */
-  init(): void {
+  init(data?: GameSceneData): void {
+    // Phase 8. `??` rather than `||`, so an explicit `''` is carried through to `resolveEntryLevel`
+    // and REJECTED there instead of quietly meaning "resume" — that function is the one place the
+    // hostile-input rules live, and this must not pre-filter for it.
+    this.requestedLevelId = data?.levelId ?? null;
     this.accumulatorMs = 0;
     // Cleared with the accumulator: a stale `prev` from the previous level would blend the first
     // drawn frame between two different levels. `interpolatedPosition` also snaps on a leap, but
@@ -129,27 +138,9 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     const level = this.loadLevel();
-    this.world = createWorld({
-      seed: SIM_SEED,
-      scale: RENDER_SCALE,
-      // Phase 3: the SOURCE of the collision geometry, and only the source. The resolver in
-      // `src/sim/player.ts` is untouched, which is the whole point of `World.solids` having been
-      // plain data since Phase 2.
-      solids: level.solids,
-      spawn: level.spawn,
-      // Phase 5, and all four from the SAME parsed level — the world's edges, the spikes that now
-      // hurt, and both enemies. Nothing here is a scene constant; move an enemy in Tiled and it
-      // moves in the game.
-      bounds: { widthPx: level.widthPx, heightPx: level.heightPx },
-      hazards: level.hazards,
-      enemies: level.enemies,
-      // Phase 6, from the same parsed level for the same reason: move a gear in Tiled and it moves
-      // in the game. There is no scene-side list of pickups to drift out of step with the file.
-      gears: level.gears,
-      // Phase 8: the exit. Step 9d tests the player's box against THIS rectangle, and `goalLayer`
-      // draws the same one — so the drawn doorway and the trigger volume cannot disagree.
-      goal: level.goal,
-    });
+    // Every world input is data off the parsed `.tmj` and nothing else — `gameLevelPick.ts` holds the
+    // mapping and the reason it is stated in one place rather than inline here.
+    this.world = createWorld(worldOptionsFor(level));
     applyFeelVariant(this.world);
     this.input$ = createSnapshot();
 
@@ -178,7 +169,7 @@ export class GameScene extends Phaser.Scene {
     // Phase 7. A plain module, not a scene, and torn down in `BootScene.init()` rather than from a
     // SHUTDOWN handler here — `src/game/audio.ts` carries the reasoning, which is Phase 6's HUD
     // lesson applied to a manager that is game-global rather than scene-owned.
-    this.audio = createAudio(this, this.catalog());
+    this.audio = createAudio(this, assetCatalog(this));
 
     this.bindKeys();
     addHelpBanner(this, this.helpText());
@@ -266,6 +257,23 @@ export class GameScene extends Phaser.Scene {
       this.prevPlayer = null;
     }
 
+    // Phase 8, on the EDGE and not on `world.completed`: the edge is one tick *(vault 2.5)* and
+    // `advanceSplit` ORs it across the batch, whereas the flag stays true forever and would rebuild
+    // the overlay every frame. `gameComplete.ts` owns the flow; the input flag stays here because
+    // this scene owns it, and `sampleHeldKeys` above clears the latched edges when it is false — so a
+    // jump pressed on the completing tick cannot fire into the next level.
+    if (events.levelCompleted) {
+      this.playerInputEnabled = false;
+      onLevelCompleted({
+        scene: this,
+        ui: this.ui,
+        goalObject: this.goalObject,
+        world: this.world,
+        levelId: this.levelKey,
+        catalog: assetCatalog(this),
+      });
+    }
+
     // Cues come from the batch's OR-accumulated edges, which is what makes them survive a frame
     // that drained five ticks — the whole reason `TickEvents` exists rather than a state diff
     // *(vault 2.5)*. `audioCues` is pure and lives in `src/sim/`, so what plays here and what the
@@ -308,6 +316,9 @@ export class GameScene extends Phaser.Scene {
       this.input$,
       () => this.playerInputEnabled,
       dev,
+      // Phase 8's ESC. The scene-key guard that keeps the two GameScene subclasses out of the menu
+      // lives with the action, in `gameLevelPick.openLevelSelect`.
+      () => openLevelSelect(this),
       // A getter, not the manager: `bindKeys` runs during `create()` and a captured reference
       // would go stale the moment Boot tore the manager down and `create()` built a new one.
       //
@@ -337,12 +348,16 @@ export class GameScene extends Phaser.Scene {
     spawnLowHpFixture(this.world);
   }
 
+  /**
+   * The two GameScene subclasses are handed the FIRST catalogued level explicitly, not the saved one —
+   * see `startDevScene`. `Gym` has no level and ignores it.
+   */
   protected togglePlayground(): void {
-    startDevScene(this, 'Playground');
+    startDevScene(this, 'Playground', firstLevelId(this));
   }
 
   protected toggleElementEditor(): void {
-    startDevScene(this, 'ElementEditor');
+    startDevScene(this, 'ElementEditor', firstLevelId(this));
   }
 
   protected toggleGym(): void {
@@ -350,28 +365,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The validated catalog. Boot refuses to route without one, so reaching here means it exists —
-   * this throws rather than returning `undefined` because a silent `?.` is how a missing catalog
-   * becomes a game with no audio and no complaint.
+   * Which level to play. The deciding — the save, the unlock rule, the hostile-`lastLevel` cases —
+   * lives in `gameLevelPick.ts`; this keeps only the assignment to `levelKey`, which
+   * `ElementEditorScene` reads when it writes a `.tmj` back out.
    */
-  protected catalog(): AssetCatalog {
-    const catalog = this.cache.json.get(CATALOG_KEY) as AssetCatalog | undefined;
-    if (!catalog) {
-      throw new Error('GameScene: no asset catalog in cache; Boot should have refused to route');
-    }
-    return catalog;
-  }
-
   protected loadLevel(): LevelData {
-    const entry = this.catalog().levels[0];
-    if (!entry) {
-      throw new Error('GameScene: the catalog lists no levels; Boot should have refused to route');
-    }
-
-    const cached = this.cache.tilemap.get(entry.key) as { data?: unknown } | undefined;
-    this.levelKey = entry.key;
-    return parseLevel(entry.key, cached?.data);
+    const picked = pickLevel(this, this.requestedLevelId);
+    this.levelKey = picked.key;
+    return picked.level;
   }
+
 
   /** The read-only debug view every e2e spec is written against. Dev build only. */
   private publishDebugState(): void {

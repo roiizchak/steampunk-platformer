@@ -52,6 +52,9 @@ export class BootScene extends Phaser.Scene {
      */
     this.scene.stop('Game');
     this.scene.stop('UI');
+    // Phase 8: the level menu SHIPS, so it is stopped on the same unconditional side as Game and UI.
+    // A restart with the menu open would otherwise leave it drawn over the reload.
+    this.scene.stop('LevelSelect');
     // Phase 7, and it belongs HERE for the same reason those two stops do. `this.sound` is one
     // manager for the whole game and is not cleaned up on scene shutdown, so a looping bed survives
     // a restart and a second one starts on top of it — criterion 7.5. A `GameScene` SHUTDOWN handler
@@ -189,6 +192,10 @@ export class BootScene extends Phaser.Scene {
     // Phase 6: the HUD runs in parallel with Game, so stopping only Game leaves a health bar and a
     // gear counter drawn over the error screen — a refusal you can see straight through.
     this.scene.stop('UI');
+    // Phase 8, and it is NOT in the DEV block below: the level menu ships. A refusal reached from the
+    // menu — press ESC, then restart Boot — would otherwise draw five level rows over "BOOT REFUSED",
+    // which is the same cosmetic refusal the HUD stop above exists to prevent.
+    this.scene.stop('LevelSelect');
     // The dev scenes, guarded so their keys do not survive into `dist/`. In production neither is
     // registered, so stopping them is already a no-op — the guard costs nothing and keeps the
     // production bundle free of any mention of a scene that cannot exist there. Phase 3 added

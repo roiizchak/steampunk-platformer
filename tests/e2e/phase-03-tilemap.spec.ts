@@ -312,6 +312,22 @@ test.describe('Phase 3 — the boot gate covers levels too', () => {
                   point: true,
                   properties: [{ name: 'spawn', type: 'bool', value: true }],
                 },
+                // 🔴 Phase 8. This fixture must be valid in EVERY respect except camera travel, or it
+                // stops proving what it is named for. Without an exit it refused with "no object
+                // carries the `goal` property" and the `camera travel` assertion went red — the same
+                // trap the bad-level fixtures under `tests/fixtures/` carry a written rule about, and
+                // the reason `describeGoalProblem` runs last inside `describeLevelProblem`. It cannot
+                // run last overall: the camera-travel rule lives in `bootLevels.ts`, downstream of the
+                // whole level validator.
+                //
+                // Standing on the floor at the far right, clear of the standing spawn box (x 30…162).
+                {
+                  x: 1700,
+                  y: 768,
+                  width: 100,
+                  height: 288,
+                  properties: [{ name: 'goal', type: 'bool', value: true }],
+                },
               ],
             },
           ],
