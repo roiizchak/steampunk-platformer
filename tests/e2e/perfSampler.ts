@@ -49,7 +49,17 @@ type Page = import('@playwright/test').Page;
 export interface Sample {
   /** rAF callbacks actually served across the tick window. */
   frames: number;
-  /** Sim ticks the window actually spanned. Both halves must span the same, or nothing compares. */
+  /**
+   * Sim ticks the window actually spanned. Both halves must span the same, or nothing compares.
+   *
+   * 🔴 **Corrected 2026-08-17: it was read AFTER the GPU drain, so it did not describe the same span
+   * as `frames`.** `frames` stops counting when the tick condition is met; `ticks` was measured
+   * several rAF frames later at the bottom of `drain()`. Invisible to a ratio of medians, **fatal to
+   * a ratio of frame COUNTS** — it put criterion 7.7 red on correct code. Now captured at the stop
+   * condition beside `elapsedMs`, so all three describe one window. Predicted by the Codex plan
+   * review from file evidence before it was observed; evidence in
+   * `docs/qa/session-gate-defects.md` § 7.7.
+   */
   ticks: number;
   /** Wall-clock across the window. */
   elapsedMs: number;
@@ -292,6 +302,10 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
             return;
           }
           const elapsedMs = performance.now() - start;
+          // Captured HERE, at the stop condition, not at the bottom of `drain()` below. `frames`
+          // stopped counting on this frame, so the tick span has to be read on this frame too or
+          // the two describe different windows — see the `ticks` docstring.
+          const measuredTicks = game.__game.tick - firstTick;
           // Disconnect BEFORE resolving: an observer left attached keeps firing into the closure of
           // a finished window and would leak its entries into the second half of the pair.
           observer?.disconnect();
@@ -315,7 +329,7 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
             };
             resolve({
               frames: work.length,
-              ticks: game.__game.tick - firstTick,
+              ticks: measuredTicks,
               elapsedMs,
               intervalMs: elapsedMs / work.length,
               workMedianMs: at(0.5),

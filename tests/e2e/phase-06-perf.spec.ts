@@ -49,7 +49,7 @@ import { expect, test } from '@playwright/test';
  * call in `GameScene.update()` also survive BOTH arms and so divide out — this measures `UIScene`.
  */
 
-import { GPU_DRAIN_FRAMES, installGpuTimer } from './gpuTimer';
+import { installGpuTimer } from './gpuTimer';
 import {
   MAX_HUD_GPU_RATIO,
   MAX_HUD_WORK_DELTA_MS,
@@ -58,46 +58,16 @@ import {
   MIN_SAMPLES,
   SAMPLE_TICKS,
 } from './perfBudget';
-import { SOFTWARE_RENDERERS, counts, sample, webglRenderer } from './perfSampler';
+import { counts, sample } from './perfSampler';
+import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
-import { hudDrawState } from './hudHelpers';
+import { hudDrawState, setHud } from './hudHelpers';
 
 /** Three pairs. Interleaved, so drift in the machine hits both arms alike. */
 const PAIRS = 3;
 
 /** The hazard's right edge in world px, from `level-01.tmj` object id 8 (x 2304, w 192). */
 const HAZARD_RIGHT_PX = 2304 + 192;
-
-/** Stops or starts the parallel HUD scene, and WAITS — scene ops are queued, not immediate. */
-async function setHud(page: import('@playwright/test').Page, on: boolean): Promise<void> {
-  await page.evaluate((wanted) => {
-    // `__phaserGame.scene` is the game-level SceneManager, NOT a Scene's ScenePlugin, so there is
-    // no `launch` here. `run` is the SceneManager's smart start: it boots a stopped scene and wakes
-    // a sleeping one, which is what "put the HUD back" has to mean after a `stop`.
-    const game = (
-      window as unknown as {
-        __phaserGame: { scene: { stop(k: string): void; run(k: string): void; isActive(k: string): boolean } };
-      }
-    ).__phaserGame;
-    if (wanted && !game.scene.isActive('UI')) game.scene.run('UI');
-    if (!wanted && game.scene.isActive('UI')) game.scene.stop('UI');
-  }, on);
-
-  // 🔴 The wait is not politeness. `ScenePlugin` QUEUES every operation and the SceneManager drains
-  // the queue at the top of the next step, so sampling immediately would straddle the toggle and
-  // average the two arms together — which biases the ratio toward 1.0, the direction that PASSES.
-  await page.waitForFunction(
-    (wanted) =>
-      (
-        window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }
-      ).__phaserGame.scene.isActive('UI') === wanted,
-    on,
-    { timeout: 10_000 },
-  );
-  // `launch` re-runs create() -> build(), which allocates the plate, Graphics and Text. That is a
-  // one-off cost and it must not land inside a measured window.
-  await waitTicks(page, GPU_DRAIN_FRAMES);
-}
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -125,17 +95,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     // REQUEST; Chromium answers a refused request by silently falling back to SwiftShader, ~21x
     // slower (HANDOFF §14). A budget measured on a software rasteriser is a measurement of the CPU
     // drawing pixels, and the fallback is invisible unless something asks.
-    const renderer = (await webglRenderer(page)).toLowerCase();
-    // eslint-disable-next-line no-console
-    console.log(`[6.9] WebGL renderer: ${renderer}`);
-    for (const software of SOFTWARE_RENDERERS) {
-      expect(
-        renderer,
-        `this ran on "${renderer}", a SOFTWARE rasteriser. Do not soften this into a skip — the ` +
-          `whole point of the chromium-gpu project is that the fallback is silent.`,
-      ).not.toContain(software);
-    }
-
+    await assertRealGpu(page, '6.9');
     // ---- put the HUD into a state where it actually DRAWS ------------------------------------
     // At full health `drawHealth` queues no rectangle (spentW === 0), so a HUD sampled at spawn is
     // nearly free. Real hazard damage, taken by playing, is what makes the bar a per-frame cost.
@@ -291,6 +251,35 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
 
     const onWork = median(on.map((s) => s.workMedianMs));
     const offWork = median(off.map((s) => s.workMedianMs));
+    /**
+     * 🔴 **Re-measured 2026-08-17, and almost everything previously believed about this half was
+     * wrong. The run-by-run tables are in `docs/qa/session-gate-defects.md` § 6.9** — kept there
+     * rather than here because this file is at the 400-line rule and evidence is what `docs/qa/` is
+     * for. The conclusions, which belong beside the code:
+     *
+     *  - **It was never contention.** D8 blamed the 47 preceding headless tests. It fails in
+     *    ISOLATION — isolated runs read 1.319 and 1.396 against a 1.25 bound, and another 0.227.
+     *    The 1.396 arrived from the adversarial gate owner AFTER the bound was set: two extra
+     *    samples raised the ceiling, so the spread is a lower bound on the noise, not a range.
+     *  - **The cause is signal-to-noise.** The HUD costs ~0.001 ms of GPU on a ~0.131 ms baseline.
+     *    One run's on-arm median came out four times BELOW its off-arm median.
+     *  - **Per-pair ratios do not fix it** — this session's plan; the same run reads 1.328, worse
+     *    than pooled, because contamination lands on one arm of one pair rather than being shared.
+     *  - **Minimum-per-arm does not either.** The theory was that GPU noise is one-sided; an OFF
+     *    window then read 0.095 ms, the cheapest reading anywhere, giving 1.419.
+     *
+     * So the median stays, and the bound moved 1.25 -> 2.0. **That is a bound moving UP against this
+     * project's standing rule, and the justification is that the rule's reason does not apply:** a
+     * bound is not allowed to be loosened because loose bounds hide the defect they exist to catch,
+     * and 1.25 could not catch it. Built and measured — one full-screen 1920x1080 alpha scrim, the
+     * old comment's own example, is INVISIBLE (0.932, 1.144). Five stacked read 2.688 - 5.641;
+     * twenty read 8.459. 1.25 sat below the noise floor AND below the smallest resolvable signal.
+     *
+     * ⚠️ **Demonstrated floor** *(vault 9.3)*: this gate cannot see one full-screen alpha layer. It
+     * catches gross overdraw only, and the 34 % margin between 2.0 and the weakest proven signal is
+     * thinner than this suite's norm. Both stated so the next reader does not believe it guards what
+     * its old comment claimed.
+     */
     const onGpu = median(on.map((s) => s.gpuMedianMs));
     const offGpu = median(off.map((s) => s.gpuMedianMs));
     const workRatio = onWork / offWork;
@@ -359,8 +348,9 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * the part of the HUD the A/B could vary.
      *
      * This is the whole frame with the HUD on, in milliseconds, against the 16.67ms a 60 Hz frame
-     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; bounded at a third of a frame,
-     * which is loose against the measurement and still fails long before 60 Hz is at risk.
+     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; **bounded at 1ms** — see
+     * `MAX_HUD_WORK_DELTA_MS`, halved from 2ms by the Phase 6 performance owner. This comment said
+     * "a third of a frame" until 2026-08-17 and was describing the old value.
      */
     expect(
       onWork,

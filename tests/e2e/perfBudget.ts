@@ -65,15 +65,118 @@ export const MIN_SAMPLES = 60;
  */
 export const MAX_WORK_RATIO = 4;
 
+/* -------------------------------------------------------------------------------------------- *
+ *  🔴 **`MAX_BURST_RATIO` is DELETED, and the measurement that killed it is below.**              *
+ *                                                                                                *
+ *  It was `fleet.workP95Ms / baseline.workP95Ms`, bounded at 6, and its stated purpose was to     *
+ *  catch the synchronised ten-sentry volley — "a handful of frames in the window and the likeliest *
+ *  place for a per-enemy blow-up to appear". Its only red-proof on record was a per-frame O(n^2)   *
+ *  sweep in `EnemyLayer.sync`, which is a cost on EVERY frame and which the median bound catches   *
+ *  on its own at 6.43x. **Nobody had ever injected a burst confined to the volley tick.**          *
+ *                                                                                                *
+ *  Done on 2026-08-17: a per-enemy allocation storm on `enemyTurn.ts`'s fire branch, so the cost   *
+ *  lands only on the tick a sentry actually shoots. Three runs each, real GPU, same box:           *
+ *                                                                                                *
+ *  | statistic                    | clean       | storm 1x    | storm 10x   | separates? |        *
+ *  |------------------------------|-------------|-------------|-------------|------------|        *
+ *  | `workP95Ms` ratio            | 0.82 - 1.86 | 1.25 - 2.00 | 1.38 - 1.71 | **no**     |        *
+ *  | frames per tick, ratio       | 0.97 - 1.07 | 1.06 - 1.09 | 1.01 - 1.04 | **no**     |        *
+ *  | wall-ms per sim tick, fleet  | 16.47-16.51 | 15.98-16.32 | 22.04-22.96 | **yes**    |        *
+ *  | that, as fleet/baseline      | 0.987-0.992 | 0.960-0.982 | 1.324-1.382 | **yes**    |        *
+ *                                                                                                *
+ *  At **ten times** the storm the p95 ratio read 1.71 — *lower than a clean run's 1.86*. A bound   *
+ *  of 6 was never going to fail for the defect it named. Deleted rather than loosened, because a   *
+ *  gate that cannot go red is decoration *(vault C2)*.                                             *
+ *                                                                                                *
+ *  ⚠️ **Frames-per-tick was the planned replacement, and it is decoration too.** Phase 7's audio    *
+ *  gate uses it and it works THERE, because a 30 ms blocking stall inside a cue starves rAF        *
+ *  directly. It does not work here: the window is bounded in TICKS, so a stalled main thread makes *
+ *  the window take longer in WALL time while rAF keeps serving frames throughout — the frame count *
+ *  barely moves and the tick count is fixed by construction. At 10x the storm it read 1.03 against *
+ *  a clean 1.06. Recorded because the plan specified it and the measurement refused it.            *
+ * -------------------------------------------------------------------------------------------- */
+
 /**
- * The same ceiling for the 95th percentile — the frames a median cannot see.
+ * The ceiling on `fleet / baseline` **wall-clock milliseconds per SIMULATED TICK**.
  *
- * Looser than the median's because a p95 taken over a few hundred samples is a noisier statistic and
- * a single GC pause lands in it. Not looser because bursts matter less: this is the assertion that
- * covers the synchronised ten-sentry volley, which is a handful of frames in the window and the
- * likeliest place for a per-enemy blow-up to appear.
+ * This is what the two bounds above structurally cannot see, and it is the quantity a player
+ * actually feels: not "how long did a frame take" but **"how long did the machine need to simulate
+ * a fixed amount of game time"**. A 60 Hz sim tick is 16.67 ms of game time; if a window of 180
+ * ticks takes more than 180 x 16.67 ms of wall time, the game is running slow — whatever the median
+ * frame, the percentile, or the frame count say.
+ *
+ * A burst is exactly the defect this sees and the others do not. The window is bounded in ticks, so
+ * a main-thread stall cannot shorten it — it can only make it take longer, and that lands here in
+ * full while being spread thin across every other statistic.
+ *
+ * Bounded at **1.15**. Clean spread is 0.987 / 0.992 / 0.987, so this is ~16 % above the worst clean
+ * reading; the proving storm clears it at **1.32 - 1.38**. A ratio rather than an absolute because
+ * the two arms are interleaved in one page seconds apart, so a contended box inflates both and
+ * divides out — the failure mode that makes criterion 6.9's GPU ratio noise-sensitive.
  */
-export const MAX_BURST_RATIO = 6;
+export const MAX_FLEET_MS_PER_TICK_RATIO = 1.15;
+
+/**
+ * The **absolute** ceiling on wall-clock ms per simulated tick, with the fleet on screen.
+ *
+ * Here for the reason `MAX_HUD_WORK_DELTA_MS` is here in Phase 6: **a ratio can only see what
+ * DIFFERS between the arms.** A cost that slows both — a per-frame leak in `GameScene.update()`,
+ * a browser-wide stall — divides out of the ratio above completely and is invisible to it. This is
+ * the whole window in milliseconds against the game time it was supposed to cover, and nothing
+ * cancels out of it.
+ *
+ * Measured at **16.47 - 16.63 ms** clean against a 16.67 ms tick — the sim keeps up exactly, which
+ * is what a fixed timestep with a frame-rate-independent clock is for. **Bounded at 20 ms**, ~20 %
+ * above the worst clean reading.
+ *
+ * 🔴 **What this bound is, precisely, corrected after the Codex implementation review.** It is a
+ * **simulation-backlog** statistic: it says the clock is still keeping up with real time. It is NOT
+ * a per-frame budget, and an earlier version of this docstring called 20 ms "an effective 50 Hz",
+ * which is **false under this clock**.
+ *
+ * `drainTicks` caps catch-up at `MAX_TICKS_PER_FRAME` = 5, so a uniform per-frame cost
+ * **self-balances**: a frame costing C ms drains about `C / 16.67` ticks, and wall time per tick
+ * stays ~16.67 however large C gets — until C exceeds `5 x 16.67 = 83 ms` and the clock starts
+ * DROPPING ticks. Simulated over the real `drainTicks` arithmetic:
+ *
+ * | uniform frame cost | ticks/frame | **ms per tick** | frames per 180 ticks |
+ * |--------------------|-------------|-----------------|----------------------|
+ * | 20 ms              | 1.20        | **16.69**       | 151                  |
+ * | 40 ms              | 2.39        | **16.70**       | 76                   |
+ * | 49 ms              | 2.94        | **16.69**       | 62                   |
+ * | 80 ms              | 4.79        | **16.70**       | 38                   |
+ * | 110 ms             | 5.00        | **22.00**       | 36                   |
+ *
+ * So a **20 - 49 ms per-frame regression is invisible to this bound AND stays above `MIN_SAMPLES`**.
+ * The previous docstring admitted a blind spot but placed it above 83 ms; it starts at 0. That gap
+ * is what `MAX_FLEET_WORK_MS` below exists to close, and the ratio bound above cannot help because a
+ * uniform cost lands in both arms and divides out.
+ *
+ * It was drafted at 25 and that was decoration even as a backlog statistic: at 25 even Phase 5's real
+ * parallax defect (71 ms median frames) would have passed. At 20 the volley storm reaches it — proved
+ * red at **21.82 ms** with the ratio bound temporarily neutralised so this assertion was the only one
+ * that could fail.
+ */
+export const MAX_MS_PER_SIM_TICK = 20;
+
+/**
+ * The **absolute** ceiling on the fleet arm's MEDIAN main-thread work per frame, in milliseconds.
+ *
+ * 🔴 **Added after the Codex implementation review found a hole every other 5.11 bound shares.**
+ * `MAX_WORK_RATIO` and `MAX_FLEET_MS_PER_TICK_RATIO` are ratios, so a cost present in BOTH arms
+ * divides out of them; `MAX_MS_PER_SIM_TICK` is blind to any uniform frame cost below 83 ms because
+ * the tick clock self-balances (see its table); and `MIN_SAMPLES` only rejects the window above
+ * ~49 ms/frame. **A uniform 20 - 49 ms per-frame regression therefore passed all of criterion 5.11.**
+ *
+ * This is the one assertion in the spec that is neither a ratio nor a function of the tick clock: the
+ * median frame's own blocking time, against the 16.67 ms a 60 Hz frame actually has.
+ *
+ * Measured **0.50 - 0.60 ms** clean on the fleet arm. **Bounded at 8 ms** — roughly half a frame, and
+ * more than thirteen times the worst clean reading, so it cannot fail on driver noise while catching
+ * the whole 20 - 49 ms band that was slipping through. Red-proved with a uniform 40 ms-per-frame
+ * stall in `GameScene.update()`, which lands in both arms and which every other bound here passes.
+ */
+export const MAX_FLEET_WORK_MS = 8;
 
 /**
  * A GPU window that produced fewer non-disjoint results than this has no median worth reading.
@@ -147,15 +250,33 @@ export const MAX_HUD_WORK_RATIO = 2;
 /**
  * The ceiling on `HUD-on / HUD-off` **GPU** time per frame.
  *
- * Tighter than the work ratio because the quantity is better resolved: the GPU timer reports
- * microseconds, the three measured ratios span 1.012-1.017, and the run-to-run drift in the
- * *baseline* (0.171 -> 0.198ms) moves both arms together and so cancels.
+ * 🔴 **1.25 -> 2.0 on 2026-08-17, and this is the one place in this file where a bound moved UP.**
+ * The full measurement — six clean runs, two rejected statistics and a three-point overdraw sweep —
+ * is in `phase-06-perf.spec.ts` beside the reduction it justifies. In short:
  *
- * 1.25 leaves roughly fifteen times the measured HUD delta as headroom while still catching the
- * failure this half exists for: a HUD that starts costing real fill rate — a full-screen scrim, an
- * alpha-blended overlay, a per-frame render target — which main-thread work would not see at all.
+ *  - the paragraph this replaces claimed "the three measured ratios span 1.012-1.017". Re-measured,
+ *    the clean spread is **0.227 - 1.396**, and 1.319 and 1.396 are both readings from runs with
+ *    nothing else on the box. Deviation D8 blamed full-suite contention; **it fails in isolation**.
+ *    ⚠️ The 1.396 came from the criterion's adversarial gate owner re-measuring after the bound was
+ *    already set: **two extra samples raised the observed ceiling**, so treat this spread as a
+ *    lower bound on the noise, not a settled range.
+ *  - the failure this half exists for — "a full-screen scrim, an alpha-blended overlay" — was built
+ *    and measured. One full-screen 1920x1080 alpha scrim reads **0.932 and 1.144: invisible**. Five
+ *    stacked read **2.688 and 5.641**; twenty read 8.459.
+ *
+ * So 1.25 sat *below* the noise floor and *below* the smallest signal it could ever resolve. It was
+ * not a tight bound being loosened; it was a bound that could only fire at random, and did.
+ *
+ * 2.0 is ~1.43x the worst clean reading (1.396) and 26 % below the weakest proven signal (2.688).
+ * That margin is thinner than the rest of this file enjoys and it is **narrowing as samples
+ * accumulate**, which is stated rather than rounded away. Nothing 1.25 could catch is now missed,
+ * because 1.25 caught nothing but itself — but if a future run lands near 2.0 on clean code, the
+ * answer is to reduce over more pairs, not to raise this again.
+ *
+ * ⚠️ Demonstrated floor: **this gate cannot see one full-screen alpha layer.** It catches gross
+ * overdraw only.
  */
-export const MAX_HUD_GPU_RATIO = 1.25;
+export const MAX_HUD_GPU_RATIO = 2;
 
 /**
  * The **absolute** ceiling on the HUD's added main-thread milliseconds per frame.
@@ -179,32 +300,66 @@ export const MAX_HUD_GPU_RATIO = 1.25;
 export const MAX_HUD_WORK_DELTA_MS = 1;
 
 /**
- * Criterion 7.7 — the ceiling on `frames-without-audio / frames-with-audio` over one fixed window.
+ * Criterion 7.7 — the ceiling on `frames-per-tick without audio / frames-per-tick with audio`.
  *
- * **This is the load-bearing bound of criterion 7.7's frame-budget half, and it is a frame COUNT
- * rather than a millisecond figure. That choice was forced by a measurement, not preferred.**
+ * 🔴🔴 **KNOWN-WEAK GATE. Re-measured 2026-08-17 across twelve clean runs, and it no longer proves
+ * what Phase 7 recorded. Read this whole block before trusting a green from it.**
  *
- * 🔴 The first two versions of this gate asserted on `workMedianMs`, then on `workP95Ms`, and a
- * proving mutation of **30 ms of blocking work per cue** moved the p95 by 0.400 ms — nothing. The
- * reason is structural and worth keeping written down, because it applies to every spec that reduces
- * `sample()` with a percentile:
+ * ## What Phase 7 recorded, and why it looked solid
  *
- *   this machine serves **~479 rAF frames per 120 sim ticks** — about 240 fps against a 60 Hz sim,
- *   four frames per tick. A cue fires roughly eight times in that window, so cue frames are **1.9 %
- *   of frames**. The 95th percentile is the 21st slowest of 479 and never lands on one.
+ * The first two versions asserted on `workMedianMs`, then `workP95Ms`, and a proving mutation of
+ * **30 ms of blocking work per cue** moved the p95 by 0.400 ms — nothing. The reason is structural
+ * and still correct, and it applies to every spec that reduces `sample()` with a percentile:
  *
- * A percentile cannot see a cost carried by 2 % of frames. Frames-served can, because blocking the
- * main thread costs frames directly: the mutation above dropped the window from **479 to 425**
- * frames, and 54 lost frames at a 4.4 ms interval is 238 ms — the eight 30 ms stalls, recovered
- * almost exactly.
+ *   this machine serves **~479 rAF frames per 120 sim ticks** — about 240 fps against a 60 Hz sim.
+ *   A cue fires roughly eight times per window, so cue frames are **1.9 % of frames**, and the 95th
+ *   percentile is the 21st slowest of 479. It never lands on one.
  *
- * Clean spread is **479 / 479 / 479** against **479 / 478 / 479**, one frame. Bounded at **1.02** —
- * ten times the observed noise, and the mutation clears it at 1.127.
+ * Frames-served was adopted instead, on a clean spread recorded as **479/479/479 against
+ * 479/478/479 — one frame** — with the mutation reaching 1.127. Against noise of one frame in 479,
+ * a bound of 1.02 was ten times the observed spread and looked generous.
  *
- * ⚠️ Its demonstrated floor: **`sound.play()` is so cheap that 500x the shipped call rate stayed
- * invisible.** This gate catches stalls, not call counts, and the QA log says so.
+ * ## What twelve runs actually show
+ *
+ * Two separate defects were found on 2026-08-17, and the first hid the second.
+ *
+ * **1. The windows were not the same length.** `sample()` returned a `ticks` read AFTER the GPU
+ * drain while `frames` stopped at the work window, so a ratio of raw frame COUNTS compared spans
+ * that differed. It put this criterion red on correct code. Fixed in `perfSampler.ts`, and this
+ * bound now divides by each window's own measured tick span rather than comparing raw counts.
+ *
+ * **2. With that fixed, the clean spread is nothing like one frame in 479.** Twelve clean runs,
+ * nine by the phase owner and three by the criterion's adversarial gate owner, on an idle box:
+ *
+ *   0.9331  0.9514  0.9556  0.9594  0.9682  0.9810
+ *   0.9829  0.9937  1.0044  1.0269  1.0395  **1.0961**
+ *
+ * **and the 30 ms-per-cue proving mutation reads 1.0943 — BELOW the worst clean run.** The gate
+ * owner's 1.0961 was a clean run with tick spans matching exactly (120/120/120 in both arms), so it
+ * is not the span defect recurring; the audio arm genuinely serves ~10 % fewer frames on some runs
+ * and not others. Signal and noise overlap completely.
+ *
+ * ## What that means, stated rather than papered over
+ *
+ * **This bound cannot presently distinguish its own proving mutation from a clean run.** At 1.02 it
+ * false-red about one run in six, which is worse than useless — a gate that cries wolf trains the
+ * next reader to dismiss a real red *(the same reasoning `playwright.config.ts` uses about a
+ * contended dev server being indistinguishable from a boot hang)*.
+ *
+ * Raised to **1.15**, which is ~5 % above the worst of twelve clean readings, so it stops failing at
+ * random. **It is NOT claimed to catch a 30 ms-per-cue stall any more** — it demonstrably does not.
+ * What it still catches is a gross frame-serving collapse, and `MAX_AUDIO_WORK_DELTA_MS` below is
+ * the load-bearing half of this criterion until this is redone properly.
+ *
+ * **The honest fix needs its own session**: more pairs so the median has something to work with,
+ * a longer window, or a different statistic entirely — the same treatment criterion 5.11's burst
+ * bound got in this session, which is what turned that one from decoration into a working gate.
+ * Recorded in `docs/qa/session-gate-defects.md` as open work.
+ *
+ * ⚠️ Its other demonstrated floor, from Phase 7 and unchanged: **`sound.play()` is so cheap that
+ * 500x the shipped call rate stayed invisible.** This catches stalls, not call counts.
  */
-export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.02;
+export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.15;
 
 /**
  * Criterion 7.7 — the ceiling on the milliseconds audio adds to the MEDIAN frame.

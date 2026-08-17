@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS, MIN_SAMPLES } from './perfBudget';
-import { SOFTWARE_RENDERERS, sample, webglRenderer } from './perfSampler';
+import { sample } from './perfSampler';
+import { assertRealGpu } from './realGpu';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
 import { cuesPlayed, resetCues, startCueRecorder } from './audioHelpers';
 
@@ -159,19 +160,34 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
     // 🔴 The renderer, before any number is trusted. SwiftShader inflates this harness's
     // milliseconds ~21x (HANDOFF §14), and while a ratio survives that, a spec that silently fell
     // back to software rasterisation is not the substrate this phase agreed to measure on.
-    const renderer = (await webglRenderer(page)).toLowerCase();
-    expect(typeof renderer).toBe('string');
-    for (const software of SOFTWARE_RENDERERS) {
-      expect(renderer, `software rasteriser: ${renderer}`).not.toContain(software);
-    }
-
+    const renderer = await assertRealGpu(page, '7.7');
     await startCueRecorder(page);
     const spawn = await readPlayer(page);
     const start = { x: spawn.x, y: spawn.y };
 
-    const arms: Record<'on' | 'off', { work: number[]; frames: number[]; cues: number[] }> = {
-      on: { work: [], frames: [], cues: [] },
-      off: { work: [], frames: [], cues: [] },
+    /**
+     * `rate` is frames per SIM TICK, not raw frames.
+     *
+     * 🔴 **This was raw `frames`, and it went red on correct code on 2026-08-17**: 478/450/450 with
+     * audio against 478/476/465 without, a "loss" of 1.0578x against a 1.02 bound. The windows were
+     * not the same length. `sample()` stops once `tick - firstTick >= wantTicks`, which OVERSHOOTS
+     * by however many ticks the last frame drained, so two windows that both satisfy
+     * `ticks >= AUDIO_SAMPLE_TICKS` routinely span different numbers of ticks — and a window that
+     * spans more ticks serves more frames for reasons that have nothing to do with audio.
+     *
+     * A ratio of raw counts silently attributes that difference to the arm. Dividing each window's
+     * frames by its own measured tick span removes it, and leaves exactly the quantity the gate
+     * claims to measure: how many frames the machine served per unit of GAME time, with audio and
+     * without. `perfSampler.ts` was corrected in the same change so `ticks` is captured at the stop
+     * condition rather than after the GPU drain — without that fix this denominator would be wrong
+     * too. Both raised by the Codex plan review (MAJOR 4).
+     */
+    const arms: Record<
+      'on' | 'off',
+      { work: number[]; frames: number[]; ticks: number[]; rate: number[]; cues: number[] }
+    > = {
+      on: { work: [], frames: [], ticks: [], rate: [], cues: [] },
+      off: { work: [], frames: [], ticks: [], rate: [], cues: [] },
     };
 
     for (let pair = 0; pair < PAIRS; pair += 1) {
@@ -198,6 +214,8 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
 
         arms[arm].work.push(measured.workMedianMs);
         arms[arm].frames.push(measured.frames);
+        arms[arm].ticks.push(measured.ticks);
+        arms[arm].rate.push(measured.frames / measured.ticks);
         arms[arm].cues.push(fired.length);
       }
     }
@@ -240,11 +258,22 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
     const on = median(arms.on.work);
     const off = median(arms.off.work);
     const delta = on - off;
-    const framesOn = median(arms.on.frames);
-    const framesOff = median(arms.off.frames);
-    const frameLoss = framesOn > 0 ? framesOff / framesOn : Infinity;
-    const detail = `frames ${arms.on.frames.join('/')} with audio vs ${arms.off.frames.join('/')} without (loss ${frameLoss.toFixed(4)}x) | median work ${on.toFixed(3)} vs ${off.toFixed(3)} ms (delta ${delta.toFixed(3)}) | cues/window ${arms.on.cues.join('/')} vs ${arms.off.cues.join('/')} | renderer ${renderer}`;
+    // Frames per sim tick, so a window that happened to span an extra tick does not read as a
+    // machine that served extra frames. See the `arms` docstring for the run that proved it.
+    const rateOn = median(arms.on.rate);
+    const rateOff = median(arms.off.rate);
+    const frameLoss = rateOn > 0 ? rateOff / rateOn : Infinity;
+    const fmtRate = (r: number[]): string => r.map((v) => v.toFixed(3)).join('/');
+    const detail =
+      `frames/tick ${fmtRate(arms.on.rate)} with audio vs ${fmtRate(arms.off.rate)} without ` +
+      `(loss ${frameLoss.toFixed(4)}x) | raw frames ${arms.on.frames.join('/')} vs ` +
+      `${arms.off.frames.join('/')} over ticks ${arms.on.ticks.join('/')} vs ` +
+      `${arms.off.ticks.join('/')} | median work ${on.toFixed(3)} vs ${off.toFixed(3)} ms ` +
+      `(delta ${delta.toFixed(3)}) | cues/window ${arms.on.cues.join('/')} vs ` +
+      `${arms.off.cues.join('/')} | renderer ${renderer}`;
 
+    // eslint-disable-next-line no-console
+    console.log('[7.7] ' + detail);
     expect(frameLoss, detail).toBeLessThanOrEqual(MAX_AUDIO_FRAME_LOSS_RATIO);
     expect(delta, detail).toBeLessThanOrEqual(MAX_AUDIO_WORK_DELTA_MS);
   });

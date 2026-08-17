@@ -3,7 +3,11 @@
  *
  * Split out of `GameScene.ts` on 2026-08-15 to bring it under the 400-line rule (criterion
  * 4.16 / 5.12), following the sibling pattern this scene already uses for `gameLevelDraw.ts`,
- * `gameHud.ts` and `gameParallax.ts`: the scene keeps a one-line method, the logic lives here.
+ * `gameHud.ts` and `gameParallax.ts`.
+ *
+ * ⚠️ That sentence used to end "the scene keeps a one-line method, the logic lives here". It does
+ * not: the one-line wrappers were inlined at their call sites on 2026-08-17 to bring
+ * `GameScene.ts` back under 400, so `update()` calls `renderPlayerSprite` directly.
  *
  * The `import.meta.env.DEV` guards moved WITH their bodies and are still at the point of use, so
  * the branches and the imports they reach are tree-shaken out of `dist/` — `verify-dist` proves the
