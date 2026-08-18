@@ -25,6 +25,7 @@ import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
 import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor } from './gameLevelPick';
 import { onLevelCompleted } from './gameComplete';
+import { shouldRunCompletion } from './completionGate';
 import { drawGoal } from './goalLayer';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
@@ -114,6 +115,9 @@ export class GameScene extends Phaser.Scene {
    */
   protected playerInputEnabled = true;
 
+  /** Has the flow already run for this level? Reset in `init()`. See `completionGate.ts`. */
+  private completionHandled = false;
+
   constructor(key = 'Game') {
     super(key);
   }
@@ -143,6 +147,9 @@ export class GameScene extends Phaser.Scene {
     // ⚠️ `ElementEditorScene` sets it back to `false` in `create()`, which runs AFTER `init()`, so
     // the dev tool is unaffected.
     this.playerInputEnabled = true;
+    // Same trap, same defence: a scene instance that already ran one completion flow would refuse
+    // to run the next, freezing level-02 permanently the moment it is reached.
+    this.completionHandled = false;
   }
 
   create(): void {
@@ -266,19 +273,12 @@ export class GameScene extends Phaser.Scene {
       this.prevPlayer = null;
     }
 
-    // Phase 8, on the EDGE and not on `world.completed`: the edge is one tick *(vault 2.5)* and
-    // `advanceSplit` ORs it across the batch, whereas the flag stays true forever and would rebuild
-    // the overlay every frame. `gameComplete.ts` owns the flow; the input flag stays here because
-    // this scene owns it.
-    //
-    // ⚠️ It is NOT what stops a jump pressed on the completing tick from firing into the next level,
-    // though this comment claimed so until the Phase 8 code-reviewer's adversarial brief read the
-    // order: `sampleHeldKeys` runs above, before `advanceSplit`, so on the completing frame it ran
-    // with the flag still true and cleared nothing. What actually prevents it is that `tick()`
-    // early-returns while `world.completed`, so nothing consumes input again, and `create()` builds a
-    // fresh `input$` for the next level. The claim was true; the named mechanism was the wrong one,
-    // which is worse than no comment *(vault C9)*.
-    if (events.levelCompleted) {
+    // Phase 8. The trigger — the edge, plus the terminal-world fallback — and every reason for its
+    // shape live in `completionGate.ts`, which is where a unit test can reach them. `gameComplete.ts`
+    // owns the flow; the input flag and the handled flag stay here because this scene owns both.
+    if (shouldRunCompletion(events.levelCompleted, this.world.completed, this.completionHandled)) {
+      // Set BEFORE the flow runs, so a handler that throws is not re-entered every frame.
+      this.completionHandled = true;
       this.playerInputEnabled = false;
       onLevelCompleted({
         scene: this,

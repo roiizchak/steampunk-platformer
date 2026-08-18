@@ -8,6 +8,7 @@
  * Renumbering later is not a refactor; it is a balance change to a phase that has already spent
  * money on art.
  *
+ *   0.  A completed level is TERMINAL: return `noEvents()` and run no step at all  (Phase 8)
  *   1.  Sample the seeded RNG exactly once -> `world.tickRoll`     (2.3 — the only advance)
  *   2.  Consume input edges from the mutable working copy          (2.4 — cleared on consumption)
  *   3.  Arm the jump-buffer window if a press edge arrived
@@ -57,6 +58,16 @@
  * while `world.completed` is true, tested before step 1 so the seeded stream does not advance either.
  * `goal.ts` carries all of it: why the letter, why after 9c, why the freeze, and why the `World.spawn`
  * argument for the respawn is NOT the argument for this.
+ *
+ * **Step 0 is a NUMBER, and it is the one stated exception to the letter rule.** Codex's Phase 8
+ * implementation review (finding #2) read the rule literally and was right to: the freeze is a branch
+ * this file's own contract did not name, and an unnamed branch before step 1 is exactly what "the
+ * numbering is the contract" exists to forbid. A letter was wrong for it. `9b`, `9c` and `9d` are
+ * letters because each one INSERTS work between two existing steps and must not shift them; step 0
+ * inserts nothing between anything — it runs BEFORE the list and, when it fires, replaces the whole
+ * list. Nothing can be renumbered by a step that precedes number 1, so the reason letters exist does
+ * not apply, and naming it `0` says what it does: no step ran. It is listed above with the others so
+ * that reading the contract shows every branch a tick can take.
  *
  * **State moved from step 4 to step 11 after Codex implementation review I4.** Resolved before
  * integration, the state published each tick described the position of the PREVIOUS one: a jump's
@@ -133,7 +144,7 @@ export { noEvents };
  * function's behaviour cannot vary with frame rate, which is the entire reason vault 2.1 exists.
  */
 export function tick(world: World, input: InputSnapshot): TickEvents {
-  // 🔴 A COMPLETED LEVEL IS TERMINAL, and this sits BEFORE step 1 so the seeded stream does not
+  // 0. 🔴 A COMPLETED LEVEL IS TERMINAL, and this sits BEFORE step 1 so the seeded stream does not
   //    advance either. Not an optimisation — without it the player can die behind the level-complete
   //    overlay and the gear total 9d exists to get right keeps moving. Full reasoning in `goal.ts`.
   if (world.completed) {
