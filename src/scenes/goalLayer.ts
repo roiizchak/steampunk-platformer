@@ -71,17 +71,33 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
   /**
    * The grey-box gate: a dark opening inside a brass frame.
    *
-   * One `Graphics` object rather than three shapes, because it has to behave as a single game object
-   * for the depth sort and for the "is it drawn" assertion. Drawn in WORLD coordinates with the object
-   * left at the origin, which is what keeps `goal` the only source of position.
+   * One object rather than three loose shapes, because it has to behave as a single game object for
+   * the depth sort, for the alpha pulse and for the "is it drawn" assertion.
+   *
+   * 🔴 **A `Container` positioned at the goal, not a `Graphics` drawing world coordinates.**
+   *
+   * The draft was a `Graphics` left at the origin with absolute `fillRect` calls. It looked right and
+   * it was UNMEASURABLE: `Graphics` has no `getBounds` in Phaser 4, and its `x`/`y` read `(0, 0)`
+   * however far from the goal rect it actually painted. So criterion 8.6's `align` test — the one
+   * named for this — could assert that an exit existed and would render, and nothing more; offsetting
+   * those `fillRect` calls would have separated the exit from its own trigger volume with every
+   * assertion still green. Codex's implementation review named it, and the fix belongs here rather
+   * than in the test: an object whose position cannot be read is one a gate cannot check.
+   *
+   * The container carries the transform and the children are drawn at LOCAL coordinates, so `goal` is
+   * still the only source of position — now expressed as the object's own `x`/`y` and recoverable from
+   * `getBounds()`.
    */
   const frame = Math.max(6, Math.round(goal.w * 0.12));
-  const gate = scene.add.graphics();
-  gate.fillStyle(FRAME_COLOUR, 1);
-  gate.fillRect(goal.x, goal.y, goal.w, goal.h);
-  gate.fillStyle(VOID_COLOUR, 1);
-  gate.fillRect(goal.x + frame, goal.y + frame, goal.w - frame * 2, goal.h - frame);
-  return gate.setDepth(7);
+  const rect = (x: number, y: number, w: number, h: number, colour: number) =>
+    scene.add.rectangle(x, y, w, h, colour).setOrigin(0, 0);
+  return scene.add
+    .container(goal.x, goal.y, [
+      rect(0, 0, goal.w, goal.h, FRAME_COLOUR),
+      rect(frame, frame, goal.w - frame * 2, goal.h - frame, VOID_COLOUR),
+    ])
+    .setSize(goal.w, goal.h)
+    .setDepth(7);
 }
 
 /** How long the exit's reached-it flourish runs. Shorter than `hudFade`'s fade, so it reads first. */
@@ -104,11 +120,13 @@ const GOAL_PULSE_HALF_MS = ticksToMs(GOAL_PULSE_TICKS / 2);
 /**
  * The exit's `animate` step — criterion 8.6.
  *
- * A two-hop alpha pulse rather than a scale or a rotation, and the reason is the grey-box branch: a
- * `Graphics` object draws in WORLD coordinates with its transform left at the origin, so scaling it
- * would move the drawn rectangle away from `goal` — the one thing `goalLayer`'s header says must never
- * happen, because that rect is also the trigger volume. Alpha is the only channel that cannot
- * desynchronise the drawing from the collision.
+ * A two-hop alpha pulse rather than a scale or a rotation, and the reason survives the move to a
+ * `Container`: scaling would grow the drawn gate away from `goal`, and that rect is also the trigger
+ * volume. Alpha is the only channel that cannot desynchronise the drawing from the collision.
+ *
+ * (It used to be the only channel available at all — the grey box was a `Graphics` drawing world
+ * coordinates, which scaling would have torn away from its own rectangle. The container makes scaling
+ * merely wrong rather than incoherent; alpha is still the right answer.)
  *
  * `yoyo` returns it to full opacity, so a spec sampling after the tween sees the exit still drawn
  * rather than a half-faded object it has to reason about.

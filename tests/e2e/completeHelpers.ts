@@ -34,9 +34,20 @@ export interface DrawnGoal {
   alpha: number;
   depth: number;
   willRender: boolean;
+  /** World-space bounds of what is actually DRAWN — see the note on `drawnGoal`. */
+  bounds: { x: number; y: number; w: number; h: number };
 }
 
-/** The exit, read off the live scene through `__phaserGame` — the `drawnVsSim.ts` pattern. */
+/**
+ * The exit, read off the live scene through `__phaserGame` — the `drawnVsSim.ts` pattern.
+ *
+ * 🔴 `bounds`, not `x`/`y`, is what an ALIGNMENT assertion can use. The greybox exit is a `Graphics`
+ * object left at the origin that draws in WORLD coordinates, so its transform reads `(0, 0)` however
+ * far from the goal rect the drawing actually is — and the align test compared neither. Codex's
+ * implementation review named it: offsetting those `fillRect` calls would separate the exit from its
+ * trigger while every assertion in that test stayed green. `getBounds()` is the drawn extent, which
+ * is the thing the claim is about.
+ */
 export async function drawnGoal(page: Page): Promise<DrawnGoal | null> {
   return page.evaluate(() => {
     const scene = (
@@ -48,12 +59,21 @@ export async function drawnGoal(page: Page): Promise<DrawnGoal | null> {
         alpha: number;
         depth: number;
         willRender(camera: unknown): boolean;
+        getBounds(): { x: number; y: number; width: number; height: number };
       };
       cameras: { main: unknown };
     };
     const g = scene.goalObject;
     if (!g) return null;
-    return { x: g.x, y: g.y, alpha: g.alpha, depth: g.depth, willRender: g.willRender(scene.cameras.main) };
+    const b = g.getBounds();
+    return {
+      x: g.x,
+      y: g.y,
+      alpha: g.alpha,
+      depth: g.depth,
+      willRender: g.willRender(scene.cameras.main),
+      bounds: { x: b.x, y: b.y, w: b.width, h: b.height },
+    };
   });
 }
 

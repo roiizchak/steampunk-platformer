@@ -154,3 +154,90 @@ describe('a write does not erase the entries the read dropped', () => {
     expect(onDisk.levels['level-01']).toEqual({ completed: true, bestGears: 6 });
   });
 });
+
+/**
+ * 🔴 A save this build refuses to READ must not be laundered into one it believes.
+ *
+ * `readProgress` rejects an unknown `version` wholesale — it will not guess at a layout that has not
+ * been designed. But `carriedOver` runs against the raw bytes, and without a version check every entry
+ * in a version-2 file was copied out and re-stamped as version 1 by the very next write. That write is
+ * one ordinary boot away: `pickLevel` records the resume point. Verified by seeding exactly this and
+ * reading storage back — `{"version":2,...,"level-04":{completed:true}}` became a version-1 completion
+ * and unlocked level-05. Found by Codex's implementation review.
+ */
+describe('carrying entries over never launders a save the reader refused', () => {
+  it('drops the entries of a FUTURE schema instead of re-stamping them', () => {
+    const storage = seeded(
+      '{"version":2,"lastLevel":"level-05","levels":{"level-04":{"completed":true,"bestGears":1}}}',
+    );
+    writeProgress(storage, recordCompletion(readProgress(storage), 'level-01', 1, 7));
+
+    const onDisk = JSON.parse(storage.raw().get(PROGRESS_KEY)!) as {
+      version: number;
+      levels: Record<string, unknown>;
+    };
+    expect(onDisk.version).toBe(1);
+    expect(
+      onDisk.levels['level-04'],
+      'a version-2 entry was re-stamped as version 1, which unlocks level-05 from a file this build ' +
+        'declared itself unable to read',
+    ).toBeUndefined();
+    expect(unlockedIds(completedIds(readProgress(storage)), ORDER)).toEqual(['level-01', 'level-02']);
+  });
+
+  /**
+   * 🔴 And a carried entry named `__proto__` survives the write.
+   *
+   * It is an OWN property of the parsed object, so copying it into an object LITERAL runs the
+   * inherited setter and it silently disappears — the exact loss `carriedOver` exists to prevent,
+   * reintroduced by the accumulator. `Object.create(null)` is the fix, and it is the same care
+   * `emptyProgress` already took.
+   */
+  it('carries an entry named __proto__ rather than dropping it through the setter', () => {
+    const storage = seeded(
+      '{"version":1,"lastLevel":null,"levels":{"__proto__":{"completed":true,"bestGears":1}}}',
+    );
+    writeProgress(storage, recordCompletion(readProgress(storage), 'level-01', 1, 7));
+    expect(
+      storage.raw().get(PROGRESS_KEY),
+      'the __proto__ entry was lost through the prototype setter',
+    ).toContain('__proto__');
+  });
+});
+
+/**
+ * 🔴 The unwritable save is MERGED with disk, not substituted for it.
+ *
+ * The draft returned `unwritten` outright once any write had failed, on the reasoning that such a
+ * storage is known-broken. Codex's implementation review pointed out that this contradicts
+ * `gameComplete.onLevelCompleted`'s own comment — it re-reads storage precisely so a level finished in
+ * another tab is not rolled back — and that a refused WRITE is not proof the next READ will fail.
+ */
+describe('the unwritable save does not hide newer bytes on disk', () => {
+  it('takes the union: this session AND whatever else landed', () => {
+    resetProgressCache();
+    // This session earns level-01 but cannot persist it.
+    writeProgress(hostileStorage, recordCompletion(emptyProgress(), 'level-01', 3, 7));
+
+    // Meanwhile a working storage already holds level-02, finished elsewhere.
+    const disk = fakeStorage({
+      [PROGRESS_KEY]: '{"version":1,"lastLevel":"level-02","levels":{"level-02":{"completed":true,"bestGears":8}}}',
+    });
+    const merged = readProgress(disk);
+    expect(
+      completedIds(merged),
+      'the in-memory save hid a completion that was already on disk',
+    ).toEqual(new Set(['level-01', 'level-02']));
+    expect(merged.levels['level-01']!.bestGears).toBe(3);
+    expect(merged.levels['level-02']!.bestGears).toBe(8);
+  });
+
+  it('keeps the better gear count when both sides have the same level', () => {
+    resetProgressCache();
+    writeProgress(hostileStorage, recordCompletion(emptyProgress(), 'level-01', 2, 7));
+    const disk = fakeStorage({
+      [PROGRESS_KEY]: '{"version":1,"lastLevel":null,"levels":{"level-01":{"completed":true,"bestGears":6}}}',
+    });
+    expect(readProgress(disk).levels['level-01']!.bestGears, 'the merge lowered a best score').toBe(6);
+  });
+});

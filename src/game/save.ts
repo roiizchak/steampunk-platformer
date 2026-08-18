@@ -143,9 +143,41 @@ function readEntry(value: unknown): LevelProgress | null {
  * @param storage typically `safeLocalStorage()`; a fake in tests; `null` where storage is refused.
  */
 export function readProgress(storage: SettingsStorage | null): SaveData {
-  // The failure path first — see `unwritten`. A copy, because the caller mutates what it gets.
-  if (unwritten !== null) return cloneSave(unwritten);
+  const onDisk = readFromStorage(storage);
+  // 🔴 MERGED with the unwritable save, not replaced by it — see `mergeSaves`.
+  return unwritten === null ? onDisk : mergeSaves(onDisk, unwritten);
+}
 
+/**
+ * Combine what storage holds with what this session could not persist.
+ *
+ * ⚠️ The draft returned `unwritten` outright, on the reasoning that a storage which refused a write is
+ * known-broken and reconciling with another tab is not worth asking about. Codex's implementation
+ * review pointed out that this contradicts `gameComplete.onLevelCompleted`'s own comment, which
+ * re-reads storage precisely so a level finished in another tab is not rolled back — and a refused
+ * write is not proof that storage will refuse the NEXT read: quota can be freed, and a second tab
+ * writes through its own successful path.
+ *
+ * A union is the honest combination because completion only ever accumulates: `recordCompletion` sets
+ * `completed` to true and never to false, and `bestGears` is a running maximum. So neither side can
+ * hold a value the other should overrule, and taking the better of each loses nothing from either.
+ *
+ * `lastLevel` is the one field that is an INTENT rather than an achievement, so this session's wins.
+ */
+function mergeSaves(onDisk: SaveData, memory: SaveData): SaveData {
+  const merged = cloneSave(onDisk);
+  for (const [id, entry] of Object.entries(memory.levels)) {
+    const seen = merged.levels[id];
+    merged.levels[id] = {
+      completed: entry.completed || (seen?.completed ?? false),
+      bestGears: Math.max(entry.bestGears, seen?.bestGears ?? 0),
+    };
+  }
+  merged.lastLevel = memory.lastLevel ?? onDisk.lastLevel;
+  return merged;
+}
+
+function readFromStorage(storage: SettingsStorage | null): SaveData {
   let stored: unknown;
   try {
     const raw = storage?.getItem(PROGRESS_KEY) ?? null;
@@ -195,12 +227,29 @@ export function readProgress(storage: SettingsStorage | null): SaveData {
  * key on disk that is absent from `save.levels` is exactly a dropped one.
  */
 function carriedOver(storage: SettingsStorage, save: SaveData): Record<string, unknown> {
-  const kept: Record<string, unknown> = {};
+  // `Object.create(null)`, for the reason `emptyProgress` gives: a stored entry named `__proto__` is an
+  // OWN property of the parsed object, and copying it into an object literal runs the inherited setter
+  // instead of storing it — so it silently vanishes from the write, which is the exact loss this
+  // function exists to prevent. Found by Codex's implementation review.
+  const kept: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   try {
     const raw = storage.getItem(PROGRESS_KEY);
     if (raw === null) return kept;
     const stored = JSON.parse(raw) as unknown;
     if (!isPlainObject(stored) || !isPlainObject(stored.levels)) return kept;
+    /**
+     * 🔴 **Only from a save of THIS version**, and this is the line that makes the difference between
+     * preserving data and laundering it.
+     *
+     * `readProgress` refuses a future schema wholesale — it will not guess at a layout that has not
+     * been designed. But `carriedOver` runs against the RAW bytes, and without this check a
+     * `{"version":2, levels:{"level-04":{completed:true}}}` had every entry copied out and
+     * re-stamped as version 1 by the write two lines below, because `save.levels` was empty and so
+     * nothing was "already there". One ordinary boot — `pickLevel` writes the resume point — and a
+     * save this build refuses to read has become a save it believes, unlocking level-05. Verified by
+     * seeding exactly that and reading storage back; found by Codex's implementation review.
+     */
+    if (stored.version !== PROGRESS_VERSION) return kept;
     for (const [id, value] of Object.entries(stored.levels)) {
       if (!(id in save.levels)) kept[id] = value;
     }
@@ -225,6 +274,7 @@ export function writeProgress(storage: SettingsStorage | null, save: SaveData): 
     // Re-serialised field by field rather than stringifying `save` directly, so a caller that hung an
     // extra field on the object does not quietly widen the stored schema.
     const levels: Record<string, unknown> = carriedOver(storage, save);
+    // (`carriedOver` returns a prototype-less object, so the assignments below cannot hit a setter.)
     for (const [id, entry] of Object.entries(save.levels)) {
       levels[id] = { completed: entry.completed, bestGears: entry.bestGears };
     }
