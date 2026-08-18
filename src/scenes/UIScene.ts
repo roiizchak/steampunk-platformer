@@ -47,6 +47,7 @@ import {
   type HudLayout,
 } from '../render/hud';
 import { addGearObject } from './gearLayer';
+import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from './hudFade';
 import { ticksToMs } from '../sim';
 import type { World } from '../sim/types';
 
@@ -88,6 +89,16 @@ const COUNTER_FILL = '#f7e3b8';
 const COUNTER_STROKE = '#1a1410';
 
 export class UIScene extends Phaser.Scene {
+  /**
+   * Phase 8's level-complete fade and panel, or `undefined` while a level is being played.
+   *
+   * **Public on purpose.** Criterion 8.6 asserts the overlay is *drawn*, and the Phase 6 lesson is
+   * that `visible && alpha` both stay truthy while `setScale(0)` leaves the GPU drawing nothing — so
+   * a spec needs the real game objects to ask `willRender(camera)`. It reaches them through
+   * `window.__phaserGame`, the same way `drawnVsSim.ts` and `perfSampler.ts` already read scene
+   * state, rather than through a ninth `window.__game` field (closed by a Phase 1 ruling).
+   */
+  overlay?: LevelCompleteOverlay;
   private layout!: HudLayout;
   private plate!: Phaser.GameObjects.Image;
   private barFill!: Phaser.GameObjects.Graphics;
@@ -126,7 +137,15 @@ export class UIScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.applyLayout, this);
       this.built = false;
+      // Phase 8. `destroy()` kills the tweens first — a tween still running against a destroyed
+      // target throws inside Phaser's update loop, and a throw there stops every scene after it.
+      this.levelComplete(null);
     });
+  }
+
+  /** Show, or clear (`null`), the level-complete overlay. The transition lives in `hudFade.ts`. */
+  levelComplete(info: LevelCompleteInfo | null): void {
+    this.overlay = setOverlay(this, this.overlay, info);
   }
 
   /**

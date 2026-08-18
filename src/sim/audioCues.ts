@@ -73,10 +73,19 @@ export const AUDIO_CUES = {
  *     it would machine-gun. `attackStarted` is the audible moment.
  *   - `respawned` — the death cue already sounded. A second cue `DEATH_TICKS` later marks a moment
  *     the player is not acting in.
+ *   - `levelCompleted` — silent **for now, and by decision rather than by omission** (Phase 8). The
+ *     level-complete overlay is the feedback: it fades the screen, so the moment is not ambiguous and
+ *     an unheard cue is not what would make it unclear. A completion sting is real Phase 9 work — it
+ *     needs a generated cue, which costs fal spend against a ceiling declared before generating, and
+ *     `audio-cue-edges.test.ts` sits at exactly 400 lines so a tenth cue would need that file split
+ *     first. Recorded here so the next phase finds a decision rather than a gap.
  */
-export const SILENT_EDGES = ['leftGround', 'hitActive', 'respawned'] as const satisfies readonly (
-  keyof TickEvents
-)[];
+export const SILENT_EDGES = [
+  'leftGround',
+  'hitActive',
+  'respawned',
+  'levelCompleted',
+] as const satisfies readonly (keyof TickEvents)[];
 
 /**
  * The cues this batch should play, in `AUDIO_CUES` declaration order.

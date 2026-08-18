@@ -40,6 +40,7 @@ import {
   tileRect,
 } from '../../src/render/groundTiles';
 import { parseLevel } from '../../src/game/tilemap';
+import { PHASE07_LEVEL_01 } from './tilemap-data-fixtures';
 import { PASS, gateBrassCap } from '../../tools/gen/gates.mjs';
 import { readPng } from '../../tools/gen/png.mjs';
 
@@ -158,12 +159,20 @@ describe('the surface rule itself', () => {
  * `level-01`, the spike run at row 19, cols 24–27 cost the ground beneath it its brass cap across
  * 384 px — and by STYLE.md §5 RULE ONE that edge is the *only* thing that says "floor".
  *
- * These run against the SHIPPED level bytes, the same technique as `tilemap-data.test.ts` running
- * the real validator over the real file *(vault 3.1)*, plus synthetic fixtures for the two boundary
- * cases the real level does not happen to contain.
+ * ## ⚠️ Phase 8: this block probes a FROZEN level, and that is the point
+ *
+ * The nine coordinate assertions below are not a description of what ships. They are a demand that
+ * *somewhere* there exists a floor with decoration on it, two stacked ground rows, a three-row pillar
+ * and three platforms at three different heights — the four shapes `hasSolidAbove` has to tell apart.
+ * Phase 8 replaced `level-01`; re-pinning these at the new one would have moved the numbers and
+ * silently thrown the shapes away, leaving a green test that discriminates nothing. So they read
+ * `tests/fixtures/levels/level-01-phase07.tmj`, byte for byte, and the CODE under test is live.
+ *
+ * The sweep at the end of this file is the other half, and it deliberately did not move: the
+ * brass-cap rule must hold for every level that actually ships.
  */
 describe('hasSolidAbove — solidity from the object layer, never the tile grid (vault 3.3)', () => {
-  const level = parseLevel('level-01', shippedLevel());
+  const level = PHASE07_LEVEL_01;
   const T = level.tileHeight;
   const capped = (col: number, row: number) =>
     groundTileGid(hasSolidAbove(level.solids, col, row, T)) === SURFACE_GID;
@@ -268,6 +277,55 @@ describe('the surface rule reaches every shipped level (4.22)', () => {
         'these ground cells carry authored art, so applySurfaceTiles skips them and they will ' +
           'NEVER receive a brass cap. Either paint the ground with the greybox fill gid, or ' +
           'change the surface rule — but do not ship a level whose floor has no leading edge.',
+      ).toEqual([]);
+    });
+
+    /**
+     * 🔴 The SAME coincidence, read from the other direction. Phase 8's second density trap.
+     *
+     * `GREYBOX_FILL_GID === SURFACE_GID === 1`, and `applySurfaceTiles` reinterprets gid 1 wherever it
+     * finds it — including in mid-air. The test above catches a walkable top painted with the wrong
+     * gid (no cap where a cap belongs); this catches the inverse, a gid-1 cell with no solid at or
+     * below it, which draws **a brass leading edge floating in the sky**.
+     *
+     * It costs nothing while level-01 paints two gids in total, and it is exactly the mistake a dense,
+     * fully-painted level invites: fill the background with the greybox brush and every one of those
+     * cells becomes a platform edge that is not a platform. STYLE.md RULE ONE says the player
+     * identifies a platform by that edge alone, so this is not cosmetic — it is a level telling the
+     * player to stand somewhere they will fall through.
+     */
+    it(`${path.split('/').pop()}: no greybox-fill cell floats with nothing solid at or below it`, () => {
+      const tileLayer = (JSON.parse(raw) as {
+        layers: { type?: string; data?: number[]; width?: number }[];
+      }).layers.find((l) => l.type === 'tilelayer' && Array.isArray(l.data));
+      const data = tileLayer!.data!;
+      const width = tileLayer!.width!;
+
+      const floating: string[] = [];
+      let fillCells = 0;
+      data.forEach((gid, index) => {
+        if (!isGreyboxFill(gid)) return;
+        fillCells += 1;
+        const col = index % width;
+        const row = Math.floor(index / width);
+        // The cell's own band, half-open — the same convention `hasSolidAbove` uses. A solid whose
+        // top edge merely touches the cell's bottom does not fill it, and does not count.
+        const top = row * TILE_SIZE;
+        const bottom = top + TILE_SIZE;
+        const left = col * TILE_SIZE;
+        const right = left + TILE_SIZE;
+        const supported = level.solids.some(
+          (s) => s.x < right && s.x + s.w > left && s.y < bottom && s.y + s.h > top,
+        );
+        if (!supported) floating.push(`(${col},${row})`);
+      });
+
+      expect(fillCells, 'the level paints no greybox fill at all, so this gate is vacuous').toBeGreaterThan(0);
+      expect(
+        floating.slice(0, 8),
+        'these cells are painted with the greybox fill gid but no collision rectangle covers them, ' +
+          'so applySurfaceTiles will cap them and the level will draw a brass platform edge in ' +
+          'mid-air. Paint background with a different gid, or add the solid.',
       ).toEqual([]);
     });
   }

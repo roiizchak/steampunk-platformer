@@ -21,7 +21,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { describeLevelProblem, isHazardObject, isSolidObject, parseLevel } from '../../src/game/tilemap';
+import { MAX_LEVEL_ENEMIES } from '../../src/game/constants';
+import { describeLevelProblem, isHazardObject, isSolidObject, parseLevel, type LevelData } from '../../src/game/tilemap';
 import { ENEMY_SLUGS } from '../../src/sim/enemies';
 
 const SHIPPED = import.meta.glob('../../public/assets/levels/*.tmj', {
@@ -45,6 +46,12 @@ const MAP_01 = JSON.parse(RAW_01) as {
   layers: { type: string; data?: number[]; objects?: unknown[] }[];
 };
 const LEVEL_01 = parseLevel('level-01', JSON.parse(RAW_01) as unknown);
+
+/** Every shipped level, parsed. Phase 8: the enemy-roster assertions sweep all of them. */
+const SHIPPED_LEVELS: [string, LevelData][] = Object.keys(SHIPPED).map((path) => {
+  const id = path.slice(path.lastIndexOf('/') + 1).replace(/\.tmj$/, '');
+  return [id, parseLevel(id, JSON.parse(SHIPPED[path]!) as unknown)];
+});
 
 describe('hazards are read from a property, never from a name (vault 3.3)', () => {
   it('isHazardObject answers only to `hazard: true`', () => {
@@ -80,42 +87,85 @@ describe('hazards are read from a property, never from a name (vault 3.3)', () =
   });
 });
 
-describe('the shipped spikes actually hurt (criterion 5.15, debt: Phase 4 world edges)', () => {
-  it('level-01 carries at least one hazard', () => {
-    expect(LEVEL_01.hazards.length).toBeGreaterThan(0);
-  });
-
-  /**
-   * Art-versus-hazard agreement, measured rather than typed. See this file's header.
-   */
-  it('no tile gid is drawn both inside and outside a hazard rectangle', () => {
-    const tiles = MAP_01.layers.find((layer) => layer.type === 'tilelayer')!.data!;
-    const inside = new Set<number>();
-    const outside = new Set<number>();
-
-    tiles.forEach((gid, index) => {
-      if (gid === 0) {
-        return; // Tiled's empty cell — it is drawn nowhere and belongs to neither set.
-      }
-      const x = (index % MAP_01.width) * MAP_01.tilewidth;
-      const y = Math.floor(index / MAP_01.width) * MAP_01.tileheight;
-      const covered = LEVEL_01.hazards.some(
-        (h) => x < h.x + h.w && x + MAP_01.tilewidth > h.x && y < h.y + h.h && y + MAP_01.tileheight > h.y,
-      );
-      (covered ? inside : outside).add(gid);
-    });
-
-    // Non-vacuity first: an empty `inside` would make the disjointness below trivially true, which
-    // is exactly what a hazard rect authored over empty sky would produce.
-    expect(inside.size).toBeGreaterThan(0);
-    expect([...inside].filter((gid) => outside.has(gid))).toEqual([]);
-  });
+/**
+ * 🔴 Widened in Phase 8 from `level-01` to **every shipped level**, and that is not tidiness.
+ *
+ * `level-hazards.test.ts` proves a spike run hurts by *walking into it*, which can only ever be an
+ * EXISTENTIAL claim — it counts how many hazards a plain walk reached and asserts the count is above
+ * zero. Every level this phase authored puts spikes on an elevated summit that no plain walk reaches,
+ * so those runs were never individually verified and a `hazard` property stripped from one of them
+ * left the suite green. Found by the Phase 8 code-reviewer gate owner.
+ *
+ * This is the UNIVERSAL half, and the two together are what close it: every spike cell drawn anywhere
+ * in any level must be covered by a hazard rect, or its gid appears both inside and outside and this
+ * goes red — reachable on foot or not.
+ */
+const SHIPPED_MAPS = Object.entries(SHIPPED).map(([path, raw]) => {
+  const id = path.split('/').pop()!.replace(/\.tmj$/, '');
+  return [id, JSON.parse(raw) as typeof MAP_01, parseLevel(id, JSON.parse(raw))] as const;
 });
 
-describe('both enemies are authored into the level file', () => {
-  it('spawns one of every known slug, and nothing else', () => {
-    const slugs = LEVEL_01.enemies.map((enemy) => enemy.slug);
-    expect([...slugs].sort()).toEqual([...ENEMY_SLUGS].sort());
+describe.each(SHIPPED_MAPS)(
+  '%s — the shipped spikes actually hurt (criterion 5.15, debt: Phase 4 world edges)',
+  (id, map, level) => {
+    it('carries at least one hazard', () => {
+      expect(level.hazards.length, `${id} ships no hazards`).toBeGreaterThan(0);
+    });
+
+    /**
+     * Art-versus-hazard agreement, measured rather than typed. See this file's header.
+     */
+    it('no tile gid is drawn both inside and outside a hazard rectangle', () => {
+      const tiles = map.layers.find((layer) => layer.type === 'tilelayer')!.data!;
+      const inside = new Set<number>();
+      const outside = new Set<number>();
+
+      tiles.forEach((gid, index) => {
+        if (gid === 0) {
+          return; // Tiled's empty cell — it is drawn nowhere and belongs to neither set.
+        }
+        const x = (index % map.width) * map.tilewidth;
+        const y = Math.floor(index / map.width) * map.tileheight;
+        const covered = level.hazards.some(
+          (h) => x < h.x + h.w && x + map.tilewidth > h.x && y < h.y + h.h && y + map.tileheight > h.y,
+        );
+        (covered ? inside : outside).add(gid);
+      });
+
+      // Non-vacuity first: an empty `inside` would make the disjointness below trivially true, which
+      // is exactly what a hazard rect authored over empty sky would produce.
+      expect(inside.size, `${id}: no tile is drawn inside any hazard rect`).toBeGreaterThan(0);
+      expect([...inside].filter((gid) => outside.has(gid)), `${id}: a gid is drawn on both sides`).toEqual([]);
+    });
+  },
+);
+
+describe('the enemies are authored into the level files', () => {
+  /**
+   * 🔴 Rewritten in Phase 8. It read `expect(slugs.sort()).toEqual(ENEMY_SLUGS.sort())` against
+   * `level-01` alone — exactly one of each type, per level. That is a constraint no five-level
+   * difficulty ramp can satisfy: the ramp's enemy count is one of the metrics that must rise.
+   *
+   * What it was actually protecting is worth keeping, and it is not "one of each": **an enemy type
+   * that exists in code but is authored into no level has never been played.** That is a per-project
+   * property, so it is asserted as the UNION across every shipped level. The dropped half — that no
+   * level names an unknown slug — is not lost either; `describeEnemyProblem` refuses one in
+   * production, which is a stronger place for it than a test.
+   */
+  it.each(SHIPPED_LEVELS)('%s names only known slugs, at least one, and no more than the cap', (id, level) => {
+    expect(level.enemies.length, `${id} ships no enemies`).toBeGreaterThan(0);
+    expect(level.enemies.length, `${id} exceeds MAX_LEVEL_ENEMIES`).toBeLessThanOrEqual(MAX_LEVEL_ENEMIES);
+    for (const enemy of level.enemies) {
+      expect(ENEMY_SLUGS, `${id} names an unknown slug`).toContain(enemy.slug);
+    }
+  });
+
+  it('every enemy type in the code is authored into at least one shipped level', () => {
+    // 🔴 The non-vacuity is `ENEMY_SLUGS.length > 1`: with a single slug the union below is satisfied
+    // by any level at all, and the gate would pass while a second type shipped in nothing.
+    expect(ENEMY_SLUGS.length, 'one slug makes the union assertion vacuous').toBeGreaterThan(1);
+    const union = new Set(SHIPPED_LEVELS.flatMap(([, level]) => level.enemies.map((e) => e.slug)));
+    expect([...union].sort()).toEqual([...ENEMY_SLUGS].sort());
   });
 
   it('a rectangle declares the beat: x is its centre, y its feet, patrol its horizontal span', () => {

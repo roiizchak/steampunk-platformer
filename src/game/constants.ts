@@ -121,8 +121,8 @@ export const PHASER_RESERVED_TEXTURE_KEYS = ['__DEFAULT', '__MISSING', '__WHITE'
  * 22 is the only number the evidence supports. 5.11 samples the shipped level's **2** enemies
  * against those 2 plus the 20-body dev fleet — 22 concurrent bodies, every one inside
  * `camera.worldView`. A level authored at this cap with nothing spawned at runtime is *exactly* the
- * configuration that spec measures. `level-01.tmj` authors 2, so the cap has 11x headroom and
- * blocks nothing that exists.
+ * configuration that spec measures. The five shipped levels author 2, 3, 4, 5 and 6, so the cap has
+ * nearly 4x headroom over the densest of them and blocks nothing that exists.
  *
  * 🔴 **Raising it means RE-MEASURING 5.11.** The number is not a preference; it is the point where a
  * measurement was taken. Editing it without re-running the frame budget turns a measured bound back
@@ -146,7 +146,8 @@ export const MAX_LEVEL_ENEMIES = 22;
  * with a rectangle test and nothing that thinks. It exists so a malformed or duplicated object layer
  * fails loudly at boot instead of shipping a level with a thousand pickups in it.
  *
- * 64 is roomy for the level sizes this project builds — `level-01` is 90 × 22 tiles — and small
+ * 64 is roomy for the level sizes this project builds — the five shipped levels run from 96 × 23 to
+ * 160 × 28 tiles and carry 7 to 11 gears — and small
  * enough that hitting it means something went wrong rather than a designer being ambitious. If a
  * level legitimately needs more, raise it; there is no measurement to invalidate. Say so in the QA
  * log so the next reader knows it was a decision and not an oversight.

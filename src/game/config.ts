@@ -3,6 +3,7 @@ import { BootScene } from '../scenes/BootScene';
 import { GameScene } from '../scenes/GameScene';
 import { ElementEditorScene } from '../scenes/ElementEditorScene';
 import { GymScene } from '../scenes/GymScene';
+import { LevelSelectScene } from '../scenes/LevelSelectScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
 import { UIScene } from '../scenes/UIScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
@@ -48,7 +49,15 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // and a tuning console reachable in the shipped game is not a cosmetic difference.
   // `UIScene` is in BOTH arms: the HUD ships. It is registered but idle — `GameScene.create()`
   // launches it in parallel, which is the first `scene.launch` in this project.
+  //
+  // `LevelSelectScene` is in both arms for the same reason — the level menu ships (Phase 8). Boot
+  // still routes to `Game`, not here: every Phase 1–7 spec asserts `sceneKey === 'Game'` after
+  // `ready`, and a menu in front of the game would fail forty specs for a reason unrelated to what
+  // they test. It is reached by ESC during play, and by finishing the last level.
+  //
+  // ⚠️ Registration order is also DRAW order for parallel scenes, which is why `UIScene` must stay
+  // after `GameScene`: the HUD draws over the world, and `hudFade`'s overlay depends on it.
   scene: import.meta.env.DEV
-    ? [BootScene, GameScene, UIScene, PlaygroundScene, ElementEditorScene, GymScene]
-    : [BootScene, GameScene, UIScene],
+    ? [BootScene, GameScene, UIScene, LevelSelectScene, PlaygroundScene, ElementEditorScene, GymScene]
+    : [BootScene, GameScene, UIScene, LevelSelectScene],
 };

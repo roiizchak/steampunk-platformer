@@ -264,8 +264,13 @@ camera is right; the world simply ends and the player keeps going.
 This is **not** a Phase 3 criterion, and it is recorded rather than fixed — see below.
 
 **The user's hands-on pass discharges 3.7.** They ran the editor by hand and saved; the browser
-download landed at the repo root as `level-01.tmj`, which is kept as the artefact. Verified against
-the authored `public/assets/levels/level-01.tmj`:
+download landed at the repo root as `level-01.tmj`, which is kept as the artefact — **moved in Phase 8
+to [`../evidence/phase-03-editor-download.tmj`](../evidence/phase-03-editor-download.tmj)**, beside the
+two screenshots from the same pass. It sat at the repo root for five phases and was mistaken for the
+shipped level in Phase 8's planning session, because it is the **pre-rescale** file: 180 × 48 at
+32 px against `placeholder-tile.png`, from before Phase 4's 3× rescale. Same bytes, same evidence, no
+longer in the way. Verified against the authored `public/assets/levels/level-01.tmj` **as it stood in
+Phase 3** — Phase 8 replaces that level, so the comparison below is historical:
 
 - **object count unchanged** (7 → 7), **tile layers byte-identical**, **every non-layer top-level
   field identical** — the editor rewrites object geometry and nothing else, which is the round-trip

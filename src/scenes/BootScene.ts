@@ -10,6 +10,7 @@ import {
   assertFilteringPinned,
 } from './bootAssets';
 import { verifyLevels } from './bootLevels';
+import { LEVEL_SELECT_KEY } from './gameLevelPick';
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -52,6 +53,9 @@ export class BootScene extends Phaser.Scene {
      */
     this.scene.stop('Game');
     this.scene.stop('UI');
+    // Phase 8: the level menu SHIPS, so it is stopped on the same unconditional side as Game and UI.
+    // A restart with the menu open would otherwise leave it drawn over the reload.
+    this.scene.stop(LEVEL_SELECT_KEY);
     // Phase 7, and it belongs HERE for the same reason those two stops do. `this.sound` is one
     // manager for the whole game and is not cleaned up on scene shutdown, so a looping bed survives
     // a restart and a second one starts on top of it — criterion 7.5. A `GameScene` SHUTDOWN handler
@@ -156,7 +160,21 @@ export class BootScene extends Phaser.Scene {
     // The consequence is deliberate: if GameScene fails to construct, `ready` stays false with
     // `bootError` null — the third state, a hang, which is distinguishable from both a clean boot
     // and a refusal. Setting `ready` here would have reported a broken game as a good one.
-    this.scene.start('Game');
+    /**
+     * ⚠️ `{ levelId: null }`, never a bare `start('Game')`.
+     *
+     * Phaser's `Systems.start(data)` only overwrites `settings.data` when `data` is TRUTHY, and
+     * `SceneManager.bootScene` feeds `settings.data` straight into `init`. So a payload-less start
+     * re-delivers whatever payload the scene was last started with — and since Phase 8 that is a
+     * concrete `{ levelId }` from the level menu or from the completion panel. `GameScene.init` cannot
+     * tell "no payload" from "the payload from three starts ago", so the stale id would win over the
+     * save and defeat the tier ordering `resolveEntryLevel` exists to enforce. Verified against the
+     * installed Phaser 4.2.1 source by the Phase 8 code-reviewer's adversarial brief.
+     *
+     * `null` is not "no payload" — it is the explicit request to resolve from the save, which is what
+     * `init`'s `data?.levelId ?? null` already means.
+     */
+    this.scene.start('Game', { levelId: null });
   }
 
   /**
@@ -189,6 +207,10 @@ export class BootScene extends Phaser.Scene {
     // Phase 6: the HUD runs in parallel with Game, so stopping only Game leaves a health bar and a
     // gear counter drawn over the error screen — a refusal you can see straight through.
     this.scene.stop('UI');
+    // Phase 8, and it is NOT in the DEV block below: the level menu ships. A refusal reached from the
+    // menu — press ESC, then restart Boot — would otherwise draw five level rows over "BOOT REFUSED",
+    // which is the same cosmetic refusal the HUD stop above exists to prevent.
+    this.scene.stop(LEVEL_SELECT_KEY);
     // The dev scenes, guarded so their keys do not survive into `dist/`. In production neither is
     // registered, so stopping them is already a no-op — the guard costs nothing and keeps the
     // production bundle free of any mention of a scene that cannot exist there. Phase 3 added

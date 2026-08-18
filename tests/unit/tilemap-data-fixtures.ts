@@ -21,6 +21,43 @@ export const BAD_LEVELS = import.meta.glob('../fixtures/bad-levels/*.fixture', {
   eager: true,
 }) as Record<string, string>;
 
+/**
+ * Retired levels, kept byte for byte because a test PROBES them rather than describing them.
+ *
+ * ## 🔴 Why a frozen copy and not the shipped file
+ *
+ * Phase 8 replaced `level-01` outright. Roughly 28 assertions across the suite named its exact
+ * coordinates, and they split cleanly into two kinds:
+ *
+ * - **About the level** — extent, camera travel, the published-number table. Those get **re-pinned**
+ *   to the new level, because their subject moved.
+ * - **A probe of the renderer or the collider** — `hasSolidAbove` needing "decoration on a floor",
+ *   "two stacked rows", "a three-row pillar" and "three platforms at three heights"; the traversal
+ *   file's pillar-at-3264 and the pit between `floors[0]` and `floors[1]`. Those assertions exist for
+ *   the *edge case the geometry happens to construct*, and re-pinning them to a new level silently
+ *   deletes the case while leaving a green test behind.
+ *
+ * Frozen `.tmj` **data**, not a `.ts` module, so `file-size.test.ts` (which globs `tests/**\/*.ts`)
+ * does not count 700 lines of Tiled JSON against the 400-line ceiling.
+ *
+ * ⚠️ This is a RETIRED level. Nothing here describes what the game ships — it describes the shapes a
+ * particular test needs to exist somewhere. Live gates (spikes must hurt; an enemy must not reach a
+ * stall point) were deliberately NOT frozen; they sweep every shipped level in
+ * `level-hazards.test.ts` instead, because freezing them would have retired the gate along with the
+ * level *(vault 9.4)*.
+ */
+export const FROZEN_LEVELS = import.meta.glob('../fixtures/levels/*.tmj', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+/** `level-01` as Phase 7 shipped it: 90 x 22 @ 96 px, the pillar at 3264, the pit at 3840–4128. */
+export const PHASE07_LEVEL_01 = parseLevel(
+  'level-01-phase07',
+  JSON.parse(FROZEN_LEVELS['../fixtures/levels/level-01-phase07.tmj']!) as unknown,
+);
+
 export const CATALOG = import.meta.glob('../../public/assets/index.json', {
   query: '?raw',
   import: 'default',
@@ -61,31 +98,57 @@ export const LEVEL_01 = parseLevel(
  * argument, in tilemap-data.test.ts's own words): a single-file sweep cannot tell "derived" from
  * "constant", so the hardcode test needs a map `parseLevel` was never tuned against.
  */
+/**
+ * ⚠️ **Grown in Phase 8 from 7 x 5 @ 16 px to 13 x 9 @ 48 px** — 112 x 80 px to 624 x 432 px.
+ *
+ * It had to grow, and the reason is worth keeping: the old map was **112 px wide and the player is
+ * 132 px wide**. Phase 8's goal rule refuses an exit that overlaps the body of a player standing at the
+ * spawn, and in a map narrower than the player *every* position overlaps it — so no valid goal could be
+ * placed and the fixture could not carry the field `LevelData` now requires.
+ *
+ * The dimensions are still deliberately unlike the shipped level's (13 x 9 @ 48 against 90 x 22 @ 96),
+ * which is all this fixture's job requires. What it must NOT be is a copy of the shipped numbers, and
+ * it is not.
+ */
 export const TINY_MAP = {
-  width: 7,
-  height: 5,
-  tilewidth: 16,
-  tileheight: 16,
+  width: 13,
+  height: 9,
+  tilewidth: 48,
+  tileheight: 48,
   layers: [
-    { type: 'tilelayer', name: 'g', data: [...new Array(34).fill(0), 1] },
+    // 13 x 9 = 117 cells. One painted cell is enough — `describeLevelProblem` only refuses an
+    // ALL-zero tile layer, and the extent is measured from the header, never from the data.
+    { type: 'tilelayer', name: 'g', data: [...new Array(116).fill(0), 1] },
     {
       type: 'objectgroup',
       name: 'c',
       objects: [
+        // The floor: full width, top at row 8 (y 384), one row deep.
         {
           x: 0,
-          y: 64,
-          width: 112,
-          height: 16,
+          y: 384,
+          width: 624,
+          height: 48,
           properties: [{ name: 'solid', type: 'bool', value: true }],
         },
+        // Feet at (96, 384) — standing on the floor, two tiles in.
         {
-          x: 56,
-          y: 64,
+          x: 96,
+          y: 384,
           width: 0,
           height: 0,
           point: true,
           properties: [{ name: 'spawn', type: 'bool', value: true }],
+        },
+        // The exit: a 96 x 144 doorway standing on the floor at x 480, well clear of the standing
+        // player's box (which spans x 30..162), and not swallowed by the floor because its top is
+        // above the floor's surface.
+        {
+          x: 480,
+          y: 240,
+          width: 96,
+          height: 144,
+          properties: [{ name: 'goal', type: 'bool', value: true }],
         },
       ],
     },

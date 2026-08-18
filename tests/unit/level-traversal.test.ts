@@ -1,5 +1,25 @@
 /**
- * Can the player actually GET THROUGH `level-01`? Asked of the simulation, not of arithmetic.
+ * Can the player actually GET THROUGH a level? Asked of the simulation, not of arithmetic.
+ *
+ * ## ⚠️ This file probes a RETIRED level, on purpose
+ *
+ * Phase 8 replaced `level-01`, and the assertions below name its exact coordinates: the 96 × 288
+ * pillar at **x 3264**, the stall at **x 3198**, the pit between `floors[0]` and `floors[1]`, the
+ * scavenger on the section starting at **x 4128**. Every one of them exists for a *shape* — a wall
+ * exactly one body-width past a stall point, a pit that stops ground-following, a hazard reachable
+ * with a run-up and not with a standing hop. Re-pinning them at the new level-01 would have moved the
+ * numbers and quietly thrown the shapes away, leaving four green tests measuring nothing in
+ * particular.
+ *
+ * So this reads `tests/fixtures/levels/level-01-phase07.tmj`, frozen byte for byte, and the SIM it
+ * runs is the live one. What it gates is the collider, the acceleration curve, the apex and
+ * ground-following — against geometry chosen to make each of those visible.
+ *
+ * 🔴 **Two assertions were NOT frozen with it**, because they were live gates rather than probes:
+ * "walking into the spikes hurts" (whose own comment says a clearable-only test is satisfied by
+ * deleting the hazard, *vault 9.4*) and "permanent aggro is bounded by the level" (the documented
+ * `x:3198` soft-lock). Both now sweep **every shipped level** in `level-hazards.test.ts`. Freezing
+ * them would have retired the gate along with the level.
  *
  * ## Why this file exists
  *
@@ -28,20 +48,17 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { parseLevel } from '../../src/game/tilemap';
 import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { RENDER_SCALE } from '../../src/game/constants';
 import type { InputSnapshot, World } from '../../src/sim/types';
-import { SHIPPED } from './tilemap-data-fixtures';
+import { PHASE07_LEVEL_01 } from './tilemap-data-fixtures';
 
-const LEVEL = parseLevel(
-  'level-01',
-  JSON.parse(SHIPPED['../../public/assets/levels/level-01.tmj']!) as unknown,
-);
+/** Phase 7's level-01, frozen. See this file's header for why it is not the shipped one. */
+const LEVEL = PHASE07_LEVEL_01;
 
-/** The shipped level, simulated at the shipped scale. No enemies: this is about terrain. */
+/** The frozen level, simulated at the shipped scale. No enemies: this is about terrain. */
 function levelWorld(startX: number): World {
   return createWorld({
     seed: 1,

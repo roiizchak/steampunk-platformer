@@ -146,6 +146,30 @@ describe('advance() carries every edge a tick can emit', () => {
       world: fresh(),
       input: { ...createSnapshot(), right: true, walkHeld: true },
     }),
+    /**
+     * A player who runs into the level's exit — Phase 8's `levelCompleted`.
+     *
+     * Its own scenario because no other one can reach it: `walk` has no goal, and every scenario with a
+     * goal would complete early and freeze, since `tick()` returns `noEvents()` once
+     * `world.completed` is true. That freeze is exactly why this scenario is needed — a batch that
+     * finishes the level stops emitting anything else, so folding a goal into `walk` would have
+     * silently deleted its footsteps.
+     *
+     * The exit stands on the floor 400 px to the right, clear of the standing spawn box (x 934…1066),
+     * and running reaches it in about 40 of the 90 ticks.
+     */
+    complete: () => ({
+      world: createWorld({
+        seed: 1,
+        scale: 6,
+        solids: FLOOR,
+        bounds: { widthPx: 8000, heightPx: 1080 },
+        spawn: SPAWN,
+        goal: { x: SPAWN.x + 400, y: SPAWN.y - 288, w: 200, h: 288 },
+      }),
+      // Running, not walking: `walkHeld` would need more than 90 ticks to cover the distance.
+      input: { ...createSnapshot(), right: true },
+    }),
   };
 
   const TICKS = 90;
@@ -219,6 +243,10 @@ describe('advance() carries every edge a tick can emit', () => {
       'playerDied',
       'enemyKilled',
       'footstep',
+      // Phase 8. Added the same day the edge was, because the OR-contract test above discovers it
+      // automatically and would have compared `false === false` in every scenario — the exact hole
+      // Codex's F7 described. Reached by the `complete` scenario and nothing else.
+      'levelCompleted',
     ] as const) {
       expect(
         [...fired].sort(),

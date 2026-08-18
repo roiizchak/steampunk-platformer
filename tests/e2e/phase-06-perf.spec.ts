@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * # Criterion 6.9's frame-budget half — what the HUD costs per frame
@@ -62,12 +62,29 @@ import { counts, sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 import { hudDrawState, setHud } from './hudHelpers';
+import { shippedLevel } from './tilemapHelpers';
 
 /** Three pairs. Interleaved, so drift in the machine hits both arms alike. */
 const PAIRS = 3;
 
-/** The hazard's right edge in world px, from `level-01.tmj` object id 8 (x 2304, w 192). */
-const HAZARD_RIGHT_PX = 2304 + 192;
+/**
+ * The right edge of the FIRST hazard right of spawn, measured from the level the browser just loaded.
+ *
+ * 🔴 It was `2304 + 192`, hand-typed out of `level-01.tmj` object id 8 — scaffolding that pinned a
+ * perf spec to one level's authoring order. Phase 8 replaces the level, so the number was about to
+ * name a hazard that no longer exists, and the `waitForFunction` below would have timed out at 20 s
+ * with a message about the HUD rather than about a stale coordinate.
+ *
+ * Derived instead, from `shippedLevel(page)` — the same file the browser fetched, parsed with the real
+ * parser. Nothing about this spec's subject (the HUD's frame cost) depends on WHICH hazard it is; only
+ * that the player ends up past one, so the health bar is drawn and steady rather than mid-respawn.
+ */
+async function hazardRightPx(page: Page): Promise<number> {
+  const level = await shippedLevel(page);
+  const ahead = level.hazards.filter((h) => h.x > level.spawn.x).sort((a, b) => a.x - b.x);
+  expect(ahead.length, 'no hazard right of spawn — this spec needs one to damage the player').toBeGreaterThan(0);
+  return ahead[0]!.x + ahead[0]!.w;
+}
 
 const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -113,7 +130,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
       // eventually respawn the player at full health, which silently ends the drawn-bar state.
       await page.waitForFunction(
         (edge) => (window as unknown as { __game: { player: { x: number } | null } }).__game.player!.x > edge,
-        HAZARD_RIGHT_PX,
+        await hazardRightPx(page),
         { timeout: 20_000 },
       );
     } finally {

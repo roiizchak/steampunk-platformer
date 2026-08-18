@@ -8,6 +8,7 @@
  * Renumbering later is not a refactor; it is a balance change to a phase that has already spent
  * money on art.
  *
+ *   0.  A completed level is TERMINAL: return `noEvents()` and run no step at all  (Phase 8)
  *   1.  Sample the seeded RNG exactly once -> `world.tickRoll`     (2.3 — the only advance)
  *   2.  Consume input edges from the mutable working copy          (2.4 — cleared on consumption)
  *   3.  Arm the jump-buffer window if a press edge arrived
@@ -21,6 +22,7 @@
  *   9.  Collide and resolve -> grounded, then clamp to the world's three solid edges
  *   9b. World-geometry damage: kill plane, hazards, projectiles, enemy contact  (Phase 5)
  *   9c. Pickups: gears the player's body crossed this tick                      (Phase 6)
+ *   9d. The exit: the player's body entered `world.goal` -> the level is complete  (Phase 8)
  *   10. Window arming: left the ground this tick -> open coyote
  *   11. State transition, through the one door                     (2.6)
  *   12. Emit this tick's event edges                               (2.5)
@@ -50,6 +52,22 @@
  * **9c was INSERTED, not renumbered in** (Phase 6). It is a letter for the same reason 9b is: it
  * needs both endpoints of this tick's motion, and the list itself must not shift. It sits after 9b
  * so a tick that both hurts and rewards does both. See `pickups.ts`.
+ *
+ * **9d is the third letter** (Phase 8), after 9c so a tick that takes the last gear and steps through
+ * the exit does both, in that order. A completed level is then **terminal** — `tick()` returns early
+ * while `world.completed` is true, tested before step 1 so the seeded stream does not advance either.
+ * `goal.ts` carries all of it: why the letter, why after 9c, why the freeze, and why the `World.spawn`
+ * argument for the respawn is NOT the argument for this.
+ *
+ * **Step 0 is a NUMBER, and it is the one stated exception to the letter rule.** Codex's Phase 8
+ * implementation review (finding #2) read the rule literally and was right to: the freeze is a branch
+ * this file's own contract did not name, and an unnamed branch before step 1 is exactly what "the
+ * numbering is the contract" exists to forbid. A letter was wrong for it. `9b`, `9c` and `9d` are
+ * letters because each one INSERTS work between two existing steps and must not shift them; step 0
+ * inserts nothing between anything — it runs BEFORE the list and, when it fires, replaces the whole
+ * list. Nothing can be renumbered by a step that precedes number 1, so the reason letters exist does
+ * not apply, and naming it `0` says what it does: no step ran. It is listed above with the others so
+ * that reading the contract shows every branch a tick can take.
  *
  * **State moved from step 4 to step 11 after Codex implementation review I4.** Resolved before
  * integration, the state published each tick described the position of the PREVIOUS one: a jump's
@@ -101,34 +119,23 @@ import {
 } from './player';
 import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
 import { releaseAggro } from './enemies';
+import { noEvents } from './events';
 import { stepEnemies } from './enemyTurn';
+import { reachedGoal } from './goal';
 import { clampToBounds } from './hazards';
 import { collectGears } from './pickups';
 import { applyPlayerAttack } from './playerAttack';
 import { applyWorldDamage } from './worldDamage';
 import { nextFloat } from './rng';
-import type { AdvanceEvents, InputSnapshot, TickEvents, World } from './types';
+import type { InputSnapshot, TickEvents, World } from './types';
 import { advanceWindow, windowOpen } from './windows';
 
 export { GREY_BOX_SOLIDS, createWorld } from './world';
 export type { CreateWorldOptions } from './world';
 
-export function noEvents(): TickEvents {
-  return {
-    jumped: false,
-    landed: false,
-    leftGround: false,
-    attackStarted: false,
-    hitActive: false,
-    hitLanded: false,
-    respawned: false,
-    gearCollected: false,
-    playerHurt: false,
-    playerDied: false,
-    enemyKilled: false,
-    footstep: false,
-  };
-}
+// `noEvents` moved to `events.ts` in Phase 8, beside the interface it constructs. Re-exported so every
+// existing `import { noEvents } from './tick'` still resolves — the same shape `createWorld` uses.
+export { noEvents };
 
 /**
  * Run exactly one simulation tick. Steps are numbered to match the contract above.
@@ -137,6 +144,13 @@ export function noEvents(): TickEvents {
  * function's behaviour cannot vary with frame rate, which is the entire reason vault 2.1 exists.
  */
 export function tick(world: World, input: InputSnapshot): TickEvents {
+  // 0. 🔴 A COMPLETED LEVEL IS TERMINAL, and this sits BEFORE step 1 so the seeded stream does not
+  //    advance either. Not an optimisation — without it the player can die behind the level-complete
+  //    overlay and the gear total 9d exists to get right keeps moving. Full reasoning in `goal.ts`.
+  if (world.completed) {
+    return noEvents();
+  }
+
   const events = noEvents();
   const { player, tuning } = world;
 
@@ -295,6 +309,15 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   world.gearsCollected += gearsTaken;
   events.gearCollected = gearsTaken > 0;
 
+  // 9d. The exit — Phase 8. A letter for the same reason 9b and 9c are, and AFTER 9c so a tick that
+  //     takes the last gear and steps through the door does both, in that order. `goal.ts` carries the
+  //     reasoning, including why completion belongs in the sim at all and why the `World.spawn`
+  //     argument for the respawn is NOT the argument for this.
+  if (reachedGoal(world)) {
+    world.completed = true;
+    events.levelCompleted = true;
+  }
+
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at
   //     step 8 and must not reopen it here, or every jump would buy a second one in mid-air.
   let coyoteArmedThisTick = false;
@@ -363,35 +386,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 }
 
 /**
- * Run `ticks` simulation ticks against ONE snapshot, returning the OR-accumulated edges (vault 2.5).
+ * `advance` lives in `advanceSplit.ts` and is re-exported here.
  *
- * The accumulation is why this returns anything at all. A render frame can drain many ticks, so a
- * whole action can start and finish between two frames; a renderer that compared state across
- * frames would never see it. `ticks === 0` is a legal, meaningful call — a frame whose accumulator
- * did not reach a whole tick — and it must not consume the input snapshot.
+ * It is not part of the numbered order above — it is a LOOP over it — and this file was at exactly
+ * 400 of its 400 lines, which is no headroom for the next person to add a step. The same split
+ * `world.ts` took, for the same reason and with the same re-export so no caller changes.
  */
-export function advance(world: World, input: InputSnapshot, ticks: number): AdvanceEvents {
-  const total = noEvents();
-  for (let i = 0; i < ticks; i += 1) {
-    const events = tick(world, input);
-    // 🔴 Every field, walked from the record itself — NOT three named assignments.
-    //
-    // It was three, and `TickEvents` had grown to seven. `attackStarted`, `hitActive`, `hitLanded`
-    // and `respawned` were silently dropped on the way out of `advance()`, so `GameScene.update()`
-    // — which is the only production caller — read `events.respawned` as **always false** and the
-    // guard written to drop the interpolation snapshot on a respawn could never fire. Found by the
-    // criterion 5.12 gate owner; the test named for the guard calls `tick()` directly, so it could
-    // not see it.
-    //
-    // Adding a field to `TickEvents` and forgetting a line here is a mistake that compiles, passes
-    // every unit test, and shows up as a rendering artifact. Iterating removes the chance to make
-    // it: a new edge is accumulated the moment `noEvents()` declares it. `tick-events.test.ts`
-    // asserts every declared field survives a batch, so this cannot regress to a named list.
-    for (const key of Object.keys(total) as (keyof TickEvents)[]) {
-      total[key] = total[key] || events[key];
-    }
-  }
-  return total;
-}
+export { advance } from './advanceSplit';
 
 export { PLAYER_BOX };

@@ -35,6 +35,22 @@
     {
       "key": "level-01",
       "url": "assets/levels/level-01.tmj"
+    },
+    {
+      "key": "level-02",
+      "url": "assets/levels/level-02.tmj"
+    },
+    {
+      "key": "level-03",
+      "url": "assets/levels/level-03.tmj"
+    },
+    {
+      "key": "level-04",
+      "url": "assets/levels/level-04.tmj"
+    },
+    {
+      "key": "level-05",
+      "url": "assets/levels/level-05.tmj"
     }
   ],
   "sheets": [

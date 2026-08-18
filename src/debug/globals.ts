@@ -12,6 +12,8 @@
  * Changing it later invalidates those specs.
  */
 
+import type { World } from '../sim/types';
+
 export interface PlayerView {
   x: number;
   y: number;
@@ -73,6 +75,31 @@ export function updateDebugState(patch: Partial<GameDebugView>): void {
 
 export function getDebugState(): GameDebugView {
   return state;
+}
+
+/**
+ * Publish the per-tick half of the surface from a sim `World`.
+ *
+ * Lifted out of `GameScene.update()` in Phase 8, and it belongs here rather than there: this file is
+ * where the eight fields are DEFINED, so it is the honest place for the note about which of them were
+ * declared long before anything wrote them. `GameScene` was also at the 400-line limit, and the rule
+ * is to split rather than to delete the explanation that made the file long.
+ *
+ * `World` is a type-only import, so nothing from `src/sim/` reaches the emitted bundle through it.
+ */
+export function publishWorldState(world: World): void {
+  const { player } = world;
+  updateDebugState({
+    tick: world.tickCount,
+    player: { x: player.x, y: player.y, vx: player.vx, vy: player.vy, state: player.state },
+    // `health` has been on the eight-field surface since Phase 1 and was permanently 0 until Phase 5.
+    // Filling it is not widening the surface — the field already existed and was a lie.
+    health: player.hp,
+    // `score` was the same lie, and outlived `health` by a phase: declared in Phase 1, reset to 0 by
+    // BootScene, and never written by anything. Phase 6 gives it the only meaning this game has for
+    // it. Still eight fields; still no STOP-and-ask.
+    score: world.gearsCollected,
+  });
 }
 
 /**

@@ -107,7 +107,13 @@ export default defineConfig({
       // and the WebAudio unlock is a real user-gesture path, which deserves a real browser rather
       // than a headless approximation of one. Criteria 7.1, 7.2 and 7.5 all measure sound, not
       // pixels, and all three are worth taking on the substrate the player has.
-      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+)\.spec\.ts/,
+      //
+      // 🔴 **Phase 8 joins for both reasons at once.** 8.6 asserts the exit graphic, the fade and the
+      // overlay are DRAWN, and 8.7 names a frame budget. This regex and the `chromium-gpu`
+      // `testMatch` below are the SAME pattern and must stay identical — a file that matches neither
+      // runs nowhere, and a file that matches both runs twice, once on the rasteriser its assertions
+      // are meaningless on.
+      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -132,7 +138,13 @@ export default defineConfig({
       // asserts the health bar's drawn rectangle and 6.8 inspects the chroma-keyed art. Both are
       // claims about rasterised output, and both are meaningless taken from SwiftShader.
       name: 'chromium-gpu',
-      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+)\.spec\.ts/,
+      // 🔴 Phase 8 joins for BOTH of the earlier reasons at once. Criterion 8.6 asserts the exit
+      // graphic, the fade and the overlay are DRAWN — a rasterised-pixel claim, meaningless from
+      // SwiftShader — and 8.7 names a frame budget, where the headless harness is not the frame rate
+      // (HANDOFF §14 measured the same scene 21x slower). A `phase-08-*.spec.ts` did not match this
+      // regex and would have run headless in silence, which is the failure mode the whole project is
+      // built against.
+      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,

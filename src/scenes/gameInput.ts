@@ -46,6 +46,16 @@ export function bindPlayerKeys(
   input$: InputSnapshot,
   isPlayerInputEnabled: () => boolean,
   dev?: DevKeyActions,
+  /**
+   * Phase 8's ESC → level menu. SHIPPED, like the audio keys and for the same reason: a menu the
+   * player cannot reach is a menu they do not have.
+   *
+   * ⚠️ Deliberately **not** gated on `isPlayerInputEnabled`. The subclass problem here is the
+   * opposite of the brackets': `PlaygroundScene` leaves player input ON, so that flag would not stop
+   * it, and `ElementEditorScene` turns it off, so it would. The guard that actually fits — "am I the
+   * production play scene" — lives in `GameScene.openLevelSelect`, with the action.
+   */
+  openLevelSelect?: () => void,
   audio?: () => AudioManager | undefined,
 ): HeldKeys {
   const keyboard = scene.input.keyboard;
@@ -53,7 +63,7 @@ export function bindPlayerKeys(
     return NO_KEYS;
   }
 
-  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M, K, OPEN_BRACKET, CLOSED_BRACKET } =
+  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M, K, ESC, OPEN_BRACKET, CLOSED_BRACKET } =
     Phaser.Input.Keyboard.KeyCodes;
 
   // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
@@ -122,8 +132,16 @@ export function bindPlayerKeys(
     audioKey(CLOSED_BRACKET, (manager) => manager.nudgeVolume(1));
   }
 
+  if (openLevelSelect) {
+    addKey(ESC).on('down', openLevelSelect);
+  }
+
   // Without capture the browser scrolls the page on arrows and space — which also corrupts a
   // Playwright key drive, so this is a test-correctness fix as much as a UX one.
+  //
+  // ESC is **not** captured, on purpose: `preventDefault` on ESC blocks the browser's own exit from
+  // full-screen, and a game that traps the player in full-screen is a worse bug than a menu key that
+  // occasionally loses to the browser.
   keyboard.addCapture('SPACE,LEFT,RIGHT,UP,DOWN,W,A,D');
 
   // DEV ONLY, on the same side of the build gate as the scene itself (vault 1.6). Without this

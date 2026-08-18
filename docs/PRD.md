@@ -31,7 +31,7 @@ what makes the game unit-testable at all, and it comes directly from the vault a
 | 5 | Enemies, hazards, combat + Enemy Gym | [phase-05-combat.md](prd/phase-05-combat.md) | **2** (tick contract) | ✅ **done** 2026-08-15 |
 | 6 | Collectibles, HUD, steampunk UI chrome | [phase-06-hud.md](prd/phase-06-hud.md) | 4, 5 | ✅ **done** 2026-08-16 |
 | 7 | Audio | [phase-07-audio.md](prd/phase-07-audio.md) | 5 | ✅ **done** 2026-08-16 |
-| 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | — |
+| 8 | Level design and progression | [phase-08-levels.md](prd/phase-08-levels.md) | 3, 5, 6 | ✅ **done** 2026-08-18 |
 | 9 | Polish, juice, particles | [phase-09-polish.md](prd/phase-09-polish.md) | 8 | — · 🔴 **BLOCKED until the two open perf gates are fixed** — see below |
 | 10 | Build and ship | [phase-10-ship.md](prd/phase-10-ship.md) | everything | — |
 

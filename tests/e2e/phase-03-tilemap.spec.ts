@@ -98,9 +98,17 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
     expect(run.maxX).toBe(wall.x - HALF_BODY);
 
     // And the wall the player stopped against is actually drawn there (Codex P4).
+    //
+    // ⚠️ The drawn cell must be INSIDE the wall's span, not at its left edge. This read
+    // `expect(tile!.pixelX).toBe(wall.x)`, which was only ever true because Phase 7's wall was exactly
+    // one tile wide: Phase 8 made it two columns of masonry, the sample at the wall's centre landed in
+    // the second column, and the assertion failed at 3360 against 3264 with a message about a missing
+    // tile. The claim being made is "the wall is painted where the collider stopped the player", and
+    // that claim does not care how wide the wall is.
     const tile = await drawnTileAt(page, wall.x + wall.w / 2, wall.y + wall.h / 2);
     expect(tile, 'no tile is drawn where the wall stopped the player').not.toBeNull();
-    expect(tile!.pixelX).toBe(wall.x);
+    expect(tile!.pixelX).toBeGreaterThanOrEqual(wall.x);
+    expect(tile!.pixelX).toBeLessThan(wall.x + wall.w);
   });
 
   test('3.4 the camera follows the player and never shows outside the map', async ({ page }) => {
@@ -311,6 +319,22 @@ test.describe('Phase 3 — the boot gate covers levels too', () => {
                   height: 0,
                   point: true,
                   properties: [{ name: 'spawn', type: 'bool', value: true }],
+                },
+                // 🔴 Phase 8. This fixture must be valid in EVERY respect except camera travel, or it
+                // stops proving what it is named for. Without an exit it refused with "no object
+                // carries the `goal` property" and the `camera travel` assertion went red — the same
+                // trap the bad-level fixtures under `tests/fixtures/` carry a written rule about, and
+                // the reason `describeGoalProblem` runs last inside `describeLevelProblem`. It cannot
+                // run last overall: the camera-travel rule lives in `bootLevels.ts`, downstream of the
+                // whole level validator.
+                //
+                // Standing on the floor at the far right, clear of the standing spawn box (x 30…162).
+                {
+                  x: 1700,
+                  y: 768,
+                  width: 100,
+                  height: 288,
+                  properties: [{ name: 'goal', type: 'bool', value: true }],
                 },
               ],
             },

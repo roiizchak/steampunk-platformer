@@ -49,6 +49,7 @@ npm run assets:prompts            # write-prompts.mjs  — prompts from STYLE.md
 npm run assets:build              # build-assets.mjs   — generations → sheets → public/assets/index.json
 npm run assets:clips              # build-clips.mjs    — animation clips
 npm run assets:world              # build-world.mjs    — tiles and parallax layers
+npm run assets:audio              # build-audio.mjs    — Phase 7 cues and music beds
 ```
 
 `npm run test:sim-isolated` mutates `node_modules` — if it is interrupted, Phaser is left
@@ -81,7 +82,9 @@ nothing from Phaser, does no I/O. That is what lets the unit suite run the **rea
 property, not the tile grid** — solidity from data, never from a name *(vault 3.3)*.
 
 **`src/scenes/` — the only place Phaser lives.** `BootScene` (load + refuse-to-route gate;
-`bootLevels.ts` holds the level half) and `GameScene` (production play) ship. **Dev-only scenes —
+`bootLevels.ts` holds the level half), `GameScene` (production play) and `UIScene` (the Phase 6 HUD,
+a parallel scene registered in **both** build arms and launched by `GameScene.create()`) ship.
+**Dev-only scenes —
 `PlaygroundScene`, `ElementEditorScene`, `GymScene` — must be guarded with `import.meta.env.DEV` at
 the point of creation *and* inside everything that names them**: the scene roster, the key binding,
 the toggle body, and `refuseToRoute`'s stop list. A "DEV ONLY" label in a document is not a build
