@@ -79,11 +79,60 @@ describe('hazards are read from a property, never from a name (vault 3.3)', () =
     expect(describeLevelProblem(hazardsOnly)).toMatch(/no object carries the `solid` property/);
   });
 
-  it('the shipped solids and hazards are disjoint sets', () => {
-    const overlapping = LEVEL_01.solids.filter((solid) =>
-      LEVEL_01.hazards.some((h) => h.x === solid.x && h.y === solid.y && h.w === solid.w && h.h === solid.h),
-    );
-    expect(overlapping).toEqual([]);
+  /**
+   * 🔴 **This was decoration until 2026-08-18, and the replacement is the point.**
+   *
+   * It read `h.x === solid.x && h.y === solid.y && h.w === solid.w && h.h === solid.h` — EXACT
+   * rectangle equality — on `level-01` ALONE. A hazard half-inside a solid, which is the shape a
+   * real authoring slip takes on a 96 px grid, matched nothing and passed. So did anything at all in
+   * levels 02–05.
+   *
+   * It became load-bearing when the low-ground spike runs went in: those put hazards flush against
+   * solids all over the five shipped levels, so "flush" and "overlapping" are now one tile apart in
+   * the data and a gate that cannot tell them apart is worse than none. A hazard sunk into the floor
+   * draws spikes that are half-buried and hurts a player standing on solid ground.
+   *
+   * Strict inequalities, so **touching is not overlapping** — every ground spike rests exactly on
+   * the floor's top edge by construction, and that is correct, not a violation.
+   */
+  it('no shipped hazard overlaps a solid, in ANY level — partially or wholly', () => {
+    const found: string[] = [];
+    for (const [id, level] of SHIPPED_LEVELS) {
+      for (const h of level.hazards) {
+        for (const s of level.solids) {
+          if (h.x < s.x + s.w && h.x + h.w > s.x && h.y < s.y + s.h && h.y + h.h > s.y) {
+            found.push(
+              `${id}: hazard (${h.x}, ${h.y}) ${h.w}x${h.h} overlaps solid (${s.x}, ${s.y}) ${s.w}x${s.h}`,
+            );
+          }
+        }
+      }
+    }
+    expect(found, found.join(' | ')).toEqual([]);
+  });
+
+  /**
+   * 🔴 The red proof, because the assertion above is an emptiness check and those pass for free.
+   *
+   * A hazard sunk ONE PIXEL into the floor — the smallest real version of the defect, and exactly
+   * what the old exact-equality form could not see.
+   */
+  it('...and that sweep goes red on a hazard sunk one pixel into the floor', () => {
+    const floor = LEVEL_01.solids[0]!;
+    const sunk = { x: floor.x + 96, y: floor.y - 95, w: 96, h: 96 };
+    const overlaps =
+      sunk.x < floor.x + floor.w &&
+      sunk.x + sunk.w > floor.x &&
+      sunk.y < floor.y + floor.h &&
+      sunk.y + sunk.h > floor.y;
+    expect(overlaps, 'the sweep above cannot see a one-pixel sinking, so it proves nothing').toBe(true);
+
+    // ...and the shipped spikes, which REST on the floor rather than sinking into it, do not.
+    const resting = { x: floor.x + 96, y: floor.y - 96, w: 96, h: 96 };
+    expect(
+      resting.y < floor.y + floor.h && resting.y + resting.h > floor.y,
+      'a spike resting exactly on the floor must NOT read as an overlap, or every level is red',
+    ).toBe(false);
   });
 });
 

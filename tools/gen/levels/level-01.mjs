@@ -77,7 +77,11 @@ export const level01 = {
    * what makes "the drawn spikes hurt" true by construction. Phase 4 shipped the run drawn and harmless
    * from two lists that had drifted.
    */
-  spikes: [{ fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 }],
+  spikes: [
+    { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 27, toCol: 28, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 42, toCol: 44, row: GROUND_TOP_ROW - 1 },
+  ],
 
   /**
    * A rectangle says all of it: its horizontal span IS the patrol beat, its bottom edge is where the

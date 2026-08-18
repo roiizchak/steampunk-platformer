@@ -59,7 +59,9 @@ export const level02 = {
   // has a cost as well as a gear.
   spikes: [
     { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 54, toCol: 54, row: 13 },
+    { fromCol: 27, toCol: 28, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 65, toCol: 67, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 56, toCol: 56, row: 13 },
   ],
 
   /**

@@ -58,11 +58,11 @@ export const level05 = {
 
   // 9 tiles of spikes = 864 px.
   spikes: [
-    { fromCol: 20, toCol: 21, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 64, toCol: 65, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 20, toCol: 22, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 97, toCol: 98, row: GROUND_TOP_ROW - 1 },
     { fromCol: 100, toCol: 101, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 134, toCol: 135, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 47, toCol: 47, row: 12 },
+    { fromCol: 134, toCol: 136, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 53, toCol: 53, row: 12 },
   ],
 
   /**
@@ -87,7 +87,7 @@ export const level05 = {
     { col: 18, row: 20 },
     { col: 33, row: 19 },
     { col: 43, row: 16 },
-    { col: 53, row: 12 },
+    { col: 47, row: 12 },
     { col: 69, row: 19 },
     { col: 89, row: 12 },
     { col: 105, row: 19 },

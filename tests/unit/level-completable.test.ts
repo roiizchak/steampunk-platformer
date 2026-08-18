@@ -34,16 +34,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { RENDER_SCALE } from '../../src/game/constants';
 import { parseLevel, type LevelData } from '../../src/game/tilemap';
-import { createSnapshot, latchJumpPress } from '../../src/sim/input';
-import { PLAYER_BOX } from '../../src/sim/player';
-import { createWorld, tick } from '../../src/sim/tick';
-import type { InputSnapshot, World } from '../../src/sim/types';
 import { GATE_SEEDS } from './level-reach.test';
+import { MAX_TICKS, autoPlay, shippedWorld } from './levelAutoPlay';
 import { SHIPPED_ENTRIES } from './tilemap-data-fixtures';
-
-const HALF_W = (PLAYER_BOX.w / 2) * RENDER_SCALE;
 
 const LEVELS: [string, LevelData][] = SHIPPED_ENTRIES.map(([id, raw]) => [
   id,
@@ -51,114 +45,11 @@ const LEVELS: [string, LevelData][] = SHIPPED_ENTRIES.map(([id, raw]) => [
 ]);
 
 /**
- * How long the auto-player gets. Generous, and it is a BOUND rather than a measurement — the assertion
- * reads `world.completed`, never the tick count, so a faster or slower route is not a failure.
- *
- * The longest level is 15360 px at roughly 9 px per tick of running, so a clean run is about 1700 ticks.
- * 12000 leaves room for several deaths, each costing a respawn at the level's start.
+ * 🔴 The policy, the world builder and the two measured look constants moved to `levelAutoPlay.ts`
+ * when the hazard-free gate was written — one definition, two callers *(vault 5.3)*. Nothing about
+ * this gate's behaviour changed: it still runs with enemies live and damage allowed, because its
+ * claim is "this level can be finished", not "finished flawlessly".
  */
-const MAX_TICKS = 12_000;
-
-/** The exact shipped world. Nothing omitted, nothing substituted. */
-function shippedWorld(level: LevelData, seed: number): World {
-  return createWorld({
-    seed,
-    scale: RENDER_SCALE,
-    solids: level.solids,
-    hazards: level.hazards,
-    enemies: level.enemies,
-    gears: level.gears,
-    goal: level.goal,
-    bounds: { widthPx: level.widthPx, heightPx: level.heightPx },
-    spawn: level.spawn,
-  });
-}
-
-/**
- * Is there any solid ground under `x` at or below the feet?
- *
- * ⚠️ **`LOOK_DOWN_PX` is 600, and it is not a tolerance — it is the difference between a drop and a
- * pit.** The first draft allowed 240 px, which is less than one 4-tile step, so stepping off a ziggurat
- * onto the floor 288 px below read as *no ground ahead*. The auto-player jumped, and on level-02 that
- * carried it straight OVER the exit: the goal is 288 px tall standing on the floor, and a running jump
- * off a 1632 px ledge keeps the whole player box above it. It finished at x 10686 of 10752 having never
- * touched a goal it had passed through the air. A real pit has no ground at any depth, so a generous
- * look-down costs nothing and a stingy one invents pits that are not there.
- */
-const LOOK_DOWN_PX = 600;
-
-function groundAhead(level: LevelData, x: number, feetY: number): boolean {
-  return level.solids.some(
-    (s) => s.x <= x && s.x + s.w >= x && s.y >= feetY - 8 && s.y <= feetY + LOOK_DOWN_PX,
-  );
-}
-
-/**
- * How far past the leading edge to look for the ground.
- *
- * 🔴 Small on purpose: the jump fires when the leading edge is essentially AT the hole. That is the
- * trigger `level-traversal.test.ts` measured its 288 px clearable gap with — *"the obstacle's own left
- * edge is the LATEST honest moment to jump, so a test that passes here passes for any earlier press
- * too"* — and copying it is what makes the measurement transferable. The first draft looked 120 px
- * ahead, which jumps 120 px early, which costs 120 px of the 288 px reach: the auto-player fell into
- * the third gap of level-04 nine times and never got past it.
- */
-const LOOK_AHEAD_PX = 16;
-
-interface Run {
-  completed: boolean;
-  ticks: number;
-  furthestX: number;
-  deaths: number;
-}
-
-/**
- * Hold Right; jump when blocked or when the ground ahead runs out.
- *
- * The two triggers are the whole policy:
- *
- * - **blocked** — right is held, the player is grounded, and x did not move. That is a wall, and the
- *   answer to a wall is a jump. `level-hazards.test.ts` proves every wall in every level is one a
- *   run-up clears, so this cannot loop forever against a dead end.
- * - **no ground ahead** — a pit or a hazard strip is one look-ahead away. Looking ahead by a body width
- *   plus a margin is what turns "run right" into "run right and jump the holes".
- *
- * `jumpHeld` stays true for the full-height jump; releasing early is the jump CUT and this policy never
- * wants a short hop.
- */
-function autoPlay(level: LevelData, seed: number): Run {
-  const world = shippedWorld(level, seed);
-  const input: InputSnapshot = createSnapshot();
-  input.right = true;
-  input.jumpHeld = true;
-
-  let furthestX = world.player.x;
-  let deaths = 0;
-  let lastX = world.player.x;
-  let stuckFor = 0;
-
-  for (let i = 0; i < MAX_TICKS; i += 1) {
-    const grounded = world.player.vy === 0;
-    if (grounded) {
-      const lead = world.player.x + HALF_W;
-      const blocked = Math.abs(world.player.x - lastX) < 0.5;
-      stuckFor = blocked ? stuckFor + 1 : 0;
-      // A few ticks of no progress rather than one: acceleration from a standstill is genuinely slow for
-      // the first tick or two, and jumping on that would bunny-hop the whole level.
-      if (stuckFor >= 4 || !groundAhead(level, lead + LOOK_AHEAD_PX, world.player.y)) {
-        latchJumpPress(input);
-        stuckFor = 0;
-      }
-    }
-    lastX = world.player.x;
-
-    const events = tick(world, input);
-    if (events.playerDied) deaths += 1;
-    if (world.player.x > furthestX) furthestX = world.player.x;
-    if (world.completed) return { completed: true, ticks: i + 1, furthestX, deaths };
-  }
-  return { completed: false, ticks: MAX_TICKS, furthestX, deaths };
-}
 
 describe.each(LEVELS)('%s can be finished in the world the player gets', (id, level) => {
   /**
