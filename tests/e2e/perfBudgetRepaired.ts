@@ -54,10 +54,39 @@
  *
  * 2.4x the worst clean reading of sixteen (0.0835), whose next-worst is 0.0307.
  *
+ * 🔴 **MAJOR, OPEN: the PER-PAIR noise is roughly 5x anything this record disclosed.** The
+ * adversarial brief printed the ten individual deltas behind each median, and every clean run
+ * contains at least one pair whose magnitude exceeds this bound outright:
+ *
+ * ```
+ * clean run 1:  0.2406  0.0819  0.6748  0.0000 -0.0020 -0.0430  0.0655  0.0072  0.0010  0.0358
+ * clean run 2:  0.7444  0.0020  0.0010  0.0123 -0.1782 -1.0424  0.0041 -0.0113 -0.0143  0.0000
+ * clean run 3: -0.0502 -0.7393 -0.0573  0.0072  0.6902 -0.0051  0.0205 -0.0010  0.0072  0.0020
+ * ```
+ *
+ * The cause is visible in the GPU-median arrays: about **one window in ten reads 0.7-1.2 ms against
+ * a 0.14 ms baseline**, on BOTH arms and independent of HUD state. When such a spike lands on one
+ * side of a pair only, that pair's delta blows past 0.2 ms by three to five times.
+ *
+ * The median of ten survived all three runs because the spikes are rare and not consistently
+ * same-signed — which is why a median was chosen. But the safety margin here is **empirical, not
+ * structural**: no false red was observed in three runs, and none is proved impossible either.
+ * Recorded rather than smoothed over, because this project's own testing rules name "a bound that
+ * would not have survived a week" as its recurring failure. **Closing it needs either the spike's
+ * root cause (OS scheduling, driver, thermal — unknown) or a statistic robust to a one-in-ten
+ * outlier by construction rather than by luck.**
+ *
  * ⚠️ **Demonstrated floor, and it is not flattering.** This gate resolves **six or more**
  * full-screen alpha scrims reliably (0.3057, and 8 scrims at 0.2396/0.2412/0.4019, all red).
  * Three, four and five are BORDERLINE - each has been observed both above and below 0.2. One and
  * two it does not resolve at all: 0.0358 and 0.0328, inside a clean band reaching 0.0835.
+ * Re-confirmed independently by the adversarial brief: `scrim2` read 0.0696 and PASSED,
+ * `scrim6` read 0.6697 with all ten pairs between 0.53 and 0.98 and FAILED.
+ *
+ * The practical consequence, stated plainly because the brief asked it directly: **any HUD
+ * change whose true GPU cost stays under roughly 0.2 ms reads as a pass** - a modest overlay, a
+ * few translucent particles, one more alpha layer. **Phase 9 is particles**, so this is the
+ * number that phase must be measured against, knowing what it cannot see.
  *
  * That is weaker than hoped and is recorded rather than rounded away 🔴 **but it is the first
  * version of this criterion that orders its own mutation at all.** The ratio it replaces put five
@@ -144,10 +173,18 @@ export const MAX_HUD_WORK_DELTA_MS = 1;
  * 4.8 % above the worst clean reading and 4.0 % below the best mutated one — near the middle of an
  * 8.9 % gap, rather than pressed against either edge as 1.02 was.
  *
- * ⚠️ **Stated floor:** the proving mutation costs about 9.4 % of served frames, so this bound
- * resolves roughly **half of it or worse** — about 15 ms per cue. A smaller audio stall lands
- * inside the gap and passes. That is a real limit, and it is the honest price of a bound that does
- * not false-red.
+ * ⚠️ **Stated floor, and it was MEASURED rather than reasoned.** The adversarial brief probed it
+ * directly by editing `CUE_STALL_MS`:
+ *
+ * ```
+ * 15 ms/cue  -> 1.0108x  PASSES
+ * 20 ms/cue  -> 1.0516x  fails
+ * 30 ms/cue  -> 1.0961x  fails   (the shipped mutation)
+ * ```
+ *
+ * The true floor sits between 15 and 20 ms per cue. This docstring first carried "roughly half of
+ * it or worse, about 15 ms", which was arithmetic from the frame cost — very slightly optimistic
+ * rather than wrong. A stall smaller than ~20 ms per cue passes.
  *
  * ⚠️ **Confirmed on held-out runs**, not on the runs it was chosen from — see the QA log.
  *

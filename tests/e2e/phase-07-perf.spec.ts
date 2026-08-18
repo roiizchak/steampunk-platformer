@@ -222,6 +222,14 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
       off: { work: [], frames: [], ticks: [], rate: [], cues: [] },
     };
 
+    /**
+     * ⚠️ **No discarded warm-up window here, unlike `phase-06-perf.spec.ts`**, which throws away one
+     * HUD-on sample before its loop so the first measured arm is not the one on cold JIT. Raised by
+     * the adversarial brief as a structural inconsistency between two specs that otherwise share a
+     * design. Measured before acting on it: pair 0's ratio read 0.998, 1.000 and 0.998 across three
+     * clean runs — indistinguishable from later pairs, so there is no bias to remove. Left as it is,
+     * and recorded, rather than adding a window that costs 4 s per run and fixes nothing.
+     */
     for (let pair = 0; pair < PAIRS; pair += 1) {
       // AB on even pairs, BA on odd. See `PAIRS` for why the fixed order it replaces was wrong.
       const order = pair % 2 === 0 ? (['on', 'off'] as const) : (['off', 'on'] as const);

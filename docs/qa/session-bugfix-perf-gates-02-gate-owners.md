@@ -139,3 +139,28 @@ the new boot gate itself being non-decoration (an early `return null` turns 7 te
   brief-1 pass did, with zero drift).
 - `SENTRY_BOX`'s correctness has no sim-side cross-check, because the sentry never moves.
 - The qa-expert traced two hazards frame-by-frame and the other sixteen only in aggregate.
+
+
+### `voltagent-qa-sec:performance-engineer` — adversarial
+
+Run **alone**, per the rule the brief-1 caveat established. Every reading is from a real GPU run
+(`assertRealGpu` confirmed on each).
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| P4 | **MAJOR, OPEN** | **6.9's per-pair noise is ~5x anything the record disclosed.** Printing the ten deltas behind each median shows every clean run contains at least one pair exceeding the 0.2 ms bound outright — up to **1.04 ms**. Cause: about one window in ten reads 0.7–1.2 ms against a 0.14 ms baseline, **on both arms and independent of HUD state**. The median of ten survived three runs because the spikes are rare and not consistently same-signed. | **RECORDED IN THE BOUND, NOT CLOSED.** The safety margin is empirical, not structural: no false red was observed, and none is proved impossible. Closing it needs the spike's root cause — OS scheduling, driver or thermal, unknown — or a statistic robust to a one-in-ten outlier by construction. This is the honest successor to 6.9's old instability, not a claim that it is gone. |
+| P5 | — | **7.7's stated floor MEASURED, not reasoned.** Probing `CUE_STALL_MS` directly: 15 ms → 1.0108 passes, 20 ms → 1.0516 fails, 30 ms → 1.0961 fails. The floor sits between 15 and 20 ms per cue. | **APPLIED.** The arithmetic estimate is replaced by the measurement; it was very slightly optimistic rather than wrong. |
+| P6 | — | **6.9's disclosed floor re-confirmed independently.** `scrim2` → 0.0696, passes. `scrim6` → 0.6697 with all ten pairs between 0.53 and 0.98, fails. | **APPLIED** as an explicit consequence: any HUD change costing under ~0.2 ms of GPU reads as a pass — and **Phase 9 is particles**, so that is the number Phase 9 must be measured against. |
+| P7 | LOW | **7.7 has no discarded warm-up window; 6.9 does.** A structural inconsistency between two specs that otherwise share a design. | **RECORDED, not changed.** Measured first: pair 0's ratio read 0.998 / 1.000 / 0.998 across three clean runs, indistinguishable from later pairs. Adding a window would cost 4 s per run and fix nothing. |
+
+**Categories the brief found clean:** 7.7's per-pair distribution is tightly clustered at 0.998–1.002
+with no bimodality and none of the outliers 6.9 shows; the AB/BA ordering is genuinely balanced,
+verified by hand — each arm takes first position five times and the mean chronological position is
+identical at 10.5; and the vacuity guards (`assertHudWasDrawing`'s alpha and `fillRect`-operand
+checks, 7.7's both-directions cue assertion) are structurally correct, each tracing to a real
+historical bug it closes.
+
+**Its blind spots, preserved:** three clean runs per gate is suggestive, not a proven false-red — ten
+or more would be needed to see whether 6.9 ever tips red on clean code; it did not sweep scrim3/4/5
+itself; it did not live-mutate the vacuity guards to prove they can go red, reviewing them by reading
+only; and it did not establish the root cause of the GPU spikes.
