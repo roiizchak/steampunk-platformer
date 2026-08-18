@@ -300,66 +300,69 @@ export const MAX_HUD_GPU_RATIO = 2;
 export const MAX_HUD_WORK_DELTA_MS = 1;
 
 /**
- * Criterion 7.7 — the ceiling on `frames-per-tick without audio / frames-per-tick with audio`.
+ * Criterion 7.7 — the ceiling on the **median of the per-pair** `frames-per-tick without audio /
+ * frames-per-tick with audio` ratios.
  *
- * 🔴🔴 **KNOWN-WEAK GATE. Re-measured 2026-08-17 across twelve clean runs, and it no longer proves
- * what Phase 7 recorded. Read this whole block before trusting a green from it.**
+ * 🟢 **REPAIRED 2026-08-18. It was REPORTED FAILING, and this is what it took.**
  *
- * ## What Phase 7 recorded, and why it looked solid
+ * ## What was wrong, and what it was not
  *
- * The first two versions asserted on `workMedianMs`, then `workP95Ms`, and a proving mutation of
- * **30 ms of blocking work per cue** moved the p95 by 0.400 ms — nothing. The reason is structural
- * and still correct, and it applies to every spec that reduces `sample()` with a percentile:
+ * At 1.15 this bound could not tell its own 30 ms-per-cue proving mutation (1.0943) from a clean
+ * run (twelve runs spanning 0.9331-1.0961). It had been raised there precisely because 1.02
+ * false-redded about one run in six. Both facts pointed at the bound; **neither was about the
+ * bound.** The measurement design was wrong in two ways, and fixing those made 1.02 work:
  *
- *   this machine serves **~479 rAF frames per 120 sim ticks** — about 240 fps against a 60 Hz sim.
- *   A cue fires roughly eight times per window, so cue frames are **1.9 % of frames**, and the 95th
- *   percentile is the 21st slowest of 479. It never lands on one.
+ * **1. The pairing was thrown away.** The statistic was `median(off.rate) / median(on.rate)` — two
+ * medians taken independently across the run, then divided. Each pair's two windows run seconds
+ * apart on the same machine in the same state, so their ratio cancels drift that two independent
+ * medians carry straight through. It is now the median of the six per-pair ratios.
  *
- * Frames-served was adopted instead, on a clean spread recorded as **479/479/479 against
- * 479/478/479 — one frame** — with the mutation reaching 1.127. Against noise of one frame in 479,
- * a bound of 1.02 was ten times the observed spread and looked generous.
+ * **2. The arm order was fixed.** Every pair sampled `on` then `off`, defended by a comment arguing
+ * that a constant bias is better than one that cancels. It is not: a constant bias is **attributed
+ * to the treatment arm**, which is the one thing a paired design exists to prevent. AB/BA now
+ * alternates, and `PAIRS` went 3 to 6.
  *
- * ## What twelve runs actually show
+ * **3. Six pairs was still too few, and the HELD-OUT run is what proved it.** With `PAIRS = 6` the
+ * six-run clean selection set read 0.9884-1.0054 against a mutated 1.0278 — apparently clean
+ * separation, and a bound of 1.02 chosen from it. The **seventh** clean run, held out from the
+ * selection, read **1.0208 and false-redded.** That is the overfit this project has now made three
+ * times, caught on the fourth by the one discipline that can catch it: choose on one set of runs,
+ * confirm on a set that had no say in the choice. `PAIRS` is 10.
  *
- * Two separate defects were found on 2026-08-17, and the first hid the second.
+ * ## The measurements this bound is set from
  *
- * **1. The windows were not the same length.** `sample()` returned a `ticks` read AFTER the GPU
- * drain while `frames` stopped at the work window, so a ratio of raw frame COUNTS compared spans
- * that differed. It put this criterion red on correct code. Fixed in `perfSampler.ts`, and this
- * bound now divides by each window's own measured tick span rather than comparing raw counts.
+ * Interleaved in one session on the GPU project, RTX 4080, per `docs/TESTING-RULES.md` — nothing
+ * here is compared against a figure recorded on another day. All at `PAIRS = 10`:
  *
- * **2. With that fixed, the clean spread is nothing like one frame in 479.** Twelve clean runs,
- * nine by the phase owner and three by the criterion's adversarial gate owner, on an idle box:
+ * ```
+ * clean    0.9927  0.9946  0.9947  0.9948  1.0000  1.0011  1.0022   (7 runs, worst 1.0022)
+ * mutated  1.0915  1.0961  1.0961                                   (3 runs, best  1.0915)
+ * ```
  *
- *   0.9331  0.9514  0.9556  0.9594  0.9682  0.9810
- *   0.9829  0.9937  1.0044  1.0269  1.0395  **1.0961**
+ * The clean spread is 0.95 % wide, against 3.3 % at six pairs. Nothing else changed between the two
+ * — same mutation, same window, same machine, same afternoon.
  *
- * **and the 30 ms-per-cue proving mutation reads 1.0943 — BELOW the worst clean run.** The gate
- * owner's 1.0961 was a clean run with tick spans matching exactly (120/120/120 in both arms), so it
- * is not the span defect recurring; the audio arm genuinely serves ~10 % fewer frames on some runs
- * and not others. Signal and noise overlap completely.
+ * ## 1.05, and both margins stated
  *
- * ## What that means, stated rather than papered over
+ * 4.8 % above the worst clean reading and 4.0 % below the best mutated one — near the middle of an
+ * 8.9 % gap, rather than pressed against either edge as 1.02 was.
  *
- * **This bound cannot presently distinguish its own proving mutation from a clean run.** At 1.02 it
- * false-red about one run in six, which is worse than useless — a gate that cries wolf trains the
- * next reader to dismiss a real red *(the same reasoning `playwright.config.ts` uses about a
- * contended dev server being indistinguishable from a boot hang)*.
+ * ⚠️ **Stated floor:** the proving mutation costs about 9.4 % of served frames, so this bound
+ * resolves roughly **half of it or worse** — about 15 ms per cue. A smaller audio stall lands
+ * inside the gap and passes. That is a real limit, and it is the honest price of a bound that does
+ * not false-red.
  *
- * Raised to **1.15**, which is ~5 % above the worst of twelve clean readings, so it stops failing at
- * random. **It is NOT claimed to catch a 30 ms-per-cue stall any more** — it demonstrably does not.
- * What it still catches is a gross frame-serving collapse, and `MAX_AUDIO_WORK_DELTA_MS` below is
- * the load-bearing half of this criterion until this is redone properly.
- *
- * **The honest fix needs its own session**: more pairs so the median has something to work with,
- * a longer window, or a different statistic entirely — the same treatment criterion 5.11's burst
- * bound got in this session, which is what turned that one from decoration into a working gate.
- * Recorded in `docs/qa/session-gate-defects.md` as open work.
+ * ⚠️ **Confirmed on held-out runs**, not on the runs it was chosen from — see the QA log.
  *
  * ⚠️ Its other demonstrated floor, from Phase 7 and unchanged: **`sound.play()` is so cheap that
  * 500x the shipped call rate stayed invisible.** This catches stalls, not call counts.
+ *
+ * 🔴 The proving mutation is COMMITTED, not performed by hand:
+ * `PERF_MUTATION=cue-stall npx playwright test tests/e2e/phase-07-perf.spec.ts`. It appends
+ * `?perfMutation=cue-stall`, which `src/game/audio.ts` reads DEV-ONLY exactly as
+ * `?breakAsset=corrupt` is read.
  */
-export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.15;
+export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.05;
 
 /**
  * Criterion 7.7 — the ceiling on the milliseconds audio adds to the MEDIAN frame.

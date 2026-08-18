@@ -131,6 +131,39 @@ export function createAudio(scene: Phaser.Scene, catalog: AssetCatalog): AudioMa
     startBeds();
   }
 
+/**
+ * DEV ONLY. `?perfMutation=cue-stall` blocks the main thread for `CUE_STALL_MS` on every cue that
+ * actually plays — **criterion 7.7's proving mutation, committed rather than performed by hand.**
+ *
+ * The same argument, and the same shape, as `?breakAsset=corrupt` in `bootAssets.ts`: a gate that
+ * cannot go red is decoration *(vault C2)*, and a mutation that lives in someone's working copy is
+ * a ritual rather than a regression. The previous perf session's storm and scrim mutations were
+ * both left uncommitted and recorded as unresolved methodology debt; this is that debt paid for the
+ * audio half.
+ *
+ * **30 ms is the number 7.7's docstring names**, so this is the mutation the bound names rather
+ * than a convenient one. It is placed after the `exists()` guard on purpose — a cue that does not
+ * play costs nothing in the shipped game, and charging for it would make the mutation heavier than
+ * the defect it stands for.
+ *
+ * A busy loop, not `setTimeout`: the defect being modelled is main-thread blocking inside the audio
+ * path, and a timer would yield to rAF and model nothing.
+ */
+const CUE_STALL_MS = 30;
+
+function stallPerCue(): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+  if (new URLSearchParams(window.location.search).get('perfMutation') !== 'cue-stall') {
+    return;
+  }
+  const until = performance.now() + CUE_STALL_MS;
+  while (performance.now() < until) {
+    /* block, deliberately */
+  }
+}
+
   const manager: AudioManager = {
     playCues(cues) {
       for (const cue of cues) {
@@ -138,6 +171,7 @@ export function createAudio(scene: Phaser.Scene, catalog: AssetCatalog): AudioMa
         if (!scene.cache.audio.exists(key)) {
           continue;
         }
+        stallPerCue();
         // Fire-and-forget: Phaser destroys the instance on completion, so a burst of footsteps
         // cannot accumulate. The beds are the only tracks we hold a reference to, which is exactly
         // the set criterion 7.5 counts.
