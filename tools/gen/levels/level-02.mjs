@@ -70,7 +70,7 @@ export const level02 = {
    * the second, so every beat below starts and ends two columns clear of a gap or a mass.
    */
   enemies: [
-    { slug: 'rust-scavenger', fromCol: 32, toCol: 36, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
+    { slug: 'rust-scavenger', fromCol: 33, toCol: 36, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
     { slug: 'brass-sentry', fromCol: 59, toCol: 63, standRow: 17, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 76, toCol: 78, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],

@@ -89,7 +89,7 @@ export const level01 = {
    * authored over the gap refuses to boot rather than walking on air.
    */
   enemies: [
-    { slug: 'brass-sentry', fromCol: 56, toCol: 60, standRow: 14, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 57, toCol: 59, standRow: 14, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 78, toCol: 88, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],
 
@@ -108,7 +108,7 @@ export const level01 = {
     { col: 22, row: 19 },
     { col: 40, row: 18 },
     { col: 51, row: 16 },
-    { col: 58, row: 13 },
+    { col: 61, row: 13 },
     { col: 65, row: 16 },
   ],
 

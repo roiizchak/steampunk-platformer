@@ -129,7 +129,11 @@ export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
  * a body ends up two different widths depending on which question is being asked of it.
  */
 export function scavengerFooting(solids: readonly Rect[], scale: number): ScavengerFooting {
-  return { solids, halfWidthPx: (SCAVENGER_BOX.w / 2) * scale };
+  return {
+    solids,
+    halfWidthPx: (SCAVENGER_BOX.w / 2) * scale,
+    heightPx: SCAVENGER_BOX.h * scale,
+  };
 }
 
 /**

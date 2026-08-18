@@ -54,6 +54,7 @@ import {
   isGearObject,
 } from './tiledEntities';
 import { describeGoalProblem, goalRect, isGoalObject } from './tiledGoal';
+import { describePlacementProblem } from './tiledPlacement';
 
 /**
  * Re-exported, not re-implemented. `ElementEditorScene` and the unit tests have imported these
@@ -302,6 +303,14 @@ export function describeLevelProblem(raw: unknown): string | null {
   );
   if (gearProblem !== null) {
     return gearProblem;
+  }
+
+  // Nothing may share space with an enemy: not a hazard, not a gear body, not a wall. Runs AFTER
+  // the enemy and gear rules so every field it reads is already discharged, and BEFORE the goal
+  // block, whose last-ness is load-bearing. Its three decisions are in `tiledPlacement.ts`.
+  const placementProblem = describePlacementProblem(objects, solids);
+  if (placementProblem !== null) {
+    return placementProblem;
   }
 
   // 🔴 THE GOAL BLOCK IS LAST, AND ITS POSITION IS LOAD-BEARING. Moving it earlier collapses the 23

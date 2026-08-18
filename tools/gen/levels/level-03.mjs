@@ -72,7 +72,7 @@ export const level03 = {
   spikes: [
     { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
     { fromCol: 66, toCol: 67, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 54, toCol: 54, row: 11 },
+    { fromCol: 51, toCol: 51, row: 11 },
   ],
 
   /**
@@ -84,8 +84,8 @@ export const level03 = {
    */
   enemies: [
     { slug: 'rust-scavenger', fromCol: 40, toCol: 42, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
-    { slug: 'brass-sentry', fromCol: 52, toCol: 56, standRow: 12, tilesTall: 2 },
-    { slug: 'brass-sentry', fromCol: 78, toCol: 82, standRow: 12, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 53, toCol: 55, standRow: 12, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 79, toCol: 81, standRow: 12, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 98, toCol: 102, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],
 
@@ -95,8 +95,8 @@ export const level03 = {
     { col: 20, row: 19 },
     { col: 37, row: 18 },
     { col: 47, row: 15 },
-    { col: 56, row: 11 },
-    { col: 80, row: 11 },
+    { col: 57, row: 11 },
+    { col: 83, row: 11 },
     { col: 95, row: 18 },
     { col: 115, row: 15 },
   ],

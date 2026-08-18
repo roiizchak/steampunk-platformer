@@ -1,6 +1,6 @@
 import type { Rect } from './types';
 import type { Sighting } from './enemies';
-import { ENEMY_DEAD_ZONE, groundUnder, withinRadius } from './enemyGeometry';
+import { ENEMY_DEAD_ZONE, blockedAt, groundUnder, withinRadius } from './enemyGeometry';
 import { TILE_SIZE } from '../game/constants';
 import { SCAVENGER_ATTACK_TICKS, attackInProgress, maybeStartSwing } from './scavengerAttack';
 
@@ -121,6 +121,14 @@ export interface ScavengerFooting {
   solids: readonly Rect[];
   /** Half the body's WORLD width. The leading edge is this far ahead of `scavenger.x`. */
   halfWidthPx: number;
+  /**
+   * The body's WORLD height, measured up from the feet — what `blockedAt` tests a wall against.
+   *
+   * Here rather than at the call site for the same reason `halfWidthPx` is: `SCAVENGER_BOX` stays
+   * the ONE definition of the body *(vault 5.3)*. A second `40 * scale` written where the veto is
+   * called is how a body ends up one height for walls and another for everything else.
+   */
+  heightPx: number;
 }
 
 export interface Scavenger {
@@ -247,11 +255,46 @@ export function releaseAggro(scavenger: Scavenger): void {
 }
 
 /**
+ * Would the step land the body on nothing? The LEADING edge is what is probed — see the call site.
+ *
+ * A two-line wrapper so the chase branch and the patrol branch ask their two questions in the same
+ * shape, and so neither call site restates the offset arithmetic *(vault 2.10)*.
+ */
+function canStand(
+  nextX: number,
+  dir: 1 | -1,
+  scavenger: Scavenger,
+  footing: ScavengerFooting,
+): boolean {
+  return groundUnder(nextX + dir * footing.halfWidthPx, scavenger.y, footing.solids);
+}
+
+/** Would the step drive the body into a wall it was clear of? See `blockedAt` for the whole rule. */
+function blocked(
+  previousX: number,
+  nextX: number,
+  scavenger: Scavenger,
+  footing: ScavengerFooting,
+): boolean {
+  return blockedAt(
+    previousX,
+    nextX,
+    scavenger.y,
+    footing.halfWidthPx,
+    footing.heightPx,
+    footing.solids,
+  );
+}
+
+/**
  * One tick of scavenger behaviour.
  *
- * `footing` is required — see `ScavengerFooting`. It is consulted on the CHASE path only: a patrol
- * stays inside authored bounds that a level designer already placed over ground, and probing there
- * would let a level's floor geometry silently override the beat the `.tmj` declares.
+ * `footing` is required — see `ScavengerFooting`. **Both** movement paths consult it now, but for
+ * different questions. The GROUND probe stays chase-only: a patrol beat is authored over floor a
+ * designer already placed, and probing there would let a level's floor geometry silently override
+ * the beat the `.tmj` declares. The WALL probe runs on both, because a wall standing on that floor
+ * is not something the authored beat was ever checked against — and the user found a patroller and
+ * a chaser walking through one alike.
  */
 export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: ScavengerFooting): void {
   // Read BEFORE anything below can move the body. `moving` is derived from the outcome rather than
@@ -314,20 +357,36 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
       // at `RENDER_SCALE` 6), so a centre probe walks half a scavenger out over the void before it
       // notices — found by the Codex plan review, finding 7. Enemies have no gravity, so what it
       // would do there is hang in the air rather than fall, which is worse than either.
-      if (groundUnder(nextX + dir * footing.halfWidthPx, scavenger.y, footing.solids)) {
+      //
+      // TWO vetoes, and they are different questions: `groundUnder` asks whether the step lands on
+      // anything, `blockedAt` whether it lands INSIDE anything. The wall half is the user-reported
+      // bug — a chaser used to cross a raised block's face because the only test here probed
+      // downward. Facing is already committed above, so a held chaser keeps looking at the player.
+      if (canStand(nextX, dir, scavenger, footing) && !blocked(scavenger.x, nextX, scavenger, footing)) {
         scavenger.x = nextX;
       }
     }
   } else {
-    scavenger.x += scavenger.facing * scavenger.patrolSpeed;
-    // Turn AT the bound, patrol-only: a chasing scavenger pinned at the bound must keep facing the
-    // player, not the direction the patrol would have turned (gate finding S2).
-    if (scavenger.x >= scavenger.patrolMax) {
-      scavenger.facing = -1;
-      scavenger.x = scavenger.patrolMax;
-    } else if (scavenger.x <= scavenger.patrolMin) {
-      scavenger.facing = 1;
-      scavenger.x = scavenger.patrolMin;
+    const nextX = scavenger.x + scavenger.facing * scavenger.patrolSpeed;
+    if (blocked(scavenger.x, nextX, scavenger, footing)) {
+      // 🔴 A wall is a bound the level did not declare, so it behaves like one: turn, do not
+      // advance. The patrol path used to consult `solids` not at all, on the argument that a beat
+      // is authored over ground the designer already checked — which is true of the FLOOR and says
+      // nothing about what stands on it. Turning rather than stopping is what makes the recovery
+      // test pass: a scavenger held against a wall forever is the same stuck creature by another
+      // name.
+      scavenger.facing = scavenger.facing === 1 ? -1 : 1;
+    } else {
+      scavenger.x = nextX;
+      // Turn AT the bound, patrol-only: a chasing scavenger pinned at the bound must keep facing the
+      // player, not the direction the patrol would have turned (gate finding S2).
+      if (scavenger.x >= scavenger.patrolMax) {
+        scavenger.facing = -1;
+        scavenger.x = scavenger.patrolMax;
+      } else if (scavenger.x <= scavenger.patrolMin) {
+        scavenger.facing = 1;
+        scavenger.x = scavenger.patrolMin;
+      }
     }
   }
 

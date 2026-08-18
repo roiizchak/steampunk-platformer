@@ -82,3 +82,49 @@ export function groundUnder(x: number, y: number, solids: readonly Rect[]): bool
   }
   return false;
 }
+
+/**
+ * Would a step from `previousX` to `nextX` drive this body INTO a solid it was clear of?
+ *
+ * The horizontal counterpart to `groundUnder`, and the reason enemies stopped walking through
+ * walls. `groundUnder` probes DOWNWARD — it vetoes a step over a void and is blind to anything
+ * standing in the way. Nothing else in the tick could catch it either: step 9's `resolveCollisions`
+ * is the player's, and enemies move at step 4a with no resolve pass after them.
+ *
+ * 🔴 **"Newly entered", not "overlapping" — and that is not a refinement, it is the fix.** A plain
+ * overlap test is what you write first and it breaks two real things:
+ *
+ *  - the unit fixtures express "ground at every height" as ONE solid spanning the whole plane, so
+ *    every body in them is permanently inside a solid. Overlap reads that as a wall.
+ *  - level-02's first scavenger sits with its 60 px half-width straddling the wall its patrol beat
+ *    starts against. Overlap traps a SHIPPED enemy on boot.
+ *
+ * So this borrows the player's own rule. `resolveCollisions` only pushes out of a solid the body
+ * was clear of at `previousX` (its `wasLeft` / `wasRight` pair); one rule for both, rather than two
+ * that agree on the happy path *(vault 5.3)*. **You cannot be blocked by something you are already
+ * inside** — which is also the only sane answer for an enemy authored half a pixel into geometry.
+ *
+ * Vertical overlap is STRICT on both edges, which is what lets a body walk along the surface it
+ * stands on: its feet sit exactly on that solid's top edge, so `feetY > solid.y` is false and the
+ * floor can never read as a wall. The same strictness lets it pass under an overhang that clears
+ * its head. `overlapsScavenger` uses strict comparisons for the same reason.
+ */
+export function blockedAt(
+  previousX: number,
+  nextX: number,
+  feetY: number,
+  halfWidthPx: number,
+  heightPx: number,
+  solids: readonly Rect[],
+): boolean {
+  const headY = feetY - heightPx;
+  for (const solid of solids) {
+    const right = solid.x + solid.w;
+    const bottom = solid.y + solid.h;
+    if (!(feetY > solid.y && headY < bottom)) continue;
+    if (!(nextX + halfWidthPx > solid.x && nextX - halfWidthPx < right)) continue;
+    const wasClear = previousX + halfWidthPx <= solid.x || previousX - halfWidthPx >= right;
+    if (wasClear) return true;
+  }
+  return false;
+}
