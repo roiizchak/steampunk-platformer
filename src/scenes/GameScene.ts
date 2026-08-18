@@ -269,8 +269,15 @@ export class GameScene extends Phaser.Scene {
     // Phase 8, on the EDGE and not on `world.completed`: the edge is one tick *(vault 2.5)* and
     // `advanceSplit` ORs it across the batch, whereas the flag stays true forever and would rebuild
     // the overlay every frame. `gameComplete.ts` owns the flow; the input flag stays here because
-    // this scene owns it, and `sampleHeldKeys` above clears the latched edges when it is false — so a
-    // jump pressed on the completing tick cannot fire into the next level.
+    // this scene owns it.
+    //
+    // ⚠️ It is NOT what stops a jump pressed on the completing tick from firing into the next level,
+    // though this comment claimed so until the Phase 8 code-reviewer's adversarial brief read the
+    // order: `sampleHeldKeys` runs above, before `advanceSplit`, so on the completing frame it ran
+    // with the flag still true and cleared nothing. What actually prevents it is that `tick()`
+    // early-returns while `world.completed`, so nothing consumes input again, and `create()` builds a
+    // fresh `input$` for the next level. The claim was true; the named mechanism was the wrong one,
+    // which is worse than no comment *(vault C9)*.
     if (events.levelCompleted) {
       this.playerInputEnabled = false;
       onLevelCompleted({

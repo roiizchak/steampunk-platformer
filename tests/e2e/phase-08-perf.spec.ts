@@ -31,126 +31,28 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { bootToGame, waitTicks } from './gameHarness';
-import { MIN_SAMPLES, SAMPLE_TICKS } from './perfBudget';
-import { sample, type Sample } from './perfSampler';
+import { bootToGame } from './gameHarness';
+import { installGpuTimer } from './gpuTimer';
+import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
+import type { Sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
-
-const PROGRESS_KEY = 'steampunk.progress';
-
-/**
- * How much more per-frame work the biggest level may cost than the smallest.
- *
- * 2.0 against a level with 2.4x the cells, 3.7x the painted tiles and 3x the enemies. The claim being
- * gated is that the camera cull makes level SIZE nearly free — if it were not, this would be closer to
- * 2.4 than to 1. It is deliberately not 1.1: the enemy count genuinely rises across the ramp and the
- * gate must not forbid the game's own design.
- */
-const MAX_LEVEL_WORK_RATIO = 2;
-
-/**
- * The **absolute** ceiling on the largest level's median main-thread work per frame, in milliseconds.
- *
- * 🔴 **A ratio alone is not a frame budget.** Any cost that lands in BOTH arms divides straight out of
- * `MAX_LEVEL_WORK_RATIO`, so a regression that made every level 30 ms per frame would leave the ratio
- * at 1.00 and this criterion green while the game ran at 30 fps. The Phase 8 performance-engineer gate
- * owner named it, and the project has already paid for it three times: `MAX_FLEET_WORK_MS`
- * (`perfBudget.ts`), `MAX_HUD_WORK_DELTA_MS` and `MAX_AUDIO_WORK_DELTA_MS` are the same repair applied
- * to criteria 5.11, 6.9 and 7.7 in turn.
- *
- * 8 ms — roughly half of a 60 Hz frame's 16.67 ms — matching `MAX_FLEET_WORK_MS` on the same box for
- * the same reason: level-05 measures **0.4 - 0.9 ms** clean here across repeated runs, so the bound
- * sits roughly ten times above the worst clean reading and cannot fail on driver noise, while still
- * catching the whole band a ratio is blind to.
- */
-const MAX_LEVEL_WORK_MS = 8;
-
-/**
- * How many off-map copies of the sim's swept geometry the mutation arm adds.
- *
- * Off-map (`x + 1e6`) on purpose: the copies are swept by `resolveCollisions`, `hazardHit` and
- * `collectGears` exactly as real geometry is, and by `GearLayer.sync()` every frame — which is the
- * cost that scales with level size and therefore the cost `MAX_LEVEL_WORK_RATIO` is a claim about —
- * but they can never touch the player, so the mutation changes the frame's cost and nothing else.
- */
-const BLOAT_COPIES = 4000;
-
-/** Three pairs, interleaved, so drift in the machine hits both arms alike. */
-const PAIRS = 3;
-
-const median = (xs: number[]): number => {
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = s.length >> 1;
-  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
-};
-
-/** A save that unlocks everything, so any level can be entered directly. */
-function unlockAll(): string {
-  const levels: Record<string, { completed: boolean; bestGears: number }> = {};
-  for (const id of ['level-01', 'level-02', 'level-03', 'level-04']) {
-    levels[id] = { completed: true, bestGears: 0 };
-  }
-  return JSON.stringify({ version: 1, lastLevel: 'level-01', levels });
-}
-
-/**
- * Enter `levelId` and let it settle, then sample one window of steady play.
- *
- * `mutate` runs after the level is in and before the settle, because `scene.start` rebuilds the world
- * and the layer from the parsed file — anything applied before entry is thrown away, and a "loaded"
- * arm would quietly read clean.
- */
-async function sampleLevel(page: Page, levelId: string, mutate?: (p: Page) => Promise<void>): Promise<Sample> {
-  await page.evaluate((id) => {
-    const game = (window as unknown as { __phaserGame: { scene: { start(k: string, d: unknown): void } } })
-      .__phaserGame;
-    game.scene.start('Game', { levelId: id });
-  }, levelId);
-  await page.waitForFunction(
-    (id) => (window as unknown as { __game: { levelId: string | null; ready: boolean } }).__game.levelId === id,
-    levelId,
-    { timeout: 20_000 },
-  );
-  if (mutate) await mutate(page);
-  // Settle: the first frames after a scene start include texture binds and layer creation, which belong
-  // to neither arm of the comparison.
-  await waitTicks(page, 60);
-  return sample(page, SAMPLE_TICKS);
-}
-
-/**
- * The mutation criterion 8.7's bound NAMES: this level's size stops being free per frame.
- *
- * Two halves, because "level size costs per frame" has two mechanisms in this game and neither alone
- * clears the measurement noise on this box:
- *
- * - **the tilemap stops culling to the camera** — `skipCull` makes every cell in the level considered
- *   each frame instead of the ~220 on screen. This is the literal wording of the bound's failure
- *   message, and the whole reason a 2.4x-bigger level is expected to cost 1x.
- * - **the sim's per-tick sweeps grow with the level** — `resolveCollisions` scans `solids` twice a
- *   tick, `hazardHit` scans `hazards`, `collectGears` scans `gears`. The copies are parked at
- *   `x + 1e6 * i`, so they are swept exactly as real geometry is and can never touch the player: the
- *   mutation changes the frame's cost and nothing else about the run.
- */
-async function costLevelSize(page: Page, copies: number): Promise<void> {
-  await page.evaluate((n) => {
-    const scene = (
-      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('Game') as {
-      groundLayer: { skipCull: boolean };
-      world: { solids: { x: number }[]; hazards: { x: number }[]; gears: { x: number }[] };
-    };
-    scene.groundLayer.skipCull = true;
-    const bloat = <T extends { x: number }>(list: T[]): T[] => {
-      const out = [...list];
-      for (let i = 1; i <= n; i += 1) for (const item of list) out.push({ ...item, x: item.x + 1_000_000 * i });
-      return out;
-    };
-    scene.world.solids = bloat(scene.world.solids);
-    scene.world.hazards = bloat(scene.world.hazards);
-    scene.world.gears = bloat(scene.world.gears);
-  }, copies);
-}
+import {
+  BLOAT_COPIES,
+  MAX_LEVEL_CREATE_MS,
+  MAX_LEVEL_CREATE_RATIO,
+  MAX_LEVEL_GPU_RATIO,
+  MAX_LEVEL_WORK_MS,
+  MAX_LEVEL_WORK_P95_MS,
+  MAX_LEVEL_WORK_RATIO,
+  PAIRS,
+  PROGRESS_KEY,
+  costLevelSize,
+  installCreateTimer,
+  median,
+  timeLevelCreation,
+  sampleLevel,
+  unlockAll,
+} from './levelPerf';
 
 test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp', () => {
   test('the largest level costs a bounded multiple of the smallest, per frame', async ({ page }) => {
@@ -161,6 +63,9 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     );
     await bootToGame(page);
     const renderer = await assertRealGpu(page, '8.7');
+    // 🔴 Turns on the GPU half of `Sample`. Without it `gpuSupported` is false and every GPU figure
+    // below is zero — which would read as "the GPU costs nothing" rather than "nothing was measured".
+    await installGpuTimer(page);
 
     const small: Sample[] = [];
     const large: Sample[] = [];
@@ -184,6 +89,10 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     const smallWork = median(small.map((s) => s.workMedianMs));
     const largeWork = median(large.map((s) => s.workMedianMs));
     const ratio = largeWork / smallWork;
+    const smallGpu = median(small.map((s) => s.gpuMedianMs));
+    const largeGpu = median(large.map((s) => s.gpuMedianMs));
+    const gpuRatio = largeGpu / smallGpu;
+    const largeP95 = median(large.map((s) => s.workP95Ms));
 
     // eslint-disable-next-line no-console
     console.log(
@@ -194,7 +103,11 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
         `      level-05 (160x28, 31.8 % painted, 6 enemies) work median ${large
           .map((s) => s.workMedianMs.toFixed(2))
           .join(', ')} -> ${largeWork.toFixed(2)} ms\n` +
-        `      ratio ${ratio.toFixed(2)}x against a bound of ${MAX_LEVEL_WORK_RATIO}x\n`,
+        `      ratio ${ratio.toFixed(2)}x against a bound of ${MAX_LEVEL_WORK_RATIO}x\n` +
+        `      GPU median  level-01 ${smallGpu.toFixed(3)} ms · level-05 ${largeGpu.toFixed(3)} ms -> ` +
+        `${gpuRatio.toFixed(2)}x against ${MAX_LEVEL_GPU_RATIO}x\n` +
+        `      work p95    level-05 ${large.map((s) => s.workP95Ms.toFixed(2)).join(', ')} -> ` +
+        `${largeP95.toFixed(2)} ms against ${MAX_LEVEL_WORK_P95_MS} ms\n`,
     );
 
     expect(
@@ -215,10 +128,119 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     ).toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
     expect(smallWork, 'level-01 alone exceeded the absolute budget').toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
 
+    /**
+     * 🔴 The GPU half, which `workMedianMs` structurally cannot see. Non-vacuity FIRST: a window with
+     * no timer, or with too few non-disjoint results, has a beautiful median of zero.
+     */
+    for (const [label, arm] of [
+      ['level-01', small],
+      ['level-05', large],
+    ] as const) {
+      for (const [i, s] of arm.entries()) {
+        expect(s.gpuSupported, `${label} window ${i + 1} had no GPU timer`).toBe(true);
+        expect(
+          s.gpuSamples,
+          `${label} window ${i + 1} produced only ${s.gpuSamples} non-disjoint GPU samples`,
+        ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
+        expect(s.gpuMedianMs, `${label} window ${i + 1} measured zero GPU time`).toBeGreaterThan(0);
+      }
+    }
+    expect(
+      gpuRatio,
+      `level-05 costs ${gpuRatio.toFixed(2)}x level-01 on the GPU. It paints 3.7x the tiles, so a ` +
+        'ratio near that number means the camera cull is not reaching the rasteriser — a cost the ' +
+        'main-thread bound above is blind to by construction.',
+    ).toBeLessThanOrEqual(MAX_LEVEL_GPU_RATIO);
+
+    /**
+     * 🔴 And the tail, not just the middle. `SAMPLE_TICKS` is two sentry cooldowns precisely so every
+     * window contains two synchronised volleys, and level-05 fires three sentries at once where
+     * level-01 fires one. A median cannot report that frame; this is the assertion that can.
+     */
+    expect(
+      largeP95,
+      `level-05's 95th-percentile frame blocked for ${largeP95.toFixed(2)} ms — a one-in-twenty ` +
+        'frame missing the 16.67 ms deadline on its own is a stutter the player sees, and the median ' +
+        'above is blind to it by construction (the defect that killed 5.11’s MAX_BURST_RATIO).',
+    ).toBeLessThanOrEqual(MAX_LEVEL_WORK_P95_MS);
+
     // 🔴 And the frames really were served. A window that drew nothing has a beautiful median.
     expect(median(large.map((s) => s.frames)), 'the large level served almost no frames').toBeGreaterThan(
       MIN_SAMPLES,
     );
+  });
+
+
+  /**
+   * 🔴 The cost `sample()` structurally cannot see: BUILDING the level.
+   *
+   * `sample` starts timing at the first `requestAnimationFrame` after it is installed, and
+   * `sampleLevel` settles for 60 ticks before that — so `drawLevelLayer`'s walk over every cell,
+   * `GearLayer.create()` and `EnemyLayer.create()` have all finished before the first measured frame.
+   * That walk is O(level AREA), which is the very quantity the steady-state ratio bound is a claim
+   * about, and until this test existed criterion 8.7 never looked at it: a construction path that
+   * went quadratic would have shipped with every bound above green. Named by the Phase 8
+   * performance-engineer's adversarial brief.
+   *
+   * Interleaved and alternating, like the measurement above, and for the same reason.
+   */
+  test('building the largest level stays linear in its area, and quick enough not to read as a load', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    await page.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [PROGRESS_KEY, unlockAll()] as const,
+    );
+    await bootToGame(page);
+    await assertRealGpu(page, '8.7-create');
+    await installCreateTimer(page);
+
+    const small: number[] = [];
+    const large: number[] = [];
+    for (let i = 0; i < PAIRS; i += 1) {
+      if (i % 2 === 0) {
+        small.push(await timeLevelCreation(page, 'level-01'));
+        large.push(await timeLevelCreation(page, 'level-05'));
+      } else {
+        large.push(await timeLevelCreation(page, 'level-05'));
+        small.push(await timeLevelCreation(page, 'level-01'));
+      }
+    }
+
+    const smallMs = median(small);
+    const largeMs = median(large);
+    const ratio = largeMs / smallMs;
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `
+[8.7 create] level-01 ${small.map((n) => n.toFixed(1)).join(', ')} -> ${smallMs.toFixed(1)} ms
+` +
+        `             level-05 ${large.map((n) => n.toFixed(1)).join(', ')} -> ${largeMs.toFixed(1)} ms
+` +
+        `             ratio ${ratio.toFixed(2)}x against ${MAX_LEVEL_CREATE_RATIO}x · absolute bound ` +
+        `${MAX_LEVEL_CREATE_MS} ms
+`,
+    );
+
+    // Non-vacuity: a zero would mean the poll resolved before anything was built.
+    for (const ms of [...small, ...large]) expect(ms, 'a level was built in no time at all').toBeGreaterThan(0);
+
+    expect(
+      ratio,
+      `building level-05 costs ${ratio.toFixed(2)}x level-01, against an AREA ratio of 2.03. ` +
+        'Construction is allowed to scale with area — it walks every cell once — so a number near 2 ' +
+        'is the expected shape and a number far above it means the walk is super-linear, which is ' +
+        'what would make a sixth level unopenable.',
+    ).toBeLessThanOrEqual(MAX_LEVEL_CREATE_RATIO);
+
+    expect(
+      largeMs,
+      `level-05 took ${largeMs.toFixed(1)} ms to build. That is the pause between ENTER on the ` +
+        'completion panel and the next level appearing, and past this it stops reading as a ' +
+        'transition and starts reading as a load.',
+    ).toBeLessThanOrEqual(MAX_LEVEL_CREATE_MS);
   });
 
   /**

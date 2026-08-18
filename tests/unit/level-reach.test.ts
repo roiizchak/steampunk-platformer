@@ -142,9 +142,13 @@ describe.each(LEVELS)('%s is completable, proved segment by segment', (id, level
    * exactly the shipped jump is a level one balance change away from being uncompletable, and the whole
    * point of proving completability with the real sim is that the sim is allowed to change.
    */
-  it(`the route still connects with jumpVelocity reduced by ${JUMP_MARGIN_DELTA}`, () => {
+  // ⚠️ Every gate seed, not just the first. The terrain graph builds a world with no enemies and is
+  // therefore seed-independent today — but the main reachability assertion above sweeps all three, and
+  // a margin proved under one seed while its own gate sweeps three is an inconsistency waiting to
+  // become a hole the day this harness grows anything stochastic. Named by the qa-expert brief 2.
+  it.each(GATE_SEEDS)(`the route still connects with jumpVelocity reduced by ${JUMP_MARGIN_DELTA} (seed %i)`, (seed) => {
     const weaker = { jumpVelocity: DEFAULT_TUNING.jumpVelocity - JUMP_MARGIN_DELTA };
-    const { reachable, goalSegment } = reachFrom(level, { seed: GATE_SEEDS[0], tuning: weaker });
+    const { reachable, goalSegment } = reachFrom(level, { seed, tuning: weaker });
     expect(
       reachable.has(goalSegment),
       `${id}: the route survives at the shipped jump and NOT with ${JUMP_MARGIN_DELTA} less. It has no ` +

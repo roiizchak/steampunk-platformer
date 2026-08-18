@@ -171,9 +171,23 @@ describe('resolveEntryLevel is total, and never hands back an id the catalog lac
         for (const completed of sets) {
           const got = resolveEntryLevel(requested, saved, order, completed);
           expect(order, `resolveEntryLevel(${String(requested)}, ${String(saved)}) escaped the catalog`).toContain(got);
+          /**
+           * 🔴 Graded against the rule spelled out HERE, not against `isUnlocked`.
+           *
+           * The draft called `isUnlocked(got, completed, order)` — the very predicate
+           * `resolveEntryLevel` uses to pick `got`. That assertion is true by construction for any
+           * implementation that calls the predicate at all, however wrong the predicate is: flip
+           * `at - 1` to `at + 1` inside `isUnlocked` and this sweep stays green while every level is
+           * unlocked out of order. Named by the Phase 8 qa-expert's adversarial brief.
+           *
+           * The rule, written out independently: level N is playable iff it is the first, or the one
+           * before it is completed.
+           */
+          const at = (order as readonly string[]).indexOf(got!);
           expect(
-            isUnlocked(got!, completed, order),
-            `resolveEntryLevel(${String(requested)}, ${String(saved)}) returned a LOCKED level`,
+            at === 0 || completed.has((order as readonly string[])[at - 1]!),
+            `resolveEntryLevel(${String(requested)}, ${String(saved)}) returned ${String(got)}, whose ` +
+              'predecessor is not completed — a LOCKED level',
           ).toBe(true);
         }
       }

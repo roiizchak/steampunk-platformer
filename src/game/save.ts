@@ -176,6 +176,41 @@ export function readProgress(storage: SettingsStorage | null): SaveData {
   return save;
 }
 
+/**
+ * The entries already on disk that `readProgress` DROPPED, carried through a write untouched.
+ *
+ * 🔴 Without this, a corrupt entry is not merely ignored — it is **erased**. `readProgress` drops what
+ * fails validation, `writeProgress` re-serialises only what survived, and the next write happens on
+ * the very next level start (`gameLevelPick`) or completion (`gameComplete`). So one hand-edited
+ * `bestGears: 3.5` cost that level's record permanently, three seconds later, silently. The header
+ * above said the entry was "dropped" and that it cost "that level's unlock"; it did not say the loss
+ * was then made permanent, which made the comment gentler than the code *(vault C9)*. Found by the
+ * Phase 8 code-reviewer's adversarial brief, and criterion 8.4's words are **no data loss**.
+ *
+ * ⚠️ It re-reads storage rather than remembering, because `readProgress` returns the parsed shape and
+ * this needs the raw values it could not parse. Nothing here interprets them: an unreadable claim is
+ * still not a claim, so a carried-over entry unlocks nothing and shows as locked. It is only kept.
+ *
+ * There is no path that legitimately removes a level entry — `recordCompletion` only ever adds — so a
+ * key on disk that is absent from `save.levels` is exactly a dropped one.
+ */
+function carriedOver(storage: SettingsStorage, save: SaveData): Record<string, unknown> {
+  const kept: Record<string, unknown> = {};
+  try {
+    const raw = storage.getItem(PROGRESS_KEY);
+    if (raw === null) return kept;
+    const stored = JSON.parse(raw) as unknown;
+    if (!isPlainObject(stored) || !isPlainObject(stored.levels)) return kept;
+    for (const [id, value] of Object.entries(stored.levels)) {
+      if (!(id in save.levels)) kept[id] = value;
+    }
+  } catch {
+    // Unparseable bytes carry no entries to keep. The write replaces them, which is the only thing a
+    // writer can do with a file it cannot read at all.
+  }
+  return kept;
+}
+
 /** Persist the save. Never throws — a full quota is not a crash. */
 export function writeProgress(storage: SettingsStorage | null, save: SaveData): void {
   // ⚠️ A `null` storage is the same failure as a throwing one, and `storage?.setItem` would have
@@ -189,7 +224,7 @@ export function writeProgress(storage: SettingsStorage | null, save: SaveData): 
   try {
     // Re-serialised field by field rather than stringifying `save` directly, so a caller that hung an
     // extra field on the object does not quietly widen the stored schema.
-    const levels: Record<string, LevelProgress> = {};
+    const levels: Record<string, unknown> = carriedOver(storage, save);
     for (const [id, entry] of Object.entries(save.levels)) {
       levels[id] = { completed: entry.completed, bestGears: entry.bestGears };
     }

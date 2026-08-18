@@ -30,6 +30,7 @@
 
 import Phaser from 'phaser';
 import { HUD_MARGIN } from '../render/hud';
+import { ticksToMs } from '../sim';
 
 /** Above every HUD object `UIScene.build()` creates, so the fade dims the HUD too. */
 export const OVERLAY_DEPTH = 1000;
@@ -38,7 +39,17 @@ export const OVERLAY_DEPTH = 1000;
 export const FADE_ALPHA = 0.72;
 
 /** Long enough to read as a transition, short enough not to delay the continue press. */
-export const FADE_MS = 420;
+export const FADE_TICKS = 25;
+
+/**
+ * The fade, in milliseconds, converted through `ticksToMs` — see `goalLayer.GOAL_PULSE_TICKS` for the
+ * rule and for why a raw `420` here was the same defect Codex blocked in `UIScene.ts`. 25 ticks is
+ * 416.67 ms.
+ */
+export const FADE_MS = ticksToMs(FADE_TICKS);
+
+/** The panel starts part-way through the fade. 12 ticks, not `FADE_MS / 2` — 12.5 ticks is not a tick. */
+const PANEL_DELAY_MS = ticksToMs(12);
 
 /** The four lines the panel shows. Composed by `gameComplete.ts`, which knows the save and the run. */
 export interface LevelCompleteInfo {
@@ -140,7 +151,7 @@ export function showLevelComplete(scene: Phaser.Scene, info: LevelCompleteInfo):
     targets: lines,
     alpha: 1,
     duration: FADE_MS,
-    delay: FADE_MS / 2,
+    delay: PANEL_DELAY_MS,
     ease: 'Quad.easeOut',
   });
 

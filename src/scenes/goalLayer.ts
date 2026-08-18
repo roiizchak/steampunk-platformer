@@ -30,6 +30,7 @@
 
 import Phaser from 'phaser';
 import type { Rect } from '../sim/types';
+import { ticksToMs } from '../sim';
 
 /** The catalogued texture a generated exit would arrive as. Absent today, by design. */
 export const GOAL_TEXTURE_KEY = 'goal-gate';
@@ -84,7 +85,21 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
 }
 
 /** How long the exit's reached-it flourish runs. Shorter than `hudFade`'s fade, so it reads first. */
-export const GOAL_PULSE_MS = 260;
+export const GOAL_PULSE_TICKS = 16;
+
+/**
+ * The pulse, in milliseconds, converted through `ticksToMs` at the one place Phaser needs a duration.
+ *
+ * 🔴 This was `const GOAL_PULSE_MS = 260`, and Codex called the identical literal a **blocker** in
+ * `UIScene.ts` one phase earlier: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6
+ * ticks — a duration the simulation cannot express. Phase 8 wrote the same number back into a new
+ * file, which is what "fixed the instance, not the class" looks like. Found by the Phase 8
+ * code-reviewer's adversarial brief. 16 ticks is 266.67 ms and is a number the sim can hold.
+ */
+export const GOAL_PULSE_MS = ticksToMs(GOAL_PULSE_TICKS);
+
+/** Out and back: the yoyo halves the pulse, and 8 is a whole tick where `16 / 2` in ms is not. */
+const GOAL_PULSE_HALF_MS = ticksToMs(GOAL_PULSE_TICKS / 2);
 
 /**
  * The exit's `animate` step — criterion 8.6.
@@ -105,7 +120,7 @@ export function animateGoalReached(
   scene.tweens.add({
     targets: goalObject,
     alpha: 0.25,
-    duration: GOAL_PULSE_MS / 2,
+    duration: GOAL_PULSE_HALF_MS,
     yoyo: true,
     repeat: 1,
   });

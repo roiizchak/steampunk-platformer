@@ -28,6 +28,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import { bestGears, completedIds, readProgress, safeLocalStorage } from '../game/save';
 import { parseLevel } from '../game/tilemap';
 import { isUnlocked } from '../sim/progress';
+import { updateDebugState } from '../debug/globals';
 import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
@@ -98,6 +99,25 @@ export class LevelSelectScene extends Phaser.Scene {
 
     this.bindKeys();
     this.paint();
+
+    /**
+     * 🔴 Publish, or the debug surface reports a running game while a menu is on screen.
+     *
+     * `state` in `src/debug/globals.ts` is module-level and only ever patched, so without this the
+     * eight fields keep whatever `GameScene` last wrote: `sceneKey: 'Game'`, `ready: true`, a
+     * `levelId` for a level that is not loaded, and a frozen player at frozen coordinates. Every one
+     * of them is a lie for as long as the menu is up — and `gameHarness.bootToGame` asserts
+     * `sceneKey === 'Game'`, so that assertion, which about forty specs stand on, would be satisfied
+     * by this screen. This is the first SHIPPED scene the player can reach that does not extend
+     * `GameScene`, so it is the first one that had to say so itself. Found by the Phase 8
+     * code-reviewer's adversarial brief; the Phase 8 spec had quietly worked around it with
+     * `scene.isActive('LevelSelect')` instead.
+     *
+     * `player` and `levelId` go to `null` because there is no level here — the honest value, and the
+     * same one `BootScene` publishes before it routes. `ready` stays true: it is the boot's terminal
+     * condition, and the boot really did finish.
+     */
+    updateDebugState({ sceneKey: this.scene.key, player: null, levelId: null });
   }
 
   /**

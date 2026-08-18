@@ -139,14 +139,25 @@ const LAUNCHES: { from: number; jumpAfter: number | null; jumpAtEdge?: boolean }
 ];
 
 /**
- * Long enough for a run-up to cross half a level-01 ground strip and still finish the arc.
+ * Long enough for the LONGEST launch script above to cross the WIDEST shipped strip and still finish
+ * the arc.
  *
- * ⚠️ Sized against a MEASUREMENT, not guessed: the player covers about 9 px per tick at run speed, and
- * the longest run-up any launch below asks for is half of a 3840 px strip — roughly 215 ticks. At the
- * first draft's 150 the run simply ran out of ticks short of the obstacle, and the transition read as
- * unprovable for a reason that had nothing to do with the geometry.
+ * ⚠️ Sized against a MEASUREMENT, and the measurement was re-taken after the Phase 8 qa-expert's
+ * adversarial brief flagged the old one as arithmetic about the wrong launch.
+ *
+ * The player covers about 9 px per tick at run speed. The longest approach any launch above asks for
+ * is `from: 0.25` — three quarters of a strip — and the widest shipped strip is **5280 px**, in
+ * level-03 at (3744, 1920). That is 3960 px, or **about 440 ticks**. The previous value of 300 was
+ * derived from the `from: 0.5` launch on a 3840 px strip (215 ticks) and simply forgot the others, so
+ * on the widest strips the `from: 0.25` script ran out of ticks before it ever reached the obstacle.
+ *
+ * The gate was green throughout, because `from: 0.5` on that same strip needs 293 ticks and fit — by
+ * seven. That is the whole reason this is worth fixing rather than recording: the failure direction is
+ * a false RED, which is safe, but a margin of seven ticks is not a margin. 600 clears the worst launch
+ * on the worst shipped strip with room, and at the first draft's 150 the run ran out short of the
+ * obstacle and the transition read as unprovable for a reason that had nothing to do with geometry.
  */
-const TICKS_PER_ATTEMPT = 300;
+const TICKS_PER_ATTEMPT = 600;
 
 export interface GraphOptions {
   seed: number;

@@ -160,7 +160,21 @@ export class BootScene extends Phaser.Scene {
     // The consequence is deliberate: if GameScene fails to construct, `ready` stays false with
     // `bootError` null — the third state, a hang, which is distinguishable from both a clean boot
     // and a refusal. Setting `ready` here would have reported a broken game as a good one.
-    this.scene.start('Game');
+    /**
+     * ⚠️ `{ levelId: null }`, never a bare `start('Game')`.
+     *
+     * Phaser's `Systems.start(data)` only overwrites `settings.data` when `data` is TRUTHY, and
+     * `SceneManager.bootScene` feeds `settings.data` straight into `init`. So a payload-less start
+     * re-delivers whatever payload the scene was last started with — and since Phase 8 that is a
+     * concrete `{ levelId }` from the level menu or from the completion panel. `GameScene.init` cannot
+     * tell "no payload" from "the payload from three starts ago", so the stale id would win over the
+     * save and defeat the tier ordering `resolveEntryLevel` exists to enforce. Verified against the
+     * installed Phaser 4.2.1 source by the Phase 8 code-reviewer's adversarial brief.
+     *
+     * `null` is not "no payload" — it is the explicit request to resolve from the save, which is what
+     * `init`'s `data?.levelId ?? null` already means.
+     */
+    this.scene.start('Game', { levelId: null });
   }
 
   /**

@@ -229,10 +229,38 @@ describe('the difficulty ramp is measured and reported as a spread (8.5, vault 5
   });
 
   it('prints the per-metric table for the QA log', () => {
-    const table = reportTable();
+    // ⚠️ No assertion. The draft here checked `table.split('\n').length === METRICS.length + 2`, which
+    // `reportTable` satisfies by construction for ANY game data and could therefore never go red —
+    // decoration wearing the shape of a gate *(vault C2)*. What the table is FOR is asserted by the
+    // five properties below; printing it is a report, not a check, and saying so is honest.
     // eslint-disable-next-line no-console
-    console.log(`\n${table}\n`);
-    expect(table.split('\n').length).toBe(METRICS.length + 2);
+    console.log(`\n${reportTable()}\n`);
+  });
+
+  /**
+   * 🔴 Property 0 — every STEP raises something. Non-decreasing is not the same as a ramp.
+   *
+   * Properties 1-4 below are all satisfied by a level-05 that is a cosmetic reskin of level-04: same
+   * length, same hazard total, same enemies, same rise, same gap. Non-vacuity only asks that the five
+   * levels differ SOMEWHERE, and levels 01-04 already provide that; direction asks for `>=`, which
+   * equality satisfies; no-backslide and no-cliff both pass a change of zero. So a five-level ramp
+   * that climbs for four levels and then flatlines shipped green, and "the difficulty ramp across the
+   * five levels" does not mean that. Named by the Phase 8 qa-expert's adversarial brief.
+   *
+   * Deliberately "at least ONE directional metric", not all five: two of them are held at a measured
+   * ceiling on purpose (see `level-04.mjs`), and requiring every metric to rise every time would
+   * forbid the plateau the design chose.
+   */
+  it('every step up the ramp raises at least one directional metric', () => {
+    for (let i = 1; i < LEVELS.length; i += 1) {
+      const risen = DIRECTIONAL.filter((m) => m.of(LEVELS[i]![1]) > m.of(LEVELS[i - 1]![1])).map((m) => m.name);
+      expect(
+        risen.length,
+        `nothing directional rose between ${LEVELS[i - 1]![0]} and ${LEVELS[i]![0]}: the later level ` +
+          'is a reskin of the earlier one. Every other property in this file passes on that, because ' +
+          'they bound decrease and growth rather than requiring any.',
+      ).toBeGreaterThan(0);
+    }
   });
 
   /**

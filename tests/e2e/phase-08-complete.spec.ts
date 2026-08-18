@@ -351,6 +351,20 @@ test.describe('Phase 8 — the level-complete flow (8.6)', () => {
       { timeout: 10_000, polling: 50 },
     );
 
+    /**
+     * 🔴 And the debug surface says so. Until Phase 8's second code-review brief, `LevelSelectScene`
+     * published nothing, so `window.__game` still read `sceneKey: 'Game'` with a `levelId` for a level
+     * that was not loaded — and `gameHarness.bootToGame`, which about forty specs stand on, asserts
+     * exactly that field. The spec above worked around it with `scene.isActive` and never said why.
+     * This is the assertion that keeps the surface honest.
+     */
+    const view = await page.evaluate(() => (window as unknown as { __game: unknown }).__game);
+    expect(view, 'the level menu still reports itself as the running game').toMatchObject({
+      sceneKey: 'LevelSelect',
+      player: null,
+      levelId: null,
+    });
+
     const rows = await page.evaluate(() => {
       const scene = (
         window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }

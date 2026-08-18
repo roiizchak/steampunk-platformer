@@ -167,7 +167,8 @@ export class GymScene extends Phaser.Scene {
     const { G, SPACE, OPEN_BRACKET, CLOSED_BRACKET, COMMA, PERIOD, Z, X, A, S, R, M } =
       Phaser.Input.Keyboard.KeyCodes;
 
-    keyboard.addKey(G, true, false).on('down', () => this.scene.start('Game'));
+    // `{ levelId: null }` — a bare start re-delivers the last payload; see `BootScene`'s note.
+    keyboard.addKey(G, true, false).on('down', () => this.scene.start('Game', { levelId: null }));
     keyboard.addKey(SPACE, true, false).on('down', () => this.togglePlaying());
     keyboard.addKey(OPEN_BRACKET, true, false).on('down', () => this.stepSheet(-1));
     keyboard.addKey(CLOSED_BRACKET, true, false).on('down', () => this.stepSheet(1));
