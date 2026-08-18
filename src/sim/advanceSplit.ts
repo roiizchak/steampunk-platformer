@@ -24,7 +24,8 @@
  * that happened to notice — the same reason `advance()` walks its record instead of naming fields.
  */
 
-import { advance, noEvents } from './tick';
+import { tick } from './tick';
+import { noEvents } from './events';
 import type { AdvanceEvents, InputSnapshot, TickEvents, World } from './types';
 
 /**
@@ -70,4 +71,27 @@ export function advanceSplit(
   beforeLastTick();
   const last = advance(world, input, 1);
   return mergeEvents(early, last);
+}
+
+/**
+ * Run `ticks` simulation ticks against ONE snapshot, returning the OR-accumulated edges (vault 2.5).
+ *
+ * The accumulation is why this returns anything at all. A render frame can drain many ticks, so a
+ * whole action can start and finish between two frames; a renderer that compared state across
+ * frames would never see it. `ticks === 0` is a legal, meaningful call — a frame whose accumulator
+ * did not reach a whole tick — and it must not consume the input snapshot.
+ */
+export function advance(world: World, input: InputSnapshot, ticks: number): AdvanceEvents {
+  const total = noEvents();
+  for (let i = 0; i < ticks; i += 1) {
+    const events = tick(world, input);
+    // 🔴 Every field, walked from the record itself — NOT named assignments. This function is where
+    // that lesson was paid for (four edges silently dropped, `respawned` permanently false in the only
+    // production caller), and the full account lives once, on `mergeEvents` in `advanceSplit.ts`.
+    // `tick-events.test.ts` asserts every declared field survives a batch so this cannot regress.
+    for (const key of Object.keys(total) as (keyof TickEvents)[]) {
+      total[key] = total[key] || events[key];
+    }
+  }
+  return total;
 }

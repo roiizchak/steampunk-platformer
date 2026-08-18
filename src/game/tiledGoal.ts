@@ -140,23 +140,42 @@ export function describeGoalProblem(
   }
 
   /**
-   * Buried ENTIRELY inside one solid, which is different from merely touching one.
+   * Buried inside solid, which is different from merely touching one.
    *
    * An exit flush against the level's right wall legitimately overlaps that wall — that is what a door
-   * in a wall looks like. What is unreachable is a volume with solid on every side, and since the
+   * in a wall looks like. What is unreachable is a volume with solid everywhere in it, and since the
    * player can never be inside a solid, the two boxes could never overlap.
+   *
+   * 🔴 Tested against the UNION, by sampling, not against each solid in turn. The first version asked
+   * whether any ONE solid contained the whole goal, and two abutting rects that jointly bury the exit
+   * answered no to that question every time — which is precisely how this generator emits a mass:
+   * one collision strip per row. Found by the Phase 8 code-reviewer gate owner.
+   *
+   * A sample grid rather than a rectangle-subtraction: the question is only "is there anywhere in this
+   * volume a player could be", the interior offsets below are well inside the smallest authored goal,
+   * and exact coverage arithmetic over arbitrary rects is a lot of code to answer a yes/no.
    */
-  const swallowed = solids.find(
-    (solid) =>
-      gx >= (solid.x as number) &&
-      gy >= (solid.y as number) &&
-      gx + gw <= (solid.x as number) + (solid.width as number) &&
-      gy + gh <= (solid.y as number) + (solid.height as number),
-  );
-  if (swallowed !== undefined) {
+  const FRACTIONS = [0.1, 0.3, 0.5, 0.7, 0.9];
+  const covers = (solid: TiledObject, px: number, py: number): boolean =>
+    px >= (solid.x as number) &&
+    py >= (solid.y as number) &&
+    px <= (solid.x as number) + (solid.width as number) &&
+    py <= (solid.y as number) + (solid.height as number);
+
+  let freeSample = false;
+  for (const fx of FRACTIONS) {
+    for (const fy of FRACTIONS) {
+      if (!solids.some((solid) => covers(solid, gx + gw * fx, gy + gh * fy))) {
+        freeSample = true;
+      }
+    }
+  }
+  if (!freeSample) {
+    // Named against the solid over the CENTRE, so the message points at something the author can find.
+    const middle = solids.find((solid) => covers(solid, gx + gw / 2, gy + gh / 2));
     return (
       `the goal at (${gx}, ${gy}) ${gw} x ${gh} is entirely inside the solid at ` +
-      `(${swallowed.x}, ${swallowed.y}) ${swallowed.width} x ${swallowed.height} — the player can ` +
+      `(${middle?.x}, ${middle?.y}) ${middle?.width} x ${middle?.height} — the player can ` +
       `never be inside a solid, so the exit can never be entered`
     );
   }

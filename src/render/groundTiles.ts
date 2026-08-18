@@ -80,8 +80,10 @@ export interface SolidRect {
  * This asks the collision rectangles, not the tile layer, and the difference is a shipped bug. The
  * caller used to ask `layer.getTileAt(col, row - 1)` — *is any tile DRAWN above me* — while calling
  * the answer `hasSolidAbove`. A decorative tile standing on the ground therefore made the ground
- * beneath it read as buried and lose its brass cap. It cost `level-01` a 4-tile stretch at
- * x 2304–2688, under the spike run, where 384 px of walkable floor drew as plain brick — and
+ * beneath it read as buried and lose its brass cap. It cost the RETIRED level-01 — the Phase 7
+ * geometry now frozen as `tests/fixtures/levels/level-01-phase07.tmj` — a 4-tile stretch at
+ * x 2304–2688, under its spike run, where 384 px of walkable floor drew as plain brick. Those
+ * coordinates describe that fixture and not the level Phase 8 shipped; the RULE is what carries, and
  * STYLE.md §5 RULE ONE is *"a player identifies a platform by that brass edge alone"*. The header
  * above already names the spike run as the case the `isGreyboxFill` guard was protecting; this is
  * the other half of that protection, and it was missing.

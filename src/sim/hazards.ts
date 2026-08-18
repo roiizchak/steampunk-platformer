@@ -8,8 +8,10 @@
  * deliberately, because a kill plane is a *death* and death is Phase 5's state machine; bolting a
  * respawn onto a game with no health model would have had to be undone here.
  *
- * The paired item was the spike run at `level-01` cols 24–27: non-solid and non-damaging, which was
- * correct — you do not stand on spikes — and making it hurt is this same work.
+ * The paired item was the spike run at cols 24–27 of the level-01 of the time — the Phase 7 geometry
+ * now frozen as `tests/fixtures/levels/level-01-phase07.tmj`, not the level Phase 8 ships:
+ * non-solid and non-damaging, which was correct — you do not stand on spikes — and making it hurt is
+ * this same work.
  *
  * ## Two different treatments, on purpose
  *

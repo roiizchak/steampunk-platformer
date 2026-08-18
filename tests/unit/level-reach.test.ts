@@ -153,21 +153,31 @@ describe.each(LEVELS)('%s is completable, proved segment by segment', (id, level
   });
 
   /**
-   * 🔴 And at least one obstacle the standing hop does NOT clear.
+   * 🔴 And the route genuinely REQUIRES the jump: with `jumpVelocity: 0` the goal must drop out.
    *
-   * Without this the whole file is satisfied by a level that is one flat corridor: every segment
+   * Without this the whole file is satisfied by a level that is one flat corridor — every segment
    * trivially reachable, every gear on the floor, the margin sweep passing because nothing is being
    * asked *(vault 9.4 — the "satisfied by deleting the hazard" shape)*.
+   *
+   * ⚠️ The draft this replaces counted "distinct surface heights > 1" and "a hole in the floor or
+   * something raised above it". Both are satisfied by geometry the route never touches: a decorative
+   * ledge in a corner is a second surface height, and neither says the PATH from spawn to exit passes
+   * through any of it. The Phase 8 code-reviewer gate owner named it. Taking the jump away and
+   * requiring the goal to become unreachable is the same claim asked of the route itself, using the
+   * machinery already here — and it is the exact shape of the `jumpVelocity` margin sweep above, at
+   * its limit.
    */
-  it('asks for at least one deliberate jump — a flat corridor would pass everything above', () => {
-    const tops = [...new Set(segments(level).map((s) => s.y))];
-    expect(tops.length, `${id} is one flat surface`).toBeGreaterThan(1);
-    const gapCount = level.solids.filter((s) => s.y === level.spawn.y).length - 1;
-    const raised = level.solids.filter((s) => s.y < level.spawn.y).length;
+  it('needs the jump: with jumpVelocity 0 the goal is UNREACHABLE', () => {
+    const { reachable, goalSegment } = reachFrom(level, {
+      seed: GATE_SEEDS[0],
+      tuning: { jumpVelocity: 0 },
+    });
     expect(
-      gapCount + raised,
-      `${id} has neither a hole in its floor nor anything raised above it`,
-    ).toBeGreaterThan(0);
+      reachable.has(goalSegment),
+      `${id}: a player who cannot jump at all still reaches the exit, so nothing on the route asks ` +
+        'for one. Every proof in this file is then about a flat corridor, and the margin sweep above ' +
+        'passes because a zero-jump route survives any tuning.',
+    ).toBe(false);
   });
 });
 

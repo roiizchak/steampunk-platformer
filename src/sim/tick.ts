@@ -116,7 +116,7 @@ import { collectGears } from './pickups';
 import { applyPlayerAttack } from './playerAttack';
 import { applyWorldDamage } from './worldDamage';
 import { nextFloat } from './rng';
-import type { AdvanceEvents, InputSnapshot, TickEvents, World } from './types';
+import type { InputSnapshot, TickEvents, World } from './types';
 import { advanceWindow, windowOpen } from './windows';
 
 export { GREY_BOX_SOLIDS, createWorld } from './world';
@@ -375,26 +375,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
 }
 
 /**
- * Run `ticks` simulation ticks against ONE snapshot, returning the OR-accumulated edges (vault 2.5).
+ * `advance` lives in `advanceSplit.ts` and is re-exported here.
  *
- * The accumulation is why this returns anything at all. A render frame can drain many ticks, so a
- * whole action can start and finish between two frames; a renderer that compared state across
- * frames would never see it. `ticks === 0` is a legal, meaningful call — a frame whose accumulator
- * did not reach a whole tick — and it must not consume the input snapshot.
+ * It is not part of the numbered order above — it is a LOOP over it — and this file was at exactly
+ * 400 of its 400 lines, which is no headroom for the next person to add a step. The same split
+ * `world.ts` took, for the same reason and with the same re-export so no caller changes.
  */
-export function advance(world: World, input: InputSnapshot, ticks: number): AdvanceEvents {
-  const total = noEvents();
-  for (let i = 0; i < ticks; i += 1) {
-    const events = tick(world, input);
-    // 🔴 Every field, walked from the record itself — NOT named assignments. This function is where
-    // that lesson was paid for (four edges silently dropped, `respawned` permanently false in the only
-    // production caller), and the full account lives once, on `mergeEvents` in `advanceSplit.ts`.
-    // `tick-events.test.ts` asserts every declared field survives a batch so this cannot regress.
-    for (const key of Object.keys(total) as (keyof TickEvents)[]) {
-      total[key] = total[key] || events[key];
-    }
-  }
-  return total;
-}
+export { advance } from './advanceSplit';
 
 export { PLAYER_BOX };

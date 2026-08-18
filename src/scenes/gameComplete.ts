@@ -38,12 +38,13 @@ import { recordCompletion, readProgress, safeLocalStorage, writeProgress } from 
 import { nextLevelId } from '../sim/progress';
 import type { World } from '../sim/types';
 import { animateGoalReached } from './goalLayer';
-import { levelOrder } from './gameLevelPick';
+import { LEVEL_SELECT_KEY, levelOrder } from './gameLevelPick';
 import type { LevelCompleteInfo } from './hudFade';
 import type { UIScene } from './UIScene';
 
-/** The scene key the last level's continue goes to. */
-export const LEVEL_SELECT_KEY = 'LevelSelect';
+/** The scene key the last level's continue goes to. Defined in `gameLevelPick.ts`, re-exported here
+ * because this file's `bindContinue` is what routes to it. */
+export { LEVEL_SELECT_KEY };
 
 export interface CompletionContext {
   scene: Phaser.Scene;

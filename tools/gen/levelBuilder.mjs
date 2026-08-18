@@ -179,7 +179,24 @@ export function buildLevel(layout) {
 
   const runs = groundRuns(W, gaps);
   const tiles = new Uint8Array(W * H);
-  const at = (col, row) => row * W + col;
+  /**
+   * A cell index, and it REFUSES an out-of-range one.
+   *
+   * ⚠️ Without the guard `row * W + col` is silently wrong rather than absent: a column past `W - 1`
+   * wraps onto the next row and paints a tile at the far LEFT of the level, a whole row down. The
+   * layout module that did it still produces a valid `.tmj`, so nothing downstream complains — the
+   * level simply has a stray tile somewhere its author never looked. A layout is data typed by hand
+   * and an off-by-one in it is the likeliest mistake there is.
+   */
+  const at = (col, row) => {
+    if (col < 0 || col >= W || row < 0 || row >= H) {
+      throw new Error(
+        `levelBuilder ${id}: cell (${col}, ${row}) is outside the ${W} x ${H} grid. An out-of-range ` +
+          'column wraps onto the next row, so this would have painted a tile somewhere else entirely.',
+      );
+    }
+    return row * W + col;
+  };
 
   // Painting order matters: fill, then walls, then platforms, then authored art LAST so it wins.
   for (const { fromCol, toCol } of runs) {

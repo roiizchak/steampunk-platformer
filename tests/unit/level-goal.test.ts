@@ -35,6 +35,16 @@ describe('REJECTS a level whose exit is missing or badly placed', () => {
     ['goal-outside-map', /is not fully inside the map/],
     ['goal-inside-solid', /is entirely inside the solid at/],
     /**
+     * 🔴 The same defect built out of TWO rects, and it is not a duplicate of the line above.
+     *
+     * The first version of this rule asked whether any ONE solid contained the whole goal, and this
+     * generator emits a mass as one collision strip per row — so an exit buried in a wall answered
+     * "no" to that question and validated. The rule now samples the goal against the UNION, and this
+     * fixture is what stops it sliding back: it passes the per-solid test and fails the union one.
+     * Found by the Phase 8 code-reviewer gate owner.
+     */
+    ['goal-inside-abutting-solids', /is entirely inside the solid at/],
+    /**
      * 🔴 The two Codex forced. `docs/reviews/phase-08-plan.md` F4/B2.
      *
      * A goal overlapping the spawn makes `world.completed` true on tick 1: the scripted traversal

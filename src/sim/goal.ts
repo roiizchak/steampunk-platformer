@@ -57,6 +57,13 @@
  *
  * It is also what makes `levelCompleted` fire exactly once **structurally**, rather than because
  * something remembered to latch a flag. There is no second tick in which it could fire again.
+ *
+ * ⚠️ **And `world.tickCount` stops with everything else**, which is worth saying out loud because it
+ * is visible outside the sim: `window.__game.tick` stops advancing the moment a level is completed and
+ * does not move again until the next level's world is built. Any e2e helper that waits on a number of
+ * TICKS — `waitTicks` — therefore hangs on a completed level rather than timing out at a wrong value.
+ * Wait on `completed`, or on the next level's `levelId`. This is a consequence of the freeze rather
+ * than a separate decision, and it cost a spec an afternoon before it was written down.
  */
 
 import { PLAYER_BOX } from './player';

@@ -76,9 +76,19 @@ export function firstLevelId(scene: Phaser.Scene): string | undefined {
  * question being asked. `playerInputEnabled` is right for a key that drives the character; "am I the
  * production play scene" is right for a key that leaves it.
  */
+/**
+ * The level menu's scene key, defined once.
+ *
+ * ⚠️ It was written out as a string literal in four places — `BootScene`'s two stop lists,
+ * `openLevelSelect` below and the scene's own `super()` — while `gameComplete.ts` exported a constant
+ * for it that none of them used. A scene key that four files spell independently is a rename waiting
+ * to leave `refuseToRoute`'s stop list behind, which fails as a menu drawn over a booting game.
+ */
+export const LEVEL_SELECT_KEY = 'LevelSelect';
+
 export function openLevelSelect(scene: Phaser.Scene): void {
   if (scene.scene.key === 'Game') {
-    scene.scene.start('LevelSelect');
+    scene.scene.start(LEVEL_SELECT_KEY);
   }
 }
 

@@ -28,7 +28,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import { bestGears, completedIds, readProgress, safeLocalStorage } from '../game/save';
 import { parseLevel } from '../game/tilemap';
 import { isUnlocked } from '../sim/progress';
-import { assetCatalog, levelOrder } from './gameLevelPick';
+import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
@@ -51,7 +51,7 @@ export class LevelSelectScene extends Phaser.Scene {
   private cursor = 0;
 
   constructor() {
-    super('LevelSelect');
+    super(LEVEL_SELECT_KEY);
   }
 
   /**
