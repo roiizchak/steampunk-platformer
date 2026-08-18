@@ -22,6 +22,27 @@ about assertions.
 and meaningless when the replacement is empty. Both cases write the file before failing, so a
 "refused" mutation can sit applied in a tree that then reports green *(C12)*.
 
+**A perf bound chosen from a set of runs must be CONFIRMED on runs that had no say in the choice.**
+Select on one set, confirm on a held-out set. Evidence, 2026-08-18, and it fired on both gates the
+same afternoon:
+
+| gate | chosen from | the first held-out run | outcome |
+|---|---|---|---|
+| 7.7 | 6 clean runs, worst **1.0054** → bound 1.02 | **1.0208** | false red |
+| 6.9 | 9 clean runs, worst **0.0307** → bound 0.06 | **0.0835** | false red |
+
+Both bounds were green on every run used to select them. Neither would have survived a week. This is
+the same failure the project had already made three times — 7.7 was originally set against a
+one-frame clean spread that twelve later runs blew apart, 6.9's clean ceiling rose the moment two
+extra samples arrived, and a previous session's replacement statistic turned out worse than the one
+it replaced. Full record: [qa/session-bugfix-perf-gates.md](qa/session-bugfix-perf-gates.md) §3.
+
+**A statistic that does not ORDER its own mutation cannot be fixed by moving the bound.** 6.9's GPU
+ratio put five full-screen scrims (1.678) *below* a clean run (1.692). No threshold separates those.
+Check the ordering before tuning the number — and if the ordering is broken, replace the statistic.
+A ratio of two very small numbers is the usual culprit: 6.9's denominator collapsed toward the GPU
+timer's own 0.035 ms resolution floor.
+
 **A non-zero exit code is not evidence a gate caught anything.** A vitest spawned from a Node parent
 loses its runner context; every suite dies at import, prints `Tests  no tests`, and exits 1 — which
 looks exactly like a caught defect. Detect redness *positively*, from `Tests N failed` plus the named
