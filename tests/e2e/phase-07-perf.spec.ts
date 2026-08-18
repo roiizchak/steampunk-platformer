@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS, MIN_SAMPLES } from './perfBudget';
+import { MIN_SAMPLES } from './perfBudget';
+import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS } from './perfBudgetRepaired';
 import { sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';

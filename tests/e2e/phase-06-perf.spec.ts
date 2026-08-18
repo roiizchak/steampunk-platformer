@@ -51,16 +51,16 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installGpuTimer } from './gpuTimer';
 import {
-  MAX_HUD_GPU_DELTA_MS,
-  MAX_HUD_WORK_DELTA_MS,
   MAX_HUD_WORK_RATIO,
   MIN_GPU_SAMPLES,
   MIN_SAMPLES,
   SAMPLE_TICKS,
 } from './perfBudget';
+import { MAX_HUD_GPU_DELTA_MS, MAX_HUD_WORK_DELTA_MS } from './perfBudgetRepaired';
 import { counts, sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
+import { assertHudWasDrawing } from './hudDrawGuards';
 import { hudDrawState, setHud } from './hudHelpers';
 import { addScrims, scrimCount } from './scrimMutation';
 import { shippedLevel } from './tilemapHelpers';
@@ -192,68 +192,8 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
       const onSample = await sample(page, SAMPLE_TICKS);
       const exit = await hudDrawState(page);
 
-      /**
-       * 🔴 **The guard the ratio cannot make.** Asserted at BOTH edges of the window, because a HUD
-       * that stopped drawing halfway through leaves an entry check green and quietly cheapens the
-       * half being measured — the same reason 5.11 re-reads `opaque` after its fleet window.
-       */
-      for (const [when, probe] of [
-        ['entering', enter],
-        ['leaving', exit],
-      ] as const) {
-        expect(probe.uiActive, `the UI scene was not active ${when} HUD-on window ${i + 1}`).toBe(true);
-        expect(
-          probe.plateWillRender,
-          `the HUD plate would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.counterWillRender,
-          `the gear counter would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.barWillRender,
-          `the health bar would not render ${when} HUD-on window ${i + 1}. A hidden bar still ` +
-            `QUEUES its rectangle, so the command-buffer check below cannot see this — and a ` +
-            `hidden object is CHEAPER, so the budget would pass more easily for it.`,
-        ).toBe(true);
-        expect(
-          probe.gearIconWillRender,
-          `the gear icon would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.barWidestRect,
-          `the health bar queued styling but FILLED NOTHING ${when} HUD-on window ${i + 1}. ` +
-            `Deleting the fillRect while leaving the fillStyle keeps the command buffer non-empty ` +
-            `and the alpha healthy while painting no pixels at all.`,
-        ).toBeGreaterThan(0);
-        expect(
-          probe.barCommands,
-          `the health bar had ZERO Graphics commands queued ${when} HUD-on window ${i + 1}. The ` +
-            `HUD is not drawing, so the ratio below would be comparing "nothing" against ` +
-            `"nothing" and would PASS. This is the assertion that stops a broken HUD reading as a ` +
-            `cheap one (vault 9.4).`,
-        ).toBeGreaterThan(0);
+      assertHudWasDrawing(enter, exit, i + 1);
 
-        /**
-         * 🔴 Alpha, because none of the four probes above can see it. `willRender` ignores alpha
-         * entirely, and `fillStyle(colour, 0)` still fills the command buffer — so a HUD faded to
-         * nothing satisfies every check above, draws no visible pixel, and costs LESS, which reads
-         * as a pass. Found by the performance owner's adversarial brief.
-         */
-        for (const [what, alpha] of [
-          ['plate', probe.plateAlpha],
-          ['counter', probe.counterAlpha],
-          ['health bar fill', probe.barFillAlpha],
-          ['gear icon', probe.gearIconAlpha],
-        ] as const) {
-          expect(
-            alpha,
-            `the ${what} is at alpha ${alpha} ${when} HUD-on window ${i + 1} — it is submitted to ` +
-              `the renderer and paints nothing a player can see, which is CHEAPER and would pass ` +
-              `the budget below for exactly the wrong reason (vault 9.4).`,
-          ).toBeGreaterThan(0);
-        }
-      }
       on.push(onSample);
       };
 
