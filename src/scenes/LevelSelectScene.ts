@@ -133,7 +133,17 @@ export class LevelSelectScene extends Phaser.Scene {
     addKey(W).on('down', () => this.move(-1));
     addKey(DOWN).on('down', () => this.move(1));
     addKey(S).on('down', () => this.move(1));
-    addKey(ENTER).on('down', () => this.play());
+    // 🔴 `event.repeat` is the guard, and it is load-bearing. The last level's completion panel is
+    // dismissed with ENTER and `scene.start` is QUEUED, so this scene's `create()` runs while that
+    // ENTER is still physically held. The `Key` built one line above is brand new with
+    // `isDown === false`, so the OS auto-repeat ~500 ms later looks to Phaser like a fresh press —
+    // `emitOnRepeat: false` cannot help, because Phaser has no memory of a press it never saw. The
+    // menu would open on the just-finished level and immediately replay it. The NATIVE event knows:
+    // every keydown after the first for a held key carries `repeat: true`.
+    addKey(ENTER).on('down', (_key: Phaser.Input.Keyboard.Key, event: KeyboardEvent) => {
+      if (event.repeat) return;
+      this.play();
+    });
     keyboard.addCapture('UP,DOWN,W,S,ENTER');
   }
 

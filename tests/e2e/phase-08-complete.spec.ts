@@ -26,70 +26,12 @@
 
 import { expect, test, type Page } from '@playwright/test';
 
-import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
+import { BOOT_TIMEOUT, bootToGame, waitTicks } from './gameHarness';
+import { drawnGoal, drawnOverlay, playerX } from './completeHelpers';
 import { assertRealGpu } from './realGpu';
 import { shippedLevel } from './tilemapHelpers';
 
 const PROGRESS_KEY = 'steampunk.progress';
-
-interface DrawnGoal {
-  x: number;
-  y: number;
-  alpha: number;
-  depth: number;
-  willRender: boolean;
-}
-
-/** The exit, read off the live scene through `__phaserGame` — the `drawnVsSim.ts` pattern. */
-async function drawnGoal(page: Page): Promise<DrawnGoal | null> {
-  return page.evaluate(() => {
-    const scene = (
-      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('Game') as {
-      goalObject?: {
-        x: number;
-        y: number;
-        alpha: number;
-        depth: number;
-        willRender(camera: unknown): boolean;
-      };
-      cameras: { main: unknown };
-    };
-    const g = scene.goalObject;
-    if (!g) return null;
-    return { x: g.x, y: g.y, alpha: g.alpha, depth: g.depth, willRender: g.willRender(scene.cameras.main) };
-  });
-}
-
-interface DrawnOverlay {
-  present: boolean;
-  fadeAlpha: number;
-  fadeRenders: boolean;
-  lines: { text: string; alpha: number; renders: boolean }[];
-}
-
-/** The level-complete panel, read off the parallel `UIScene`. */
-async function drawnOverlay(page: Page): Promise<DrawnOverlay> {
-  return page.evaluate(() => {
-    const ui = (
-      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('UI') as {
-      overlay?: {
-        fade: { alpha: number; willRender(c: unknown): boolean };
-        lines: { text: string; alpha: number; willRender(c: unknown): boolean }[];
-      };
-      cameras: { main: unknown };
-    };
-    if (!ui?.overlay) return { present: false, fadeAlpha: 0, fadeRenders: false, lines: [] };
-    const cam = ui.cameras.main;
-    return {
-      present: true,
-      fadeAlpha: ui.overlay.fade.alpha,
-      fadeRenders: ui.overlay.fade.willRender(cam),
-      lines: ui.overlay.lines.map((l) => ({ text: l.text, alpha: l.alpha, renders: l.willRender(cam) })),
-    };
-  });
-}
 
 /**
  * Play level-01 to its exit, driving the game with REAL key events.
@@ -132,39 +74,75 @@ async function playToExit(page: Page): Promise<void> {
     };
 
     key('keydown', 'ArrowRight');
+
+    /**
+     * 🔴 Every threshold here is in MILLISECONDS or in PIXELS, never in frames.
+     *
+     * The first version counted frames, and it passed when this spec ran alone and failed every time
+     * the whole GPU project ran ahead of it — deterministically, at 90 s, with the player stuck. The
+     * sim is a fixed 60 Hz; the driver observes once per ANIMATION FRAME. Idle on this box that is
+     * ~240 fps, so the player moves ~2 px between looks. Behind the Phase 5/6/7 perf specs the frame
+     * rate drops and the player moves **tens of pixels** between looks — so a jump triggered by
+     * "no ground 16 px ahead of the leading edge" fires when the edge is already over the hole, and
+     * the driver falls into the same gap until the clock runs out.
+     *
+     * A frame-counted budget is not a duration and a fixed look-ahead is not a safe margin when the
+     * sampling rate is the thing that varies. The look-ahead below therefore includes **how far the
+     * player actually moved since the last look**, which is the distance it may move before the next
+     * one, and the two counters are real time.
+     */
+    /** Hold Space past the apex. See the note below on why holding long is free and cutting is not. */
+    const HOLD_MS = 400;
+    /** The static margin, matching `level-completable.test.ts`'s `LOOK_AHEAD_PX`. */
+    const LOOK_BASE = 16;
+    /** No forward progress for this long means a wall. ~60 ms is the unit auto-player's 4 ticks. */
+    const STUCK_MS = 60;
+
     let lastX = -1;
-    let stuck = 0;
+    let lastT = 0;
+    let stuckMs = 0;
     /**
      * 🔴 Space must be HELD, not tapped. `sampleHeldKeys` reads `jumpHeld` from `key.isDown` every
      * frame, and releasing in the same frame as the press is the jump CUT — the player got a hop a
-     * fraction of the full arc. 45 frames is past the apex — the second attempt held it for 20, which is
-     * still a cut, and the player stood at x 3198 jumping into the face of the 3-tile wall 38 times
-     * without clearing it. Holding longer than the arc costs nothing; holding too little is invisible
-     * except as a level that cannot be finished.
+     * fraction of the full arc. The second attempt held it for 20 frames, which is still a cut, and
+     * the player stood at x 3198 jumping into the face of the 3-tile wall 38 times without clearing
+     * it. Holding longer than the arc costs nothing; holding too little is invisible except as a
+     * level that cannot be finished.
+     *
+     * ⚠️ The release is a DEADLINE, and the ground check no longer waits for it. Suppressing the
+     * check until the hold expired meant that at a low frame rate the player landed and then ran
+     * blind for the remainder of the hold — the same defect as the look-ahead, wearing a hat.
+     * `vy === 0` is the honest condition: evaluate whenever the feet are down.
      */
-    let releaseIn = 0;
+    let holdUntil = 0;
 
-    const step = () => {
+    const step = (t: number) => {
       const scene = w.__phaserGame.scene.getScene('Game') as {
         simWorld?: { player: { x: number; y: number; vy: number }; solids: { x: number; y: number; w: number; h: number }[]; completed: boolean };
       };
       const world = scene?.simWorld;
       if (!world || world.completed) return;
-      if (releaseIn > 0 && --releaseIn === 0) key('keyup', 'Space');
+      if (holdUntil !== 0 && t >= holdUntil) {
+        key('keyup', 'Space');
+        holdUntil = 0;
+      }
       const { player } = world;
-      if (player.vy === 0 && releaseIn === 0) {
-        const lead = player.x + 66;
-        stuck = Math.abs(player.x - lastX) < 0.5 ? stuck + 1 : 0;
+      if (player.vy === 0) {
+        const travelled = lastX < 0 ? 0 : player.x - lastX;
+        // The leading edge, plus the static margin, plus one more observation's worth of travel.
+        const lead = player.x + 66 + LOOK_BASE + Math.max(0, travelled);
+        stuckMs = Math.abs(player.x - lastX) < 0.5 ? stuckMs + (lastT === 0 ? 0 : t - lastT) : 0;
         const ground = world.solids.some(
-          (s) => s.x <= lead + 16 && s.x + s.w >= lead + 16 && s.y >= player.y - 8 && s.y <= player.y + 600,
+          (s) => s.x <= lead && s.x + s.w >= lead && s.y >= player.y - 8 && s.y <= player.y + 600,
         );
-        if (stuck >= 4 || !ground) {
+        if (holdUntil === 0 && (stuckMs >= STUCK_MS || !ground)) {
           key('keydown', 'Space');
-          releaseIn = 45;
-          stuck = 0;
+          holdUntil = t + HOLD_MS;
+          stuckMs = 0;
         }
       }
       lastX = player.x;
+      lastT = t;
       w.__drive = requestAnimationFrame(step);
     };
     w.__drive = requestAnimationFrame(step);
@@ -332,6 +310,28 @@ test.describe('Phase 8 — the level-complete flow (8.6)', () => {
     // caught that: it read `level-01` until the write was added.
     expect(save).toMatchObject({ lastLevel: 'level-02' });
     expect((save.levels as Record<string, { completed: boolean }>)['level-01']!.completed).toBe(true);
+
+    /**
+     * 🔴 **And the character can still MOVE.** This is the assertion that was missing, and its absence
+     * shipped a game that was unplayable from level-02 onward.
+     *
+     * `GameScene` sets `playerInputEnabled = false` when a level is completed, and Phaser reuses the
+     * scene INSTANCE across `scene.start`, so the flag has to be reset in `init()`. It was not. Every
+     * check above passed — the id, the readiness, the cleared banner, the save — because every one of
+     * them reads STATE. None of them pressed a key. The hands-on pass screenshotted level-02's spawn
+     * and did not try walking either. A scene that loads is not a scene that plays.
+     */
+    const startX = await playerX(page);
+    await page.keyboard.down('ArrowRight');
+    await waitTicks(page, 40);
+    await page.keyboard.up('ArrowRight');
+    const endX = await playerX(page);
+    expect(
+      endX - startX,
+      `holding Right for 40 ticks in level-02 moved the player ${(endX - startX).toFixed(1)} px. The ` +
+        'level loaded and the banner cleared, but the keyboard does not drive the character — which ' +
+        'is every level after the first, recoverable only by reloading the page.',
+    ).toBeGreaterThan(100);
   });
 
   test('8.6 ESC opens the level menu, and it draws the five levels with their lock state', async ({

@@ -35,6 +35,7 @@ import { describe, expect, it } from 'vitest';
 
 import { RENDER_SCALE } from '../../src/game/constants';
 import { parseLevel, type LevelData } from '../../src/game/tilemap';
+import { SENTRY } from '../../src/sim/enemySentry';
 import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { createWorld, tick } from '../../src/sim/tick';
@@ -56,6 +57,20 @@ const HALF_W = (PLAYER_BOX.w / 2) * RENDER_SCALE;
  * enemy, jump, or turn round, rather than discovering the problem through the health bar.
  */
 const SAFE_GAP_PX = 400;
+
+/**
+ * 🔴 And a sentry's safe distance is its own **detect radius**, not that number.
+ *
+ * A sentry never walks. `closestApproach` forces `chasing` on the scavengers and then measures how far
+ * each enemy travelled, so for a sentry it measured nothing but the spawn separation — and 400 px was
+ * compared against a turret that reaches 640 and fires 10 damage every 90 ticks. A player wedged 500 px
+ * from one is shot until they die, respawn, walk back and are shot again, and the gate said *safe*.
+ * Found by the Phase 8 code-reviewer gate owner.
+ *
+ * Derived from `SENTRY.radius` rather than typed, so a retune of the turret moves the bar with it
+ * *(vault 5.3)*. `max` because the reaction-time argument behind `SAFE_GAP_PX` still applies on top.
+ */
+const SENTRY_SAFE_PX = Math.max(SAFE_GAP_PX, SENTRY.radius);
 
 function levelWorld(level: LevelData, startX: number, withEnemies: boolean): World {
   return createWorld({
@@ -218,24 +233,42 @@ function stallPoints(level: LevelData): number[] {
 }
 
 /**
- * Every enemy's closest approach to `point`, after a long forced chase.
+ * The **worst safety margin** at `point`: how much room to spare the nearest enemy left, against the
+ * distance that enemy needs to be kept at. Positive is safe; zero or below is the defect.
  *
- * `chasing` is forced on rather than waiting for detection: the question is how far an enemy can
+ * A margin rather than a raw distance, because the two enemy kinds do not want the same number — see
+ * `SENTRY_SAFE_PX`. Returning `Infinity` for a level with no enemies is correct and deliberate.
+ *
+ * `chasing` is forced on rather than waiting for detection: the question is how far a scavenger can
  * TRAVEL, not whether it notices. Waiting would let the check pass for the wrong reason any time the
- * player happened to start outside the detect radius.
+ * player happened to start outside the detect radius. Sentries have no such flag — they do not move,
+ * and their reach is the radius, which is exactly why they need their own bar.
+ *
+ * ⚠️ Sampled every tick and minimised, not read once at the end. A scavenger whose patrol carries it
+ * across the stall point and away again is the same defect as one that parks there, and reading the
+ * final frame would miss it.
  */
-function closestApproach(level: LevelData, point: number): number {
+function safetyMargin(level: LevelData, point: number): number {
   const world = levelWorld(level, point, true);
-  const chasers = [...world.enemies.scavengers, ...world.enemies.sentries];
   for (const enemy of world.enemies.scavengers) enemy.chasing = true;
 
   const input: InputSnapshot = createSnapshot();
-  for (let i = 0; i < 1200; i += 1) tick(world, input);
+  let worst = Number.POSITIVE_INFINITY;
+  const sample = (): void => {
+    for (const enemy of world.enemies.scavengers) {
+      worst = Math.min(worst, Math.abs(enemy.x - world.player.x) - SAFE_GAP_PX);
+    }
+    for (const enemy of world.enemies.sentries) {
+      worst = Math.min(worst, Math.abs(enemy.x - world.player.x) - SENTRY_SAFE_PX);
+    }
+  };
 
-  return chasers.reduce(
-    (nearest, enemy) => Math.min(nearest, Math.abs(enemy.x - world.player.x)),
-    Number.POSITIVE_INFINITY,
-  );
+  sample();
+  for (let i = 0; i < 1200; i += 1) {
+    tick(world, input);
+    sample();
+  }
+  return worst;
 }
 
 describe.each(LEVELS)('%s — no enemy can reach a point where the player is stopped', (id, level) => {
@@ -251,12 +284,13 @@ describe.each(LEVELS)('%s — no enemy can reach a point where the player is sto
   it('every enemy stays clear of every stall point, however long it chases', () => {
     for (const point of stallPoints(level)) {
       expect(
-        closestApproach(level, point),
-        `${id}: an enemy reached a stall at x ${Math.round(point)} that a run-up jump cannot clear. ` +
-          'A player stopped by terrain they cannot pass, taking damage, is the x:3198 defect — it is ' +
-          'a LEVEL problem, not a code one, and it needs the terrain or the patrol changed rather ' +
-          'than the bar lowered.',
-      ).toBeGreaterThan(SAFE_GAP_PX);
+        safetyMargin(level, point),
+        `${id}: an enemy came within reach of a stall at x ${Math.round(point)} that a run-up jump ` +
+          'cannot clear. A player stopped by terrain they cannot pass, taking damage, is the x:3198 ' +
+          'defect — it is a LEVEL problem, not a code one, and it needs the terrain or the patrol ' +
+          `changed rather than the bar lowered. Scavengers must stay ${SAFE_GAP_PX} px clear; a ` +
+          `sentry must stay ${SENTRY_SAFE_PX} px clear, because that is how far it SHOOTS.`,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -314,10 +348,34 @@ describe('the stall detector can actually find one', () => {
   it('and the enemy check goes RED on it', () => {
     const point = stallPoints(trap)[0]!;
     expect(
-      closestApproach(trap, point),
+      safetyMargin(trap, point),
       'a scavenger parked at the face of an unjumpable wall did NOT trip the gate, so the sweep over ' +
         'the shipped levels proves nothing',
-    ).toBeLessThan(SAFE_GAP_PX);
+    ).toBeLessThan(0);
+  });
+
+  /**
+   * 🔴 The sentry's own bar, proved separately — and proved to be the thing that catches this.
+   *
+   * The turret sits 600 px from the stall. Under the scavenger's 400 px bar that is comfortably clear,
+   * and the gate was green while a stopped player took 10 damage every 90 ticks forever. The two
+   * assertions below are the before and the after of the code-reviewer's finding.
+   */
+  it('a SENTRY 600 px away is caught, though 600 clears the scavenger bar', () => {
+    const shot: LevelData = {
+      ...trap,
+      enemies: [{ slug: 'brass-sentry', x: 1334, y: 1000, patrolMin: 1334, patrolMax: 1334 }],
+    };
+    const point = stallPoints(shot)[0]!;
+    const distance = Math.abs(1334 - point);
+    expect(distance, 'the fixture must sit between the two bars, or it proves nothing').toBeGreaterThan(
+      SAFE_GAP_PX,
+    );
+    expect(distance).toBeLessThan(SENTRY_SAFE_PX);
+    expect(
+      safetyMargin(shot, point),
+      'a sentry whose 640 px reach covers a stall the player cannot escape was reported safe',
+    ).toBeLessThan(0);
   });
 
   /**

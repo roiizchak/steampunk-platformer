@@ -14,10 +14,10 @@
  * `npm run test:sim-isolated` beside the sim suite. A fake scene is four properties.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CATALOG_KEY } from '../../src/game/assetCatalog';
-import { PROGRESS_KEY } from '../../src/game/save';
+import { PROGRESS_KEY, resetProgressCache } from '../../src/game/save';
 import { RENDER_SCALE } from '../../src/game/constants';
 import { firstLevelId, levelOrder, openLevelSelect, pickLevel, worldOptionsFor } from '../../src/scenes/gameLevelPick';
 import { LEVEL_01, SHIPPED, SHIPPED_ENTRIES, idOf } from './tilemap-data-fixtures';
@@ -53,6 +53,13 @@ const store = (json?: string) => {
 
 const pick = (requested: string | null, json?: string, order = ORDER) =>
   pickLevel(fakeScene(order) as never, requested, store(json));
+
+/**
+ * ⚠️ `pickLevel` writes the resume point, and a write through a refused storage is held in module
+ * state so the session still progresses. Cleared between tests, or the `storage: null` case below
+ * would leak its save into every test after it.
+ */
+beforeEach(resetProgressCache);
 
 describe('levelOrder is the catalog, in catalog order', () => {
   it('reads the keys off the entries, unsorted', () => {

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { updateDebugState } from '../debug/globals';
+import { publishWorldState, updateDebugState } from '../debug/globals';
 import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import type { LevelData } from '../game/tilemap';
@@ -134,6 +134,15 @@ export class GameScene extends Phaser.Scene {
     // the honest reset is here rather than relying on that guard to catch a restart.
     this.prevPlayer = null;
     this.held = { left: [], right: [], jump: [], walk: [], attack: [] };
+    // 🔴 And the input flag, which finishing a level turns OFF. Phaser reuses the scene INSTANCE
+    // across `scene.start`, so without this line level-02 opens with the character frozen and only a
+    // page reload recovers — the whole game after level-01 is unplayable. Found by the Phase 8
+    // code-reviewer gate owner; the e2e spec that advanced to level-02 asserted the id and the
+    // overlay and never pressed a movement key, and neither did the hands-on pass.
+    //
+    // ⚠️ `ElementEditorScene` sets it back to `false` in `create()`, which runs AFTER `init()`, so
+    // the dev tool is unaffected.
+    this.playerInputEnabled = true;
   }
 
   create(): void {
@@ -202,7 +211,7 @@ export class GameScene extends Phaser.Scene {
       bootError: null,
       levelId: level.id,
     });
-    this.publishDebugState();
+    publishWorldState(this.world);
   }
 
   /**
@@ -298,7 +307,7 @@ export class GameScene extends Phaser.Scene {
     // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
     // lane advances between ticks and the other does not.
     this.motionProbe?.update(delta);
-    this.publishDebugState();
+    publishWorldState(this.world);
   }
 
   private bindKeys(): void {
@@ -373,23 +382,6 @@ export class GameScene extends Phaser.Scene {
     const picked = pickLevel(this, this.requestedLevelId);
     this.levelKey = picked.key;
     return picked.level;
-  }
-
-
-  /** The read-only debug view every e2e spec is written against. Dev build only. */
-  private publishDebugState(): void {
-    const { player } = this.world;
-    updateDebugState({
-      tick: this.world.tickCount,
-      player: { x: player.x, y: player.y, vx: player.vx, vy: player.vy, state: player.state },
-      // `health` has been on the eight-field surface since Phase 1 and permanently 0 until now.
-      // Filling it is not widening the surface — the field already existed and was a lie.
-      health: player.hp,
-      // `score` was the same lie, and outlived `health` by a phase: declared in Phase 1, reset to 0
-      // by BootScene, and never written by anything. Phase 6 gives it the only meaning this game
-      // has for it. Still eight fields; still no STOP-and-ask.
-      score: this.world.gearsCollected,
-    });
   }
 
   protected get simWorld(): World {

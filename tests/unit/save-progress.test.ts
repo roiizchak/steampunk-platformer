@@ -16,7 +16,7 @@
  * and the valid entries beside it survive. Criterion 8.4 is that second half.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   PROGRESS_KEY,
@@ -26,9 +26,17 @@ import {
   emptyProgress,
   readProgress,
   recordCompletion,
+  resetProgressCache,
   writeProgress,
 } from '../../src/game/save';
 import { unlockedIds } from '../../src/sim/progress';
+
+/**
+ * ⚠️ `writeProgress` keeps an unwritable save in module state, so a test that writes through a
+ * refused storage would otherwise make every later `readProgress` in this file return that save
+ * instead of reading its fixture. It is the price of the fallback and it is paid here, once.
+ */
+beforeEach(resetProgressCache);
 
 const ORDER = ['level-01', 'level-02', 'level-03', 'level-04', 'level-05'];
 
@@ -280,5 +288,64 @@ describe('bestGears is clamped where it is READ', () => {
 
   it('reads zero for a level with no record', () => {
     expect(bestGears(emptyProgress(), 'level-04', 7)).toBe(0);
+  });
+});
+
+/**
+ * 🔴 A write that cannot land must not silently regress the player.
+ *
+ * Nothing in this game caches the save: `pickLevel`, `onLevelCompleted` and `LevelSelectScene` each
+ * re-read storage. So on a refused or full `localStorage` the old code finished level-01, showed a
+ * panel reading `ENTER — level-02`, started `Game` with `levelId: 'level-02'`, and `resolveEntryLevel`
+ * re-read the unchanged storage, found level-02 still locked, and handed back level-01. Forever. The
+ * comment in `writeProgress` claimed "progress still applies for this session"; it did not, and a
+ * comment that is wrong is worse than no comment *(vault C9)*. Found by the Phase 8 code-reviewer.
+ *
+ * These are the gate on the fallback that makes that comment true. Both failure shapes are covered
+ * because they are different code paths: a storage that THROWS, and no storage at all — the second
+ * would have short-circuited `storage?.setItem` straight into the success branch.
+ */
+describe('a save that cannot be written survives in memory for the session', () => {
+  const earned = () => recordCompletion(emptyProgress(), 'level-01', 3, 7);
+
+  it.each([
+    ['storage that throws on write', hostileStorage],
+    ['no storage at all', null],
+  ])('reads back what was written through %s', (_label, storage) => {
+    writeProgress(storage as never, earned());
+    const save = readProgress(storage as never);
+    expect(completedIds(save), 'the completion was lost, so the player is sent back to level-01').toEqual(
+      new Set(['level-01']),
+    );
+    expect(unlockedIds(completedIds(save), ORDER)).toContain('level-02');
+    expect(save.levels['level-01']!.bestGears).toBe(3);
+  });
+
+  it('hands out a COPY, so a caller mutating the save cannot corrupt the fallback', () => {
+    writeProgress(null, earned());
+    const first = readProgress(null);
+    first.levels['level-05'] = { completed: true, bestGears: 99 };
+    first.lastLevel = 'level-05';
+    expect(completedIds(readProgress(null)), 'the cached save was mutated through a reader').toEqual(
+      new Set(['level-01']),
+    );
+  });
+
+  it('stops winning once a write really lands — storage is authoritative again', () => {
+    writeProgress(null, earned());
+    const disk = fakeStorage();
+    writeProgress(disk, emptyProgress());
+    expect(
+      completedIds(readProgress(disk)),
+      'a successful write did not clear the fallback, so the session is stuck on stale progress',
+    ).toEqual(new Set());
+  });
+
+  /**
+   * ⚠️ And it must not invent progress. A read with no write before it is still an empty save — the
+   * fallback is a memory of what THIS session earned, not a way to be generous about it.
+   */
+  it('is not a source of progress on its own', () => {
+    expect(completedIds(readProgress(hostileStorage)).size).toBe(0);
   });
 });

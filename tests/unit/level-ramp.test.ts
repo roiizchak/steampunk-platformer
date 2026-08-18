@@ -131,6 +131,32 @@ const METRICS: Metric[] = [
       'mandatory and there is no margin left',
     of: (l) => Number((widestGap(l) / CLEARABLE_GAP_PX).toFixed(3)),
   },
+  /**
+   * 🔴 The two composition metrics, added after the Phase 8 code-reviewer gate owner pointed out that
+   * **`enemy count` cannot see WHICH enemies they are**: swapping level-05's two sentries for two
+   * scavengers moves no metric in this table, and the ramp gate stays green on a level whose threat
+   * profile was rewritten. A sentry and a scavenger are not interchangeable — one shoots 640 px and
+   * never leaves its post, the other closes and does contact damage.
+   *
+   * FREE rather than directional, because the mix is a design choice, not a difficulty axis: a level
+   * built around turrets is not harder than one built around chasers. What makes them useful is that
+   * *free is not unwatched* — no-backslide, no-cliff and the per-metric non-vacuity all apply, so the
+   * swap above would have to keep both counts within 25 % to pass.
+   */
+  {
+    name: 'sentry count',
+    directional: false,
+    reason:
+      'FREE. The mix of enemy KINDS is a design choice, not a difficulty axis — but it must be ' +
+      'visible, or `enemy count` blesses any substitution that keeps the total.',
+    of: (l) => l.enemies.filter((e) => e.slug === 'brass-sentry').length,
+  },
+  {
+    name: 'scavenger count',
+    directional: false,
+    reason: 'FREE, for the same reason as `sentry count`, and it is the other half of that pair.',
+    of: (l) => l.enemies.filter((e) => e.slug === 'rust-scavenger').length,
+  },
   {
     name: 'gear count',
     directional: false,

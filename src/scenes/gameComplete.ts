@@ -22,9 +22,14 @@
  *
  * SPACE is jump. A player who touches the exit **mid-jump** is holding it, and a continue bound to
  * SPACE would be pressed the instant the panel appeared — a level-complete screen the player never
- * sees, on exactly the runs where they were moving fast. ENTER is bound nowhere else in this project
- * (checked against every `addKey` in `src/` and every `keyboard.press` in `tests/e2e/`), so it collides
- * with no spec and with no other control.
+ * sees, on exactly the runs where they were moving fast. ENTER collides with no Phase 1–7 spec and with
+ * no gameplay control.
+ *
+ * ⚠️ It is **not** unbound elsewhere: `LevelSelectScene` binds it too, which is the same trap one
+ * paragraph up, one scene along. Holding ENTER through "ALL LEVELS COMPLETE" carries the OS auto-repeat
+ * into a menu whose `Key` was created a millisecond ago with `isDown === false`, and the menu replays
+ * the level the player just finished. That guard lives in `LevelSelectScene.bindKeys`, on the native
+ * event's `repeat` flag.
  */
 
 import Phaser from 'phaser';

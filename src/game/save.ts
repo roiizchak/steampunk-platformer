@@ -76,6 +76,43 @@ export function emptyProgress(): SaveData {
   return { version: PROGRESS_VERSION, lastLevel: null, levels: Object.create(null) as Record<string, LevelProgress> };
 }
 
+/**
+ * The save that could not be persisted, held for the rest of the session.
+ *
+ * 🔴 Without this, a refused or full `localStorage` **silently regresses the player**. Nothing in this
+ * game caches the save: `gameLevelPick.pickLevel`, `gameComplete.onLevelCompleted` and
+ * `LevelSelectScene.create` each re-read storage. So when `setItem` throws, finishing level-01 shows a
+ * panel reading `ENTER — level-02`, and ENTER starts `Game` with `levelId: 'level-02'`, and
+ * `resolveEntryLevel` finds level-02 still locked in the storage it re-reads and hands back level-01.
+ * Forever. The old comment in `writeProgress` claimed "progress still applies for this session" — it
+ * did not, and a comment that is wrong is worse than no comment at all *(vault C9)*.
+ *
+ * One module-level fallback rather than a cache threaded through three call sites: it is the single
+ * seam every reader already passes through, and it engages only on the failure path.
+ *
+ * ⚠️ Once a write has failed, storage is known-broken and this wins over it outright. Reconciling with
+ * another tab is not a question worth asking about an origin that refuses writes.
+ */
+let unwritten: SaveData | null = null;
+
+/** A deep-enough copy: callers mutate what `readProgress` hands them (`recordCompletion` does). */
+function cloneSave(save: SaveData): SaveData {
+  const copy = emptyProgress();
+  copy.lastLevel = save.lastLevel;
+  for (const [id, entry] of Object.entries(save.levels)) {
+    copy.levels[id] = { completed: entry.completed, bestGears: entry.bestGears };
+  }
+  return copy;
+}
+
+/**
+ * Forget the unwritten save. **Tests only** — a suite that makes one write fail would otherwise poison
+ * every later test in the file, and module state that only a failure path sets has no other way out.
+ */
+export function resetProgressCache(): void {
+  unwritten = null;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -106,6 +143,9 @@ function readEntry(value: unknown): LevelProgress | null {
  * @param storage typically `safeLocalStorage()`; a fake in tests; `null` where storage is refused.
  */
 export function readProgress(storage: SettingsStorage | null): SaveData {
+  // The failure path first — see `unwritten`. A copy, because the caller mutates what it gets.
+  if (unwritten !== null) return cloneSave(unwritten);
+
   let stored: unknown;
   try {
     const raw = storage?.getItem(PROGRESS_KEY) ?? null;
@@ -138,6 +178,14 @@ export function readProgress(storage: SettingsStorage | null): SaveData {
 
 /** Persist the save. Never throws — a full quota is not a crash. */
 export function writeProgress(storage: SettingsStorage | null, save: SaveData): void {
+  // ⚠️ A `null` storage is the same failure as a throwing one, and `storage?.setItem` would have
+  // short-circuited into the success path. `safeLocalStorage()` returns `null` on a blocked origin,
+  // so this is the case where the whole game runs with no disk at all — and it must still advance
+  // past level-01.
+  if (storage === null) {
+    unwritten = cloneSave(save);
+    return;
+  }
   try {
     // Re-serialised field by field rather than stringifying `save` directly, so a caller that hung an
     // extra field on the object does not quietly widen the stored schema.
@@ -149,9 +197,14 @@ export function writeProgress(storage: SettingsStorage | null, save: SaveData): 
       PROGRESS_KEY,
       JSON.stringify({ version: PROGRESS_VERSION, lastLevel: save.lastLevel, levels }),
     );
+    // It landed, so storage is authoritative again and any earlier fallback is stale.
+    unwritten = null;
   } catch {
-    // Quota, private mode, a disabled origin. Progress still applies for this session; it just will
-    // not survive a reload, which is strictly better than refusing to finish a level.
+    // Quota, private mode, a disabled origin. Hold it in memory so progress really does apply for the
+    // rest of the session — it just will not survive a reload. See `unwritten`: the version of this
+    // comment that made that claim without the fallback behind it was false, and the player was sent
+    // back to level-01 every time they finished one.
+    unwritten = cloneSave(save);
   }
 }
 

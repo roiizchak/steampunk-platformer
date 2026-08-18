@@ -48,6 +48,33 @@ const PROGRESS_KEY = 'steampunk.progress';
  */
 const MAX_LEVEL_WORK_RATIO = 2;
 
+/**
+ * The **absolute** ceiling on the largest level's median main-thread work per frame, in milliseconds.
+ *
+ * 🔴 **A ratio alone is not a frame budget.** Any cost that lands in BOTH arms divides straight out of
+ * `MAX_LEVEL_WORK_RATIO`, so a regression that made every level 30 ms per frame would leave the ratio
+ * at 1.00 and this criterion green while the game ran at 30 fps. The Phase 8 performance-engineer gate
+ * owner named it, and the project has already paid for it three times: `MAX_FLEET_WORK_MS`
+ * (`perfBudget.ts`), `MAX_HUD_WORK_DELTA_MS` and `MAX_AUDIO_WORK_DELTA_MS` are the same repair applied
+ * to criteria 5.11, 6.9 and 7.7 in turn.
+ *
+ * 8 ms — roughly half of a 60 Hz frame's 16.67 ms — matching `MAX_FLEET_WORK_MS` on the same box for
+ * the same reason: level-05 measures **0.4 - 0.9 ms** clean here across repeated runs, so the bound
+ * sits roughly ten times above the worst clean reading and cannot fail on driver noise, while still
+ * catching the whole band a ratio is blind to.
+ */
+const MAX_LEVEL_WORK_MS = 8;
+
+/**
+ * How many off-map copies of the sim's swept geometry the mutation arm adds.
+ *
+ * Off-map (`x + 1e6`) on purpose: the copies are swept by `resolveCollisions`, `hazardHit` and
+ * `collectGears` exactly as real geometry is, and by `GearLayer.sync()` every frame — which is the
+ * cost that scales with level size and therefore the cost `MAX_LEVEL_WORK_RATIO` is a claim about —
+ * but they can never touch the player, so the mutation changes the frame's cost and nothing else.
+ */
+const BLOAT_COPIES = 4000;
+
 /** Three pairs, interleaved, so drift in the machine hits both arms alike. */
 const PAIRS = 3;
 
@@ -66,8 +93,14 @@ function unlockAll(): string {
   return JSON.stringify({ version: 1, lastLevel: 'level-01', levels });
 }
 
-/** Enter `levelId` and let it settle, then sample one window of steady play. */
-async function sampleLevel(page: Page, levelId: string): Promise<Sample> {
+/**
+ * Enter `levelId` and let it settle, then sample one window of steady play.
+ *
+ * `mutate` runs after the level is in and before the settle, because `scene.start` rebuilds the world
+ * and the layer from the parsed file — anything applied before entry is thrown away, and a "loaded"
+ * arm would quietly read clean.
+ */
+async function sampleLevel(page: Page, levelId: string, mutate?: (p: Page) => Promise<void>): Promise<Sample> {
   await page.evaluate((id) => {
     const game = (window as unknown as { __phaserGame: { scene: { start(k: string, d: unknown): void } } })
       .__phaserGame;
@@ -78,10 +111,45 @@ async function sampleLevel(page: Page, levelId: string): Promise<Sample> {
     levelId,
     { timeout: 20_000 },
   );
+  if (mutate) await mutate(page);
   // Settle: the first frames after a scene start include texture binds and layer creation, which belong
   // to neither arm of the comparison.
   await waitTicks(page, 60);
   return sample(page, SAMPLE_TICKS);
+}
+
+/**
+ * The mutation criterion 8.7's bound NAMES: this level's size stops being free per frame.
+ *
+ * Two halves, because "level size costs per frame" has two mechanisms in this game and neither alone
+ * clears the measurement noise on this box:
+ *
+ * - **the tilemap stops culling to the camera** — `skipCull` makes every cell in the level considered
+ *   each frame instead of the ~220 on screen. This is the literal wording of the bound's failure
+ *   message, and the whole reason a 2.4x-bigger level is expected to cost 1x.
+ * - **the sim's per-tick sweeps grow with the level** — `resolveCollisions` scans `solids` twice a
+ *   tick, `hazardHit` scans `hazards`, `collectGears` scans `gears`. The copies are parked at
+ *   `x + 1e6 * i`, so they are swept exactly as real geometry is and can never touch the player: the
+ *   mutation changes the frame's cost and nothing else about the run.
+ */
+async function costLevelSize(page: Page, copies: number): Promise<void> {
+  await page.evaluate((n) => {
+    const scene = (
+      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+    ).__phaserGame.scene.getScene('Game') as {
+      groundLayer: { skipCull: boolean };
+      world: { solids: { x: number }[]; hazards: { x: number }[]; gears: { x: number }[] };
+    };
+    scene.groundLayer.skipCull = true;
+    const bloat = <T extends { x: number }>(list: T[]): T[] => {
+      const out = [...list];
+      for (let i = 1; i <= n; i += 1) for (const item of list) out.push({ ...item, x: item.x + 1_000_000 * i });
+      return out;
+    };
+    scene.world.solids = bloat(scene.world.solids);
+    scene.world.hazards = bloat(scene.world.hazards);
+    scene.world.gears = bloat(scene.world.gears);
+  }, copies);
 }
 
 test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp', () => {
@@ -137,6 +205,16 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
         'ramp as well as a difficulty one.',
     ).toBeLessThanOrEqual(MAX_LEVEL_WORK_RATIO);
 
+    // 🔴 And an ABSOLUTE ceiling beside the ratio, because a cost in both arms divides out of a ratio
+    // and leaves it at 1.00. See `MAX_LEVEL_WORK_MS`.
+    expect(
+      largeWork,
+      `level-05's median frame blocked the main thread for ${largeWork.toFixed(2)} ms out of the ` +
+        '16.67 ms a 60 Hz frame has. The ratio above cannot see this: a regression that slowed every ' +
+        'level equally divides out of it and leaves it at 1.00x.',
+    ).toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
+    expect(smallWork, 'level-01 alone exceeded the absolute budget').toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
+
     // 🔴 And the frames really were served. A window that drew nothing has a beautiful median.
     expect(median(large.map((s) => s.frames)), 'the large level served almost no frames').toBeGreaterThan(
       MIN_SAMPLES,
@@ -144,63 +222,78 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
   });
 
   /**
-   * 🔴 **The bound must be able to tell a real cost from a clean run**, which is exactly where criterion
-   * 7.7 failed: it named a frame-loss bound whose two arms differed by something that divided out.
+   * 🔴 **The RATIO must be able to go red on the mutation it names**, and it must stay green on a clean
+   * run. Both halves, in one test, against one bound.
    *
-   * This adds genuine per-frame work to the SAME level and asserts the same measurement notices. If a
-   * measurable regression does not move `workMedianMs`, the ratio above is measuring nothing and the
-   * budget is decoration.
+   * The draft this replaces burned 3 ms of main thread inside `GameScene.update()` and asserted the
+   * median moved. That proves `sample()` is not dead — a real thing to know, and the reason the
+   * `sys.sceneUpdate` note below is kept — but it is **not** what criterion 8.7 needs. It never
+   * computed a level-01-against-level-05 ratio under load, so nothing in the file showed that
+   * `MAX_LEVEL_WORK_RATIO` could ever fail. That is the shape criterion 7.7 failed in, one level up:
+   * a healthy-looking sensitivity check standing in for a red proof of the actual bound. Named by the
+   * Phase 8 performance-engineer gate owner.
+   *
+   * ## It re-runs the SAME procedure, not a cheaper one
+   *
+   * 🔴 The first attempt took one sample of each arm and compared them. On this box a clean median is
+   * **0.4 - 0.8 ms** and Chrome coarsens `performance.now()` to 0.1 ms, so a single-sample clean ratio
+   * swung between **0.83x and 2.00x** across consecutive runs — a red proof that could fail on a clean
+   * build proves nothing about the bound. The interleaving and the median-of-medians in the test above
+   * exist precisely to average that out, so this repeats them exactly, with one variable changed. A red
+   * proof measured more cheaply than the bound it is about is not a proof of that bound.
    */
-  test('the measurement can see per-frame work that was added', async ({ page }) => {
-    test.setTimeout(180_000);
+  test('the ratio bound goes RED on a level whose size stops being free', async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [PROGRESS_KEY, unlockAll()] as const,
+    );
     await bootToGame(page);
-    await assertRealGpu(page, '8.7-sensitivity');
-    await waitTicks(page, 60);
+    await assertRealGpu(page, '8.7-redproof');
 
-    const clean = await sample(page, SAMPLE_TICKS);
+    const small: Sample[] = [];
+    const large: Sample[] = [];
+    const mutate = (p: Page) => costLevelSize(p, BLOAT_COPIES);
+    for (let i = 0; i < PAIRS; i += 1) {
+      if (i % 2 === 0) {
+        small.push(await sampleLevel(page, 'level-01'));
+        large.push(await sampleLevel(page, 'level-05', mutate));
+      } else {
+        large.push(await sampleLevel(page, 'level-05', mutate));
+        small.push(await sampleLevel(page, 'level-01'));
+      }
+    }
 
-    // A busy-wait inside the scene's own update, so the cost lands in `now - frameStart` exactly where a
-    // real regression would. Not a `setTimeout` and not a GPU load: the bound above is on MAIN-THREAD
-    // frame work, so the mutation has to be main-thread frame work.
-    await page.evaluate(() => {
-      const scene = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as {
-        update(t: number, d: number): void;
-        sys: { sceneUpdate?: (t: number, d: number) => void };
-      };
-      const original = scene.update.bind(scene);
-      const loaded = (t: number, d: number) => {
-        original(t, d);
-        const until = performance.now() + 3;
-        while (performance.now() < until) {
-          /* burn 3 ms of main thread, every frame */
-        }
-      };
-      scene.update = loaded;
-      /**
-       * 🔴 **`sys.sceneUpdate` is the one that runs.** Phaser's `Systems` captures `scene.update` at
-       * boot and calls the captured reference every frame, so reassigning `scene.update` alone shadows
-       * a method nobody invokes — the first attempt added 3 ms per frame and the median did not move
-       * by a hundredth of a millisecond. That looked exactly like the measurement being blind, which is
-       * the failure this test exists to rule out, so the distinction is worth the two lines.
-       */
-      if (scene.sys.sceneUpdate) scene.sys.sceneUpdate = loaded;
-    });
-    await waitTicks(page, 60);
-    const loaded = await sample(page, SAMPLE_TICKS);
+    const smallWork = median(small.map((s) => s.workMedianMs));
+    const largeWork = median(large.map((s) => s.workMedianMs));
+    const ratio = largeWork / smallWork;
 
     // eslint-disable-next-line no-console
     console.log(
-      `\n[8.7 sensitivity] clean work median ${clean.workMedianMs.toFixed(2)} ms -> ` +
-        `loaded ${loaded.workMedianMs.toFixed(2)} ms\n`,
+      `\n[8.7 red proof] level-01 clean ${smallWork.toFixed(2)} ms · level-05 unculled + ` +
+        `${BLOAT_COPIES}x the swept geometry ${largeWork.toFixed(2)} ms · ratio ${ratio.toFixed(2)}x ` +
+        `against a bound of ${MAX_LEVEL_WORK_RATIO}x\n`,
     );
 
     expect(
-      loaded.workMedianMs - clean.workMedianMs,
-      'three milliseconds of busy-wait added to every frame did not move the median this criterion ' +
-        'gates. The bound in the test above cannot distinguish a regression from a clean run, which is ' +
-        'the shape criterion 7.7 failed in.',
-    ).toBeGreaterThan(1);
+      ratio,
+      'a level-05 that no longer culls its tilemap to the camera, and whose per-tick sweeps grew with ' +
+        `its size, still measured ${ratio.toFixed(2)}x level-01. The bound in the test above therefore ` +
+        'cannot fail on the very mutation it is written about, and 8.7’s frame budget is decoration.',
+    ).toBeGreaterThan(MAX_LEVEL_WORK_RATIO);
+
+    // 🔴 The discrimination: the clean run of this same comparison is in the test above, which asserts
+    // the ratio is UNDER the bound with the identical procedure. Both directions, one bound, one
+    // session *(vault C2)*. Repeating the clean half here would only add another noisy sample.
+    expect(largeWork, 'the mutated arm did not measurably cost more').toBeGreaterThan(smallWork);
+
+    /**
+     * ⚠️ Kept from the draft this replaced, because it cost an hour: **`sys.sceneUpdate` is the
+     * function that runs.** Phaser's `Systems` captures `scene.update` at boot and calls the captured
+     * reference every frame, so a mutation that reassigns `scene.update` alone shadows a method nobody
+     * invokes — 3 ms of busy-wait per frame moved the median by less than a hundredth of a
+     * millisecond, which looked exactly like the measurement being blind. Anything that patches the
+     * update loop here must set both.
+     */
   });
 });

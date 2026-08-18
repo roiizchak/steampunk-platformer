@@ -53,6 +53,102 @@ async function levelId(page: Page): Promise<string | null> {
   return page.evaluate(() => (window as unknown as { __game: { levelId: string | null } }).__game.levelId);
 }
 
+/**
+ * Press a key the way the OS does, with `repeat` under our control.
+ *
+ * 🔴 `keyCode` has to be forced on: Phaser's keyboard plugin dispatches on `event.keyCode`, which is
+ * deprecated and therefore NOT settable through `KeyboardEventInit`. A synthetic event carries 0, so
+ * every key resolves to nothing and the page looks inert.
+ */
+async function pressRaw(page: Page, code: string, keyCode: number, repeat: boolean): Promise<void> {
+  await page.evaluate(
+    ([c, k, r]) => {
+      const down = new KeyboardEvent('keydown', { code: c as string, key: c as string, repeat: r as boolean, bubbles: true });
+      Object.defineProperty(down, 'keyCode', { get: () => k as number });
+      window.dispatchEvent(down);
+    },
+    [code, keyCode, repeat] as const,
+  );
+}
+
+/** The release. Needed between the two halves below — see the note there. */
+async function releaseRaw(page: Page, code: string, keyCode: number): Promise<void> {
+  await page.evaluate(
+    ([c, k]) => {
+      const up = new KeyboardEvent('keyup', { code: c as string, key: c as string, bubbles: true });
+      Object.defineProperty(up, 'keyCode', { get: () => k as number });
+      window.dispatchEvent(up);
+    },
+    [code, keyCode] as const,
+  );
+}
+
+const activeScene = (page: Page, key: string) =>
+  page.evaluate(
+    (k) =>
+      (window as unknown as { __phaserGame: { scene: { isActive(s: string): boolean } } }).__phaserGame.scene.isActive(
+        k,
+      ),
+    key,
+  );
+
+/**
+ * 🔴 The held-ENTER trap, which is the same trap `gameComplete.ts` names for SPACE, one scene along.
+ *
+ * `scene.start` is QUEUED. Dismissing "ALL LEVELS COMPLETE" with ENTER therefore builds
+ * `LevelSelectScene` while that ENTER is still physically held, and the `Key` it binds is brand new
+ * with `isDown === false` — so the OS auto-repeat ~500 ms later looks to Phaser like a fresh press and
+ * the menu immediately replays the level the player just finished. `emitOnRepeat: false` cannot help:
+ * Phaser has no memory of a press it never saw. The native event does, and the guard reads it.
+ */
+test.describe('Phase 8 — the level menu ignores a key the player never re-pressed', () => {
+  test('8.6 an auto-repeat ENTER does not start a level, and a real press does', async ({ page }) => {
+    await bootToGame(page);
+    await assertRealGpu(page, '8.6-repeat');
+
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }).__phaserGame.scene.isActive(
+          'LevelSelect',
+        ),
+      undefined,
+      { timeout: 10_000, polling: 50 },
+    );
+
+    // The repeat. Nothing may happen — and it is asserted over a real window of frames, because
+    // "the scene did not change in the same millisecond" is not a claim about anything.
+    await pressRaw(page, 'Enter', 13, true);
+    await page.waitForTimeout(600);
+    expect(
+      await activeScene(page, 'LevelSelect'),
+      'an ENTER carried over from the previous scene started a level — a player who holds the key ' +
+        'through the completion panel replays the level they just finished',
+    ).toBe(true);
+    expect(await activeScene(page, 'Game')).toBe(false);
+
+    /**
+     * 🔴 And the discrimination: a genuine press must still work, or the guard is just a broken menu.
+     *
+     * ⚠️ The release first, and it is not padding. Phaser's `Key` is now `isDown` from the repeat it
+     * ignored, so a second keydown without a keyup between is itself a repeat — `emitOnRepeat: false`
+     * swallows it and this half would fail for a reason that has nothing to do with the guard. It is
+     * also what physically happens: the player lets go of the key they were holding, then presses it.
+     */
+    await releaseRaw(page, 'Enter', 13);
+    await pressRaw(page, 'Enter', 13, false);
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __phaserGame: { scene: { isActive(k: string): boolean } } }).__phaserGame.scene.isActive(
+          'Game',
+        ),
+      undefined,
+      { timeout: 10_000, polling: 50 },
+    );
+    expect(await activeScene(page, 'Game')).toBe(true);
+  });
+});
+
 test.describe('Phase 8 — progression and the save file', () => {
   test('8.3 a fresh browser boots into level-01, and the save is written when one is finished', async ({
     page,

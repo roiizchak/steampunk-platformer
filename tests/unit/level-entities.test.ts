@@ -87,37 +87,58 @@ describe('hazards are read from a property, never from a name (vault 3.3)', () =
   });
 });
 
-describe('the shipped spikes actually hurt (criterion 5.15, debt: Phase 4 world edges)', () => {
-  it('level-01 carries at least one hazard', () => {
-    expect(LEVEL_01.hazards.length).toBeGreaterThan(0);
-  });
+/**
+ * 🔴 Widened in Phase 8 from `level-01` to **every shipped level**, and that is not tidiness.
+ *
+ * `level-hazards.test.ts` proves a spike run hurts by *walking into it*, which can only ever be an
+ * EXISTENTIAL claim — it counts how many hazards a plain walk reached and asserts the count is above
+ * zero. Every level this phase authored puts spikes on an elevated summit that no plain walk reaches,
+ * so those runs were never individually verified and a `hazard` property stripped from one of them
+ * left the suite green. Found by the Phase 8 code-reviewer gate owner.
+ *
+ * This is the UNIVERSAL half, and the two together are what close it: every spike cell drawn anywhere
+ * in any level must be covered by a hazard rect, or its gid appears both inside and outside and this
+ * goes red — reachable on foot or not.
+ */
+const SHIPPED_MAPS = Object.entries(SHIPPED).map(([path, raw]) => {
+  const id = path.split('/').pop()!.replace(/\.tmj$/, '');
+  return [id, JSON.parse(raw) as typeof MAP_01, parseLevel(id, JSON.parse(raw))] as const;
+});
 
-  /**
-   * Art-versus-hazard agreement, measured rather than typed. See this file's header.
-   */
-  it('no tile gid is drawn both inside and outside a hazard rectangle', () => {
-    const tiles = MAP_01.layers.find((layer) => layer.type === 'tilelayer')!.data!;
-    const inside = new Set<number>();
-    const outside = new Set<number>();
-
-    tiles.forEach((gid, index) => {
-      if (gid === 0) {
-        return; // Tiled's empty cell — it is drawn nowhere and belongs to neither set.
-      }
-      const x = (index % MAP_01.width) * MAP_01.tilewidth;
-      const y = Math.floor(index / MAP_01.width) * MAP_01.tileheight;
-      const covered = LEVEL_01.hazards.some(
-        (h) => x < h.x + h.w && x + MAP_01.tilewidth > h.x && y < h.y + h.h && y + MAP_01.tileheight > h.y,
-      );
-      (covered ? inside : outside).add(gid);
+describe.each(SHIPPED_MAPS)(
+  '%s — the shipped spikes actually hurt (criterion 5.15, debt: Phase 4 world edges)',
+  (id, map, level) => {
+    it('carries at least one hazard', () => {
+      expect(level.hazards.length, `${id} ships no hazards`).toBeGreaterThan(0);
     });
 
-    // Non-vacuity first: an empty `inside` would make the disjointness below trivially true, which
-    // is exactly what a hazard rect authored over empty sky would produce.
-    expect(inside.size).toBeGreaterThan(0);
-    expect([...inside].filter((gid) => outside.has(gid))).toEqual([]);
-  });
-});
+    /**
+     * Art-versus-hazard agreement, measured rather than typed. See this file's header.
+     */
+    it('no tile gid is drawn both inside and outside a hazard rectangle', () => {
+      const tiles = map.layers.find((layer) => layer.type === 'tilelayer')!.data!;
+      const inside = new Set<number>();
+      const outside = new Set<number>();
+
+      tiles.forEach((gid, index) => {
+        if (gid === 0) {
+          return; // Tiled's empty cell — it is drawn nowhere and belongs to neither set.
+        }
+        const x = (index % map.width) * map.tilewidth;
+        const y = Math.floor(index / map.width) * map.tileheight;
+        const covered = level.hazards.some(
+          (h) => x < h.x + h.w && x + map.tilewidth > h.x && y < h.y + h.h && y + map.tileheight > h.y,
+        );
+        (covered ? inside : outside).add(gid);
+      });
+
+      // Non-vacuity first: an empty `inside` would make the disjointness below trivially true, which
+      // is exactly what a hazard rect authored over empty sky would produce.
+      expect(inside.size, `${id}: no tile is drawn inside any hazard rect`).toBeGreaterThan(0);
+      expect([...inside].filter((gid) => outside.has(gid)), `${id}: a gid is drawn on both sides`).toEqual([]);
+    });
+  },
+);
 
 describe('the enemies are authored into the level files', () => {
   /**
