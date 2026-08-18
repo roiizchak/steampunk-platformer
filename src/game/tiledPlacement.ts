@@ -1,6 +1,7 @@
 import { RENDER_SCALE } from './constants';
 import { isEnemyObject, isHazardObject, stringProperty, type TiledObject } from './tiledObjects';
 import { isGearObject } from './tiledEntities';
+import { FOOT_TOLERANCE_PX } from '../sim/enemyGeometry';
 import { SCAVENGER_BOX, SENTRY_BOX } from '../sim/enemyPlacement';
 import { GEAR_BOX } from '../sim/pickups';
 import type { Rect } from '../sim/types';
@@ -87,14 +88,27 @@ export function describePlacementProblem(
   for (const [index, enemy] of enemyObjects.entries()) {
     const slug = stringProperty(enemy, 'enemy');
     // Every field read below is already discharged by `describeEnemyProblem`, which runs first.
-    const box = slug === 'brass-sentry' ? SENTRY_BOX : SCAVENGER_BOX;
+    // 🔴 Exhaustive, like `spawnEnemies`'s `never` default two files over. An inline ternary gave a
+    // third slug the scavenger's 120x240 body silently, so the gate would validate the wrong shape
+    // for the one enemy nobody had checked yet.
+    const box =
+      slug === 'brass-sentry' ? SENTRY_BOX : slug === 'rust-scavenger' ? SCAVENGER_BOX : null;
+    if (box === null) {
+      // `describeEnemyProblem` runs first and refuses an unknown slug, so this is unreachable today
+      // and is here so that adding a slug without a body is a visible failure rather than a guess.
+      return `${`enemy #${index}`} has slug \`${String(slug)}\`, which has no body box in this gate`;
+    }
     const halfWidth = (box.w / 2) * RENDER_SCALE;
     const feet = (enemy.y as number) + (enemy.height as number);
+    // The box stops `FOOT_TOLERANCE_PX` short of the sole, for the reason that constant records:
+    // every shipped enemy stands with EXACTLY zero separation from its floor, so without this a
+    // one-pixel Element Editor nudge refuses the level — and refuses it with a message about the
+    // wall veto, which would not have stopped that body at all.
     const swept: Rect = {
       x: (enemy.x as number) - halfWidth,
       y: feet - box.h * RENDER_SCALE,
       w: (enemy.width as number) + halfWidth * 2,
-      h: box.h * RENDER_SCALE,
+      h: box.h * RENDER_SCALE - FOOT_TOLERANCE_PX,
     };
 
     const label = `enemy #${index} \`${String(slug)}\``;

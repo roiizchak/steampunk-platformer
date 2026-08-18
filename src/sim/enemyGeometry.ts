@@ -96,8 +96,12 @@ export function groundUnder(x: number, y: number, solids: readonly Rect[]): bool
  *
  *  - the unit fixtures express "ground at every height" as ONE solid spanning the whole plane, so
  *    every body in them is permanently inside a solid. Overlap reads that as a wall.
- *  - level-02's first scavenger sits with its 60 px half-width straddling the wall its patrol beat
- *    starts against. Overlap traps a SHIPPED enemy on boot.
+ *  - level-02's first scavenger SAT with its 60 px half-width straddling the wall its patrol beat
+ *    started against, and an overlap test would have trapped it on boot. ⚠️ **Past tense on
+ *    purpose: the A2 placement fix in this same branch moved that beat one column, so the body now
+ *    clears the wall by 36 px and no shipped enemy overlaps a solid any more.** The reason the rule
+ *    is written this way is still the reason; the live example is gone, and the discriminating case
+ *    is now a committed fixture in `enemy-wall-collision.test.ts` rather than a shipped level.
  *
  * So this borrows the player's own rule. `resolveCollisions` only pushes out of a solid the body
  * was clear of at `previousX` (its `wasLeft` / `wasRight` pair); one rule for both, rather than two
@@ -109,6 +113,25 @@ export function groundUnder(x: number, y: number, solids: readonly Rect[]): bool
  * floor can never read as a wall. The same strictness lets it pass under an overhang that clears
  * its head. `overlapsScavenger` uses strict comparisons for the same reason.
  */
+/**
+ * How far a body's feet may sit off a surface before that surface counts as an obstruction.
+ *
+ * 🔴 **Zero tolerance made every shipped enemy one pixel from refusing to boot.** Measured by the
+ * adversarial brief: all 20 enemies in the five levels have EXACTLY zero separation from the floor
+ * they stand on, and nudging a floor strip up by 1 px made `describePlacementProblem` reject the
+ * level. `tilemap.ts`'s spawn rule was rewritten TWICE for this same reason — its comment says the
+ * Element Editor's *"ENTIRE PURPOSE is nudging a collision strip a pixel or two"* — and the placement
+ * rule reintroduced the brittleness in the next block along.
+ *
+ * It is not only a gate problem: with the feet 1 px low the SIM breaks too, a patroller freezing at
+ * the seam between two abutting floor strips. So the tolerance belongs in both, from one constant,
+ * or they drift apart again *(vault 5.3)*.
+ *
+ * Two pixels: a third of one 6 px patrol step and 1/48th of a 96 px tile, so it forgives an
+ * authoring nudge without forgiving a ledge anybody could see.
+ */
+export const FOOT_TOLERANCE_PX = 2;
+
 export function blockedAt(
   previousX: number,
   nextX: number,
@@ -121,7 +144,9 @@ export function blockedAt(
   for (const solid of solids) {
     const right = solid.x + solid.w;
     const bottom = solid.y + solid.h;
-    if (!(feetY > solid.y && headY < bottom)) continue;
+    // The foot line carries a tolerance; the head line does not. A surface a hair above the
+    // feet is the floor being stood on, not a wall — see `FOOT_TOLERANCE_PX`.
+    if (!(feetY - FOOT_TOLERANCE_PX > solid.y && headY < bottom)) continue;
     if (!(nextX + halfWidthPx > solid.x && nextX - halfWidthPx < right)) continue;
     const wasClear = previousX + halfWidthPx <= solid.x || previousX - halfWidthPx >= right;
     if (wasClear) return true;

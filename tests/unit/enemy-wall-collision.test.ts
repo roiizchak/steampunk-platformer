@@ -33,8 +33,17 @@ import type { Rect } from '../../src/sim/types';
  */
 
 const SCALE = RENDER_SCALE;
-const HALF = (SCAVENGER_BOX.w / 2) * SCALE;
-const HEIGHT = SCAVENGER_BOX.h * SCALE;
+/**
+ * 🔴 Through `scavengerFooting`, not by restating `(w / 2) * scale` here.
+ *
+ * The first version derived these from `SCAVENGER_BOX` directly, which meant every position
+ * assertion in this file was measured against the test's own copy of the formula the source had
+ * deliberately centralised — so the file could not detect a footing/body desync, which is the exact
+ * failure the source's own guard exists to prevent. Raised by the code-reviewer's adversarial brief.
+ */
+const BODY = scavengerFooting([], SCALE);
+const HALF = BODY.halfWidthPx;
+const HEIGHT = BODY.heightPx;
 
 /** Feet on y 0, so a wall is any solid whose top is above 0 and whose bottom is below the head. */
 const GROUND: Rect = { x: -100000, y: 0, w: 200000, h: TILE_SIZE };
@@ -56,9 +65,37 @@ describe('blockedAt — the horizontal veto', () => {
     expect(blockedAt(500, 506, 0, HALF, HEIGHT, [GROUND])).toBe(false);
   });
 
-  it('does NOT block on an overhang entirely above the head', () => {
-    const overhang: Rect = { x: 1200, y: -HEIGHT - 500, w: TILE_SIZE, h: 100 };
+  /**
+   * 🔴 **The three assertions below are what make `heightPx` MEAN anything.**
+   *
+   * The adversarial brief mutated `headY = feetY - heightPx` to `feetY - 1` — a body one pixel tall
+   * — and the entire suite stayed green: 1878 passed, 0 failed. The only test that named the
+   * vertical extent put its overhang at `y = -HEIGHT - 500`, so far clear that it passed for ANY
+   * height between 1 and 640. Its fixture made the property it claimed to measure unreachable,
+   * which is the C2 shape exactly.
+   *
+   * The behavioural bug that leaves open is the reported one in its vertical form: a ledge at the
+   * creature's chest is a wall, and a body too short to reach it walks straight through.
+   */
+  it('BLOCKS on a ledge at chest height — the vertical extent is real', () => {
+    // Body spans [-240, 0]. This solid sits inside it and nowhere near the feet or the head.
+    const chest: Rect = { x: 1200, y: -200, w: TILE_SIZE, h: 100 };
+    expect(blockedAt(1135, 1141, 0, HALF, HEIGHT, [chest])).toBe(true);
+  });
+
+  it('does NOT block on an overhang that clears the head by one pixel', () => {
+    // Bottom at -241, one px above the head at -240. Tight on purpose: an overhang parked 500 px
+    // clear cannot tell a correct height from a wrong one.
+    const overhang: Rect = { x: 1200, y: -HEIGHT - 101, w: TILE_SIZE, h: 100 };
+    expect(overhang.y + overhang.h, 'the fixture must sit just above the head').toBe(-HEIGHT - 1);
     expect(blockedAt(1135, 1141, 0, HALF, HEIGHT, [overhang])).toBe(false);
+  });
+
+  it('the footing reports the body the SIM uses, not a number this test chose', () => {
+    // Without this, `HEIGHT` and `HALF` above could both be wrong together and every assertion in
+    // the file would still agree with itself.
+    expect(BODY.heightPx).toBe(SCAVENGER_BOX.h * SCALE);
+    expect(BODY.halfWidthPx).toBe((SCAVENGER_BOX.w / 2) * SCALE);
   });
 
   it('blocks symmetrically, walking left', () => {

@@ -152,6 +152,15 @@ export function scavengerFooting(solids: readonly Rect[], scale: number): Scaven
       `scavengerFooting: SCAVENGER_BOX must sit on the feet, got y ${SCAVENGER_BOX.y} h ${SCAVENGER_BOX.h}`,
     );
   }
+  // 🔴 The x half, which the docstring above promised and the first version did not check.
+  // `blockedAt` probes `x ± halfWidthPx` — symmetric about the centre and blind to `facing` — while
+  // `overlapsScavenger` goes through `toWorld`, which offsets by `box.x` and reflects by facing.
+  // An asymmetric box makes those two bodies differ with no throw and no red test.
+  if (body.x !== -body.w / 2) {
+    throw new Error(
+      `scavengerFooting: SCAVENGER_BOX must be symmetric about the feet, got x ${SCAVENGER_BOX.x} w ${SCAVENGER_BOX.w}`,
+    );
+  }
   return { solids, halfWidthPx: body.w / 2, heightPx: body.h };
 }
 

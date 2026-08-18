@@ -97,10 +97,24 @@ on the **shipped** levels with the auto-player's full run-up:
 | **576 px** | **does not** |
 
 **Both numbers are real and they do not contradict each other** — the old one was measured on the
-retired level with `level-traversal.test.ts`'s approach, this one on the geometry that ships. Both
-are now recorded in `shared.mjs`. The red proof had to be rebuilt at 576 px: at the 384 px the stale
-figure implied, **the gate passed**. That is the argument for measuring rather than quoting, and it
-cost one wrong red proof to learn.
+retired level with `level-traversal.test.ts`'s approach, this one with the auto-player's full run-up.
+Both are now recorded in `shared.mjs`. The red proof had to be rebuilt at 576 px: at the 384 px the
+stale figure implied, **the gate passed**. That is the argument for measuring rather than quoting,
+and it cost one wrong red proof to learn.
+
+🔴 **Corrected by the adversarial brief: this is a FLAT-GROUND figure, and the two shipped 480 px
+runs are not flat-ground crossings.** The first version of this section said the layouts were
+*"sized against 480, because that is the number measured on the geometry they actually ship"*. They
+were not. level-03's cols 65–69 and level-04's cols 63–67 are the **valley floor between two raised
+masses of equal height**, and the policy clears them by launching from the elevated walkway: traced,
+the feet pass **737 px above** the hazard at closest approach and land **305 px past** its far edge.
+Their width came from the mass spacing and from widening a run leftward off a descent-landing spot
+— not from approaching a measured ceiling.
+
+So the honest statement is narrower: **480 px is what a flat-ground run-up clears**, and it is the
+number to size a FLAT run against. The shipped valley crossings have margins far larger than that,
+and the tightest clearance anywhere in the five levels is 316 px — measured across all 18 shipped
+hazards. Nothing ships near a boundary.
 
 ### Width is not the only thing that matters
 
@@ -116,6 +130,11 @@ gate naming the column:
 
 All three moved. This is recorded in `shared.mjs` beside the width figure, because a future author
 sizing a run correctly can still place it fatally.
+
+*(Precision, from the adversarial brief: "moved" covers three different edits — level-02's summit
+spike shifted two columns, level-04's widened leftward so its leading edge is visible before the
+fall, and level-05's left that stretch entirely and reappeared at cols 97–98. All three vacated the
+landing spot, which is the property that matters, but they are not three translations.)*
 
 ### Criterion 7.7 — `MAX_AUDIO_FRAME_LOSS_RATIO`, 1.15 → **1.05**
 
@@ -219,13 +238,28 @@ Recorded because §7 listed green legs only, and the code-reviewer gate owner wa
 applied to `src/sim/enemyGeometry.ts`, measured, and reverted; the revert is confirmed by the file
 matching `HEAD` and by the original predicate still appearing exactly once.
 
+**Scope: `npm test`, the whole unit suite (1880 tests), not a selected subset.** The first version
+of this table reported counts from a two-file run without saying so, and the adversarial brief could
+not reproduce it — fairly, since this table IS the C1/C12 record.
+
 | mutation | what it models | result |
 |---|---|---|
-| `noveto` — `blockedAt` never returns true | the bug as reported | **7 failed**, 19 passed — both wall tests, both `moving` tests, the patrol turn, and the shipped-level sweep |
-| `overlap` — `wasClear = true` | the veto written the obvious wrong way | **7 failed**, 28 passed — the `EVERYWHERE` case, three pre-existing patrol/chase tests, and the start-inside-a-wall fixture |
+| `noveto` — `blockedAt` never returns true | the bug as reported | **8 failed**, 1872 passed — all in `enemy-wall-collision.test.ts` |
+| `overlap` — `wasClear = true` | the veto written the obvious wrong way | **10 failed**, 1870 passed — across `enemy-wall-collision`, `enemy-ai-scavenger` **and `enemy-view`** |
+| `headY = feetY - 1` — a body one pixel tall | a ledge at chest height that a too-short body walks through | **1 failed**, 1879 passed — and **0 failed before this session added the assertion** |
 
-The two mutations fail **disjoint** sets of tests, which is the point: one proves the veto exists,
-the other proves it is the *newly-entered* rule rather than an overlap test.
+The first two fail **overlapping but different** sets, which is the point: one proves the veto
+exists, the other proves it is the *newly-entered* rule rather than an overlap test. `enemy-view`
+appearing only under `overlap` is worth noting — the animation layer reads `moving`, so a veto that
+freezes a patroller is visible there and nowhere else.
+
+🔴 **The third row is the one that should not have been needed.** The vertical extent of the veto
+— the parameter that distinguishes a wall from an overhang you walk under — was completely
+unconstrained: the suite was green with the enemy's body **one pixel tall**. The single test that
+named it parked its overhang 500 px clear of the head, so it passed for any height between 1 and
+640: a fixture positioned so far from the boundary that the property it claimed to measure was
+unreachable. Found by the code-reviewer's adversarial brief; three assertions now pin it, including
+an overhang that clears the head by exactly one pixel.
 
 Three assertions were strengthened after the first brief, each because the mutation table showed
 them surviving something they should have caught:
@@ -239,6 +273,26 @@ them surviving something they should have caught:
 - the shipped-span sweep is **vacuous against the overlap mutation** now that A2 moved level-02's
   beat off its wall (`checked=11 short=0`). The discriminating case became a committed fixture
   driven through `stepScavenger`.
+
+## 5c. The hazard-free gate is not vacuous on the SHIPPED levels
+
+The adversarial brief mutated `avoidHazards` into a no-op — the feature silently doing nothing — and
+re-ran the gate. **All 15 shipped-level assertions went red** (5 levels x 3 seeds), plus the control.
+That matters more than the committed 576 px fixture: it shows the real levels, not only a synthetic
+one, depend on the behaviour being present. `playerHurt` was traced to the real collision path
+(`worldDamage.ts` → `hazards.ts`'s swept `segmentHitsRect`), not a stub.
+
+The same brief checked a suspicion worth recording as **closed**: `hazardAhead` tests a window around
+the FEET, so a hazard hanging at head height would be invisible to the policy. It is also invisible
+to the game — `hazardHit` sweeps the feet segment only, never the full body AABB. The auto-player's
+blind spot matches the engine's own damage rule by construction, and every shipped hazard is
+floor-standing anyway.
+
+⚠️ **`GATE_SEEDS` is decorative for this gate.** With enemies off, nothing RNG-dependent touches
+movement, and the three seeds produce byte-identical trajectories. It triples the assertion count
+without adding coverage — harmless, but stated, because `level-completable.test.ts` carries a vault
+8.2 comment explaining why seeds DO matter there and this file inherited the shape without the
+reason.
 
 ## 6. Deliberate non-fixes, recorded
 
@@ -264,8 +318,8 @@ them surviving something they should have caught:
 | leg | result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **1873** passed, 112 files |
-| `npm run test:sim-isolated` | **1873** passed with Phaser uninstalled |
+| `npm test` | **1880** passed, 112 files |
+| `npm run test:sim-isolated` | re-run at the end of the session |
 | `npm run build` | clean; `verify-dist ok: 5 level(s) and 11 audio file(s) byte-identical, no DEV-only scene key or debug surface` |
 | `npm run test:e2e` | **102** passed |
 | both perf specs, re-run after the 400-line splits | pass |
