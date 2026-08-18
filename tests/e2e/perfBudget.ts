@@ -248,35 +248,63 @@ export const MAX_GPU_RATIO = 5;
 export const MAX_HUD_WORK_RATIO = 2;
 
 /**
- * The ceiling on `HUD-on / HUD-off` **GPU** time per frame.
+ * Criterion 6.9 - the ceiling on the **median per-pair GPU millisecond delta** the HUD adds.
  *
- * 🔴 **1.25 -> 2.0 on 2026-08-17, and this is the one place in this file where a bound moved UP.**
- * The full measurement — six clean runs, two rejected statistics and a three-point overdraw sweep —
- * is in `phase-06-perf.spec.ts` beside the reduction it justifies. In short:
+ * 🟢 **REPLACED THE RATIO 2026-08-18.** `MAX_HUD_GPU_RATIO` was recorded broken twice over: its
+ * resolution floor was *bracketed, not measured* (one full-screen scrim invisible, five visible at
+ * 2.688, nothing between ever run), and it passed and failed on the SAME unchanged commit at 0.76x
+ * and 3.53x. Both symptoms have one cause, and this file already named it in the abstract: **a
+ * ratio of two very small numbers is dominated by noise.** The arms sit ~0.13 ms apart measuring a
+ * HUD that costs ~0.001 ms, and the OFF arm's median collapses toward the GPU timer's own
+ * resolution floor - 0.035 ms has been observed - which makes the quotient explode for reasons that
+ * have nothing to do with what was drawn.
  *
- *  - the paragraph this replaces claimed "the three measured ratios span 1.012-1.017". Re-measured,
- *    the clean spread is **0.227 - 1.396**, and 1.319 and 1.396 are both readings from runs with
- *    nothing else on the box. Deviation D8 blamed full-suite contention; **it fails in isolation**.
- *    ⚠️ The 1.396 came from the criterion's adversarial gate owner re-measuring after the bound was
- *    already set: **two extra samples raised the observed ceiling**, so treat this spread as a
- *    lower bound on the noise, not a settled range.
- *  - the failure this half exists for — "a full-screen scrim, an alpha-blended overlay" — was built
- *    and measured. One full-screen 1920x1080 alpha scrim reads **0.932 and 1.144: invisible**. Five
- *    stacked read **2.688 and 5.641**; twenty read 8.459.
+ * ## Measured, not argued
  *
- * So 1.25 sat *below* the noise floor and *below* the smallest signal it could ever resolve. It was
- * not a tight bound being loosened; it was a bound that could only fire at random, and did.
+ * The scrim mutation is COMMITTED now (`tests/e2e/scrimMutation.ts`, driven by
+ * `PERF_MUTATION=scrimN`), so the sweep the previous session was interrupted part-way through
+ * finally ran. At `PAIRS = 10` with AB/BA ordering, one session, RTX 4080:
  *
- * 2.0 is ~1.43x the worst clean reading (1.396) and 26 % below the weakest proven signal (2.688).
- * That margin is thinner than the rest of this file enjoys and it is **narrowing as samples
- * accumulate**, which is stated rather than rounded away. Nothing 1.25 could catch is now missed,
- * because 1.25 caught nothing but itself — but if a future run lands near 2.0 on clean code, the
- * answer is to reduce over more pairs, not to raise this again.
+ * ```
+ *            ratio            paired delta (ms)
+ * clean      0.502 - 1.692    -0.0312 .. 0.0835   (16 runs; 13 of them under 0.031)
+ * 1 scrim    1.263 / 1.393     0.0358
+ * 2 scrims   1.665 / 3.080     0.0328
+ * 3 scrims   1.739 / 1.821     0.0983  0.3082
+ * 4 scrims   2.770             0.1725  0.2749
+ * 5 scrims   1.678             0.1044
+ * 6 scrims   -                 0.3057
+ * 8 scrims   2.777             0.2396  0.2412  0.4019
+ * ```
  *
- * ⚠️ Demonstrated floor: **this gate cannot see one full-screen alpha layer.** It catches gross
- * overdraw only.
+ * **The ratio column is the finding.** Clean runs reach 1.692 while two full-screen scrims read
+ * 1.665, and five scrims (1.678) are indistinguishable from a clean run. It is not a tight bound
+ * needing adjustment - it does not order its own mutation. The delta column does.
+ *
+ * ## 0.2 ms, and the floor STATED rather than bracketed
+ *
+ * 2.4x the worst clean reading of sixteen (0.0835), whose next-worst is 0.0307.
+ *
+ * ⚠️ **Demonstrated floor, and it is not flattering.** This gate resolves **six or more**
+ * full-screen alpha scrims reliably (0.3057, and 8 scrims at 0.2396/0.2412/0.4019, all red).
+ * Three, four and five are BORDERLINE - each has been observed both above and below 0.2. One and
+ * two it does not resolve at all: 0.0358 and 0.0328, inside a clean band reaching 0.0835.
+ *
+ * That is weaker than hoped and is recorded rather than rounded away 🔴 **but it is the first
+ * version of this criterion that orders its own mutation at all.** The ratio it replaces put five
+ * scrims (1.678) below a clean run (1.692).
+ *
+ * ⚠️ **Both bounds this session were chosen on one set of runs and CONFIRMED on a held-out set,
+ * and the hold-out caught an overfit BOTH times.** Here a 0.06 bound chosen from nine clean runs
+ * (worst 0.0307) false-redded on a tenth at 0.0835. Selecting and proving on the same data is how
+ * this criterion, criterion 7.7, and the previous session's replacement statistic all got here.
+ *
+ * 🔴 It is still a **GPU** statistic, and that is deliberate rather than incidental. The
+ * main-thread `MAX_HUD_WORK_DELTA_MS` below cannot inherit this criterion at any bound: a
+ * full-screen scrim is fill rate and costs the main thread essentially nothing, so the defect 6.9
+ * names is invisible to it by construction.
  */
-export const MAX_HUD_GPU_RATIO = 2;
+export const MAX_HUD_GPU_DELTA_MS = 0.2;
 
 /**
  * The **absolute** ceiling on the HUD's added main-thread milliseconds per frame.
