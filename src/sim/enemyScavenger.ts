@@ -362,7 +362,8 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
       // anything, `blockedAt` whether it lands INSIDE anything. The wall half is the user-reported
       // bug — a chaser used to cross a raised block's face because the only test here probed
       // downward. Facing is already committed above, so a held chaser keeps looking at the player.
-      if (canStand(nextX, dir, scavenger, footing) && !blocked(scavenger.x, nextX, scavenger, footing)) {
+      const standing = canStand(nextX, dir, scavenger, footing);
+      if (standing && !blocked(scavenger.x, nextX, scavenger, footing)) {
         scavenger.x = nextX;
       }
     }

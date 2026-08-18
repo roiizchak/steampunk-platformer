@@ -212,6 +212,34 @@ list, so a mutation applied once would vanish from pair 2 onward and quietly mea
 | `MAX_HUD_GPU_RATIO` | could not order its own mutation | deleted; see §2 |
 | the 384 px red proof for the new hazard gate | passed, because it was sized from a stale figure | rebuilt at 576 px from a measurement |
 
+## 5b. Watching the wall veto fail — the mutation table
+
+Recorded because §7 listed green legs only, and the code-reviewer gate owner was right that
+*"unit + committed red proof"* is not evidenced by a passing suite *(C1, C12)*. Both mutations were
+applied to `src/sim/enemyGeometry.ts`, measured, and reverted; the revert is confirmed by the file
+matching `HEAD` and by the original predicate still appearing exactly once.
+
+| mutation | what it models | result |
+|---|---|---|
+| `noveto` — `blockedAt` never returns true | the bug as reported | **7 failed**, 19 passed — both wall tests, both `moving` tests, the patrol turn, and the shipped-level sweep |
+| `overlap` — `wasClear = true` | the veto written the obvious wrong way | **7 failed**, 28 passed — the `EVERYWHERE` case, three pre-existing patrol/chase tests, and the start-inside-a-wall fixture |
+
+The two mutations fail **disjoint** sets of tests, which is the point: one proves the veto exists,
+the other proves it is the *newly-entered* rule rather than an overlap test.
+
+Three assertions were strengthened after the first brief, each because the mutation table showed
+them surviving something they should have caught:
+
+- `reports moving:false while it is held` **passed under `noveto`**. The unvetoed chaser walked
+  through the wall to x 2106 with the player at 2200, and 94 px is inside `ENEMY_DEAD_ZONE` — so it
+  stopped for the dead zone and `moving` read false for the wrong reason entirely. It now asserts
+  the position too.
+- the patrol path had **no `moving` assertion at all**; the readback's claim to cover "any veto
+  added later" was a statement about the chase branch only.
+- the shipped-span sweep is **vacuous against the overlap mutation** now that A2 moved level-02's
+  beat off its wall (`checked=11 short=0`). The discriminating case became a committed fixture
+  driven through `stepScavenger`.
+
 ## 6. Deliberate non-fixes, recorded
 
 - **The `level-01-phase07.tmj` fixture is no longer byte-identical to what Phase 7 shipped.** One
@@ -224,6 +252,10 @@ list, so a mutation applied once would vanish from pair 2 onward and quietly mea
   those places none was added, rather than shipping a level that cannot be finished. Only level-03's
   cols 65–69 lies between two raised masses on both sides, so it is the one crossing spiked end to
   end and jumped mass-to-mass.
+- **A latent authorship hazard, not a live defect:** a body in a niche narrower than
+  `2 x halfWidth + 2 x speed` and clear of both walls flips facing every tick and never moves.
+  No shipped level has one — the gate owner swept all 11 patrollers for 4000 ticks, `insideTicks=0`
+  and every beat walked end to end — so it is recorded rather than guarded against.
 - **The 8.5 difficulty ramp needed rebalancing** after the additions: it read 7/8/8/10/9 tiles and is
   now 7/8/9/10/11. The ramp gate caught the regression.
 

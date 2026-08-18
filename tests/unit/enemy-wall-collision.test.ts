@@ -88,6 +88,16 @@ describe('a chasing scavenger and a wall — the reported bug', () => {
     for (let i = 0; i < 400; i += 1) {
       stepScavenger(s, { playerX: 2200, playerY: 0 }, footing);
     }
+    /**
+     * 🔴 **The position assertion is what makes the `moving` one mean anything.**
+     *
+     * Without it this test was decoration, and the code-reviewer gate owner proved it: delete the
+     * veto entirely and it still PASSES. The unvetoed chaser walks through the wall to x 2106, the
+     * player is at 2200, and |2200 - 2106| = 94 is inside `ENEMY_DEAD_ZONE` (96) — so it stops, and
+     * `moving` reads false for a completely different reason than the one being asserted. Same
+     * class as mutation M20 surviving a loose `/solid/i` match *(vault C2)*.
+     */
+    expect(s.x + HALF, 'it is held by the WALL, not by the dead zone').toBeLessThanOrEqual(wall.x);
     expect(s.moving).toBe(false);
   });
 
@@ -123,8 +133,65 @@ describe('a patrolling scavenger and a wall', () => {
     // It did not simply stop dead at the wall: it turned and walked the beat back.
     expect(Math.min(...xs)).toBeLessThan(1000);
   });
+
+  it('reports moving:false on the tick the wall vetoes it', () => {
+    // The patrol path had no `moving` assertion at all until the code-reviewer gate owner asked for
+    // one. The chase path's is above; without this, "the readback covers every veto added later"
+    // was a claim about the chase branch only.
+    const s = createScavenger({ x: 1000, y: 0, patrolMin: 900, patrolMax: 3000 });
+    let vetoed = 0;
+    for (let i = 0; i < 2000; i += 1) {
+      const before = s.x;
+      stepScavenger(s, { playerX: 999999, playerY: 999999 }, footing);
+      if (s.x === before) {
+        vetoed += 1;
+        expect(s.moving, 'held by the wall but still reporting motion').toBe(false);
+      }
+    }
+    expect(vetoed, 'the wall never actually vetoed a step, so nothing above was tested').toBeGreaterThan(0);
+  });
 });
 
+/**
+ * 🔴 A body that STARTS inside a wall must be able to walk out of it.
+ *
+ * This is the discriminating case for the newly-entered rule, and the shipped levels no longer
+ * carry one. level-02's scavenger used to sit with its body straddling the wall at columns 30-31;
+ * the A2 placement fix moved the beat, which is correct - and which left the shipped-span sweep
+ * below VACUOUS against the regression it was written for. With no shipped body overlapping a
+ * solid, an "overlapping" veto would leave every shipped span green. The code-reviewer gate owner
+ * measured that and asked for a fixture. Driven through `stepScavenger`, because the question is
+ * what the SIM does with such a body, not whether the parser refuses it.
+ *
+ * ⚠️ What the rule does NOT promise, pinned here so nobody reads more into it: a beat whose END is
+ * inside a wall is still SHORTENED. Walking toward that end the body is clear on one tick and
+ * inside on the next, which is a newly-entered step and is vetoed. Measured: with the wall at
+ * 1000..1096 and `patrolMin` 1140, the turn happens at 1157.5. That is why the level DATA was fixed
+ * in A2 rather than the rule being weakened to accommodate it.
+ */
+describe('a body that starts inside a wall walks out rather than freezing', () => {
+  const wall = wallAt(1000);
+  const footing = scavengerFooting([GROUND, wall], SCALE);
+
+  it('covers its beat away from the wall instead of being pinned at spawn', () => {
+    // Body [1080, 1200] against a wall spanning [1000, 1096]: overlapping by 16 px at rest.
+    const s = createScavenger({ x: 1140, y: 0, patrolMin: 1140, patrolMax: 1800 });
+    expect(1140 - HALF, 'the fixture must actually overlap, or it proves nothing').toBeLessThan(
+      wall.x + TILE_SIZE,
+    );
+
+    const xs: number[] = [];
+    let moved = 0;
+    for (let i = 0; i < 3000; i += 1) {
+      stepScavenger(s, { playerX: 999999, playerY: 999999 }, footing);
+      xs.push(s.x);
+      if (s.moving) moved += 1;
+    }
+    // An "overlapping" veto freezes it here forever, flipping facing every tick and never moving.
+    expect(moved, 'pinned at spawn: it never moved once in 3000 ticks').toBeGreaterThan(0);
+    expect(Math.max(...xs), 'it never reached the far end of its beat').toBe(1800);
+  });
+});
 /* ------------------------------------------------------------------ *
  * The shipped levels — the sweep, and the regression the fix could cause.
  * ------------------------------------------------------------------ */
@@ -195,6 +262,14 @@ describe('the veto does not shorten an authored patrol beat', () => {
    *
    * This asserts the beat is walked END TO END, which is the property a designer authored — not
    * merely that the enemy moved at all.
+   *
+   * ⚠️ **It is VACUOUS against the overlap mutation, and deliberately kept anyway.** The A2 fix
+   * moved level-02's beat off its wall, so no shipped body overlaps a solid any more and an
+   * "overlapping" veto leaves every span here green. Measured by the code-reviewer gate owner:
+   * `checked=11 short=0` under that mutation. The discriminating case moved to the fixture above,
+   * *"a body that starts inside a wall walks out rather than freezing"*, which does go red. What
+   * this sweep still catches is a beat SHORTENED by any future veto — which is exactly how the
+   * level-02 defect was found in the first place.
    */
   it('every shipped patroller still reaches both ends of its beat', () => {
     let checked = 0;

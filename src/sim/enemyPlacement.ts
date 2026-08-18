@@ -129,11 +129,30 @@ export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
  * a body ends up two different widths depending on which question is being asked of it.
  */
 export function scavengerFooting(solids: readonly Rect[], scale: number): ScavengerFooting {
-  return {
-    solids,
-    halfWidthPx: (SCAVENGER_BOX.w / 2) * scale,
-    heightPx: SCAVENGER_BOX.h * scale,
-  };
+  /**
+   * 🔴 Derived through `toWorld`, not by multiplying the box's fields here.
+   *
+   * The first version wrote `(SCAVENGER_BOX.w / 2) * scale` and `SCAVENGER_BOX.h * scale` directly.
+   * That is correct ONLY because `SCAVENGER_BOX` happens to be `{ x: -10, y: 0, w: 20, h: 40 }` —
+   * symmetric about the feet and sitting on them. `toWorld` computes `y = feetY - (box.y + box.h) *
+   * scale` and reflects `x` by facing, so giving the box a non-zero `y` or an asymmetric `x` would
+   * have silently desynced the veto's idea of the body from `overlapsScavenger`'s. Two
+   * representations of one body is the exact thing this file's vault 5.3 note argues against, and
+   * the code-reviewer gate owner caught it doing precisely that.
+   *
+   * A zero-origin probe: the returned rect's offsets ARE the body's, whatever the box becomes.
+   */
+  const body = toWorld(SCAVENGER_BOX, 0, 0, 1, scale);
+  // `blockedAt` spans `[feetY - heightPx, feetY]`, which is the body ONLY while its bottom sits on
+  // the feet. Enforced rather than assumed, the same way `createScavenger` throws on a cooldown
+  // shorter than its own swing: a silent desync from `overlapsScavenger` is not something a test
+  // would notice until an enemy walked through a wall again.
+  if (body.y + body.h !== 0) {
+    throw new Error(
+      `scavengerFooting: SCAVENGER_BOX must sit on the feet, got y ${SCAVENGER_BOX.y} h ${SCAVENGER_BOX.h}`,
+    );
+  }
+  return { solids, halfWidthPx: body.w / 2, heightPx: body.h };
 }
 
 /**
