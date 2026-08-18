@@ -240,7 +240,7 @@ describe('the enemies are authored into the level files', () => {
 });
 
 /**
- * The four new committed fixtures, each asserted against its OWN reason.
+ * Every committed bad fixture that has a rule of its own, asserted against its OWN reason.
  *
  * `tilemap-data.test.ts` already sweeps every fixture for "rejected, with a distinct reason". That
  * sweep cannot tell WHICH rule fired, and a rule that rejects for the wrong reason is not a gate —
@@ -267,6 +267,19 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // from the shipped level with ONE gear's y moved from 1872 to 2016: inside the floor solid at
     // y 1920, height 192. Nothing else in the file differs.
     ['gear-inside-solid', /is inside the solid at/],
+    // 🔴 The three PLACEMENT fixtures, added 2026-08-18 with the rule they prove.
+    //
+    // They were committed without a row here, and the gate owner's first brief caught it: the
+    // directory sweep in `tilemap-data.test.ts` proves only "rejected, distinctly from every OTHER
+    // fixture", which is satisfied by three rules firing in the wrong order as long as their
+    // messages differ. `bad-levels/README.md` says so in the project's own words, and the fix was
+    // to extend this array rather than to argue the sweep was enough.
+    //
+    // Each regex names the rule AND the object type, so swapping the hazard and gear branches of
+    // `describePlacementProblem` goes red here while the sweep stays green.
+    ['enemy-standing-in-a-hazard', /walks its beat through the hazard at \(200, 200\) 32x32/],
+    ['gear-inside-an-enemy', /walks its beat through the gear body at \(224, 154\) 72x72/],
+    ['enemy-beat-into-a-wall', /walks its beat into the solid at \(300, 64\) 32x192/],
   ];
 
   it.each(cases)('%s', (name, reason) => {
