@@ -133,7 +133,7 @@ export function goalEntryAlpha(goalEntryTicks: number | null): number {
   if (goalEntryTicks === null) {
     return 1;
   }
-  return 1;
+  return Math.max(0, 1 - goalEntryTicks / GOAL_ENTRY_TICKS);
 }
 
 /**

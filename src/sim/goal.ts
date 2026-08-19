@@ -299,5 +299,5 @@ export function stepGoalEntry(world: World): boolean {
   }
 
   world.goalEntryTicks += 1;
-  return world.goalEntryTicks >= GOAL_ENTRY_TICKS;
+  return world.goalEntryTicks >= GOAL_ENTRY_TICKS && containedInGoal(world);
 }
