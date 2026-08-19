@@ -95,7 +95,8 @@ against one line before shooting any clip *(criterion 4.27)*.
 | industrial tileset | `tiles-industrial` | 3 | ✅ shipped |
 | parallax far / mid / near | `bg-far` `bg-mid` `bg-near` | 3 | ✅ shipped |
 | HUD health assembly | `hud-health` | 4 | ✅ shipped, **unused until Phase 6** |
-| gear pickup | — | 6 | ⬜ |
+| gear pickup | `gear` | 6 | ✅ shipped, 72 × 72 |
+| **level exit gate** | `goal-gate` | **8 follow-up** | ✅ shipped, **192 × 288** — authored at the goal rect so `setDisplaySize` is a no-op |
 | collect → scoreboard tween art | — | 6 | ⬜ |
 | hazard art (spikes beyond the tileset) | — | 5 | ⬜ |
 | audio cues | — | 7 | ⬜ — needs the catalog schema extended |

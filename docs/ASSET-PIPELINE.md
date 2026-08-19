@@ -335,6 +335,41 @@ The single source of truth. **An entry here is what makes a file an asset.**
 
 `fps` is **derived** (§5) and `simTicks` records what it was derived from, so the gate can recompute it.
 
+### Isolated objects — `images`, not `sheets`
+
+The HUD assembly, the gear pickup and the **exit gate** are single subjects on a chroma field. They
+carry no frames and no timing, so they are plain `images` rows that `queueCatalog` loads and
+`verifyExpectedTextures` proves registered — **no scene code changes to add one**:
+
+```json
+{ "key": "goal-gate", "url": "assets/objects/gate.png" }
+```
+
+`tools/gen/catalogWrite.mjs` merges only `catalog.sheets`, so the `images` array is hand-maintained
+and survives every `assets:build` byte-for-byte.
+
+**All three are built by `buildChrome.mjs` on one recipe:** measure the chroma key from the image's
+OWN border, key out, refuse unless exactly one connected component comes back, crop to the bounding
+box, downscale to the size it draws at.
+
+| asset | aspect | output | why that size |
+|---|---|---|---|
+| `hud-health` | `21:9` | 413 × 128 | 1/8 of the 1080 viewport |
+| `gear` | `1:1` | 72 × 72 | `GEAR_BOX.w × RENDER_SCALE` |
+| `goal-gate` | `2:3` | **192 × 288** | **the goal rect in all five `.tmj` files** — so `drawGoal`'s `setDisplaySize` is a no-op and pixels are 1:1 at `CAMERA_ZOOM` 1 |
+
+🔴 **The gate has one requirement the other two do not: its opening must be SOLID and DARK.** The
+player fades to alpha 0 inside it. If the model renders the opening as a real hole onto the chroma
+field, `keyOut` punches through and the character fades into the parallax backdrop instead of into a
+passage — the asset's job, exactly inverted.
+
+**The one-component check cannot see that failure.** A doorway whose interior keyed away comes back
+as a RING: still one component, still 192 × 288, still passing every check in the build script. So
+`tests/unit/shipped-gate.test.ts` measures the finished bytes — interior darkness and opacity, a
+bright frame column flanking the opening on both sides, overall opacity, and frame-versus-void
+luminance. Four measurements because Codex's plan review showed that any one of them alone is passed
+by an opaque dark slab or by a mostly-transparent ring.
+
 ---
 
 ## 9. Phaser 4 loading

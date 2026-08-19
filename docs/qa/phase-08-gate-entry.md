@@ -204,6 +204,55 @@ Stated rather than glossed.
 
 ## Red proofs — every new gate watched failing *(C1)*, every mutation confirmed reverted *(C12)*
 
+### The shipped art — three mutations, three different ways to be wrong
+
+**Target:** `public/assets/objects/gate.png`, mutated as bytes and re-run against
+`tests/unit/shipped-gate.test.ts`. Restored with `cmp` confirming byte-for-byte equality after
+each.
+
+| | mutation | landed | `Tests N failed` | caught by |
+|---|---|---|---|---|
+| **A** | **transparent void** — the interior keys away, so the gate ships as a **ring** | yes | **2 failed** | dark-opaque opening · mostly-opaque overall |
+| **B** | **slab** — an opaque dark rectangle with no doorway around it | yes | **2 failed** | bright frame flanking the opening · frame-vs-void luminance |
+| **C** | **lit interior** — the opening is a lit room, not a dark passage | yes | **2 failed** | dark-opaque opening · frame-vs-void luminance |
+
+Mutation A is the one the whole test file exists for: **a ring is still exactly one connected
+component and still 192 × 288**, so `buildGate`'s refusal cannot see it and the asset ships as a
+see-through hole the player fades into instead of a dark passage.
+
+🔴 **The first run of this loop proved nothing and said so.** The mutation script sat in `/tmp` and
+its relative import of `tools/gen/png.mjs` did not resolve, so it threw, no bytes changed, and all
+seven tests passed. The `landed=` column — a `cmp` before believing the result — is what caught it;
+without it the honest record would have been three false greens read as "the gate cannot catch
+these". *(C12, and the second time this session that a red proof was nearly recorded from a run
+that mutated nothing.)*
+
+### 🔴 A red gate fixed by correcting the WINDOW, not the bound
+
+`has a solid frame down BOTH jambs` failed on the real asset at **0.574 against a 0.6 bound**. The
+tempting move is to lower the bound. The column profile says the bound was never the problem:
+
+```
+  col   0    0 % opaque              transparent margin
+  col   8  100 % opaque,  95 % bright   the copper PIPE
+  col  16   13 % opaque              the GAP between pipe and frame
+  col  24   92 % opaque,  22 % bright   the jamb begins
+  col  40  100 % opaque,  91 % bright   the jamb proper
+  col  56..136  100 % opaque, ~14 % bright   THE OPENING
+  col 144  100 % opaque,  87 % bright   the right jamb
+  col 176   15 % opaque              the gap again
+```
+
+The window `x 0..20` straddled a transparent margin and a pipe gap and **measured neither jamb**.
+Replaced with a predicate that does not need to know where the jambs are — *somewhere between the
+centre and each edge there is a column that is ≥90 % opaque and ≥60 % bright.* Hardcoding
+`24..52` / `144..172` was rejected: that is fitting the test to one generation, and the next
+re-shoot moves them.
+
+The distinction is the point. **Moving a bound to clear a red gate is forbidden; correcting a
+window that measures the wrong pixels is fixing the test.** Mutation B above then confirms the
+replacement still refuses a slab, which the old window would also have done — so nothing was lost.
+
 ### The fade curve — three mutations, and only one test does the work
 
 **Target:** `goalEntryAlpha` in `src/render/playerView.ts`. Driven from the shell, never from a
