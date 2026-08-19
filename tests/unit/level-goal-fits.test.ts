@@ -42,6 +42,7 @@ import { describe, expect, it } from 'vitest';
 import { RENDER_SCALE } from '../../src/game/constants';
 import { parseLevel } from '../../src/game/tilemap';
 import { PLAYER_BOX } from '../../src/sim/player';
+import { DEFAULT_TUNING } from '../../src/sim/playerTuning';
 import { SHIPPED_ENTRIES } from './tilemap-data-fixtures';
 
 const BODY_W = PLAYER_BOX.w * RENDER_SCALE; // 132
@@ -77,10 +78,21 @@ describe('every shipped goal rect admits full containment', () => {
     const bottom = level.goal.y + level.goal.h;
     // Standing on that solid is the ONLY way `bottom === goal.y + goal.h` is ever true. Without a
     // floor here the player falls through the doorway and the level cannot be finished.
+    //
+    // 🔴 It has to span the WHOLE containment window, not merely touch the rect. This filtered on
+    // `s.x < goal.x + goal.w && s.x + s.w > goal.x` — any overlap at all — so a one-pixel sliver of
+    // floor under the corner of the doorway passed it, and the player standing in the window it
+    // left would fall through. Raised by the gate's checklist review; it is the same softlock the
+    // ceiling in `stepGoalEntry` catches from the other end, and a level should not need rescuing
+    // by a sim guard when the data itself can be gated.
+    //
+    // The window a contained body's feet can occupy is `[goal.x + BODY_W/2, goal.x + goal.w -
+    // BODY_W/2]`, and the box extends BODY_W/2 either side of the feet — so the floor must cover
+    // the full rect.
     const flush = level.solids.filter(
-      (s) => s.y === bottom && s.x < level.goal.x + level.goal.w && s.x + s.w > level.goal.x,
+      (s) => s.y === bottom && s.x <= level.goal.x && s.x + s.w >= level.goal.x + level.goal.w,
     );
-    expect(flush.length, `${id}: no solid at y=${bottom} spanning the exit — nothing to stand on`)
+    expect(flush.length, `${id}: no solid at y=${bottom} spanning the WHOLE exit — nothing to stand on`)
       .toBeGreaterThan(0);
   });
 
@@ -88,7 +100,16 @@ describe('every shipped goal rect admits full containment', () => {
     const level = parseLevel(id, JSON.parse(raw) as unknown);
     // The auto-run's dead zone is one tick of travel wide, so the window has to be at least that
     // or the player oscillates around a centre they can never satisfy containment at.
+    //
+    // 🔴 Derived from `runMax`, not the literal `18` this asserted first. The dead zone IS
+    // `world.tuning.runMax` (`goal.ts`'s `goalEntryDir`), and 18 was `2 * runMax` only by
+    // coincidence of authorship — `runMax` is a live knob edited in the Playground, and retuning it
+    // to 12 would have left this gate green while the guarantee it encodes became false. This
+    // file's own stated virtue is going red the day someone retunes `RENDER_SCALE`; it did not
+    // extend that to the knob it actually depends on. Raised by both gate reviews independently.
+    const deadZone = DEFAULT_TUNING.runMax;
     const window = level.goal.w - BODY_W;
-    expect(window, `${id}: only ${window}px of horizontal slack`).toBeGreaterThanOrEqual(18);
+    expect(window, `${id}: only ${window}px of slack against a ${deadZone}px dead zone`)
+      .toBeGreaterThanOrEqual(deadZone * 2);
   });
 });

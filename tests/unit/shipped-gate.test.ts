@@ -103,6 +103,40 @@ const IN_X1 = 128;
 const IN_Y0 = 96;
 const IN_Y1 = 192;
 
+/**
+ * The span the DRAWN COURIER actually occupies, gate-local.
+ *
+ * `PLAYER_BOX.w * RENDER_SCALE` is 132 and the gate is 192, so a centred body covers `x 30..162`.
+ * The 64 px window above is half that. The gate's adversarial review made the consequence concrete:
+ * a doorway exactly 64 px wide passes every assertion in this file while **half the courier fades
+ * against bright brass**. A window narrower than the thing it protects is structurally incapable of
+ * ordering a mutation that narrows the opening to its own size.
+ */
+const BODY_X0 = 30;
+const BODY_X1 = 162;
+
+/** Opaque and near-black: the void a character can disappear into. */
+const isDark = (p: { r: number; g: number; b: number; a: number }) =>
+  p.a === 255 && p.r + p.g + p.b < 210;
+
+/**
+ * Columns that are nearly all opaque AND mostly bright — frame material, wherever it happens to be.
+ *
+ * Shared, because two tests need it and the second one was using a hardcoded window instead. See
+ * `the frame is far brighter than the opening` below.
+ */
+function frameColumns(): { left: number[]; right: number[] } {
+  const columnIsFrame = (x: number) =>
+    fraction(x, x + 1, 40, 260, (p) => p.a > 200) >= 0.9 &&
+    fraction(x, x + 1, 40, 260, (p) => p.a > 200 && p.r + p.g + p.b >= 210) >= 0.6;
+  const centre = GATE_W / 2;
+  const left: number[] = [];
+  const right: number[] = [];
+  for (let x = 0; x < centre; x += 1) if (columnIsFrame(x)) left.push(x);
+  for (let x = centre; x < GATE_W; x += 1) if (columnIsFrame(x)) right.push(x);
+  return { left, right };
+}
+
 describe('the shipped exit gate', () => {
   it('the shipped bytes decode — nothing below runs against a missing file', () => {
     // `readPng` throws on a missing or non-PNG file, so reaching here already proves the bytes are
@@ -171,18 +205,50 @@ describe('the shipped exit gate', () => {
      * dark-interior test above. Hardcoding `24..52` and `144..172` was rejected — that is fitting
      * the test to this one generation, and the next re-shoot moves them.
      */
-    const columnIsFrame = (x: number) =>
-      fraction(x, x + 1, 40, 260, (p) => p.a > 200) >= 0.9 &&
-      fraction(x, x + 1, 40, 260, (p) => p.a > 200 && p.r + p.g + p.b >= 210) >= 0.6;
+    const { left, right } = frameColumns();
+    expect(left.length, 'no bright opaque frame column left of centre').toBeGreaterThan(0);
+    expect(right.length, 'no bright opaque frame column right of centre').toBeGreaterThan(0);
+  });
 
-    const centre = GATE_W / 2;
-    const leftFrame: number[] = [];
-    const rightFrame: number[] = [];
-    for (let x = 0; x < centre; x += 1) if (columnIsFrame(x)) leftFrame.push(x);
-    for (let x = centre; x < GATE_W; x += 1) if (columnIsFrame(x)) rightFrame.push(x);
+  /**
+   * The opening has to be wide enough for the courier, measured as a RUN and not as a fraction.
+   *
+   * A fraction over a window cannot tell a doorway from a barcode: alternating 8 px bright and dark
+   * bars score the same as a passage. The contiguous dark run can, and it is also what the fade
+   * actually needs — the character has to cross an unbroken void, not a striped one.
+   *
+   * The bound is **half the body**, 66 px, expressed from `PLAYER_BOX` rather than from this
+   * generation. The shipped art measures **92 px** at every sampled height, so there is ~39 % of
+   * headroom; the 64 px slit the adversarial review synthesised fails it, and so does the barcode.
+   */
+  it('the opening is an unbroken run at least half the courier wide, at every height', () => {
+    const runs = [IN_Y0, (IN_Y0 + IN_Y1) / 2, IN_Y1 - 1].map((y) => {
+      let best = 0;
+      let run = 0;
+      for (let x = 0; x < GATE_W; x += 1) {
+        if (isDark(at(x, y))) {
+          run += 1;
+          best = Math.max(best, run);
+        } else run = 0;
+      }
+      return best;
+    });
+    const floor = (BODY_X1 - BODY_X0) / 2;
+    for (const [i, run] of runs.entries()) {
+      expect(run, `row ${i}: longest unbroken dark run is only ${run}px`).toBeGreaterThanOrEqual(floor);
+    }
+  });
 
-    expect(leftFrame.length, 'no bright opaque frame column left of centre').toBeGreaterThan(0);
-    expect(rightFrame.length, 'no bright opaque frame column right of centre').toBeGreaterThan(0);
+  /**
+   * And the same darkness across the span the body actually covers, not just the middle third.
+   *
+   * Measured on the shipped art: **0.794**. A 64 px opening scores 0.485, so this separates them
+   * with room on both sides. ~30 % of the drawn frame does fade against jamb today — the courier's
+   * own art is narrower than its 132 px box, so it reads fine, but the number is recorded in the QA
+   * log rather than left for the next re-shoot to rediscover.
+   */
+  it('is dark across the span the courier actually covers, not only its middle third', () => {
+    expect(fraction(BODY_X0, BODY_X1, IN_Y0, IN_Y1, isDark)).toBeGreaterThan(0.7);
   });
 
   it('is mostly opaque overall — not a frame with a transparent hole', () => {
@@ -193,7 +259,16 @@ describe('the shipped exit gate', () => {
   it('the frame is far brighter than the opening — the void has to read as a void', () => {
     // Not a style claim. If the interior were merely dark-ish brickwork rather than a passage, the
     // player fading into it would read as walking into a wall.
-    const frame = luminance(0, 20, 40, 260);
+    // 🔴 This read `luminance(0, 20, 40, 260)` until the adversarial review pointed out that the
+    // test two above it documents that exact window as one that "straddled a transparent margin and
+    // a pipe gap and measured neither jamb". It was averaging the copper pipe at column 8 and
+    // calling it frame material — 246.9 over a region only 57 % opaque. The correction was applied
+    // to the jamb test and not to its sibling. Both now measure the columns actually detected as
+    // frame, so a re-shoot that moves the pipe cannot false-red a working asset.
+    const { left, right } = frameColumns();
+    const cols = [...left, ...right];
+    expect(cols.length, 'premise: some frame material was found at all').toBeGreaterThan(0);
+    const frame = cols.reduce((sum, x) => sum + luminance(x, x + 1, 40, 260), 0) / cols.length;
     const void_ = luminance(IN_X0, IN_X1, IN_Y0, IN_Y1);
     expect(frame, `frame ${frame.toFixed(1)} vs void ${void_.toFixed(1)}`).toBeGreaterThan(
       void_ * 2,

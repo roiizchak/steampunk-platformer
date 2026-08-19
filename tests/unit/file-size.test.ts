@@ -99,11 +99,16 @@ function lineCount(text: string): number {
  *  1. `lines=` must MATCH the current count, so ordinary growth breaks its own citation;
  *  2. **exactly one** active citation per path, so two logs cannot disagree and let the gate pass on
  *     whichever happens to match;
- *  3. the ratchet below, which is at **0** — so no file may be over the limit at all today, and
- *     re-exempting one is a deliberate, visible edit in two places.
+ *  3. the ratchet below, which is at **1** — raised from 0 by the gate-art session for
+ *     `src/sim/tick.ts`, so exactly one file may be over the limit today and re-exempting a second
+ *     is a deliberate, visible edit in two places.
  *
- * The residual hole is narrow — a file that grows back to a byte-identical previously-exempted size
- * while the ratchet has been raised — and it is written down rather than papered over.
+ * ⚠️ **The residual hole this describes is OPEN while the ratchet is above 0**, and it said
+ * "while the ratchet has been raised" as a hypothetical until the ratchet was actually raised and
+ * nobody re-read the sentence. A file that grows back to a byte-identical previously-exempted size
+ * passes (1) and (2); only the count in (3) stands between it and the gate, and the count does not
+ * name a path. Narrow, written down rather than papered over — and this paragraph is now describing
+ * the present tense. *(vault C9: a wrong comment is worse than none.)*
  *
  * ## The lesson this mechanism is built on, restored here 2026-08-17
  *

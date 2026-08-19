@@ -40,44 +40,19 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DEATH_TICKS, damagePlayer } from '../../src/sim/combat';
-import { createSnapshot } from '../../src/sim/input';
-import { PLAYER_BOX } from '../../src/sim/player';
 import { GOAL_ENTRY_TICKS, containedInGoal, overlapsGoal, stepGoalEntry } from '../../src/sim/goal';
-import { createWorld, tick } from '../../src/sim/tick';
-import type { InputSnapshot, Rect, World } from '../../src/sim/types';
-
-const SCALE = 6;
-const BODY_W = PLAYER_BOX.w * SCALE; // 132
-const BODY_H = PLAYER_BOX.h * SCALE; // 288
-
-const FLOOR_Y = 960;
-const FLOOR: Rect[] = [{ x: 0, y: FLOOR_Y, w: 8000, h: 120 }];
-const BOUNDS = { widthPx: 8000, heightPx: 1080 };
-const SPAWN = { x: 1000, y: FLOOR_Y };
-
-/**
- * The shipped goal geometry, reproduced: 192 wide, exactly body-tall, flush on the floor, and
- * well clear of the standing spawn box — `describeGoalProblem` refuses a goal that overlaps it,
- * and that data rule is half of what makes the death guard sufficient.
- */
-const GOAL: Rect = { x: SPAWN.x + 600, y: FLOOR_Y - BODY_H, w: 192, h: BODY_H };
-const CENTRE = GOAL.x + GOAL.w / 2;
-
-const neutral = (): InputSnapshot => createSnapshot();
-
-function makeWorld(): World {
-  return createWorld({ seed: 1, scale: SCALE, solids: FLOOR, bounds: BOUNDS, spawn: SPAWN, goal: GOAL });
-}
-
-/** A world with the player's feet placed exactly, standing on the floor. */
-function standingAt(x: number, y: number = FLOOR_Y): World {
-  const world = makeWorld();
-  world.player.x = x;
-  world.player.y = y;
-  world.player.grounded = true;
-  return world;
-}
+import { tick } from '../../src/sim/tick';
+import type { World } from '../../src/sim/types';
+import {
+  BODY_W,
+  CENTRE,
+  FLOOR_Y,
+  GOAL,
+  makeWorld,
+  neutral,
+  runToGate,
+  standingAt,
+} from './goal-entry-fixture';
 
 describe('the gate edge is not the gate', () => {
   it('brushing the left edge OVERLAPS but is NOT contained', () => {
@@ -155,24 +130,6 @@ describe('the gate edge is not the gate', () => {
     expect(stepGoalEntry(world)).toBe(true);
   });
 });
-
-/**
- * Run rightward until the sequence arms, and report the tick it armed on.
- *
- * 🔴 `typeof === 'number'`, NOT `!== null`. The first draft used `!== null` and **two tests in
- * this file passed vacuously against a `World` that had no such field at all** — because
- * `undefined !== null` is true, so this helper returned on tick 1 and the assertions after it
- * ran against an untouched world. Watched failing is only evidence if the failure is the one the
- * test names, and here two of seventeen were green before a line of the feature existed.
- */
-function runToGate(world: World): number {
-  const held = { ...neutral(), right: true };
-  for (let i = 0; i < 600; i += 1) {
-    tick(world, { ...held });
-    if (typeof world.goalEntryTicks === 'number') return world.tickCount;
-  }
-  throw new Error('the sequence never armed');
-}
 
 /**
  * Run rightward with the attack button mashed on EVERY tick, including the arming one.
@@ -279,88 +236,5 @@ describe('the run-in sequence', () => {
     const input = { ...neutral(), attackPressed: true };
     tick(world, input);
     expect(input.attackPressed, 'the edge must be eaten, not left latched').toBe(false);
-  });
-});
-
-describe('the cancel — the blocker Codex found', () => {
-  it('DEATH cancels the sequence, so a respawn never inherits a locked run-in', () => {
-    // Without this the respawned player auto-runs from the spawn, cannot jump, and cannot reach
-    // any exit. Level 01 ships a scavenger patrol ending 96 px from its door, so it is the
-    // ordinary way a run ends badly rather than a corner case.
-    const world = makeWorld();
-    runToGate(world);
-    world.player.hp = 0;
-    world.player.state = 'death';
-    tick(world, neutral());
-    expect(world.goalEntryTicks, 'disarmed, so the respawned player is free').toBe(null);
-    expect(world.completed).toBe(false);
-  });
-
-  /**
-   * The same claim, driven through the REAL death machine rather than asserted one tick in.
-   *
-   * 🔴 The test above writes `hp` and `state` by hand and reads the counter on the very next tick.
-   * That proves the cancel BRANCH fires; it does not prove the player is playable again, which is
-   * the thing G.4b actually claims. Between those two facts sit `DEATH_TICKS` of corpse, step 4c's
-   * `deathWindowClosed`, and `respawnPlayer` — none of which the hand-written version executes. A
-   * cancel that re-armed during the death window, or a respawn that left the lock on, would pass it.
-   * Raised by the gate's adversarial QA brief.
-   */
-  it('a REAL death and respawn leaves the player free, opaque and able to jump', () => {
-    const world = makeWorld();
-    runToGate(world);
-    expect(world.goalEntryTicks, 'premise: the run-in owns the body').toBe(0);
-
-    damagePlayer(world.player, world.player.maxHp);
-    // The whole corpse window plus the respawn tick, driven one tick at a time. The counter must
-    // be null on every one of them — a re-arm anywhere in here is the unwinnable-level defect.
-    for (let i = 0; i <= DEATH_TICKS + 1; i += 1) {
-      tick(world, neutral());
-      expect(world.goalEntryTicks, `death tick ${i}`).toBe(null);
-    }
-
-    expect(world.player.x, 'respawned at the spawn point, not at the door').toBe(SPAWN.x);
-    expect(world.player.hp).toBe(world.player.maxHp);
-    expect(world.completed).toBe(false);
-
-    // Playable: land, then jump. A player still holding the run-in's lock cannot leave the ground.
-    for (let i = 0; i < 40; i += 1) tick(world, neutral());
-    expect(world.player.grounded, 'premise: back on the floor').toBe(true);
-    const input = neutral();
-    input.jumpPressed = true;
-    input.jumpHeld = true;
-    tick(world, input);
-    expect(world.player.grounded, 'the respawned player can still jump').toBe(false);
-  });
-
-  it('being knocked clean out of the gate cancels it, so nobody fades in open air', () => {
-    const world = makeWorld();
-    runToGate(world);
-    for (let i = 0; i < 5; i += 1) tick(world, neutral());
-    expect(world.goalEntryTicks).toBe(5);
-    world.player.x = GOAL.x - 400; // shoved well clear of the rect
-    tick(world, neutral());
-    expect(world.goalEntryTicks).toBe(null);
-  });
-
-  it('re-arms cleanly after a cancel, from zero', () => {
-    const world = makeWorld();
-    runToGate(world);
-    world.player.x = GOAL.x - 400;
-    tick(world, neutral());
-    expect(world.goalEntryTicks).toBe(null);
-    runToGate(world);
-    expect(world.goalEntryTicks).toBe(0);
-    expect(world.completed).toBe(false);
-  });
-
-  it('a cancelled run still finishes the level on a second approach', () => {
-    const world = makeWorld();
-    runToGate(world);
-    world.player.x = GOAL.x - 400;
-    tick(world, neutral());
-    const held = { ...neutral(), right: true };
-    for (let i = 0; i < 200 && !world.completed; i += 1) tick(world, { ...held });
-    expect(world.completed, 'the door still works the second time').toBe(true);
   });
 });

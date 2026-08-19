@@ -242,6 +242,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // numbered step — only step 5 (which consumes `dir`) and step 7 (which consumes the gate) are —
   // so caching the read does not reorder or renumber the contract above.
   const hitstunLocked = movementLocked(player);
+  // ⚠️ `entryLocked` is tested BEFORE `hitstunLocked`, so the run-in overrides hitstun's horizontal
+  // lock rather than yielding to it. Deliberate — a courier who stopped dead halfway through its own
+  // entry would strand the fade — and narrow: `stepGoalEntry` cancels the whole sequence on `hurt`
+  // at 9d of the same tick the hit lands, so the override covers that one tick and nothing after it.
+  // Called out because it is a Phase 5 combat rule bent by a Phase 8 feature, and both gate reviews
+  // flagged that no header said so.
   const dir: -1 | 0 | 1 = entryLocked
     ? goalEntryDir(world)
     : hitstunLocked

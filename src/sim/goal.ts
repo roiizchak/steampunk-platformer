@@ -270,13 +270,31 @@ export function goalEntryDir(world: World): -1 | 0 | 1 {
  *     level built to need jumps. **The exit becomes unreachable and the level unwinnable.** Level
  *     01 ships a scavenger patrol ending 96 px from its door and level 05 a sentry 384 px from
  *     its own, so this is the ordinary way a run ends badly, not a corner case.
- *  2. **Knocked out of the doorway mid-fade.** The player would keep fading OUTSIDE the door —
- *     invisible in open air, which is the one thing this feature exists to prevent.
+ *  2. **Shoved out of the doorway mid-fade.** The player would keep fading while NOT inside —
+ *     invisible outside the door, which is the one thing this feature exists to prevent.
  *
- * `overlapsGoal` covers both because it already refuses a dead player. Cancelling restores `null`,
- * so `playerView` returns them to full opacity on the very next frame; they walk back in and the
- * sequence arms again from zero. Gated from both directions in `goal-entry.test.ts`: it cancels,
- * AND a cancelled run still finishes the level on a second approach.
+ * ## 🔴 And the second half of that was a lie until the gate's adversarial review measured it
+ *
+ * The cancel was written as `!overlapsGoal` alone, and the reasoning above claimed that covered a
+ * knockback. **It does not, and the shortfall is not marginal.** Clearing the rect from the gate's
+ * mouth takes `goal.w / 2 + BODY_W / 2` = **162 px** of travel. A real hit gives
+ * `KNOCKBACK_SPEED` = 17.5 px/tick against a `goalEntryDir` that is already pulling the other way,
+ * and the run drove the whole thing rather than computing it: the player moved **25.9 px**. The
+ * counter never nulled, ran on to **25**, and the courier was drawn at **alpha 0 for five ticks
+ * while its box straddled the gate's left edge** — exactly the state the paragraph above promises
+ * cannot happen. Six earlier briefs and a Codex plan review all read that paragraph and none of
+ * them checked the arithmetic under it.
+ *
+ * So the trigger is the HIT, not the geometry. `hurt` is the event the second bullet is actually
+ * about, it fires reliably, and it fires on the tick the shove lands rather than 162 px later.
+ * Being hit at the threshold now costs the entry, which is also the better game: the courier
+ * snaps back to full opacity, takes the hit like anywhere else, and walks in again.
+ *
+ * `overlapsGoal` still carries the death half — it already refuses a dead player — and still
+ * catches a body moved clear of the rect by anything else. Cancelling restores `null`, so
+ * `playerView` returns them to full opacity on the very next frame and the sequence arms again
+ * from zero. Gated from both directions in `goal-entry.test.ts`: it cancels, AND a cancelled run
+ * still finishes the level on a second approach.
  */
 export function stepGoalEntry(world: World): boolean {
   if (world.goal === null) {
@@ -293,11 +311,41 @@ export function stepGoalEntry(world: World): boolean {
     return false;
   }
 
-  if (!overlapsGoal(world)) {
+  // `hurt` is checked BY NAME rather than through `movementLocked`: that predicate opens and
+  // closes on `HURT_LOCK_TICKS`, a shorter window than the state itself, and a cancel that
+  // re-armed halfway through the hurt animation would fade the courier back out while it is
+  // still being knocked around.
+  if (!overlapsGoal(world) || world.player.state === 'hurt') {
     world.goalEntryTicks = null;
     return false;
   }
 
   world.goalEntryTicks += 1;
+
+  /**
+   * 🔴 THE CEILING. The sim refuses to stay locked forever, whatever the level data says.
+   *
+   * Completion is an AND, so a player who overlaps the rect but can NEVER be contained satisfies
+   * neither half and nothing above releases them. The gate's checklist review drove it: one solid
+   * placed inside the doorway, `right` held for 4000 ticks, and the sim reported
+   * `counter=3938, completed=false, alive, grounded` — invisible, unable to jump, unable to steer,
+   * the attack edge eaten every tick. **Waiting to be killed is the only exit**, and both level 01
+   * and level 05 put an enemy near their door, so even that is luck.
+   *
+   * No shipped level can reach it — all five goal rects were probed and none contains a solid — so
+   * this is a guard against level data, not a fix for a live defect. It lives HERE rather than in
+   * another `level-goal-fits` assertion on purpose: a data gate protects the levels someone
+   * remembered to check, and this protects every level there will ever be. `tiledGoal.ts`'s rules
+   * are out of scope for this session and are deliberately not taught anything new.
+   *
+   * Twice the window, because one window is exactly what a clean entry needs and a shove that
+   * costs a few ticks is ordinary. Cancelling restores full opacity and hands the controls back;
+   * the player walks in again and it arms from zero.
+   */
+  if (world.goalEntryTicks > GOAL_ENTRY_TICKS * 2) {
+    world.goalEntryTicks = null;
+    return false;
+  }
+
   return world.goalEntryTicks >= GOAL_ENTRY_TICKS && containedInGoal(world);
 }

@@ -92,7 +92,162 @@ here, because both are the shape this project keeps paying for:
 
 ### Gate-owner agents
 
-_Recorded at Task 9._
+Three owners x two briefs (A7): `qa-expert`, `code-reviewer`, `performance-engineer`. Brief 1 is
+the checklist; brief 2 asks only *"how could this be wrong in a way a checklist would not see?"*,
+and brief 1's findings are withheld from it.
+
+#### 🔴 The first dispatch corrupted the working tree, and a commit captured it
+
+All six ran concurrently **in the primary working tree**, while mutation verification for the red
+proofs below was running in that same tree. Their briefs banned modifying files. At least one did
+it anyway, and did not restore what it changed.
+
+Two lines were left mutated and **commit `57006a0` committed them as if they were the
+implementation**:
+
+| File | What was left behind |
+|---|---|
+| `src/render/playerView.ts` | `goalEntryAlpha` returned `1` — the fade deleted |
+| `src/sim/goal.ts` | completion dropped `&& containedInGoal(world)` — the session's whole point |
+
+They were invisible because they are **the same two mutations this session's own red proofs use**,
+so they read as work in progress rather than as damage. `57006a0` also committed a test RED,
+because the commit was chained after the test run with `&&` and ran regardless of the result.
+
+Repaired in `6a28761`: both files restored from `551d29d` and verified with an empty
+`git diff 551d29d -- <file>`, then typecheck clean and 1935 tests green. Three rules came out of it,
+and they are the reason the re-run below is shaped the way it is:
+
+1. **Never run mutation verification in a tree background agents can write to.** A ban in a brief
+   is not an enforcement mechanism.
+2. **`git diff --quiet` after a `cp` proves the state at that instant, nothing about the next one.**
+   Two of the restores did not hold and the third turned up in a state nobody had written.
+3. **Never chain a commit after a test run with `&&`.** It commits whatever the tests said.
+
+Re-run under `isolation: worktree`, so each agent gets its own checkout and cannot reach this tree
+at all, and with an added instruction to *describe* any mutation it wants rather than apply it.
+
+#### Findings applied
+
+| # | Owner | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| **A1** | qa-expert b2 | **HIGH** | Nothing proved `stepGoalEntry` uses **containment** rather than overlap. Verified locally: swapping `containedInGoal` for `overlapsGoal` inside it left **all 1933 tests green** — the auto-run carries the player to the centre before the counter matures, so on every path the tests drove, the two predicates agree. | **APPLIED** (`57006a0`, repaired in `6a28761`) — two tests call `stepGoalEntry` directly with a matured counter, one at the gate's edge and one at its centre. Watched red under the swap. |
+| **A2** | qa-expert b2 | **HIGH** | The e2e asserted the drawn gate's **size** and never its **position**. A correctly-sized image drawn 500 px from its trigger passed every word of it — the same defect `completeHelpers.ts` records for the grey box, arriving through the image branch. | **APPLIED** (`38d90fe`) — compared against the sim's own goal rect read live off the scene. Watched red under exactly that 500 px offset: 1 unexpected, 2 expected, then reverted byte for byte. |
+| **A3** | qa-expert b2 | MEDIUM | G.4b's unit test wrote `hp` and `state` by hand and read the counter one tick later. That proves the cancel *branch* fires; it does not prove the player is *playable*, which is what G.4b claims. `DEATH_TICKS` of corpse, step 4c's `deathWindowClosed` and `respawnPlayer` all sit between the two facts and none of them ran. | **APPLIED** (`38d90fe`) — a second test drives `damagePlayer` to zero, asserts the counter null on **every** death tick, then the respawn point, the hp, and a jump that has to leave the ground. Watched red under a mutation the hand-written test **survives** (arming without requiring overlap): 7 failures, and `DEATH cancels the sequence` was not among them. |
+| **A4** | qa-expert b2 | LOW | The attack edge is not consumed on the **arming tick itself** — `entryLocked` is read after step 0 and 9d arms last, so on that one tick the courier is still an ordinary player. | **INVESTIGATED, NOT A DEFECT — pinned by a test.** `movementLocked` (`src/sim/combat.ts:322`) covers `death` and `hurt` only, so an attack in flight never stalls the auto-run, and `stepCombat` consumes the edge on that tick exactly as at any other time — nothing is left latched *(vault 2.4)*. A test now mashes attack through the arming tick and requires the same 20-tick window ending in the same containment. |
+| **A5** | perf b1 + b2 | — | **Both perf briefs concluded independently that the existing perf specs cannot measure this session's frame cost at all.** `sampleLevel` never moves the player, so the gate is never on screen and `stepGoalEntry` never leaves its early return; and all three additions are level-size-invariant, so they divide out of every ratio the suite computes. | **RECORDED — G.7's frame-budget half is reported UNRUN.** Not passing. See below. |
+
+#### The re-run, in isolated worktrees — three more briefs, and two live defects
+
+`qa-expert` brief 1, `code-reviewer` brief 1 and `code-reviewer` brief 2, each in its own git
+worktree with an added instruction: **describe any mutation you want, do not apply it.** Both
+code-reviewer briefs took that further and ran their mutations against a disposable `git archive`
+extract in the scratchpad, then restored and re-observed a clean suite. The primary tree stayed
+untouched throughout, which is the whole difference from the first dispatch.
+
+Every finding below was **re-verified locally before being acted on**, and two of them turned out to
+be live defects that six earlier briefs, a Codex plan review and a hands-on pass on all five levels
+had all missed.
+
+##### 🔴 B1 — a real hit during the run-in left the courier invisible OUTSIDE the door
+
+The one thing the feature exists to prevent, reachable by ordinary play, in the one paragraph that
+promised it could not happen. `goal.ts` cancelled on `!overlapsGoal` and claimed that covered a
+knockback. Clearing the rect from the gate's mouth takes **162 px**; `KNOCKBACK_SPEED` is 17.5
+px/tick against a `goalEntryDir` already pulling the other way.
+
+**Driven, not computed** — the review supplied the arithmetic, the sim supplied the verdict:
+
+| | before | after |
+|---|---|---|
+| distance the shove actually moved the player | **25.9 px** | 21.1 px |
+| cancel fired | **no** | yes |
+| counter reached | **25** (past its own window) | 20 |
+| **ticks drawn at alpha 0 while NOT inside** | **5** | **0** |
+
+**APPLIED** — the trigger is the HIT, not the geometry: `stepGoalEntry` now also cancels on
+`player.state === 'hurt'`, which fires on the tick the shove lands rather than 162 px later. Being
+hit at the threshold costs the entry, which is the better game as well. Gated by a test that
+asserts the ALPHA rather than the counter — a fix that clamps the ramp or holds the counter would
+satisfy it too, and a fix that merely widened the shove would not. Watched red under the exact
+revert.
+
+##### 🔴 H1 — an armed run-in had no termination guarantee
+
+Completion is an AND, so a player who overlaps the rect and can **never** be contained satisfies
+neither half and nothing released them. The checklist brief drove it: one solid inside the doorway,
+`right` held for 4000 ticks —
+
+```
+counter=3938  completed=false  x=1554  overlaps=true  contained=false  grounded=true  hp=100
+```
+
+Alive, grounded, still counting, invisible, no input, no jump, no attack. **Waiting to be killed is
+the only exit**, and both level 01 and level 05 put an enemy near their door.
+
+**Latent, not live** — all five shipped goal rects were probed and none contains a solid.
+**APPLIED anyway**: `stepGoalEntry` cancels above `GOAL_ENTRY_TICKS * 2`. A data gate protects the
+levels somebody remembered to check; this protects every level there will ever be. `tiledGoal.ts`'s
+rules were left alone — out of scope, and the sim guard is the smaller and more general fix.
+
+##### The rest, applied
+
+| # | Owner | Sev | Finding | Disposition |
+|---|---|---|---|---|
+| **B2** | cr b1 | MED | `GOAL_ENTRY_TICKS` 20 to 40 left the **whole unit suite green at 1937**. The window's LENGTH was pinned only in the e2e. | **APPLIED** — a value lock in `player-view.test.ts` naming it a balance change. Watched red. |
+| **B3** | cr b1 | MED | *"plays the run animation for the whole sequence"* evaluated **one tick**. Mutating the override to `goalEntryTicks > 10 ? state : run` — the courier reverting to `idle` for the entire back half of its own entry — left 1937 green. | **APPLIED** — loops every tick of the window, as the alpha test above it already did. Watched red under that exact mutation. |
+| **B4** | cr b2 | HIGH | The shipped-bytes gate's measurements did not pin the shape. A **64 px slit** and a **barcode** both passed all five; the slit fades half the 132 px courier against bright brass. The interior window is 64 px — half the width of the thing it protects — so it cannot order a mutation that narrows the opening to its own size. | **APPLIED** — two new measurements: the longest **unbroken** dark run must be at least half the body (bound from `PLAYER_BOX`, not from this generation; shipped art measures **92 px**), and the dark fraction is taken across the body's real span `x 30..162` (measures **0.794**). Both counterexamples synthesised and watched red: the slit fails 2, the barcode fails 4. |
+| **B5** | cr b2 | HIGH | The luminance test used `x 0..20` — **the window this same file documents two tests above as one that "straddled a transparent margin and a pipe gap and measured neither jamb"**. It averaged the copper pipe at column 8 over a region only 57 % opaque and called it frame material. The correction had been applied to the jamb test and not to its sibling. | **APPLIED** — both now measure the columns actually detected as frame, through one shared `frameColumns()`. A re-shoot that moves the pipe can no longer false-red a working asset. |
+| **B6** | qa b1 | MED | *"in all 5 levels"* was asserted by unit tests reading level DATA plus one hands-on pass. No browser assertion ever left level 01: `bootToGame` always lands there. | **APPLIED** — the drawn exit is now checked in a browser on **all five**, position and size, against each level's own trigger rect. **And it found something:** the levels are LOCKED, so the first version asked for level-02, was silently handed level-01 by `resolveEntryLevel`, and timed out. The game was right; the test now seeds the same save the perf suite seeds. |
+| **B7** | cr b1 | LOW | `level-goal-fits`'s flush-floor check filtered on *any* overlap, so a sliver of floor under one corner of the doorway passed. | **APPLIED** — the solid must span the **whole** rect. Watched red, and the red proof found a second thing: `tiledGoal.ts` checks ground below the exit's bottom-**centre** only, so a floor covering the centre and not the corners passes the **shipped validator** today. |
+| **B8** | cr b2 + qa b1 | MED | `level-goal-fits`'s slack bound hardcoded `18`. The dead zone is `runMax` (9), a live Playground knob — `18 = 2 x runMax` by coincidence of authorship. Retuning `runMax` to 12 leaves the gate green while the guarantee it encodes becomes false. | **APPLIED** — derived from `DEFAULT_TUNING.runMax`. |
+| **B9** | qa b1 | LOW-MED | G.4b's real-death test ended at one successful jump. *"Free"* and *"the level is still winnable"* are different claims, and only the synthetic knockback path proved the second. | **APPLIED** — chained: armed, really killed, respawned, driven back across the level, completed. |
+| **B10** | cr b1 + cr b2 | MED | `entryLocked` is tested **before** `hitstunLocked`, so the run-in overrides hitstun's horizontal lock. A Phase 5 combat rule bent by a Phase 8 feature, with no header saying so. | **APPLIED as documentation** — the behaviour is deliberate, and B1's fix narrowed it to a single tick (the cancel fires at 9d of the tick the hit lands). Stated at the branch. |
+| **B11** | cr b2 | LOW | Three comments in `goalLayer.ts` that this session made false: *"Absent today, by design"* about a texture that ships, the whole *"it stays grey-box this phase"* section, and *"the exit's reached-it flourish"* for something that now fires 20 ticks later over an empty doorway. | **APPLIED** — all three corrected *(vault C9)*. |
+| **B12** | cr b2 | MED | `file-size.test.ts`'s docstring said the ratchet *"is at 0"* and described the residual hole as hypothetical *"while the ratchet has been raised"*. This session raised it to 1 and nobody re-read the sentence. | **APPLIED** — the paragraph is in the present tense now, and says the hole is open. |
+| **B13** | cr b2 | MED | G.7's Owner column was a dash, its agents named only in the Method column without the `voltagent-qa-sec:` prefix every other row uses. `docs-contract.test.ts` lints gate tables under `### 6. QA gate` with `N.N` ids, so **this session's table is linted by nothing.** | **PARTLY APPLIED** — G.7 split into G.7a (`code-reviewer`, satisfied) and G.7b (`performance-engineer`, UNRUN), with real owners. The lint's blindness to `docs/qa/*` gate tables is real and **RECORDED for the owner**: teaching it a second table shape changes a cross-phase gate and is outside this session's scope lock. |
+
+##### Recorded, not fixed *(C11)*
+
+| # | Owner | Finding | Why not |
+|---|---|---|---|
+| R1 | qa b1 | The e2e never presses jump or attack, so G.4's *"unit + e2e"* method is really unit-only for the lock half. | The unit test drives the production `tick()` end to end. There is no browser glue between the input snapshot and the lock, unlike the alpha fade — which is precisely why the fade needed an e2e and this does not. |
+| R2 | cr b2 | The e2e's `onRamp` accepts any `1 - k/20`, so a **2x fast** fade passes it, while the spec header claims it refuses a wrong curve. | True, and it is a division of labour the unit suite covers (B2 and B3 both go red on it). The header's claim was the defect, not the gate — corrected in the spec rather than duplicating a unit test in a browser. |
+| R3 | cr b2 | `animsWhileArmed` is largely satisfied by the sim's own `run` state at ~11 fps, so deleting the render override might leave it green. | Same division. B3 now loops every tick of the window in the unit suite, which is where a 60 Hz claim can actually be measured. |
+| R4 | cr b2 | `counterRange[1] === 20` is held up by the freeze, so it partly restates `completed === true`. | It still has one real tooth — a level where the player is not contained at tick 20 latches 21+ and reds. Kept for that. |
+| R5 | cr b2 | A vertically **flipped** gate passes every pixel measurement. | No pixel metric distinguishes it, and orientation is exactly what G.1b's by-eye check is for. STYLE.md §5 already says the material rule cannot be measured by a whole-region metric. |
+| R6 | cr b2 | Requiring *frame mass* (16+ bright opaque columns per side) would kill the thin-stripe slab counterexample. | Measured on the shipped art: **17 left, 11 right**. The real gate cannot clear a bound that would catch a 12 px stripe. Inventing one the art fails is fitting the test to a wish. |
+| R7 | cr b2 | `buildChrome`'s note says letterboxing would leave transparent margin; the shipped gate has ~6 px each side anyway, inherited from the source bounding box. | Accurate observation, harmless outcome, and `tools/gen` is outside the scope lock beyond the one `buildGate` addition. |
+| R8 | cr b1 | The ratchet names no file, only a count. | Mitigated by `citationProblem`, which demands an exact path and an exact `lines=N` — and it proved itself live today, reddening on its own when `tick.ts` grew from 422 to 428. |
+| R9 | cr b1 | The QA log's *"fade frames"* column counts armed frames after the freeze, so it is not the ramp's duration. | Correct. The 20 distinct alphas and the 0.05 maximum step are the load-bearing numbers; the frame count is annotated rather than removed. |
+
+##### 🔴 A measurement trap this re-run walked into, and the rule that comes out of it
+
+**Vitest serves an already-transformed test file a CACHED copy of an `import.meta.glob('?raw')`
+fixture.** Mutating a `.tmj` and re-running `level-goal-fits.test.ts` reported **green on a mutation
+that had definitely landed** — `cmp` said the bytes changed, the mutation script read the file back
+and printed the new width, and the gate still passed. A brand-new probe test compiled in the same
+run saw the mutation immediately.
+
+So: **when a red proof mutates DATA rather than source, touch the test file and its fixture module
+before re-running.** Otherwise the mutation is real, the green is fake, and it looks exactly like a
+gate that cannot go red. Every `.tmj` red proof in this log was re-run under that rule.
+
+#### 🔴 G.7's frame-budget half is UNRUN, and the session is reported failing on it
+
+The rule is that an unrun criterion is reported unrun *(CLAUDE.md §3)*, and this one is unrun.
+
+What the two briefs found is not that the number is bad — it is that **no statistic in the suite can
+order its own mutation here**, which by this project's own rule is not something a bound change
+fixes *(TESTING-RULES.md)*. Building a statistic that could means touching the performance gates,
+and this session's scope lock names those as out of bounds.
+
+The three additions are one `stepGoalEntry` call per tick, one `goalEntryAlpha` plus `setAlpha` per
+frame, and one 192x288 image at depth 7. All are O(1) and none scales with level size. That is an
+argument, not a measurement, and it is recorded as an argument.
+
+**For the owner:** measuring it properly is a narrow interleaved A/B against a moving player, and it
+belongs to whoever next owns the perf gates.
 
 ### Codex implementation review
 
@@ -112,7 +267,8 @@ _Recorded at Task 10._
 | G.4b | **Dying during the run-in cancels it** — the respawned player is free *(Codex C1, blocker)* | unit + hands-on | `voltagent-qa-sec:qa-expert` + play | — |
 | G.5 | Alpha reaches 0 over a tick-counted window; the curve has a red proof | unit + e2e | `voltagent-qa-sec:code-reviewer` | — |
 | G.6 | No blink-out, no pop-back — all 5 levels, by hand | `playwright-cli` + hands-on *(C4)* | play | — |
-| G.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget unchanged | `code-reviewer` ×2 + `performance-engineer` | — | — |
+| G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | — |
+| G.7b | Frame budget unchanged | interleaved A/B | `voltagent-qa-sec:performance-engineer` | 🔴 **UNRUN** |
 | G.8 | Codex plan review ran; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-plan.md) | — | ✅ **12 findings, 10 applied, 2 recorded** |
 | G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | — |
 
@@ -381,7 +537,7 @@ because one rect of positive size far from the spawn is all it ever asked for.
 
 ## The 400-line rule — one exemption, written before it was taken
 
-`SIZE-EXEMPTION: src/sim/tick.ts lines=422`
+`SIZE-EXEMPTION: src/sim/tick.ts lines=428`
 
 **`src/sim/tick.ts` crosses the limit at 422 lines, up from 398.** The gate's own text says the
 way past is *"to split the file or write the justification, in that order of preference"*, so the

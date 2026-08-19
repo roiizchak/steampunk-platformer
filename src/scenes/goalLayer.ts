@@ -6,12 +6,17 @@
  * the rectangle was**. Criterion 8.6 begins "align, animate, fade…", which presupposes something to
  * align to. An invisible exit is not a level-complete flow; it is a level with a secret.
  *
- * ## Grey-box, and it stays grey-box this phase
+ * ## Grey-box first, and the art arrived afterwards — which is the rule working
  *
  * "Grey-box before art" is a Global Constraint: no fal spend on a feature whose mechanics are not
- * already playable. Phase 8 is not a generating phase, and the exit's mechanics are brand new — so this
- * draws from `Graphics` primitives and the existing tileset, and generated exit art is Phase 9's, after
- * the flow has been played. Recorded rather than deferred silently.
+ * already playable. Phase 8 shipped this as `Graphics` primitives for exactly that reason. The
+ * gate-art session then built the run-in and the fade against those primitives, played all five
+ * levels by hand, and only then spent $0.30 on one image — so `drawGoal`'s image branch below,
+ * written dead in Phase 8, is the branch that runs today and `goalIsGreybox` returns false.
+ *
+ * The grey-box half is NOT dead code and is not to be deleted: it is what a missing or failed
+ * texture falls back to, and `goalIsGreybox` is how a test says which branch shipped rather than
+ * inferring it.
  *
  * The branch is the same shape `gearLayer.ts` uses, and for the reason its header records: Phase 5 chose
  * Sprite-vs-Rectangle **once, at creation, from a transient state**, and twelve of twenty enemies were
@@ -32,7 +37,7 @@ import Phaser from 'phaser';
 import type { Rect } from '../sim/types';
 import { ticksToMs } from '../sim';
 
-/** The catalogued texture a generated exit would arrive as. Absent today, by design. */
+/** The catalogued texture the generated exit arrives as — `public/assets/objects/gate.png`. */
 export const GOAL_TEXTURE_KEY = 'goal-gate';
 
 /**
@@ -100,7 +105,13 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
     .setDepth(7);
 }
 
-/** How long the exit's reached-it flourish runs. Shorter than `hudFade`'s fade, so it reads first. */
+/**
+ * How long the exit's flourish runs. Shorter than `hudFade`'s fade, so it reads first.
+ *
+ * ⚠️ It fires on `levelCompleted`, which since the gate-art session is **twenty ticks after** the
+ * player reached the door and one tick after the courier finished fading out. So it is the
+ * *completed-it* flourish now, not the *reached-it* one, and it plays over an empty doorway.
+ */
 export const GOAL_PULSE_TICKS = 16;
 
 /**

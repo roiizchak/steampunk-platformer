@@ -50,6 +50,7 @@ import { expect, test } from '@playwright/test';
 import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
 import { drawnGoal } from './completeHelpers';
 import { RUN_TIMEOUT, playToExit } from './levelDriver';
+import { PROGRESS_KEY, unlockAll } from './levelPerf';
 
 /** Must match `GOAL_ENTRY_TICKS` in `src/sim/goal.ts`. Asserted below rather than assumed. */
 const GOAL_ENTRY_TICKS = 20;
@@ -72,6 +73,26 @@ async function triggerRect(page: import('@playwright/test').Page): Promise<{ x: 
     const g = scene.simWorld.goal;
     return g ? { x: g.x, y: g.y } : null;
   });
+}
+
+/**
+ * Switch the running game to another level and wait until it is the one on screen.
+ *
+ * The same seam `levelPerf.ts` uses. Waiting on `__game.levelId` rather than on a timeout is what
+ * makes this deterministic — the scene start is asynchronous and the old scene's objects survive
+ * for a frame or two after it.
+ */
+async function startLevel(page: import('@playwright/test').Page, levelId: string): Promise<void> {
+  await page.evaluate((id) => {
+    (
+      window as unknown as { __phaserGame: { scene: { start(k: string, d: unknown): void } } }
+    ).__phaserGame.scene.start('Game', { levelId: id });
+  }, levelId);
+  await page.waitForFunction(
+    (id) => (window as unknown as { __game: { levelId: string | null; ready: boolean } }).__game.levelId === id,
+    levelId,
+    { timeout: BOOT_TIMEOUT },
+  );
 }
 
 interface FadeReport {
@@ -239,6 +260,48 @@ test.describe('the exit is generated art, not a grey box', () => {
     expect(Math.round(goal!.bounds.x), 'the drawn gate is not where the trigger is').toBe(trigger!.x);
     expect(Math.round(goal!.bounds.y), 'the drawn gate is not where the trigger is').toBe(trigger!.y);
   });
+
+  /**
+   * 🔴 The criterion says *"in all 5 levels"* and every browser assertion above sees only level 01.
+   *
+   * `bootToGame` always lands on level 01 (`BootScene` starts `Game` with `{ levelId: null }`), so
+   * the other four were covered by a one-time hands-on pass and by unit tests that read level DATA.
+   * Neither of those watches a drawn object. Raised by the gate's checklist review.
+   *
+   * `scene.start('Game', { levelId })` is the seam the perf suite already uses to move between
+   * levels, and waiting on `__game.levelId` is how it knows the new scene is live — no new debug
+   * field, no `waitForTimeout`.
+   */
+  for (const levelId of ['level-01', 'level-02', 'level-03', 'level-04', 'level-05']) {
+    test(`${levelId} draws its exit from the art, at its own trigger rect`, async ({ page }) => {
+      // 🔴 The levels are LOCKED, and finding that out is half of what this test bought.
+      //
+      // `resolveEntryLevel` (`src/sim/progress.ts`) refuses a level the save has not unlocked and
+      // silently falls back to `order[0]`, so the first version of this test asked for level-02,
+      // was handed level-01, and timed out waiting for a level id that was never going to arrive.
+      // That is the game working correctly. Seeding the same save the perf suite seeds is the
+      // supported way in — not a workaround, the actual mechanism.
+      await page.addInitScript(
+        ([key, value]) => window.localStorage.setItem(key, value),
+        [PROGRESS_KEY, unlockAll()] as const,
+      );
+      await bootToGame(page);
+      await startLevel(page, levelId);
+
+      const goal = await drawnGoal(page);
+      const trigger = await triggerRect(page);
+      expect(goal, `${levelId}: nothing was drawn for the exit`).not.toBeNull();
+      expect(trigger, `${levelId}: the level carries no goal rect`).not.toBeNull();
+
+      expect(typeof goal!.willRender).toBe('boolean');
+      expect(goal!.willRender, `${levelId}: the exit exists but the GPU would not draw it`).toBe(true);
+      expect(goal!.depth).toBe(7);
+      expect(Math.round(goal!.bounds.w)).toBe(192);
+      expect(Math.round(goal!.bounds.h)).toBe(288);
+      expect(Math.round(goal!.bounds.x), `${levelId}: drawn away from its trigger`).toBe(trigger!.x);
+      expect(Math.round(goal!.bounds.y), `${levelId}: drawn away from its trigger`).toBe(trigger!.y);
+    });
+  }
 });
 
 test.describe('the courier runs in and fades', () => {

@@ -175,9 +175,34 @@ describe('the gate-entry fade', () => {
     // The sim's own state reads `fall` for a tick or two if the player entered airborne, and `idle`
     // once the dead zone stops them at the centre. The brief asks the character to RUN in, so the
     // override lives HERE rather than teaching the state machine about doorways.
-    for (const state of ['idle', 'fall', 'jump', 'walk'] as const) {
-      expect(playerRenderDesc(playerAt({ state }), 6, 3).animKey).toBe('brass-courier-run');
+    //
+    // 🔴 EVERY tick of the window, not a sample of one. This read `goalEntryTicks = 3` alone until
+    // the gate's checklist review mutated the override to `goalEntryTicks > 10 ? state : run` and
+    // watched the whole suite stay green at 1937 passed — the courier reverting to `idle` for the
+    // entire back half of its own entry, unseen. The alpha test directly above already loops; this
+    // one did not, and "for the whole sequence" is in its name.
+    for (let t = 0; t <= GOAL_ENTRY_TICKS; t += 1) {
+      for (const state of ['idle', 'fall', 'jump', 'walk'] as const) {
+        expect(playerRenderDesc(playerAt({ state }), 6, t).animKey, `tick ${t}, state ${state}`).toBe(
+          'brass-courier-run',
+        );
+      }
     }
+  });
+
+  /**
+   * The WINDOW'S LENGTH, which nothing in the unit suite could see.
+   *
+   * Every assertion above computes its expectation from `GOAL_ENTRY_TICKS` itself, so it is true of
+   * any window. The checklist review changed the constant from 20 to 40 and the whole suite stayed
+   * green at 1937 passed — a fade, and a completion window, at half speed, invisible. The e2e spec
+   * pins the literal 20 as well, and deliberately: two independent statements of a balance number
+   * is the point, not duplication.
+   *
+   * Changing this is a balance change. The gate going red IS the review checkpoint.
+   */
+  it('the entry window is 20 ticks — changing it is a balance change, not a refactor', () => {
+    expect(GOAL_ENTRY_TICKS).toBe(20);
   });
 
   it('leaves the animation key alone when no run-in is running', () => {
