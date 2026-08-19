@@ -118,6 +118,44 @@ _Recorded at Task 10._
 
 ---
 
+## The 400-line rule — one exemption, written before it was taken
+
+`SIZE-EXEMPTION: src/sim/tick.ts lines=422`
+
+**`src/sim/tick.ts` crosses the limit at 422 lines, up from 398.** The gate's own text says the
+way past is *"to split the file or write the justification, in that order of preference"*, so the
+split was attempted first and is recorded here as rejected, with the reason.
+
+**What the +24 lines are.** The whole feature's footprint in this file: the widened-9d paragraph in
+the contract header (8), the `entryLocked` cached read (3), the attack-edge consumption block (6),
+the `dir` ternary gaining a branch (2), and one line each on steps 5, 7 and 9d. Roughly 11 further
+lines were **moved out to `goal.ts`** while getting here — every one of them reasoning that
+`goal.ts`'s own header already claims (*"the step in `tick.ts` is three lines and a pointer, and the
+reasoning lives with the code that implements it"*). That was a real defect in the first draft, not
+a line-count trick, and it is why this exemption is for 422 and not 445.
+
+**Why it is not split.** This file is the numbered tick contract **and** the function that
+implements it, and their co-location is the entire design premise — *"the code below is a numbered
+list rather than a paragraph of arithmetic"*. The one extractable concern was already extracted:
+`advance` moved to `advanceSplit.ts` in Phase 8 for exactly this reason, and that file's docstring
+says so. The two remaining candidates were examined and both would **contradict a decision written
+into this file**:
+
+- **step 13's window advance** → `windows.ts`. Refused: step 13's own comment states that the
+  guard in front of `advanceWindow` *"is the step-order rule above and stays here, with the
+  numbered order that owns it"*.
+- **step 4c's respawn** → `combat.ts`. Refused: the block states the decision is taken in `tick.ts`
+  *"where the spawn point lives"*, and `combat.ts` deliberately imports no level data.
+
+Splitting the contract header into a document was also rejected: CLAUDE.md's instruction is *"read
+that file's header before changing anything in `src/sim/`"*, and its value is being in the file the
+reader already has open.
+
+**The ratchet moves 0 → 1** in `tests/unit/file-size.test.ts`, which is the deliberate act that
+gate requires alongside this citation. Not one line of explanation was deleted to reach 422.
+
+---
+
 ## Decisions and deliberate non-fixes
 
 | | Decision | Why |

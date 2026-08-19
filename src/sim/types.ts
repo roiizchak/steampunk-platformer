@@ -319,6 +319,27 @@ export interface World {
    * freeze note at the top of `tick()` for why the alternative was not survivable.
    */
   completed: boolean;
+  /**
+   * Ticks since the player's box first overlapped `goal`, or `null` when no run-in is running.
+   *
+   * The scripted entry sequence's progress, owned by the sim as an integer tick count — the
+   * gate-entry session. `null` rather than `-1` so "not started" is unrepresentable as a duration
+   * and cannot be arithmetic'd into one by accident.
+   *
+   * **The sim only COUNTS.** Nothing under `src/sim/` knows this makes the player transparent —
+   * `src/render/playerView.ts` maps this integer to an alpha and to the forced `run` key, which is
+   * what keeps the fade a render decision and keeps a millisecond tween off a tick-counted body.
+   *
+   * Two behaviours worth stating because neither is derivable from the type:
+   *
+   *  - **It is NOT monotonic.** `stepGoalEntry` sets it back to `null` the moment the player stops
+   *    overlapping the goal — death, or a knockback that clears the rect. Without that cancel a
+   *    killed player respawns still locked and still auto-running, and the level is unwinnable.
+   *  - **It freezes with everything else.** Step 0 returns before step 1 once `completed` latches,
+   *    so the final value is held forever and the drawn alpha holds at 0. "No pop-back" is
+   *    structural rather than remembered.
+   */
+  goalEntryTicks: number | null;
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

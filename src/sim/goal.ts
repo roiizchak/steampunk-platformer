@@ -1,8 +1,29 @@
 /**
- * Step 9d — the player reached the level's exit.
+ * Step 9d — the player ENTERS the level's exit.
  *
  * Phase 8. Its own module for the same reason `worldDamage.ts` (9b) and `pickups.ts` (9c) are: the step
  * in `tick.ts` is three lines and a pointer, and the reasoning lives with the code that implements it.
+ *
+ * ## 🔴 What this step means CHANGED, and no number moved
+ *
+ * Phase 8 shipped it as *"the body overlapped the rect, so the level is over"* — a single
+ * `reachedGoal` AABB test. Brushing the doorway's left edge by one pixel ended the level, so the
+ * character was whisked away at the threshold and the 132 px of doorway behind it were never
+ * entered at all. The gate-entry session replaced that with a scripted **run-in**:
+ *
+ * ```
+ *   first overlap  -> ARM      the sim takes the controls, the player auto-runs to the centre
+ *   each tick      -> ADVANCE  an integer counter; the render layer fades the body from it
+ *   stopped overlapping -> CANCEL   back to null, controls returned, fully opaque again
+ *   counter >= GOAL_ENTRY_TICKS AND fully contained -> COMPLETE
+ * ```
+ *
+ * **Nothing was renumbered, inserted or lettered.** 9d already owned "the exit"; an exit you walk
+ * into for twenty ticks is still the exit. Codex's plan review was asked directly whether widening
+ * a step's meaning in place violates `tick.ts`'s contract in substance and ruled that it does not —
+ * the guarantee is about numbering and ordering, and both are untouched. The obligation it named
+ * was that the contract's own text describe the widened semantics accurately; `tick.ts`'s header
+ * and this one both do.
  *
  * ## Why a LETTER and not step 10
  *
@@ -70,47 +91,213 @@ import { PLAYER_BOX } from './player';
 import type { World } from './types';
 
 /**
- * Has the player entered the exit on this tick?
+ * How long the run-in takes, in ticks. **20 = one third of a second at 60 Hz.**
  *
- * Returns `false` and touches nothing when there is no goal, when the level is already complete, or
- * when the player is dead — see `tick.ts` step 9d for what each of those guards is for.
+ * Not a taste setting — it is chosen against the geometry so that the TICK COUNT, not the
+ * distance, is what binds completion:
+ *
+ * ```
+ *   body 132 wide, goal 192 wide          -> 60 px of horizontal slack, 30 each side
+ *   first overlap   x > goal.x - 66
+ *   full containment x >= goal.x + 66     -> 132 px of travel, ~15 ticks at runMax 9
+ *   the gate centre  goal.x + 96          -> 162 px,           ~18 ticks
+ * ```
+ *
+ * At 20 the counter is still short of its target when the body is already contained, so
+ * `stepGoalEntry`'s completion test is decided by the counter on an ordinary approach. That is
+ * what makes "assert which tick it completes on" a deterministic assertion rather than a race
+ * between a counter and a distance — and it is why the tests in `goal-entry.test.ts` can name a
+ * tick at all.
+ *
+ * It is also the fade's denominator: `playerView.goalEntryAlpha` divides by this, so alpha
+ * reaches 0 on exactly the earliest tick completion can fire.
  */
-export function reachedGoal(world: World): boolean {
-  const { goal, player, scale } = world;
-  if (goal === null) {
-    return false;
-  }
+export const GOAL_ENTRY_TICKS = 20;
 
-  /**
-   * 🔴 Death wins ties.
-   *
-   * You do not finish a level by dying on the doorstep. `hp <= 0` rather than `state === 'death'`
-   * alone, because the kill plane calls `killPlayer` and early-returns without necessarily having
-   * entered the death state yet — the same two-routes-to-death asymmetry `playerDied`'s docstring
-   * records.
-   *
-   * ⚠️ This guard is NOT sufficient on its own, and believing it was is the defect Codex's plan review
-   * caught. `respawnPlayer` runs at step 4c and restores `state: 'idle'` with full hp, so on the
-   * respawn tick this test is already false. If the goal overlapped the spawn, dying anywhere would
-   * complete the level. What actually prevents that is `describeGoalProblem` refusing a goal that
-   * overlaps the standing spawn box — a data rule, not a runtime one, and the two are load-bearing
-   * together rather than either alone.
-   */
-  if (player.hp <= 0 || player.state === 'death') {
-    return false;
-  }
-
-  // The player's box in world space, from the feet. Same construction as the collider's and the
-  // pickups' — `toWorld` in `player.ts` is the only other place that converts a LocalBox, and this
-  // deliberately mirrors it rather than inventing a second half-width.
+/**
+ * The player's box in world space, from the feet.
+ *
+ * ONE construction, shared by both predicates below. Same shape as the collider's and the
+ * pickups' — `toWorld` in `player.ts` is the only other place that converts a LocalBox, and this
+ * deliberately mirrors it rather than inventing a second half-width.
+ */
+function playerBox(world: World): { left: number; right: number; top: number; bottom: number } {
+  const { player, scale } = world;
   const halfW = (PLAYER_BOX.w * scale) / 2;
-  const bodyH = PLAYER_BOX.h * scale;
-  const left = player.x - halfW;
-  const right = player.x + halfW;
-  const top = player.y - bodyH;
-  const bottom = player.y;
+  return {
+    left: player.x - halfW,
+    right: player.x + halfW,
+    top: player.y - PLAYER_BOX.h * scale,
+    bottom: player.y,
+  };
+}
 
-  return (
-    left < goal.x + goal.w && right > goal.x && top < goal.y + goal.h && bottom > goal.y
-  );
+/**
+ * Is the goal testable at all this tick?
+ *
+ * 🔴 Death wins ties.
+ *
+ * You do not finish a level by dying on the doorstep. `hp <= 0` rather than `state === 'death'`
+ * alone, because the kill plane calls `killPlayer` and early-returns without necessarily having
+ * entered the death state yet — the same two-routes-to-death asymmetry `playerDied`'s docstring
+ * records.
+ *
+ * ⚠️ This guard is NOT sufficient on its own, and believing it was is the defect Codex's Phase 8
+ * plan review caught. `respawnPlayer` runs at step 4c and restores `state: 'idle'` with full hp, so
+ * on the respawn tick this test is already false. If the goal overlapped the spawn, dying anywhere
+ * would complete the level. What actually prevents that is `describeGoalProblem` refusing a goal
+ * that overlaps the standing spawn box — a data rule, not a runtime one, and the two are
+ * load-bearing together rather than either alone.
+ */
+function goalTestable(world: World): boolean {
+  return world.goal !== null && world.player.hp > 0 && world.player.state !== 'death';
+}
+
+/**
+ * Has the player's box TOUCHED the exit? This **arms** the run-in; it no longer completes anything.
+ *
+ * This is the rule that used to be called `reachedGoal` and used to end the level on its own. A
+ * player whose right edge crossed `goal.x` by one pixel finished the level — so the character was
+ * whisked away at the threshold and the 132 px of doorway behind it were never entered at all.
+ * Demoted to a trigger, which is the whole point of the gate-entry session.
+ *
+ * It is also the CANCEL condition (see `stepGoalEntry`), which is why it keeps the death guard: a
+ * player who dies mid-run-in stops overlapping by this definition, and that is what disarms them.
+ */
+export function overlapsGoal(world: World): boolean {
+  const goal = world.goal;
+  if (goal === null || !goalTestable(world)) {
+    return false;
+  }
+  const b = playerBox(world);
+  return b.left < goal.x + goal.w && b.right > goal.x && b.top < goal.y + goal.h && b.bottom > goal.y;
+}
+
+/**
+ * Is the player's box FULLY INSIDE the exit? This is what completes the level.
+ *
+ * 🔴 **Inclusive on every edge, and that is not a rounding convenience — it is the only workable
+ * rule here.** `PLAYER_BOX.h * scale` is 288, every shipped goal rect is exactly 288 tall, and each
+ * one sits flush on its floor. So the vertical test is an exact equality at BOTH edges,
+ * satisfiable only while the player stands on that floor. A strict `<` makes all five levels
+ * uncompletable, and one pixel of air does the same thing temporarily.
+ *
+ * That razor edge is deliberate rather than tolerated. It is why the run-in drives the player
+ * along the GROUND instead of teleporting them, and Codex's plan review confirmed independently
+ * that ordinary grounded play reaches the equality reliably: `resolveCollisions` snaps `player.y`
+ * to `solid.y`, and this game has no slopes and no moving platforms to drift it.
+ *
+ * ⚠️ Nothing validates the rect height at load time — `tiledGoal.ts` deliberately does not learn
+ * this rule, because it is a consequence of the player's size rather than a property of level
+ * data. `tests/unit/level-goal-fits.test.ts` is the gate that goes red the day someone authors a
+ * 240 px exit, and it is the only one.
+ */
+export function containedInGoal(world: World): boolean {
+  const goal = world.goal;
+  if (goal === null || !goalTestable(world)) {
+    return false;
+  }
+  const b = playerBox(world);
+  return b.left >= goal.x && b.right <= goal.x + goal.w && b.top >= goal.y && b.bottom <= goal.y + goal.h;
+}
+
+/**
+ * The auto-run's direction for THIS tick, or `0` when no run-in is running.
+ *
+ * Read by `tick.ts` where `dir` is decided — the same un-numbered block `hitstunLocked` uses, and
+ * for the reason stated there. It is not a numbered step and adds none.
+ *
+ * **The dead zone is one tick's travel.** Without it a body moving `runMax` px/tick oscillates
+ * around the centre forever, never settling, because `sign()` flips every time it crosses.
+ *
+ * ponytail: for the last few ticks of a fast entry the player then stands still while
+ * `playerView` still says `run` — foot-slide, the thing this project hates. Accepted here and
+ * recorded rather than hidden: alpha is <= 0.25 by that point and the character is inside a dark
+ * opening. The upgrade path, if a playtest ever says it reads, is a deceleration ramp over the
+ * last few ticks rather than a hard dead zone.
+ */
+export function goalEntryDir(world: World): -1 | 0 | 1 {
+  const goal = world.goal;
+  if (world.goalEntryTicks === null || goal === null) {
+    return 0;
+  }
+  const dx = goal.x + goal.w / 2 - world.player.x;
+  if (Math.abs(dx) <= world.tuning.runMax) {
+    return 0;
+  }
+  return dx > 0 ? 1 : -1;
+}
+
+/**
+ * Step 9d — arm the run-in, advance it, cancel it, or complete the level. Returns `true` on the
+ * one tick the level completes.
+ *
+ * ## Why 9d's MEANING widened, and why nothing was renumbered
+ *
+ * `tick.ts`'s header is the authority and it says renumbering is a balance change, not a refactor,
+ * because Phase 5's animation frame rates are derived from windows that slot into those numbers.
+ * Nothing here renumbers, inserts or letters anything. 9d already owned "the exit"; an exit you
+ * walk into for twenty ticks is still the exit. The auto-run is not a step either — it overrides
+ * the `dir` that step 5 already consumes.
+ *
+ * Codex's plan review was asked this directly and ruled it **not** a substantive violation: the
+ * header's guarantee is about numbering and ordering, both untouched. The whole obligation is that
+ * the header text describe the widened semantics accurately, which it now does.
+ *
+ * ## The one-tick offset, stated so nobody later calls it a bug
+ *
+ * Arming happens HERE, at 9d of tick N — step 5 has already run. So the first tick the player is
+ * actually driven by the sequence is N+1, and the counter reads 0 through a tick in which the
+ * player still moved under their own input. That is the same shape as the jump buffer's "able to
+ * jump is the tick AFTER touchdown", and deliberate for the same reason: the test happens where
+ * the information exists.
+ *
+ * ## Why completion is an AND, and not either half alone
+ *
+ *  - **`containedInGoal` alone** completes instantly for a player who drops straight down into the
+ *    doorway — they are contained on the arming tick. That is a blink-out at the threshold, which
+ *    is the exact defect this whole sequence exists to remove.
+ *  - **the counter alone** completes a player who was stopped short of the door and never got in.
+ *  - **both** give the fade its full window AND keep completion honest about where the body is.
+ *
+ * ## 🔴 THE CANCEL — the blocker Codex's plan review found
+ *
+ * One branch, covering two failures that look nothing alike:
+ *
+ *  1. **Death.** `respawnPlayer` runs at step 4c and puts the player back at `world.spawn`. It
+ *     cannot know about a counter the WORLD owns, and nothing else was watching. Without this line
+ *     the respawned player keeps the lock — auto-running from the spawn, unable to jump, across a
+ *     level built to need jumps. **The exit becomes unreachable and the level unwinnable.** Level
+ *     01 ships a scavenger patrol ending 96 px from its door and level 05 a sentry 384 px from
+ *     its own, so this is the ordinary way a run ends badly, not a corner case.
+ *  2. **Knocked out of the doorway mid-fade.** The player would keep fading OUTSIDE the door —
+ *     invisible in open air, which is the one thing this feature exists to prevent.
+ *
+ * `overlapsGoal` covers both because it already refuses a dead player. Cancelling restores `null`,
+ * so `playerView` returns them to full opacity on the very next frame; they walk back in and the
+ * sequence arms again from zero. Gated from both directions in `goal-entry.test.ts`: it cancels,
+ * AND a cancelled run still finishes the level on a second approach.
+ */
+export function stepGoalEntry(world: World): boolean {
+  if (world.goal === null) {
+    return false;
+  }
+
+  if (world.goalEntryTicks === null) {
+    if (!overlapsGoal(world)) {
+      return false;
+    }
+    // Armed, not advanced: this tick is the one the body arrived on, and the auto-run cannot
+    // reach it — step 5 has already run. The counter starts moving next tick.
+    world.goalEntryTicks = 0;
+    return false;
+  }
+
+  if (!overlapsGoal(world)) {
+    world.goalEntryTicks = null;
+    return false;
+  }
+
+  world.goalEntryTicks += 1;
+  return world.goalEntryTicks >= GOAL_ENTRY_TICKS && containedInGoal(world);
 }

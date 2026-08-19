@@ -286,9 +286,22 @@ describe('the 400-line rule', () => {
     // clearing it needs a deliberate ratchet raise here as well as an active citation there. That
     // is the same ratchet this comment has always described, one notch further down.
     //
+    // 🔴 **0 -> 1 on 2026-08-19**, for `src/sim/tick.ts` at **422**, in the gate-entry session.
+    // The split was attempted first, per the order of preference below, and both remaining
+    // candidates would have contradicted a decision written into that file — step 13's comment says
+    // its guard "stays here, with the numbered order that owns it", and step 4c's says the respawn
+    // decision is taken where the spawn point lives. `advance` was already extracted to
+    // `advanceSplit.ts` in Phase 8 for exactly this pressure, and that was the one clean seam.
+    //
+    // What crossed the line is 24 lines of the widened step 9d: the contract paragraph, the
+    // `entryLocked` read, the attack-edge consumption, and one line each on steps 5, 7 and 9d.
+    // Roughly 11 more were MOVED to `goal.ts` on the way — reasoning that `goal.ts`'s own header
+    // already claims — which is why the citation reads 422 and not 445. Nothing was deleted.
+    // Justification: `docs/qa/phase-08-gate-entry.md`.
+    //
     // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
     // the way past is to split the file or write the justification, in that order of preference.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(0);
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(1);
   });
 });
 

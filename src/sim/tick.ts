@@ -22,7 +22,7 @@
  *   9.  Collide and resolve -> grounded, then clamp to the world's three solid edges
  *   9b. World-geometry damage: kill plane, hazards, projectiles, enemy contact  (Phase 5)
  *   9c. Pickups: gears the player's body crossed this tick                      (Phase 6)
- *   9d. The exit: the player's body entered `world.goal` -> the level is complete  (Phase 8)
+ *   9d. The exit: arm / advance / cancel / complete the entry run-in   (Phase 8, widened)
  *   10. Window arming: left the ground this tick -> open coyote
  *   11. State transition, through the one door                     (2.6)
  *   12. Emit this tick's event edges                               (2.5)
@@ -58,6 +58,15 @@
  * while `world.completed` is true, tested before step 1 so the seeded stream does not advance either.
  * `goal.ts` carries all of it: why the letter, why after 9c, why the freeze, and why the `World.spawn`
  * argument for the respawn is NOT the argument for this.
+ *
+ * **🔴 9d's MEANING WIDENED in the gate-entry session, and no step moved.** It was
+ * `reachedGoal -> completed` — one overlap test. It is now `stepGoalEntry`: arm a run-in, advance
+ * an integer counter, cancel it, or complete. Three existing steps NARROW as a consequence and
+ * none is added — step 5 takes `dir` from `goalEntryDir` and a forced `walkHeld: false`, step 7's
+ * jump gate gains `!entryLocked`, and the attack edge is consumed and discarded before 4b.
+ * Nothing renumbered, inserted or lettered, so this header's balance-change hazard does not
+ * apply; Codex's plan review was asked directly and agreed. **`goal.ts` carries all of it** — why
+ * widening beat a new letter, the one-tick arming offset, and why the cancel is a blocker fix.
  *
  * **Step 0 is a NUMBER, and it is the one stated exception to the letter rule.** Codex's Phase 8
  * implementation review (finding #2) read the rule literally and was right to: the freeze is a branch
@@ -108,7 +117,7 @@
  * `tests/unit/coyote-time.test.ts`, is the fix.
  */
 
-import { consumeJumpPress } from './input';
+import { consumeAttackPress, consumeJumpPress } from './input';
 import {
   PLAYER_BOX,
   advanceStride,
@@ -121,7 +130,7 @@ import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './
 import { releaseAggro } from './enemies';
 import { noEvents } from './events';
 import { stepEnemies } from './enemyTurn';
-import { reachedGoal } from './goal';
+import { goalEntryDir, stepGoalEntry } from './goal';
 import { clampToBounds } from './hazards';
 import { collectGears } from './pickups';
 import { applyPlayerAttack } from './playerAttack';
@@ -154,6 +163,10 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   const events = noEvents();
   const { player, tuning } = world;
 
+  // Is the gate's run-in driving the body? A cached read like `hitstunLocked`, not a step. Taken
+  // here because 4b needs it and nothing before 9d writes `goalEntryTicks`.
+  const entryLocked = world.goalEntryTicks !== null;
+
   // 1. Sample the seeded stream exactly once (vault 2.3). Consumers read `tickRoll`; they never
   //    pull from the stream, so the number of decisions a tick makes cannot change the sequence.
   world.tickRoll = nextFloat(world.rng);
@@ -174,6 +187,14 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //        live hitbox. World-geometry damage is NOT here — it is step 9b, because a swept test
   //        needs a position that does not exist yet. See `worldDamage.ts`.
   stepEnemies(world);
+
+  //    🔴 The gate's run-in locks the swing, and the edge is still CONSUMED off the REAL snapshot.
+  //    A spread clone would clear the CLONE and leave the real edge latched forever — the swing
+  //    lands the instant the lock lifts, or on tick 1 of the next level. Vault 2.4 exactly, and a
+  //    blocker in Codex's plan review before it was written.
+  if (entryLocked) {
+    consumeAttackPress(input);
+  }
 
   const combat = stepCombat(player, input);
   events.attackStarted = combat.attackStarted;
@@ -221,16 +242,19 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // numbered step — only step 5 (which consumes `dir`) and step 7 (which consumes the gate) are —
   // so caching the read does not reorder or renumber the contract above.
   const hitstunLocked = movementLocked(player);
-  const dir: -1 | 0 | 1 = hitstunLocked
-    ? 0
-    : input.left === input.right
+  const dir: -1 | 0 | 1 = entryLocked
+    ? goalEntryDir(world)
+    : hitstunLocked
       ? 0
-      : input.right
-        ? 1
-        : -1;
+      : input.left === input.right
+        ? 0
+        : input.right
+          ? 1
+          : -1;
 
-  // 5. Horizontal.
-  stepHorizontal(player, tuning, dir, input.walkHeld);
+  // 5. Horizontal. `walkHeld` forced FALSE under the run-in: it is a RUN into the doorway by
+  //    definition, and a held walk modifier would otherwise halve the speed and double the window.
+  stepHorizontal(player, tuning, dir, entryLocked ? false : input.walkHeld);
 
   // 6. Vertical.
   //
@@ -264,7 +288,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    lock lifts, not discarded".
   const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
   const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
-  if (bufferOpen && !hitstunLocked && (player.grounded || coyoteOpen)) {
+  if (bufferOpen && !hitstunLocked && !entryLocked && (player.grounded || coyoteOpen)) {
     player.vy = -tuning.jumpVelocity;
     player.jumpCutPending = true;
     player.grounded = false;
@@ -309,11 +333,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   world.gearsCollected += gearsTaken;
   events.gearCollected = gearsTaken > 0;
 
-  // 9d. The exit — Phase 8. A letter for the same reason 9b and 9c are, and AFTER 9c so a tick that
-  //     takes the last gear and steps through the door does both, in that order. `goal.ts` carries the
-  //     reasoning, including why completion belongs in the sim at all and why the `World.spawn`
-  //     argument for the respawn is NOT the argument for this.
-  if (reachedGoal(world)) {
+  // 9d. The exit — Phase 8, widened by the gate-entry session: arm / advance / cancel / complete,
+  //     not one overlap test. A letter for the same reason 9b and 9c are, and AFTER 9c so a tick
+  //     that takes the last gear and steps through the door does both, in that order. `goal.ts`
+  //     carries all the reasoning — why completion belongs in the sim, why the `World.spawn`
+  //     argument for the respawn is NOT the argument for this, and why the cancel is load-bearing.
+  if (stepGoalEntry(world)) {
     world.completed = true;
     events.levelCompleted = true;
   }

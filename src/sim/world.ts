@@ -120,6 +120,7 @@ export function createWorld({
     gearsCollected: 0,
     goal: goal ?? null,
     completed: false,
+    goalEntryTicks: null,
     tuning,
     scale,
     player: {
