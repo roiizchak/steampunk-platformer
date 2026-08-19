@@ -118,6 +118,90 @@ _Recorded at Task 10._
 
 ---
 
+## Hands-on, on the GREY BOX, before a cent was spent
+
+Driven with `playwright-cli` against the dev server. Grey-box-before-art is a Global Constraint, and
+the point of doing this first is that the art must not be bought against a broken sequence.
+
+**Sampled once per animation frame, inside the page, returning an aggregate.** A wait expressed in
+ticks cannot bound a sampling window — and `window.__game.tick` *stops* the moment a level
+completes, so nothing here waits on a tick count. Every run waits on `ready`, then on `completed`.
+
+### All five levels
+
+| level | completed | armed at x | goal.x | fade frames | distinct alphas | biggest 1-frame drop | anims while armed | final α | popped back |
+|---|---|---|---|---|---|---|---|---|---|
+| level-01 | ✅ | 8577 | 8640 | 137 | **20** | **0.05** | `brass-courier-run` | 0 | **no** |
+| level-02 | ✅ | 10343 | 10368 | 169 | **20** | **0.05** | `brass-courier-run` | 0 | **no** |
+| level-03 | ✅ | 11975 | 11904 | 137 | **20** | **0.05** | `brass-courier-run` | 0 | **no** |
+| level-04 | ✅ | 13556 | 13440 | 137 | **20** | **0.05** | `brass-courier-run` | 0 | **no** |
+| level-05 | ✅ | 14910 | 14976 | 137 | **20** | **0.05** | `brass-courier-run` | 0 | **no** |
+
+**`0.05` is exactly `1 / GOAL_ENTRY_TICKS`** — one step of the ramp, never more. That is the number
+that rules out a blink-out: a character that winked out at the threshold would show a single drop
+near 1.0. And **20 distinct alphas** is the whole ramp, seen on screen.
+
+`tailAlphas` was `[0]` on every level across the 60 frames sampled *after* the level-complete panel
+appeared — no pop-back, which is structural rather than remembered: the sim freezes at step 0 and
+`goalEntryAlpha` keeps returning 0 from the held counter.
+
+**level-04 travelled −30 px while armed** — it armed at 13556, right of the gate's 13536 centre,
+and ran **left** into it. The auto-run is genuinely bidirectional and the dead zone settles it.
+
+### Screenshots — [docs/evidence/gate-entry/](../evidence/gate-entry/)
+
+| | |
+|---|---|
+| `01-approaching.png` | the courier on the floor, gate ahead, full opacity |
+| `02-armed-first-contact.png` | at the doorway's left edge, sequence armed, still fully drawn |
+| `03-mid-fade.png` | **counter 17, α 0.15 — the courier is inside the dark opening and nearly gone** |
+| `04-complete.png` | LEVEL COMPLETE panel, the courier entirely absent, the void still drawn |
+
+Looked at by eye, which is the only thing that can settle this *(C4)*: it reads as a character
+walking into a doorway and being swallowed by the dark, not as a sprite being switched off.
+
+### G.4b — dying mid-run-in, the blocker Codex predicted
+
+Killed through the **kill plane**, not by writing `hp`. Writing `hp` directly bypasses `killPlayer`
+and the death window, so the respawn never runs and the half that matters goes unobserved — the
+first attempt did exactly that and produced a misleading pass.
+
+| | |
+|---|---|
+| armed at | frame 156, x 8574 |
+| killed at | frame 176, entry counter **5**, α 0.75 |
+| `goalEntryTicks` after | `5 → **null**` — **cancelled** |
+| alpha after | `0.75 → **1**` — fully opaque again |
+| respawned | **true**, at the spawn (x 625, `world.spawn.x` 624) |
+| hp after | **100** |
+| then | ran to **x 2224** under held input — **the controls came back** |
+| level completed | **false** — you do not finish by dying on the doorstep |
+
+Without the cancel this is the unwinnable state: locked, auto-running, unable to jump, at a spawn
+1600 px from the first pillar it has to clear.
+
+### Two things the probe got wrong first, both worth keeping
+
+- **A synthetic `new KeyboardEvent` does not move the character.** Phaser's keyboard manager matches
+  on `event.keyCode`, which the init dict cannot set. The first probe ran 3600 frames with the
+  courier standing still and reported *"no fade, no arming"* — which reads exactly like a broken
+  feature. Fixed with `Object.defineProperty(e, 'keyCode', …)`, and the difference between a broken
+  probe and a broken feature is one line of evidence.
+- **A jumping bot flies over the exit.** The goal rect is exactly the body height, so an airborne
+  player's feet rise above `goal.y + goal.h` and `overlapsGoal` is false. On level-02 the bot
+  bunny-hopped straight over the doorway and out the far side, never arming. **This is unchanged
+  pre-existing behaviour** — the old rule used the identical vertical test — but it is worth
+  recording: *you cannot enter the exit while jumping.* The bot stops jumping within 700 px of the
+  gate; a human walks in.
+
+**level-05's traversal is not claimed here.** The browser bot dies 21 times on it and never reaches
+the exit — a limitation of a crude probe, not of the level: `level-completable.test.ts` finishes
+level-05 under every gate seed. Its run-in above was observed by placing the courier 400 px left of
+its exit and letting the game do the rest, which exercises arm → run → fade → complete in full.
+Stated rather than glossed.
+
+---
+
 ## Red proofs — every new gate watched failing *(C1)*, every mutation confirmed reverted *(C12)*
 
 ### The fade curve — three mutations, and only one test does the work
