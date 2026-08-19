@@ -278,6 +278,18 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // Each regex names the rule AND the object type, so swapping the hazard and gear branches of
     // `describePlacementProblem` goes red here while the sweep stays green.
     ['enemy-standing-in-a-hazard', /walks its beat through the hazard at \(200, 200\) 32x32/],
+    // 🔴 The FOURTH placement fixture, added by Codex implementation review 2, finding 1.
+    //
+    // Identical to the one above with a single number changed — the hazard's `y`, 200 → 255 — so
+    // that it overlaps only the **bottom pixel** of the sentry's body (feet 256, body 64…256).
+    // `FOOT_TOLERANCE_PX` used to be subtracted from the box used for hazards and gears as well as
+    // solids, which put the box's sole at 254 and let this one pass: a spike one pixel under the
+    // creature, invisible to the gate and reading on screen as exactly the reported bug.
+    //
+    // Reverting `swept`/`sweptFeetClear` in `tiledPlacement.ts` to one shortened box turns this row
+    // red and leaves every other row in this array green — which is the whole point of committing it
+    // rather than asserting the tolerance's value *(vault C2)*.
+    ['hazard-under-an-enemy-sole', /walks its beat through the hazard at \(200, 255\) 32x32/],
     ['gear-inside-an-enemy', /walks its beat through the gear body at \(224, 154\) 72x72/],
     ['enemy-beat-into-a-wall', /walks its beat into the solid at \(300, 64\) 32x192/],
   ];

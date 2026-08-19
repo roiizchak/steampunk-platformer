@@ -7,12 +7,22 @@
  * real jump rather than a walk. That is a level-design change with one obvious way to get it wrong:
  * a spike run wider than the player can clear.
  *
- * 🔴 **The ceiling was re-measured here, on the SHIPPED levels, and it is 480 px — not the 252 px
- * `shared.mjs` records.** Both numbers are real and they do not contradict each other: Phase 8's
- * figure came from `level-traversal.test.ts` probing the retired level with the approach that file
- * sets up, and this one comes from this gate's own auto-player with a full run-up along the shipped
- * opening. Widths 192/288/384/480 px all cross with zero hits; **576 px does not**. The layouts here
- * are sized against 480, because that is the number measured on the geometry they actually ship.
+ * 🔴 **The ceiling was re-measured here and it is 480 px — not the 252 px `shared.mjs` records.**
+ * Both numbers are real and they do not contradict each other: Phase 8's figure came from
+ * `level-traversal.test.ts` probing the retired level with the approach that file sets up, and this
+ * one comes from this gate's own auto-player. Widths 192/288/384/480 px all cross with zero hits;
+ * **576 px does not**.
+ *
+ * ⚠️ **480 px is what a FLAT run-up clears, and the shipped valley crossings are not that** — the
+ * qa-expert's adversarial brief (finding B1) withdrew the stronger claim this paragraph used to
+ * make. The two shipped 480 px runs sit in the valley between two raised masses: the player launches
+ * from the elevated walkway, clears the spikes by **737 px** and lands **305 px past** the far edge.
+ * Their width came from the mass spacing and from widening a run off a descent-landing spot — not
+ * from approaching a measured ceiling. Across all 18 shipped hazards the tightest clearance anywhere
+ * is 316 px, so **nothing ships near a boundary**. `shared.mjs` carries the same correction; this
+ * header went on saying "sized against 480, because that is the number measured on the geometry they
+ * actually ship" until Codex implementation review 2 (finding 4) noticed the withdrawal had not
+ * reached it.
  *
  * The plan's first draft named three existing gates as the arbiters. The Codex plan review found
  * that **all three are blind to exactly this**, and each claim was re-verified here before the gate

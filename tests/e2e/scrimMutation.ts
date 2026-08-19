@@ -60,6 +60,54 @@ export async function addScrims(page: Page, count: number): Promise<void> {
 }
 
 /**
+ * 6.9's **second** proving mutation: N milliseconds of main-thread work per frame, on the HUD scene.
+ *
+ * ## Why a second one was needed — Codex implementation review 2, finding 3
+ *
+ * `addScrims` proves the GPU half. It cannot prove the main-thread half at all: a scrim submits the
+ * same handful of draw calls and costs the CPU nothing, which is the whole reason 6.9 asserts a GPU
+ * delta. So the **absolute** `onWork` assertion — the one bound that is not a ratio, and therefore
+ * the only thing covering `GearLayer.sync()` and the `renderHud()` call that run identically in both
+ * arms and divide out of everything else — had **no red proof of any kind**, and its ceiling had
+ * never been measured. It read `16.67 / 3` (5.56 ms) while its own docstring claimed 1 ms.
+ *
+ * 🔴 **It attaches to the GAME scene, not the UI scene, and that is the entire point.** The first
+ * version hooked `UI`, so the cost appeared in the HUD-ON arm only — which meant it tripped
+ * `MAX_HUD_WORK_DELTA_MS` (1 ms injected read as a 7.600 ms delta) and never reached the absolute
+ * bound at all. A mutation that only moves the statistic another bound already resolves proves
+ * nothing new *(the "an A/B toggle bounds what it can show" lesson)*. `Game` runs in **both** arms,
+ * so the cost divides cleanly out of every ratio and out of the delta — leaving the absolute
+ * `onWork` assertion as the only thing that can see it. That is Codex's scenario reproduced exactly:
+ * shared HUD work growing, invisible to an A/B.
+ *
+ * Attach it ONCE, before the pair loop. `Game` is never stopped, unlike `UI`.
+ *
+ * ```
+ * PERF_MUTATION=hudwork2 npx playwright test tests/e2e/phase-06-perf.spec.ts
+ * ```
+ */
+export async function addHudWork(page: Page, ms: number): Promise<void> {
+  await page.evaluate((cost) => {
+    const game = (
+      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+    ).__phaserGame;
+    const scene = game.scene.getScene('Game') as { events: { on(e: string, f: () => void): void } };
+    scene.events.on('update', () => {
+      const until = performance.now() + cost;
+      while (performance.now() < until) {
+        /* block the main thread, deliberately */
+      }
+    });
+  }, ms);
+}
+
+/** Read the millisecond cost out of `PERF_MUTATION`, e.g. `hudwork2`. Zero when unset. */
+export function hudWorkMs(mutation: string): number {
+  const match = /^hudwork(\d+(?:\.\d+)?)$/.exec(mutation);
+  return match === null ? 0 : Number(match[1]);
+}
+
+/**
  * Read the scrim count out of `PERF_MUTATION`, e.g. `scrim3`. Zero when unset or not a scrim.
  *
  * Driven from the shell so the mutation is a command rather than an edit:

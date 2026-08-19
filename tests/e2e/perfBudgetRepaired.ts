@@ -54,6 +54,19 @@
  *
  * 2.4x the worst clean reading of sixteen (0.0835), whose next-worst is 0.0307.
  *
+ * ✅ **Seven more clean runs, and the worst reading did not move** — Codex implementation review 2
+ * called this bound "another empirically lucky perf statistic" and its own gate-owner record left the
+ * question open at three clean runs, so the answer was measured rather than argued. Seven fresh clean
+ * runs read `0.0266  -0.0010  -0.0072  0.0389  0.0824  -0.0143  0.0230` — **worst 0.0824, under the
+ * previous worst of 0.0835**, and the last three of them had no say in any bound.
+ *
+ * That makes **23 clean runs in total with a worst reading of 0.0835 and nothing above 0.09**,
+ * against a 0.2 ms bound: a 2.4× margin that has now held across every run this project has made.
+ * No false red has been observed. The per-pair finding below is unchanged and stays open — the
+ * *mechanism* for one is still there — but "lucky" is a weaker claim after 23 runs than after three,
+ * and the honest statement is that the median survives the noise in practice while nothing proves it
+ * must.
+ *
  * 🔴 **MAJOR, OPEN: the PER-PAIR noise is roughly 5x anything this record disclosed.** The
  * adversarial brief printed the ten individual deltas behind each median, and every clean run
  * contains at least one pair whose magnitude exceeds this bound outright:
@@ -218,3 +231,59 @@ export const MAX_AUDIO_FRAME_LOSS_RATIO = 1.05;
  * five quantisation steps and 3 % of a 16.67 ms frame; the 2 ms/frame leak clears it fourfold.
  */
 export const MAX_AUDIO_WORK_DELTA_MS = 0.5;
+
+/**
+ * Criterion 6.9's **absolute** ceiling: the whole frame's main-thread work with the HUD on, in ms.
+ *
+ * ## 🔴 Why this constant exists at all — Codex implementation review 2, finding 3
+ *
+ * Every other assertion in `phase-06-perf.spec.ts` is a RATIO or a DELTA, and both can only see what
+ * DIFFERS between the arms. `GearLayer.sync()` and `GameScene.update()`'s `renderHud()` call run
+ * identically with the HUD on and off, so they cancel out of all of them — meaning the criterion's
+ * own words, *frame budget*, were only ever answered for the part of the HUD an A/B could vary.
+ *
+ * This assertion was already there for exactly that reason. Two things were wrong with it:
+ *
+ * 1. It was written inline as `16.67 / 3` — **5.557 ms**, a third of a frame — while the docstring
+ *    directly above it claimed *"bounded at 1 ms"*. The prose had been updated when the Phase 6
+ *    performance owner halved `MAX_HUD_WORK_DELTA_MS`; the code had not, and the two are different
+ *    statistics anyway (that one is a delta, this one is absolute). A bound whose comment and value
+ *    disagree by 5.6× is the failure this project keeps writing rules about *(vault C9)*.
+ * 2. **It had no red proof of any kind.** `addScrims` cannot supply one: a scrim costs the CPU
+ *    nothing, which is precisely why 6.9 asserts a GPU delta. So the one bound covering shared HUD
+ *    work had never been shown capable of going red.
+ *
+ * ## The ladder, measured with `addHudWork` — the mutation built to prove it
+ *
+ * `PERF_MUTATION=hudworkN` attaches N ms of busy-wait per frame to the **Game** scene, so it runs in
+ * both arms and divides cleanly out of every ratio and out of the delta. That is Codex's scenario
+ * reproduced: shared HUD work growing, invisible to an A/B.
+ *
+ * ```
+ * injected   onWork (median of 10 HUD-on windows)   at 5.557   at 2.5
+ * clean      0.400 / 0.500 / 0.500 / 0.600          pass       pass
+ * 1 ms       1.300                                  pass       pass
+ * 2 ms       2.450                                  pass       pass      <- the floor
+ * 3 ms       3.300                                  pass       FAIL
+ * 4 ms       6.600                                  FAIL       FAIL
+ * ```
+ *
+ * ## Choosing 2.5, and confirming it on runs that had no say
+ *
+ * Selection set: the four clean runs above, plus the 0.5–0.9 ms band this spec's prose already
+ * recorded. Worst clean observed, **0.9 ms**.
+ *
+ * 🔴 The bound is **not** set near that worst case, and this session has two fresh scars explaining
+ * why. 7.7's first bound was chosen from six runs whose worst was 1.0054 and false-redded on a
+ * seventh at 1.0208; 6.9's GPU delta was chosen from nine runs whose worst was 0.0307 and
+ * false-redded on a tenth at 0.0835. **Both times the true spread was 2–3× the observed worst.** So
+ * 0.9 × ~2.8 → **2.5 ms**, then confirmed on runs not used to pick it.
+ *
+ * ⚠️ **Stated floor: about 2 ms of added shared main-thread work per frame passes.** `hudwork2` reads
+ * 2.450 — under the bound, and deliberately not chosen as the proving mutation because a 0.05 ms
+ * margin proves nothing. `hudwork3` at 3.300 is the committed red proof, clearing the bound by 32 %.
+ * That floor is a real limit and it is **2.8× better than the 5.557 ms it replaces**, which needed a
+ * 4 ms/frame regression before it noticed. It is not the 1 ms the old comment claimed, and pretending
+ * otherwise is how the disagreement got here in the first place.
+ */
+export const MAX_HUD_FRAME_WORK_MS = 2.5;

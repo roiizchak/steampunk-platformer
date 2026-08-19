@@ -100,16 +100,33 @@ export function describePlacementProblem(
     }
     const halfWidth = (box.w / 2) * RENDER_SCALE;
     const feet = (enemy.y as number) + (enemy.height as number);
-    // The box stops `FOOT_TOLERANCE_PX` short of the sole, for the reason that constant records:
-    // every shipped enemy stands with EXACTLY zero separation from its floor, so without this a
-    // one-pixel Element Editor nudge refuses the level — and refuses it with a message about the
-    // wall veto, which would not have stopped that body at all.
+    /**
+     * The body as it is DRAWN and as the sim carries it: the full `toWorld` rectangle, sole
+     * included. This is what hazards and gears are tested against.
+     */
     const swept: Rect = {
       x: (enemy.x as number) - halfWidth,
       y: feet - box.h * RENDER_SCALE,
       w: (enemy.width as number) + halfWidth * 2,
-      h: box.h * RENDER_SCALE - FOOT_TOLERANCE_PX,
+      h: box.h * RENDER_SCALE,
     };
+    /**
+     * 🔴 **`FOOT_TOLERANCE_PX` belongs to the SOLID test and to nothing else** — Codex
+     * implementation review 2, finding 1.
+     *
+     * The tolerance exists for one reason, recorded on the constant itself: every shipped enemy
+     * stands with EXACTLY zero separation from its floor, so a full-height box reads its own floor
+     * as an obstruction and a one-pixel Element Editor nudge refuses the level — with a message
+     * about the wall veto, which would not have stopped that body at all.
+     *
+     * That argument is about **floors**. Nothing legitimately touches an enemy's sole except the
+     * ground it stands on, so applying the same shortening to hazards and gears bought nothing and
+     * cost a hole: a spike whose top sat 1 px under the sole, or a gear body clipping the lowest two
+     * pixels of the creature, **passed the gate** while reading on screen as exactly the reported
+     * bug. The shipped levels are tile-aligned and none of them was near that hole — but the
+     * Element-Editor nudge this tolerance exists to permit is precisely the edit that would open it.
+     */
+    const sweptFeetClear: Rect = { ...swept, h: swept.h - FOOT_TOLERANCE_PX };
 
     const label = `enemy #${index} \`${String(slug)}\``;
     const where = (r: Rect): string => `(${r.x}, ${r.y}) ${r.w}x${r.h}`;
@@ -125,7 +142,7 @@ export function describePlacementProblem(
       }
     }
     for (const solid of solids) {
-      if (intersects(swept, solid)) {
+      if (intersects(sweptFeetClear, solid)) {
         return `${label} walks its beat into the solid at ${where(solid)} — the wall veto would stop it short of the beat the level declares`;
       }
     }

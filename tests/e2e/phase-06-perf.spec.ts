@@ -56,13 +56,17 @@ import {
   MIN_SAMPLES,
   SAMPLE_TICKS,
 } from './perfBudget';
-import { MAX_HUD_GPU_DELTA_MS, MAX_HUD_WORK_DELTA_MS } from './perfBudgetRepaired';
+import {
+  MAX_HUD_FRAME_WORK_MS,
+  MAX_HUD_GPU_DELTA_MS,
+  MAX_HUD_WORK_DELTA_MS,
+} from './perfBudgetRepaired';
 import { counts, sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
 import { assertHudWasDrawing } from './hudDrawGuards';
 import { hudDrawState, setHud } from './hudHelpers';
-import { addScrims, scrimCount } from './scrimMutation';
+import { addHudWork, hudWorkMs, addScrims, scrimCount } from './scrimMutation';
 import { shippedLevel } from './tilemapHelpers';
 
 /** Three pairs. Interleaved, so drift in the machine hits both arms alike. */
@@ -78,6 +82,8 @@ declare const process: { env: Record<string, string | undefined> };
  * See `scrimMutation.ts` for what it draws and why it is committed rather than hand-built.
  */
 const SCRIMS = scrimCount(process.env.PERF_MUTATION ?? '');
+/** 6.9's main-thread proving mutation, e.g. `PERF_MUTATION=hudwork2`. See `addHudWork`. */
+const HUD_WORK_MS = hudWorkMs(process.env.PERF_MUTATION ?? '');
 
 const PAIRS = 10;
 
@@ -165,6 +171,9 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     expect(player, 'no player after the walk').not.toBeNull();
 
     await installGpuTimer(page);
+    // Once, before the loop: `Game` is never stopped, and the whole point of this mutation is that
+    // it runs in BOTH arms. See `addHudWork`.
+    if (HUD_WORK_MS > 0) await addHudWork(page, HUD_WORK_MS);
     // A discarded warm-up so the first measured arm is not the one running on cold JIT.
     await setHud(page, true);
     await sample(page, SAMPLE_TICKS);
@@ -365,9 +374,12 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * the part of the HUD the A/B could vary.
      *
      * This is the whole frame with the HUD on, in milliseconds, against the 16.67ms a 60 Hz frame
-     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; **bounded at 1ms** — see
-     * `MAX_HUD_WORK_DELTA_MS`, halved from 2ms by the Phase 6 performance owner. This comment said
-     * "a third of a frame" until 2026-08-17 and was describing the old value.
+     * actually has. Nothing cancels out of it.
+     *
+     * 🔴 The bound is `MAX_HUD_FRAME_WORK_MS`, and **that constant is where the whole record lives**
+     * — the mutation ladder, the clean band, why 2.5 rather than 1, and the floor it admits to. This
+     * comment claimed "bounded at 1ms" while the code read `16.67 / 3` (5.557ms) and nothing had ever
+     * proved the assertion could go red. Codex implementation review 2 found both.
      */
     expect(
       onWork,
@@ -375,7 +387,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
         `the 16.67ms a 60 Hz frame has. This bound is absolute rather than a ratio precisely so ` +
         `that GearLayer.sync() and the renderHud() call — which run in BOTH arms and divide out of ` +
         `every ratio above — are inside something.`,
-    ).toBeLessThan(16.67 / 3);
+    ).toBeLessThan(MAX_HUD_FRAME_WORK_MS);
 
     expect(await currentTick(page), 'the game stopped ticking during the measurement').toBeGreaterThan(0);
   });

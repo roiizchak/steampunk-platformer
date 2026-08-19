@@ -318,13 +318,38 @@ reason.
 | leg | result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **1880** passed, 112 files |
-| `npm run test:sim-isolated` | re-run at the end of the session |
+| `npm test` | **1882** passed, 112 files |
+| `npm run test:sim-isolated` | **1882** passed with Phaser uninstalled |
 | `npm run build` | clean; `verify-dist ok: 5 level(s) and 11 audio file(s) byte-identical, no DEV-only scene key or debug surface` |
 | `npm run test:e2e` | **102** passed |
 | both perf specs, re-run after the 400-line splits | pass |
+| hands-on play, all 5 levels | completed, 0 deaths, **0 hazard contacts** |
 
 The 400-line ratchet went red mid-session on `perfBudget.ts` (414) and `phase-06-perf.spec.ts` (442).
 Split, not exempted: `perfBudgetRepaired.ts` takes the HUD and audio budgets — the ones that were
 reported failing and now carry long measurement records — and `hudDrawGuards.ts` takes 6.9's
 non-vacuity assertions.
+
+
+---
+
+## 8. The Codex implementation review, and the three things it changed
+
+Full text and triage: [`docs/reviews/session-bugfix-perf-gates-impl.md`](../reviews/session-bugfix-perf-gates-impl.md).
+
+Five findings, run **after** all six gate-owner briefs and after the hands-on pass — so it reviewed a
+diff those had already reshaped, and still found two real defects nobody else had.
+
+| # | finding | what it cost / what it changed |
+|---|---|---|
+| 1 | **`FOOT_TOLERANCE_PX` was applied to the hazard and gear tests, not just the solid test.** A spike 1 px under an enemy's sole, or a gear body clipping its lowest two pixels, **passed the boot gate** — while reading on screen as exactly the reported bug. | **APPLIED.** Full body box for hazards and gears, shortened box for solids only. Fourth committed fixture `hazard-under-an-enemy-sole` red-proves it: reverting turns that one row red and leaves all 37 others green. |
+| 3 | **The absolute HUD-work bound claimed 1 ms in its docstring and permitted `16.67/3` = 5.557 ms in code** — and worse than Codex could see from the file, it had **no red proof of any kind**, because a scrim costs the CPU nothing. | **APPLIED.** New committed mutation `addHudWork` (Game scene, so it runs in both arms and only the absolute bound can see it), a measured ladder, and `MAX_HUD_FRAME_WORK_MS = 2.5` confirmed on three held-out runs. Floor stated: ~2 ms of added shared work still passes — **2.8× better than the 5.557 ms it replaces**. |
+| 4 | `level-hazard-free.test.ts`'s header still carried the 480 px claim the qa-expert had withdrawn. The correction reached the QA log and `shared.mjs`, not the gate's own first paragraph. | **APPLIED.** |
+| 2 | Four remaining gate-vs-sim geometry differences. | **2a APPLIED with #1.** 2b (a body inside a solid may move deeper) is the `resolveCollisions` rule the player uses and is deliberate; 2c (unbounded speed overrides could tunnel) is unreachable from shipped data; 2d (the gate validates the beat, chase leaves it) is the design, and the hands-on pass exercised it. **Recorded.** |
+| 5 | **Blocker: "6.9 ships another empirically lucky perf statistic."** | **MEASURED rather than argued.** Seven more clean runs: worst **0.0824**, *under* the previous worst. **23 clean runs total, worst 0.0835, nothing above 0.09**, against a 0.2 ms bound — 2.4× margin, no false red ever observed. **P4 stays open**: the mechanism for one is still there, and 23 runs is evidence, not proof. |
+
+🔴 **Codex's #3 is the one worth remembering.** Two of this project's own rules were both being broken
+by a single line: a bound whose comment and value disagreed by 5.6× *(vault C9)*, and a bound that had
+never been watched failing *(vault C1/C2)*. It survived six adversarial briefs — including a
+performance owner whose entire job was that spec — because every one of them read the *statistic* and
+none of them read the *assertion*.
