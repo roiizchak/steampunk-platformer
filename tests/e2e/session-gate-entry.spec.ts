@@ -54,6 +54,26 @@ import { RUN_TIMEOUT, playToExit } from './levelDriver';
 /** Must match `GOAL_ENTRY_TICKS` in `src/sim/goal.ts`. Asserted below rather than assumed. */
 const GOAL_ENTRY_TICKS = 20;
 
+/**
+ * The sim's OWN trigger rect, read live off the scene through `__phaserGame`.
+ *
+ * Not a typed-in `8640` *(vault 4.11)*, and not the `.tmj` re-parsed here either — `@types/node` is
+ * not a dependency of this project and Phase 1 twice declined to add one. The live rect is the
+ * better comparand anyway: the claim under test is *the drawn gate stands where the trigger is*, and
+ * `getBounds()` is the extent after every transform, origin and display-size the scene applied. An
+ * offset draw, a wrong origin or a letterboxed image separates the two; nothing about reading them
+ * from one world makes them agree.
+ */
+async function triggerRect(page: import('@playwright/test').Page): Promise<{ x: number; y: number } | null> {
+  return page.evaluate(() => {
+    const scene = (
+      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+    ).__phaserGame.scene.getScene('Game') as { simWorld: { goal: { x: number; y: number } | null } };
+    const g = scene.simWorld.goal;
+    return g ? { x: g.x, y: g.y } : null;
+  });
+}
+
 interface FadeReport {
   /** Did the level actually finish? Everything else is meaningless if not. */
   completed: boolean;
@@ -196,7 +216,7 @@ test.describe('the exit is generated art, not a grey box', () => {
     expect(goal!.depth, 'depth 7: under gears, enemies and the player, because you walk THROUGH it').toBe(7);
   });
 
-  test('the drawn exit is the size of the goal rect it triggers on', async ({ page }) => {
+  test('the drawn exit occupies the goal rect it triggers on — position AND size', async ({ page }) => {
     await bootToGame(page);
     const goal = await drawnGoal(page);
     expect(goal).not.toBeNull();
@@ -206,6 +226,18 @@ test.describe('the exit is generated art, not a grey box', () => {
     expect(typeof goal!.bounds.w).toBe('number');
     expect(Math.round(goal!.bounds.w)).toBe(192);
     expect(Math.round(goal!.bounds.h)).toBe(288);
+
+    // 🔴 Size alone was the whole assertion until the gate's adversarial QA brief pointed out that
+    // a correctly-sized image drawn 500 px from its trigger passes every word of it. That is the
+    // same defect `completeHelpers.ts` records for the GREY BOX — an object whose transform read
+    // (0, 0) while it drew somewhere else entirely — arriving through the image branch instead.
+    // The player would fade into empty air beside a door they never entered.
+    //
+    const trigger = await triggerRect(page);
+    expect(trigger, 'the level carries no goal rect, so nothing below is a measurement').not.toBeNull();
+    expect(typeof goal!.bounds.x).toBe('number');
+    expect(Math.round(goal!.bounds.x), 'the drawn gate is not where the trigger is').toBe(trigger!.x);
+    expect(Math.round(goal!.bounds.y), 'the drawn gate is not where the trigger is').toBe(trigger!.y);
   });
 });
 

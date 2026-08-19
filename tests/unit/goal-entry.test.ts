@@ -40,6 +40,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { DEATH_TICKS, damagePlayer } from '../../src/sim/combat';
 import { createSnapshot } from '../../src/sim/input';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { GOAL_ENTRY_TICKS, containedInGoal, overlapsGoal, stepGoalEntry } from '../../src/sim/goal';
@@ -173,7 +174,40 @@ function runToGate(world: World): number {
   throw new Error('the sequence never armed');
 }
 
+/**
+ * Run rightward with the attack button mashed on EVERY tick, including the arming one.
+ *
+ * 🔴 The arming tick is the one tick the lock does not cover, and that is by construction, not by
+ * oversight: `entryLocked` is read once after step 0, and 9d — where the arming happens — is the
+ * last thing in the tick. So on tick N the courier is still an ordinary player and can swing.
+ * Raised by the gate's adversarial QA brief as a possible hole. It is not one, and this pins why:
+ * `movementLocked` covers `death` and `hurt` only, so an attack in flight never stalls the auto-run,
+ * and the edge is consumed by `stepCombat` on that same tick exactly as it would be at any other
+ * time — nothing is left latched to fire into the next level *(vault 2.4)*.
+ */
+function runToGateMashing(world: World): void {
+  for (let i = 0; i < 600; i += 1) {
+    const input = neutral();
+    input.right = true;
+    input.attackPressed = true;
+    tick(world, input);
+    if (typeof world.goalEntryTicks === 'number') return;
+  }
+  throw new Error('the sequence never armed');
+}
+
 describe('the run-in sequence', () => {
+  it('an attack on the ARMING tick changes neither the window nor where it ends', () => {
+    const world = makeWorld();
+    runToGateMashing(world);
+    expect(world.goalEntryTicks).toBe(0);
+
+    for (let i = 0; i < GOAL_ENTRY_TICKS; i += 1) tick(world, neutral());
+    expect(world.goalEntryTicks, 'the same window, not a longer one').toBe(GOAL_ENTRY_TICKS);
+    expect(world.completed, 'and it still completes on that tick').toBe(true);
+    expect(containedInGoal(world), 'a stalled auto-run would finish short of containment').toBe(true);
+  });
+
   it('arms on the tick of first overlap, and arming is not completing', () => {
     const world = makeWorld();
     const armedAt = runToGate(world);
@@ -260,6 +294,43 @@ describe('the cancel — the blocker Codex found', () => {
     tick(world, neutral());
     expect(world.goalEntryTicks, 'disarmed, so the respawned player is free').toBe(null);
     expect(world.completed).toBe(false);
+  });
+
+  /**
+   * The same claim, driven through the REAL death machine rather than asserted one tick in.
+   *
+   * 🔴 The test above writes `hp` and `state` by hand and reads the counter on the very next tick.
+   * That proves the cancel BRANCH fires; it does not prove the player is playable again, which is
+   * the thing G.4b actually claims. Between those two facts sit `DEATH_TICKS` of corpse, step 4c's
+   * `deathWindowClosed`, and `respawnPlayer` — none of which the hand-written version executes. A
+   * cancel that re-armed during the death window, or a respawn that left the lock on, would pass it.
+   * Raised by the gate's adversarial QA brief.
+   */
+  it('a REAL death and respawn leaves the player free, opaque and able to jump', () => {
+    const world = makeWorld();
+    runToGate(world);
+    expect(world.goalEntryTicks, 'premise: the run-in owns the body').toBe(0);
+
+    damagePlayer(world.player, world.player.maxHp);
+    // The whole corpse window plus the respawn tick, driven one tick at a time. The counter must
+    // be null on every one of them — a re-arm anywhere in here is the unwinnable-level defect.
+    for (let i = 0; i <= DEATH_TICKS + 1; i += 1) {
+      tick(world, neutral());
+      expect(world.goalEntryTicks, `death tick ${i}`).toBe(null);
+    }
+
+    expect(world.player.x, 'respawned at the spawn point, not at the door').toBe(SPAWN.x);
+    expect(world.player.hp).toBe(world.player.maxHp);
+    expect(world.completed).toBe(false);
+
+    // Playable: land, then jump. A player still holding the run-in's lock cannot leave the ground.
+    for (let i = 0; i < 40; i += 1) tick(world, neutral());
+    expect(world.player.grounded, 'premise: back on the floor').toBe(true);
+    const input = neutral();
+    input.jumpPressed = true;
+    input.jumpHeld = true;
+    tick(world, input);
+    expect(world.player.grounded, 'the respawned player can still jump').toBe(false);
   });
 
   it('being knocked clean out of the gate cancels it, so nobody fades in open air', () => {
