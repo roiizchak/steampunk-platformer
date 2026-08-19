@@ -118,6 +118,38 @@ _Recorded at Task 10._
 
 ---
 
+## Red proofs — every new gate watched failing *(C1)*, every mutation confirmed reverted *(C12)*
+
+### `level-goal-fits.test.ts` — and the finding that Codex's "future-proofing" objection was wrong
+
+**Mutation:** `level-01.tmj`'s goal rect height `288 → 240`, applied by editing the **parsed JSON**,
+not by a text substitution.
+
+🔴 **The planned text mutation would have changed zero bytes.** It grepped `"height":288`; the
+shipped file writes `"height": 288`, with a space. Codex's plan review (C5) caught it and it was
+verified here before anything ran: **6 matches for the real pattern, 0 for the planned one.** A
+"watched it go red" record taken from that run would have been false — which is precisely why the
+rule is *content changed AND the original count dropped by one*, and never *the count is now zero*.
+
+| | |
+|---|---|
+| before | `grep -c '"height": 288'` → **6** |
+| mutation landed | `cmp` reports the file differs → **yes** |
+| after | **5** — dropped by exactly one, not to zero |
+| gate red | `Tests 2 failed`, naming `level-01 is EXACTLY body-tall` and `level-01 has a solid whose top edge is flush with the exit bottom` |
+| reverted | `git diff --quiet` clean → **byte-for-byte**; count back to **6** |
+| green again | `Tests 95 passed` across both files |
+
+**And the mutated level is genuinely unwinnable.** With the 240 px exit,
+`level-completable.test.ts` fails on **all three seeds** (8201, 8202, 8203) — the solver plays the
+real `tick()` over the real shipped bytes and can never finish. That retires Codex's C11 objection
+(*"future-proofing, not current delivery"*) with evidence rather than argument: the failure this
+ten-line file prevents is a shipped level that loads, validates, draws its door and cannot be
+completed, and **no other gate in this repository sees it** — `level-goal.test.ts` passes it,
+because one rect of positive size far from the spawn is all it ever asked for.
+
+---
+
 ## The 400-line rule — one exemption, written before it was taken
 
 `SIZE-EXEMPTION: src/sim/tick.ts lines=422`
