@@ -120,6 +120,30 @@ _Recorded at Task 10._
 
 ## Red proofs — every new gate watched failing *(C1)*, every mutation confirmed reverted *(C12)*
 
+### The fade curve — three mutations, and only one test does the work
+
+**Target:** `goalEntryAlpha` in `src/render/playerView.ts`. Driven from the shell, never from a
+Node script. `GOAL_ENTRY_TICKS` occurrences dropped **2 → 1** on every mutation, and the file was
+restored with `cmp` confirming byte-for-byte equality afterwards *(C12)*.
+
+| | mutation | `Tests N failed` | which tests caught it |
+|---|---|---|---|
+| **A** | delete the fade — `return 1` | **3 failed** | per-tick curve · monotonic · reaches 0 |
+| **B** | make it instant — `return 0` | **2 failed** | per-tick curve · monotonic |
+| **C** | **quadratic** — `1 - (t/N)²` | **1 failed** | per-tick curve **only** |
+
+🔴 **Mutation C is the one worth keeping.** A quadratic ramp agrees with the linear one at tick 0
+*and* at tick `N`, and is monotonically decreasing throughout — so **both endpoint assertions and
+the monotonicity assertion pass it**, and the character visibly fades on a different schedule. Only
+`pins the alpha at EVERY tick of the ramp` sees it.
+
+That is the concrete form of the rule this project keeps re-learning: *"the endpoints are worthless
+on their own."* Mutation B makes the same point from the other side — with an instant fade, the
+test named `reaches exactly 0 at GOAL_ENTRY_TICKS` **still passes**, because a sprite that vanished
+immediately is also a sprite that is invisible at the end. A gate asserting the end state of a fade
+cannot tell a fade from a disappearance, and *"the player is invisible at the end" is true of a
+sprite that was never drawn.*
+
 ### `level-goal-fits.test.ts` — and the finding that Codex's "future-proofing" objection was wrong
 
 **Mutation:** `level-01.tmj`'s goal rect height `288 → 240`, applied by editing the **parsed JSON**,
