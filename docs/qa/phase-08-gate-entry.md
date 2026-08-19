@@ -204,6 +204,51 @@ Stated rather than glossed.
 
 ## Red proofs — every new gate watched failing *(C1)*, every mutation confirmed reverted *(C12)*
 
+### The e2e spec — and the harness trap it walked into from the wrong end
+
+**Mutation:** delete `sprite.setAlpha(desc.alpha)` from `gamePlayerDraw.ts`, so the fade is computed
+and never reaches the screen. `setAlpha` occurrences **1 → 0**, `cmp` confirms the file changed,
+`git diff --quiet` confirms it restored.
+
+**Red:** `1 failed`, naming
+`fades to 0 over many frames, plays run throughout, and never pops back`, on
+`the courier was never drawn PARTIALLY faded — that is a blink-out, not a fade`. Restored: `3 passed`.
+
+That mutation is the one this spec exists for. `player-view.test.ts` stays **completely green**
+through it, because the descriptor is still correct — only nothing applies it. It is the same shape
+as Phase 2's *deleting `renderPlayer()` left every test green*.
+
+#### 🔴 Two false reds before that, both the harness rather than the feature
+
+**1. The bound was unmeasurable in this project.** The first version counted *distinct alphas per
+animation frame* and required more than five. It failed on the real build with **one**. The headless
+project renders at roughly **11 fps** against a fixed 60 Hz sim, so one frame drains five or six
+ticks and the entire 20-tick ramp spans about **three animation frames** — there are not five frames
+in the window to have five alphas in.
+
+This is the project's oldest measurement trap arriving from the opposite end. Phase 7 learned that
+at ~240 fps a percentile over rAF frames cannot see a cost carried by 2 % of frames; here, at ~11
+fps, a per-frame sampler cannot see a ramp lasting a third of a second.
+
+**The bound was not lowered to fit the harness — the statistic was replaced** *(the rule from
+2026-08-19: a statistic that cannot order its own mutation cannot be fixed by moving the bound)*.
+The claim is now:
+
+> every alpha the sprite is ever drawn with is a value **on** the ramp (`1 − k/20` for whole `k`),
+> it never increases, and at least one is strictly between 0 and 1.
+
+That holds at 11 fps and at 240 fps, it is what the fade actually claims, and it still refuses an
+instant blink, a wrong curve and a pop-back. Pairing each alpha with the counter read in the same
+callback was rejected: the sampler and Phaser's update run in an unspecified order within a frame,
+so the pair can skew by one tick through no fault of the code under test.
+
+**2. The sampler measured an empty window.** `playToExit` waits on `world.completed`, so a sampler
+installed *after* it returns begins life on a finished level. It saw one alpha (`0`), a counter
+frozen at 20, and reported *"never drawn partially faded"* — **a true statement about a window it
+had entirely missed**, indistinguishable from a real blink-out defect. Fixed by installing the
+sampler before the drive. Worth stating plainly: **two of the three shape assertions were red
+against a feature that works**, and the difference was five lines of ordering.
+
 ### The shipped art — three mutations, three different ways to be wrong
 
 **Target:** `public/assets/objects/gate.png`, mutated as bytes and re-run against
