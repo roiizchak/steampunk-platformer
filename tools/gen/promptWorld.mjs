@@ -251,3 +251,84 @@ export function parallaxPrompt(template, depth) {
   ].join('\n');
 }
 
+
+/**
+ * The level EXIT — the gate-entry session's one generation.
+ *
+ * `2:3` and downscaled to exactly `192 x 288`, because that is the goal rect in all five shipped
+ * `.tmj` files. Authored at the size it draws at, like every other sprite here: at `CAMERA_ZOOM` 1
+ * nothing scales between the file and the screen, which is what makes "readable at true sprite
+ * size" testable rather than a range.
+ *
+ * ## 🔴 THE OPENING IS LOAD-BEARING, NOT DECORATION
+ *
+ * The player fades to alpha 0 *inside* this doorway. If the model renders the opening as a real
+ * hole onto the chroma field, `keyOut` punches straight through it and the character fades into a
+ * transparent gap showing the parallax behind — the exact opposite of vanishing into a dark
+ * passage. So the interior is named as SOLID NEAR-BLACK, exhaustively, in the same style
+ * `hudPrompt`'s anti-segmentation clause uses and for the same reason: this model obeys a named
+ * element and ignores an adjective, and it has many words for "opening".
+ *
+ * `tests/unit/shipped-gate.test.ts` measures the finished file's interior opacity, because the
+ * one-component check in `buildGate` cannot see this: a doorway whose interior keyed away comes
+ * back as a FRAME — a ring, still exactly one connected component, still 192 x 288.
+ *
+ * ## Why no brass-cap separation rule
+ *
+ * STYLE.md §5 rule ONE is about standable surfaces. A doorway is not standable and the player walks
+ * THROUGH it, so capping it in brass would make it read as a platform — the one thing the rule
+ * exists to prevent. Rule TWO (temperature) does apply and is carried by the warm brass frame
+ * against the near-black void. Named here rather than silently skipped *(vault 9.3)*.
+ */
+export function gatePrompt(template) {
+  const rendering = templateBlock(template, 'RENDERING');
+  const forbid = templateBlock(template, 'DO NOT INCLUDE');
+  return [
+    'A single ornate Victorian steampunk doorway, drawn as one isolated game object on a flat ' +
+      'background. Seen straight on, face to the viewer, no perspective, no tilt. It stands ' +
+      'upright and is TALLER THAN IT IS WIDE, filling the frame vertically.',
+    '',
+    'THE DOORWAY FRAME: a heavy riveted wrought-iron portal with a polished brass arch across the ' +
+      'top and brass edging down both jambs. Named element by element: a row of dome rivets down ' +
+      'each jamb, two round pressure gauges with white dials set into the left jamb, a brass lever ' +
+      'and a valve wheel on the right jamb, copper pipework running up both sides and over the ' +
+      'lintel, and one hanging lamp with a warm amber glow above the arch. Engraved filigree on ' +
+      'the brass, patina and soot in the recesses.',
+    '',
+    // The clause the whole feature depends on. Exhaustive, because the model has many words for
+    // "opening" and only one of them has to land for the void to key away.
+    'CRITICAL — THE OPENING: the interior of the doorway is filled with SOLID NEAR-BLACK DARKNESS, ' +
+      'an unlit passage receding into shadow. It is COMPLETELY OPAQUE and covers every pixel ' +
+      'inside the frame. Nothing behind the doorway is visible through it. It is NOT an open hole, ' +
+      'NOT a gap, NOT a window, NOT a cut-out, NOT transparent, NOT see-through, NOT the ' +
+      'background colour and NOT green. There is no scenery, no sky, no room and no floor visible ' +
+      'inside it — only darkness, with the faintest cool rim-light picking out the inner edge of ' +
+      'the frame.',
+    '',
+    'CRITICAL SILHOUETTE: it must read instantly as a DOORWAY from its outline alone at small ' +
+      'size — an upright rectangular portal with a dark interior, one continuous frame all the way ' +
+      'around, standing on its own. It is ONE doorway, complete and centred, not part of a wall ' +
+      'and not overlapping anything.',
+    '',
+    // 🔴 The margin clause is a GATE requirement, not framing taste. `estimateKeyColour` measures
+    // the key from the image's own border and REFUSES an image whose border is not uniform — and
+    // take 1 put the doorway flush against the bottom edge, so that row came back **5.5 % green**
+    // against 97.8 / 100 / 96.1 on the other three and the build stopped. The refusal was correct
+    // and was not worked around: this clause is the fix, and it names the bottom explicitly
+    // because that is the edge a doorway naturally runs off.
+    'BACKGROUND AND MARGIN: one flat uniform chroma green field, RGB 0 255 0, edge to edge behind ' +
+      'everything. CRITICAL: the doorway and EVERYTHING attached to it — the lamp, its chain, the ' +
+      'pipework, the gauges, the lever and the valve wheel — must sit COMPLETELY INSIDE the image ' +
+      'with a clear band of chroma green all the way around: above the lamp, BELOW THE BASE OF ' +
+      'THE DOORWAY, and outside the pipework on both the left and the right. Nothing touches or ' +
+      'runs off any edge of the image. Every one of the four outermost rows and columns of pixels ' +
+      'is pure chroma green. The chroma green does NOT show through the doorway opening itself. ' +
+      'No wall, no panel, no plate, no backing, no scene, no shadow, no floor.',
+    '',
+    rendering,
+    '',
+    `${forbid}, a second doorway, a door leaf, an open door, a doorknob, a person, a figure in ` +
+      'the doorway, a staircase, a room behind it, a wall around it, background scenery, ' +
+      'drop shadow, a brass-capped platform, a floor slab under the frame.',
+  ].join('\n');
+}

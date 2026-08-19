@@ -84,3 +84,57 @@ export function buildGear() {
   );
   return { width: scaled.width, height: scaled.height };
 }
+
+/**
+ * The level EXIT — the gate-entry session.
+ *
+ * `192 x 288` because that is the goal rect in all five shipped `.tmj` files, so `drawGoal`'s
+ * `setDisplaySize` is a no-op and the pixels are 1:1 at `CAMERA_ZOOM` 1 — the same "authored at the
+ * size it draws at" rule `buildGear` states above.
+ *
+ * ## 🔴 The one-component check matters MORE here than for the gear, and still is not enough
+ *
+ * A doorway whose dark interior keyed away would come back as a **frame**: a ring, which is still
+ * exactly ONE connected component, still 192 x 288, and still passes everything in this function.
+ * What ships is a see-through hole the player fades into instead of a dark passage — the whole
+ * point of the asset, silently inverted.
+ *
+ * So the real gate for that is `tests/unit/shipped-gate.test.ts`, which measures the FINISHED
+ * file's interior opacity, its two jambs and the frame-versus-void luminance. Vault 3.1 in its
+ * usual form: the unit suite runs the real validator over the shipped bytes.
+ *
+ * ## What take 1 cost, recorded because the refusal was correct
+ *
+ * Take 1 put the doorway flush against the bottom edge of the frame. `estimateKeyColour` measures
+ * the key from the image's own border and refused it — that row came back **5.5 %** background
+ * against 97.8 / 100 / 96.1 on the other three. **The gate was not weakened to accept it**; the
+ * prompt gained an explicit margin clause naming the bottom edge, and take 2 keys cleanly. The
+ * cost was one $0.15 generation, which is what the authorised retry is for.
+ */
+export function buildGate() {
+  const image = raw('gate');
+  const { key } = estimateKeyColour(image);
+  const keyed = removeSpecks(keyOut(image, { key }));
+  const rects = detectFrames(keyed, { minGap: 16, minExtent: 64 });
+  if (rects.length !== 1) {
+    throw new Error(
+      `assets:world: expected ONE gate, detected ${rects.length}. The prompt asks for a single ` +
+        `centred doorway that touches no edge; more than one component means it did not hold, and ` +
+        `the exit the player sees would be whichever piece happened to be first.`,
+    );
+  }
+  const r = rects[0];
+  const trimmed = crop(keyed, r.x, r.y, r.w, r.h);
+  // Straight to the goal rect. The keyed bounding box came back at 1636 x 2355 — a ratio of
+  // 0.6947 against the rect's 0.6667 — so this squashes the width by about 4 %, which is under the
+  // pixel grid at this size. Letterboxing instead was considered and rejected: it would put
+  // transparent margin inside a rect that is ALSO the trigger volume, so the drawn door would be
+  // narrower than the thing the player has to walk into.
+  const scaled = downscale(trimmed, 192, 288);
+  mkdirSync('public/assets/objects', { recursive: true });
+  writeFileSync('public/assets/objects/gate.png', encodePng(scaled.width, scaled.height, scaled.data));
+  console.log(
+    `ok  gate      1 object    ${r.w}x${r.h} -> ${scaled.width}x${scaled.height}  key(${key.join(',')})`,
+  );
+  return { width: scaled.width, height: scaled.height };
+}

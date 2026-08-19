@@ -84,6 +84,12 @@ and nothing else moves.**
 
 | [generations/phase-06-hud.md](generations/phase-06-hud.md) | Phase 6 — the gear pickup, and the HUD re-shot on the user's decision. Both first takes, both adopted. The re-shoot came back **413 × 128 where the retired plate was 305 × 128**, and every constant measured off the old one was wrong the moment it landed | `fal-ai/nano-banana-pro` | 2 · $0.30 |
 
+| [generations/session-gate.md](generations/session-gate.md) | The gate-entry session — the level exit. Take 1 was REFUSED by the keying gate for running flush off the bottom edge (5.5 % background on that row against 97.8/100/96.1); the gate was not weakened, the prompt gained a margin clause naming that edge, and take 2 keyed at a measured `(3,149,41)` — **not** the `(0,255,0)` asked for | `fal-ai/nano-banana-pro` | 2 · $0.30 |
+
+**Running total after the gate-entry session: $47.91 quoted.** (Phase 6 closed at $47.61.)
+
+🔴 **The ceiling is recorded twice and the two disagree** — [PRD.md](PRD.md) Global Constraints say **$50**, the line below says **$55**. $0.30 fits under either, so the gate-entry session proceeded and named the contradiction rather than picking a winner. **Which number is current is the owner's call.**
+
 **Running total after Phase 6: $47.61 of the $55 ceiling. $7.39 remains.**
 
 > 🔴 This line read **"25 generations, $23.51 of the $40 ceiling"** until 2026-08-14 — stale by two
