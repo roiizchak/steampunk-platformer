@@ -42,7 +42,7 @@
 import { describe, expect, it } from 'vitest';
 import { createSnapshot } from '../../src/sim/input';
 import { PLAYER_BOX } from '../../src/sim/player';
-import { GOAL_ENTRY_TICKS, containedInGoal, overlapsGoal } from '../../src/sim/goal';
+import { GOAL_ENTRY_TICKS, containedInGoal, overlapsGoal, stepGoalEntry } from '../../src/sim/goal';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { InputSnapshot, Rect, World } from '../../src/sim/types';
 
@@ -114,6 +114,44 @@ describe('the gate edge is not the gate', () => {
     world.player.hp = 0;
     expect(overlapsGoal(world)).toBe(false);
     expect(containedInGoal(world)).toBe(false);
+  });
+
+  /**
+   * 🔴 **`stepGoalEntry` USES containment, and nothing else in this suite could prove it.**
+   *
+   * Found by the qa-expert's adversarial brief and confirmed by mutation: replacing
+   * `containedInGoal` with `overlapsGoal` inside `stepGoalEntry`'s completion test left **all 1933
+   * tests green**. The whole point of this session — that you finish by being INSIDE the door, not
+   * by touching it — had no gate that could see it violated.
+   *
+   * Every other test in this file drives the sim, and the auto-run carries the player to the gate's
+   * centre well before the counter matures. By tick 20 overlap and containment are both true, so
+   * the two predicates agree and the swap is invisible. The predicate tests above catch a broken
+   * `containedInGoal` in isolation, but nothing proved `stepGoalEntry` was calling it.
+   *
+   * The fix is to call the step DIRECTLY, with the counter already mature and the body parked
+   * somewhere the two predicates disagree — which is exactly the gate's edge.
+   */
+  it('stepGoalEntry completes on CONTAINMENT, not on overlap, once the counter has matured', () => {
+    const world = standingAt(GOAL.x - BODY_W / 2 + 1);
+    // Premise, stated so this cannot pass by the two predicates quietly agreeing.
+    expect(overlapsGoal(world), 'premise: the body touches the rect').toBe(true);
+    expect(containedInGoal(world), 'premise: and is NOT inside it').toBe(false);
+
+    world.goalEntryTicks = GOAL_ENTRY_TICKS;
+    expect(
+      stepGoalEntry(world),
+      'a matured counter plus mere overlap must NOT complete the level',
+    ).toBe(false);
+  });
+
+  it('stepGoalEntry DOES complete once the same matured counter is genuinely contained', () => {
+    // The positive half, so the test above cannot be satisfied by a `stepGoalEntry` that never
+    // returns true at all.
+    const world = standingAt(CENTRE);
+    expect(containedInGoal(world)).toBe(true);
+    world.goalEntryTicks = GOAL_ENTRY_TICKS;
+    expect(stepGoalEntry(world)).toBe(true);
   });
 });
 
