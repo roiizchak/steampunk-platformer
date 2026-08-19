@@ -1,17 +1,45 @@
-# Session handoff — Phase 7 (audio)
+# Session handoff — the bug-fix + perf-gate session
 
 > ## 👉 Resuming? Read [handoff/next-session-prompt.md](handoff/next-session-prompt.md) first.
 >
-> **Phase 7 is done, merged and pushed** (`main` at `3f46c7f`, 2026-08-16). Phases 1–7 are ✅.
+> **Phases 1–8 are ✅.** The owner played the shipped Phase 8 build, reported three bugs, and scoped
+> one session to those plus the two perf gates blocking Phase 9. All five are done.
+> **Phase 9 is unblocked.**
 >
-> The next session is **scoped by the owner to exactly four items** — three gate defects plus
-> criterion 4.23, which is red on `main` — and explicitly **not** to Phase 8. That file is the whole
-> brief; everything below it is history.
+> That file is the whole brief — including the three perf numbers Phase 9 will be judged against and
+> what each of them cannot see. Everything below it is history.
 >
-> Phase 7's own record: [qa/phase-07-audio.md](qa/phase-07-audio.md) ·
-> [qa/phase-07-audio-02-gate-owners.md](qa/phase-07-audio-02-gate-owners.md) ·
-> [reviews/phase-07-impl.md](reviews/phase-07-impl.md) ·
-> [generations/phase-07-audio.md](generations/phase-07-audio.md)
+> This session's record: [qa/session-bugfix-perf-gates.md](qa/session-bugfix-perf-gates.md) ·
+> [-02-gate-owners.md](qa/session-bugfix-perf-gates-02-gate-owners.md) ·
+> [-03-hands-on.md](qa/session-bugfix-perf-gates-03-hands-on.md) ·
+> [reviews/session-bugfix-perf-gates-plan.md](reviews/session-bugfix-perf-gates-plan.md) ·
+> [reviews/session-bugfix-perf-gates-impl.md](reviews/session-bugfix-perf-gates-impl.md)
+
+## 19. The bug-fix + perf-gate session — 2026-08-19. **This section supersedes §18.**
+
+Three user-reported bugs and the two perf gates that blocked Phase 9. Verified at the end: typecheck ·
+**1882** unit tests · **1882** with Phaser uninstalled · `build` + `verify-dist` clean · **102** e2e ·
+**all five levels played by hand to completion, 0 deaths, 0 hazard contacts**.
+
+**What the process caught that the code did not.** The three bugs were the easy part. Six gate-owner
+briefs found **16 defects in the session's own work** — including that the enemy body's *height* was
+completely unmeasured (the whole suite stayed green with a 1 px tall enemy), and that the boot gate and
+the sim disagreed by one `patrolSpeed`. The Codex implementation review then found two more that all
+six briefs had missed:
+
+- `FOOT_TOLERANCE_PX` was applied to the hazard and gear tests as well as the solid test, so a spike
+  one pixel under a creature's sole **passed the gate** while reading on screen as exactly the
+  reported bug.
+- 6.9's absolute HUD-work bound **claimed 1 ms in its docstring and permitted 5.557 ms in code**, and
+  had never been watched failing — because the only mutation that existed was a scrim, and a scrim
+  costs the CPU nothing. It survived a performance owner whose entire job was that spec, because every
+  brief read the *statistic* and none read the *assertion*.
+
+**Two new testing rules came out of it**, both in [TESTING-RULES.md](TESTING-RULES.md) and
+[CLAUDE.md §5](../CLAUDE.md): a perf bound chosen from one set of runs must be **confirmed on a
+held-out set** (it caught an overfit on *both* gates), and **a statistic that cannot order its own
+mutation cannot be fixed by moving the bound** — replace the statistic.
+
 
 ## 18. Phase 7 — 2026-08-16. **This section supersedes §17.**
 

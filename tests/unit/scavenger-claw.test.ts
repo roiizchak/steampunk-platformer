@@ -20,7 +20,8 @@ import {
 } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
-import { attackInProgress, releaseAggro, stepScavenger } from '../../src/sim/enemies';
+import { attackInProgress, releaseAggro, scavengerFooting, stepScavenger } from '../../src/sim/enemies';
+import { RENDER_SCALE } from '../../src/game/constants';
 import type { World } from '../../src/sim/types';
 
 const IDLE = createSnapshot();
@@ -179,7 +180,8 @@ describe('the scavenger claw is live on exactly its active ticks, and nowhere el
  */
 describe('the swing only fires at a player it has actually seen and can actually reach', () => {
   const AT = (x: number, y: number) => ({ playerX: x, playerY: y });
-  const EVERYWHERE = { solids: [{ x: -100000, y: 200, w: 200000, h: 100 }], halfWidthPx: 60 };
+  // Through the factory, so the body's width and height have ONE definition (vault 5.3).
+  const EVERYWHERE = scavengerFooting([{ x: -100000, y: 200, w: 200000, h: 100 }], RENDER_SCALE);
 
   function swingsIn(scav: ReturnType<typeof createScavenger>, at: { playerX: number; playerY: number }, ticks: number): number {
     let swings = 0;
@@ -251,7 +253,7 @@ describe('the swing only fires at a player it has actually seen and can actually
  */
 describe('R5 — releasing aggro also ends any swing in progress', () => {
   const AT_R5 = (x: number, y: number) => ({ playerX: x, playerY: y });
-  const GROUND_R5 = { solids: [{ x: -100000, y: 200, w: 200000, h: 100 }], halfWidthPx: 60 };
+  const GROUND_R5 = scavengerFooting([{ x: -100000, y: 200, w: 200000, h: 100 }], RENDER_SCALE);
 
   it('a scavenger mid-swing is no longer mid-swing once aggro is released', () => {
     const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });

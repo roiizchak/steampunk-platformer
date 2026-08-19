@@ -1515,6 +1515,8 @@
         0,
         0,
         0,
+        0,
+        0,
         13,
         0,
         0,
@@ -1622,8 +1624,6 @@
         0,
         0,
         0,
-        0,
-        0,
         1,
         1,
         1,
@@ -2160,15 +2160,11 @@
         13,
         13,
         0,
-        0,
-        0,
+        13,
+        13,
         0,
         1,
         1,
-        0,
-        0,
-        0,
-        0,
         0,
         0,
         0,
@@ -2177,30 +2173,34 @@
         0,
         0,
         0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
         0,
         0,
         0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        13,
+        13,
+        13,
         0,
         0,
         0,
@@ -2958,13 +2958,49 @@
           "rotation": 0,
           "type": "",
           "visible": true,
+          "width": 192,
+          "x": 2592,
+          "y": 1824
+        },
+        {
+          "height": 96,
+          "id": 15,
+          "name": "",
+          "properties": [
+            {
+              "name": "hazard",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 288,
+          "x": 6240,
+          "y": 1824
+        },
+        {
+          "height": 96,
+          "id": 16,
+          "name": "",
+          "properties": [
+            {
+              "name": "hazard",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
           "width": 96,
-          "x": 5184,
+          "x": 5376,
           "y": 1248
         },
         {
           "height": 240,
-          "id": 15,
+          "id": 17,
           "name": "",
           "properties": [
             {
@@ -2976,13 +3012,13 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 480,
-          "x": 3072,
+          "width": 384,
+          "x": 3168,
           "y": 1680
         },
         {
           "height": 192,
-          "id": 16,
+          "id": 18,
           "name": "",
           "properties": [
             {
@@ -3000,7 +3036,7 @@
         },
         {
           "height": 240,
-          "id": 17,
+          "id": 19,
           "name": "",
           "properties": [
             {
@@ -3018,7 +3054,7 @@
         },
         {
           "height": 288,
-          "id": 18,
+          "id": 20,
           "name": "",
           "properties": [
             {
@@ -3036,7 +3072,7 @@
         },
         {
           "height": 0,
-          "id": 19,
+          "id": 21,
           "name": "",
           "point": true,
           "properties": [
@@ -3055,7 +3091,7 @@
         },
         {
           "height": 0,
-          "id": 20,
+          "id": 22,
           "name": "",
           "point": true,
           "properties": [
@@ -3074,7 +3110,7 @@
         },
         {
           "height": 0,
-          "id": 21,
+          "id": 23,
           "name": "",
           "point": true,
           "properties": [
@@ -3093,7 +3129,7 @@
         },
         {
           "height": 0,
-          "id": 22,
+          "id": 24,
           "name": "",
           "point": true,
           "properties": [
@@ -3112,7 +3148,7 @@
         },
         {
           "height": 0,
-          "id": 23,
+          "id": 25,
           "name": "",
           "point": true,
           "properties": [
@@ -3131,7 +3167,7 @@
         },
         {
           "height": 0,
-          "id": 24,
+          "id": 26,
           "name": "",
           "point": true,
           "properties": [
@@ -3150,7 +3186,7 @@
         },
         {
           "height": 0,
-          "id": 25,
+          "id": 27,
           "name": "",
           "point": true,
           "properties": [
@@ -3169,7 +3205,7 @@
         },
         {
           "height": 0,
-          "id": 26,
+          "id": 28,
           "name": "",
           "point": true,
           "properties": [
@@ -3195,7 +3231,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 27,
+  "nextobjectid": 29,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",

@@ -62,7 +62,9 @@ export const BLOAT_COPIES = 30000;
  * camera cull is supposed to make that free per frame, and until this bound existed nothing in the
  * criterion asked. `Sample` has carried `gpuMedianMs` since Phase 5; 8.7 simply never read it.
  *
- * 2, matching `MAX_HUD_GPU_RATIO` — the claim is "nearly free", not "measurably cheaper".
+ * 2. It used to say "matching `MAX_HUD_GPU_RATIO`"; that constant was DELETED on 2026-08-18 for
+ * failing to order its own mutation, and this 2 is now a bound in its own right rather than a
+ * borrowed one. The claim is "nearly free", not "measurably cheaper".
  */
 export const MAX_LEVEL_GPU_RATIO = 2;
 

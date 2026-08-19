@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS, MIN_SAMPLES } from './perfBudget';
+import { MIN_SAMPLES } from './perfBudget';
+import { MAX_AUDIO_FRAME_LOSS_RATIO, MAX_AUDIO_WORK_DELTA_MS } from './perfBudgetRepaired';
 import { sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
@@ -59,8 +60,39 @@ import { cuesPlayed, resetCues, startCueRecorder } from './audioHelpers';
  *    the comparison trustworthy even though neither figure alone is.
  */
 
-/** Three pairs, interleaved, so drift in the machine hits both arms alike. */
-const PAIRS = 3;
+/**
+ * Ten pairs, **alternating AB/BA**, so drift in the machine cancels instead of loading one arm.
+ *
+ * 🔴 Both halves changed on 2026-08-18 and both were Codex findings.
+ *
+ * The order used to be fixed `on` then `off` every pair, defended in a comment as *"holding that
+ * constant means the bias sits in both pairs the same way instead of cancelling into noise nobody
+ * can see"*. That is backwards: a constant bias does not cancel, it is **attributed to the
+ * treatment arm**, which is exactly what a paired design exists to prevent. Alternating means the
+ * first-position penalty is paid by `on` half the time and by `off` the other half.
+ *
+ * Three pairs was also too few for a median to mean anything. Six was ALSO too few, and finding
+ * that out cost a held-out run: at six the clean spread is 3.3 % wide and a bound chosen from six
+ * clean runs false-redded on the seventh. At ten it is 0.95 % wide and the mutation sits 8.9 %
+ * clear. See `MAX_AUDIO_FRAME_LOSS_RATIO` for the readings.
+ */
+const PAIRS = 10;
+
+/**
+ * The committed proving mutation, driven from the shell rather than by editing source:
+ *
+ * ```
+ * PERF_MUTATION=cue-stall npx playwright test tests/e2e/phase-07-perf.spec.ts
+ * ```
+ *
+ * It appends `?perfMutation=cue-stall`, which `src/game/audio.ts` reads (DEV ONLY, exactly as
+ * `?breakAsset=corrupt` is read) and turns into 30 ms of main-thread blocking per cue that plays.
+ * 30 ms is the figure this criterion's own docstring names, so it is the mutation the bound NAMES
+ * rather than a convenient one.
+ */
+declare const process: { env: Record<string, string | undefined> };
+
+const MUTATION = process.env.PERF_MUTATION ?? '';
 
 /**
  * 120 ticks — two seconds of running per window.
@@ -151,11 +183,11 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
   test('firing cues costs a bounded slice of the frame, and is provably firing while measured', async ({
     page,
   }) => {
-    // Arithmetic, not a loosened bound: six windows of 120 ticks is 12 s of deliberate sampling
+    // Arithmetic, not a loosened bound: twenty windows of 120 ticks is 40 s of deliberate sampling
     // before the resets and settles between them are counted. Boot stays bounded by BOOT_TIMEOUT.
     test.setTimeout(180_000);
 
-    await bootToGame(page);
+    await bootToGame(page, MUTATION === '' ? '' : `?perfMutation=${MUTATION}`);
 
     // 🔴 The renderer, before any number is trusted. SwiftShader inflates this harness's
     // milliseconds ~21x (HANDOFF §14), and while a ratio survives that, a spec that silently fell
@@ -190,11 +222,18 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
       off: { work: [], frames: [], ticks: [], rate: [], cues: [] },
     };
 
+    /**
+     * ⚠️ **No discarded warm-up window here, unlike `phase-06-perf.spec.ts`**, which throws away one
+     * HUD-on sample before its loop so the first measured arm is not the one on cold JIT. Raised by
+     * the adversarial brief as a structural inconsistency between two specs that otherwise share a
+     * design. Measured before acting on it: pair 0's ratio read 0.998, 1.000 and 0.998 across three
+     * clean runs — indistinguishable from later pairs, so there is no bias to remove. Left as it is,
+     * and recorded, rather than adding a window that costs 4 s per run and fixes nothing.
+     */
     for (let pair = 0; pair < PAIRS; pair += 1) {
-      // Interleaved within the pair, and the order is fixed rather than alternating: a machine that
-      // warms up over the run biases whichever arm goes first, and holding that constant means the
-      // bias sits in both pairs the same way instead of cancelling into noise nobody can see.
-      for (const arm of ['on', 'off'] as const) {
+      // AB on even pairs, BA on odd. See `PAIRS` for why the fixed order it replaces was wrong.
+      const order = pair % 2 === 0 ? (['on', 'off'] as const) : (['off', 'on'] as const);
+      for (const arm of order) {
         await setAudio(page, arm === 'on');
         await resetRun(page, start);
         await resetCues(page);
@@ -260,13 +299,23 @@ test.describe('Phase 7 — criterion 7.7, the audio frame budget', () => {
     const delta = on - off;
     // Frames per sim tick, so a window that happened to span an extra tick does not read as a
     // machine that served extra frames. See the `arms` docstring for the run that proved it.
-    const rateOn = median(arms.on.rate);
-    const rateOff = median(arms.off.rate);
-    const frameLoss = rateOn > 0 ? rateOff / rateOn : Infinity;
+    /**
+     * 🔴 **PAIRED, and that is the change that made this statistic work.**
+     *
+     * It used to be `median(off.rate) / median(on.rate)` — a ratio of two medians taken across the
+     * whole run. That discards the pairing the design already pays for: each pair's two windows run
+     * seconds apart on the same machine in the same state, so their ratio cancels drift that the
+     * two independent medians carry straight through. Measured, the difference is not subtle: with
+     * medians-of-medians the clean and mutated runs read 0.9633x and 1.0469x, and every earlier
+     * session's clean spread swamped that gap. Per-pair, the same two runs separate with no overlap
+     * at all — clean pairs top out at 1.000 and mutated pairs bottom out at 1.025.
+     */
+    const pairRatios = arms.on.rate.map((r, i) => (r > 0 ? arms.off.rate[i]! / r : Infinity));
+    const frameLoss = median(pairRatios);
     const fmtRate = (r: number[]): string => r.map((v) => v.toFixed(3)).join('/');
     const detail =
       `frames/tick ${fmtRate(arms.on.rate)} with audio vs ${fmtRate(arms.off.rate)} without ` +
-      `(loss ${frameLoss.toFixed(4)}x) | raw frames ${arms.on.frames.join('/')} vs ` +
+      `(pair ratios ${fmtRate(pairRatios)}; median loss ${frameLoss.toFixed(4)}x) | raw frames ${arms.on.frames.join('/')} vs ` +
       `${arms.off.frames.join('/')} over ticks ${arms.on.ticks.join('/')} vs ` +
       `${arms.off.ticks.join('/')} | median work ${on.toFixed(3)} vs ${off.toFixed(3)} ms ` +
       `(delta ${delta.toFixed(3)}) | cues/window ${arms.on.cues.join('/')} vs ` +

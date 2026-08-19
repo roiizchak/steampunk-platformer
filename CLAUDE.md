@@ -188,6 +188,10 @@ Each rule below cost a real false green or false red. **The evidence for every o
   about assertions.
 - **Verify a mutation applied by "content changed AND the original count dropped by one"** — never by
   "the count is now zero" *(C12)*.
+- **A perf bound is chosen on one set of runs and confirmed on a HELD-OUT set.** Both gates fixed on
+  2026-08-18 false-redded on the first run that had no say in their bound.
+- **A statistic that does not order its own mutation cannot be fixed by moving the bound** — replace
+  the statistic. 6.9's GPU ratio put five full-screen scrims below a clean run.
 - **A non-zero exit code is not evidence a gate caught anything.** Detect redness *positively*, from
   `Tests N failed` plus named specs. Drive mutation loops from the shell, never from a Node script.
 - **Assert the type before the value** in e2e.

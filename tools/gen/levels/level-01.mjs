@@ -77,7 +77,11 @@ export const level01 = {
    * what makes "the drawn spikes hurt" true by construction. Phase 4 shipped the run drawn and harmless
    * from two lists that had drifted.
    */
-  spikes: [{ fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 }],
+  spikes: [
+    { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 27, toCol: 28, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 42, toCol: 44, row: GROUND_TOP_ROW - 1 },
+  ],
 
   /**
    * A rectangle says all of it: its horizontal span IS the patrol beat, its bottom edge is where the
@@ -89,7 +93,7 @@ export const level01 = {
    * authored over the gap refuses to boot rather than walking on air.
    */
   enemies: [
-    { slug: 'brass-sentry', fromCol: 56, toCol: 60, standRow: 14, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 57, toCol: 59, standRow: 14, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 78, toCol: 88, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
   ],
 
@@ -108,7 +112,7 @@ export const level01 = {
     { col: 22, row: 19 },
     { col: 40, row: 18 },
     { col: 51, row: 16 },
-    { col: 58, row: 13 },
+    { col: 61, row: 13 },
     { col: 65, row: 16 },
   ],
 

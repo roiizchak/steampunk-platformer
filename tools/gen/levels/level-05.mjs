@@ -58,11 +58,11 @@ export const level05 = {
 
   // 9 tiles of spikes = 864 px.
   spikes: [
-    { fromCol: 20, toCol: 21, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 64, toCol: 65, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 20, toCol: 22, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 97, toCol: 98, row: GROUND_TOP_ROW - 1 },
     { fromCol: 100, toCol: 101, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 134, toCol: 135, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 51, toCol: 51, row: 12 },
+    { fromCol: 134, toCol: 136, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 53, toCol: 53, row: 12 },
   ],
 
   /**
@@ -74,11 +74,11 @@ export const level05 = {
    */
   enemies: [
     { slug: 'rust-scavenger', fromCol: 36, toCol: 38, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
-    { slug: 'brass-sentry', fromCol: 48, toCol: 52, standRow: 13, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 49, toCol: 51, standRow: 13, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 72, toCol: 74, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
-    { slug: 'brass-sentry', fromCol: 84, toCol: 88, standRow: 13, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 85, toCol: 87, standRow: 13, tilesTall: 2 },
     { slug: 'rust-scavenger', fromCol: 108, toCol: 110, standRow: GROUND_TOP_ROW, tilesTall: 2.5 },
-    { slug: 'brass-sentry', fromCol: 147, toCol: 153, standRow: 17, tilesTall: 2 },
+    { slug: 'brass-sentry', fromCol: 149, toCol: 151, standRow: 17, tilesTall: 2 },
   ],
 
   gears: [
@@ -87,12 +87,12 @@ export const level05 = {
     { col: 18, row: 20 },
     { col: 33, row: 19 },
     { col: 43, row: 16 },
-    { col: 52, row: 12 },
+    { col: 47, row: 12 },
     { col: 69, row: 19 },
-    { col: 86, row: 12 },
+    { col: 89, row: 12 },
     { col: 105, row: 19 },
     { col: 122, row: 12 },
-    { col: 150, row: 16 },
+    { col: 153, row: 16 },
   ],
 
   spawnCol: 6,

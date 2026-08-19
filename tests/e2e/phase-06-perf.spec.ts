@@ -51,21 +51,41 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { installGpuTimer } from './gpuTimer';
 import {
-  MAX_HUD_GPU_RATIO,
-  MAX_HUD_WORK_DELTA_MS,
   MAX_HUD_WORK_RATIO,
   MIN_GPU_SAMPLES,
   MIN_SAMPLES,
   SAMPLE_TICKS,
 } from './perfBudget';
+import {
+  MAX_HUD_FRAME_WORK_MS,
+  MAX_HUD_GPU_DELTA_MS,
+  MAX_HUD_WORK_DELTA_MS,
+} from './perfBudgetRepaired';
 import { counts, sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import { bootToGame, currentTick, readPlayer, waitTicks } from './gameHarness';
+import { assertHudWasDrawing } from './hudDrawGuards';
 import { hudDrawState, setHud } from './hudHelpers';
+import { addHudWork, hudWorkMs, addScrims, scrimCount } from './scrimMutation';
 import { shippedLevel } from './tilemapHelpers';
 
 /** Three pairs. Interleaved, so drift in the machine hits both arms alike. */
-const PAIRS = 3;
+declare const process: { env: Record<string, string | undefined> };
+
+/**
+ * The committed proving mutation for this criterion, driven from the shell:
+ *
+ * ```
+ * PERF_MUTATION=scrim3 npx playwright test tests/e2e/phase-06-perf.spec.ts --project=chromium-gpu
+ * ```
+ *
+ * See `scrimMutation.ts` for what it draws and why it is committed rather than hand-built.
+ */
+const SCRIMS = scrimCount(process.env.PERF_MUTATION ?? '');
+/** 6.9's main-thread proving mutation, e.g. `PERF_MUTATION=hudwork2`. See `addHudWork`. */
+const HUD_WORK_MS = hudWorkMs(process.env.PERF_MUTATION ?? '');
+
+const PAIRS = 10;
 
 /**
  * The right edge of the FIRST hazard right of spawn, measured from the level the browser just loaded.
@@ -100,11 +120,11 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * ⚠️ Raised from Playwright's 30 s default, and this is NOT the loosened-bound anti-pattern the
      * config warns about. That warning is about `BOOT_TIMEOUT` — a bound loose enough to survive a
      * contended dev server is loose enough to hide a genuine boot hang. This budget is arithmetic:
-     * six `SAMPLE_TICKS` windows plus a discarded warm-up is 7 x 3 s of *deliberate* sampling
+     * twenty `SAMPLE_TICKS` windows plus a discarded warm-up is 21 x 3 s of *deliberate* sampling
      * before the walk to the hazard is counted. Boot is still bounded by `BOOT_TIMEOUT` inside
      * `bootToGame`, and every wait below is a condition, never a sleep.
      */
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
 
     await bootToGame(page);
 
@@ -151,85 +171,42 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     expect(player, 'no player after the walk').not.toBeNull();
 
     await installGpuTimer(page);
+    // Once, before the loop: `Game` is never stopped, and the whole point of this mutation is that
+    // it runs in BOTH arms. See `addHudWork`.
+    if (HUD_WORK_MS > 0) await addHudWork(page, HUD_WORK_MS);
     // A discarded warm-up so the first measured arm is not the one running on cold JIT.
     await setHud(page, true);
     await sample(page, SAMPLE_TICKS);
 
-    // ---- three interleaved pairs -------------------------------------------------------------
+    // ---- ten interleaved AB/BA pairs -------------------------------------------------------------
     const on: Awaited<ReturnType<typeof sample>>[] = [];
     const off: Awaited<ReturnType<typeof sample>>[] = [];
 
     for (let i = 0; i < PAIRS; i += 1) {
+      /**
+       * 🔴 **AB on even pairs, BA on odd**, so warm-up and directional drift cancel instead of
+       * being attributed to whichever arm always went first. The fixed `on`-then-`off` order this
+       * replaces was the same defect criterion 7.7 carried, found by the same Codex review, and it
+       * matters more here: 6.9's two arms differ by ~0.001 ms against a ~0.13 ms baseline, so a
+       * systematic first-position penalty is large next to the signal.
+       */
+      const measureOn = async (): Promise<void> => {
       // --- HUD on ---
       await setHud(page, true);
+      // 🔴 AFTER the toggle, every time. `setHud(true)` runs the UI scene, and `stop('UI')`
+      // destroyed its display list — scrims added once would be gone from pair 2 onward and the
+      // mutation would quietly measure nothing.
+      if (SCRIMS > 0) await addScrims(page, SCRIMS);
       const enter = await hudDrawState(page);
       const onSample = await sample(page, SAMPLE_TICKS);
       const exit = await hudDrawState(page);
 
-      /**
-       * 🔴 **The guard the ratio cannot make.** Asserted at BOTH edges of the window, because a HUD
-       * that stopped drawing halfway through leaves an entry check green and quietly cheapens the
-       * half being measured — the same reason 5.11 re-reads `opaque` after its fleet window.
-       */
-      for (const [when, probe] of [
-        ['entering', enter],
-        ['leaving', exit],
-      ] as const) {
-        expect(probe.uiActive, `the UI scene was not active ${when} HUD-on window ${i + 1}`).toBe(true);
-        expect(
-          probe.plateWillRender,
-          `the HUD plate would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.counterWillRender,
-          `the gear counter would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.barWillRender,
-          `the health bar would not render ${when} HUD-on window ${i + 1}. A hidden bar still ` +
-            `QUEUES its rectangle, so the command-buffer check below cannot see this — and a ` +
-            `hidden object is CHEAPER, so the budget would pass more easily for it.`,
-        ).toBe(true);
-        expect(
-          probe.gearIconWillRender,
-          `the gear icon would not render ${when} HUD-on window ${i + 1}`,
-        ).toBe(true);
-        expect(
-          probe.barWidestRect,
-          `the health bar queued styling but FILLED NOTHING ${when} HUD-on window ${i + 1}. ` +
-            `Deleting the fillRect while leaving the fillStyle keeps the command buffer non-empty ` +
-            `and the alpha healthy while painting no pixels at all.`,
-        ).toBeGreaterThan(0);
-        expect(
-          probe.barCommands,
-          `the health bar had ZERO Graphics commands queued ${when} HUD-on window ${i + 1}. The ` +
-            `HUD is not drawing, so the ratio below would be comparing "nothing" against ` +
-            `"nothing" and would PASS. This is the assertion that stops a broken HUD reading as a ` +
-            `cheap one (vault 9.4).`,
-        ).toBeGreaterThan(0);
+      assertHudWasDrawing(enter, exit, i + 1);
 
-        /**
-         * 🔴 Alpha, because none of the four probes above can see it. `willRender` ignores alpha
-         * entirely, and `fillStyle(colour, 0)` still fills the command buffer — so a HUD faded to
-         * nothing satisfies every check above, draws no visible pixel, and costs LESS, which reads
-         * as a pass. Found by the performance owner's adversarial brief.
-         */
-        for (const [what, alpha] of [
-          ['plate', probe.plateAlpha],
-          ['counter', probe.counterAlpha],
-          ['health bar fill', probe.barFillAlpha],
-          ['gear icon', probe.gearIconAlpha],
-        ] as const) {
-          expect(
-            alpha,
-            `the ${what} is at alpha ${alpha} ${when} HUD-on window ${i + 1} — it is submitted to ` +
-              `the renderer and paints nothing a player can see, which is CHEAPER and would pass ` +
-              `the budget below for exactly the wrong reason (vault 9.4).`,
-          ).toBeGreaterThan(0);
-        }
-      }
       on.push(onSample);
+      };
 
+      const measureOff = async (): Promise<void> => {
       // --- HUD off ---
       await setHud(page, false);
       const offProbe = await hudDrawState(page);
@@ -239,6 +216,11 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
           `same thing, and the ratio would be ~1.0 for the wrong reason`,
       ).toBe(false);
       off.push(await sample(page, SAMPLE_TICKS));
+      };
+
+      for (const step of i % 2 === 0 ? [measureOn, measureOff] : [measureOff, measureOn]) {
+        await step();
+      }
     }
 
     // Leave the game as we found it, so a later spec in the same file is not handed a dead HUD.
@@ -302,6 +284,29 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
     const workRatio = onWork / offWork;
     const gpuRatio = onGpu / offGpu;
 
+    /**
+     * 🔴 **The paired GPU DELTA — the statistic that replaced the ratio, and why.**
+     *
+     * `gpuRatio` divides two very small numbers. `perfBudget.ts` already names that as a failure
+     * mode and 6.9 is the case: the arms are ~0.13 ms apart from a HUD costing ~0.001 ms, and the
+     * OFF arm's median collapses toward the GPU timer's own resolution floor (0.035 ms has been
+     * observed). A small denominator makes the quotient explode for reasons that have nothing to do
+     * with what the HUD drew, which is why the criterion was recorded as unstable at 0.76-3.53 on
+     * unchanged commits.
+     *
+     * Re-measured here at `PAIRS = 10` with AB/BA ordering, the ratio is still unusable: five clean
+     * runs spanned **0.502 to 1.692**, and TWO full-screen scrims read 1.665. The clean spread
+     * swallows the mutation whole.
+     *
+     * A difference does not have that problem. It is still a GPU measurement — which the main-thread
+     * `MAX_HUD_WORK_DELTA_MS` is not, and cannot be substituted for it, since a scrim is fill rate
+     * and costs the main thread nothing. And it is PAIRED, taking each pair's own two windows,
+     * which cancels the drift two independent medians carry straight through *(the same correction
+     * criterion 7.7 needed)*.
+     */
+    const gpuDeltas = on.map((sample, i) => sample.gpuMedianMs - off[i]!.gpuMedianMs);
+    const gpuDeltaMs = median(gpuDeltas);
+
     const fmt = (set: typeof on, pick: (s: (typeof on)[number]) => number): string =>
       set.map((s) => pick(s).toFixed(3)).join(', ');
     // eslint-disable-next-line no-console
@@ -314,6 +319,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
         `off [${fmt(off, (s) => s.gpuMedianMs)}] -> ${offGpu.toFixed(3)}ms | ratio ${gpuRatio.toFixed(3)}x\n` +
         `      work p95     on ${fmt(on, (s) => s.workP95Ms)} | off ${fmt(off, (s) => s.workP95Ms)}\n` +
         `      GPU p95      on ${fmt(on, (s) => s.gpuP95Ms)} | off ${fmt(off, (s) => s.gpuP95Ms)}`,
+      `      GPU delta    per-pair [${gpuDeltas.map((d) => d.toFixed(4)).join(', ')}] -> median ${gpuDeltaMs.toFixed(4)}ms`,
     );
 
     // Type before value — a ratio that stopped being a number must not read as a passing one.
@@ -349,12 +355,15 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * target) submits the same handful of draw calls and costs the main thread nothing.
      */
     expect(
-      gpuRatio,
-      `turning the HUD on multiplied per-frame GPU time by ${gpuRatio.toFixed(3)}x ` +
-        `(${offGpu.toFixed(3)}ms -> ${onGpu.toFixed(3)}ms) while main-thread work moved ` +
-        `${workRatio.toFixed(3)}x. GPU cost growing faster than submission cost is overdraw or ` +
-        `alpha blending, not "drawing a few more objects".`,
-    ).toBeLessThan(MAX_HUD_GPU_RATIO);
+      gpuDeltaMs,
+      `turning the HUD on added ${gpuDeltaMs.toFixed(4)}ms of GPU time per frame ` +
+        `(${offGpu.toFixed(3)}ms -> ${onGpu.toFixed(3)}ms, ratio ${gpuRatio.toFixed(3)}x) while ` +
+        `main-thread work moved ${workRatio.toFixed(3)}x. GPU cost growing while submission cost ` +
+        `does not is overdraw or alpha blending, not "drawing a few more objects". The RATIO is ` +
+        `logged for context and deliberately NOT asserted - it does not order its own mutation; ` +
+        `see MAX_HUD_GPU_DELTA_MS for the sweep where clean runs reached 1.692 while two ` +
+        `full-screen scrims read 1.665.`,
+    ).toBeLessThan(MAX_HUD_GPU_DELTA_MS);
 
     /**
      * 🔴 **The absolute bound, which nothing divides out of** — Codex implementation review 2.
@@ -365,9 +374,12 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
      * the part of the HUD the A/B could vary.
      *
      * This is the whole frame with the HUD on, in milliseconds, against the 16.67ms a 60 Hz frame
-     * actually has. Nothing cancels out of it. Measured ~0.5-0.9ms; **bounded at 1ms** — see
-     * `MAX_HUD_WORK_DELTA_MS`, halved from 2ms by the Phase 6 performance owner. This comment said
-     * "a third of a frame" until 2026-08-17 and was describing the old value.
+     * actually has. Nothing cancels out of it.
+     *
+     * 🔴 The bound is `MAX_HUD_FRAME_WORK_MS`, and **that constant is where the whole record lives**
+     * — the mutation ladder, the clean band, why 2.5 rather than 1, and the floor it admits to. This
+     * comment claimed "bounded at 1ms" while the code read `16.67 / 3` (5.557ms) and nothing had ever
+     * proved the assertion could go red. Codex implementation review 2 found both.
      */
     expect(
       onWork,
@@ -375,7 +387,7 @@ test.describe('Phase 6 — criterion 6.9, the HUD frame budget', () => {
         `the 16.67ms a 60 Hz frame has. This bound is absolute rather than a ratio precisely so ` +
         `that GearLayer.sync() and the renderHud() call — which run in BOTH arms and divide out of ` +
         `every ratio above — are inside something.`,
-    ).toBeLessThan(16.67 / 3);
+    ).toBeLessThan(MAX_HUD_FRAME_WORK_MS);
 
     expect(await currentTick(page), 'the game stopped ticking during the measurement').toBeGreaterThan(0);
   });

@@ -74,3 +74,18 @@ standing body is 132 px wide, so the box a goal must not overlap spans x −18�
 That is not a quirk of the fixtures; it is the 4 × 4 base being narrower than the character, and it is
 why `TINY_MAP` in `tests/unit/tilemap-data-fixtures.ts` had to grow from 7 × 5 @ 16 px to 13 × 9 @ 48 px
 when `LevelData.goal` became required.
+
+## The three placement fixtures (2026-08-18)
+
+`enemy-standing-in-a-hazard`, `gear-inside-an-enemy` and `enemy-beat-into-a-wall` are the committed
+red proofs for `describePlacementProblem` — the rule that nothing may share space with an enemy.
+They were written because the user played the shipped build and saw **a sentry standing in spikes**
+and **gears inside an enemy's body**, in four of the five levels, with the whole suite green. The
+only cross-object rule in the parser before them was goal-versus-spawn.
+
+They do **not** use the 4 × 4 base above. A sentry's body is `SENTRY_BOX` at `RENDER_SCALE` 6 —
+96 × 192 px — which is taller than a 128 px map, so a fixture built on that base could not express
+"beside the enemy" and "inside the enemy" as different places. These are 20 × 10 @ 32 px = 640 × 320,
+with the sentry's feet on the floor strip at y 256 and its swept beat spanning x 176…336. Each
+fixture then adds exactly ONE object inside that span, so each trips exactly one of the three rules
+and the directory sweep's distinct-reason assertion stays meaningful.

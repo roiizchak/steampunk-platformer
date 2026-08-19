@@ -32,6 +32,16 @@
 // - **Rise:** the measured apex is ~413 px, so 4 tiles (384 px) is the ceiling and 3 is comfortable.
 // - **Hazard width:** 216 px clears standing, 240 needs a run-up, 252 is impassable — a 12 px window.
 //   It was deliberately not taken. Hazards here are 1 or 2 tiles.
+//   🔴 **Re-measured 2026-08-18 with a full run-up on FLAT ground: 480 px crosses clean, 576 does not.** Both
+//   figures are real. The line above came from `level-traversal.test.ts` probing the RETIRED level
+//   with that file's approach; the new one comes from `level-hazard-free.test.ts` running the shipped
+//   layouts. Size a FLAT run against 480 and let that gate confirm it. ⚠️ The two 480 px runs that
+//   ship (level-03 cols 65-69, level-04 cols 63-67) are NOT flat crossings — they are valley floors
+//   jumped mass-to-mass from an elevated walkway, clearing the spikes by ~737 px. Their width came
+//   from the mass spacing, not from approaching this ceiling. And note that
+//   **width is not the only thing that matters**: a run placed where a descent LANDS is unavoidable
+//   at any width, because the player cannot react while airborne. Three shipped runs were exactly
+//   that (level-02 col 54, level-04 cols 66-67, level-05 cols 64-65) and all three were moved.
 // - **Ground gap:** 2–3 tiles. A gap has no height to clear, so it is a longer reach than a hazard of
 //   the same width; 3 tiles (288 px) crosses with a run-up.
 

@@ -79,11 +79,60 @@ describe('hazards are read from a property, never from a name (vault 3.3)', () =
     expect(describeLevelProblem(hazardsOnly)).toMatch(/no object carries the `solid` property/);
   });
 
-  it('the shipped solids and hazards are disjoint sets', () => {
-    const overlapping = LEVEL_01.solids.filter((solid) =>
-      LEVEL_01.hazards.some((h) => h.x === solid.x && h.y === solid.y && h.w === solid.w && h.h === solid.h),
-    );
-    expect(overlapping).toEqual([]);
+  /**
+   * 🔴 **This was decoration until 2026-08-18, and the replacement is the point.**
+   *
+   * It read `h.x === solid.x && h.y === solid.y && h.w === solid.w && h.h === solid.h` — EXACT
+   * rectangle equality — on `level-01` ALONE. A hazard half-inside a solid, which is the shape a
+   * real authoring slip takes on a 96 px grid, matched nothing and passed. So did anything at all in
+   * levels 02–05.
+   *
+   * It became load-bearing when the low-ground spike runs went in: those put hazards flush against
+   * solids all over the five shipped levels, so "flush" and "overlapping" are now one tile apart in
+   * the data and a gate that cannot tell them apart is worse than none. A hazard sunk into the floor
+   * draws spikes that are half-buried and hurts a player standing on solid ground.
+   *
+   * Strict inequalities, so **touching is not overlapping** — every ground spike rests exactly on
+   * the floor's top edge by construction, and that is correct, not a violation.
+   */
+  it('no shipped hazard overlaps a solid, in ANY level — partially or wholly', () => {
+    const found: string[] = [];
+    for (const [id, level] of SHIPPED_LEVELS) {
+      for (const h of level.hazards) {
+        for (const s of level.solids) {
+          if (h.x < s.x + s.w && h.x + h.w > s.x && h.y < s.y + s.h && h.y + h.h > s.y) {
+            found.push(
+              `${id}: hazard (${h.x}, ${h.y}) ${h.w}x${h.h} overlaps solid (${s.x}, ${s.y}) ${s.w}x${s.h}`,
+            );
+          }
+        }
+      }
+    }
+    expect(found, found.join(' | ')).toEqual([]);
+  });
+
+  /**
+   * 🔴 The red proof, because the assertion above is an emptiness check and those pass for free.
+   *
+   * A hazard sunk ONE PIXEL into the floor — the smallest real version of the defect, and exactly
+   * what the old exact-equality form could not see.
+   */
+  it('...and that sweep goes red on a hazard sunk one pixel into the floor', () => {
+    const floor = LEVEL_01.solids[0]!;
+    const sunk = { x: floor.x + 96, y: floor.y - 95, w: 96, h: 96 };
+    const overlaps =
+      sunk.x < floor.x + floor.w &&
+      sunk.x + sunk.w > floor.x &&
+      sunk.y < floor.y + floor.h &&
+      sunk.y + sunk.h > floor.y;
+    expect(overlaps, 'the sweep above cannot see a one-pixel sinking, so it proves nothing').toBe(true);
+
+    // ...and the shipped spikes, which REST on the floor rather than sinking into it, do not.
+    const resting = { x: floor.x + 96, y: floor.y - 96, w: 96, h: 96 };
+    expect(
+      resting.y < floor.y + floor.h && resting.y + resting.h > floor.y,
+      'a spike resting exactly on the floor must NOT read as an overlap, or every level is red',
+    ).toBe(false);
   });
 });
 
@@ -191,7 +240,7 @@ describe('the enemies are authored into the level files', () => {
 });
 
 /**
- * The four new committed fixtures, each asserted against its OWN reason.
+ * Every committed bad fixture that has a rule of its own, asserted against its OWN reason.
  *
  * `tilemap-data.test.ts` already sweeps every fixture for "rejected, with a distinct reason". That
  * sweep cannot tell WHICH rule fired, and a rule that rejects for the wrong reason is not a gate —
@@ -218,6 +267,31 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // from the shipped level with ONE gear's y moved from 1872 to 2016: inside the floor solid at
     // y 1920, height 192. Nothing else in the file differs.
     ['gear-inside-solid', /is inside the solid at/],
+    // 🔴 The three PLACEMENT fixtures, added 2026-08-18 with the rule they prove.
+    //
+    // They were committed without a row here, and the gate owner's first brief caught it: the
+    // directory sweep in `tilemap-data.test.ts` proves only "rejected, distinctly from every OTHER
+    // fixture", which is satisfied by three rules firing in the wrong order as long as their
+    // messages differ. `bad-levels/README.md` says so in the project's own words, and the fix was
+    // to extend this array rather than to argue the sweep was enough.
+    //
+    // Each regex names the rule AND the object type, so swapping the hazard and gear branches of
+    // `describePlacementProblem` goes red here while the sweep stays green.
+    ['enemy-standing-in-a-hazard', /walks its beat through the hazard at \(200, 200\) 32x32/],
+    // 🔴 The FOURTH placement fixture, added by Codex implementation review 2, finding 1.
+    //
+    // Identical to the one above with a single number changed — the hazard's `y`, 200 → 255 — so
+    // that it overlaps only the **bottom pixel** of the sentry's body (feet 256, body 64…256).
+    // `FOOT_TOLERANCE_PX` used to be subtracted from the box used for hazards and gears as well as
+    // solids, which put the box's sole at 254 and let this one pass: a spike one pixel under the
+    // creature, invisible to the gate and reading on screen as exactly the reported bug.
+    //
+    // Reverting `swept`/`sweptFeetClear` in `tiledPlacement.ts` to one shortened box turns this row
+    // red and leaves every other row in this array green — which is the whole point of committing it
+    // rather than asserting the tolerance's value *(vault C2)*.
+    ['hazard-under-an-enemy-sole', /walks its beat through the hazard at \(200, 255\) 32x32/],
+    ['gear-inside-an-enemy', /walks its beat through the gear body at \(224, 154\) 72x72/],
+    ['enemy-beat-into-a-wall', /walks its beat into the solid at \(300, 64\) 32x192/],
   ];
 
   it.each(cases)('%s', (name, reason) => {

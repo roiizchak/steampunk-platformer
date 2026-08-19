@@ -30,9 +30,14 @@ export const BOOT_TIMEOUT = 20_000;
 
 type Page = import('@playwright/test').Page;
 
-/** Load the game, wait for a terminal boot state, assert it succeeded, and focus the canvas. */
-export async function bootToGame(page: Page): Promise<void> {
-  await page.goto('/');
+/**
+ * Load the game, wait for a terminal boot state, assert it succeeded, and focus the canvas.
+ *
+ * `search` appends a dev-only query string — `?breakAsset=corrupt`, `?perfMutation=cue-stall`.
+ * Committed mutations are driven through it rather than by hand-editing source *(vault C2)*.
+ */
+export async function bootToGame(page: Page, search = ''): Promise<void> {
+  await page.goto('/' + search);
   await page.waitForFunction(
     () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
     undefined,
