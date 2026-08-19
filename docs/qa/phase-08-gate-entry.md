@@ -180,6 +180,33 @@ first attempt did exactly that and produced a misleading pass.
 Without the cancel this is the unwinnable state: locked, auto-running, unable to jump, at a spawn
 1600 px from the first pillar it has to clear.
 
+### The same five levels again, on the REAL ART — G.1b and G.6
+
+Re-run after `goal-gate` shipped. Identical numbers on all five, which is itself the point: swapping
+a `Container` of two `Rectangle`s for a generated `Image` changed nothing about the sequence.
+
+| level | completed | armed at x | goal.x | distinct alphas | biggest 1-frame drop | anims while armed | final α |
+|---|---|---|---|---|---|---|---|
+| level-01 | ✅ | 8574 | 8640 | **20** | **0.05** | `brass-courier-run` | 0 |
+| level-02 | ✅ | 10302 | 10368 | **20** | **0.05** | `brass-courier-run` | 0 |
+| level-03 | ✅ | 11838 | 11904 | **20** | **0.05** | `brass-courier-run` | 0 |
+| level-04 | ✅ | 13374 | 13440 | **20** | **0.05** | `brass-courier-run` | 0 |
+| level-05 | ✅ | 14910 | 14976 | **20** | **0.05** | `brass-courier-run` | 0 |
+
+Every level arms at exactly `goal.x − 66` — the body's half-width — which is the geometry this
+session is built on, observed rather than asserted.
+
+**G.1b, settled by eye** *(C4)*, screenshots in [docs/evidence/gate-entry/](../evidence/gate-entry/)
+as `art-01`…`art-04`:
+
+- The gate reads as a **Victorian steampunk doorway** standing on the walkway: riveted iron jambs,
+  brass arch and edging, two pressure gauges, a valve wheel, copper pipework, a lit lamp above the
+  lintel. Not a slab, not a window, not a decorated wall.
+- It is **the same height as the courier**, which is correct and not a coincidence — both are 288 px.
+- **At counter 12 / α 0.40 the courier is a ghost inside the dark opening** (`art-03-mid-fade.png`).
+  The void swallows them. That single frame is the whole feature and it does what it was for.
+- At completion the courier is entirely gone and the opening is still drawn.
+
 ### Two things the probe got wrong first, both worth keeping
 
 - **A synthetic `new KeyboardEvent` does not move the character.** Phaser's keyboard manager matches
