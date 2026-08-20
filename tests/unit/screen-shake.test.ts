@@ -131,6 +131,34 @@ describe('shakeEnergy force-settles', () => {
     }
   });
 
+  it('decays LINEARLY — equal drops per tick, and the scale pinned as a literal', () => {
+    // 🔴 Nothing else in this file compares `shakeEnergy` to a number. One test compares it to
+    // `shakePeak(...)` — the very factor the implementation multiplies by, so both sides move
+    // together — and the preemption fixture locates its threshold tick by CALLING `shakeEnergy`,
+    // deriving its fixture from the code under test. Wrapping the decay in `Math.sqrt` passed all
+    // of it. "Linear" is a claim in the docstring, so it needs an assertion of its own.
+    //
+    // Equal successive differences ARE linearity, and no ease, power or sqrt survives them.
+    const state = running('lethal', 0);
+    const energy = [0, 1, 2, 3, 4, 5, 6, 7].map((tick) => shakeEnergy(state, tick));
+    const drop = energy[0] - energy[1];
+    for (let i = 1; i < 7; i += 1) {
+      expect(energy[i] - energy[i + 1], `drop from tick ${i} to ${i + 1}`).toBeCloseTo(drop, 15);
+    }
+
+    // Absolute literals, so the curve is pinned even if `shakePeak` itself is mutated.
+    expect(energy[0]).toBeCloseTo(0.006403124237432849, 15);
+    expect(drop).toBeCloseTo(0.0009147320339189784, 15);
+    expect(energy[7]).toBe(0);
+
+    // And once more on `light`, whose duration is different, so the divisor is exercised too.
+    const light = running('light', 0);
+    expect(shakeEnergy(light, 0)).toBeCloseTo(0.0031622776601683794, 15);
+    expect(shakeEnergy(light, 1)).toBeCloseTo(0.0023717082451262845, 15);
+    expect(shakeEnergy(light, 2)).toBeCloseTo(0.0015811388300841897, 15);
+    expect(shakeEnergy(light, 3)).toBeCloseTo(0.0007905694150420949, 15);
+  });
+
   it('holds at the peak before the start tick — a scheduled shake has spent nothing', () => {
     const state = running('lethal', 50);
     expect(shakeEnergy(state, 40)).toBe(shakePeak(SHAKE.lethal));
@@ -219,6 +247,38 @@ describe('shakeWithinEnvelope', () => {
     expect(shakeWithinEnvelope(state, 3, 0, 0, W, H)).toBe(true);
     expect(shakeWithinEnvelope(state, 3, maxX, maxY, W, H)).toBe(true);
     expect(shakeWithinEnvelope(state, 3, -maxX, -maxY, W, H)).toBe(true);
+  });
+
+  it('demands EXACTLY zero on every tick of the freeze, before the shake starts', () => {
+    // 🔴 This is the window the whole module exists for. `shakeStartTick` delays an outgoing shake
+    // until the hit-stop freeze releases, precisely so the camera does not jitter over a still
+    // image — and `shakeEnergy` clamps a not-yet-started state to its FULL PEAK, so without this
+    // branch `shakeSettled` is false through the entire delay and the predicate falls through to
+    // the peak box. A camera thrown +-9.6 px on every frame of the freeze was "inside the envelope".
+    //
+    // A later e2e spec imports this predicate AS its assertion for "the shake starts after the
+    // freeze". A scene that calls `camera.shake()` on the hit tick instead of on `shakeStartTick`
+    // produces exactly the defect, and the predicate used to return true on every frame of it.
+    const hitTick = 100;
+    const start = shakeStartTick('lethal', hitTick);
+    expect(start).toBe(109);
+    const state: ShakeState = { startedTick: start, cmd: SHAKE.lethal };
+
+    for (let tick = hitTick; tick < start; tick += 1) {
+      expect(shakeWithinEnvelope(state, tick, 0, 0, W, H), `still camera at tick ${tick}`).toBe(
+        true,
+      );
+      expect(
+        shakeWithinEnvelope(state, tick, SHAKE.lethal.ax * W, 0, W, H),
+        `full-amplitude x offset at tick ${tick}, which is INSIDE the freeze`,
+      ).toBe(false);
+      expect(shakeWithinEnvelope(state, tick, 0, SHAKE.lethal.ay * H, W, H)).toBe(false);
+      expect(shakeWithinEnvelope(state, tick, 0.5, 0, W, H)).toBe(false);
+    }
+
+    // Both sides of the boundary: the peak box opens on the start tick and not one tick sooner.
+    expect(shakeWithinEnvelope(state, start - 1, SHAKE.lethal.ax * W, 0, W, H)).toBe(false);
+    expect(shakeWithinEnvelope(state, start, SHAKE.lethal.ax * W, 0, W, H)).toBe(true);
   });
 
   it('rejects an offset outside the peak box on either axis independently', () => {

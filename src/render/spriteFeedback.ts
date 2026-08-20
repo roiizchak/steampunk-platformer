@@ -29,9 +29,9 @@ import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../sim/hitstop'
  * ships `brass-courier-attack` with `frameCount: 10, simTicks: 20, fps: 30`, and 20 ticks at 60 Hz
  * is 333 ms, which is 10 frames at 30 fps. The QA log's prose says "12 frames" one line under its
  * own trace table, and that table lists texture frames 0–9 and anims indices 1–10 — ten of each. The
- * catalog is the authority and the prose is not *(CLAUDE.md)*; the unit test reads `frameCount` back
- * out of the shipped catalog rather than hard-coding either number, so a regenerated sheet turns the
- * assertion red instead of silently invalidating this comment.
+ * catalog is the authority and the prose is not *(CLAUDE.md)*; `effects.test.ts` now reads
+ * `frameCount` back out of the shipped catalog rather than hard-coding either number, so a
+ * regenerated sheet turns the assertion red instead of silently invalidating this comment.
  *
  * ## Why this constant has to exist at all
  *
@@ -75,7 +75,23 @@ const FLINCH_RETURN_TICKS = 6;
 /** The flinch's vertical component, as a fraction of the horizontal step. A lift, not a hop. */
 const FLINCH_LIFT = 0.25;
 
-const NO_OFFSET = { dx: 0, dy: 0 };
+/**
+ * The neutral offset — **frozen**, and returned as `Readonly<>`.
+ *
+ * It is a shared module-level object, so an unfrozen one is a live poisoning hazard: a scene writing
+ * `const o = flinchOffset(...); o.dx *= RENDER_SCALE;` mutates the single neutral every never-hit
+ * body is drawn from, and every one of them is then displaced from the box the sim resolved its
+ * collisions against — forever, with the unit suite green, because nothing in a test mutates a
+ * return value. Freezing turns that into a throw; the `Readonly<>` return type turns it into a
+ * typecheck failure, which is the earlier and cheaper of the two.
+ *
+ * This is the module's stated virtue ("a never-happened state returns its neutral value, forever")
+ * and it was precisely what was breakable.
+ */
+const NO_OFFSET: Offset = Object.freeze({ dx: 0, dy: 0 });
+
+/** A render offset in pixels. `Readonly` so a consumer cannot mutate a shared neutral. */
+export type Offset = Readonly<{ dx: number; dy: number }>;
 
 /**
  * Enemy flinch: a **STEP** during the freeze, an eased return with a small overshoot, then settle.
@@ -100,7 +116,7 @@ export function flinchOffset(
   ticksSince: number | null,
   impact: ImpactClass,
   facing: 1 | -1,
-): { dx: number; dy: number } {
+): Offset {
   if (ticksSince === null || ticksSince < 0) {
     return NO_OFFSET;
   }
@@ -146,7 +162,11 @@ const LAND_SQUASH_TICKS = 3;
 /** Peak horizontal stretch. The vertical is its reciprocal, which is what preserves the area. */
 const LAND_SQUASH_SX = 1.18;
 
-const NO_SQUASH = { sx: 1, sy: 1 };
+/** A sprite scale pair. `Readonly` for the same reason as `Offset`. */
+export type Squash = Readonly<{ sx: number; sy: number }>;
+
+/** The neutral squash — frozen and `Readonly<>`, exactly as `NO_OFFSET` is and for the same reason. */
+const NO_SQUASH: Squash = Object.freeze({ sx: 1, sy: 1 });
 
 /**
  * Landing squash. 3 ticks, roughly area-preserving.
@@ -160,7 +180,7 @@ const NO_SQUASH = { sx: 1, sy: 1 };
  * freezes at step 0 once a level completes, so this is called forever afterwards with the counter's
  * final value; holding at neutral is structural rather than something a listener remembers to do.
  */
-export function landSquash(ticksSinceLanded: number | null): { sx: number; sy: number } {
+export function landSquash(ticksSinceLanded: number | null): Squash {
   if (ticksSinceLanded === null || ticksSinceLanded < 0 || ticksSinceLanded >= LAND_SQUASH_TICKS) {
     return NO_SQUASH;
   }

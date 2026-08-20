@@ -1,56 +1,55 @@
 /**
  * Impact effects — the DECISION half. Engine-free *(vault 2.12)*.
  *
- * Every function under test answers "what should be drawn" from integer sim state and returns plain
- * data. Nothing here knows Phaser exists, which is why the depth band, the particle budget, the
- * flinch curve and the i-frame flicker are all reachable from a unit test in milliseconds instead of
- * from a screenshot.
+ * The EMITTER half: the depth band, the particle budget, and the three burst builders. The per-sprite
+ * transforms `effects.ts` re-exports from `spriteFeedback.ts` are tested in `sprite-feedback.test.ts`
+ * — this file was split for the 400-line rule, along the same seam the source is split on.
  *
- * Three of these tests are guarding against a specific way this class of feature ships broken:
+ * Every function under test answers "what should be drawn" from integer sim state and returns plain
+ * data. Nothing here knows Phaser exists, which is why the depth band, the particle budget and every
+ * burst count are reachable from a unit test in milliseconds instead of from a screenshot.
+ *
+ * 🔴 **The theme of this file's second pass.** Almost every gate in its first version asked whether a
+ * value came back, not whether it is capable of doing anything. A `Burst` of count 0 satisfied every
+ * assertion about kind, cap, position and even the required `hurtVent < deathSteam` comparison; an
+ * emitter with `alphaStart: 0` satisfied every assertion about depth and budget while drawing
+ * nothing; and a landing-dust ramp flattened to a constant satisfied "monotonic". Four separate
+ * mutations, four fully green suites. The assertions below are written the other way round.
+ *
+ * Three of these tests guard a specific way this class of feature ships broken:
  *
  *   - **the depth band.** 10.1/10.2/10.3 looks arbitrary and is not: a particle emitter above the
  *     enemy `Graphics` layers costs one extra batch flush every frame forever, because particles and
  *     Graphics use different batch handlers. A "tidy" edit to 13 is invisible in a screenshot and
- *     visible only in a frame budget. The mutation proof for this task drives exactly that edit.
+ *     visible only in a frame budget.
  *   - **the peak-alive budget.** Phaser's `atLimit()` DROPS emit requests rather than evicting, so
  *     the cap is what makes the worst case a constant instead of something a sampler has to catch.
- *   - **`iframeAlpha` never returning 0.** Alpha 0 is how the vault's blocker shipped invisible menu
- *     cards with a fully green suite, and 45 ticks of an invisible player loses positional tracking.
- *
- * The force-settle tests (`flinchOffset`, `landSquash`) are `toBe`, never `toBeCloseTo`. A transform
- * that settles at 1e-17 instead of 0 leaves the sprite permanently, invisibly displaced, and nothing
- * downstream can tell that apart from correct.
+ *   - **the visible start values.** Alpha 0 is how the vault's blocker shipped invisible menu cards
+ *     with a fully green suite. `iframeAlpha` guards that for the player sprite; nothing guarded it
+ *     for the 96 particles the frame budget is spent on until now.
  */
 
 import { describe, expect, it } from 'vitest';
 import {
-  ATTACK_CONTACT_FRAME_INDEX,
   DUST_MIN_FALL_PX,
   EFFECT_DEPTH,
   EFFECT_PEAK_ALIVE,
   EMITTER_SPECS,
   SPARK_CONE_DEG,
   deathSteam,
-  flinchOffset,
-  hitFlashAlpha,
   hurtVent,
-  iframeAlpha,
   impactSparks,
-  landSquash,
   landingDust,
-  ticksSinceHit,
+  type Burst,
   type EffectKind,
 } from '../../src/render/effects';
-import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../../src/sim/hitstop';
-import { IFRAME_TICKS } from '../../src/sim/combat';
+import { type ImpactClass } from '../../src/sim/hitstop';
 
 const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 const IMPACTS: ImpactClass[] = ['light', 'lethal', 'playerHurt'];
 
 /** The sim's own terminal velocity. Landing dust is expressed against it, not an invented number. */
 const MAX_FALL = 51.6;
-
-const neverHit = (): Freezable => ({ hitstopUntil: -1, lastHitTick: -1 });
 
 describe('the depth band', () => {
   it('puts every emitter STRICTLY inside (10, 11)', () => {
@@ -102,16 +101,85 @@ describe('the particle budget', () => {
   });
 });
 
-describe('the attack contact frame', () => {
-  it('is the measured texture frame 4, inside the shipped clip', () => {
-    // A measurement traced on 2026-08-20 against the shipped sheet, not a preference. If the clip is
-    // ever regenerated at a different frame count this assertion is the thing that has to be
-    // re-measured — sheetGates.mjs's G5 will still pass, because it only asks whether contact falls
-    // inside the active window, and a mid-wind-up frame inside the window is exactly the defect.
-    expect(ATTACK_CONTACT_FRAME_INDEX).toBe(4);
-    expect(Number.isInteger(ATTACK_CONTACT_FRAME_INDEX)).toBe(true);
-    expect(ATTACK_CONTACT_FRAME_INDEX).toBeGreaterThanOrEqual(0);
-    expect(ATTACK_CONTACT_FRAME_INDEX).toBeLessThan(10);
+describe('no emitter can be neutralised into invisibility', () => {
+  // A particle whose scale or alpha STARTS at zero never draws, whatever its count. Every alphaEnd
+  // in the table is 0 and sparks' scaleEnd is 0 — those are correct, they are the fade-out — so the
+  // START of each ramp is the field that carries the whole visual budget.
+  //
+  // This is the same alpha-0 class `iframeAlpha`'s docstring names as how the vault's blocker
+  // shipped invisible menu cards with a fully green suite. That guard was on the player sprite; this
+  // one is on the 96 particles the frame budget is spent on.
+  const MIN_VISIBLE = 0.1;
+
+  it('starts every emitter at a scale and an alpha that can actually be seen', () => {
+    for (const kind of KINDS) {
+      const spec = EMITTER_SPECS[kind];
+      for (const field of ['scaleStart', 'alphaStart'] as const) {
+        expect(
+          spec[field],
+          `${kind}.${field} is ${spec[field]}. Below ${MIN_VISIBLE} the emitter draws nothing a ` +
+            `player can see, and every assertion about counts, caps and depths still passes — all ` +
+            `${EFFECT_PEAK_ALIVE} budgeted particles would be invisible with a green suite.`,
+        ).toBeGreaterThanOrEqual(MIN_VISIBLE);
+      }
+    }
+  });
+
+  it('gives every emitter a lifespan and a speed, so its particles both persist and travel', () => {
+    for (const kind of KINDS) {
+      const spec = EMITTER_SPECS[kind];
+      expect(spec.lifespanTicks, `${kind} lives ${spec.lifespanTicks} ticks`).toBeGreaterThan(0);
+      expect(spec.speedMax, `${kind} particles never move`).toBeGreaterThan(0);
+      expect(spec.speedMin).toBeLessThanOrEqual(spec.speedMax);
+      expect(spec.angleMin).toBeLessThan(spec.angleMax);
+    }
+  });
+
+  it('pins every visual start value as a literal, so a retune is a visible edit', () => {
+    expect(EMITTER_SPECS.sparks.scaleStart).toBe(0.9);
+    expect(EMITTER_SPECS.sparks.alphaStart).toBe(1);
+    expect(EMITTER_SPECS.steam.scaleStart).toBe(0.4);
+    expect(EMITTER_SPECS.steam.alphaStart).toBe(0.75);
+    expect(EMITTER_SPECS.dust.scaleStart).toBe(0.6);
+    expect(EMITTER_SPECS.dust.alphaStart).toBe(0.55);
+  });
+});
+
+describe('every burst draws something', () => {
+  /** Every burst any function in this module can return, labelled. */
+  const allBursts = (): [string, Burst][] => [
+    ...IMPACTS.flatMap(
+      (impact) =>
+        impactSparks(0, 0, 1, impact).map((burst, n) => [
+          `impactSparks(${impact})[${n === 0 ? 'core' : 'tail'}]`,
+          burst,
+        ]) as [string, Burst][],
+    ),
+    ['deathSteam', deathSteam(0, 0)],
+    ['hurtVent(facing +1)', hurtVent(0, 0, 1)],
+    ['hurtVent(facing -1)', hurtVent(0, 0, -1)],
+    ['landingDust at the threshold', landingDust(DUST_MIN_FALL_PX, 0, 0, MAX_FALL) as Burst],
+    ['landingDust at terminal velocity', landingDust(MAX_FALL, 0, 0, MAX_FALL) as Burst],
+  ];
+
+  it('never returns a burst of zero particles — a burst of 0 is not a burst', () => {
+    // The CLASS, not three instances. A burst of count 0 satisfies every assertion that asks whether
+    // a burst came back, whether its kind is right, whether it fits the cap — and even the brief's
+    // required `hurtVent.count < deathSteam.count`, which passes HARDER when hurtVent is 0. Asking
+    // "did a value come back" is not asking "can it do anything".
+    for (const [label, burst] of allBursts()) {
+      expect(
+        burst.count,
+        `${label} returned count ${burst.count}. It draws nothing, and every other assertion ` +
+          `about it still passes.`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps every burst inside its own emitter cap', () => {
+    for (const [label, burst] of allBursts()) {
+      expect(burst.count, label).toBeLessThanOrEqual(EMITTER_SPECS[burst.kind].maxAliveParticles);
+    }
   });
 });
 
@@ -137,6 +205,32 @@ describe('landingDust', () => {
       previous = count;
     }
     expect(previous).toBeGreaterThan(0);
+  });
+
+  it('RAMPS — pinned as literals, and STRICTLY increasing across the ramp region', () => {
+    // 🔴 Monotonicity alone cannot order its own mutation: a CONSTANT count is monotonic, so a
+    // `Math.max(14, …)` typo returning 14 particles for a 9 px step-down passes the sweep above
+    // untouched. The comparator is what was wrong, so the statistic is replaced rather than the
+    // bound moved — the ramp IS the feature, and a step-down and a terminal-velocity slam are
+    // supposed to look different.
+    const at = (vy: number) => landingDust(vy, 0, 0, MAX_FALL)?.count;
+
+    // The foot of the ramp, and four separated points along it.
+    expect(at(DUST_MIN_FALL_PX)).toBe(1);
+    expect(at(10)).toBe(2);
+    expect(at(12)).toBe(5);
+    expect(at(16)).toBe(11);
+    expect(at(17)).toBe(13);
+
+    // Strict, between well-separated points. A flat or saturated ramp cannot survive this.
+    expect(at(51.6) as number).toBeGreaterThan(at(17) as number);
+    expect(at(17) as number).toBeGreaterThan(at(12) as number);
+    expect(at(12) as number).toBeGreaterThan(at(10) as number);
+    expect(at(10) as number).toBeGreaterThan(at(DUST_MIN_FALL_PX) as number);
+
+    // The cap is reached from BELOW, so a below-cap value is pinned as well as the ceiling.
+    expect(at(18)).toBe(14);
+    expect(at(17) as number).toBeLessThan(14);
   });
 
   it('treats a fall and an equal-magnitude rise identically — it reads |vy|', () => {
@@ -194,6 +288,21 @@ describe('impactSparks', () => {
     expect(SPARK_CONE_DEG.lethal).toBe(90);
   });
 
+  it('pins the core/tail split, so neither side can collapse to nothing', () => {
+    // The brief's reason for two bursts is a hot core and a warmer tail. With `Burst` carrying no
+    // lifespan or colour field, `count` and `angleDeg` are the ONLY things that distinguish them —
+    // so an unpinned split lets `SPARK_CORE_SHARE` drift to 1.0 and hand back an empty tail while
+    // the totals, the kinds, the angles and the cap all still pass.
+    expect(impactSparks(0, 0, 1, 'light').map((b) => b.count)).toEqual([6, 4]);
+    expect(impactSparks(0, 0, 1, 'lethal').map((b) => b.count)).toEqual([11, 7]);
+    expect(impactSparks(0, 0, 1, 'playerHurt').map((b) => b.count)).toEqual([8, 4]);
+  });
+
+  it('pins the playerHurt total and cone, which light and lethal alone leave open', () => {
+    expect(impactSparks(0, 0, 1, 'playerHurt').reduce((sum, b) => sum + b.count, 0)).toBe(12);
+    expect(SPARK_CONE_DEG.playerHurt).toBe(50);
+  });
+
   it('fits every single impact inside the sparks emitter’s 32-particle cap', () => {
     for (const impact of IMPACTS) {
       const total = impactSparks(0, 0, 1, impact).reduce((sum, b) => sum + b.count, 0);
@@ -210,8 +319,12 @@ describe('steam — deathSteam and hurtVent share one emitter', () => {
 
   it('is distinguishable at play speed: the vent is strictly smaller than the plume', () => {
     // A vent the player survives and a plume that ends an enemy are the same picture otherwise.
-    expect(hurtVent(0, 0, 1).count).toBeLessThan(deathSteam(0, 0).count);
+    // 🔴 BOTH sides pinned as literals. `a < b` is not a gate unless both are known non-zero —
+    // dropping `HURT_VENT_COUNT` to 0 makes this comparison pass *harder* while the player takes
+    // damage in complete silence.
+    expect(hurtVent(0, 0, 1).count).toBe(6);
     expect(deathSteam(0, 0).count).toBe(14);
+    expect(hurtVent(0, 0, 1).count).toBeLessThan(deathSteam(0, 0).count);
   });
 
   it('fits both together inside the steam emitter’s 48-particle budget', () => {
@@ -224,173 +337,5 @@ describe('steam — deathSteam and hurtVent share one emitter', () => {
     expect(deathSteam(0, 0).angleDeg).toBe(270);
     expect(hurtVent(0, 0, 1).angleDeg).toBe(250);
     expect(hurtVent(0, 0, -1).angleDeg).toBe(290);
-  });
-});
-
-describe('ticksSinceHit', () => {
-  it('is null for a body that was never hit — the -1 sentinel', () => {
-    expect(ticksSinceHit(neverHit(), 0)).toBe(null);
-    expect(ticksSinceHit(neverHit(), 5000)).toBe(null);
-  });
-
-  it('counts from the hit tick, and keeps counting past the end of the freeze', () => {
-    const body: Freezable = { hitstopUntil: 100 + HITSTOP_TICKS.lethal, lastHitTick: 100 };
-    expect(ticksSinceHit(body, 100)).toBe(0);
-    expect(ticksSinceHit(body, 109)).toBe(9);
-    expect(ticksSinceHit(body, 400)).toBe(300);
-  });
-});
-
-describe('flinchOffset force-settles', () => {
-  it('is neutral for a body that was never hit', () => {
-    expect(flinchOffset(null, 'light', 1)).toEqual({ dx: 0, dy: 0 });
-  });
-
-  it('holds a STEP for the whole freeze, mirrored by facing', () => {
-    for (const impact of IMPACTS) {
-      const held = flinchOffset(0, impact, 1);
-      expect(held.dx).toBeGreaterThan(0);
-      for (let t = 0; t <= HITSTOP_TICKS[impact]; t += 1) {
-        expect(flinchOffset(t, impact, 1)).toEqual(held);
-      }
-      expect(flinchOffset(0, impact, -1).dx).toBe(-held.dx);
-    }
-  });
-
-  it('overshoots past zero on the way back — a small one', () => {
-    const step = flinchOffset(0, 'lethal', 1).dx;
-    const past = [];
-    for (let t = HITSTOP_TICKS.lethal + 1; t < HITSTOP_TICKS.lethal + 20; t += 1) {
-      past.push(flinchOffset(t, 'lethal', 1).dx);
-    }
-    expect(past.some((dx) => dx < 0)).toBe(true);
-    expect(Math.min(...past)).toBeGreaterThan(-step * 0.3);
-  });
-
-  it('returns to EXACTLY 0 and STAYS 0, for every impact class and both facings', () => {
-    // The force-settle property applied to the one thing this phase animates in the world.
-    for (const impact of IMPACTS) {
-      for (const facing of [1, -1] as const) {
-        let settledAt: number | null = null;
-        for (let t = 0; t <= 600; t += 1) {
-          const { dx, dy } = flinchOffset(t, impact, facing);
-          if (settledAt !== null) {
-            expect(dx).toBe(0);
-            expect(dy).toBe(0);
-          } else if (dx === 0 && dy === 0 && t > HITSTOP_TICKS[impact]) {
-            settledAt = t;
-          }
-        }
-        expect(settledAt).not.toBe(null);
-        expect(settledAt as number).toBeLessThan(HITSTOP_TICKS[impact] + 12);
-      }
-    }
-  });
-});
-
-describe('hitFlashAlpha', () => {
-  it('is 0 for a body that was never hit', () => {
-    for (const impact of IMPACTS) {
-      expect(hitFlashAlpha(null, impact)).toBe(0);
-    }
-  });
-
-  it('DECAYS a light hit to exactly 0, and stays there', () => {
-    expect(hitFlashAlpha(0, 'light')).toBe(1);
-    expect(hitFlashAlpha(1, 'light')).toBeLessThan(1);
-    expect(hitFlashAlpha(2, 'light')).toBeLessThan(hitFlashAlpha(1, 'light'));
-    expect(hitFlashAlpha(HITSTOP_TICKS.light, 'light')).toBe(0);
-    expect(hitFlashAlpha(HITSTOP_TICKS.light + 50, 'light')).toBe(0);
-  });
-
-  it('HOLDS a lethal or playerHurt flash blown out for the whole freeze', () => {
-    for (const impact of ['lethal', 'playerHurt'] as const) {
-      for (let t = 0; t < HITSTOP_TICKS[impact]; t += 1) {
-        expect(hitFlashAlpha(t, impact)).toBe(1);
-      }
-      expect(hitFlashAlpha(HITSTOP_TICKS[impact], impact)).toBe(0);
-      expect(hitFlashAlpha(HITSTOP_TICKS[impact] + 1, impact)).toBe(0);
-    }
-  });
-});
-
-describe('landSquash', () => {
-  it('is neutral when nothing landed', () => {
-    expect(landSquash(null)).toEqual({ sx: 1, sy: 1 });
-  });
-
-  it('squashes on the landing tick and is roughly area-preserving throughout', () => {
-    const first = landSquash(0);
-    expect(first.sx).toBeGreaterThan(1);
-    expect(first.sy).toBeLessThan(1);
-    for (let t = 0; t <= 5; t += 1) {
-      const { sx, sy } = landSquash(t);
-      expect(sx * sy).toBeCloseTo(1, 10);
-    }
-  });
-
-  it('runs for 3 ticks and returns to EXACTLY 1 — both sides of the boundary', () => {
-    // 2 ticks reads as a glitch at 60 Hz; this is the reason the boundary is where it is.
-    expect(landSquash(2).sx).toBeGreaterThan(1);
-    expect(landSquash(3)).toEqual({ sx: 1, sy: 1 });
-    expect(landSquash(4)).toEqual({ sx: 1, sy: 1 });
-    expect(landSquash(900)).toEqual({ sx: 1, sy: 1 });
-  });
-
-  it('relaxes monotonically back toward 1', () => {
-    expect(landSquash(0).sx).toBeGreaterThan(landSquash(1).sx);
-    expect(landSquash(1).sx).toBeGreaterThan(landSquash(2).sx);
-  });
-});
-
-describe('iframeAlpha', () => {
-  it('NEVER returns 0 across the whole 45-tick i-frame window', () => {
-    // Alpha 0 is exactly how the vault's blocker shipped invisible menu cards with a fully green
-    // suite. 45 ticks of an invisible player is three quarters of a second of lost positional
-    // tracking, and the flicker is supposed to say "invulnerable", not "gone".
-    for (let counter = 0; counter < IFRAME_TICKS; counter += 1) {
-      expect(
-        iframeAlpha(counter, IFRAME_TICKS),
-        `iframeAlpha returned 0 at counter ${counter}. The floor is 0.35 and never 0.`,
-      ).toBeGreaterThanOrEqual(0.35);
-    }
-  });
-
-  it('alternates on a 6-tick period, 3 on and 3 off — asserted at every phase boundary', () => {
-    expect(iframeAlpha(0, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(2, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(3, IFRAME_TICKS)).toBe(0.35);
-    expect(iframeAlpha(5, IFRAME_TICKS)).toBe(0.35);
-    expect(iframeAlpha(6, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(8, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(9, IFRAME_TICKS)).toBe(0.35);
-  });
-
-  it('is fully opaque once the window has lapsed — both sides of the boundary', () => {
-    // 41 is the last DIM tick inside the window; 47 has the same phase and is outside it. If the
-    // window guard were missing, 47 would come back at 0.35 — so this pair is the boundary.
-    expect(iframeAlpha(41, IFRAME_TICKS)).toBe(0.35);
-    expect(iframeAlpha(IFRAME_TICKS - 1, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(IFRAME_TICKS, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(IFRAME_TICKS + 1, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(47, IFRAME_TICKS)).toBe(1);
-    expect(iframeAlpha(9999, IFRAME_TICKS)).toBe(1);
-  });
-
-  it('never strobes faster than the period, whatever the window length', () => {
-    // A zero-length window is the branch a `<=` typo makes unreachable (vault 5.5).
-    expect(iframeAlpha(0, 0)).toBe(1);
-  });
-});
-
-describe('a state that never happened draws nothing', () => {
-  it('is neutral end to end for a body that was never hit', () => {
-    const body = neverHit();
-    const since = ticksSinceHit(body, 1234);
-    expect(since).toBe(null);
-    expect(flinchOffset(since, 'lethal', 1)).toEqual({ dx: 0, dy: 0 });
-    expect(hitFlashAlpha(since, 'lethal')).toBe(0);
-    expect(landSquash(null)).toEqual({ sx: 1, sy: 1 });
-    expect(landingDust(0, 0, 0, MAX_FALL)).toBe(null);
   });
 });

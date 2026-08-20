@@ -172,15 +172,24 @@ export function shakeDurationMs(cmd: ShakeCommand): number {
  * precedent in `cameraRig.ts`. One criterion asserted against one definition, never two copies that
  * agree on the happy path and diverge exactly where a bug would live.
  *
- * ⚠️ **The bound is the PEAK, not `shakeEnergy`.** Phaser's `Shake` effect jitters at a constant
- * intensity for the whole duration; it does not taper. `shakeEnergy`'s linear decay is *our*
- * arbitration currency — a claim about which shake deserves the camera next, not a claim about what
- * is drawn. Bounding the envelope by the decayed value would false-red on a correct camera on almost
- * every frame, which is exactly the class of false red this suite has already paid for twice.
+ * There are three regimes, and the two that bound tightly are the ones that matter:
  *
- * What it does hold tightly is the settled case: once the shake is over the offset must be **exactly
- * zero**. That is the assertion that catches a shake which never stops, and it is the reason this
- * predicate is worth having at all.
+ *  1. 🔴 **BEFORE `startedTick` — exactly zero.** This is the window the whole module exists for.
+ *     `shakeStartTick` delays an outgoing shake until the hit-stop freeze releases, precisely so the
+ *     camera does not jitter over a still image. Without this branch the predicate could not see
+ *     that failure at all: `shakeEnergy` clamps a not-yet-started state to its **full peak** (it has
+ *     spent nothing), so `shakeSettled` is `false` for the entire delay and the check fell through
+ *     to the peak box below — reporting a camera thrown ±9.6 px on every frame of the freeze as
+ *     inside the envelope. A later e2e spec imports this function *as* its assertion for "the shake
+ *     starts after the freeze", so that was a false green waiting to happen.
+ *  2. **While running — the PEAK box, not `shakeEnergy`.** Phaser's `Shake` effect jitters at a
+ *     constant intensity for the whole duration; it does not taper. `shakeEnergy`'s linear decay is
+ *     *our* arbitration currency — a claim about which shake deserves the camera next, not a claim
+ *     about what is drawn. Bounding this regime by the decayed value would false-red on a correct
+ *     camera on almost every frame, which is exactly the class of false red this suite has already
+ *     paid for twice. This is the one loose regime, deliberately.
+ *  3. **After it settles — exactly zero again.** The assertion that catches a shake which never
+ *     stops.
  */
 export function shakeWithinEnvelope(
   state: ShakeState | null,
@@ -190,9 +199,11 @@ export function shakeWithinEnvelope(
   viewportW: number,
   viewportH: number,
 ): boolean {
-  if (shakeSettled(state, tick)) {
+  // Regimes 1 and 3 above: nothing may be drawn before the shake starts, or after it ends.
+  if (state === null || tick < state.startedTick || shakeSettled(state, tick)) {
     return offsetX === 0 && offsetY === 0;
   }
-  const cmd = (state as ShakeState).cmd;
-  return Math.abs(offsetX) <= cmd.ax * viewportW && Math.abs(offsetY) <= cmd.ay * viewportH;
+  return (
+    Math.abs(offsetX) <= state.cmd.ax * viewportW && Math.abs(offsetY) <= state.cmd.ay * viewportH
+  );
 }
