@@ -119,6 +119,73 @@ describe('the two ways the run-in refused to end, both found by driving it', () 
     expect(containedInGoal(world), 'premise: and containment really is unreachable').toBe(false);
     expect(longest, 'the lock has to let go').toBeLessThanOrEqual(GOAL_ENTRY_TICKS * 2 + 1);
   });
+
+  /**
+   * 🔴 …and STAYS let go, which the test above cannot see.
+   *
+   * Codex's implementation review called this the clearest case in the diff of a test passing while
+   * the behaviour it names stays broken, and it was right. The ceiling wrote `null` and the arm
+   * branch saw an overlapping player on the very next tick and started again from zero — so the
+   * longest single armed span stayed under the ceiling exactly as designed, and the assertion above
+   * passed, while the player cycled: **~41 ticks locked and invisible, one tick of control, repeat.**
+   *
+   * Driven against a blocked doorway before the fix: **3 free ticks in 120.** After: 120 in 120.
+   *
+   * The right quantity is not the longest lock, it is how much of the window the player owns.
+   */
+  it('and stays released — the ceiling is a latch, not a one-tick blink', () => {
+    const wall: Rect = { x: GOAL.x + 20, y: FLOOR_Y - BODY_H, w: 40, h: BODY_H };
+    const world = makeWorld([wall]);
+    const held = neutral();
+    held.right = true;
+    for (let i = 0; i < 300; i += 1) tick(world, { ...held });
+
+    // Settled state: another 120 ticks jammed against the same wall, holding the same input.
+    let free = 0;
+    for (let i = 0; i < 120; i += 1) {
+      tick(world, { ...held });
+      if (world.goalEntryTicks === null) free += 1;
+    }
+    expect(overlapsGoal(world), 'premise: the body is still jammed against the rect').toBe(true);
+    expect(containedInGoal(world), 'premise: and containment is still unreachable').toBe(false);
+    expect(free, 'the player has to keep the controls, not get one tick in forty-one').toBe(120);
+  });
+
+  /**
+   * The arming-tick jump, which the input lock structurally cannot cover.
+   *
+   * `entryLocked` is cached before step 1 and 9d arms at the end of the tick, so a jump pressed on
+   * exactly the arming tick fires. Codex's implementation review found it. Two fixes were tried and
+   * measured before the one that shipped — a position test at step 7 (useless: the body has not been
+   * integrated yet) and refusing to arm off the ground (worked, and took four `level-completable`
+   * seeds red, because the auto-player jumps where the floor ends just past every exit).
+   *
+   * What shipped freezes the COUNTER while airborne. The claim is therefore not *"you cannot jump"*
+   * — you can — but the one that matters: **the courier is never drawn faded while off the ground
+   * and outside the door.** Asserted on the alpha, because that is the thing a player sees.
+   */
+  it('a jump on the arming tick never fades the courier in mid-air', () => {
+    const world = makeWorld();
+    let faded = 0;
+    let sawAirborneArmed = false;
+    for (let i = 0; i < 900; i += 1) {
+      const input = neutral();
+      input.right = true;
+      input.jumpPressed = true;
+      input.jumpHeld = true;
+      tick(world, input);
+      if (world.goalEntryTicks !== null && !world.player.grounded) {
+        sawAirborneArmed = true;
+        if (goalEntryAlpha(world.goalEntryTicks) < 1) faded += 1;
+      }
+      if (world.completed) break;
+    }
+    expect(world.completed, 'mashing jump must still finish the level').toBe(true);
+    expect(sawAirborneArmed, 'premise: the run-in really did arm while the body was off the ground').toBe(
+      true,
+    );
+    expect(faded, 'the courier was drawn part-faded while airborne').toBe(0);
+  });
 });
 
 describe('the cancel — the blocker Codex found', () => {

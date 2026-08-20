@@ -340,6 +340,25 @@ export interface World {
    *    structural rather than remembered.
    */
   goalEntryTicks: number | null;
+
+  /**
+   * Has the entry ceiling fired, with the body still inside the rect it fired over?
+   *
+   * 🔴 **The ceiling alone did not terminate anything, and the test that claimed it did was
+   * measuring the wrong quantity.** `stepGoalEntry` cancelled at `GOAL_ENTRY_TICKS * 2` by writing
+   * `null` — and then the very next tick the arm branch saw an overlapping player and armed again
+   * from zero. Driven against a blocked doorway: over 120 ticks the player was free for **three**.
+   * Roughly 41 ticks locked and invisible, one tick of control, repeat, forever.
+   *
+   * The regression test asserted only the longest single armed span, which stayed under the ceiling
+   * exactly as designed, so it passed. Codex's implementation review called it the clearest case in
+   * the diff of a test passing while the behaviour it names stays broken, and it was right.
+   *
+   * So the release needs a LATCH, not a reset. Set when the ceiling fires; cleared the moment the
+   * body stops overlapping the goal, which is the only event that can make a fresh entry meaningful.
+   * A boolean rather than another counter: there is no duration here, only "this attempt is spent".
+   */
+  goalEntryBlocked: boolean;
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

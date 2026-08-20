@@ -1,30 +1,30 @@
 # Session handoff — the gate-art + gate-entry session
 
-> ## 🔴 One criterion is still open. Do not merge as done.
+> ## ✅ Every criterion is green. **STOP for the owner's approval before merging.**
 >
-> Everything the owner asked for is built, tested, measured and played. **G.9 — the Codex
-> implementation review — has not run**, and by the project's own rule *(CLAUDE.md §3)* that means
-> the session is reported failing on it rather than done.
+> All nine gates pass, both Codex reviews ran and every finding from both is applied or recorded, the
+> gate owners ran twice each in isolated worktrees, and the whole thing has been played by hand.
+> Nothing is merged and nothing should be until the owner says so.
 >
-> **Why:** Codex hit its account usage limit mid-review. It resets **2026-08-20 09:40**. The plan
-> review (G.8) ran and all 12 of its findings are applied or recorded.
+> Full record: [qa/phase-08-gate-entry.md](qa/phase-08-gate-entry.md) ·
+> [plan review](reviews/session-gate-art-and-entry-plan.md) ·
+> [implementation review](reviews/session-gate-art-and-entry-impl.md) ·
+> [generations/session-gate.md](generations/session-gate.md) ·
+> [evidence/gate-entry/](evidence/gate-entry/)
 >
-> **To finish:** re-run the implementation review, file it at
-> `docs/reviews/session-gate-art-and-entry-impl.md`, triage every finding, **then STOP for
-> approval.** Nothing is merged.
->
-> **Settled since the first draft of this page:**
+> **The Codex implementation review returned BLOCK**, on two high-severity defects that six agent
+> briefs and a five-level hands-on pass had all read past. Both were confirmed by driving the sim,
+> both are fixed, and the story of fixing the first one is the most useful thing in this session:
 >
 > | | |
 > |---|---|
-> | **G.7b — frame budget** | ✅ **MEASURED**, after being reported UNRUN. `tests/e2e/phase-08-gate-perf.spec.ts` puts the exit on screen and amplifies its draw 40x to clear a quantised clock. One exit costs **0.0009–0.0065 ms of GPU per frame** on an RTX 4080 — at worst 0.04 % of a 16.67 ms frame — against a 0.05 ms bound chosen on one run and confirmed on two held-out ones. |
-> | **The art-spend ceiling** | ✅ Settled by the owner at **$55** on 2026-08-20. `PRD.md` was raised to match `GENERATION-LOG.md`; they had disagreed for four days. |
-> | **The gate's size** | ✅ The owner spotted from a screenshot that the doorway was exactly as tall as the character. Rebuilt at **288 x 432** from the same generation — no new spend — and anchored bottom-centre on an unchanged trigger rect. |
+> | **The jump is not locked on the arming tick** | `entryLocked` is cached before step 1 and 9d arms at the end of the tick. **Three attempts.** A position test at step 7 was useless — step 7 runs before the body is integrated, so it reads the previous position. Refusing to arm off the ground worked and took `level-completable` red on four seeds, because the auto-player jumps where the floor ends just past every exit. What shipped freezes the COUNTER while airborne: the run-in still arms mid-hop and still steers the body in, but the fade measures walking in, and you do not walk through air. |
+> | **The ceiling was a blink, not a release** | It wrote `null` and the arm branch re-armed on the very next tick — **3 free ticks in 120** against a blocked doorway. The test passed because it measured the longest single armed span, which stays under the ceiling *because the ceiling works*. Now a latch, cleared only when the body leaves the rect: 120 in 120. |
 >
-> Full record: [qa/phase-08-gate-entry.md](qa/phase-08-gate-entry.md) ·
-> [reviews/session-gate-art-and-entry-plan.md](reviews/session-gate-art-and-entry-plan.md) ·
-> [generations/session-gate.md](generations/session-gate.md) ·
-> [evidence/gate-entry/](evidence/gate-entry/)
+> **Settled along the way:** G.7b measured on a real RTX 4080 (**0.0009–0.0065 ms of GPU per exit per
+> frame**, plus a linearity check at two amplifications after Codex objected that marginal cost is not
+> total cost) · the art-spend ceiling reconciled at **$55** · the gate rebuilt at **288 × 432** after
+> the owner saw it was the same height as the character.
 
 ## What shipped
 

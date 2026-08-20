@@ -294,6 +294,12 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    lock lifts, not discarded".
   const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
   const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
+  //    ⚠️ On the ARMING tick this lock is still false — `entryLocked` is cached before step 1 and 9d
+  //    arms at the end of the tick — so a jump pressed exactly then does fire. Codex's implementation
+  //    review raised it, and the fix is NOT here: a position test at step 7 reads the player's
+  //    PRE-movement coordinates, so on the arming tick it reports "not in the doorway" and blocks
+  //    nothing. Tried, measured, reverted. The sequence refuses to arm off the ground instead — see
+  //    `stepGoalEntry` — which makes the hop harmless rather than forbidden.
   if (bufferOpen && !hitstunLocked && !entryLocked && (player.grounded || coyoteOpen)) {
     player.vy = -tuning.jumpVelocity;
     player.jumpCutPending = true;

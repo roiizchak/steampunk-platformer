@@ -255,9 +255,11 @@ export function parallaxPrompt(template, depth) {
 /**
  * The level EXIT — the gate-entry session's one generation.
  *
- * `2:3` and downscaled to exactly `192 x 288`, because that is the goal rect in all five shipped
- * `.tmj` files. Authored at the size it draws at, like every other sprite here: at `CAMERA_ZOOM` 1
- * nothing scales between the file and the screen, which is what makes "readable at true sprite
+ * `2:3` and downscaled to exactly `GATE_PX` — `288 x 432`, which is **larger** than the 192 x 288
+ * goal rect it triggers on. It was the rect, and that made the doorway exactly as tall as the
+ * 132 x 288 courier. Still authored at the size it draws at, like every other sprite here: at
+ * `CAMERA_ZOOM` 1 nothing scales between the file and the screen, which is what makes "readable at
+ * true sprite
  * size" testable rather than a range.
  *
  * ## 🔴 THE OPENING IS LOAD-BEARING, NOT DECORATION

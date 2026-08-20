@@ -211,7 +211,7 @@ rules were left alone — out of scope, and the sim guard is the smaller and mor
 
 | # | Owner | Finding | Why not |
 |---|---|---|---|
-| R1 | qa b1 | The e2e never presses jump or attack, so G.4's *"unit + e2e"* method is really unit-only for the lock half. | The unit test drives the production `tick()` end to end. There is no browser glue between the input snapshot and the lock, unlike the alpha fade — which is precisely why the fade needed an e2e and this does not. |
+| R1 | qa b1 | The e2e never presses jump or attack, so G.4's *"unit + e2e"* method is really unit-only for the lock half. | 🔴 **WITHDRAWN.** The Codex implementation review showed this reasoning talks past its own gap — the unit coverage omitted the ARMING tick, which is exactly where the lock does not hold. Now covered by an arming-tick alpha test. |
 | R2 | cr b2 | The e2e's `onRamp` accepts any `1 - k/20`, so a **2x fast** fade passes it, while the spec header claims it refuses a wrong curve. | True, and it is a division of labour the unit suite covers (B2 and B3 both go red on it). The header's claim was the defect, not the gate — corrected in the spec rather than duplicating a unit test in a browser. |
 | R3 | cr b2 | `animsWhileArmed` is largely satisfied by the sim's own `run` state at ~11 fps, so deleting the render override might leave it green. | Same division. B3 now loops every tick of the window in the unit suite, which is where a 60 Hz claim can actually be measured. |
 | R4 | cr b2 | `counterRange[1] === 20` is held up by the freeze, so it partly restates `completed === true`. | It still has one real tooth — a level where the player is not contained at tick 20 latches 21+ and reds. Kept for that. |
@@ -309,6 +309,46 @@ measurable, the divisor is dividing noise, so it fails loudly rather than report
 
 ---
 
+### Codex implementation review — BLOCK, 4 findings, all applied
+
+Filed verbatim with its triage at
+[reviews/session-gate-art-and-entry-impl.md](../reviews/session-gate-art-and-entry-impl.md). It ran
+AFTER the gate owners, so the diff it read is the one their fixes produced.
+
+It returned **BLOCK** on two high-severity defects, and both were confirmed by driving the sim:
+
+| | What Codex found | What the sim said |
+|---|---|---|
+| **1** | The jump is not locked on the ARMING tick — `entryLocked` is cached before step 1 and 9d arms at the end of the tick — so a hop there can fade the courier while outside the door. | **Mechanism confirmed** (the jump fires, `vy -24.3`, counter 0). **Harm not reachable at current tuning**: the hop costs 11 of the 20 ticks and lands contained by 14. But that margin is a tuning coincidence and `runMax` / `jumpVelocity` are live Playground knobs. |
+| **2** | The `GOAL_ENTRY_TICKS * 2` ceiling writes `null` and the arm branch re-arms on the very next tick, so an uncontainable player cycles instead of being released. And the test measured the longest single armed span — which stays under the ceiling **because the ceiling works** — so it passed while the behaviour it named stayed broken. | **Confirmed, and worse than described: 3 free ticks in 120.** After the fix, 120 in 120. |
+
+Finding 1 took **three attempts**, and the two failures are worth more than the fix:
+
+1. **A position test at step 7** — useless, because step 7 runs before step 8 integrates the body, so
+   on the arming tick it reads the PREVIOUS position, reports "not in the doorway" and blocks
+   nothing. Measured, reverted.
+2. **Refusing to arm off the ground** — it worked, and took `level-completable.test.ts` red on four
+   seeds. The auto-player jumps when the ground ahead runs out, and on every shipped level the floor
+   ends just past the exit, so it hopped the threshold and sailed over the doorway, finishing at
+   x 3338 with the goal at 1600–1792 and zero grounded ticks while overlapping. That gate exists for
+   exactly this, and this session's plan said in as many words that a completability failure is a
+   real defect and not a test to update. Reverted.
+
+What shipped **freezes the counter while airborne**: the sequence still arms mid-hop and still steers
+the body in — which is how an airborne arrival ever completed, and what attempt 2 destroyed — but the
+fade measures *walking in*, and you do not walk through air.
+
+**Finding 3** (G.7b measures marginal cost, not total, and never proved linearity) was a fair
+objection to an inference rather than a defect. Answered by measuring instead of arguing: the spec now
+takes the same per-exit estimate at **20 and at 40** copies and fails if they disagree by more than
+4x. Measured **0.0037 vs 0.0060 ms — 1.6x apart** — so the division is sound and G.7b is proved
+rather than asserted.
+
+**Finding 4** (six stale sentences in live contracts) applied. **R1 was withdrawn**: Codex was right
+that its reasoning talked past finding 1.
+
+---
+
 ## The QA gate
 
 | # | Criterion | Method | Owner | Status |
@@ -324,7 +364,7 @@ measurable, the divisor is dividing noise, so it fails loudly rather than report
 | G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | ✅ 1 file over 400, cited |
 | G.7b | Frame budget unchanged | amplified A/B on real GPU | `voltagent-qa-sec:performance-engineer` | ✅ **0.0009-0.0065 ms/frame per exit, bound 0.05** |
 | G.8 | Codex plan review ran; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-plan.md) | — | ✅ **12 findings, 10 applied, 2 recorded** |
-| G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | 🔴 **BLOCKED — usage limit** |
+| G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | ✅ **BLOCK, 4 findings, all applied** |
 
 ---
 
@@ -735,7 +775,7 @@ because one rect of positive size far from the spawn is all it ever asked for.
 
 ## The 400-line rule — one exemption, written before it was taken
 
-`SIZE-EXEMPTION: src/sim/tick.ts lines=428`
+`SIZE-EXEMPTION: src/sim/tick.ts lines=434`
 
 **`src/sim/tick.ts` crosses the limit at 422 lines, up from 398.** The gate's own text says the
 way past is *"to split the file or write the justification, in that order of preference"*, so the

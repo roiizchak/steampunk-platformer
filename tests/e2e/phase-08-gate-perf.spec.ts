@@ -111,6 +111,24 @@ const MAX_EXIT_GPU_MS = 0.05;
 const MUTATION_COPIES = 40;
 
 /**
+ * A second, smaller amplification — and the reason it exists.
+ *
+ * 🔴 Codex's implementation review made the fair objection that `(41 exits − 1 exit) / 40` is a
+ * MARGINAL cost, not a total one: it omits whatever the first gate costs that the next forty do not,
+ * and stacking co-located identical images could hit a batching or overdraw path a lone image never
+ * takes. Divide by forty and any of that becomes invisible.
+ *
+ * The answer is not to argue about it, it is to measure whether the thing is linear. If the per-exit
+ * figure at 20 copies and at 40 copies agree, the cost scales with the number drawn and the division
+ * is sound. If they disagree badly, the inference is broken and the spec says so instead of
+ * reporting a number.
+ */
+const HALF_COPIES = 20;
+
+/** How far apart the two per-exit estimates may sit before the amplify-and-divide inference fails. */
+const MAX_LINEARITY_SPREAD = 4;
+
+/**
  * Put the exit on screen, short of its own trigger rect, and clear the doorstep.
  *
  * 78 px short of the rect — 12 px clear of first overlap, since half the body is 66 px at scale 6 —
@@ -252,20 +270,23 @@ test.describe('G.7b — the frame cost of the exit', () => {
     await parkAtExit(page);
 
     const one: Sample[] = [];
+    const half: Sample[] = [];
     const many: Sample[] = [];
     for (let i = 0; i < PAIRS; i += 1) {
       // The order alternates: three A-then-B rounds would give every A a cooler machine.
       if (i % 2 === 0) {
         one.push(await sampleArm(page, 0));
+        half.push(await sampleArm(page, HALF_COPIES));
         many.push(await sampleArm(page, MUTATION_COPIES));
       } else {
         many.push(await sampleArm(page, MUTATION_COPIES));
+        half.push(await sampleArm(page, HALF_COPIES));
         one.push(await sampleArm(page, 0));
       }
     }
     await setExitCopies(page, 0);
 
-    for (const s of [...one, ...many]) {
+    for (const s of [...one, ...half, ...many]) {
       expect(s.frames, 'too few frames served to say anything').toBeGreaterThanOrEqual(MIN_SAMPLES);
       expect(s.ticks, 'the window spanned no sim ticks').toBeGreaterThan(0);
     }
@@ -283,6 +304,11 @@ test.describe('G.7b — the frame cost of the exit', () => {
     const perExitWork = Math.max(0, (manyWork - oneWork) / MUTATION_COPIES);
     const perExitGpu = Math.max(0, (manyGpu - oneGpu) / MUTATION_COPIES);
 
+    // The same estimate taken at half the amplification. If the cost is linear in the number drawn,
+    // these two agree and the division above is sound.
+    const halfGpu = median(half.map((s) => s.gpuMedianMs));
+    const perExitGpuHalf = Math.max(0, (halfGpu - oneGpu) / HALF_COPIES);
+
     // eslint-disable-next-line no-console
     console.log(
       [
@@ -290,7 +316,9 @@ test.describe('G.7b — the frame cost of the exit', () => {
         `[G.7b] renderer ${renderer}`,
         `       1 exit      work ${oneWork.toFixed(3)} ms   gpu ${oneGpu.toFixed(3)} ms`,
         `       ${MUTATION_COPIES + 1} exits    work ${manyWork.toFixed(3)} ms   gpu ${manyGpu.toFixed(3)} ms`,
+        `       ${HALF_COPIES + 1} exits    work ${median(half.map((s) => s.workMedianMs)).toFixed(3)} ms   gpu ${halfGpu.toFixed(3)} ms`,
         `       per exit    work ${perExitWork.toFixed(4)} ms   gpu ${perExitGpu.toFixed(4)} ms`,
+        `       per exit at ${HALF_COPIES}          gpu ${perExitGpuHalf.toFixed(4)} ms   (linearity check)`,
         `       bounds      work ${MAX_EXIT_WORK_MS} ms   gpu ${MAX_EXIT_GPU_MS} ms`,
         '',
       ].join('\n'),
@@ -304,6 +332,21 @@ test.describe('G.7b — the frame cost of the exit', () => {
       `${MUTATION_COPIES} extra exits did not cost the GPU anything — the amplifier is not amplifying, ` +
         'so the per-exit figure is noise over 40 and this gate is measuring nothing',
     ).toBeGreaterThan(oneGpu);
+
+    // 🔴 LINEARITY. Without this the division is an assumption, not a measurement — Codex's
+    // implementation review, finding 3. Two independent estimates of the same quantity, taken at
+    // different amplifications; if the cost of drawing the exit scales with how many are drawn, they
+    // agree. A ratio rather than a difference, because both are tiny and an absolute tolerance would
+    // be a bound on noise.
+    const spread =
+      Math.max(perExitGpu, perExitGpuHalf) / Math.max(1e-6, Math.min(perExitGpu, perExitGpuHalf));
+    expect(
+      spread,
+      `the per-exit cost measured at ${HALF_COPIES} copies (${perExitGpuHalf.toFixed(4)} ms) and at ` +
+        `${MUTATION_COPIES} (${perExitGpu.toFixed(4)} ms) disagree by ${spread.toFixed(1)}x. The cost ` +
+        'does not scale with the number drawn, so dividing the delta by the count is not a per-exit ' +
+        'figure and this gate is not measuring what it says it is.',
+    ).toBeLessThan(MAX_LINEARITY_SPREAD);
 
     expect(perExitWork, 'the exit costs the main thread more per frame than it should').toBeLessThan(
       MAX_EXIT_WORK_MS,

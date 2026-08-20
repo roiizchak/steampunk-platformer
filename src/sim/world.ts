@@ -121,6 +121,7 @@ export function createWorld({
     goal: goal ?? null,
     completed: false,
     goalEntryTicks: null,
+    goalEntryBlocked: false,
     tuning,
     scale,
     player: {

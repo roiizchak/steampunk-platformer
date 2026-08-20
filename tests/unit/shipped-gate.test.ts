@@ -175,7 +175,7 @@ describe('the shipped exit gate', () => {
     expect(png.height).toBeGreaterThan(0);
   });
 
-  it('is authored at exactly the goal rect, so nothing rescales it on screen', () => {
+  it('is authored at exactly GATE_PX, so nothing rescales it on screen', () => {
     // Assert the TYPE before the value: an `undefined` width makes every comparison vacuous.
     expect(typeof png.width).toBe('number');
     expect(png.width).toBe(GATE_W);

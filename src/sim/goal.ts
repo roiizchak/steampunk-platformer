@@ -12,11 +12,17 @@
  * entered at all. The gate-entry session replaced that with a scripted **run-in**:
  *
  * ```
- *   first overlap  -> ARM      the sim takes the controls, the player auto-runs to the centre
- *   each tick      -> ADVANCE  an integer counter; the render layer fades the body from it
- *   stopped overlapping -> CANCEL   back to null, controls returned, fully opaque again
+ *   first overlap        -> ARM       the sim takes the controls; the player auto-runs to the centre
+ *   each GROUNDED tick   -> ADVANCE   an integer counter; the render layer fades the body from it
+ *   airborne             -> HOLD      the counter freezes, so nothing fades in mid-air
+ *   left the rect, or hit -> CANCEL    back to null, controls returned, fully opaque again
+ *   counter > 2x window  -> RELEASE   and LATCH, until the body leaves the rect
  *   counter >= GOAL_ENTRY_TICKS AND fully contained -> COMPLETE
  * ```
+ *
+ * The last three lines were not in the first version. Each was added because someone drove the sim
+ * and watched it misbehave — a real knockback, a blocked doorway, and a jump on the arming tick. The
+ * reasoning for each sits with its branch below.
  *
  * **Nothing was renumbered, inserted or lettered.** 9d already owned "the exit"; an exit you walk
  * into for twenty ticks is still the exit. Codex's plan review was asked directly whether widening
@@ -87,8 +93,10 @@
  * than a separate decision, and it cost a spec an afternoon before it was written down.
  */
 
-import { PLAYER_BOX } from './player';
+import { containedInGoal, overlapsGoal } from './goalGeometry';
 import type { World } from './types';
+
+export { containedInGoal, overlapsGoal } from './goalGeometry';
 
 /**
  * How long the run-in takes, in ticks. **20 = one third of a second at 60 Hz.**
@@ -113,93 +121,6 @@ import type { World } from './types';
  * reaches 0 on exactly the earliest tick completion can fire.
  */
 export const GOAL_ENTRY_TICKS = 20;
-
-/**
- * The player's box in world space, from the feet.
- *
- * ONE construction, shared by both predicates below. Same shape as the collider's and the
- * pickups' — `toWorld` in `player.ts` is the only other place that converts a LocalBox, and this
- * deliberately mirrors it rather than inventing a second half-width.
- */
-function playerBox(world: World): { left: number; right: number; top: number; bottom: number } {
-  const { player, scale } = world;
-  const halfW = (PLAYER_BOX.w * scale) / 2;
-  return {
-    left: player.x - halfW,
-    right: player.x + halfW,
-    top: player.y - PLAYER_BOX.h * scale,
-    bottom: player.y,
-  };
-}
-
-/**
- * Is the goal testable at all this tick?
- *
- * 🔴 Death wins ties.
- *
- * You do not finish a level by dying on the doorstep. `hp <= 0` rather than `state === 'death'`
- * alone, because the kill plane calls `killPlayer` and early-returns without necessarily having
- * entered the death state yet — the same two-routes-to-death asymmetry `playerDied`'s docstring
- * records.
- *
- * ⚠️ This guard is NOT sufficient on its own, and believing it was is the defect Codex's Phase 8
- * plan review caught. `respawnPlayer` runs at step 4c and restores `state: 'idle'` with full hp, so
- * on the respawn tick this test is already false. If the goal overlapped the spawn, dying anywhere
- * would complete the level. What actually prevents that is `describeGoalProblem` refusing a goal
- * that overlaps the standing spawn box — a data rule, not a runtime one, and the two are
- * load-bearing together rather than either alone.
- */
-function goalTestable(world: World): boolean {
-  return world.goal !== null && world.player.hp > 0 && world.player.state !== 'death';
-}
-
-/**
- * Has the player's box TOUCHED the exit? This **arms** the run-in; it no longer completes anything.
- *
- * This is the rule that used to be called `reachedGoal` and used to end the level on its own. A
- * player whose right edge crossed `goal.x` by one pixel finished the level — so the character was
- * whisked away at the threshold and the 132 px of doorway behind it were never entered at all.
- * Demoted to a trigger, which is the whole point of the gate-entry session.
- *
- * It is also the CANCEL condition (see `stepGoalEntry`), which is why it keeps the death guard: a
- * player who dies mid-run-in stops overlapping by this definition, and that is what disarms them.
- */
-export function overlapsGoal(world: World): boolean {
-  const goal = world.goal;
-  if (goal === null || !goalTestable(world)) {
-    return false;
-  }
-  const b = playerBox(world);
-  return b.left < goal.x + goal.w && b.right > goal.x && b.top < goal.y + goal.h && b.bottom > goal.y;
-}
-
-/**
- * Is the player's box FULLY INSIDE the exit? This is what completes the level.
- *
- * 🔴 **Inclusive on every edge, and that is not a rounding convenience — it is the only workable
- * rule here.** `PLAYER_BOX.h * scale` is 288, every shipped goal rect is exactly 288 tall, and each
- * one sits flush on its floor. So the vertical test is an exact equality at BOTH edges,
- * satisfiable only while the player stands on that floor. A strict `<` makes all five levels
- * uncompletable, and one pixel of air does the same thing temporarily.
- *
- * That razor edge is deliberate rather than tolerated. It is why the run-in drives the player
- * along the GROUND instead of teleporting them, and Codex's plan review confirmed independently
- * that ordinary grounded play reaches the equality reliably: `resolveCollisions` snaps `player.y`
- * to `solid.y`, and this game has no slopes and no moving platforms to drift it.
- *
- * ⚠️ Nothing validates the rect height at load time — `tiledGoal.ts` deliberately does not learn
- * this rule, because it is a consequence of the player's size rather than a property of level
- * data. `tests/unit/level-goal-fits.test.ts` is the gate that goes red the day someone authors a
- * 240 px exit, and it is the only one.
- */
-export function containedInGoal(world: World): boolean {
-  const goal = world.goal;
-  if (goal === null || !goalTestable(world)) {
-    return false;
-  }
-  const b = playerBox(world);
-  return b.left >= goal.x && b.right <= goal.x + goal.w && b.top >= goal.y && b.bottom <= goal.y + goal.h;
-}
 
 /**
  * The auto-run's direction for THIS tick, or `0` when no run-in is running.
@@ -316,12 +237,20 @@ export function goalEntryDir(world: World): -1 | 0 | 1 {
  * or dead.
  */
 function entryBlocked(world: World): boolean {
-  return !overlapsGoal(world) || world.player.state === 'hurt';
+  return !overlapsGoal(world) || world.player.state === 'hurt' || world.goalEntryBlocked;
 }
 
 export function stepGoalEntry(world: World): boolean {
   if (world.goal === null) {
     return false;
+  }
+
+  // The latch's only exit. Cleared BEFORE anything else reads it, so a body that left the rect and
+  // came back is a fresh attempt on the tick it returns rather than one tick later. `overlapsGoal`
+  // is false for a dead player too, so a respawn clears it as well — which is what makes the level
+  // still winnable after the ceiling has fired.
+  if (!overlapsGoal(world)) {
+    world.goalEntryBlocked = false;
   }
 
   if (world.goalEntryTicks === null) {
@@ -336,6 +265,35 @@ export function stepGoalEntry(world: World): boolean {
 
   if (entryBlocked(world)) {
     world.goalEntryTicks = null;
+    return false;
+  }
+
+  /**
+   * 🔴 **The counter only advances on the GROUND, and that is what makes an airborne entry honest.**
+   *
+   * Codex's implementation review found that the input lock cannot cover the tick the sequence arms
+   * on: `entryLocked` is cached before step 1 and this runs at 9d, so step 7 has already accepted a
+   * jump before anything knows. Two fixes were tried and measured before this one:
+   *
+   *  - **A position test at step 7.** Useless: the body has not been integrated yet, so on the
+   *    arming tick it reads as outside the rect and blocks nothing. Reverted.
+   *  - **Refusing to arm off the ground.** It worked, and it broke the shipped levels.
+   *    `level-completable.test.ts`'s auto-player jumps when the ground ahead runs out, and on every
+   *    level the floor ends just past the exit — so it hops at the threshold, and with arming
+   *    refused it sailed over the doorway and finished the level unfinishable. Four seeds went red.
+   *    That gate exists for exactly this, and the plan for this session said in as many words that a
+   *    completability failure is a real defect and not a test to update. Reverted.
+   *
+   * Freezing the COUNTER instead keeps the steering and fixes the harm. The sequence still arms
+   * mid-hop, so `goalEntryDir` still pulls the body toward the centre through the air and lands it
+   * inside — which is how an airborne arrival ever completed. But the fade measures *walking in*,
+   * and you do not walk through air: alpha stays at 1 until the feet are down, so the courier can
+   * never be drawn faded — let alone invisible — while airborne and outside the door.
+   *
+   * It also cannot stall: `overlapsGoal` still gates the cancel above, and a body cannot stay
+   * airborne indefinitely over a rect that sits flush on its floor.
+   */
+  if (!world.player.grounded) {
     return false;
   }
 
@@ -362,7 +320,13 @@ export function stepGoalEntry(world: World): boolean {
    * the player walks in again and it arms from zero.
    */
   if (world.goalEntryTicks > GOAL_ENTRY_TICKS * 2) {
+    // 🔴 LATCH, not reset. Writing `null` alone released the body for exactly one tick: the arm
+    // branch saw an overlapping player on the next one and started again from zero. Driven against a
+    // blocked doorway that gave 3 free ticks in 120 — locked and invisible for ~41, in control for
+    // 1, forever. `goalEntryBlocked` holds until the body leaves the rect, which is cleared at the
+    // top of this function and is the only event that makes a fresh attempt mean anything.
     world.goalEntryTicks = null;
+    world.goalEntryBlocked = true;
     return false;
   }
 

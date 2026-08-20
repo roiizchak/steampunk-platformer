@@ -24,9 +24,15 @@
  * looked *better* for it. `goalIsGreybox` is exported so a test asserts which branch shipped instead of
  * inferring it.
  *
- * ## The drawn rect IS the trigger rect
+ * ## The drawn gate is ANCHORED to the trigger rect — it is no longer the same size as it
  *
- * Nothing here computes geometry. It draws `LevelData.goal`, the same rectangle `describeGoalProblem`
+ * ⚠️ This section read *"the drawn rect IS the trigger rect"* until the gate-art session found that
+ * meant the doorway was exactly as tall as the courier walking through it. The art is `GATE_PX` now,
+ * larger than the rect and standing bottom-centre on it. **What survives is the part that mattered:
+ * the drawing takes its position from `LevelData.goal` and computes no geometry of its own**, so the
+ * door cannot drift away from the thing step 9d tests. Only the size was ever coincidental.
+ *
+ * It draws from `LevelData.goal`, the same rectangle `describeGoalProblem`
  * validated and the same one step 9d tests the player's box against. That is deliberate and it is why
  * the exit carries no tile painting in the `.tmj`: a doorway painted into the tile layer plus a trigger
  * rect beside it are two lists that can drift, which is exactly how Phase 4 shipped a spike run drawn
