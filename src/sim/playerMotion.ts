@@ -48,6 +48,16 @@ export interface MotionLocks {
 export interface PlayerMotion {
   previousX: number;
   previousY: number;
+  /**
+   * Did steps 5-8 actually run, or did hit-stop skip all four?
+   *
+   * Returned rather than re-derived, and **step 13 must use THIS and not `frozen(player,
+   * tickCount)`** *(vault 5.3)*. The two disagree on exactly one tick and it is the important one:
+   * a freeze armed at 9b of tick `T` makes `frozen()` true for the rest of `T`, but step 7 already
+   * ran on `T`, so a window that skipped its advance there would be one tick more generous than
+   * step 13's own rule allows. This answers the question step 13 actually asks.
+   */
+  ran: boolean;
 }
 
 /**
@@ -74,7 +84,7 @@ export function stepPlayerMotion(
   // step 1, collision at 9, the state door at 11 — because a freeze is a pause on MOTION, not on the
   // simulation. See `hitstop.ts` for why it is a deadline rather than a window counter.
   if (frozen(player, world.tickCount)) {
-    return { previousX, previousY };
+    return { previousX, previousY, ran: false };
   }
 
   // 5. Horizontal. `walkHeld` forced FALSE under the run-in: it is a RUN into the doorway by
@@ -111,9 +121,15 @@ export function stepPlayerMotion(
   //    Pinned by `tests/unit/player-combat.test.ts` — "a buffered press made during hitstun fires
   //    when the lock lifts, not discarded".
   //
-  //    ⚠️ A press made while FROZEN is treated the same way, and by the same mechanism: the buffer
-  //    is armed at step 3, which the freeze does not gate, so the press survives the freeze and
-  //    fires on the first unfrozen tick the player is able to jump.
+  //    ⚠️ A press made while FROZEN is treated the same way, and it takes TWO gates, not one. The
+  //    buffer is armed at step 3, which the freeze deliberately does not gate — but arming a window
+  //    the freeze then spends is worse than useless, and step 13 charged it for every frozen tick
+  //    until Phase 9's fix round. A 9-tick `lethal` freeze saturated `jumpBufferTicks` 8 from inside
+  //    itself, so the press was eaten and the jump never fired at all. Step 13 now skips its advance
+  //    on any tick this function returned `ran: false` for, which is what makes the sentence above
+  //    true rather than aspirational. Pinned by `hitstop-interactions.test.ts`, which asserts WHICH
+  //    tick the jump fires on for a lethal freeze and keeps a light one as a passes-either-way
+  //    control.
   const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
   const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
   //    ⚠️ On the ARMING tick this lock is still false — `entryLocked` is cached before step 1 and 9d
@@ -137,5 +153,5 @@ export function stepPlayerMotion(
   player.x += player.vx;
   player.y += player.vy;
 
-  return { previousX, previousY };
+  return { previousX, previousY, ran: true };
 }

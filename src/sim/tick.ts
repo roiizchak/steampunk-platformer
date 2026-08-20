@@ -271,7 +271,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    the BLOCK moved, the NUMBERING did not. That module also owns the hit-stop gate, which is one
   //    early return covering all four steps, and it captures `previousX`/`previousY` outside that
   //    gate so 9, 9b and 9c below still get both endpoints of this tick's motion.
-  const { previousX, previousY } = stepPlayerMotion(
+  const { previousX, previousY, ran: motionRan } = stepPlayerMotion(
     world,
     input,
     { dir, hitstunLocked, entryLocked },
@@ -367,10 +367,14 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     The `advanceWindow` call is the shared saturating increment from `windows.ts`; the guard in
   //     front of it — WHETHER this tick is spent at all — is the step-order rule above and stays
   //     here, with the numbered order that owns it.
-  if (!coyoteArmedThisTick) {
+  //     🔴 **A FROZEN tick is not spent either** (Phase 9) — the same rule one step further out:
+  //     step 7 did not run at all. Ungated, a 9-tick `lethal` freeze saturated `jumpBufferTicks` 8
+  //     and `coyoteTicks` 7 from inside itself and ate the press outright. `motionRan`, NOT
+  //     `frozen()` — `PlayerMotion.ran` says why they differ on the arming tick.
+  if (!coyoteArmedThisTick && motionRan) {
     player.ticksSinceGrounded = advanceWindow(player.ticksSinceGrounded, tuning.coyoteTicks);
   }
-  if (!events.landed) {
+  if (!events.landed && motionRan) {
     player.ticksSinceJumpPressed = advanceWindow(
       player.ticksSinceJumpPressed,
       tuning.jumpBufferTicks,

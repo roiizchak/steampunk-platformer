@@ -18,9 +18,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { ATTACK, HURT_LOCK_TICKS, IFRAME_TICKS, PLAYER_MAX_HP, invulnerable, movementLocked } from '../../src/sim/combat';
-import { HITSTOP_TICKS } from '../../src/sim/hitstop';
+import { HITSTOP_TICKS, freezePair } from '../../src/sim/hitstop';
 import { PLAYER_ATTACK_DAMAGE } from '../../src/sim/playerAttack';
 import { SCAVENGER, SCAVENGER_ATTACK } from '../../src/sim/enemies';
+import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
 import type { World } from '../../src/sim/types';
 import { BOUNDS, FLOOR, IDLE, SCALE, clawedWhileIdle, strikeWhileRunning } from './hitstop-fixtures';
@@ -150,5 +151,112 @@ describe('the regressions freezing those counters caused', () => {
     scavenger.lastHitTick = world.tickCount;
     tick(world, { ...IDLE });
     expect(world.player.hp, 'a frozen scavenger clawed through its own hit-stop').toBe(PLAYER_MAX_HP);
+  });
+});
+
+/**
+ * Step 13's two forgiveness windows are counters that were already counting, so they belong here
+ * with `iFrameCounter` and `combatCounter` rather than beside the freeze itself.
+ *
+ * Step 13's own rule, quoted from `tick.ts`: *"A window does not spend a tick on which step 8 could
+ * not yet see the fact that tick established."* **A frozen tick is a tick on which step 7 did not
+ * run at all**, so neither window may spend one — the identical forgiveness leak the freeze already
+ * refuses for i-frames and swing recovery, on windows small enough that a 9-tick `lethal` freeze
+ * saturates both.
+ *
+ * Each test carries a `light` (4) CONTROL that passes either way. Without it a red would only prove
+ * the assertion fires, not that it discriminates: 4 is under both knobs, so a light freeze cannot
+ * saturate either window and both versions of step 13 agree about it.
+ */
+describe('the freeze does not spend the jump buffer or the coyote window', () => {
+  /** Press jump the tick after a hit lands and report the tick the jump actually fires on. */
+  function jumpAfterFreeze(lethal: boolean): { hitTick: number; firedAt: number | null; duringFreeze: number[] } {
+    const struck = lethal ? strikeWhileRunning({ targetHp: PLAYER_ATTACK_DAMAGE }) : strikeWhileRunning();
+    const { world, input, hitTick } = struck;
+    const freeze = lethal ? HITSTOP_TICKS.lethal : HITSTOP_TICKS.light;
+    expect(struck.target.hp === 0, 'the wrong impact class landed').toBe(lethal);
+    expect(world.player.grounded, 'an airborne fixture cannot test the BUFFER').toBe(true);
+
+    latchJumpPress(input);
+    let firedAt: number | null = null;
+    const duringFreeze: number[] = [];
+    for (let i = 0; i < freeze + 8; i += 1) {
+      const at = world.tickCount;
+      if (tick(world, input).jumped) {
+        if (firedAt === null) firedAt = at;
+        if (at <= hitTick + freeze) duringFreeze.push(at);
+      }
+    }
+    return { hitTick, firedAt, duringFreeze };
+  }
+
+  it('a buffered press survives a lethal freeze and fires on the release tick', () => {
+    // The press is consumed at step 2 of `hitTick + 1`, the first frozen tick, and the release tick
+    // is the first one on which step 7 runs again.
+    const lethal = jumpAfterFreeze(true);
+    expect(lethal.duringFreeze, 'a jump fired out of a frozen body — step 7 escaped the gate').toEqual([]);
+    expect(lethal.firedAt, 'the freeze ate the buffered press').toBe(
+      lethal.hitTick + HITSTOP_TICKS.lethal + 1,
+    );
+
+    // The control. `HITSTOP_TICKS.light` is 4 against `jumpBufferTicks` 8, so the window cannot
+    // saturate inside it and this case fires whether or not step 13 is gated.
+    const light = jumpAfterFreeze(false);
+    expect(light.duringFreeze).toEqual([]);
+    expect(light.firedAt).toBe(light.hitTick + HITSTOP_TICKS.light + 1);
+  });
+
+  /**
+   * Coyote, the mirror case — `coyoteTicks` is 7, so a 9-tick freeze saturates it too.
+   *
+   * The freeze is armed through `freezePair` by hand rather than by a landed blow. Contriving a
+   * LETHAL hit to resolve on the exact tick the player's feet leave a ledge is fixture gymnastics
+   * that would test the fixture, not the window; the field it writes is the one field `freezePair`
+   * writes, and the buffer test above already drives the real 9b path end to end.
+   */
+  function coyoteAfterFreeze(ticks: number): { leftAt: number; armedAt: number; firedAt: number | null } {
+    const world = createWorld({
+      seed: 1,
+      scale: 1,
+      // A ledge with the floor far below, so the sweep cannot land mid-test — `coyote-time.test.ts`
+      // learned that the hard way when gravity was retuned under it.
+      solids: [
+        { x: 0, y: 780, w: 700, h: 32 },
+        { x: 0, y: 4000, w: 8000, h: 120 },
+      ],
+    });
+    const input = createSnapshot();
+    for (let i = 0; i < 10; i += 1) tick(world, input);
+    expect(world.player.grounded, 'the fixture never settled on the ledge').toBe(true);
+
+    input.right = true;
+    let leftAt = -1;
+    for (let i = 0; i < 600 && leftAt < 0; i += 1) {
+      const at = world.tickCount;
+      if (tick(world, input).leftGround) leftAt = at;
+    }
+    expect(leftAt, 'the player never walked off the ledge').toBeGreaterThan(0);
+
+    const armedAt = world.tickCount;
+    freezePair(world.player, { hitstopUntil: -1, lastHitTick: -1 }, ticks === HITSTOP_TICKS.lethal ? 'lethal' : 'light', armedAt);
+    latchJumpPress(input);
+
+    let firedAt: number | null = null;
+    for (let i = 0; i < ticks + 8 && firedAt === null; i += 1) {
+      const at = world.tickCount;
+      if (tick(world, input).jumped) firedAt = at;
+    }
+    return { leftAt, armedAt, firedAt };
+  }
+
+  it('a coyote window survives a lethal freeze and is still open on the release tick', () => {
+    const lethal = coyoteAfterFreeze(HITSTOP_TICKS.lethal);
+    expect(lethal.firedAt, 'the freeze closed the coyote window').toBe(
+      lethal.armedAt + HITSTOP_TICKS.lethal + 1,
+    );
+
+    // The control: 4 is under `coyoteTicks` 7, so this fires either way.
+    const light = coyoteAfterFreeze(HITSTOP_TICKS.light);
+    expect(light.firedAt).toBe(light.armedAt + HITSTOP_TICKS.light + 1);
   });
 });
