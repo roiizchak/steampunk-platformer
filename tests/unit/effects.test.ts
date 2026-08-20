@@ -122,6 +122,11 @@ describe('landingDust', () => {
     expect(landingDust(8.999, 0, 0, MAX_FALL)).toBe(null);
     expect(landingDust(9, 0, 0, MAX_FALL)).not.toBe(null);
     expect(landingDust(9, 0, 0, MAX_FALL)?.kind).toBe('dust');
+    // 🔴 The 'on' side of a threshold has to DRAW something. Without this line the clamp could
+    // return a burst of count 0 at exactly DUST_MIN_FALL_PX — indistinguishable from no dust at
+    // all — and this whole test would pass on a fixture that emits nothing. That is the decoration
+    // case the phase's own rules forbid, and it is what it did before the floor was added.
+    expect(landingDust(9, 0, 0, MAX_FALL)?.count).toBeGreaterThan(0);
   });
 
   it('is monotonic in |vy| across a sweep, not at three convenient points', () => {

@@ -205,9 +205,14 @@ export function landingDust(
   if (fall < DUST_MIN_FALL_PX) {
     return null;
   }
+  // The floor is 1, not 0. `DUST_MIN_FALL_PX` is the fall at which dust STARTS, so the burst it
+  // returns has to draw something: at exactly the threshold the ramp evaluates to 0, and a burst of
+  // count 0 is indistinguishable from no burst at all — while still satisfying every assertion that
+  // asks whether a burst came back. That is a decoration fixture, which this project forbids, and it
+  // is what this line read before the integrator caught it on merge.
   const count = Math.min(
     DUST_MAX_COUNT,
-    Math.max(0, Math.round((fall - DUST_MIN_FALL_PX) * DUST_PER_PX)),
+    Math.max(1, Math.round((fall - DUST_MIN_FALL_PX) * DUST_PER_PX)),
   );
   return { kind: 'dust', x, y, count, angleDeg: UP_DEG };
 }
