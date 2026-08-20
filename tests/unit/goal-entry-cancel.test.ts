@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { DEATH_TICKS, damagePlayer } from '../../src/sim/combat';
+import { DEATH_TICKS, HURT_TICKS, damagePlayer } from '../../src/sim/combat';
 import { KNOCKBACK_SPEED } from '../../src/sim/worldDamage';
 import { goalEntryAlpha } from '../../src/render/playerView';
 import { GOAL_ENTRY_TICKS, containedInGoal, overlapsGoal } from '../../src/sim/goal';
@@ -61,6 +61,33 @@ describe('the two ways the run-in refused to end, both found by driving it', () 
     }
     expect(invisibleOutside, 'ticks drawn at alpha 0 while NOT inside the doorway').toBe(0);
     expect(world.completed, 'and the hit costs the entry, it does not cost the level').toBe(true);
+  });
+
+  /**
+   * The cancel must STAY cancelled for the whole hurt window, not re-arm on the next tick.
+   *
+   * Found by watching the counter in the running game — nothing looked wrong on screen, because a
+   * counter of 0 draws at alpha 1 exactly as `null` does. The cancel knew about `hurt` and the arm
+   * branch did not, so the sequence flickered `null / 0 / null / 0` for the whole window, and
+   * `entryLocked` was true on every other tick — the auto-run fighting the knockback on alternating
+   * ticks, hitstun half-applied.
+   */
+  it('stays cancelled for the whole hurt window instead of flickering back on', () => {
+    const world = makeWorld();
+    runToGate(world);
+    for (let i = 0; i < 8; i += 1) tick(world, neutral());
+    damagePlayer(world.player, 10);
+    world.player.vx = -KNOCKBACK_SPEED;
+    world.player.knockbackPending = true;
+
+    const armedWhileHurt: number[] = [];
+    for (let i = 0; i < HURT_TICKS; i += 1) {
+      tick(world, neutral());
+      if (world.player.state !== 'hurt') break;
+      if (world.goalEntryTicks !== null) armedWhileHurt.push(world.goalEntryTicks);
+    }
+    expect(armedWhileHurt, 'the run-in re-armed while the courier was still being knocked around')
+      .toEqual([]);
   });
 
   /**

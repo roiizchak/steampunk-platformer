@@ -259,18 +259,18 @@ _Recorded at Task 10._
 
 | # | Criterion | Method | Owner | Status |
 |---|---|---|---|---|
-| G.1 | `goalIsGreybox()` false in all 5 levels; the gate renders at the goal rect | unit + e2e | `voltagent-qa-sec:qa-expert` | — |
-| G.1b | **The art READS as a doorway with a dark opening** *(Codex C6)* | by eye, screenshotted *(C4)* | play | — |
-| G.2 | Edge contact does NOT complete; the predicate fixture **and** the per-tick loop, both watched failing | unit | `voltagent-qa-sec:qa-expert` | — |
-| G.3 | Containment DOES complete, at a named tick | unit | `voltagent-qa-sec:qa-expert` | — |
-| G.4 | `run` plays from first overlap to completion; jump AND attack locked on the **sim** state; the attack edge is consumed | unit + e2e | `voltagent-qa-sec:qa-expert` | — |
-| G.4b | **Dying during the run-in cancels it** — the respawned player is free *(Codex C1, blocker)* | unit + hands-on | `voltagent-qa-sec:qa-expert` + play | — |
-| G.5 | Alpha reaches 0 over a tick-counted window; the curve has a red proof | unit + e2e | `voltagent-qa-sec:code-reviewer` | — |
-| G.6 | No blink-out, no pop-back — all 5 levels, by hand | `playwright-cli` + hands-on *(C4)* | play | — |
-| G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | — |
+| G.1 | `goalIsGreybox()` false in all 5 levels; the gate renders at the goal rect | unit + e2e | `voltagent-qa-sec:qa-expert` | ✅ unit + e2e on all 5 levels |
+| G.1b | **The art READS as a doorway with a dark opening** *(Codex C6)* | by eye, screenshotted *(C4)* | play | ✅ by eye, twice — before and after the fixes |
+| G.2 | Edge contact does NOT complete; the predicate fixture **and** the per-tick loop, both watched failing | unit | `voltagent-qa-sec:qa-expert` | ✅ both watched failing |
+| G.3 | Containment DOES complete, at a named tick | unit | `voltagent-qa-sec:qa-expert` | ✅ tick 20, watched failing two ways |
+| G.4 | `run` plays from first overlap to completion; jump AND attack locked on the **sim** state; the attack edge is consumed | unit + e2e | `voltagent-qa-sec:qa-expert` | ✅ sim state, edge consumed |
+| G.4b | **Dying during the run-in cancels it** — the respawned player is free *(Codex C1, blocker)* | unit + hands-on | `voltagent-qa-sec:qa-expert` + play | ✅ real death, respawn, and a finished level |
+| G.5 | Alpha reaches 0 over a tick-counted window; the curve has a red proof | unit + e2e | `voltagent-qa-sec:code-reviewer` | ✅ curve, window length and override all watched failing |
+| G.6 | No blink-out, no pop-back — all 5 levels, by hand | `playwright-cli` + hands-on *(C4)* | play | ✅ 5 levels pre-fix; probe-driven re-check after |
+| G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | ✅ 1 file over 400, cited |
 | G.7b | Frame budget unchanged | interleaved A/B | `voltagent-qa-sec:performance-engineer` | 🔴 **UNRUN** |
 | G.8 | Codex plan review ran; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-plan.md) | — | ✅ **12 findings, 10 applied, 2 recorded** |
-| G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | — |
+| G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | 🔴 **BLOCKED — usage limit** |
 
 ---
 
@@ -382,6 +382,83 @@ the exit — a limitation of a crude probe, not of the level: `level-completable
 level-05 under every gate seed. Its run-in above was observed by placing the courier 400 px left of
 its exit and letting the game do the rest, which exercises arm → run → fade → complete in full.
 Stated rather than glossed.
+
+---
+
+### The hands-on re-check, after the two fixes — and a third defect it found
+
+The fixes changed what happens when the courier is hit at the door, so the earlier hands-on pass no
+longer covers it. Re-driven in the running game with `playwright-cli`.
+
+⚠️ **Level 01 could not be platformed through the CLI.** Each command is a round trip while the game
+runs on real time in between, so a stall-triggered jump fires tens of pixels too late — the courier
+died in the pit at 3840–4128 on every attempt. `levelDriver.ts` avoids this by running the whole
+driver **inside the page**, sampling once per animation frame; a CLI loop structurally cannot. So the
+observations below use an **instrumented probe**: the body is placed at the gate's mouth and the sim
+then runs untouched from there. Stated plainly because it is not the same thing as playing the level,
+and the earlier full five-level pass — which did play them — stands as the record for G.6.
+
+#### The clean entry is unchanged by the fixes
+
+| Measured, in the running game | Value |
+|---|---|
+| ticks from arming to completion | **21** (counter 0 → 20) |
+| distinct alphas drawn | **21** |
+| biggest single-tick drop | **0.05** — exactly 1/20 |
+| sim states while armed | `run` only |
+| frames at alpha 0 before completion | **0** |
+| alpha after the panel | **0**, held |
+
+Identical to the pre-fix pass. Neither fix touches the path a clean entry takes.
+
+#### The hit at the door, watched
+
+```
+counter/alpha/state, one entry per tick
+
+0/1/run  1/0.95/run  …  8/0.6/hurt      the hit lands mid-fade
+null/1/hurt  × 17                        cancelled, opaque, the whole hurt window
+0/1/run  1/0.95/run  …  20/0/idle        re-armed from zero, full window, completes
+```
+
+Which is the intended behaviour: being hit at the threshold costs the entry, the courier snaps back
+to full opacity and takes the hit like anywhere else, then walks in again.
+
+#### 🔴 …and the first run of that trace showed the counter FLICKERING
+
+```
+8/0.6/hurt  null/1/hurt  0/1/hurt  null/1/hurt  0/1/hurt  …
+```
+
+The cancel branch had learned about `hurt` and the arm branch had not, so the sequence cancelled at
+9d and re-armed at 9d of the very next tick, for the whole hurt window.
+
+**Nothing looked wrong on screen** — a counter of `0` draws at alpha 1 exactly as `null` does — so no
+alpha assertion anywhere could have seen it, and none did. It was found by watching the *counter* in
+the running game rather than the render. What it actually cost: `entryLocked` was true on every other
+tick, so the auto-run fought the knockback on alternating ticks and hitstun was half-applied.
+
+**APPLIED** — one `entryBlocked()` predicate, read by both branches *(vault 5.3)*. Watched red: with
+the arm branch reverted, `stays cancelled for the whole hurt window` fails and nothing else does.
+Re-watched in the running game afterwards: `null/1/hurt` × 17, no flicker.
+
+This is the session's third defect found by driving rather than reading, and the second one no gate
+in the suite could have caught — both because the wrong thing was being measured, not because a
+bound was wrong.
+
+#### Screenshots — [docs/evidence/gate-entry/](../evidence/gate-entry/)
+
+| File | What it shows |
+|---|---|
+| `fix-01-fade-a.png` | counter 4, alpha 0.80 — the courier at the doorway's mouth, part-faded, with the scavenger beside it |
+| `fix-02-fade-b.png` · `fix-03-fade-c.png` | counter 20, alpha 0 — gone, panel up |
+| `fix-04-complete.png` | the finished state at true size |
+
+**G.1b, by eye, again:** the gate reads as a Victorian brass-arched doorway with gauges down the
+jambs and a genuinely dark opening. The figure standing opaque beside it in the completed shot is
+the **scavenger**, not the courier — worth writing down, because it looks exactly like a pop-back
+until you check which sprite it is.
+
 
 ---
 

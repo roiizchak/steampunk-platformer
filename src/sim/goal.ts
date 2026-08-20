@@ -296,13 +296,36 @@ export function goalEntryDir(world: World): -1 | 0 | 1 {
  * from zero. Gated from both directions in `goal-entry.test.ts`: it cancels, AND a cancelled run
  * still finishes the level on a second approach.
  */
+/**
+ * Is the body in no condition to be entering a doorway right now?
+ *
+ * ONE definition, read by both the arm branch and the cancel branch, because two statements of the
+ * same condition is where they drift *(vault 5.3)* — and here they drifted immediately. The cancel
+ * learned about `hurt` first and the arm did not, so a courier hit at the threshold cancelled at 9d,
+ * re-armed at 9d of the very next tick, cancelled again, and **flickered null / 0 / null / 0 for the
+ * whole hurt window**. Alpha happened to be 1 at a counter of 0, so nothing looked wrong on screen —
+ * it was found by watching the counter in the running game, not by looking at the render. What it
+ * cost was real though: `entryLocked` was true on every other tick, so the auto-run fought the
+ * knockback on alternating ticks and hitstun was half-applied.
+ *
+ * `hurt` is checked BY NAME rather than through `movementLocked`, which opens and closes on
+ * `HURT_LOCK_TICKS` — a shorter window than the state itself, so it would re-arm halfway through the
+ * hurt animation while the courier is still being knocked around.
+ *
+ * `overlapsGoal` carries the death half already, and the geometry half: no goal, not touching it,
+ * or dead.
+ */
+function entryBlocked(world: World): boolean {
+  return !overlapsGoal(world) || world.player.state === 'hurt';
+}
+
 export function stepGoalEntry(world: World): boolean {
   if (world.goal === null) {
     return false;
   }
 
   if (world.goalEntryTicks === null) {
-    if (!overlapsGoal(world)) {
+    if (entryBlocked(world)) {
       return false;
     }
     // Armed, not advanced: this tick is the one the body arrived on, and the auto-run cannot
@@ -311,11 +334,7 @@ export function stepGoalEntry(world: World): boolean {
     return false;
   }
 
-  // `hurt` is checked BY NAME rather than through `movementLocked`: that predicate opens and
-  // closes on `HURT_LOCK_TICKS`, a shorter window than the state itself, and a cancel that
-  // re-armed halfway through the hurt animation would fade the courier back out while it is
-  // still being knocked around.
-  if (!overlapsGoal(world) || world.player.state === 'hurt') {
+  if (entryBlocked(world)) {
     world.goalEntryTicks = null;
     return false;
   }

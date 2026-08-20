@@ -30,6 +30,7 @@ the index — `docs-contract.test.ts` addresses it by that name.
 | 8 — Level design and progression | [qa/phase-08-levels.md](qa/phase-08-levels.md) + [gate owners](qa/phase-08-levels-02-gate-owners.md) | [prd/phase-08-levels.md](prd/phase-08-levels.md) | [plan](reviews/phase-08-plan.md) · [impl](reviews/phase-08-impl.md) |
 | — Four gate defects (not a phase) | [qa/session-gate-defects.md](qa/session-gate-defects.md) | [handoff](handoff/next-session-prompt.md) | [plan](reviews/session-gate-defects-plan.md) · [impl](reviews/session-gate-defects-impl.md) |
 | — Three reported bugs + the two perf gates (not a phase) | [qa/session-bugfix-perf-gates.md](qa/session-bugfix-perf-gates.md) + [gate owners](qa/session-bugfix-perf-gates-02-gate-owners.md) | [handoff](HANDOFF.md) | [plan](reviews/session-bugfix-perf-gates-plan.md) · [impl](reviews/session-bugfix-perf-gates-impl.md) |
+| — Exit gate art + the enter-the-gate run-in (not a phase) | [qa/phase-08-gate-entry.md](qa/phase-08-gate-entry.md) | [handoff](HANDOFF.md) | [plan](reviews/session-gate-art-and-entry-plan.md) · impl 🔴 **blocked, Codex usage limit** |
 
 > Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
 > not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads
