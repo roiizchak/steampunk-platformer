@@ -103,7 +103,7 @@ describe('the particle budget', () => {
 });
 
 describe('the attack contact frame', () => {
-  it('is the measured texture frame 4, inside the 12-frame clip', () => {
+  it('is the measured texture frame 4, inside the shipped clip', () => {
     // A measurement traced on 2026-08-20 against the shipped sheet, not a preference. If the clip is
     // ever regenerated at a different frame count this assertion is the thing that has to be
     // re-measured — sheetGates.mjs's G5 will still pass, because it only asks whether contact falls
@@ -111,7 +111,7 @@ describe('the attack contact frame', () => {
     expect(ATTACK_CONTACT_FRAME_INDEX).toBe(4);
     expect(Number.isInteger(ATTACK_CONTACT_FRAME_INDEX)).toBe(true);
     expect(ATTACK_CONTACT_FRAME_INDEX).toBeGreaterThanOrEqual(0);
-    expect(ATTACK_CONTACT_FRAME_INDEX).toBeLessThan(12);
+    expect(ATTACK_CONTACT_FRAME_INDEX).toBeLessThan(10);
   });
 });
 

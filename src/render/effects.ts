@@ -190,10 +190,8 @@ const HURT_VENT_LEAN_DEG = 20;
  * it means the ramp is expressed against the fastest fall the sim can actually produce rather than
  * against an unbounded number.
  *
- * At exactly `DUST_MIN_FALL_PX` the count is the foot of the ramp — 0 — and the burst is still
- * returned. That is deliberate: the threshold is where dust *becomes possible*, and the count ramps
- * up from there rather than popping in at full size. The scene treats a count of 0 as a no-op, which
- * is what `explode(0)` already is.
+ * At or above the threshold the count ramps from **1** upward — see the comment on the clamp below
+ * for why the floor is 1 and not 0. Below it there is no burst at all, only `null`.
  */
 export function landingDust(
   impactVy: number,

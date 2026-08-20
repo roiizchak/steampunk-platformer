@@ -22,9 +22,16 @@ import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../sim/hitstop'
  * The texture frame the attack clip makes contact on. **A MEASUREMENT, not a preference.**
  *
  * Traced live on **2026-08-20** against the shipped `brass-courier` sheet — see
- * `docs/qa/phase-09-polish.md`, Task 0. The attack clip is **12 frames over a 20-tick swing**, and
- * contact is texture frame **4**, which is `frames[4]` because Phaser's `anims` index is
- * `textureFrame + 1`.
+ * `docs/qa/phase-09-polish.md`, Task 0. Contact is texture frame **4**, which is `frames[4]` because
+ * Phaser's `anims` index is `textureFrame + 1`.
+ *
+ * ⚠️ **The clip is 10 texture frames over the 20-tick swing, not 12.** `public/assets/index.json`
+ * ships `brass-courier-attack` with `frameCount: 10, simTicks: 20, fps: 30`, and 20 ticks at 60 Hz
+ * is 333 ms, which is 10 frames at 30 fps. The QA log's prose says "12 frames" one line under its
+ * own trace table, and that table lists texture frames 0–9 and anims indices 1–10 — ten of each. The
+ * catalog is the authority and the prose is not *(CLAUDE.md)*; the unit test reads `frameCount` back
+ * out of the shipped catalog rather than hard-coding either number, so a regenerated sheet turns the
+ * assertion red instead of silently invalidating this comment.
  *
  * ## Why this constant has to exist at all
  *
@@ -79,7 +86,9 @@ const NO_OFFSET = { dx: 0, dy: 0 };
  *
  * The return is `(1 - u)·cos(πu)` over `FLINCH_RETURN_TICKS`. The cosine crosses zero at the halfway
  * point and goes negative after it, which is the overshoot — the body swings a little past its rest
- * position and comes back, peaking near 18 % of the step. The `(1 - u)` envelope is what makes it
+ * position and comes back. The continuous minimum is −17.9 % at u ≈ 0.73, but the function is only
+ * ever evaluated at integer ticks, so the largest overshoot actually **drawn** is at `u = 4/6`:
+ * `(1/3)·cos(2π/3)` = **−16.7 %** of the step. That sampled figure is the one a playtest measures. The `(1 - u)` envelope is what makes it
  * *land*: at `u = 1` the term is exactly 0, and the branch below returns the shared neutral object
  * from that tick onward rather than a computed `-0`.
  *

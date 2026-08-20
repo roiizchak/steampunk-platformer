@@ -66,8 +66,9 @@ export interface ShakeState {
  * pure `ay`); and taking a hit rings the player's own head hardest on the axis they were struck on,
  * so `playerHurt` leads on `ay` and is the only outgoing-scale shake that does.
  *
- * Every value is between one and two orders of magnitude under Phaser's 0.05 default, which at
- * 1920 × 1080 would move the camera a whole 96 px grid cell for a hit on a gear.
+ * Phaser's 0.05 default would move the camera a whole 96 px grid cell for a hit on a gear. These
+ * sit between **7×** and **62×** under it: `playerHurt.ay` 0.007 is the largest at 0.05 / 0.007 =
+ * 7.1, and `land.ax` 0.0008 the smallest at 62.5.
  */
 export const SHAKE: Readonly<Record<ImpactClass | 'land', ShakeCommand>> = {
   light: { durationTicks: 4, ax: 0.003, ay: 0.001 },
@@ -87,7 +88,8 @@ export function shakeFor(impact: ImpactClass | 'land'): ShakeCommand {
  * A euclidean magnitude rather than `max(ax, ay)`, because a command that is strong on both axes
  * genuinely reads as a bigger event than one equally strong on a single axis — `playerHurt`
  * (0.004, 0.007) must outrank `light` (0.003, 0.001) on any honest measure, and it does on this one
- * by a factor of three.
+ * by **2.55×** (0.008062 / 0.003162). On `max(ax, ay)` it would be 1.4×, which is inside the range a
+ * retune could invert by accident.
  *
  * Exported because `shouldPreempt` is asserted against it in the unit test; one definition of "how
  * big is this shake", never two that agree about the happy path *(vault 5.3)*.
