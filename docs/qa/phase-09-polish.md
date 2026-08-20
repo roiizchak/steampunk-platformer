@@ -47,7 +47,16 @@ The live trace, tick by tick. `ATTACK = { startup: 6, active: 4, recovery: 10 }`
 | 10–11 | recovery | 6 | 5 |
 | 12–19 | recovery | 7–10 | 6–9 |
 
-The attack clip has **12 frames** (`anims index = textureFrame + 1`) spread over a 20-tick swing.
+The attack clip has **10 frames** (`anims index = textureFrame + 1`) spread over a 20-tick swing.
+
+> 🔴 **This line said 12 until 2026-08-20, and the table directly above it always said 10.** It lists
+> texture frames 0-9 and anims indices 1-10; `public/assets/index.json` ships `brass-courier-attack`
+> at `frameCount: 10, simTicks: 20, fps: 30`, and 20 ticks at 60 Hz is 0.333 s, which is 10 frames at
+> 30 fps. Three independent sources agreed and the prose disagreed with all of them. Caught by the
+> Task 2 implementer when its dispatch — which had copied the wrong number out of this file — told it
+> to read the catalog instead of hard-coding the count. **The contact-frame conclusion is unaffected:**
+> contact is texture frame 4, which is `frames[4]`, on `combatCounter` 8-9. *(vault C9 again, and this
+> time in the document the code is told to cite.)*
 
 **G5 passes and is still a red flag for this phase.** G5 only asks whether contact falls *inside*
 the window. It falls on ticks 8 and 9 — the **last two** of four. A hit normally lands on the
