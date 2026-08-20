@@ -69,11 +69,16 @@ export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
 export { KNOCKBACK_SPEED, applyWorldDamage } from './worldDamage';
 export { ATTACK_BOX, PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from './playerAttack';
 export { stepEnemies } from './enemyTurn';
+// Exported through the barrel so `sim-boundary.test.ts` walks it — see this file's note above.
+export { HURT_LOCK_TICKS, knockbackSettling, movementLocked } from './movementLock';
+export type { Freezable, ImpactClass } from './hitstop';
+export { HITSTOP_TICKS, freezePair, frozen } from './hitstop';
+export type { MotionLocks, PlayerMotion } from './playerMotion';
+export { stepPlayerMotion } from './playerMotion';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,
   DEATH_TICKS,
-  HURT_LOCK_TICKS,
   HURT_TICKS,
   IFRAME_TICKS,
   PLAYER_MAX_HP,
@@ -87,8 +92,6 @@ export {
   hitWindowOpen,
   invulnerable,
   isCombatState,
-  knockbackSettling,
-  movementLocked,
   stepCombat,
 } from './combat';
 export type {

@@ -215,11 +215,15 @@ export function stepHorizontal(
     // `vx` survives to reach step 8's integration instead of being eaten before it ever moves the
     // player. See `knockbackSettling`'s docstring for why this is exactly one tick.
     if (knockbackSettling(player)) {
-      // Consumed HERE, the one place it is read for real (vault 2.6-style single door). Clearing on
-      // use — not on a timer, not where it was set — is what keeps the exemption to exactly the one
-      // tick `knockbackSettling`'s docstring promises: left set, the very next `combatCounter === 1`
-      // read (impossible while still in the same `hurt` state, since that counter only equals 1
-      // once) would otherwise be the only thing standing between one tick and a permanent one.
+      // Consumed HERE, the one place it is read for real (vault 2.6-style single door).
+      //
+      // 🔴 **This clear is now the ONLY thing bounding the exemption, and it was belt-and-braces
+      // until Phase 9.** The old comment justified it against `knockbackSettling`'s
+      // `combatCounter === 1` clause — "impossible while still in the same `hurt` state, since that
+      // counter only equals 1 once". That clause no longer exists (see its docstring for why it went
+      // as redundant rather than as broken), so nothing else narrows the predicate: `state ===
+      // 'hurt' && knockbackPending` is true for every locked tick of the hurt window. Delete this
+      // line and the friction exemption stops being one tick and becomes the whole of hitstun.
       player.knockbackPending = false;
       return;
     }

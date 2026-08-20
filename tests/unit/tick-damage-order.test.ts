@@ -61,6 +61,11 @@ describe("step 9b: the player's swing resolves before contact damage (finding A1
     // resetting `state`/`combatCounter`) long before the active window was ever reached.
     world.player.state = 'attack';
     world.player.combatCounter = firstActiveCounter() - 1;
+    // 🔴 Phase 9: the swing's identity is STORED, not derived from `tickCount - combatCounter`, so a
+    // hand-built mid-swing player has to set it. Left at the `-1` sentinel it would equal the
+    // scavenger's untouched `lastHitSwing` and `strike()` would refuse the blow — the fixture would
+    // silently stop testing the ordering it is named for. See `PlayerSim.swingStartTick`.
+    world.player.swingStartTick = world.tickCount;
     // i-frames expired — `createWorld` already seeds `iFrameCounter` at `IFRAME_TICKS` (closed
     // window, vault-documented "expired" state), so no override is needed here.
 
