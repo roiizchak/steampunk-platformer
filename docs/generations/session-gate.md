@@ -12,7 +12,7 @@ The superseded take is retained as evidence in `_generated/world/superseded/`, n
 | Take | `request_id` | measured px | detected | outcome |
 |---|---|---|---|---|
 | 1 | `01a01ad3-a1c0-7570-89bd-4a09ea96966e` | **1696 × 2528** | — | **superseded**, see below |
-| 2 | `01a01ad6-a039-76e2-9828-089a99edb0ea` | **1696 × 2528** | 1 component, bbox 1636 × 2355 | **adopted** → `public/assets/objects/gate.png`, 192 × 288 |
+| 2 | `01a01ad6-a039-76e2-9828-089a99edb0ea` | **1696 × 2528** | 1 component, bbox 1636 × 2355 | **adopted** → `public/assets/objects/gate.png`, **288 × 432** (re-downscaled from this same crop on 2026-08-20 — no new generation, no new spend) |
 
 Dimensions read off the files, never off the aspect label *(vault 4.11)* — the job record reports
 `width: null` for both.
@@ -94,7 +94,7 @@ Cost: one $0.15 generation, which is what the authorised retry is for.
 | measured key | **`(3, 149, 41)`** |
 | components after keying | **exactly 1** |
 | keyed bounding box | **1636 × 2355**, ratio `0.6947` |
-| target rect | `192 × 288`, ratio `0.6667` |
+| target size | `288 × 432`, ratio `0.6667` — `GATE_PX`, not the goal rect |
 | distortion accepted | ~4 % horizontal squash, below the pixel grid at this size |
 
 **The measured key is `(3,149,41)`, not the `(0,255,0)` the prompt asked for.** That is STYLE.md
@@ -120,7 +120,7 @@ Applied, with the two that do not apply named rather than scored *(vault 9.3)*.
 | 2 | Alpha read by value, never `mode == "RGBA"` | ✅ source is PNG colour type **2** (RGB, no alpha) — keying mandatory; the shipped file is type **6** and `shipped-gate.test.ts` counts opaque and transparent pixels on it |
 | 3 | Zone separation measured | ⛔ **inapplicable** — an isolated object on a chroma field has no background band. Same call as the gear and the HUD |
 | 4 | Brass-cap rule checked by eye | ⛔ **inapplicable, and deliberately so.** §5 rule ONE is about *standable* surfaces. The player walks THROUGH this and it is drawn at depth 7, under them; capping it in brass would make it read as a platform, which is the one thing that rule exists to prevent. Rule TWO (temperature) does apply and is carried by the warm brass frame against the near-black void |
-| 5 | Readability at true sprite size | ✅ looked at at **192 × 288**, the size it draws at — the arch, both gauges' white dials, the valve wheel, the lamp's amber glow and the rivet rows all still resolve, and the opening reads as a dark passage |
+| 5 | Readability at true sprite size | ✅ looked at at the size it draws at — the arch, both gauges' white dials, the valve wheel, the lamp's amber glow and the rivet rows all still resolve, and the opening reads as a dark passage |
 
 **Gate 0 did not re-run.** It is a one-time model-swap probe, closed 2026-08-08, and no model
 changed. Stated rather than silently skipped.

@@ -356,7 +356,7 @@ box, downscale to the size it draws at.
 |---|---|---|---|
 | `hud-health` | `21:9` | 413 × 128 | 1/8 of the 1080 viewport |
 | `gear` | `1:1` | 72 × 72 | `GEAR_BOX.w × RENDER_SCALE` |
-| `goal-gate` | `2:3` | **192 × 288** | **the goal rect in all five `.tmj` files** — so `drawGoal`'s `setDisplaySize` is a no-op and pixels are 1:1 at `CAMERA_ZOOM` 1 |
+| `goal-gate` | `2:3` | **288 × 432** (`GATE_PX`) | **deliberately LARGER than the 192 × 288 goal rect it triggers on.** It WAS the rect, and that made the doorway exactly as tall as the 132 × 288 courier walking through it — a hatch, not a portal, and no gate caught it because every assertion compared the art to the rect. Now 1.5× the courier's height, anchored **bottom-centre** on the rect so it stands on the threshold the sim tests. The trigger is unchanged; `src/scenes/goalArtSize.ts` is the authority |
 
 🔴 **The gate has one requirement the other two do not: its opening must be SOLID and DARK.** The
 player fades to alpha 0 inside it. If the model renders the opening as a real hole onto the chroma
@@ -364,7 +364,7 @@ field, `keyOut` punches through and the character fades into the parallax backdr
 passage — the asset's job, exactly inverted.
 
 **The one-component check cannot see that failure.** A doorway whose interior keyed away comes back
-as a RING: still one component, still 192 × 288, still passing every check in the build script. So
+as a RING: still one component, still the authored size, still passing every check in the build script. So
 `tests/unit/shipped-gate.test.ts` measures the finished bytes — interior darkness and opacity, a
 bright frame column flanking the opening on both sides, overall opacity, and frame-versus-void
 luminance. Four measurements because Codex's plan review showed that any one of them alone is passed
