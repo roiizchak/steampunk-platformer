@@ -41,12 +41,29 @@ import { readPng } from '../../tools/gen/png.mjs';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { RENDER_SCALE } from '../../src/game/constants';
 import catalog from '../../public/assets/index.json';
+import { GATE_PX } from '../../src/scenes/goalArtSize';
 
 const GATE_PATH = 'public/assets/objects/gate.png';
 
-/** The goal rect in every shipped level. The gate is authored at exactly this size. */
-const GATE_W = 192;
-const GATE_H = PLAYER_BOX.h * RENDER_SCALE; // 288
+/**
+ * The gate's authored size — **`GATE_PX`, not the goal rect.**
+ *
+ * 🔴 It was the rect (192 x 288) until the owner looked at a screenshot and said the gate needed to
+ * be bigger than the character. The rect is 192 x 288 and the courier's box is 132 x 288, so the
+ * doorway stood **exactly as tall as the person walking through it**. Nothing in this file could
+ * have caught it: every measurement here compared the art to the rect, and against the rect it was
+ * correct. A `play`-owned criterion found what nine machine measurements could not.
+ *
+ * Read from `src/scenes/goalArtSize.ts`, which is also what `drawGoal` draws with — so this test is
+ * the thing that stops the `.mjs` build tool's copy of the number from drifting away from the
+ * scene's.
+ */
+const GATE_W = GATE_PX.w; // 288
+const GATE_H = GATE_PX.h; // 432
+
+/** The courier's box, for the spans below. 132 x 288 at `RENDER_SCALE` 6. */
+const BODY_W = PLAYER_BOX.w * RENDER_SCALE;
+const BODY_H = PLAYER_BOX.h * RENDER_SCALE;
 
 interface Px {
   r: number;
@@ -98,10 +115,10 @@ function luminance(x0: number, x1: number, y0: number, y1: number): number {
 }
 
 // The interior sample: the middle third of the middle third, well inside any plausible frame.
-const IN_X0 = 64;
-const IN_X1 = 128;
-const IN_Y0 = 96;
-const IN_Y1 = 192;
+const IN_X0 = GATE_W / 3;
+const IN_X1 = (GATE_W * 2) / 3;
+const IN_Y0 = GATE_H / 3;
+const IN_Y1 = (GATE_H * 2) / 3;
 
 /**
  * The span the DRAWN COURIER actually occupies, gate-local.
@@ -112,8 +129,21 @@ const IN_Y1 = 192;
  * against bright brass**. A window narrower than the thing it protects is structurally incapable of
  * ordering a mutation that narrows the opening to its own size.
  */
-const BODY_X0 = 30;
-const BODY_X1 = 162;
+const BODY_X0 = (GATE_W - BODY_W) / 2; // 78
+const BODY_X1 = BODY_X0 + BODY_W; // 210
+/**
+ * The courier's VERTICAL span inside the gate.
+ *
+ * `drawGoal` stands the gate on the goal rect's bottom edge and the courier stands on that same
+ * floor, so the body occupies the gate's **bottom** `BODY_H` — not its middle. Before the gate grew,
+ * those were the same thing and the distinction did not exist.
+ */
+const BODY_Y0 = GATE_H - BODY_H; // 144
+const BODY_Y1 = GATE_H;
+
+/** The vertical band the jambs are scanned over: the middle ~76 %, clear of lintel and threshold. */
+const FRAME_Y0 = Math.round(GATE_H * 0.14);
+const FRAME_Y1 = Math.round(GATE_H * 0.9);
 
 /** Opaque and near-black: the void a character can disappear into. */
 const isDark = (p: { r: number; g: number; b: number; a: number }) =>
@@ -127,8 +157,8 @@ const isDark = (p: { r: number; g: number; b: number; a: number }) =>
  */
 function frameColumns(): { left: number[]; right: number[] } {
   const columnIsFrame = (x: number) =>
-    fraction(x, x + 1, 40, 260, (p) => p.a > 200) >= 0.9 &&
-    fraction(x, x + 1, 40, 260, (p) => p.a > 200 && p.r + p.g + p.b >= 210) >= 0.6;
+    fraction(x, x + 1, FRAME_Y0, FRAME_Y1, (p) => p.a > 200) >= 0.9 &&
+    fraction(x, x + 1, FRAME_Y0, FRAME_Y1, (p) => p.a > 200 && p.r + p.g + p.b >= 210) >= 0.6;
   const centre = GATE_W / 2;
   const left: number[] = [];
   const right: number[] = [];
@@ -217,12 +247,22 @@ describe('the shipped exit gate', () => {
    * bars score the same as a passage. The contiguous dark run can, and it is also what the fade
    * actually needs — the character has to cross an unbroken void, not a striped one.
    *
-   * The bound is **half the body**, 66 px, expressed from `PLAYER_BOX` rather than from this
-   * generation. The shipped art measures **92 px** at every sampled height, so there is ~39 % of
-   * headroom; the 64 px slit the adversarial review synthesised fails it, and so does the barcode.
+   * The bound is **the whole body**, `BODY_W`, expressed from `PLAYER_BOX` rather than from this
+   * generation — and it is only affordable because the gate grew. At 192 x 288 the opening measured
+   * **92 px** against a 132 px courier, so ~30 % of the drawn character faded against brass and the
+   * bound could only honestly ask for half. At 288 x 432 it measures **138 px**: the doorway is now
+   * genuinely wider than the person walking through it, so the test can say so.
+   *
+   * ⚠️ 138 against 132 is ~4.5 % of headroom, which is thin. That is the correct amount of thin: a
+   * re-shoot that dips under is a real regression — the courier would fade against the jamb again —
+   * and the fix is a better generation, **never** a lower bound.
+   *
+   * Sampled at heights inside the courier's own vertical span, not the image's middle third. Since
+   * the gate stands taller than the body those are different bands, and the one that matters is
+   * where the character actually is.
    */
-  it('the opening is an unbroken run at least half the courier wide, at every height', () => {
-    const runs = [IN_Y0, (IN_Y0 + IN_Y1) / 2, IN_Y1 - 1].map((y) => {
+  it('the opening is an unbroken run at least as wide as the courier, at every body height', () => {
+    const runs = [BODY_Y0 + 36, (BODY_Y0 + BODY_Y1) / 2, BODY_Y1 - 32].map((y) => {
       let best = 0;
       let run = 0;
       for (let x = 0; x < GATE_W; x += 1) {
@@ -233,7 +273,7 @@ describe('the shipped exit gate', () => {
       }
       return best;
     });
-    const floor = (BODY_X1 - BODY_X0) / 2;
+    const floor = BODY_W;
     for (const [i, run] of runs.entries()) {
       expect(run, `row ${i}: longest unbroken dark run is only ${run}px`).toBeGreaterThanOrEqual(floor);
     }
@@ -242,13 +282,12 @@ describe('the shipped exit gate', () => {
   /**
    * And the same darkness across the span the body actually covers, not just the middle third.
    *
-   * Measured on the shipped art: **0.794**. A 64 px opening scores 0.485, so this separates them
-   * with room on both sides. ~30 % of the drawn frame does fade against jamb today — the courier's
-   * own art is narrower than its 132 px box, so it reads fine, but the number is recorded in the QA
-   * log rather than left for the next re-shoot to rediscover.
+   * Measured on the shipped art: **0.973**, over the courier's real box — the full 132 x 288 the
+   * character occupies, standing on the gate's threshold. It was **0.794** at the old size against a
+   * bound of 0.7. The gate growing is what bought the headroom, so the bound moves up with it.
    */
-  it('is dark across the span the courier actually covers, not only its middle third', () => {
-    expect(fraction(BODY_X0, BODY_X1, IN_Y0, IN_Y1, isDark)).toBeGreaterThan(0.7);
+  it('is dark across the whole box the courier occupies, not just the middle of the image', () => {
+    expect(fraction(BODY_X0, BODY_X1, BODY_Y0, BODY_Y1, isDark)).toBeGreaterThan(0.9);
   });
 
   it('is mostly opaque overall — not a frame with a transparent hole', () => {
@@ -268,7 +307,7 @@ describe('the shipped exit gate', () => {
     const { left, right } = frameColumns();
     const cols = [...left, ...right];
     expect(cols.length, 'premise: some frame material was found at all').toBeGreaterThan(0);
-    const frame = cols.reduce((sum, x) => sum + luminance(x, x + 1, 40, 260), 0) / cols.length;
+    const frame = cols.reduce((sum, x) => sum + luminance(x, x + 1, FRAME_Y0, FRAME_Y1), 0) / cols.length;
     const void_ = luminance(IN_X0, IN_X1, IN_Y0, IN_Y1);
     expect(frame, `frame ${frame.toFixed(1)} vs void ${void_.toFixed(1)}`).toBeGreaterThan(
       void_ * 2,

@@ -1,23 +1,25 @@
 # Session handoff — the gate-art + gate-entry session
 
-> ## 🔴 This session is reported FAILING on two criteria. Do not merge it as done.
+> ## 🔴 One criterion is still open. Do not merge as done.
 >
-> Everything the owner asked for is built, tested and played. **Two gates did not run**, and by the
-> project's own rule *(CLAUDE.md §3)* that means the session is reported failing, not done:
+> Everything the owner asked for is built, tested, measured and played. **G.9 — the Codex
+> implementation review — has not run**, and by the project's own rule *(CLAUDE.md §3)* that means
+> the session is reported failing on it rather than done.
 >
-> | | Why |
+> **Why:** Codex hit its account usage limit mid-review. It resets **2026-08-20 09:40**. The plan
+> review (G.8) ran and all 12 of its findings are applied or recorded.
+>
+> **To finish:** re-run the implementation review, file it at
+> `docs/reviews/session-gate-art-and-entry-impl.md`, triage every finding, **then STOP for
+> approval.** Nothing is merged.
+>
+> **Settled since the first draft of this page:**
+>
+> | | |
 > |---|---|
-> | **G.7b — frame budget** | UNRUN. Both perf briefs concluded independently that no statistic in the existing suite can measure this change: `sampleLevel` never moves the player, so the gate is never on screen and `stepGoalEntry` never leaves its early return, and all three additions are level-size-invariant so they divide out of every ratio. Building a statistic that could means touching the perf gates, which this session's scope lock forbids. |
-> | **G.9 — Codex implementation review** | BLOCKED. Codex hit its account usage limit mid-review; it resets **2026-08-20 09:40**. The plan review (G.8) ran and its 12 findings are all applied or recorded. |
->
-> **To finish this session:** re-run the Codex implementation review with the prompt in
-> [reviews/session-gate-art-and-entry-plan.md](reviews/session-gate-art-and-entry-plan.md)'s sibling
-> slot, file it at `docs/reviews/session-gate-art-and-entry-impl.md`, triage every finding, then
-> decide G.7b — measure it or accept it UNRUN. **Then STOP for approval.** Nothing is merged.
->
-> ⚠️ **One thing is the owner's call and was deliberately not decided:** the art-spend ceiling is
-> **$50** in `PRD.md` and **$55** in `GENERATION-LOG.md`. This session spent $0.30, which fits under
-> either, so it proceeded and named the contradiction rather than picking a winner.
+> | **G.7b — frame budget** | ✅ **MEASURED**, after being reported UNRUN. `tests/e2e/phase-08-gate-perf.spec.ts` puts the exit on screen and amplifies its draw 40x to clear a quantised clock. One exit costs **0.0009–0.0065 ms of GPU per frame** on an RTX 4080 — at worst 0.04 % of a 16.67 ms frame — against a 0.05 ms bound chosen on one run and confirmed on two held-out ones. |
+> | **The art-spend ceiling** | ✅ Settled by the owner at **$55** on 2026-08-20. `PRD.md` was raised to match `GENERATION-LOG.md`; they had disagreed for four days. |
+> | **The gate's size** | ✅ The owner spotted from a screenshot that the doorway was exactly as tall as the character. Rebuilt at **288 x 432** from the same generation — no new spend — and anchored bottom-centre on an unchanged trigger rect. |
 >
 > Full record: [qa/phase-08-gate-entry.md](qa/phase-08-gate-entry.md) ·
 > [reviews/session-gate-art-and-entry-plan.md](reviews/session-gate-art-and-entry-plan.md) ·
@@ -82,6 +84,15 @@ under the mutation that motivated it — including a fade window whose **length*
 (20 → 40 left the whole suite green), a `run` override evaluated at **one tick** of twenty, and an
 art gate that passed a **64 px slit** and a **barcode**.
 
+## And two the OWNER found, by looking
+
+Both were invisible to every machine gate in the suite, and both were found from a screenshot.
+
+| | |
+|---|---|
+| **The gate was the same height as the character** | The rect is 192 x 288 and the courier's box is 132 x 288, so the doorway stood exactly as tall as the person walking through it — a hatch, not a portal. Nothing caught it because every assertion compared the drawing to the **rect**, and against the rect it was perfect. No test said the door had to be bigger than the character, because nobody had thought to say it. |
+| **The first frame-budget statistic was noise** | Its own first version compared *drawn* to *hidden* and reported a 1.5x main-thread ratio — which was the 0.1 ms clock quantum — and a GPU arm claiming that drawing an extra image made the frame 40 % **faster**. Replaced, not re-bounded. |
+
 ## Verification at the tip
 
 | | |
@@ -89,7 +100,7 @@ art gate that passed a **64 px slit** and a **barcode**.
 | `npm run typecheck` | clean |
 | `npm test` | **116 files / 1944 tests**, 0 failed |
 | `npm run test:sim-isolated` | same count with Phaser uninstalled |
-| `npm run test:e2e` | **110 passed** |
+| `npm run test:e2e` | **114 passed**, including G.7b on a real GPU |
 | `npm run build` | `verify-dist` ok — 5 levels and 11 audio files byte-identical, no dev-only key in the bundle |
 
 `src/sim/tick.ts` is the one file over 400 lines (**428**), cited in

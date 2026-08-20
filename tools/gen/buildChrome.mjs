@@ -111,6 +111,26 @@ export function buildGear() {
  * prompt gained an explicit margin clause naming the bottom edge, and take 2 keys cleanly. The
  * cost was one $0.15 generation, which is what the authorised retry is for.
  */
+/**
+ * The exit gate's drawn size, in world pixels.
+ *
+ * 🔴 **Deliberately LARGER than the goal rect it triggers on.** The rect is 192 x 288 and the
+ * courier's box is `PLAYER_BOX` 22 x 48 at `RENDER_SCALE` 6 = 132 x 288 — so a gate authored at the
+ * rect's size is exactly as tall as the character walking through it, and reads as a hatch rather
+ * than a doorway. `288 x 432` keeps the source art's 2:3 aspect, stands 1.5x the courier's height,
+ * and is 3 grid cells wide.
+ *
+ * ⚠️ **`src/scenes/goalArtSize.ts` is the authority; this is a copy.** A `.mjs` build tool cannot
+ * import a `.ts` module, so the number lives twice — and `tests/unit/shipped-gate.test.ts` asserts
+ * the shipped PNG's dimensions against the TS constant, so the copies cannot drift in silence.
+ *
+ * The TRIGGER stays 192 x 288. Art and trigger volume are now separate numbers on purpose:
+ * `drawGoal` centres this on the rect horizontally and stands it on the rect's bottom edge, so the
+ * doorway grows upward and outward from the threshold the sim actually tests. Containment is an
+ * exact vertical equality against the rect — see `goal.ts` — and nothing here may change it.
+ */
+export const GATE_PX = { w: 288, h: 432 };
+
 export function buildGate() {
   const image = raw('gate');
   const { key } = estimateKeyColour(image);
@@ -125,12 +145,20 @@ export function buildGate() {
   }
   const r = rects[0];
   const trimmed = crop(keyed, r.x, r.y, r.w, r.h);
-  // Straight to the goal rect. The keyed bounding box came back at 1636 x 2355 — a ratio of
-  // 0.6947 against the rect's 0.6667 — so this squashes the width by about 4 %, which is under the
-  // pixel grid at this size. Letterboxing instead was considered and rejected: it would put
-  // transparent margin inside a rect that is ALSO the trigger volume, so the drawn door would be
-  // narrower than the thing the player has to walk into.
-  const scaled = downscale(trimmed, 192, 288);
+  // The keyed bounding box came back at 1636 x 2355 — a ratio of 0.6947 against this target's
+  // 0.6667 — so this squashes the width by about 4 %, which is under the pixel grid at this size.
+  //
+  // 🔴 **Not the goal rect's size, and that is the point.** It was `192 x 288` — the rect exactly —
+  // until the owner looked at a screenshot and said the obvious thing: *the gate needs to be bigger
+  // than the character.* The rect is `192 x 288` and the courier's box is `132 x 288`, so the
+  // doorway was drawn EXACTLY as tall as the person walking through it. Nothing measured that,
+  // because every gate in the suite compared the drawing to the rect and the rect was right.
+  // See `GATE_PX`.
+  //
+  // Rebuilt from the SAME generation — `npm run assets:world` re-downscales the original 1636 x 2355
+  // crop — so this cost nothing and no fal call was made. Re-scaling the shipped 192 x 288 PNG by 1.5
+  // would have been an upscale of already-downscaled pixels; this is one clean downscale.
+  const scaled = downscale(trimmed, GATE_PX.w, GATE_PX.h);
   mkdirSync('public/assets/objects', { recursive: true });
   writeFileSync('public/assets/objects/gate.png', encodePng(scaled.width, scaled.height, scaled.data));
   console.log(

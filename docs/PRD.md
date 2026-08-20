@@ -85,8 +85,12 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   a document is a snapshot; upstream endpoints change under us.
 - **Every generation logged** to [GENERATION-LOG.md](GENERATION-LOG.md): model, prompt, seed, cost,
   path, kept/discarded.
-- **The fal art-spend ceiling is `$50`**, raised from `$25` by owner amendment on 2026-08-16 after
-  Phase 4 came in at `$31.39` against an estimate that `genmedia pricing` had understated by ~21×.
+- **The fal art-spend ceiling is `$55`**, raised from `$25` by owner amendment on 2026-08-16 after
+  Phase 4 came in at `$31.39` against an estimate that `genmedia pricing` had understated by ~21×,
+  and reconciled to `$55` by owner decision on 2026-08-20. This line said `$50` and
+  `GENERATION-LOG.md` said `$55` for four days; the gate-entry session found the contradiction,
+  refused to pick a winner, and the owner settled it. **`GENERATION-LOG.md`'s running total is the
+  live figure; this line is the ceiling it is measured against, and they must agree.**
   **The ceiling is not the whole rule.** Phase 4 had a ceiling and overran it anyway, because 22
   clips ran before anyone read an invoice: **read the invoice before the next batch, not after it.**
   The ceiling bounds the damage; the ordering is what makes the bound reachable. This is the *art*

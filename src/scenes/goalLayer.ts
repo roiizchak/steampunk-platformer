@@ -36,6 +36,7 @@
 import Phaser from 'phaser';
 import type { Rect } from '../sim/types';
 import { ticksToMs } from '../sim';
+import { GATE_PX } from './goalArtSize';
 
 /** The catalogued texture the generated exit arrives as — `public/assets/objects/gate.png`. */
 export const GOAL_TEXTURE_KEY = 'goal-gate';
@@ -65,11 +66,30 @@ export function goalIsGreybox(scene: Phaser.Scene): boolean {
  */
 export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.GameObject {
   if (!goalIsGreybox(scene)) {
-    // Centred on the rect, sized to it — the same "already the right size" contract `addGearObject`
-    // states, so no caller reaches for setOrigin afterwards.
+    /**
+     * 🔴 The drawn doorway is BIGGER than the rect that triggers it, and the two are separate
+     * numbers on purpose.
+     *
+     * It used to be `setDisplaySize(goal.w, goal.h)` — the art authored at exactly the rect's size,
+     * so the call was a no-op and the pixels were 1:1. That was tidy and it was wrong: the rect is
+     * 192 x 288 and the courier's box is 132 x 288, so **the doorway was drawn exactly as tall as
+     * the person walking through it**. It reads as a hatch. Every gate in the suite compared the
+     * drawing to the rect, and against the rect it was perfect — the owner found it by looking at a
+     * screenshot, which is what `play`-owned criteria are for.
+     *
+     * Anchored **bottom-centre**: the door stands ON the threshold the sim tests and grows upward
+     * and outward from it. `setOrigin(0.5, 1)` at the rect's bottom edge is what makes that true
+     * whatever `GATE_PX` becomes — the alternative, centring on the rect and letting it grow
+     * downward, would sink the doorway's base into the floor.
+     *
+     * The trigger volume is untouched. `overlapsGoal` and `containedInGoal` read `world.goal`, and
+     * containment is an exact vertical equality against its 288 — see `goal.ts`. Nothing here may
+     * change that, which is why this scales the IMAGE and not the rect.
+     */
     return scene.add
-      .image(goal.x + goal.w / 2, goal.y + goal.h / 2, GOAL_TEXTURE_KEY)
-      .setDisplaySize(goal.w, goal.h)
+      .image(goal.x + goal.w / 2, goal.y + goal.h, GOAL_TEXTURE_KEY)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(GATE_PX.w, GATE_PX.h)
       .setDepth(7);
   }
 

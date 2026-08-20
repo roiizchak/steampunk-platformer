@@ -135,7 +135,7 @@ at all, and with an added instruction to *describe* any mutation it wants rather
 | **A2** | qa-expert b2 | **HIGH** | The e2e asserted the drawn gate's **size** and never its **position**. A correctly-sized image drawn 500 px from its trigger passed every word of it — the same defect `completeHelpers.ts` records for the grey box, arriving through the image branch. | **APPLIED** (`38d90fe`) — compared against the sim's own goal rect read live off the scene. Watched red under exactly that 500 px offset: 1 unexpected, 2 expected, then reverted byte for byte. |
 | **A3** | qa-expert b2 | MEDIUM | G.4b's unit test wrote `hp` and `state` by hand and read the counter one tick later. That proves the cancel *branch* fires; it does not prove the player is *playable*, which is what G.4b claims. `DEATH_TICKS` of corpse, step 4c's `deathWindowClosed` and `respawnPlayer` all sit between the two facts and none of them ran. | **APPLIED** (`38d90fe`) — a second test drives `damagePlayer` to zero, asserts the counter null on **every** death tick, then the respawn point, the hp, and a jump that has to leave the ground. Watched red under a mutation the hand-written test **survives** (arming without requiring overlap): 7 failures, and `DEATH cancels the sequence` was not among them. |
 | **A4** | qa-expert b2 | LOW | The attack edge is not consumed on the **arming tick itself** — `entryLocked` is read after step 0 and 9d arms last, so on that one tick the courier is still an ordinary player. | **INVESTIGATED, NOT A DEFECT — pinned by a test.** `movementLocked` (`src/sim/combat.ts:322`) covers `death` and `hurt` only, so an attack in flight never stalls the auto-run, and `stepCombat` consumes the edge on that tick exactly as at any other time — nothing is left latched *(vault 2.4)*. A test now mashes attack through the arming tick and requires the same 20-tick window ending in the same containment. |
-| **A5** | perf b1 + b2 | — | **Both perf briefs concluded independently that the existing perf specs cannot measure this session's frame cost at all.** `sampleLevel` never moves the player, so the gate is never on screen and `stepGoalEntry` never leaves its early return; and all three additions are level-size-invariant, so they divide out of every ratio the suite computes. | **RECORDED — G.7's frame-budget half is reported UNRUN.** Not passing. See below. |
+| **A5** | perf b1 + b2 | — | **Both perf briefs concluded independently that the existing perf specs cannot measure this session's frame cost at all.** `sampleLevel` never moves the player, so the gate is never on screen and `stepGoalEntry` never leaves its early return; and all three additions are level-size-invariant, so they divide out of every ratio the suite computes. | **RECORDED, then MEASURED.** Reported UNRUN at first; the owner asked for it to be fixed, so `phase-08-gate-perf.spec.ts` now measures it on a real GPU. See below. |
 
 #### The re-run, in isolated worktrees — three more briefs, and two live defects
 
@@ -205,7 +205,7 @@ rules were left alone — out of scope, and the sim guard is the smaller and mor
 | **B10** | cr b1 + cr b2 | MED | `entryLocked` is tested **before** `hitstunLocked`, so the run-in overrides hitstun's horizontal lock. A Phase 5 combat rule bent by a Phase 8 feature, with no header saying so. | **APPLIED as documentation** — the behaviour is deliberate, and B1's fix narrowed it to a single tick (the cancel fires at 9d of the tick the hit lands). Stated at the branch. |
 | **B11** | cr b2 | LOW | Three comments in `goalLayer.ts` that this session made false: *"Absent today, by design"* about a texture that ships, the whole *"it stays grey-box this phase"* section, and *"the exit's reached-it flourish"* for something that now fires 20 ticks later over an empty doorway. | **APPLIED** — all three corrected *(vault C9)*. |
 | **B12** | cr b2 | MED | `file-size.test.ts`'s docstring said the ratchet *"is at 0"* and described the residual hole as hypothetical *"while the ratchet has been raised"*. This session raised it to 1 and nobody re-read the sentence. | **APPLIED** — the paragraph is in the present tense now, and says the hole is open. |
-| **B13** | cr b2 | MED | G.7's Owner column was a dash, its agents named only in the Method column without the `voltagent-qa-sec:` prefix every other row uses. `docs-contract.test.ts` lints gate tables under `### 6. QA gate` with `N.N` ids, so **this session's table is linted by nothing.** | **PARTLY APPLIED** — G.7 split into G.7a (`code-reviewer`, satisfied) and G.7b (`performance-engineer`, UNRUN), with real owners. The lint's blindness to `docs/qa/*` gate tables is real and **RECORDED for the owner**: teaching it a second table shape changes a cross-phase gate and is outside this session's scope lock. |
+| **B13** | cr b2 | MED | G.7's Owner column was a dash, its agents named only in the Method column without the `voltagent-qa-sec:` prefix every other row uses. `docs-contract.test.ts` lints gate tables under `### 6. QA gate` with `N.N` ids, so **this session's table is linted by nothing.** | **PARTLY APPLIED** — G.7 split into G.7a (`code-reviewer`, satisfied) and G.7b (`performance-engineer`, now measured), with real owners. The lint's blindness to `docs/qa/*` gate tables is real and **RECORDED for the owner**: teaching it a second table shape changes a cross-phase gate and is outside this session's scope lock. |
 
 ##### Recorded, not fixed *(C11)*
 
@@ -233,25 +233,79 @@ So: **when a red proof mutates DATA rather than source, touch the test file and 
 before re-running.** Otherwise the mutation is real, the green is fake, and it looks exactly like a
 gate that cannot go red. Every `.tmj` red proof in this log was re-run under that rule.
 
-#### 🔴 G.7's frame-budget half is UNRUN, and the session is reported failing on it
+### G.7b — the frame budget, MEASURED
 
-The rule is that an unrun criterion is reported unrun *(CLAUDE.md §3)*, and this one is unrun.
+Reported UNRUN earlier in this session. The owner asked for it to be fixed, so it was: the criterion
+now has a spec, a number and a held-out confirmation. `tests/e2e/phase-08-gate-perf.spec.ts`.
 
-What the two briefs found is not that the number is bad — it is that **no statistic in the suite can
-order its own mutation here**, which by this project's own rule is not something a bound change
-fixes *(TESTING-RULES.md)*. Building a statistic that could means touching the performance gates,
-and this session's scope lock names those as out of bounds.
+**No existing gate was touched.** The file is named `phase-08-*` so that `playwright.config.ts`'s two
+matching regexes route it to the `chromium-gpu` project without either being edited — a rename was
+the whole cost of getting onto real hardware.
 
-The three additions are one `stepGoalEntry` call per tick, one `goalEntryAlpha` plus `setAlpha` per
-frame, and one 192x288 image at depth 7. All are O(1) and none scales with level size. That is an
-argument, not a measurement, and it is recorded as an argument.
+#### The result
 
-**For the owner:** measuring it properly is a narrow interleaved A/B against a moving player, and it
-belongs to whoever next owns the perf gates.
+Measured on the real GPU the config exists to reach — `angle (nvidia, nvidia geforce rtx 4080,
+direct3d11)`, not SwiftShader.
 
-### Codex implementation review
+| run | 1 exit (gpu) | 41 exits (gpu) | **per exit** | main thread |
+|---|---|---|---|---|
+| 1 — bound chosen here | 0.140 ms | 0.234 ms | **0.0024 ms** | below the floor |
+| 2 — held out | 0.177 ms | 0.214 ms | **0.0009 ms** | below the floor |
+| 3 — held out | 0.128 ms | 0.389 ms | **0.0065 ms** | below the floor |
 
-_Recorded at Task 10._
+**One exit costs between 0.0009 and 0.0065 ms of GPU per frame** — at worst **0.04 % of a 16.67 ms
+frame**. The bound is `0.05 ms`, so the measured worst case sits 7.7x under it and the best case 55x
+under. Main-thread work is under the clock's own resolution in every run.
+
+#### 🔴 The first version of this measurement was thrown away, and why that matters
+
+It sampled *exit drawn* against *exit hidden* and compared medians:
+
+```
+exit drawn   work 0.600 ms   gpu 0.161 ms
+exit hidden  work 0.400 ms   gpu 0.270 ms
+ratios       work 1.500      gpu 0.595
+```
+
+Neither figure is a measurement. `performance.now()` is quantised to **0.1 ms** in this browser, so
+`0.600` and `0.400` are adjacent steps on the clock's grid — that 1.500 is the quantum, not the gate.
+And the GPU arm says drawing an extra 124 416-pixel image made the frame **40 % faster**, which is
+not a small effect measured imprecisely; it is noise with a sign.
+
+The bound would have gone red on correct code, and moving it would have made it green for anything.
+**The statistic was replaced, not re-bounded** — which is this project's own rule, applied to a gate
+written inside this session.
+
+#### What replaced it, and why it can go red
+
+Amplify until the signal clears the timer, then divide back down. 40 extra exits — identical texture,
+size, origin, depth and position — are stacked on the real one; the delta over that window divided by
+40 is the per-exit cost, measured above the 0.1 ms grid instead of underneath it.
+
+**The mutation is not a separate test somebody has to remember to run — it is how the measurement is
+taken.** An exit that got twice as expensive to draw doubles the delta and doubles the reported
+figure. And the spec asserts its own premise: if 40 extra exits do not cost the GPU anything
+measurable, the divisor is dividing noise, so it fails loudly rather than reporting a small number.
+
+#### What this does NOT measure, stated rather than implied
+
+- **`goalEntryAlpha` + `sprite.setAlpha`** run unconditionally on every frame of every arm, so they
+  divide out of this exactly as they divide out of 8.7's ratio. One property write per frame against
+  16.67 ms is far under anything measurable here. *An A/B toggle bounds what it can show.*
+- **`stepGoalEntry`'s real work** lasts 20 ticks, then the level completes and the sim freezes. Not a
+  steady state, by construction. It is nine comparisons and an increment.
+
+#### Two things the spec had to learn first
+
+1. **The scavenger closed the door.** Level 01's patrol ends 96 px from the exit. Parked at the
+   threshold, the player is in its aggro range; it charges, the knockback shoves the body INTO the
+   rect, the run-in arms, and 20 ticks later the level completes and `tick()` freezes at step 0. The
+   tick-bounded sampler then never reaches its span and `page.evaluate` hangs. **Two runs died at
+   240 s having measured nothing.** Enemies are now cleared in every arm identically.
+2. **A perf spec has to be named for the project it needs.** `session-gate-perf.spec.ts` matched
+   neither regex in `playwright.config.ts` and ran headless, where `assertRealGpu` correctly refused
+   it. That refusal is the config working — the whole point of `chromium-gpu` is that a silent
+   SwiftShader fallback is invisible.
 
 ---
 
@@ -268,7 +322,7 @@ _Recorded at Task 10._
 | G.5 | Alpha reaches 0 over a tick-counted window; the curve has a red proof | unit + e2e | `voltagent-qa-sec:code-reviewer` | ✅ curve, window length and override all watched failing |
 | G.6 | No blink-out, no pop-back — all 5 levels, by hand | `playwright-cli` + hands-on *(C4)* | play | ✅ 5 levels pre-fix; probe-driven re-check after |
 | G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | ✅ 1 file over 400, cited |
-| G.7b | Frame budget unchanged | interleaved A/B | `voltagent-qa-sec:performance-engineer` | 🔴 **UNRUN** |
+| G.7b | Frame budget unchanged | amplified A/B on real GPU | `voltagent-qa-sec:performance-engineer` | ✅ **0.0009-0.0065 ms/frame per exit, bound 0.05** |
 | G.8 | Codex plan review ran; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-plan.md) | — | ✅ **12 findings, 10 applied, 2 recorded** |
 | G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | 🔴 **BLOCKED — usage limit** |
 
@@ -458,6 +512,73 @@ bound was wrong.
 jambs and a genuinely dark opening. The figure standing opaque beside it in the completed shot is
 the **scavenger**, not the courier — worth writing down, because it looks exactly like a pop-back
 until you check which sprite it is.
+
+
+---
+
+### 🔴 The gate was the same height as the character, and nine machine gates said it was perfect
+
+Found by the owner, looking at a screenshot: *"the gate is smaller than the character. This gate needs
+to be bigger than the character."*
+
+The goal rect is `192 x 288`. The courier's box is `PLAYER_BOX` 22 x 48 at `RENDER_SCALE` 6 =
+`132 x 288`. The gate was authored at the rect's size and drawn `setDisplaySize(goal.w, goal.h)` — so
+**the doorway stood exactly as tall as the person walking through it.** It read as a hatch.
+
+#### Why nothing caught it
+
+Every measurement in the suite compared the drawing to the rect, and **against the rect it was
+correct**: `shipped-gate.test.ts` asserted `192 x 288` because that is what the rect is; the e2e
+asserted the drawn bounds matched the trigger, because they did. The size was consistent, documented,
+and wrong — there was no assertion anywhere that the door had to be bigger than the character,
+because nobody had thought to say it.
+
+That is exactly what a `play`-owned criterion is for, and it is the second time this session a human
+eye found what the machine gates could not. *(C4.)*
+
+#### The fix: art and trigger volume are now separate numbers
+
+| | before | after |
+|---|---|---|
+| drawn size | 192 x 288 | **288 x 432** (`GATE_PX`) |
+| anchor | centred on the rect | **bottom-centre on the rect** |
+| trigger rect | 192 x 288 | **192 x 288, unchanged** |
+| height vs the courier | **1.0x** | **1.5x** |
+
+`GATE_PX` lives in `src/scenes/goalArtSize.ts` because it is needed on both sides of a boundary that
+cannot be crossed: the scene draws with it and a `.mjs` build tool authors the PNG at it, and a `.mjs`
+file cannot import a `.ts` module. `shipped-gate.test.ts` asserts the shipped PNG against the TS
+constant, so the two copies cannot drift in silence *(vault 5.3)*.
+
+**Anchored bottom-centre** so the door stands ON the threshold the sim tests and grows upward and
+outward from it. Centring it on the rect instead would sink its base into the floor.
+
+**Containment is untouched.** `overlapsGoal` and `containedInGoal` read `world.goal`, and the vertical
+test is an exact equality against the rect's 288 — see `goal.ts`. This scales the IMAGE, never the
+rect, and the `.tmj` files were not opened.
+
+**No fal spend.** `npm run assets:world` re-downscaled the same 1636 x 2355 crop from the existing
+generation. Rescaling the shipped 192 x 288 PNG would have been an upscale of already-downscaled
+pixels; this is one clean downscale.
+
+#### The bigger gate measurably improved the art
+
+| measured on the shipped PNG | 192 x 288 | 288 x 432 |
+|---|---|---|
+| unbroken dark run at the courier's heights | 92 px | **138 px** |
+| …against the 132 px courier | **0.70x — narrower than the body** | **1.05x — wider than the body** |
+| dark fraction over the courier's real box | 0.794 | **0.973** |
+
+At the old size ~30 % of the drawn character faded against brass jamb, and the gate could only
+honestly ask for *half* the body width. Now the opening is genuinely wider than the person walking
+through it, so **the test says so**: the bound is `BODY_W`, from `PLAYER_BOX`.
+
+⚠️ 138 against 132 is ~4.5 % of headroom, which is thin, and deliberately: a re-shoot that dips under
+is a real regression — the courier would fade against the jamb again — and the fix is a better
+generation, **never** a lower bound.
+
+Both counterexamples re-synthesised at the new size and watched red: a 96 px opening (narrower than
+the body) fails 2 assertions, a barcode fails 4.
 
 
 ---

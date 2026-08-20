@@ -51,6 +51,7 @@ import { BOOT_TIMEOUT, bootToGame } from './gameHarness';
 import { drawnGoal } from './completeHelpers';
 import { RUN_TIMEOUT, playToExit } from './levelDriver';
 import { PROGRESS_KEY, unlockAll } from './levelPerf';
+import { GATE_PX } from '../../src/scenes/goalArtSize';
 
 /** Must match `GOAL_ENTRY_TICKS` in `src/sim/goal.ts`. Asserted below rather than assumed. */
 const GOAL_ENTRY_TICKS = 20;
@@ -65,13 +66,22 @@ const GOAL_ENTRY_TICKS = 20;
  * offset draw, a wrong origin or a letterboxed image separates the two; nothing about reading them
  * from one world makes them agree.
  */
-async function triggerRect(page: import('@playwright/test').Page): Promise<{ x: number; y: number } | null> {
+interface TriggerRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+async function triggerRect(page: import('@playwright/test').Page): Promise<TriggerRect | null> {
   return page.evaluate(() => {
     const scene = (
       window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('Game') as { simWorld: { goal: { x: number; y: number } | null } };
+    ).__phaserGame.scene.getScene('Game') as {
+      simWorld: { goal: { x: number; y: number; w: number; h: number } | null };
+    };
     const g = scene.simWorld.goal;
-    return g ? { x: g.x, y: g.y } : null;
+    return g ? { x: g.x, y: g.y, w: g.w, h: g.h } : null;
   });
 }
 
@@ -237,16 +247,17 @@ test.describe('the exit is generated art, not a grey box', () => {
     expect(goal!.depth, 'depth 7: under gears, enemies and the player, because you walk THROUGH it').toBe(7);
   });
 
-  test('the drawn exit occupies the goal rect it triggers on — position AND size', async ({ page }) => {
+  test('the drawn exit stands ON its trigger rect, and is bigger than the courier', async ({ page }) => {
     await bootToGame(page);
     const goal = await drawnGoal(page);
     expect(goal).not.toBeNull();
-    // The art is authored at 192 x 288, so `setDisplaySize` is a no-op and this is 1:1. If the
-    // image were letterboxed or mis-scaled, the drawn extent would stop matching the trigger volume
-    // and a player could stand "inside the door" while the sim disagreed.
+    // 🔴 The art is authored at `GATE_PX` — 288 x 432 — which is deliberately LARGER than the
+    // 192 x 288 rect it triggers on. It was authored at the rect's size, and that made the doorway
+    // exactly as tall as the 132 x 288 courier walking through it. Every assertion here compared
+    // the drawing to the rect and passed; the owner found it by looking at a screenshot.
     expect(typeof goal!.bounds.w).toBe('number');
-    expect(Math.round(goal!.bounds.w)).toBe(192);
-    expect(Math.round(goal!.bounds.h)).toBe(288);
+    expect(Math.round(goal!.bounds.w)).toBe(GATE_PX.w);
+    expect(Math.round(goal!.bounds.h)).toBe(GATE_PX.h);
 
     // 🔴 Size alone was the whole assertion until the gate's adversarial QA brief pointed out that
     // a correctly-sized image drawn 500 px from its trigger passes every word of it. That is the
@@ -257,8 +268,23 @@ test.describe('the exit is generated art, not a grey box', () => {
     const trigger = await triggerRect(page);
     expect(trigger, 'the level carries no goal rect, so nothing below is a measurement').not.toBeNull();
     expect(typeof goal!.bounds.x).toBe('number');
-    expect(Math.round(goal!.bounds.x), 'the drawn gate is not where the trigger is').toBe(trigger!.x);
-    expect(Math.round(goal!.bounds.y), 'the drawn gate is not where the trigger is').toBe(trigger!.y);
+
+    // Anchored BOTTOM-CENTRE on the rect: the door stands on the threshold the sim tests and grows
+    // upward and outward from it. Anything else — centring on the rect, or top-left — sinks its base
+    // into the floor or floats it, and both look like a bug rather than a doorway.
+    const rectCentreX = trigger!.x + trigger!.w / 2;
+    const rectBottom = trigger!.y + trigger!.h;
+    expect(Math.round(goal!.bounds.x + goal!.bounds.w / 2), 'the gate is not centred on its trigger').toBe(
+      rectCentreX,
+    );
+    expect(Math.round(goal!.bounds.y + goal!.bounds.h), 'the gate does not stand on the threshold').toBe(
+      rectBottom,
+    );
+
+    // And the claim the owner actually made: it has to be bigger than the character.
+    expect(goal!.bounds.h, 'the doorway is no taller than the courier walking through it').toBeGreaterThan(
+      trigger!.h,
+    );
   });
 
   /**
@@ -296,10 +322,16 @@ test.describe('the exit is generated art, not a grey box', () => {
       expect(typeof goal!.willRender).toBe('boolean');
       expect(goal!.willRender, `${levelId}: the exit exists but the GPU would not draw it`).toBe(true);
       expect(goal!.depth).toBe(7);
-      expect(Math.round(goal!.bounds.w)).toBe(192);
-      expect(Math.round(goal!.bounds.h)).toBe(288);
-      expect(Math.round(goal!.bounds.x), `${levelId}: drawn away from its trigger`).toBe(trigger!.x);
-      expect(Math.round(goal!.bounds.y), `${levelId}: drawn away from its trigger`).toBe(trigger!.y);
+      expect(Math.round(goal!.bounds.w)).toBe(GATE_PX.w);
+      expect(Math.round(goal!.bounds.h)).toBe(GATE_PX.h);
+      expect(
+        Math.round(goal!.bounds.x + goal!.bounds.w / 2),
+        `${levelId}: drawn away from its trigger`,
+      ).toBe(trigger!.x + trigger!.w / 2);
+      expect(
+        Math.round(goal!.bounds.y + goal!.bounds.h),
+        `${levelId}: not standing on its threshold`,
+      ).toBe(trigger!.y + trigger!.h);
     });
   }
 });

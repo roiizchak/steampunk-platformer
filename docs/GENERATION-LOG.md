@@ -88,7 +88,7 @@ and nothing else moves.**
 
 **Running total after the gate-entry session: $47.91 quoted.** (Phase 6 closed at $47.61.)
 
-🔴 **The ceiling is recorded twice and the two disagree** — [PRD.md](PRD.md) Global Constraints say **$50**, the line below says **$55**. $0.30 fits under either, so the gate-entry session proceeded and named the contradiction rather than picking a winner. **Which number is current is the owner's call.**
+✅ **The ceiling was recorded twice and the two disagreed** — [PRD.md](PRD.md) Global Constraints said **$50** and the line below said **$55**. The gate-entry session named the contradiction rather than picking a winner; the owner settled it at **$55** on 2026-08-20 and PRD.md was raised to match.
 
 **Running total after Phase 6: $47.61 of the $55 ceiling. $7.39 remains.**
 
