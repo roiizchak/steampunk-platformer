@@ -319,6 +319,46 @@ export interface World {
    * freeze note at the top of `tick()` for why the alternative was not survivable.
    */
   completed: boolean;
+  /**
+   * Ticks since the player's box first overlapped `goal`, or `null` when no run-in is running.
+   *
+   * The scripted entry sequence's progress, owned by the sim as an integer tick count — the
+   * gate-entry session. `null` rather than `-1` so "not started" is unrepresentable as a duration
+   * and cannot be arithmetic'd into one by accident.
+   *
+   * **The sim only COUNTS.** Nothing under `src/sim/` knows this makes the player transparent —
+   * `src/render/playerView.ts` maps this integer to an alpha and to the forced `run` key, which is
+   * what keeps the fade a render decision and keeps a millisecond tween off a tick-counted body.
+   *
+   * Two behaviours worth stating because neither is derivable from the type:
+   *
+   *  - **It is NOT monotonic.** `stepGoalEntry` sets it back to `null` the moment the player stops
+   *    overlapping the goal — death, or a knockback that clears the rect. Without that cancel a
+   *    killed player respawns still locked and still auto-running, and the level is unwinnable.
+   *  - **It freezes with everything else.** Step 0 returns before step 1 once `completed` latches,
+   *    so the final value is held forever and the drawn alpha holds at 0. "No pop-back" is
+   *    structural rather than remembered.
+   */
+  goalEntryTicks: number | null;
+
+  /**
+   * Has the entry ceiling fired, with the body still inside the rect it fired over?
+   *
+   * 🔴 **The ceiling alone did not terminate anything, and the test that claimed it did was
+   * measuring the wrong quantity.** `stepGoalEntry` cancelled at `GOAL_ENTRY_TICKS * 2` by writing
+   * `null` — and then the very next tick the arm branch saw an overlapping player and armed again
+   * from zero. Driven against a blocked doorway: over 120 ticks the player was free for **three**.
+   * Roughly 41 ticks locked and invisible, one tick of control, repeat, forever.
+   *
+   * The regression test asserted only the longest single armed span, which stayed under the ceiling
+   * exactly as designed, so it passed. Codex's implementation review called it the clearest case in
+   * the diff of a test passing while the behaviour it names stays broken, and it was right.
+   *
+   * So the release needs a LATCH, not a reset. Set when the ceiling fires; cleared the moment the
+   * body stops overlapping the goal, which is the only event that can make a fresh entry meaningful.
+   * A boolean rather than another counter: there is no duration here, only "this attempt is spent".
+   */
+  goalEntryBlocked: boolean;
   /** Live knobs, so the Playground edits them in place and tests derive expectations from them. */
   tuning: TuningKnobs;
   /**

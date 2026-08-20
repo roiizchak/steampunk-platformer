@@ -13,6 +13,7 @@
  * and the sim boundary test would pass on it unchanged.
  */
 
+import { GOAL_ENTRY_TICKS } from '../sim/goal';
 import { PLAYER_BOX } from '../sim/player';
 import type { PlayerSim, PlayerState } from '../sim/types';
 
@@ -40,6 +41,13 @@ export interface PlayerRenderDesc {
    * texture ever goes missing.
    */
   animKey: string;
+  /**
+   * Opacity, `0`–`1`. **`1` for every frame of ordinary play** — this exists for the gate.
+   *
+   * The gate-entry session. The scene applies it unconditionally every frame, which is what makes
+   * it self-correcting: nothing has to remember to put it back.
+   */
+  alpha: number;
 }
 
 /**
@@ -97,7 +105,47 @@ export function allAnimKeys(): string[] {
   return Object.values(STATE_ANIMS);
 }
 
-export function playerRenderDesc(player: PlayerSim, scale: number): PlayerRenderDesc {
+/**
+ * The gate-entry fade: the run-in's tick count → the player's opacity.
+ *
+ * 🔴 **This is the seam the whole feature turns on.** `src/sim/` owns an integer — how many ticks
+ * the player has been walking into the doorway — and knows nothing about transparency. This
+ * function is the only place that decides the body disappears.
+ *
+ * **Why not a Phaser tween on the sprite.** Two independent reasons, either one sufficient:
+ *
+ *  1. A tween is a duration in MILLISECONDS on a body whose entire sequence is an integer count of
+ *     60 Hz ticks *(vault 2.1)*. The two would drift apart on any frame rate that is not exactly
+ *     60, and the fade would finish before or after the level did depending on the display.
+ *  2. A tween is STATE. It would have to be cancelled on a scene restart, on a death mid-run-in,
+ *     and on the cancel — three teardown paths, each of which is a chance to leave a permanently
+ *     transparent character in the next level. Phase 6 paid for exactly this class of bug with the
+ *     HUD's lifetime.
+ *
+ * Recomputed from the counter every frame, it has no teardown at all: `null` means opaque, and a
+ * new level's world starts at `null`.
+ *
+ * The clamp at 0 matters because the sim FREEZES at step 0 once the level completes, so this is
+ * called forever afterwards with the counter's final value. Alpha holds at 0 — "no pop-back" is
+ * structural rather than something a listener remembers to do.
+ */
+export function goalEntryAlpha(goalEntryTicks: number | null): number {
+  if (goalEntryTicks === null) {
+    return 1;
+  }
+  return Math.max(0, 1 - goalEntryTicks / GOAL_ENTRY_TICKS);
+}
+
+/**
+ * @param goalEntryTicks `World.goalEntryTicks` — the gate run-in's progress, or `null` when none is
+ *   running. Defaults to `null` so every pre-existing call site keeps the behaviour it was written
+ *   against; only the production draw path passes it.
+ */
+export function playerRenderDesc(
+  player: PlayerSim,
+  scale: number,
+  goalEntryTicks: number | null = null,
+): PlayerRenderDesc {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`playerRenderDesc: scale must be a finite number greater than 0, got ${scale}`);
   }
@@ -113,6 +161,12 @@ export function playerRenderDesc(player: PlayerSim, scale: number): PlayerRender
     originY: 1,
     flipX: player.facing === -1,
     colour: STATE_COLOURS[player.state],
-    animKey: STATE_ANIMS[player.state],
+    // 🔴 `run` is FORCED for the whole gate run-in, whatever the sim says. The sim's own state
+    // reads `fall` for a tick or two if the player entered airborne, and `idle` once the auto-run's
+    // dead zone settles them at the centre — and the character is supposed to be seen RUNNING into
+    // the door. The override lives here rather than in `resolveState` because it is a rendering
+    // claim about one scripted moment, not a movement state the simulation should have to carry.
+    animKey: goalEntryTicks === null ? STATE_ANIMS[player.state] : STATE_ANIMS.run,
+    alpha: goalEntryAlpha(goalEntryTicks),
   };
 }

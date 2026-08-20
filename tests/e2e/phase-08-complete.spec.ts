@@ -63,17 +63,38 @@ test.describe('Phase 8 — the level-complete flow (8.6)', () => {
      * and the character-scale bounds below read `level.goal` rather than the drawing. Codex's
      * implementation review pointed out that offsetting the `fillRect` calls would keep all of it
      * green while visibly separating the exit from the rectangle step 9d triggers on. `getBounds()`
-     * is the drawn extent, and it must BE the goal rect — one pixel of tolerance for the frame's
-     * rounding, no more.
+     * is the drawn extent, which is the thing the claim is about.
+     *
+     * ⚠️ **This asserted `bounds === level.goal` exactly, and that stopped being the contract.** The
+     * gate-art session found the drawn doorway was the same height as the character walking through
+     * it — the rect is 192 x 288 and the courier's box is 132 x 288 — and made the ART larger than
+     * its TRIGGER: `GATE_PX`, anchored bottom-centre on the rect. The equality was never the point;
+     * *the exit is drawn where the trigger is* was, and that is what is asserted now. The defect
+     * Codex named is still caught — an offset `fillRect` moves the centre or lifts the base, and
+     * both are checked below.
      */
-    const { bounds } = drawn!;
-    expect(bounds.x, 'the drawn exit is not on the goal rect').toBeCloseTo(level.goal.x, 0);
-    expect(bounds.y, 'the drawn exit is not on the goal rect').toBeCloseTo(level.goal.y, 0);
-    expect(bounds.w, 'the drawn exit is not the width of the goal rect').toBeCloseTo(level.goal.w, 0);
-    expect(bounds.h, 'the drawn exit is not the height of the goal rect').toBeCloseTo(level.goal.h, 0);
-
     const BODY_H = 288;
     const BODY_W = 132;
+
+    const { bounds } = drawn!;
+    expect(bounds.x + bounds.w / 2, 'the drawn exit is not centred on the goal rect').toBeCloseTo(
+      level.goal.x + level.goal.w / 2,
+      0,
+    );
+    expect(bounds.y + bounds.h, 'the drawn exit does not stand on the goal rect').toBeCloseTo(
+      level.goal.y + level.goal.h,
+      0,
+    );
+    // A doorway is something you walk THROUGH, so it has to be at least as big as the trigger volume
+    // and at least as tall as the character. Both directions matter: art smaller than the rect leaves
+    // the player triggering on empty floor, and this is exactly what shipped until an owner looked.
+    expect(bounds.w, 'the drawn exit is narrower than the rect it triggers on').toBeGreaterThanOrEqual(
+      level.goal.w,
+    );
+    expect(bounds.h, 'the drawn exit is no taller than the character walking through it').toBeGreaterThan(
+      BODY_H,
+    );
+
     expect(level.goal.h, 'the exit is shorter than the character').toBeGreaterThanOrEqual(BODY_H);
     expect(level.goal.h, 'the exit is more than two characters tall').toBeLessThanOrEqual(BODY_H * 2);
     expect(level.goal.w, 'the exit is narrower than the character').toBeGreaterThanOrEqual(BODY_W);

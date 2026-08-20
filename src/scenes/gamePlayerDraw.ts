@@ -29,7 +29,7 @@ export function renderPlayerSprite(
   accumulatorMs: number,
   feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void,
 ): void {
-  const desc = playerRenderDesc(world.player, world.scale);
+  const desc = playerRenderDesc(world.player, world.scale, world.goalEntryTicks);
   // Drawn BETWEEN the last two ticks, not at the current one. Without this the sprite is held
   // still on every frame `drainTicks` returns 0 ticks for — three refreshes out of four at
   // 240 Hz — and then jumps 12 px, which is the "ghost / double image" the user reported and
@@ -45,6 +45,12 @@ export function renderPlayerSprite(
   // anyway so it would not arrive untested in this phase, which is why this line is a
   // one-for-one replacement rather than new behaviour.
   sprite.setFlipX(desc.flipX);
+
+  // The gate-entry fade. Applied EVERY frame from the descriptor rather than tweened once, so it
+  // is self-correcting: a new level builds a world with `goalEntryTicks: null`, the descriptor
+  // says 1, and the sprite is opaque again on the first frame with nothing to tear down. See
+  // `goalEntryAlpha` in `playerView.ts` for why a Phaser tween was rejected.
+  sprite.setAlpha(desc.alpha);
 
   // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
   // used to reimplement inline (R10).

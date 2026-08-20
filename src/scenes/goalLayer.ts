@@ -6,12 +6,17 @@
  * the rectangle was**. Criterion 8.6 begins "align, animate, fade…", which presupposes something to
  * align to. An invisible exit is not a level-complete flow; it is a level with a secret.
  *
- * ## Grey-box, and it stays grey-box this phase
+ * ## Grey-box first, and the art arrived afterwards — which is the rule working
  *
  * "Grey-box before art" is a Global Constraint: no fal spend on a feature whose mechanics are not
- * already playable. Phase 8 is not a generating phase, and the exit's mechanics are brand new — so this
- * draws from `Graphics` primitives and the existing tileset, and generated exit art is Phase 9's, after
- * the flow has been played. Recorded rather than deferred silently.
+ * already playable. Phase 8 shipped this as `Graphics` primitives for exactly that reason. The
+ * gate-art session then built the run-in and the fade against those primitives, played all five
+ * levels by hand, and only then spent $0.30 on one image — so `drawGoal`'s image branch below,
+ * written dead in Phase 8, is the branch that runs today and `goalIsGreybox` returns false.
+ *
+ * The grey-box half is NOT dead code and is not to be deleted: it is what a missing or failed
+ * texture falls back to, and `goalIsGreybox` is how a test says which branch shipped rather than
+ * inferring it.
  *
  * The branch is the same shape `gearLayer.ts` uses, and for the reason its header records: Phase 5 chose
  * Sprite-vs-Rectangle **once, at creation, from a transient state**, and twelve of twenty enemies were
@@ -19,9 +24,15 @@
  * looked *better* for it. `goalIsGreybox` is exported so a test asserts which branch shipped instead of
  * inferring it.
  *
- * ## The drawn rect IS the trigger rect
+ * ## The drawn gate is ANCHORED to the trigger rect — it is no longer the same size as it
  *
- * Nothing here computes geometry. It draws `LevelData.goal`, the same rectangle `describeGoalProblem`
+ * ⚠️ This section read *"the drawn rect IS the trigger rect"* until the gate-art session found that
+ * meant the doorway was exactly as tall as the courier walking through it. The art is `GATE_PX` now,
+ * larger than the rect and standing bottom-centre on it. **What survives is the part that mattered:
+ * the drawing takes its position from `LevelData.goal` and computes no geometry of its own**, so the
+ * door cannot drift away from the thing step 9d tests. Only the size was ever coincidental.
+ *
+ * It draws from `LevelData.goal`, the same rectangle `describeGoalProblem`
  * validated and the same one step 9d tests the player's box against. That is deliberate and it is why
  * the exit carries no tile painting in the `.tmj`: a doorway painted into the tile layer plus a trigger
  * rect beside it are two lists that can drift, which is exactly how Phase 4 shipped a spike run drawn
@@ -31,8 +42,9 @@
 import Phaser from 'phaser';
 import type { Rect } from '../sim/types';
 import { ticksToMs } from '../sim';
+import { GATE_PX } from './goalArtSize';
 
-/** The catalogued texture a generated exit would arrive as. Absent today, by design. */
+/** The catalogued texture the generated exit arrives as — `public/assets/objects/gate.png`. */
 export const GOAL_TEXTURE_KEY = 'goal-gate';
 
 /**
@@ -60,11 +72,30 @@ export function goalIsGreybox(scene: Phaser.Scene): boolean {
  */
 export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.GameObject {
   if (!goalIsGreybox(scene)) {
-    // Centred on the rect, sized to it — the same "already the right size" contract `addGearObject`
-    // states, so no caller reaches for setOrigin afterwards.
+    /**
+     * 🔴 The drawn doorway is BIGGER than the rect that triggers it, and the two are separate
+     * numbers on purpose.
+     *
+     * It used to be `setDisplaySize(goal.w, goal.h)` — the art authored at exactly the rect's size,
+     * so the call was a no-op and the pixels were 1:1. That was tidy and it was wrong: the rect is
+     * 192 x 288 and the courier's box is 132 x 288, so **the doorway was drawn exactly as tall as
+     * the person walking through it**. It reads as a hatch. Every gate in the suite compared the
+     * drawing to the rect, and against the rect it was perfect — the owner found it by looking at a
+     * screenshot, which is what `play`-owned criteria are for.
+     *
+     * Anchored **bottom-centre**: the door stands ON the threshold the sim tests and grows upward
+     * and outward from it. `setOrigin(0.5, 1)` at the rect's bottom edge is what makes that true
+     * whatever `GATE_PX` becomes — the alternative, centring on the rect and letting it grow
+     * downward, would sink the doorway's base into the floor.
+     *
+     * The trigger volume is untouched. `overlapsGoal` and `containedInGoal` read `world.goal`, and
+     * containment is an exact vertical equality against its 288 — see `goal.ts`. Nothing here may
+     * change that, which is why this scales the IMAGE and not the rect.
+     */
     return scene.add
-      .image(goal.x + goal.w / 2, goal.y + goal.h / 2, GOAL_TEXTURE_KEY)
-      .setDisplaySize(goal.w, goal.h)
+      .image(goal.x + goal.w / 2, goal.y + goal.h, GOAL_TEXTURE_KEY)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(GATE_PX.w, GATE_PX.h)
       .setDepth(7);
   }
 
@@ -100,7 +131,13 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
     .setDepth(7);
 }
 
-/** How long the exit's reached-it flourish runs. Shorter than `hudFade`'s fade, so it reads first. */
+/**
+ * How long the exit's flourish runs. Shorter than `hudFade`'s fade, so it reads first.
+ *
+ * ⚠️ It fires on `levelCompleted`, which since the gate-art session is **twenty ticks after** the
+ * player reached the door and one tick after the courier finished fading out. So it is the
+ * *completed-it* flourish now, not the *reached-it* one, and it plays over an empty doorway.
+ */
 export const GOAL_PULSE_TICKS = 16;
 
 /**

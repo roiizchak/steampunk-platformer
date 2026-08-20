@@ -29,6 +29,10 @@
     {
       "key": "gear",
       "url": "assets/objects/gear.png"
+    },
+    {
+      "key": "goal-gate",
+      "url": "assets/objects/gate.png"
     }
   ],
   "levels": [

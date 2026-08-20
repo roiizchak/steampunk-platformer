@@ -25,6 +25,7 @@ import { createSnapshot } from '../../src/sim/input';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { createWorld, tick } from '../../src/sim/tick';
 import { DEATH_TICKS } from '../../src/sim/combat';
+import { GOAL_ENTRY_TICKS } from '../../src/sim/goal';
 import type { InputSnapshot, Rect, World } from '../../src/sim/types';
 
 const SCALE = 6;
@@ -196,7 +197,7 @@ describe('death wins ties', () => {
    * a goal in level data — asserted by `goal-on-spawn.fixture` in `level-goal.test.ts`. The two rules
    * are load-bearing together; this asserts the runtime half behaves as described.
    */
-  it('DOES complete on the respawn tick if a goal overlaps the spawn — which is why level data forbids it', () => {
+  it('DOES complete with no input at all if a goal overlaps the spawn — which is why level data forbids it', () => {
     const overlapping: Rect = {
       x: SPAWN.x - 100,
       y: SPAWN.y - PLAYER_BOX.h * SCALE,
@@ -205,11 +206,19 @@ describe('death wins ties', () => {
     };
     const w = world(overlapping);
 
-    // Completes immediately — no walking required. That is the defect, demonstrated rather than
-    // asserted away, so the reason `describeGoalProblem` refuses this geometry stays visible.
-    const { edges, at } = run(w, 5, createSnapshot());
+    // 🔴 This used to complete on tick 0 and the assertion below said so. The gate-entry session
+    // changed WHEN, not WHETHER: the body is contained from the first tick, so the run-in arms at
+    // once and the level completes the moment the counter reaches `GOAL_ENTRY_TICKS`. The defect
+    // the data rule prevents is unchanged and is still demonstrated rather than asserted away —
+    // no input is ever supplied, and the level finishes anyway.
+    //
+    // Naming the exact tick is deliberately stronger than the old `toBe(0)`: it fails if the
+    // completion drifts by one tick in either direction, which "it completed at some point" cannot.
+    const { edges, at } = run(w, GOAL_ENTRY_TICKS + 10, createSnapshot());
 
-    expect(edges, 'an overlapping goal must complete at once — this is the defect the data rule prevents').toBe(1);
-    expect(at[0], 'it completes on the very first tick, before any input matters').toBe(0);
+    expect(edges, 'an overlapping goal must still complete unaided — the defect the data rule prevents').toBe(1);
+    expect(at[0], 'it completes when the run-in counter matures, with no input at any point').toBe(
+      GOAL_ENTRY_TICKS,
+    );
   });
 });

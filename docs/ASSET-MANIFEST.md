@@ -95,7 +95,8 @@ against one line before shooting any clip *(criterion 4.27)*.
 | industrial tileset | `tiles-industrial` | 3 | ✅ shipped |
 | parallax far / mid / near | `bg-far` `bg-mid` `bg-near` | 3 | ✅ shipped |
 | HUD health assembly | `hud-health` | 4 | ✅ shipped, **unused until Phase 6** |
-| gear pickup | — | 6 | ⬜ |
+| gear pickup | `gear` | 6 | ✅ shipped, 72 × 72 |
+| **level exit gate** | `goal-gate` | **8 follow-up** | ✅ shipped, **288 × 432** — `GATE_PX`, deliberately larger than the 192 × 288 trigger rect and anchored bottom-centre on it. It was authored at the rect until the owner saw it was the same height as the character |
 | collect → scoreboard tween art | — | 6 | ⬜ |
 | hazard art (spikes beyond the tileset) | — | 5 | ⬜ |
 | audio cues | — | 7 | ⬜ — needs the catalog schema extended |

@@ -20,6 +20,7 @@
 import { describe, expect, it } from 'vitest';
 import { playerRenderDesc } from '../../src/render/playerView';
 import { IFRAME_TICKS, PLAYER_MAX_HP } from '../../src/sim/combat';
+import { GOAL_ENTRY_TICKS } from '../../src/sim/goal';
 import { PLAYER_BOX } from '../../src/sim/player';
 import { createWorld } from '../../src/sim/tick';
 import type { PlayerSim } from '../../src/sim/types';
@@ -122,5 +123,90 @@ describe('playerRenderDesc (vault 2.12)', () => {
     expect(desc.x).toBe(world.player.x);
     expect(desc.y).toBe(world.player.y);
     expect(desc.w).toBe(PLAYER_BOX.w * 2);
+  });
+});
+
+/**
+ * The gate-entry fade — a RENDER decision driven by a SIM integer.
+ *
+ * The sim counts ticks and nothing under `src/sim/` knows the player becomes transparent. A Phaser
+ * tween was the obvious alternative and is wrong twice over: it is a millisecond duration on a body
+ * whose whole sequence is tick-counted (vault 2.1), and it would need cancelling on every scene
+ * restart. Recomputed from the counter every frame instead, so a new level's `null` restores
+ * opacity with nothing to remember and no teardown to forget.
+ */
+describe('the gate-entry fade', () => {
+  it('is fully opaque when no run-in is running', () => {
+    expect(playerRenderDesc(playerAt(), 6, null).alpha).toBe(1);
+    expect(playerRenderDesc(playerAt(), 6).alpha, 'and by default, for every pre-existing caller').toBe(1);
+  });
+
+  it('pins the alpha at EVERY tick of the ramp, not just its endpoints', () => {
+    // 🔴 The endpoints are worthless on their own. An instant fade, a half-strength fade and this
+    // linear one all agree at 0 and at N — only the middle of the curve tells them apart, which is
+    // why the mutation proofs in `docs/qa/phase-08-gate-entry.md` target this test and not the
+    // two below it.
+    for (let t = 0; t <= GOAL_ENTRY_TICKS; t += 1) {
+      expect(playerRenderDesc(playerAt(), 6, t).alpha, `tick ${t}`).toBeCloseTo(
+        1 - t / GOAL_ENTRY_TICKS,
+        10,
+      );
+    }
+  });
+
+  it('is monotonically decreasing — it never brightens mid-sequence', () => {
+    let previous = Number.POSITIVE_INFINITY;
+    for (let t = 0; t <= GOAL_ENTRY_TICKS; t += 1) {
+      const alpha = playerRenderDesc(playerAt(), 6, t).alpha;
+      expect(alpha, `tick ${t} is brighter than tick ${t - 1}`).toBeLessThan(previous);
+      previous = alpha;
+    }
+  });
+
+  it('reaches exactly 0 at GOAL_ENTRY_TICKS and never goes negative', () => {
+    // 0 on the earliest tick completion can fire, so the character is gone by the time the level
+    // ends rather than winking out at it. Past that the sim is frozen, so the clamp is what holds
+    // alpha at 0 rather than driving it below.
+    expect(playerRenderDesc(playerAt(), 6, GOAL_ENTRY_TICKS).alpha).toBe(0);
+    expect(playerRenderDesc(playerAt(), 6, GOAL_ENTRY_TICKS + 40).alpha).toBe(0);
+  });
+
+  it('plays the run animation for the whole sequence, whatever the sim state says', () => {
+    // The sim's own state reads `fall` for a tick or two if the player entered airborne, and `idle`
+    // once the dead zone stops them at the centre. The brief asks the character to RUN in, so the
+    // override lives HERE rather than teaching the state machine about doorways.
+    //
+    // 🔴 EVERY tick of the window, not a sample of one. This read `goalEntryTicks = 3` alone until
+    // the gate's checklist review mutated the override to `goalEntryTicks > 10 ? state : run` and
+    // watched the whole suite stay green at 1937 passed — the courier reverting to `idle` for the
+    // entire back half of its own entry, unseen. The alpha test directly above already loops; this
+    // one did not, and "for the whole sequence" is in its name.
+    for (let t = 0; t <= GOAL_ENTRY_TICKS; t += 1) {
+      for (const state of ['idle', 'fall', 'jump', 'walk'] as const) {
+        expect(playerRenderDesc(playerAt({ state }), 6, t).animKey, `tick ${t}, state ${state}`).toBe(
+          'brass-courier-run',
+        );
+      }
+    }
+  });
+
+  /**
+   * The WINDOW'S LENGTH, which nothing in the unit suite could see.
+   *
+   * Every assertion above computes its expectation from `GOAL_ENTRY_TICKS` itself, so it is true of
+   * any window. The checklist review changed the constant from 20 to 40 and the whole suite stayed
+   * green at 1937 passed — a fade, and a completion window, at half speed, invisible. The e2e spec
+   * pins the literal 20 as well, and deliberately: two independent statements of a balance number
+   * is the point, not duplication.
+   *
+   * Changing this is a balance change. The gate going red IS the review checkpoint.
+   */
+  it('the entry window is 20 ticks — changing it is a balance change, not a refactor', () => {
+    expect(GOAL_ENTRY_TICKS).toBe(20);
+  });
+
+  it('leaves the animation key alone when no run-in is running', () => {
+    // Without this the override could be unconditional and every test above would still pass.
+    expect(playerRenderDesc(playerAt({ state: 'fall' }), 6, null).animKey).toBe('brass-courier-fall');
   });
 });

@@ -99,11 +99,16 @@ function lineCount(text: string): number {
  *  1. `lines=` must MATCH the current count, so ordinary growth breaks its own citation;
  *  2. **exactly one** active citation per path, so two logs cannot disagree and let the gate pass on
  *     whichever happens to match;
- *  3. the ratchet below, which is at **0** — so no file may be over the limit at all today, and
- *     re-exempting one is a deliberate, visible edit in two places.
+ *  3. the ratchet below, which is at **1** — raised from 0 by the gate-art session for
+ *     `src/sim/tick.ts`, so exactly one file may be over the limit today and re-exempting a second
+ *     is a deliberate, visible edit in two places.
  *
- * The residual hole is narrow — a file that grows back to a byte-identical previously-exempted size
- * while the ratchet has been raised — and it is written down rather than papered over.
+ * ⚠️ **The residual hole this describes is OPEN while the ratchet is above 0**, and it said
+ * "while the ratchet has been raised" as a hypothetical until the ratchet was actually raised and
+ * nobody re-read the sentence. A file that grows back to a byte-identical previously-exempted size
+ * passes (1) and (2); only the count in (3) stands between it and the gate, and the count does not
+ * name a path. Narrow, written down rather than papered over — and this paragraph is now describing
+ * the present tense. *(vault C9: a wrong comment is worse than none.)*
  *
  * ## The lesson this mechanism is built on, restored here 2026-08-17
  *
@@ -286,9 +291,22 @@ describe('the 400-line rule', () => {
     // clearing it needs a deliberate ratchet raise here as well as an active citation there. That
     // is the same ratchet this comment has always described, one notch further down.
     //
+    // 🔴 **0 -> 1 on 2026-08-19**, for `src/sim/tick.ts` at **422**, in the gate-entry session.
+    // The split was attempted first, per the order of preference below, and both remaining
+    // candidates would have contradicted a decision written into that file — step 13's comment says
+    // its guard "stays here, with the numbered order that owns it", and step 4c's says the respawn
+    // decision is taken where the spawn point lives. `advance` was already extracted to
+    // `advanceSplit.ts` in Phase 8 for exactly this pressure, and that was the one clean seam.
+    //
+    // What crossed the line is 24 lines of the widened step 9d: the contract paragraph, the
+    // `entryLocked` read, the attack-edge consumption, and one line each on steps 5, 7 and 9d.
+    // Roughly 11 more were MOVED to `goal.ts` on the way — reasoning that `goal.ts`'s own header
+    // already claims — which is why the citation reads 422 and not 445. Nothing was deleted.
+    // Justification: `docs/qa/phase-08-gate-entry.md`.
+    //
     // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
     // the way past is to split the file or write the justification, in that order of preference.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(0);
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(1);
   });
 });
 

@@ -1,8 +1,8 @@
 /**
- * `npm run assets:world` — tileset, parallax, HUD and the gear pickup, from raw model output to
+ * `npm run assets:world` — tileset, parallax, HUD, the gear pickup and the exit gate, from raw model output to
  * shipped assets.
  *
- * The two isolated-object assets (HUD, gear) live in `buildChrome.mjs`; source resolution lives in
+ * The isolated-object assets (HUD, gear, gate) live in `buildChrome.mjs`; source resolution lives in
  * `rawSource.mjs`. What stays here is the grid-and-seam work, which shares nothing with them.
  *
  * The tileset is the interesting one. `nano-banana-pro` exposes no explicit `width`/`height`, so a
@@ -21,7 +21,7 @@ import { detectFrames } from './sheets.mjs';
 import { crop, downscale, mirrorLoop } from './resize.mjs';
 import { gateGridExact, gateSeam, regionStats, PASS, WARM } from './gates.mjs';
 import { raw } from './rawSource.mjs';
-import { buildHud, buildGear } from './buildChrome.mjs';
+import { buildHud, buildGear, buildGate } from './buildChrome.mjs';
 
 /**
  * Read `TILE_SIZE` out of the runtime constants rather than declaring a second copy.
@@ -314,8 +314,9 @@ const tiles = buildTileset();
 const backgrounds = buildParallax();
 const hud = buildHud();
 const gear = buildGear();
+const gate = buildGate();
 writeFileSync(
   '_generated/world-report.json',
-  `${JSON.stringify({ tiles, backgrounds, hud, gear }, null, 2)}\n`,
+  `${JSON.stringify({ tiles, backgrounds, hud, gear, gate }, null, 2)}\n`,
 );
 console.log('\nwrote tiles, backgrounds, hud and gear into public/assets/');
