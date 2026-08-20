@@ -48,6 +48,7 @@ import {
 } from '../render/hud';
 import { addGearObject } from './gearLayer';
 import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from './hudFade';
+import { attachGearPop, type GearPop } from './hudGearPop';
 import { ticksToMs } from '../sim';
 import type { World } from '../sim/types';
 
@@ -124,6 +125,7 @@ export class UIScene extends Phaser.Scene {
    * grey box and the sprite would end up different sizes.
    */
   private iconBaseDiameter = 1;
+  private gearPop?: GearPop;
 
   constructor() {
     super('UI');
@@ -260,7 +262,9 @@ export class UIScene extends Phaser.Scene {
       this.layout.gearIcon.x + this.layout.gearIcon.w / 2,
       this.layout.gearIcon.y + this.layout.gearIcon.h / 2,
     );
+    this.gearPop?.destroy();
     this.gearIcon.setScale(this.layout.gearIcon.w / this.iconBaseDiameter);
+    this.gearPop = attachGearPop(this, this.gearIcon, this.layout.gearIcon.w / this.iconBaseDiameter);
 
     this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
     this.counter.setFontSize(this.layout.counter.fontPx);
@@ -299,6 +303,7 @@ export class UIScene extends Phaser.Scene {
     if (world.gearsCollected !== this.drawnGearCount) {
       this.drawnGearCount = world.gearsCollected;
       this.counter.setText(counterText(world.gearsCollected));
+      this.gearPop?.pop();
       this.spawnCollectTweens(world, worldCamera);
     }
     this.lastGearTick = world.tickCount;

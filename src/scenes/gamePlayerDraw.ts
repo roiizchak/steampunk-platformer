@@ -16,8 +16,10 @@
 
 import Phaser from 'phaser';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
+import { ATTACK_CONTACT_FRAME_INDEX } from '../render/effects';
 import { interpolatedPosition, renderAlpha, type Point } from '../render/interpolate';
-import { playerRenderDesc } from '../render/playerView';
+import { animKeyFor, playerRenderDesc } from '../render/playerView';
+import { frozen } from '../sim/hitstop';
 import type { World } from '../sim/types';
 import { registerCatalogAnimations } from './gameAnimations';
 import { playIfChanged } from './playAnim';
@@ -55,6 +57,36 @@ export function renderPlayerSprite(
   // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
   // used to reimplement inline (R10).
   playIfChanged(sprite, desc.animKey);
+
+  // 🔴 The hit-stop freeze's DRAWN frame — Phase 9, and it has to live here.
+  //
+  // The line above re-derives the animation from sim state on EVERY frame, so an `anims.pause()` or
+  // `setCurrentFrame()` called from anywhere else is silently overwritten within one frame. Both are
+  // therefore recomputed here from a sim predicate, in the same self-correcting shape as the
+  // `goalEntryAlpha` line four lines up: nothing is armed, nothing is torn down, and a restart or a
+  // new level needs no cancellation path.
+  //
+  // The SNAP is the part a screenshot cannot see. Contact lands on `combatCounter` 8–9, the last two
+  // ticks of the four-tick active window — so a freeze that simply held whatever frame the renderer
+  // had last advanced to would hold a mid-wind-up pose, which is the opposite of what a freeze is
+  // for. `ATTACK_CONTACT_FRAME_INDEX` is a measurement traced against the shipped sheet; see its
+  // docstring in `spriteFeedback.ts`, and note that `sheetGates.mjs`'s G5 passes here and is blind
+  // to it.
+  if (frozen(world.player, world.tickCount)) {
+    sprite.anims.pause();
+    const frames = sprite.anims.currentAnim?.frames;
+    // Only the attack clip is snapped: every other clip's frozen pose is already the right one.
+    // The bounds check is not defensive noise — a regenerated sheet with fewer frames must draw the
+    // wrong pose for a few ticks, never take the scene down inside a render loop.
+    if (desc.animKey === animKeyFor('attack') && frames && frames.length > ATTACK_CONTACT_FRAME_INDEX) {
+      sprite.anims.setCurrentFrame(frames[ATTACK_CONTACT_FRAME_INDEX]);
+    }
+  } else {
+    // UNCONDITIONALLY, every frame. Resuming a running animation is a no-op, and doing it without a
+    // guard is exactly what makes the pause above self-correcting across a restart — there is no
+    // "was frozen" flag to leak.
+    sprite.anims.resume();
+  }
 
   // DEV ONLY — the live locomotion tuner's per-frame update. Guarded at the point of use so the
   // branch and its import are tree-shaken out of `dist/`; `verify-dist` proves the absence.
