@@ -21,12 +21,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { PLAYER_MAX_HP } from '../../src/sim/combat';
+import { SCAVENGER, SCAVENGER_ATTACK } from '../../src/sim/enemies';
 import { HITSTOP_TICKS, freezePair, frozen } from '../../src/sim/hitstop';
 import { PLAYER_ATTACK_DAMAGE } from '../../src/sim/playerAttack';
 import { HAZARD_DAMAGE } from '../../src/sim/hazards';
 import { fireProjectile } from '../../src/sim/projectiles';
 import { createSnapshot } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
+import type { World } from '../../src/sim/types';
 import { BOUNDS, FLOOR, IDLE, SCALE, clawedWhileIdle, strikeWhileRunning } from './hitstop-fixtures';
 
 describe('the freeze lengths themselves', () => {
@@ -207,5 +209,104 @@ describe('damage with no attacker body freezes nothing', () => {
     }
     expect(world.player.hp, 'the bolt never landed').toBe(PLAYER_MAX_HP - 9);
     expect(world.player.hitstopUntil, 'a projectile armed a freeze').toBe(-1);
+  });
+});
+
+/**
+ * The gate's own header says the four steps "freeze together or the freeze is a bug". Steps 5 and 8
+ * were the only two a test actually held there: every fixture above is GROUNDED, presses no jump,
+ * and asserts only `x` and `vx`, so `stepVertical` escaping the gate would have been invisible.
+ * Demonstrated by the review — wrapping only 5 and 8 and leaving 6 and 7 live left all 1962 tests
+ * green *(C2: half a gate is decoration)*. These two close that.
+ */
+describe('the gate covers all four steps, not the two the grounded fixtures can see', () => {
+  /**
+   * A hit taken in mid-air, so gravity has something to move.
+   *
+   * Both bodies are raised 560 px together — the shape `knockback.test.ts` uses and for the reason
+   * its comment gives: raising only the player lifts them clear of the scavenger, contact never
+   * happens, and zero displacement reads as a clean pass. The claw is armed to `startup - 1` because
+   * `stepScavenger` advances the counter before testing it.
+   */
+  it('an AIRBORNE freeze holds y, vy and grounded — step 6 is inside the gate', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: SCALE,
+      solids: FLOOR,
+      bounds: BOUNDS,
+      spawn: { x: 706, y: 400 },
+      enemies: [{ slug: 'rust-scavenger', x: 700, y: 400, patrolMin: 700, patrolMax: 700 }],
+    });
+    world.enemies.scavengers[0]!.attackCounter = SCAVENGER_ATTACK.startup - 1;
+
+    tick(world, { ...IDLE });
+    const player = world.player;
+    const hitTick = world.tickCount - 1;
+    expect(player.hp, 'the claw never landed').toBe(PLAYER_MAX_HP - SCAVENGER.damage);
+    // Non-vacuity, both halves: airborne, and already falling. A body at `vy === 0` on the ground
+    // cannot tell a gated `stepVertical` from a live one.
+    expect(player.grounded).toBe(false);
+    expect(player.vy, 'not falling yet, so gravity has nothing to reveal').toBeGreaterThan(0);
+
+    const y0 = player.y;
+    const vy0 = player.vy;
+    for (let n = 1; n <= HITSTOP_TICKS.playerHurt; n += 1) {
+      tick(world, { ...IDLE });
+      expect(world.tickCount).toBe(hitTick + 1 + n);
+      expect(player.y, `the body fell on frozen tick ${n}`).toBe(y0);
+      expect(player.vy, `gravity accelerated the body on frozen tick ${n}`).toBe(vy0);
+      expect(player.grounded, `grounded flipped on frozen tick ${n}`).toBe(false);
+    }
+
+    tick(world, { ...IDLE });
+    expect(player.vy, 'the body never resumed falling').toBeGreaterThan(vy0);
+    expect(player.y, 'the body never resumed falling').toBeGreaterThan(y0);
+  });
+
+  /**
+   * A FROZEN sentry takes no turn at all — and `stepSentry` IS the cooldown advance, so calling it
+   * and discarding `fired` would let a turret bank its recovery and shoot the instant the freeze
+   * lifted. Both halves of that claim are asserted: nothing fires, and the counter does not move.
+   *
+   * The "a bolt in flight keeps flying" test above freezes a SCAVENGER, so it never reaches this
+   * branch. Deleting the sentry guard leaves it green.
+   */
+  it('a FROZEN sentry neither fires nor banks its cooldown', () => {
+    const build = (): World =>
+      createWorld({
+        seed: 1,
+        scale: SCALE,
+        solids: FLOOR,
+        bounds: BOUNDS,
+        spawn: { x: 1000, y: 960 },
+        enemies: [{ slug: 'brass-sentry', x: 1200, y: 960, patrolMin: 1200, patrolMax: 1200 }],
+      });
+
+    // Control: unfrozen, a ready sentry inside its radius shoots on tick one.
+    const control = build();
+    tick(control, { ...IDLE });
+    expect(control.projectiles.length, 'the CONTROL never fired — the fixture is out of range').toBe(1);
+
+    const world = build();
+    const sentry = world.enemies.sentries[0]!;
+    // Mid-cooldown as well as frozen, so "did not bank" is a real reading rather than a saturated
+    // counter that could not have moved anyway.
+    sentry.cooldownCounter = 0;
+    // Driven off the DEADLINE rather than off a count of ticks. Arming by hand happens before a tick
+    // runs, where `freezePair` normally fires at 9b of a tick that has already run — so counting
+    // `HITSTOP_TICKS.lethal` ticks from here stops one short of the window.
+    const until = world.tickCount + HITSTOP_TICKS.lethal;
+    sentry.hitstopUntil = until;
+    sentry.lastHitTick = world.tickCount;
+
+    while (world.tickCount <= until) {
+      const at = world.tickCount;
+      tick(world, { ...IDLE });
+      expect(sentry.cooldownCounter, `the frozen turret banked cooldown on tick ${at}`).toBe(0);
+      expect(world.projectiles.length, `the frozen turret fired on tick ${at}`).toBe(0);
+    }
+
+    tick(world, { ...IDLE });
+    expect(sentry.cooldownCounter, 'the turret never resumed its cooldown').toBe(1);
   });
 });
