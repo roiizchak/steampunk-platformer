@@ -145,6 +145,10 @@ export function createWorld({
       iFrameCounter: IFRAME_TICKS,
       // FIX 2: no impulse has landed yet.
       knockbackPending: false,
+      // Phase 9: never frozen, never hit, never swung. `-1` is the sentinel `lastHitSwing` uses.
+      hitstopUntil: -1,
+      lastHitTick: -1,
+      swingStartTick: -1,
       strideCounter: 0,
       strideGait: null,
     },

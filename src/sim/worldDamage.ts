@@ -34,6 +34,7 @@
 import { HAZARD_DAMAGE, belowKillPlane, hazardHit } from './hazards';
 import { SCAVENGER, attackIsLive, overlapsScavenger } from './enemies';
 import { damagePlayer, killPlayer } from './combat';
+import { freezePair, frozen } from './hitstop';
 import { PLAYER_BOX, toWorld } from './player';
 import { projectileHit } from './projectiles';
 import type { PlayerSim, World } from './types';
@@ -160,6 +161,12 @@ export function applyWorldDamage(
     // walking INTO, and reversing the player's own travel double-counts a wall or floor collision
     // that has already stopped them this same tick. Decided rather than left to fall out of the
     // code by accident (Codex plan review correction 3).
+    //
+    // **Hit-stop is exempt here for the same reason, and deliberately so** *(Phase 9)*. A freeze is
+    // an impact between two BODIES; a swept rectangle is not a body and has nothing to freeze, so
+    // there is no pair to pass `freezePair`. Freezing the player alone would be a one-sided pause
+    // with no visible cause — the player stops, nothing else does, and it reads as a stutter rather
+    // than as a hit. Recorded as a decision, not left to fall out of the code as an omission.
     landed = damagePlayer(player, HAZARD_DAMAGE) || landed;
   }
 
@@ -174,6 +181,10 @@ export function applyWorldDamage(
     if (hit && player.hp > 0) {
       applyKnockback(player, shot.x);
     }
+    // **No hit-stop on a bolt** *(Phase 9)*, the same call the hazard branch above makes. The
+    // attacker is a sentry that may be half a screen away and is about to have its shot deleted on
+    // the next line; there is no attacking body present to freeze, and freezing the shooter for a
+    // hit it took no part in this tick would stop a turret the player cannot even see.
     // Consumed on impact, whether or not it actually cost hp. A shot left flying through an
     // invulnerable player re-hits the moment the window lapses, which reads as one bullet doing
     // damage twice from the same position.
@@ -184,6 +195,15 @@ export function applyWorldDamage(
     // A corpse is scenery. Without this the body the player just killed keeps costing hp until it
     // is walked around, which reads as the kill not having registered.
     if (scavenger.hp <= 0) {
+      continue;
+    }
+    // 🔴 **A frozen scavenger deals no damage** *(Phase 9)*. Its own step 4a is skipped while it is
+    // in hit-stop, so `attackCounter` is held — and a held counter sitting inside the active window
+    // means `attackIsLive` stays TRUE for every frozen tick. Without this guard the freeze would be
+    // a damage window rather than a pause: the claw hangs live and the shared i-frame window is the
+    // only thing between the player and a second hit. Read here rather than inside `attackIsLive`,
+    // which is shared with the renderer and should keep describing the POSE.
+    if (frozen(scavenger, world.tickCount)) {
       continue;
     }
     // 🔴 **The swing, not the touch** — a deliberate balance change, 2026-08-14, on the player's
@@ -204,6 +224,17 @@ export function applyWorldDamage(
       landed = hit || landed;
       if (hit && player.hp > 0) {
         applyKnockback(player, scavenger.x);
+      }
+      if (hit) {
+        // 🔴 **Hit-stop, the other direction** *(Phase 9)*. The claw is the one damage source in
+        // this file with a body behind it, which is exactly why it is the one that freezes. Gated on
+        // `hit`, not on contact: a blow refused by i-frames is not an impact, and freezing on one
+        // would let a player standing in a scavenger be pinned by hits that cost nothing.
+        //
+        // A LETHAL blow still freezes, unlike the knockback above, which skips a corpse. The two are
+        // not the same call: a shove has to move a body that is about to stop being controlled,
+        // while the freeze is punctuation on the moment of death and reads correctly on it.
+        freezePair(player, scavenger, 'playerHurt', world.tickCount);
       }
       break;
     }

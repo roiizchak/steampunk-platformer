@@ -99,16 +99,17 @@ function lineCount(text: string): number {
  *  1. `lines=` must MATCH the current count, so ordinary growth breaks its own citation;
  *  2. **exactly one** active citation per path, so two logs cannot disagree and let the gate pass on
  *     whichever happens to match;
- *  3. the ratchet below, which is at **1** — raised from 0 by the gate-art session for
- *     `src/sim/tick.ts`, so exactly one file may be over the limit today and re-exempting a second
- *     is a deliberate, visible edit in two places.
+ *  3. the ratchet below, which is back at **0** as of 2026-08-20 — `src/sim/tick.ts` came off the
+ *     list when Phase 9 moved steps 5-8 to `playerMotion.ts` — so nothing may be over the limit
+ *     today and exempting a file is a deliberate, visible edit in two places.
  *
- * ⚠️ **The residual hole this describes is OPEN while the ratchet is above 0**, and it said
+ * ⚠️ **The residual hole this describes is OPEN whenever the ratchet is above 0**, and it once said
  * "while the ratchet has been raised" as a hypothetical until the ratchet was actually raised and
  * nobody re-read the sentence. A file that grows back to a byte-identical previously-exempted size
  * passes (1) and (2); only the count in (3) stands between it and the gate, and the count does not
- * name a path. Narrow, written down rather than papered over — and this paragraph is now describing
- * the present tense. *(vault C9: a wrong comment is worse than none.)*
+ * name a path. The ratchet is at 0 again today, so the hole is **shut** — this paragraph is back to
+ * describing a hazard rather than the present tense, and it says which.
+ * *(vault C9: a wrong comment is worse than none.)*
  *
  * ## The lesson this mechanism is built on, restored here 2026-08-17
  *
@@ -304,9 +305,19 @@ describe('the 400-line rule', () => {
     // already claims — which is why the citation reads 422 and not 445. Nothing was deleted.
     // Justification: `docs/qa/phase-08-gate-entry.md`.
     //
+    // 🔴 **1 -> 0 on 2026-08-20**, when `src/sim/tick.ts` came off the list at **396**. Phase 9
+    // needed a home for a hit-stop gate that has to cover steps 5, 6, 7 and 8 together, and moving
+    // that block whole into `src/sim/playerMotion.ts` — numbered comments intact, one-line markers
+    // left at the call site so the file still reads as fourteen steps in order — is the split the
+    // gate-entry session looked for and did not find. **It is the first extraction in this project
+    // to move a NUMBERED step**; the two it examined (step 13's window advance, step 4c's respawn)
+    // were both refused because each contradicts a decision written into that file, and neither
+    // objection applies to a block that takes its numbering with it. The citation in
+    // `docs/qa/phase-08-gate-entry.md` is deleted, which is the other half of this edit.
+    //
     // Lower it again whenever a file comes off the list. **Raising it is not a way past this gate**;
     // the way past is to split the file or write the justification, in that order of preference.
-    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(1);
+    expect(over.length, `${over.length} files over ${LIMIT} lines`).toBeLessThanOrEqual(0);
   });
 });
 

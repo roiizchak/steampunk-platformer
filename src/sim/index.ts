@@ -69,6 +69,10 @@ export { fireProjectile, projectileHit, stepProjectiles } from './projectiles';
 export { KNOCKBACK_SPEED, applyWorldDamage } from './worldDamage';
 export { ATTACK_BOX, PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from './playerAttack';
 export { stepEnemies } from './enemyTurn';
+export type { Freezable, ImpactClass } from './hitstop';
+export { HITSTOP_TICKS, freezePair, frozen } from './hitstop';
+export type { MotionLocks, PlayerMotion } from './playerMotion';
+export { stepPlayerMotion } from './playerMotion';
 export type { AttackPhase, CombatStep, CombatTiming } from './combat';
 export {
   ATTACK,

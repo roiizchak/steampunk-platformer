@@ -773,11 +773,16 @@ because one rect of positive size far from the spawn is all it ever asked for.
 
 ---
 
-## The 400-line rule — one exemption, written before it was taken
+## The 400-line rule — one exemption, written before it was taken (CLOSED 2026-08-20)
 
-`SIZE-EXEMPTION: src/sim/tick.ts lines=434`
+> **🔴 The exemption is SPENT and the citation line is deleted.** Phase 9 needed a home for the
+> hit-stop gate, which has to cover steps 5, 6, 7 and 8 together, and moving that block whole into
+> `src/sim/playerMotion.ts` took this file to **396**. The split refused below was the wrong split;
+> the one that worked was not on the list, because in Phase 8 nothing yet needed a seam through the
+> numbered steps themselves. **The ratchet goes back 1 → 0.** Everything under this line is kept as
+> written — it is the reasoning that was true when it was taken, and the record of what changed it.
 
-**`src/sim/tick.ts` crosses the limit at 422 lines, up from 398.** The gate's own text says the
+**`src/sim/tick.ts` crossed the limit at 422 lines, up from 398.** The gate's own text says the
 way past is *"to split the file or write the justification, in that order of preference"*, so the
 split was attempted first and is recorded here as rejected, with the reason.
 
@@ -808,6 +813,12 @@ reader already has open.
 
 **The ratchet moves 0 → 1** in `tests/unit/file-size.test.ts`, which is the deliberate act that
 gate requires alongside this citation. Not one line of explanation was deleted to reach 422.
+
+**2026-08-20 — and moved back 1 → 0.** Phase 9 moved steps 5–8 whole into `src/sim/playerMotion.ts`,
+numbered comments and all, leaving one-line markers at the call site so `tick.ts` still reads as
+fourteen steps in order. That is the seam the two candidates above did not offer: it contradicts no
+decision written into the file, because the block carries its own numbering with it and nothing was
+renumbered, lettered or inserted. `tick.ts` is 396. Nothing was deleted to get there either.
 
 ---
 

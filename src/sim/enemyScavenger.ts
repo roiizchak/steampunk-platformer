@@ -79,6 +79,10 @@ export interface Scavenger {
   maxHp: number;
   /** The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`. */
   lastHitSwing: number;
+  /** Phase 9 hit-stop: the last tick this body is frozen, `-1` for never. See `hitstop.ts`. */
+  hitstopUntil: number;
+  /** Phase 9 hit-stop: the tick of the hit that froze it. */
+  lastHitTick: number;
   /**
    * Ticks since this scavenger's last swing STARTED, saturating at `attackCooldown`.
    *

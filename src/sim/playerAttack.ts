@@ -12,10 +12,17 @@
  * multiplier *(Codex C4 on criterion 5.5)*.
  *
  * Each enemy therefore records the swing that last hit it, and a swing is identified by **the tick
- * it started**: `tickCount - combatCounter` while the player is in `attack`. Two swings cannot begin
- * on the same tick, so the identity is unique without an id generator, without a set allocated per
- * swing, and without a new field on `PlayerSim`. One number per enemy *(vault 5.1 — one counter,
- * one flag)*.
+ * it started**. Two swings cannot begin on the same tick, so the identity is unique without an id
+ * generator and without a set allocated per swing. One number per enemy *(vault 5.1)*.
+ *
+ * 🔴 **That tick used to be DERIVED, as `tickCount - combatCounter`, and Phase 9 had to store it.**
+ * The derivation is unique only while both numbers advance together. Hit-stop freezes
+ * `combatCounter` at step 4b while `tickCount` keeps rising at step 14 — so the derived identity
+ * changed on **every frozen tick**, `lastHitSwing` never matched, and the same enemy would have been
+ * struck once per tick of its own hit-stop: a damage multiplier wearing a freeze's clothes. It is
+ * now `player.swingStartTick`, written by the one site that starts a swing (`stepCombat`), and this
+ * is what `hitstop.test.ts`'s "one swing costs one target one hit" regression watches. `lastHitSwing`
+ * keeps its meaning and its `-1` sentinel exactly as before.
  *
  * ## The hitbox is authored local, and mirrored by exactly one function
  *
@@ -27,6 +34,7 @@
 import { ATTACK, hitWindowOpen } from './combat';
 import { SCAVENGER_BOX, SENTRY_BOX, type Scavenger, type Sentry } from './enemies';
 import { toWorld } from './player';
+import { freezePair, type Freezable } from './hitstop';
 import type { LocalBox, Rect, World } from './types';
 
 /**
@@ -49,8 +57,14 @@ export const PLAYER_ATTACK_DAMAGE = 20;
  */
 export const ATTACK_BOX: LocalBox = { x: 11, y: 12, w: 26, h: 24 };
 
-/** Every enemy carries this: the start tick of the swing that last connected. `-1` is "never". */
-export interface Hittable {
+/**
+ * Every enemy carries this: the start tick of the swing that last connected, and its hit-stop.
+ *
+ * `Freezable` is extended rather than restated for the reason `hitstop.ts` gives for being
+ * structural at all — there is no common entity type here, and two copies of two integers is where
+ * one of them gets forgotten on the next creature.
+ */
+export interface Hittable extends Freezable {
   x: number;
   y: number;
   hp: number;
@@ -110,7 +124,7 @@ export function applyPlayerAttack(world: World): PlayerAttackResult {
     return { hits: 0, kills: 0 };
   }
 
-  const swing = world.tickCount - player.combatCounter;
+  const swing = player.swingStartTick;
   const reach = toWorld(ATTACK_BOX, player.x, player.y, player.facing, world.scale);
   let hits = 0;
   let kills = 0;
@@ -124,6 +138,13 @@ export function applyPlayerAttack(world: World): PlayerAttackResult {
     }
     enemy.lastHitSwing = swing;
     enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE);
+    // 🔴 **Hit-stop, armed here — step 9b, both bodies, one call** *(Phase 9)*. A kill reads heavier
+    // than a graze, so the class is decided off the hp that was just written rather than off the one
+    // this closure was entered with. `freezePair` rather than two `freeze()` calls: two calls is two
+    // places to pass the class, and the day they disagree the attacker recovers before its victim.
+    // Arming is a WRITE, not a gate — it does not disturb 9b's documented ordering guarantee that
+    // the player's own swing resolves before anything can trade a hit back.
+    freezePair(player, enemy, enemy.hp <= 0 ? 'lethal' : 'light', world.tickCount);
     hits += 1;
     // The `hp > 0` guard at the top of this closure means a corpse is never struck twice, so this
     // counts the transition to zero rather than the state of being at zero.

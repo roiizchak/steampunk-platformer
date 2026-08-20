@@ -16,10 +16,20 @@
  * Projectiles are advanced BEFORE the sentries fire, so a shot spawned this tick does not also move
  * this tick. Firing first would give every shot a free tick of travel and make the muzzle appear a
  * body-width from the barrel.
+ *
+ * ## Hit-stop skips a BODY's turn, never the world's array update (Phase 9)
+ *
+ * A frozen enemy does not take its own step and a frozen sentry does not fire. **`stepProjectiles`
+ * is never skipped**: it is a world-level update over an array, not one creature's turn, and bolts
+ * already in flight belong to the world rather than to whoever fired them. Freezing a sentry must
+ * not stop a shot that left its barrel three ticks ago — that would be the global pause `hitstop.ts`
+ * exists to not be, and it would stop it for every OTHER sentry's shots too, since they share the
+ * one array.
  */
 
 import { SENTRY, SENTRY_MUZZLE, releaseAggro, scavengerFooting, stepScavenger, stepSentry } from './enemies';
 import { PLAYER_BOX, toWorld } from './player';
+import { frozen } from './hitstop';
 import { fireProjectile, stepProjectiles } from './projectiles';
 import type { World } from './types';
 
@@ -31,7 +41,11 @@ export function stepEnemies(world: World): void {
 
   for (const scavenger of world.enemies.scavengers) {
     if (scavenger.hp > 0) {
-      stepScavenger(scavenger, sighting, footing);
+      // Frozen: no decision, no swing advance, no travel. The corpse branch below still runs for a
+      // dead one, because death has to release the chase whatever else is true of the body.
+      if (!frozen(scavenger, world.tickCount)) {
+        stepScavenger(scavenger, sighting, footing);
+      }
       continue;
     }
     // 🔴 Death is the ONLY exit from a chase now that aggro is permanent, so it has to be written
@@ -56,6 +70,12 @@ export function stepEnemies(world: World): void {
 
   for (const sentry of world.enemies.sentries) {
     if (sentry.hp <= 0) {
+      continue;
+    }
+    // Frozen: the whole fire block goes, cooldown advance included. `stepSentry` IS the cooldown
+    // advance, so calling it and discarding `fired` would let a frozen turret bank its recovery and
+    // shoot the instant the freeze lifted.
+    if (frozen(sentry, world.tickCount)) {
       continue;
     }
     if (!stepSentry(sentry, sighting).fired) {

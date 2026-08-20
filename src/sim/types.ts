@@ -223,6 +223,30 @@ export interface PlayerSim {
    */
   knockbackPending: boolean;
 
+  /* --- Phase 9 hit-stop. Neither of these is a counter; see `hitstop.ts` for why. --- */
+
+  /**
+   * The LAST tick on which this body is frozen by hit-stop, or `-1` for never.
+   *
+   * An absolute DEADLINE, not a window counter, so nothing in step 13 advances it and no arming-tick
+   * question exists. `hitstop.ts`'s header carries the full argument — read it before converting
+   * this to the `windows.ts` idiom, which would cost every freeze a tick.
+   */
+  hitstopUntil: number;
+  /** The tick of the hit that froze this body. `hitstopUntil - lastHitTick` IS the impact class. */
+  lastHitTick: number;
+  /**
+   * The tick this swing STARTED, or `-1`. The swing's identity, stored rather than derived.
+   *
+   * `playerAttack.ts` used to compute it as `tickCount - combatCounter`, which is unique per swing
+   * only while both numbers advance together. Phase 9 froze `combatCounter` at step 4b while
+   * `tickCount` kept rising, so the derived value changed on **every frozen tick** and the same
+   * enemy would have been struck once per tick of its own hit-stop — a damage multiplier wearing a
+   * freeze's clothes. Written wherever `combatCounter` is reset to 0 for an attack; `lastHitSwing`
+   * on each enemy still compares against it, with its `-1` sentinel unchanged.
+   */
+  swingStartTick: number;
+
   /* --- Phase 7 audio. --- */
 
   /**
