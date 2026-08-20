@@ -305,7 +305,7 @@ describe('the 400-line rule', () => {
     // already claims — which is why the citation reads 422 and not 445. Nothing was deleted.
     // Justification: `docs/qa/phase-08-gate-entry.md`.
     //
-    // 🔴 **1 -> 0 on 2026-08-20**, when `src/sim/tick.ts` came off the list at **396**. Phase 9
+    // 🔴 **1 -> 0 on 2026-08-20**, when `src/sim/tick.ts` came off the list. Phase 9
     // needed a home for a hit-stop gate that has to cover steps 5, 6, 7 and 8 together, and moving
     // that block whole into `src/sim/playerMotion.ts` — numbered comments intact, one-line markers
     // left at the call site so the file still reads as fourteen steps in order — is the split the

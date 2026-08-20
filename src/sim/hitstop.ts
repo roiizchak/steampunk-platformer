@@ -21,8 +21,8 @@
  * A deadline has no arming-tick question at all. Arm at 9b of tick `T` with `tickCount + N`, test
  * `tickCount <= until`, and ticks `T+1 … T+N` are frozen — **exactly `N`, by construction**, with
  * no rule about which step may read it and no dependence on the freeze being armed before or after
- * anything else. It rests on the one invariant this file needs and `playerAttack.ts:113` already
- * ships on: `tickCount` rises unconditionally at step 14.
+ * anything else. It rests on the one invariant this file needs, which `applyPlayerAttack`
+ * (`playerAttack.ts`) already ships on: `tickCount` rises unconditionally at step 14.
  *
  * It also needs **no step-13 entry**. Nothing advances it, so nothing can forget to.
  *

@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ATTACK, HURT_LOCK_TICKS, IFRAME_TICKS, PLAYER_MAX_HP, invulnerable, movementLocked } from '../../src/sim/combat';
 import { HITSTOP_TICKS, freezePair } from '../../src/sim/hitstop';
-import { PLAYER_ATTACK_DAMAGE } from '../../src/sim/playerAttack';
+import { PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from '../../src/sim/playerAttack';
 import { SCAVENGER, SCAVENGER_ATTACK } from '../../src/sim/enemies';
 import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { createWorld, tick } from '../../src/sim/tick';
@@ -115,6 +115,24 @@ describe('the regressions freezing those counters caused', () => {
     tick(world, { ...IDLE });
     expect(world.tickCount).toBe(hitTick + 2 + HITSTOP_TICKS.playerHurt);
     expect(player.x - xBefore, 'friction ate the impulse before it ever moved the player').toBeCloseTo(impulse, 6);
+  });
+
+  /**
+   * The sentinel collision, made loud. `swingStartTick` and `lastHitSwing` both use `-1`, so a
+   * hand-built `state = 'attack'` fixture that forgets the identity matches every untouched enemy
+   * and the swing passes silently through all of them — reporting green while asserting nothing.
+   * `tick-damage-order.test.ts` was exactly that fixture, and nothing told it.
+   */
+  it('throws when a fixture sets state = attack without a swing identity', () => {
+    const world = createWorld({ seed: 1, scale: SCALE, solids: FLOOR, bounds: BOUNDS });
+    world.player.state = 'attack';
+    world.player.combatCounter = ATTACK.startup;
+    expect(world.player.swingStartTick, 'a fresh world must carry the sentinel').toBe(-1);
+    expect(() => applyPlayerAttack(world)).toThrow(/swingStartTick/);
+
+    // And it does NOT throw once the identity is set — without this the throw could be unconditional.
+    world.player.swingStartTick = world.tickCount;
+    expect(() => applyPlayerAttack(world)).not.toThrow();
   });
 
   it('a FROZEN scavenger deals no damage, even armed mid-strike on top of the player', () => {

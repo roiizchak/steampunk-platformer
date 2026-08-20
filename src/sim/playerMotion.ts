@@ -3,9 +3,11 @@
  *
  * ⚠️ **This file holds four NUMBERED steps, which no previous extraction did.** `enemyTurn.ts` and
  * `worldDamage.ts` each hold one lettered sub-step; `advanceSplit.ts` holds `advance`, and
- * `tick.ts:425-432` is explicit that it was extracted precisely because it is *"not part of the
- * numbered order above"* — it is a LOOP over it. So none of the three is precedent for this one, and
- * saying otherwise would be the kind of comfortable citation that lets a contract drift.
+ * `tick.ts`'s closing note on that export is explicit that it was extracted precisely because it is
+ * *"not part of the numbered order above"* — it is a LOOP over it. So none of the three is precedent
+ * for this one, and saying otherwise would be the kind of comfortable citation that lets a contract
+ * drift. (Cited by symbol, not by line: the first draft of this paragraph pointed at `tick.ts:425`
+ * and the same commit moved that note to 391.)
  *
  * What is true is the thing that matters: **the block moved, the numbering did not.** Steps 5–8 keep
  * their numbers, their order, and every word of the reasoning that was written against them —

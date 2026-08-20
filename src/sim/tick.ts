@@ -94,9 +94,8 @@
  * numbered step** — `enemyTurn.ts` and `worldDamage.ts` hold LETTERED sub-steps, and the note at the
  * foot of this file says plainly that `advance` was extracted because it is *"not part of the
  * numbered order above"*. This one is the first, so it is stated rather than justified by precedent.
- * What it bought is the 400-line rule and a home for Phase 9's hit-stop gate, which has to cover all
- * four steps at once or it is a bug: skip 5 and 6 but not 8 and a stale velocity still integrates.
- * `playerMotion.ts`'s header carries the gate's reasoning.
+ * It bought the 400-line rule and a home for the hit-stop gate, which must cover all four steps at
+ * once or it is a bug. `playerMotion.ts`'s header carries the gate's reasoning.
  *
  * **THE WINDOW DEFINITIONS.** They are NOT one sentence. An earlier version of this header claimed
  * both windows behaved identically; the Codex implementation review (finding I1) showed that claim
@@ -367,10 +366,9 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     The `advanceWindow` call is the shared saturating increment from `windows.ts`; the guard in
   //     front of it — WHETHER this tick is spent at all — is the step-order rule above and stays
   //     here, with the numbered order that owns it.
-  //     🔴 **A FROZEN tick is not spent either** (Phase 9) — the same rule one step further out:
-  //     step 7 did not run at all. Ungated, a 9-tick `lethal` freeze saturated `jumpBufferTicks` 8
-  //     and `coyoteTicks` 7 from inside itself and ate the press outright. `motionRan`, NOT
-  //     `frozen()` — `PlayerMotion.ran` says why they differ on the arming tick.
+  //     🔴 **A FROZEN tick is not spent either** (Phase 9): step 7 did not run at all. Ungated, a
+  //     9-tick `lethal` freeze saturated both knobs from inside itself and ate the press. `motionRan`
+  //     and NOT `frozen()` — `PlayerMotion.ran` says why they differ on the arming tick.
   if (!coyoteArmedThisTick && motionRan) {
     player.ticksSinceGrounded = advanceWindow(player.ticksSinceGrounded, tuning.coyoteTicks);
   }

@@ -117,10 +117,42 @@ export interface PlayerAttackResult {
  *
  * It stops being masked the moment `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`, which is
  * a plausible retune. If that happens, the case becomes reachable and needs a gate.
+ *
+ * ## A frozen swing's hitbox can CHAIN the freeze, and that is known and uncapped
+ *
+ * This function is ungated by hit-stop, and `combatCounter` is frozen — so the hitbox stays live for
+ * every frozen tick, and a *second* enemy that walks into reach during a freeze is struck and
+ * re-arms `freezePair`. Each enemy is still hit exactly once per swing (`lastHitSwing`), and level
+ * layout bounds how many bodies can enter reach inside 4-9 ticks, so the chain is short in practice.
+ * Capping it is a design decision about how a crowd should feel, not a defect, and it is out of
+ * Phase 9's scope: recorded in the QA log and deliberately left uncapped rather than missed.
  */
 export function applyPlayerAttack(world: World): PlayerAttackResult {
   const { player } = world;
-  if (player.state !== 'attack' || !hitWindowOpen(player.combatCounter, ATTACK)) {
+  if (player.state !== 'attack') {
+    return { hits: 0, kills: 0 };
+  }
+  /**
+   * 🔴 **The sentinel collision, made LOUD** — `swingStartTick` and every enemy's `lastHitSwing`
+   * share `-1`, so a fixture that sets `state = 'attack'` by hand without setting the swing identity
+   * matches the untouched sentinel on every enemy and the whole swing passes silently through all of
+   * them. `tick-damage-order.test.ts` was written that way and had to be patched when the identity
+   * stopped being derived; nothing told it, and the test would have gone on reporting green while
+   * asserting nothing. A fixture trap that fails silently is the one that costs a session.
+   *
+   * Thrown rather than defaulted, in the shape of `windows.ts`'s `assertTicks`: this is an
+   * unrepresentable state, not a case to tolerate. `stepCombat` is the only site that starts a swing
+   * and it always writes this, so no live code path can reach here.
+   */
+  if (player.swingStartTick < 0) {
+    throw new Error(
+      `applyPlayerAttack: player.state is 'attack' but swingStartTick is ` +
+        `${player.swingStartTick}. It is written by stepCombat when a swing starts; a fixture that ` +
+        `sets state by hand must set it too, or it matches every enemy's lastHitSwing sentinel and ` +
+        `the swing hits nothing.`,
+    );
+  }
+  if (!hitWindowOpen(player.combatCounter, ATTACK)) {
     return { hits: 0, kills: 0 };
   }
 
