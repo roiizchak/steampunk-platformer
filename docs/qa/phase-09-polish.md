@@ -440,3 +440,49 @@ resolution. The difference, and the only thing that makes this one legitimate, i
 here is **proved to amplify** (the sweep orders monotonically across nine walks) and the linearity that
 licenses the divide-back is **asserted rather than assumed**. G.7b's amplifier does not amplify, which
 is why its own premise check refuses to emit a number.
+
+---
+
+## Criterion 5.11 red once in seven, and it is the third GPU-ratio gate to do this
+
+`tests/e2e/phase-05-perf.spec.ts:111` failed once during Phase 9's verification, reporting a GPU ratio
+of **7.53×** against `MAX_GPU_RATIO < 5`. It was not attributed until it had been sampled, because
+this session had already made that mistake once with G.7b.
+
+| run | baseline GPU median | fleet GPU median | ratio | result |
+|---|---|---|---|---|
+| in the full GPU project | **0.035 ms** | 0.262 ms | **7.53×** | **fail** |
+| alone ×4 | 0.161 / 0.198 / 0.199 / 0.200 ms | 0.333 / 0.322 / 0.358 / 0.355 ms | 2.07 / 1.63 / 1.80 / 1.78× | pass |
+| full GPU project, re-run | 0.170 ms | 0.342 ms | 2.01× | pass |
+
+**One failure in seven, and read the denominator.** The fleet arm barely moved (0.262 against
+0.322–0.358 — if anything *lower* on the failing run). What collapsed was the **baseline**, from a
+steady ~0.17–0.20 ms down to 0.035 ms, a fifth of every other reading. The ratio did not rise because
+the fleet got expensive; it rose because the thing it divides by fell into the noise.
+
+**Not a Phase 9 regression.** Phase 9's own two gates passed in the same failing run, and the whole
+57-test GPU project passed on re-run.
+
+### The pattern is now three for three
+
+Every GPU-**ratio** gate this project has built has eventually proven noise-dominated:
+
+| gate | fate |
+|---|---|
+| criterion **6.9**'s GPU ratio | **discarded** 2026-08-19 — ranked five full-screen scrims below a clean run |
+| **G.7b** (`phase-08-gate-perf.spec.ts:264`) | **flaky**, ~3 failures in 7 — its own premise check refuses to emit a number |
+| criterion **5.11**'s GPU ratio | 1 failure in 7, denominator collapse |
+
+The common shape: **a ratio of two sub-millisecond GPU medians, where the denominator is a quiet
+baseline sitting near the timer's resolution.** A quiet baseline is exactly the measurement most
+vulnerable to quantisation, and putting it under the division line makes the whole statistic inherit
+that vulnerability. The numerator being well-behaved does not save it.
+
+Phase 9's own budget gate deliberately does **not** take this shape — it asserts an amplified absolute
+delta and a monotone sweep, and it proves the amplifier amplifies before dividing back. That is the
+distinction to carry forward: **amplify and check the amplification, rather than divide by a quiet
+control.**
+
+**Recorded, not fixed.** 5.11 is Phase 5's criterion and repairing it is out of Phase 9's scope. It
+belongs with G.7b in whatever session takes the perf-gate family on, and the two should be fixed
+together, because the diagnosis is the same one.
