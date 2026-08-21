@@ -1,13 +1,17 @@
 /**
  * 🔴 Do the two Phaser-VALUE scene files read the tables they were built for?
  *
- * `enemy-feedback.test.ts` is the behavioural half of this question and covers `enemyLayer.ts` end
- * to end. `gamePlayerDraw.ts`, `gameEffects.ts` and `UIScene.ts` cannot be driven the same way:
- * each names a Phaser VALUE (`Phaser.Display`, `Phaser.BlendModes`, `Phaser.Scenes.Events`), and
+ * ⚠️ **Two of the three files below are driven BEHAVIOURALLY now, and this file is no longer their
+ * only gate.** It used to say they could not be: each named a Phaser VALUE and
  * `npm run test:sim-isolated` runs this suite with the engine uninstalled, so a value import
- * anywhere in the graph turns a boundary check into a resolution failure.
+ * anywhere in the graph turns a boundary check into a resolution failure. `gamePlayerDraw.ts`'s
+ * value import turned out to be unnecessary and `gameEffects.ts`'s two constants are pinned literals
+ * in `engineLiterals.ts`, so `player-draw-behaviour.test.ts` and `effects-behaviour.test.ts` now
+ * drive both against fake scenes — QA log entry 33, closed. `UIScene.ts` still names
+ * `Phaser.Display` and `Phaser.Scenes.Events` and is still text-gated only.
  *
- * So these are source-text gates, in `effects-draw-path.test.ts`'s and `play-anim.test.ts`'s idiom:
+ * What stays here is the half a fake scene cannot assert: that there is ONE implementation and not
+ * two, and that a shared constant is used rather than a bare number. Same idiom as before —
  * raw source through `import.meta.glob`, sliced to the function under discussion so a match cannot
  * come from a comment, and each assertion carrying the mutation it is meant to catch.
  *
@@ -149,8 +153,12 @@ describe('gameEffects.ts draws the landing squash and tears itself down', () => 
     // them is a teardown. A camera left mid-shake is then captured as the next run's unshaken base,
     // and every frame afterwards carries that error — including the frames `shakeWithinEnvelope`
     // asserts are exactly at base.
-    expect(src).toContain('Phaser.Scenes.Events.SHUTDOWN');
-    expect(src).toMatch(/SHUTDOWN,\s*\(\)\s*=>\s*attachment\.destroy\(\)/);
+    // The event NAME and the restore are both asserted behaviourally now, in
+    // `effects-behaviour.test.ts`, against a fake scene that records what `events.once` was given.
+    // What stays here is that the registration goes through the pinned literal rather than a bare
+    // `'shutdown'` string, which is the claim the fake scene cannot make.
+    expect(src).toContain('SCENE_SHUTDOWN');
+    expect(src).toMatch(/SCENE_SHUTDOWN,\s*\(\)\s*=>\s*attachment\.destroy\(\)/);
   });
 });
 

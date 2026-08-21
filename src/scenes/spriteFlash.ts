@@ -27,21 +27,18 @@
  * Both callers — `gamePlayerDraw.ts` for the player and `enemyLayer.ts` for the enemies — reach this
  * from `enemy-layer-catalog.test.ts` and friends, and **`npm run test:sim-isolated` runs the whole
  * unit suite with Phaser uninstalled**. A value import of the engine anywhere in that graph turns a
- * boundary check into a module-resolution failure. `enemyLayer.ts` is `import type Phaser` for
- * exactly this reason and must stay that way, so the number is written down once, here, with the
- * source line that fixes it — and `tests/e2e/phase-09-draw.spec.ts` pins it against the real
- * `Phaser.TintModes.ADD`, where a value import of the engine is free.
+ * boundary check into a module-resolution failure.
+ *
+ * The number itself moved to `engineLiterals.ts` when `gameEffects.ts` needed the same treatment for
+ * two more, and is **re-exported from here** so every existing `from './spriteFlash'` still
+ * resolves. `engineLiterals.ts` carries the pin's reasoning; `tests/unit/engine-literals.test.ts`
+ * and `tests/e2e/phase-09-draw.spec.ts` both hold it against the vendored engine.
  */
 
 import type Phaser from 'phaser';
+import { TINT_MODE_ADD } from './engineLiterals';
 
-/**
- * `Phaser.TintModes.ADD`, from `node_modules/phaser/src/renderer/TintModes.js:52`.
- *
- * Pinned in e2e against the symbol. If that pin ever reds, this is the number to change — never the
- * assertion.
- */
-export const TINT_MODE_ADD = 2;
+export { TINT_MODE_ADD };
 
 /** Anything with the Tint component. `Shape`/`Rectangle` does NOT have it — see `enemyLayer.ts`. */
 type Tintable = Pick<Phaser.GameObjects.Sprite, 'setTint' | 'setTintMode' | 'clearTint'>;

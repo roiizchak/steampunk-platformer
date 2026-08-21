@@ -1,5 +1,5 @@
 /**
- * The impact effects, as DRAWN objects. The only file in Phase 9 that imports Phaser.
+ * The impact effects, as DRAWN objects.
  *
  * Everything decided here was decided somewhere else: `src/render/effects.ts` says what particles a
  * moment is worth, `src/render/screenShake.ts` says how hard and when the camera moves, and
@@ -43,9 +43,24 @@
  * Depth and blend mode are a MEASURED cost decision and not a preference — `effects.ts`'s header
  * carries the argument. Every value here is read out of `EMITTER_SPECS[kind]`; nothing in this file
  * restates one.
+ *
+ * ## 🔴 Phaser is a TYPE-only import, and the two engine VALUES are pinned literals
+ *
+ * This file used to be the one Phase 9 module that imported the engine as a value, for exactly two
+ * symbols: `Phaser.Scenes.Events.SHUTDOWN` and `Phaser.BlendModes.NORMAL`. The price was paid by the
+ * tests, not the bundle — `npm run test:sim-isolated` runs the unit suite with Phaser uninstalled,
+ * so nothing in that suite could import this module and the whole effects path was guarded as
+ * **source text** instead of behaviour (QA log entry 33).
+ *
+ * Both are now literals beside the source line that fixes them, which is `spriteFlash.ts`'s
+ * `TINT_MODE_ADD` idiom exactly, and all three are pinned against the vendored engine by
+ * `engine-literals.test.ts` — in the UNIT suite, where a Phaser upgrade cannot slip past a run that
+ * skipped Playwright. `effects-behaviour.test.ts` then drives `attachEffects` against a fake scene.
+ *
+ * ⚠️ **Keep it type-only.** If either pin ever reds, change the LITERAL, never the assertion.
  */
 
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { TICK_HZ } from '../game/constants';
 import {
   EMITTER_SPECS,
@@ -71,6 +86,7 @@ import {
 import { ticksToMs } from '../sim';
 import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
+import { BLEND_MODE_NORMAL, SCENE_SHUTDOWN } from './engineLiterals';
 import { ensureParticleTexture } from './particleTexture';
 
 /** What `GameScene` holds on to after attaching the effects. */
@@ -302,7 +318,7 @@ export function attachEffects(
   // Registered here rather than in `GameScene` for the reason `hudFade` and `goalLayer` register
   // theirs the same way: the teardown belongs to the thing that built the state, `GameScene.ts` sits
   // at exactly 400 lines, and a handler in the scene is one more thing the next feature forgets.
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => attachment.destroy());
+  scene.events.once(SCENE_SHUTDOWN, () => attachment.destroy());
 
   return attachment;
 
@@ -363,6 +379,6 @@ function createEmitter(
     // NORMAL, and load-bearing: a blend-mode change forces a batch flush, and the depth band exists
     // so these join the player's existing quad run for zero extra flushes. ADD would cost one flush
     // every frame, forever, and be invisible in a screenshot.
-    .setBlendMode(Phaser.BlendModes.NORMAL)
+    .setBlendMode(BLEND_MODE_NORMAL)
     .reserve(spec.reserve);
 }
