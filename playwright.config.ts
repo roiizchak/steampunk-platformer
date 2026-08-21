@@ -113,7 +113,21 @@ export default defineConfig({
       // `testMatch` below are the SAME pattern and must stay identical — a file that matches neither
       // runs nowhere, and a file that matches both runs twice, once on the rasteriser its assertions
       // are meaningless on.
-      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
+      //
+      // 🔴 **Phase 9 joins as a prefix with ONE named exclusion, and the shape is deliberate.**
+      // `phase-09-polish.spec.ts` asserts behaviour — tick indices, hp drops, camera offsets — and
+      // belongs here, on the cheap headless browser. Everything else under `phase-09-` measures time
+      // or draw submission (`phase-09-perf`, `phase-09-draw`), calls `assertRealGpu`, and must have
+      // the substrate this phase agreed to measure on.
+      //
+      // It was `9-perf` alone for one commit, and the review was right that an exact name is the
+      // failure this file already recorded at :98-102: a future `phase-09-perf-b.spec.ts` would have
+      // matched NEITHER pattern and run silently on SwiftShader. A negative lookahead inverts the
+      // default — a new Phase 9 spec is assumed to need the real GPU unless it is named as not
+      // needing it — because the two failure modes are not symmetric. Getting it wrong this way
+      // costs a headed window and some seconds; getting it wrong the other way ships a measurement
+      // of a software rasteriser with a green tick beside it.
+      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -144,7 +158,11 @@ export default defineConfig({
       // (HANDOFF §14 measured the same scene 21x slower). A `phase-08-*.spec.ts` did not match this
       // regex and would have run headless in silence, which is the failure mode the whole project is
       // built against.
-      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
+      // 🔴 Phase 9's perf spec joins for the TIME reason alone (criteria 9.5 and 9.6), and by exact
+      // name rather than by prefix — see the `testIgnore` above. This pattern and that one are the
+      // SAME pattern and must stay identical: a file matching neither runs nowhere, and a file
+      // matching both runs twice, once on a rasteriser its assertions are meaningless on.
+      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,
