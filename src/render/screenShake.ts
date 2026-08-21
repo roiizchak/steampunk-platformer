@@ -166,6 +166,48 @@ export function shakeDurationMs(cmd: ShakeCommand): number {
 }
 
 /**
+ * The camera jitter, in [-1, 1], as a pure function of the tick.
+ *
+ * **No `Math.random`.** Two incommensurate frequencies so the two axes never trace a diagonal, and a
+ * value that changes once per SIM tick rather than once per frame — a 240 Hz jitter over a 60 Hz
+ * world reads as a blur rather than as a shake. Bounded by 1 by construction, which is what keeps
+ * the drawn offset inside `shakeWithinEnvelope`'s peak box.
+ */
+const JITTER_X_FREQ = 12.9898;
+const JITTER_Y_FREQ = 7.233;
+
+/**
+ * The EXACT offset the camera must be at on `tick`. `gameEffects.applyShake` writes this and nothing
+ * else; nothing anywhere recomputes it.
+ *
+ * 🔴 **It moved here from `src/scenes/gameEffects.ts` so that one number can be asserted rather than
+ * two that agree** — the `shakeWithinEnvelope` / `viewFits` / `tracksTarget` precedent, and the same
+ * reason those live in `src/render/`: this is a DECISION, and the scene only applies it.
+ *
+ * The reason it had to move is a hole a review found in the e2e gate. `shakeWithinEnvelope`'s
+ * running regime is the peak BOX, loose on purpose (see its docstring), and the only lower bound
+ * anywhere was "the camera moved at all". So an amplitude regression of **100×** — `0.01 * cmd.ax`
+ * — passed the whole shake gate green: every sample was still inside the box and still non-zero.
+ * The offset is deterministic in `(cmd, tick, viewportW, viewportH)`, so the exact value was
+ * available the entire time and cost nothing; `phase-09-polish.spec.ts` now asserts against it.
+ *
+ * Returns the offset unconditionally — WHETHER a shake is running is `shakeSettled`'s question and
+ * the caller's branch, not this function's. Keeping the two apart is what lets the spec assert the
+ * value on exactly the ticks it has already established are inside the window.
+ */
+export function shakeOffset(
+  cmd: ShakeCommand,
+  tick: number,
+  viewportW: number,
+  viewportH: number,
+): { x: number; y: number } {
+  return {
+    x: cmd.ax * viewportW * Math.sin(tick * JITTER_X_FREQ),
+    y: cmd.ay * viewportH * Math.cos(tick * JITTER_Y_FREQ),
+  };
+}
+
+/**
  * Does an offset a camera actually rendered lie inside what the state permits this tick?
  *
  * Imported by BOTH the unit test and the e2e spec, deliberately — the `viewFits` / `tracksTarget`

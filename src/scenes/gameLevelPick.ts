@@ -206,17 +206,35 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
  * both sides of the threshold *(vault C2)*. Without arm B the plateau assertion is a description of
  * what the game happens to do, not a gate that can go red.
  *
- * Anything unparseable, negative or absent is 1. A debug flag that silently half-applies is worse
- * than one that is ignored, so the fallback is always "the shipped behaviour".
+ * Anything unparseable, negative, fractional or absent is 1. A debug flag that silently
+ * half-applies is worse than one that is ignored, so the fallback is always "the shipped behaviour".
+ *
+ * 🔴 **`Number.isInteger` is a CORRECTNESS check, not an invariant kept for tidiness.** Two separate
+ * things break on a fractional scale, and the second is the dangerous one:
+ *
+ *  1. `hitstopUntil` becomes a float duration inside `src/sim/`, against CLAUDE.md §3 — *every
+ *     duration is an integer count of 60 Hz ticks*.
+ *  2. **`?hitstop=1.5` makes `playerHurt` 6 × 1.5 = 9, which COLLIDES with `lethal`'s 9 in
+ *     `IMPACT_BY_FREEZE`** (`gameEffects.ts`), the reverse lookup keyed on
+ *     `hitstopUntil - lastHitTick`. That map's docstring rests on "the three lengths are distinct
+ *     (4 / 9 / 6)"; a fractional scale is the first thing in this project that can break the
+ *     premise, and the symptom is silent — taking a hit draws **lethal** sparks and arms a lethal
+ *     shake, with nothing red anywhere.
+ *
+ * Enforced HERE, at the parse boundary, so the sim never sees a value it would have to re-check.
+ *
+ * ⚠️ The empty-string case needs its own line and `Number.isInteger` does not cover it: `Number('')`
+ * is **0**, and `0` is an integer. `?hitstop=` would otherwise get the single most destructive
+ * setting while this docstring promised the fallback is always the shipped behaviour.
  */
 function hitstopScaleFromSearch(): number {
   if (!import.meta.env.DEV) {
     return 1;
   }
   const raw = new URLSearchParams(globalThis.location?.search ?? '').get('hitstop');
-  if (raw === null) {
+  if (raw === null || raw.trim() === '') {
     return 1;
   }
   const scale = Number(raw);
-  return Number.isFinite(scale) && scale >= 0 ? scale : 1;
+  return Number.isInteger(scale) && scale >= 0 ? scale : 1;
 }

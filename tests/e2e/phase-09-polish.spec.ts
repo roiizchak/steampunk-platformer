@@ -1,7 +1,6 @@
 /**
- * Phase 9 — the BEHAVIOURAL gate on hit-stop, screen shake and the effects depth band (9.1, 9.2).
- * Not one millisecond is measured here; the frame budget is the perf spec's job, and a spec with two
- * reasons to go red has no way to tell them apart.
+ * Phase 9 — the BEHAVIOURAL gate on hit-stop, screen shake and the effects depth band (9.1, 9.2). No
+ * millisecond is measured here; two reasons to go red cannot be told apart.
  *
  * **The sampling method.** `tick` is one of the eight `window.__game` fields and it is read in the
  * **same synchronous callback** as `player` and `health` — which turns the debug surface into a
@@ -11,12 +10,11 @@
  * then looks: Playwright waits on a positive CONDITION computed from the series, never on a sleep.
  *
  * **Why `vy` is load-bearing.** Under ordinary hitstun the player is locked horizontally but
- * **gravity still runs**, so `vy` changes every tick, and a constant NON-ZERO `vy` across six
- * consecutive ticks is impossible for a body the sim is still integrating. That one field separates
- * "the freeze works" from "hitstun happened"; `tick` rising across the same span separately rules
- * out a stalled tab and a stopped game. A grounded standing hit has `vy === 0` and satisfies the
- * identity check **vacuously**, which is why the driver bunny-hops and why the chosen hit is
- * asserted airborne first.
+ * **gravity still runs**, so `vy` changes every tick, and a constant NON-ZERO `vy` across six ticks
+ * is impossible for a body the sim is still integrating. That one field separates "the freeze works"
+ * from "hitstun happened"; `tick` rising over the same span rules out a stalled tab and a stopped
+ * game. A grounded hit has `vy === 0` and satisfies the identity check **vacuously** — hence the
+ * bunny-hop driver, and hence `firstAirborneHit` refusing to hand any test a grounded hit.
  *
  * **Both arms, same session.** `?hitstop=0` is a committed DEV mutation (`hitstopScaleFromSearch`,
  * `gameLevelPick.ts`): the plateau is PRESENT at scale 1 and ABSENT at scale 0, same page, same
@@ -26,27 +24,24 @@
 import { expect, test, type Page } from '@playwright/test';
 import { bootToGame } from './gameHarness';
 import { EFFECT_DEPTH, type EffectKind } from '../../src/render/effects';
-import { SHAKE, shakeWithinEnvelope, type ShakeState } from '../../src/render/screenShake';
+import { SHAKE, shakeOffset, shakeWithinEnvelope, type ShakeState } from '../../src/render/screenShake';
 import { HITSTOP_TICKS } from '../../src/sim/hitstop';
 
-/**
- * One deduped tick, read in a single synchronous callback in the page. `ox`/`oy` are the camera's
- * offset from its unshaken base — `gameEffects.applyShake` writes `camera.x`/`.y`.
- */
+/** One deduped tick, read in one synchronous callback. `ox`/`oy` are the camera's offset from its
+ * unshaken base — `gameEffects.applyShake` writes `camera.x`/`.y`. */
 interface Sample {
   tick: number; hp: number; x: number; y: number; vx: number; vy: number;
   grounded: boolean; ox: number; oy: number;
 }
 
 /**
- * What a test waits for, as plain DATA: `page.waitForFunction` serialises its argument, so a closure
- * would have to be stringified and re-evaluated in the page — fragile, and a second copy of the rule.
- *
+ * What a test waits for, as plain DATA: `waitForFunction` serialises its argument, so a closure would
+ * have to be stringified and re-evaluated in the page — fragile, and a second copy of the rule.
  * 🔴 `run` is the harness's own RESOLUTION, not a perf number. One `requestAnimationFrame` cannot
- * observe two sim ticks, so a frame that drains three leaves two ticks that were never published and
- * can never be sampled. Right after boot this harness drains ~2.7 ticks per frame (shader
- * compilation, texture upload), making "exactly six frozen ticks" not wrong but *unmeasurable*. Every
- * test waits on `run` first — a positive condition on the INSTRUMENT, never a sleep.
+ * observe two sim ticks, so a frame that drains three leaves two that can never be sampled. Right
+ * after boot this harness drains ~2.7 ticks/frame (shader compilation, texture upload), making
+ * "exactly six frozen ticks" not wrong but *unmeasurable*. Every test waits on `run` first — a
+ * positive condition on the INSTRUMENT, never a sleep.
  */
 interface WaitSpec {
   kind: 'run' | 'drop' | 'airborneDrop' | 'land';
@@ -60,9 +55,9 @@ const RUN_TIMEOUT = 60_000;
 const TAIL_TICKS = 14;
 
 /**
- * Install the per-frame recorder — every test's data comes out of this one array. `window.__game`
- * supplies the eight published fields; `grounded` and the camera come off `window.__phaserGame`, the
- * sanctioned route for anything the closed surface does not carry. **No ninth field was added.**
+ * Install the per-frame recorder — every test's data comes from this one array. `window.__game` gives
+ * the eight published fields; `grounded` and the camera come off `window.__phaserGame`, the sanctioned
+ * route for anything the closed surface does not carry. **No ninth field was added.**
  */
 async function installRecorder(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -123,6 +118,12 @@ async function readSeries(page: Page): Promise<Sample[]> {
   const raw = await page.evaluate(() => (window as unknown as { __rec: Sample[] }).__rec);
   expect(Array.isArray(raw)).toBe(true);
   expect(raw.length).toBeGreaterThan(10);
+  // 🔴 The camera base assumes a QUIESCENT camera at install — CHECKED here rather than asserted
+  // away in a comment. A shake in flight when the base was captured biases every offset in the
+  // series and false-REDs every "settled to exactly zero" for a reason unrelated to the game. The
+  // first line also types `grounded`, the one field off the untyped `__phaserGame` route *(C1)*.
+  expect(typeof raw[0].grounded, 'grounded, off __phaserGame, must be typed').toBe('boolean');
+  expect([raw[0].ox, raw[0].oy], 'the camera was not quiescent at install').toEqual([0, 0]);
   // Deduped at record time; asserted here, so a broken dedupe cannot inflate a span.
   for (let i = 1; i < raw.length; i++) expect(raw[i].tick).toBeGreaterThan(raw[i - 1].tick);
   return raw;
@@ -138,18 +139,16 @@ async function stopDriving(page: Page): Promise<void> {
 
 /**
  * Spawn scavengers next to the player and bunny-hop, from INSIDE the page.
- *
  * Round trips are not an option — `levelDriver.ts` records 200 of them costing ~40 s of latency.
  * Genuine `KeyboardEvent`s on `window`, with `keyCode` forced on: Phaser's keyboard plugin dispatches
  * on that deprecated field, which `KeyboardEventInit` refuses to set, and a driver without it looks
  * correct and never moves the game.
  *
- * 🔴 **The hops are CUT on purpose.** A full-height jump reaches ~437 px and the scavenger's body is
- * 240 px tall, so for most of a full arc the boxes do not overlap in `y` at all and the claw — 18
- * ticks of startup — goes live at an altitude it cannot reach. A ~50 ms hold cuts the jump to about
- * a third of that, keeping the player inside the claw's reach for the whole cycle **and** airborne
- * for ~97 % of it: an airborne hit becomes ordinary rather than lucky, and it is the only kind that
- * can prove anything about `vy`.
+ * 🔴 **The hops are CUT on purpose.** A full-height jump reaches ~437 px against a 240 px scavenger,
+ * so across most of an arc the boxes do not overlap in `y` and the claw — 18 ticks of startup — goes
+ * live at an altitude it cannot reach. A ~50 ms hold cuts the jump to a third of that, keeping the
+ * player in reach for the whole cycle **and** airborne ~97 % of it: an airborne hit becomes ordinary
+ * rather than lucky, and it is the only kind that can prove anything about `vy`.
  */
 async function startBrawl(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -199,9 +198,8 @@ function contiguous(byTick: Map<number, Sample>, from: number, to: number): Samp
   return out;
 }
 
-/** The bodily state a freeze holds identical. Compared bit for bit, never within a tolerance. */
-const still = (a: Sample, b: Sample): boolean =>
-  a.x === b.x && a.y === b.y && a.vx === b.vx && a.vy === b.vy;
+/** The bodily state a freeze holds identical. Bit for bit, never within a tolerance. */
+const still = (a: Sample, b: Sample): boolean => a.x === b.x && a.y === b.y && a.vx === b.vx && a.vy === b.vy;
 
 /** Drive one brawl arm and return its series. Same page, same build — only `search` differs. */
 async function brawlArm(page: Page, search: string): Promise<Sample[]> {
@@ -215,15 +213,25 @@ async function brawlArm(page: Page, search: string): Promise<Sample[]> {
   return series;
 }
 
-/** The first airborne hit with a full window of ticks recorded either side of it. */
+/**
+ * The first airborne hit with a full window of ticks recorded either side of it. 🔴 **Its two guards
+ * live HERE and are deliberately NOT restated as assertions in the tests** — an `expect` repeating
+ * the predicate its own input was selected by cannot fail; it looks like a gate and is not one
+ * *(C2)*. This throw is the enforcement, so it says what a maintainer will need to hear.
+ */
 function firstAirborneHit(series: Sample[]): { t0: number; byTick: Map<number, Sample> } {
   const byTick = new Map(series.map((s) => [s.tick, s]));
-  for (let i = 1; i < series.length; i++) {
-    const s = series[i];
-    if (s.hp < series[i - 1].hp && !s.grounded && s.vy !== 0 && contiguous(byTick, s.tick, s.tick + 7))
-      return { t0: s.tick, byTick };
+  const drops = series.filter((s, i) => i > 0 && s.hp < series[i - 1].hp);
+  for (const s of drops) {
+    if (!s.grounded && s.vy !== 0 && contiguous(byTick, s.tick, s.tick + 7)) return { t0: s.tick, byTick };
   }
-  throw new Error(`no airborne health drop with 8 contiguous ticks in ${series.length} samples`);
+  throw new Error(
+    `No usable hit in ${series.length} ticks. Usable = AIRBORNE with vy !== 0 (a grounded hit holds ` +
+      `vy === 0 for six ticks frozen or not, so the freeze check would pass VACUOUSLY) AND T0..T0+7 ` +
+      `all recorded (an unobserved tick cannot be asserted about). ${drops.length} drop(s): ` +
+      `[${drops.map((s) => `${s.tick}${s.grounded ? ' gnd' : ''}${s.vy === 0 ? ' vy=0' : ''}`).join(', ')}]. ` +
+      `All grounded = the bunny-hop driver stopped working; all airborne = dropped ticks (WaitSpec.run).`,
+  );
 }
 
 test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick it claims', () => {
@@ -232,32 +240,23 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
     // ── ARM A: the shipped behaviour ─────────────────────────────────────────────────────────────
     const { t0, byTick } = firstAirborneHit(await brawlArm(page, ''));
     const hit = byTick.get(t0)!;
-    // Type before value (vault C1), every field, before anything is compared. Then the guard that
-    // stops the whole assertion being vacuous: a grounded standing hit holds `vy === 0` for six
-    // ticks whether or not anything is frozen.
+    // Type before value (C1). The airborne and contiguity guards are NOT repeated here —
+    // `firstAirborneHit` enforces both by selection; restating them could not fail.
     for (const f of ['tick', 'hp', 'x', 'y', 'vx', 'vy'] as const) {
       expect(typeof hit[f], `arm A: __game.${f} at T0`).toBe('number');
     }
-    expect(typeof hit.grounded).toBe('boolean');
-    expect(Math.abs(hit.vy), 'arm A: the hit must be AIRBORNE, or vy proves nothing').toBeGreaterThan(0);
-    expect(hit.grounded).toBe(false);
-    // The world kept running while the body did not: eight consecutive ticks were recorded.
-    const win = contiguous(byTick, t0, t0 + 7);
-    expect(win, 'arm A: ticks T0..T0+7 must all have been recorded').not.toBeNull();
-    expect(win!.map((s) => s.tick)).toEqual([0, 1, 2, 3, 4, 5, 6, 7].map((n) => t0 + n));
-    // The freeze itself: T0+1 .. T0+6 bit-identical to T0. Exactly six, asserted as a COUNT. Then it
-    // ENDS — without that, the count above passes for a game that stopped simulating altogether.
+    const win = contiguous(byTick, t0, t0 + 7)!;
+    // T0+1..T0+6 bit-identical to T0 — exactly six, as a COUNT. Then it ENDS: without that last
+    // line the count passes for a game that stopped simulating the player altogether.
     expect(
-      win!.slice(1, 7).filter((s) => still(s, hit)).length,
+      win.slice(1, 7).filter((s) => still(s, hit)).length,
       `arm A: frozen ticks after T0=${t0} (expected ${HITSTOP_TICKS.playerHurt})`,
     ).toBe(HITSTOP_TICKS.playerHurt);
     expect(HITSTOP_TICKS.playerHurt).toBe(6);
-    expect(win![7].x, `arm A: x must move again at T0+7 (t=${t0 + 7})`).not.toBe(hit.x);
-
+    expect(win[7].x, `arm A: x must move again at T0+7 (t=${t0 + 7})`).not.toBe(hit.x);
     // ── ARM B: the same driver, the same page, the freeze scaled to zero ──────────────────────────
     const b = firstAirborneHit(await brawlArm(page, '?hitstop=0'));
     const bHit = b.byTick.get(b.t0)!;
-    expect(Math.abs(bHit.vy), 'arm B: the hit must be AIRBORNE too').toBeGreaterThan(0);
     const bWin = contiguous(b.byTick, b.t0, b.t0 + 7)!;
     expect(
       bWin.slice(1, 7).filter((s) => still(s, bHit)).length,
@@ -266,7 +265,6 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
     // The body moved on the very next tick — the plain-language version of the same fact.
     expect(bWin[1].x === bHit.x && bWin[1].vy === bHit.vy).toBe(false);
   });
-
   test('a HAZARD hit costs health and freezes nothing — the other side of "impact"', async ({ page }) => {
     await bootToGame(page);
     await installRecorder(page);
@@ -285,11 +283,9 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
     for (const f of ['tick', 'hp', 'x', 'vx', 'vy'] as const) {
       expect(typeof drop[f], `hazard: __game.${f} at T0`).toBe('number');
     }
-    // Every tick RECORDED inside the six a claw would have frozen. Gap-tolerant on purpose: the claim
-    // is "no tick after the hit holds the body still", and a tick the harness never observed can
-    // neither support nor refute it — the non-empty assertion is what stops that being vacuous. A
-    // hazard is a swept rectangle, not a body; `worldDamage.ts` records the hit-stop exemption as a
-    // decision, not an omission, so the body moves again on the very next tick there was one.
+    // Every tick RECORDED inside the six a claw would have frozen. Gap-tolerant: an unobserved tick
+    // can neither support nor refute the claim, and the non-empty assertion is what stops that being
+    // vacuous. A hazard is a swept rectangle, not a body — `worldDamage.ts` records the exemption.
     const after = series.filter((s) => s.tick > t0 && s.tick <= t0 + HITSTOP_TICKS.playerHurt);
     expect(after.length, `hazard: ticks after T0=${t0} were recorded at all`).toBeGreaterThan(0);
     expect(
@@ -303,16 +299,13 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
     ).toEqual([]);
   });
 });
-
 test.describe('9.2 the effects are sequenced off the tick series, never off an effect completing', () => {
   test.setTimeout(RUN_TIMEOUT * 2);
   test('the landing shake stays inside shakeWithinEnvelope and settles to EXACTLY zero', async ({ page }) => {
     await bootToGame(page);
     await installRecorder(page);
-    // Three ticks is the window here most easily destroyed by a frame that drains several ticks:
-    // resolve first, jump second. 🔴 And nothing awaits `SHAKE_COMPLETE` — `Camera.reset()` and
-    // `Camera.destroy()` both skip that event, so a spec waiting on it would hang on precisely the
-    // paths that matter. The wait is on the tick series: a landing, then a tail longer than the shake.
+    // 🔴 Nothing awaits `SHAKE_COMPLETE` — `Camera.reset()`/`.destroy()` skip it, so waiting on it
+    // hangs on exactly the paths that matter. The wait is the tick series: a landing, then a tail.
     await waitFor(page, { kind: 'run', n: 12 });
     await page.keyboard.down('Space');
     await waitFor(page, { kind: 'land', n: TAIL_TICKS });
@@ -326,15 +319,12 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     const landAt = series.findIndex((s, i) => i > 0 && s.grounded && !series[i - 1].grounded);
     expect(landAt, 'a landing must have been recorded').toBeGreaterThan(0);
     const landTick = series[landAt].tick;
-
-    // Reconstructed from the same table `gameEffects.arm` reads, never a second copy of the numbers;
-    // `land` starts on the hit tick itself, having no freeze to wait for. 🔴 Gap-tolerant, and that
-    // costs nothing: `landTick` comes from the same `world.tickCount` `arm` reads on the frame the
-    // landing is seen, so a frame that drained two ticks moves BOTH by the same amount. A gap costs
-    // samples, not correctness — each claim below is true of every tick that WAS observed.
+    const span = SHAKE.land.durationTicks;
+    // From the same table `gameEffects.arm` reads, never a second copy; `land` starts on the hit tick,
+    // having no freeze to wait for. 🔴 `landTick` comes from the same `world.tickCount` `arm` reads on
+    // the frame the landing is seen, so a drained frame moves BOTH — a gap costs samples, not truth.
     const state: ShakeState = { startedTick: landTick, cmd: SHAKE.land };
     const arc = series.filter((s) => s.tick >= landTick - 6 && s.tick <= landTick + TAIL_TICKS);
-    expect(arc.length).toBeGreaterThan(SHAKE.land.durationTicks * 2);
     for (const s of arc) {
       expect([typeof s.ox, typeof s.oy]).toEqual(['number', 'number']);
       expect(
@@ -342,36 +332,37 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
         `t=${s.tick} (land=${landTick}): offset (${s.ox}, ${s.oy}) outside the envelope`,
       ).toBe(true);
     }
-    // 🔴 The non-vacuity half. A camera that never moves satisfies every branch of the envelope: zero
-    // is inside the peak box as well as being the required value outside it.
-    const running = arc.filter((s) => s.tick >= landTick && s.tick < landTick + SHAKE.land.durationTicks);
+    // 🔴 Non-vacuity: a camera that never moves satisfies EVERY branch of the envelope — zero is
+    // inside the peak box as well as being the required value outside it.
+    const running = arc.filter((s) => s.tick >= landTick && s.tick < landTick + span);
     expect(
       running.map((s) => s.tick),
-      `the shake window t=${landTick}..${landTick + SHAKE.land.durationTicks - 1} went unsampled; ` +
-        `recorded ticks nearby: ${arc.map((s) => s.tick).join(',')}`,
+      `shake window t=${landTick}..${landTick + span - 1} went unsampled; nearby: ${arc.map((s) => s.tick)}`,
     ).not.toEqual([]);
     const peak = Math.max(...running.map((s) => Math.max(Math.abs(s.ox), Math.abs(s.oy))));
     expect(peak, 'the camera must actually have MOVED during the shake').toBeGreaterThan(0);
-    // Exactly zero afterwards, not approximately. A shake settling at 1e-17 leaves the camera
-    // permanently off its target and every later assertion inherits the error.
-    const settled = arc.filter((s) => s.tick >= landTick + SHAKE.land.durationTicks);
+    // 🔴 And the EXACT value: `peak > 0` plus a peak box is not an amplitude claim — a 100×
+    // regression (`0.01 * cmd.ax`) is non-zero and inside the box. `shakeOffset` is the same function
+    // `applyShake` writes from, deterministic in `(cmd, tick, w, h)`; nothing here need be loose.
+    for (const s of running) {
+      const w = shakeOffset(SHAKE.land, s.tick, view.w, view.h);
+      expect([s.ox, s.oy], `t=${s.tick}: drawn offset != shakeOffset(SHAKE.land, …)`).toEqual([w.x, w.y]);
+    }
+    // Exactly zero afterwards: a shake settling at 1e-17 leaves the camera permanently off target.
+    const settled = arc.filter((s) => s.tick >= landTick + span);
     expect(settled.length, 'the tail after the shake must have been sampled').toBeGreaterThan(2);
     for (const s of settled) {
       expect(s.ox, `t=${s.tick}: ox after the shake window`).toBe(0);
       expect(s.oy, `t=${s.tick}: oy after the shake window`).toBe(0);
     }
   });
-
   test('the three DRAWN emitters sit strictly inside the (10, 11) depth band', async ({ page }) => {
     await bootToGame(page);
-    // 🔴 The only place the APPLIED depth is observable. `effects.ts` pins `EFFECT_DEPTH` and
-    // `gameEffects.ts` carries a source-text guard that it passes `spec.depth` — neither looks at a
-    // drawn object, and Task 5 verified the gap by hand: a scene-side `setDepth(13)` left all 2051
-    // unit tests green. The band puts the particles above the player (10) and below the first
-    // `Graphics` (11), so they join the existing `BatchHandlerQuad` run; at 13 the frame gains one
-    // flush every frame, forever, and nothing else in the suite would notice. Selected by TEXTURE
-    // KEY rather than Phaser's `type` string: `ensureParticleTexture` bakes each kind's colour into
-    // its own `fx-particle-<kind>` texture, so the key IS the emitter's identity.
+    // 🔴 The only place the APPLIED depth is observable: `effects.ts` pins `EFFECT_DEPTH` and
+    // `gameEffects.ts` guards on source text, neither looks at a drawn object, and Task 5 verified a
+    // scene-side `setDepth(13)` left all 2051 unit tests green. The band puts particles above the
+    // player (10) and below the first `Graphics` (11) so they share one `BatchHandlerQuad` run; at 13
+    // the frame gains a flush forever. Selected by TEXTURE KEY — the baked colour IS the identity.
     const drawn = await page.evaluate(() => {
       type G = { __phaserGame: { scene: { getScene(k: string): unknown } } };
       const scene = (window as unknown as G).__phaserGame.scene.getScene('Game') as {
@@ -383,17 +374,23 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     });
     expect(Array.isArray(drawn)).toBe(true);
     expect(drawn.length, 'three emitters are added in GameScene.create()').toBe(3);
+    // ⚠️ Three passes, not one loop, and the ORDER is what makes each independently red-provable:
+    // band → distinct → identity. Folded together, identity shadows distinctness and distinctness
+    // could never be watched failing. Split: `setDepth(13)` reds the band, `setDepth(10.5)` reds
+    // distinctness, `setDepth(spec.depth + 0.4)` reds identity.
     for (const e of drawn) {
       expect(typeof e.depth, `emitter ${e.key}: depth type`).toBe('number');
       // The interval is pinned here as its own literal — the same open interval the unit test pins,
       // stated twice on purpose rather than imported as a bound that could move under both at once.
       expect(e.depth, `emitter ${e.key} depth`).toBeGreaterThan(10);
       expect(e.depth, `emitter ${e.key} depth`).toBeLessThan(11);
-      // And each is ITS OWN entry — one definition, asserted from the drawn side.
+    }
+    expect(new Set(drawn.map((e) => e.depth)).size, 'the three depths must be distinct').toBe(3);
+    // And each is ITS OWN entry — one definition, asserted from the drawn side.
+    for (const e of drawn) {
       const kind = e.key.replace('fx-particle-', '') as EffectKind;
       expect(EFFECT_DEPTH[kind], `no EFFECT_DEPTH entry for drawn emitter "${e.key}"`).toBeDefined();
       expect(e.depth, `drawn depth of ${kind}`).toBe(EFFECT_DEPTH[kind]);
     }
-    expect(new Set(drawn.map((e) => e.depth)).size, 'the three depths must be distinct').toBe(3);
   });
 });

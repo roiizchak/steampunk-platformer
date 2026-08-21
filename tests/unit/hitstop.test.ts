@@ -64,6 +64,57 @@ describe('the freeze lengths themselves', () => {
     freezePair(a, b, 'lethal', 105);
     expect(a.hitstopUntil).toBe(105 + HITSTOP_TICKS.lethal);
   });
+
+  /**
+   * Phase 9's `scale`, pinned HERE rather than only through a browser.
+   *
+   * The e2e spec drives `?hitstop=0` end to end, which is the right shape for a behavioural gate and
+   * the wrong shape for a parser: the round trip is ~15 s and the failure arrives as a plateau that
+   * did or did not appear. These are the same claims in milliseconds.
+   */
+  it('scale 0 arms a deadline of the ARMING tick itself — zero frozen ticks of motion', () => {
+    const a = { hitstopUntil: -1, lastHitTick: -1 };
+    const b = { hitstopUntil: -1, lastHitTick: -1 };
+    freezePair(a, b, 'light', 100, 0);
+    for (const body of [a, b]) {
+      expect(body.hitstopUntil).toBe(100);
+      expect(body.lastHitTick).toBe(100);
+      // True for the REMAINDER of tick 100 — but steps 5-8 already ran, so no motion is skipped.
+      expect(frozen(body, 100)).toBe(true);
+      expect(frozen(body, 101)).toBe(false);
+    }
+  });
+
+  it('defaults to 1, so every existing caller is behaviourally identical', () => {
+    const withDefault = { hitstopUntil: -1, lastHitTick: -1 };
+    const explicit = { hitstopUntil: -1, lastHitTick: -1 };
+    freezePair(withDefault, withDefault, 'playerHurt', 100);
+    freezePair(explicit, explicit, 'playerHurt', 100, 1);
+    expect(withDefault.hitstopUntil).toBe(explicit.hitstopUntil);
+    expect(explicit.hitstopUntil).toBe(100 + HITSTOP_TICKS.playerHurt);
+  });
+
+  /**
+   * 🔴 A FRACTIONAL scale is a correctness hazard, not an untidiness — which is why the parser
+   * refuses one and why that refusal is pinned here rather than left to a reviewer's eye.
+   *
+   * `hitstopScaleFromSearch` (`src/scenes/gameLevelPick.ts`) is the only thing that ever supplies a
+   * scale, and it is not importable here — it reads `window`, and this suite runs with no DOM. So
+   * this asserts the CONSEQUENCE the parser exists to prevent, which is the durable half: at 1.5,
+   * `playerHurt` produces the same freeze LENGTH as an unscaled `lethal`, and `IMPACT_BY_FREEZE`
+   * (`gameEffects.ts`) is keyed on exactly that length. The player would take a hit and see lethal
+   * sparks, with nothing red anywhere.
+   */
+  it('a fractional scale would collide playerHurt with lethal — the reason the parser refuses one', () => {
+    const a = { hitstopUntil: -1, lastHitTick: -1 };
+    freezePair(a, a, 'playerHurt', 100, 1.5);
+    expect(a.hitstopUntil - a.lastHitTick).toBe(HITSTOP_TICKS.lethal);
+    expect(Number.isInteger(a.hitstopUntil - a.lastHitTick)).toBe(true); // 9, indistinguishable
+    // And the non-integer case the collision hides behind: a float duration in the sim at all.
+    const b = { hitstopUntil: -1, lastHitTick: -1 };
+    freezePair(b, b, 'playerHurt', 100, 0.3);
+    expect(Number.isInteger(b.hitstopUntil)).toBe(false);
+  });
 });
 
 describe('the player→enemy freeze, driven at a run', () => {
