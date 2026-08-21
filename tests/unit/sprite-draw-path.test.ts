@@ -93,9 +93,19 @@ describe('gamePlayerDraw.ts draws the per-sprite feedback', () => {
   });
 
   it('MULTIPLIES the i-frame flicker into the gate-entry alpha rather than replacing it', () => {
-    // Two orthogonal states — a player can walk into the gate still invulnerable — so whichever was
-    // written second would erase the other. `setAlpha(desc.alpha)` alone is the mutation.
-    expect(body).toMatch(/setAlpha\(\s*desc\.alpha \* iframeAlpha\(/);
+    // Two orthogonal states, so whichever was written second would erase the other.
+    // `setAlpha(desc.alpha)` alone is the mutation this names.
+    expect(body).toContain('iframeAlpha(world.player.iFrameCounter, IFRAME_TICKS)');
+    expect(body).toMatch(/setAlpha\(\s*desc\.alpha \* flicker\s*\)/);
+  });
+
+  it('SUPPRESSES the flicker during the gate run-in, where the fade owns the alpha', () => {
+    // 🔴 Found by `session-gate-entry.spec.ts`, in a browser, and by nothing else. A player who
+    // reaches the exit still invulnerable had the scripted fade multiplied by a 3-on/3-off strobe:
+    // the drawn alpha fell, rose and fell again, off the `1 - k/20` ramp `goalEntryAlpha` defines.
+    // The run-in's alpha is a rendering claim about one scripted moment; a flicker is a claim about
+    // the moment before it.
+    expect(body).toMatch(/world\.goalEntryTicks === null\s*\n?\s*\?\s*iframeAlpha\(/);
   });
 
   it('SNAPS the frozen attack pose to the contact frame', () => {

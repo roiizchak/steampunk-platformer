@@ -85,11 +85,21 @@ export function renderPlayerSprite(
   // says 1, and the sprite is opaque again on the first frame with nothing to tear down. See
   // `goalEntryAlpha` in `playerView.ts` for why a Phaser tween was rejected.
   //
-  // MULTIPLIED by the i-frame flicker rather than replaced by it: the two are orthogonal states —
-  // a player can walk into the gate still invulnerable — and whichever was written second would
-  // otherwise erase the other. `iframeAlpha` returns exactly 1 outside the window, so the product
-  // is `desc.alpha` for every frame that is not flickering.
-  sprite.setAlpha(desc.alpha * iframeAlpha(world.player.iFrameCounter, IFRAME_TICKS));
+  // MULTIPLIED by the i-frame flicker rather than replaced by it: the two are orthogonal states and
+  // whichever was written second would otherwise erase the other. `iframeAlpha` returns exactly 1
+  // outside the window, so the product is `desc.alpha` on every frame that is not flickering.
+  //
+  // 🔴 **Except during the gate run-in, where the flicker is suppressed outright.** A player who
+  // reaches the exit still invulnerable would otherwise have the scripted fade multiplied by a
+  // 3-on/3-off strobe — the fade would fall, rise, and fall again, and the drawn alpha would be a
+  // product of two ramps rather than a step on the one `goalEntryAlpha` defines. The run-in's alpha
+  // is *"a rendering claim about one scripted moment"* (`playerView.ts`), and a flicker is a claim
+  // about the moment before it. Caught by `session-gate-entry.spec.ts`'s *"never pops back"*, in a
+  // browser, and by nothing else.
+  const flicker = world.goalEntryTicks === null
+    ? iframeAlpha(world.player.iFrameCounter, IFRAME_TICKS)
+    : 1;
+  sprite.setAlpha(desc.alpha * flicker);
 
   // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
   // used to reimplement inline (R10).
