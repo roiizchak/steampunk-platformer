@@ -183,7 +183,7 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
     enemies: level.enemies,
     gears: level.gears,
     goal: level.goal,
-    hitstopScale: hitstopScaleFromSearch(),
+    hitstopScale: hitstopScaleFromSearch(globalThis.location?.search ?? ''),
   };
 }
 
@@ -226,15 +226,28 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
  * ⚠️ The empty-string case needs its own line and `Number.isInteger` does not cover it: `Number('')`
  * is **0**, and `0` is an integer. `?hitstop=` would otherwise get the single most destructive
  * setting while this docstring promised the fallback is always the shipped behaviour.
+ *
+ * 🔴 **The search string is a PARAMETER, not a `globalThis` read, and that is what makes the two
+ * paragraphs above gateable.** It is `variantFromSearch`'s shape verbatim
+ * (`src/game/feelVariants.ts`), for the same reason: the DOM read stays at the one call site and the
+ * parser is a pure function of a string, so `tests/unit/level-pick.test.ts` can drive every branch
+ * in milliseconds instead of a 15-second browser round trip. The first version of this function read
+ * `globalThis.location` itself and had **no test of any kind** — mutating `Number.isInteger` to
+ * `Number.isFinite` left all 2060 tests green, so the fix that closed a HIGH review finding was
+ * itself decoration *(C2)*.
  */
-function hitstopScaleFromSearch(): number {
+export function hitstopScaleFromSearch(search: string): number {
   if (!import.meta.env.DEV) {
     return 1;
   }
-  const raw = new URLSearchParams(globalThis.location?.search ?? '').get('hitstop');
+  const raw = new URLSearchParams(search).get('hitstop');
   if (raw === null || raw.trim() === '') {
     return 1;
   }
   const scale = Number(raw);
-  return Number.isInteger(scale) && scale >= 0 ? scale : 1;
+  // `isSafeInteger`, not `isInteger`: `Number.isInteger(1e308)` is **true** — it is a float with no
+  // fractional part — and `1e308 * HITSTOP_TICKS.light` overflows to `Infinity`, which makes
+  // `hitstopUntil` a deadline no tick count can ever pass. That was the third bullet of the review
+  // finding this predicate was written for, and `isInteger` alone did not close it.
+  return Number.isSafeInteger(scale) && scale >= 0 ? scale : 1;
 }
