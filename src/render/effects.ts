@@ -58,6 +58,20 @@ export interface EmitterSpec {
    * so this makes the worst case a constant instead of something a sampler has to catch in the wild.
    */
   maxAliveParticles: number;
+  /**
+   * The particle's colour, as plain data.
+   *
+   * Colour has always lived in `src/render/` in this project — `playerView.ts`'s `STATE_COLOURS` and
+   * `enemyView.ts`'s `SENTRY_COLOUR`/`SCAVENGER_COLOUR` are the same idea for sprites. It is a spec
+   * FIELD rather than a number the scene picks, for the reason every other field here is: a scene
+   * that chooses its own values is a second place the art direction lives.
+   *
+   * ⚠️ **The scene bakes this into the generated particle texture, it does NOT call `setTint`.**
+   * `playerView.ts:60-62` records why: tint is WebGL-only in Phaser 4, the game runs `Phaser.AUTO`
+   * with a live Canvas fallback, and a tinted texture renders plain white there. A colour baked at
+   * `generateTexture` time is the same picture on both renderers.
+   */
+  tint: number;
   depth: number;
   /** Pre-allocated at create() so a burst never allocates and never spikes GC. */
   reserve: number;
@@ -69,6 +83,16 @@ export interface EmitterSpec {
  * `angleMin`/`angleMax` here are the cone the emitter is *created* with. `steam` and `dust` use it
  * verbatim; `sparks` overrides it per burst, because a kill throws a visibly wider spray than a graze
  * — see `SPARK_CONE_DEG`, which is the authority for that override.
+ *
+ * ## The three tints are GREY-BOX values, chosen and not measured
+ *
+ * STYLE.md §1's locked direction is *"the foreground is warm and brass-capped and the background is
+ * cool and shadowed"*, and these follow it: a hot brass spark off struck metal, a cool off-white
+ * vent, and a warm grey-brown puff off the ground. They are **judgements awaiting the hands-on
+ * pass**, not measurements — criterion 9.8 owes a by-eye read on *"spark colour reading as
+ * brass-on-steel rather than generic orange"*, and three white dots cannot be judged against that at
+ * all. STYLE.md locks generated ART; a grey-box render tint is not that, so nothing here needs
+ * approval. Expect these numbers to move once someone has looked at them on a screen.
  *
  * The three caps sum to `EFFECT_PEAK_ALIVE`. `steam` is the largest because it is the only one that
  * lives long enough for two of them to overlap: at 45 ticks a death plume is still on screen when
@@ -87,6 +111,8 @@ export const EMITTER_SPECS: Readonly<Record<EffectKind, EmitterSpec>> = {
     angleMin: -25,
     angleMax: 25,
     maxAliveParticles: 32,
+    // Hot brass off struck steel — the warmest of the three, and the only one meant to read as a spark.
+    tint: 0xf0b040,
     depth: EFFECT_DEPTH.sparks,
     reserve: 32,
   },
@@ -104,6 +130,8 @@ export const EMITTER_SPECS: Readonly<Record<EffectKind, EmitterSpec>> = {
     angleMin: 250,
     angleMax: 290,
     maxAliveParticles: 48,
+    // Cool off-white. The one COOL tint, per STYLE.md §1: vented steam is not part of the warm foreground.
+    tint: 0xcfd8dc,
     depth: EFFECT_DEPTH.steam,
     reserve: 48,
   },
@@ -121,6 +149,8 @@ export const EMITTER_SPECS: Readonly<Record<EffectKind, EmitterSpec>> = {
     angleMin: 200,
     angleMax: 340,
     maxAliveParticles: 16,
+    // Warm grey-brown, the ground it was kicked off. Deliberately the dullest: dust is never the read.
+    tint: 0x9c8163,
     depth: EFFECT_DEPTH.dust,
     reserve: 16,
   },

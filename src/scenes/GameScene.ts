@@ -17,6 +17,7 @@ import {
 } from './gameDev';
 import { EnemyLayer } from './enemyLayer';
 import { bindPlayerKeys, sampleHeldKeys, type HeldKeys } from './gameInput';
+import { attachEffects, type EffectAttachment } from './gameEffects';
 import { attachHud } from './gameHud';
 import { createAudio, type AudioManager } from '../game/audio';
 import { audioCues } from '../sim/audioCues';
@@ -49,7 +50,6 @@ export interface GameSceneData {
   levelId?: string | null;
 }
 
-
 /**
  * Re-exported so the e2e specs can derive the drawn player's size instead of hardcoding it.
  * The value itself lives in `src/game/constants.ts` — one source, so a doc, a scene and a test
@@ -80,6 +80,7 @@ export class GameScene extends Phaser.Scene {
   private ui?: UIScene;
   /** Phase 7's sound manager. Optional for the same reason `ui` is: a frame can beat `create()`. */
   private audio?: AudioManager;
+  private effects!: EffectAttachment;
   private parallax: ParallaxImage[] = [];
   protected levelKey = '';
   /** The id `init(data)` was started with. `null` on a plain boot: resume whatever the save says. */
@@ -203,6 +204,7 @@ export class GameScene extends Phaser.Scene {
     camera.setBounds(cam.bounds.x, cam.bounds.y, cam.bounds.w, cam.bounds.h);
     camera.setZoom(cam.zoom);
     camera.startFollow(this.playerSprite, false, cam.lerpX, cam.lerpY);
+    this.effects = attachEffects(this, this.world);
 
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
     // "the gate passed" and "the game is running" are different facts. If this scene fails to
@@ -307,6 +309,7 @@ export class GameScene extends Phaser.Scene {
     // goes across because the collect tween has to turn a gear's WORLD position into a screen
     // position, and the camera's scroll and zoom are that transform — doing the conversion here
     // would put HUD arithmetic in the one file this project cannot let grow.
+    this.effects.render(this.world, this.cameras.main);
     this.ui?.render(this.world, this.cameras.main);
     this.gears.sync();
     this.enemies.sync(renderAlpha(this.accumulatorMs));

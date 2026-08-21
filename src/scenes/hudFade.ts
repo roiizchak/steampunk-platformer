@@ -143,16 +143,47 @@ export function showLevelComplete(scene: Phaser.Scene, info: LevelCompleteInfo):
       .setAlpha(0),
   );
 
-  const targets: Phaser.GameObjects.GameObject[] = [fade, ...lines];
-  scene.tweens.add({ targets: fade, alpha: FADE_ALPHA, duration: FADE_MS, ease: 'Quad.easeOut' });
+  /**
+   * 🔴 Criterion 9.3 — each tween is HELD, and stopped by its handle rather than by its target.
+   *
+   * This read `scene.tweens.killTweensOf(targets)`, which is kill-by-target: it reaches every tween
+   * pointed at these objects, including ones another feature owns, and it reports nothing about
+   * what it hit. Two handles cost two locals and stop exactly the two tweens this function started.
+   *
+   * 🔴 Criterion 9.4 — the end value is FORCE-SETTLED in both `onStop` and `onComplete`, because
+   * Phaser writes it in neither. `stop()` leaves a tween's targets wherever the interpolation had
+   * reached, so a fade interrupted a third of the way through stays a third dark forever.
+   *
+   * ⚠️ On today's only call path this settle is **not independently observable**: `destroy()` is
+   * reached from `UIScene.levelComplete(null)`, which destroys these objects on the next two lines.
+   * It is written here because it is the honest shape for a tween handle and because the next caller
+   * will not be that one — but a gate asserting it *alone* would be decoration, which is why 9.4's
+   * observable subject is the HUD gear pop (`hudGearPop.ts`) and not this file.
+   */
+  const settleFade = (): void => {
+    fade.setAlpha(FADE_ALPHA);
+  };
+  const settleLines = (): void => {
+    for (const line of lines) line.setAlpha(1);
+  };
+  const fadeTween = scene.tweens.add({
+    targets: fade,
+    alpha: FADE_ALPHA,
+    duration: FADE_MS,
+    ease: 'Quad.easeOut',
+    onStop: settleFade,
+    onComplete: settleFade,
+  });
   // The text arrives slightly behind the dimming, so the panel reads as landing on a darkened screen
   // rather than the two crossing each other.
-  scene.tweens.add({
+  const linesTween = scene.tweens.add({
     targets: lines,
     alpha: 1,
     duration: FADE_MS,
     delay: PANEL_DELAY_MS,
     ease: 'Quad.easeOut',
+    onStop: settleLines,
+    onComplete: settleLines,
   });
 
   return {
@@ -161,8 +192,11 @@ export function showLevelComplete(scene: Phaser.Scene, info: LevelCompleteInfo):
     destroy() {
       // The tweens go first. A tween still running against a destroyed target throws inside Phaser's
       // update loop, and a throw there stops every subsequent scene — which is how the Phase 6
-      // restart path left a frozen HUD over an error screen.
-      scene.tweens.killTweensOf(targets);
+      // restart path left a frozen HUD over an error screen. The ordering is not stylistic, and it
+      // did not change when the kill-by-target call became these two stops: what changed is WHICH
+      // tweens are stopped, not when.
+      fadeTween.stop();
+      linesTween.stop();
       for (const line of lines) line.destroy();
       fade.destroy();
     },
