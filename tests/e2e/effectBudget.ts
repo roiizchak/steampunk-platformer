@@ -42,9 +42,38 @@ export const SHIPPED_PEAK_ALIVE = EFFECT_PEAK_ALIVE;
  * alive-counts and asserts it rises with N **before** any bound is applied to it.
  *
  * 0 is the control arm and is part of the sweep, not separate from it: "0 particles is not cheaper
- * than 1024 particles" is exactly the failure the ordering check exists to catch.
+ * than 2048 particles" is exactly the failure the ordering check exists to catch.
+ *
+ * ## 🔴 It was `[0, 64, 128, 256, 512, 1024]`, and that sweep could not order itself
+ *
+ * Six back-to-back runs on `ca3814f`, alone on a quiet box, **ordered 1 in 6** — five of them failing
+ * on the *same* gap, `64` against `0`, and a separate sample of four elsewhere failed twice on two
+ * other gaps. Pooling all six runs' per-round readings, gap by gap:
+ *
+ * | gap | ΔN | sign of the per-round delta, over 30 observations |
+ * |---|---|---|
+ * | 0 → 64 | 64 | **+12 / −11 / =7** — a coin flip |
+ * | 64 → 128 | 64 | **+15 / −10 / =5** — a coin flip |
+ * | 128 → 256 | 128 | +18 / −3 / =9 |
+ * | 256 → 512 | 256 | +22 / −5 / =3 |
+ * | 512 → 1024 | 512 | **+30 / −0 / =0** |
+ * | 0 → 1024 | 1024 | **+29 / −0 / =1** |
+ *
+ * The cause is arithmetic, not luck. One particle costs ~0.001 ms here, so a 64-particle gap is
+ * ~0.06 ms of signal — **below `CLOCK_GRID_MS`** — while a single reading sits 0.131 ms from its own
+ * point median on average. The adjacent-pair test at the bottom of that sweep was asking the clock a
+ * question it cannot answer, and the answer it returned was a coin toss.
+ *
+ * ⚠️ **And it is not fixable by sampling harder.** Resolving a 0.06 ms gap against a per-reading
+ * spread of ~0.3 ms needs a standard error near 0.02 ms, which is ~225 rounds — about six hours per
+ * run. The N values have to separate instead, which is a change of *instrument*, not of bound.
+ *
+ * So every gap is now **1024 particles**, ~1 ms of signal against that same noise, and the two floors
+ * in this file clear it by a margin instead of by luck: `MIN_HALF_STORM_WORK_DELTA_MS` is now read at
+ * 1024 rather than 512, where the old sweep put it 1–3 clock steps from the bound and red it 1 run in
+ * 6 the moment Guard 1 stopped firing first. **No bound in this file moved.**
  */
-export const SWEEP_ALIVE = [0, 64, 128, 256, 512, 1024] as const;
+export const SWEEP_ALIVE = [0, 1024, 2048] as const;
 
 /** The top of the sweep, and the amplification the per-particle figure is divided back out of. */
 export const STORM_ALIVE = SWEEP_ALIVE[SWEEP_ALIVE.length - 1];
