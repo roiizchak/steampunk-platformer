@@ -76,6 +76,17 @@ export interface EffectAttachment {
   render(world: World, camera: Phaser.Cameras.Scene2D.Camera): void;
   /** The live emitters, for the e2e perf spec's per-particle `willRender()` count. */
   emitters(): Readonly<Record<EffectKind, Phaser.GameObjects.Particles.ParticleEmitter>>;
+  /**
+   * The camera's UNSHAKEN position, as captured in `create()`.
+   *
+   * 🔴 Published for the same reason `emitters()` is: it is the only way the e2e spec can tell a
+   * shake from a **constant** camera error. The spec used to take `[cam.x, cam.y]` at recorder
+   * install as its zero, which is `base + whatever offset was applied on that frame` — so an error
+   * constant from before install through the whole run subtracts out of every sample and is
+   * invisible. `camera.setPosition(baseX + x + 5, …)` passed the whole 9.2a suite. Against this
+   * pair the recorded offset IS the applied offset, and that mutation reds.
+   */
+  base(): { x: number; y: number };
   destroy(): void;
 }
 
@@ -257,6 +268,10 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
 
     emitters() {
       return built;
+    },
+
+    base() {
+      return { x: baseX, y: baseY };
     },
 
     destroy() {

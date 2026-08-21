@@ -26,116 +26,17 @@ import { bootToGame } from './gameHarness';
 import { EFFECT_DEPTH, type EffectKind } from '../../src/render/effects';
 import { SHAKE, shakeOffset, shakeWithinEnvelope, type ShakeState } from '../../src/render/screenShake';
 import { HITSTOP_TICKS } from '../../src/sim/hitstop';
-
-/** One deduped tick, read in one synchronous callback. `ox`/`oy` are the camera's offset from its
- * unshaken base — `gameEffects.applyShake` writes `camera.x`/`.y`. */
-interface Sample {
-  tick: number; hp: number; x: number; y: number; vx: number; vy: number;
-  grounded: boolean; ox: number; oy: number;
-}
-
-/**
- * What a test waits for, as plain DATA: `waitForFunction` serialises its argument, so a closure would
- * have to be stringified and re-evaluated in the page — fragile, and a second copy of the rule.
- * 🔴 `run` is the harness's own RESOLUTION, not a perf number. One `requestAnimationFrame` cannot
- * observe two sim ticks, so a frame that drains three leaves two that can never be sampled. Right
- * after boot this harness drains ~2.7 ticks/frame (shader compilation, texture upload), making
- * "exactly six frozen ticks" not wrong but *unmeasurable*. Every test waits on `run` first — a
- * positive condition on the INSTRUMENT, never a sleep.
- */
-interface WaitSpec {
-  kind: 'run' | 'drop' | 'airborneDrop' | 'land';
-  /** For `run`, the gap-free series length required; otherwise ticks recorded after the event. */
-  n: number;
-}
-
-/** Generous: a real hang still fails as a timeout rather than passing as a long-enough sleep. */
-const RUN_TIMEOUT = 60_000;
-/** Ticks recorded after the event a test reduces. Longer than the 6-tick freeze, with slack. */
-const TAIL_TICKS = 14;
-
-/**
- * Install the per-frame recorder — every test's data comes from this one array. `window.__game` gives
- * the eight published fields; `grounded` and the camera come off `window.__phaserGame`, the sanctioned
- * route for anything the closed surface does not carry. **No ninth field was added.**
- */
-async function installRecorder(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    type G = { __phaserGame: { scene: { getScene(k: string): unknown } } };
-    const w = window as unknown as G & { __rec?: unknown[]; __view?: unknown; __recRaf?: number };
-    const scene = w.__phaserGame.scene.getScene('Game') as {
-      simWorld: { player: { grounded: boolean } };
-      cameras: { main: { x: number; y: number; width: number; height: number } };
-    };
-    const cam = scene.cameras.main;
-    // The unshaken base, captured while quiescent — boot's own landing shake settled long before
-    // `bootToGame` returned — so it is the same pair `attachEffects` captured in `create()`.
-    const [baseX, baseY] = [cam.x, cam.y];
-    const rec: Record<string, number | boolean>[] = [];
-    w.__rec = rec;
-    w.__view = { w: cam.width, h: cam.height };
-    let last = -1;
-    const step = (): void => {
-      const g = window.__game;
-      const p = g?.player as { x: number; y: number; vx: number; vy: number } | undefined;
-      if (g && p && g.tick !== last) {
-        last = g.tick;
-        const { x, y, vx, vy } = p;
-        const gr = scene.simWorld.player.grounded;
-        rec.push({ tick: g.tick, hp: g.health, x, y, vx, vy, grounded: gr, ox: cam.x - baseX, oy: cam.y - baseY });
-      }
-      w.__recRaf = requestAnimationFrame(step);
-    };
-    w.__recRaf = requestAnimationFrame(step);
-  });
-}
-
-/** Wait on a POSITIVE terminal condition computed from the recorded series. Never a sleep. */
-async function waitFor(page: Page, spec: WaitSpec): Promise<void> {
-  await page.waitForFunction(
-    (s: WaitSpec) => {
-      const rec = (window as unknown as { __rec?: Sample[] }).__rec ?? [];
-      if (rec.length < 2) return false;
-      let at = -1;
-      let run = 1;
-      for (let i = 1; i < rec.length; i++) {
-        const [a, b] = [rec[i - 1], rec[i]];
-        run = b.tick === a.tick + 1 ? run + 1 : 1;
-        const hit =
-          s.kind === 'land'
-            ? b.grounded && !a.grounded
-            : b.hp < a.hp && (s.kind === 'drop' || (!b.grounded && b.vy !== 0));
-        if (s.kind !== 'run' && hit) at = b.tick;
-      }
-      return s.kind === 'run' ? run >= s.n : at >= 0 && rec[rec.length - 1].tick >= at + s.n;
-    },
-    spec,
-    { timeout: RUN_TIMEOUT, polling: 100 },
-  );
-}
-
-async function readSeries(page: Page): Promise<Sample[]> {
-  const raw = await page.evaluate(() => (window as unknown as { __rec: Sample[] }).__rec);
-  expect(Array.isArray(raw)).toBe(true);
-  expect(raw.length).toBeGreaterThan(10);
-  // 🔴 The camera base assumes a QUIESCENT camera at install — CHECKED here rather than asserted
-  // away in a comment. A shake in flight when the base was captured biases every offset in the
-  // series and false-REDs every "settled to exactly zero" for a reason unrelated to the game. The
-  // first line also types `grounded`, the one field off the untyped `__phaserGame` route *(C1)*.
-  expect(typeof raw[0].grounded, 'grounded, off __phaserGame, must be typed').toBe('boolean');
-  expect([raw[0].ox, raw[0].oy], 'the camera was not quiescent at install').toEqual([0, 0]);
-  // Deduped at record time; asserted here, so a broken dedupe cannot inflate a span.
-  for (let i = 1; i < raw.length; i++) expect(raw[i].tick).toBeGreaterThan(raw[i - 1].tick);
-  return raw;
-}
-
-async function stopDriving(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const w = window as unknown as { __drive?: number; __recRaf?: number };
-    if (w.__drive !== undefined) cancelAnimationFrame(w.__drive);
-    if (w.__recRaf !== undefined) cancelAnimationFrame(w.__recRaf);
-  });
-}
+import { IFRAME_TICKS } from '../../src/sim/combatTiming';
+// The instrument — recorder, positive wait, read-back — lives beside the spec, not in it.
+import {
+  RUN_TIMEOUT,
+  TAIL_TICKS,
+  installRecorder,
+  readSeries,
+  stopDriving,
+  waitFor,
+  type Sample,
+} from './polishSeries';
 
 /**
  * Spawn scavengers next to the player and bunny-hop, from INSIDE the page.
@@ -237,6 +138,10 @@ function firstAirborneHit(series: Sample[]): { t0: number; byTick: Map<number, S
 test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick it claims', () => {
   test.setTimeout(RUN_TIMEOUT * 3);
   test('a claw holds x, y, vx, vy for exactly six ticks — and ?hitstop=0 removes it', async ({ page }) => {
+    // 🔴 What makes `waitFor`'s re-arming `drop` condition terminate, asserted rather than argued.
+    // Retune `IFRAME_TICKS` under 14 and this names the wait that would start hanging.
+    expect(TAIL_TICKS, 'TAIL_TICKS must stay under IFRAME_TICKS or the drop wait can re-arm forever')
+      .toBeLessThan(IFRAME_TICKS);
     // ── ARM A: the shipped behaviour ─────────────────────────────────────────────────────────────
     const { t0, byTick } = firstAirborneHit(await brawlArm(page, ''));
     const hit = byTick.get(t0)!;
@@ -283,9 +188,21 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
     for (const f of ['tick', 'hp', 'x', 'vx', 'vy'] as const) {
       expect(typeof drop[f], `hazard: __game.${f} at T0`).toBe('number');
     }
-    // Every tick RECORDED inside the six a claw would have frozen. Gap-tolerant: an unobserved tick
-    // can neither support nor refute the claim, and the non-empty assertion is what stops that being
-    // vacuous. A hazard is a swept rectangle, not a body — `worldDamage.ts` records the exemption.
+    // 🔴 **The claim at full resolution, from a gap-tolerant series** — the review's F9, which was
+    // recorded as future-proofing rather than closed. The position assertions below can only speak
+    // about ticks the harness OBSERVED, so a freeze shorter than the sampling gap slips between two
+    // samples; so does a freeze whose deadline has already passed by the time anything is sampled.
+    // The sentinel cannot be slipped past. `hitstopUntil` starts at **-1**, nothing ever clears it,
+    // and `freezePair` only raises it — so in a run where the only damage source is a swept
+    // rectangle it must still read -1 at every sample, and a freeze of ANY length armed at ANY tick
+    // leaves a value that is not -1. No tick arithmetic, no dependence on which ticks were seen.
+    const armed = series.filter((s) => s.tick <= t0 + HITSTOP_TICKS.playerHurt && s.frozenUntil !== -1);
+    expect(
+      armed.map((s) => [s.tick, s.frozenUntil]),
+      `hazard at T0=${t0}: a freeze deadline was armed; -1 is the never-frozen sentinel`,
+    ).toEqual([]);
+    // The same claim read off the BODY rather than the deadline, so a freeze applied without going
+    // through `freezePair` is caught too. A hazard is a swept rectangle, not a body.
     const after = series.filter((s) => s.tick > t0 && s.tick <= t0 + HITSTOP_TICKS.playerHurt);
     expect(after.length, `hazard: ticks after T0=${t0} were recorded at all`).toBeGreaterThan(0);
     expect(

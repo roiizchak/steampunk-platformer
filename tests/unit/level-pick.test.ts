@@ -19,7 +19,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CATALOG_KEY } from '../../src/game/assetCatalog';
 import { PROGRESS_KEY, resetProgressCache } from '../../src/game/save';
 import { RENDER_SCALE } from '../../src/game/constants';
-import { firstLevelId, levelOrder, openLevelSelect, pickLevel, worldOptionsFor } from '../../src/scenes/gameLevelPick';
+import {
+  firstLevelId,
+  hitstopScaleFromSearch,
+  levelOrder,
+  openLevelSelect,
+  pickLevel,
+  worldOptionsFor,
+} from '../../src/scenes/gameLevelPick';
 import { LEVEL_01, SHIPPED, SHIPPED_ENTRIES, idOf } from './tilemap-data-fixtures';
 
 /** Five catalogued ids, only one of which has real bytes behind it. */
@@ -250,5 +257,69 @@ describe('every catalogued level is one of the shipped files', () => {
 
   it('derives its ids the same way the glob does, so the comparison is not two conventions', () => {
     expect(idOf('../../public/assets/levels/level-03.tmj')).toBe('level-03');
+  });
+});
+
+/**
+ * `?hitstop=N` — the DEV freeze knob, and the only gate it has.
+ *
+ * 🔴 **This block exists because the fix that closed a HIGH review finding shipped with nothing
+ * watching it.** `hitstopScaleFromSearch` was module-private and read `globalThis.location` itself,
+ * so no unit test could reach it: mutating `Number.isInteger` to `Number.isFinite` left the whole
+ * suite — 123 files, 2060 tests — green with a float duration reaching `src/sim/`. The e2e spec
+ * drives two of the seven branches below and takes 15 s per arm to do it.
+ *
+ * ⚠️ Every case here is non-vacuous only because `?hitstop=0` returns **0**. The function's first
+ * statement is `if (!import.meta.env.DEV) return 1`, so if this suite ever ran with `DEV` false
+ * every assertion below would collapse onto the fallback and prove nothing — except that one, which
+ * cannot return 0 outside DEV. It is the first case for that reason.
+ */
+describe('hitstopScaleFromSearch — the DEV freeze knob (`?hitstop=`)', () => {
+  it('reads a plain integer, INCLUDING zero — the arm B the e2e freeze gate needs', () => {
+    // 0 is the whole point of the knob: it is the committed fixture on the other side of the
+    // threshold (C2). It is also what proves the DEV branch is live in this suite.
+    expect(hitstopScaleFromSearch('?hitstop=0')).toBe(0);
+    expect(hitstopScaleFromSearch('?hitstop=1')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=3')).toBe(3);
+  });
+
+  it('falls back to 1 when the knob is absent or empty', () => {
+    expect(hitstopScaleFromSearch('')).toBe(1);
+    expect(hitstopScaleFromSearch('?feel=2')).toBe(1);
+    // `Number('')` is 0, and 0 is an integer — so the empty value needs its own branch or it gets
+    // the single most destructive setting while the docstring promises the shipped behaviour.
+    expect(hitstopScaleFromSearch('?hitstop=')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=%20')).toBe(1);
+  });
+
+  it('REFUSES a fractional scale — the collision that draws lethal sparks off a claw', () => {
+    // 6 * 1.5 = 9 collides with `lethal`'s 9 in `IMPACT_BY_FREEZE`, which is keyed on
+    // `hitstopUntil - lastHitTick`. The symptom is silent: the wrong sparks, the wrong shake,
+    // nothing red. And 0.3 puts a float duration inside `src/sim/` (CLAUDE.md §3).
+    expect(hitstopScaleFromSearch('?hitstop=1.5')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=0.3')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=2.0000001')).toBe(1);
+  });
+
+  it('REFUSES a scale that overflows the deadline — `Number.isInteger(1e308)` is true', () => {
+    // The trap in the obvious predicate: 1e308 has no fractional part, so `isInteger` admits it,
+    // and `tickCount + 4 * 1e308` is `Infinity` — a freeze no tick count can ever pass.
+    expect(Number.isInteger(1e308), 'the premise: isInteger alone does NOT reject this').toBe(true);
+    expect(hitstopScaleFromSearch('?hitstop=1e308')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=1e21')).toBe(1);
+  });
+
+  it('REFUSES a negative, an unparseable value and a non-finite one', () => {
+    expect(hitstopScaleFromSearch('?hitstop=-2')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=-0.5')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=nonsense')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=NaN')).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=Infinity')).toBe(1);
+  });
+
+  it('is what `worldOptionsFor` puts on the world, so the parser is on the shipped path', () => {
+    // Without this the parser could be correct and unwired — the exact shape the `pickLevel` block
+    // above exists to catch. `location` is undefined under vitest, so this is the absent case.
+    expect(worldOptionsFor(LEVEL_01).hitstopScale).toBe(1);
   });
 });

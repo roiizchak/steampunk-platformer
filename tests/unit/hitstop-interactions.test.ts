@@ -17,8 +17,16 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { ATTACK, HURT_LOCK_TICKS, IFRAME_TICKS, PLAYER_MAX_HP, invulnerable, movementLocked } from '../../src/sim/combat';
-import { HITSTOP_TICKS, freezePair } from '../../src/sim/hitstop';
+import {
+  ATTACK,
+  HURT_LOCK_TICKS,
+  IFRAME_TICKS,
+  PLAYER_MAX_HP,
+  invulnerable,
+  knockbackSettling,
+  movementLocked,
+} from '../../src/sim/combat';
+import { HITSTOP_TICKS, freezePair, frozen } from '../../src/sim/hitstop';
 import { PLAYER_ATTACK_DAMAGE, applyPlayerAttack } from '../../src/sim/playerAttack';
 import { SCAVENGER, SCAVENGER_ATTACK } from '../../src/sim/enemies';
 import { createSnapshot, latchJumpPress } from '../../src/sim/input';
@@ -115,6 +123,80 @@ describe('the regressions freezing those counters caused', () => {
     tick(world, { ...IDLE });
     expect(world.tickCount).toBe(hitTick + 2 + HITSTOP_TICKS.playerHurt);
     expect(player.x - xBefore, 'friction ate the impulse before it ever moved the player').toBeCloseTo(impulse, 6);
+  });
+
+  /**
+   * 🔴 **The reachability argument that let the `combatCounter === 1` clause be DELETED, pinned.**
+   *
+   * `knockbackSettling` used to be `state === 'hurt' && (knockbackPending || combatCounter === 1)`.
+   * Phase 9 dropped the second disjunct as redundant, and both the implementer and the reviewer
+   * verified independently that restoring it leaves the whole suite green — so it shipped under a
+   * C11/C2 note saying **no test tells the two versions apart**. A comment is not a gate: the claim
+   * rests on an invariant that a future edit to step 4b can silently break, and nothing was watching
+   * the invariant.
+   *
+   * This is that gate. The clause identified "the first tick step 5 runs after the hit" by
+   * arithmetic — 9b writes `combatCounter = 0`, 4b of the next tick advances it to 1, step 5 reads
+   * it. A freeze that skipped 5-8 while 4b kept counting would break that arithmetic and make the
+   * clause load-bearing again. It does not, because **4b and step 5 test the same
+   * `frozen(player, tickCount)` in the same tick**, so the counter cannot advance on a tick step 5
+   * did not run.
+   *
+   * What is asserted is the strongest honest form of "the two versions cannot be told apart":
+   * **at every tick where step 5 actually evaluates the predicate, `combatCounter === 1` and
+   * `knockbackSettling` return the same answer.** They disagree only on frozen ticks, where nothing
+   * reads either. Delete the `!held` guard on 4b's counter block and this goes red at the first
+   * frozen tick.
+   */
+  it('the deleted `combatCounter === 1` clause is unreachable: 0 on every frozen tick, exactly 1 on the release tick', () => {
+    const { world, hitTick } = clawedWhileIdle();
+    const player = world.player;
+    // Non-vacuity, both halves: the hit really armed a freeze AND really armed the exemption.
+    expect(player.state).toBe('hurt');
+    expect(player.knockbackPending, 'the claw did not arm the friction exemption').toBe(true);
+    expect(player.combatCounter, '9b writes the counter to 0 on the hit tick').toBe(0);
+    expect(frozen(player, hitTick + 1), 'the claw did not arm a freeze').toBe(true);
+
+    /**
+     * Per tick: whether it was frozen, the flag as step 5 WOULD HAVE SEEN IT (sampled before the
+     * tick — step 5 consumes it in the same tick it reads it, so a sample taken afterwards reads
+     * the wrong side of the edge), and the counter step 5 would have read (sampled after, because
+     * 4b advances it earlier in the same tick).
+     */
+    const seen = [] as { t: number; held: boolean; counter: number; settling: boolean }[];
+    for (let n = 1; n <= HITSTOP_TICKS.playerHurt + 3; n += 1) {
+      const t = world.tickCount;
+      const settling = knockbackSettling(player);
+      tick(world, { ...IDLE });
+      seen.push({ t, held: frozen(player, t), counter: player.combatCounter, settling });
+    }
+
+    const heldTicks = seen.filter((s) => s.held);
+    expect(heldTicks.map((s) => s.t), 'the frozen span, as a count and as ticks').toEqual(
+      Array.from({ length: HITSTOP_TICKS.playerHurt }, (_, i) => hitTick + 1 + i),
+    );
+    // 1. The counter does not move while step 5 is skipped. This is the invariant the deletion
+    //    rests on, and the ONE thing a step-4b edit can break.
+    for (const s of heldTicks) {
+      expect(s.counter, `frozen tick t=${s.t}: combatCounter advanced while step 5 was skipped`).toBe(0);
+    }
+    // 2. The release tick — the first tick step 5 runs again — reads exactly 1, so the deleted
+    //    clause would have been TRUE there, exactly where the surviving flag is also true.
+    const release = seen.find((s) => !s.held)!;
+    expect(release.t, 'the release tick').toBe(hitTick + 1 + HITSTOP_TICKS.playerHurt);
+    expect(release.counter, 'the release tick must read exactly 1, or the old clause missed it').toBe(1);
+    // 3. And the two versions AGREE at every tick step 5 evaluates them — which is what "no test
+    //    can tell them apart" means, stated as an assertion instead of as a comment.
+    for (const s of seen.filter((x) => !x.held)) {
+      expect(
+        s.counter === 1,
+        `t=${s.t}: the deleted clause (${s.counter === 1}) and the shipped flag (${s.settling}) disagree`,
+      ).toBe(s.settling);
+    }
+    // Non-vacuous in both directions: some evaluated tick answers true, some answer false.
+    const evaluated = seen.filter((s) => !s.held).map((s) => s.settling);
+    expect(evaluated).toContain(true);
+    expect(evaluated).toContain(false);
   });
 
   /**

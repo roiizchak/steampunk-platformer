@@ -101,10 +101,14 @@ export function movementLocked(player: PlayerSim): boolean {
  * justification is gone and `knockbackPending` alone always sufficed: set only where
  * `applyKnockback` writes `vx`, cleared by `stepHorizontal` (`player.ts`) the one time it is
  * consumed — bounded by its own consumption rather than by a counter that now stops and starts.
- * Recorded rather than dressed up *(C11)*: **no test tells the two versions apart**, so nothing
- * pretends to gate the clause *(C2)*. What IS gated is what it was ever for —
- * `hitstop-interactions.test.ts` asserts the impulse arrives undecayed on the release tick, which
- * fails outright if the freeze stops covering step 5.
+ * No test tells the two versions apart, and nothing pretends to gate the clause itself *(C2)* — a
+ * predicate that is provably never read cannot have a red. **What is gated is the invariant that
+ * makes it unreadable**, which is the thing a future edit can actually break:
+ * `hitstop-interactions.test.ts` walks the whole freeze and asserts `combatCounter` is **0 on every
+ * frozen tick and exactly 1 on the release tick**, with the flag sampled at the moment step 5 would
+ * read it. Delete the `!held` guard on step 4b's counter block — the one change that would make this
+ * clause load-bearing again — and that test names the first frozen tick it advanced on. Beside it,
+ * the impulse-arrives-undecayed test gates what the clause was ever *for*.
  *
  */
 export function knockbackSettling(player: PlayerSim): boolean {
