@@ -24,7 +24,12 @@
  * `stop()` dispatches `onStop` **only while the tween is live**; natural completion dispatches
  * `onComplete` and writes the end value itself (`TweenData.js` assigns `target[key] = current`
  * before its `if (complete)` branch); `BaseTween.destroy()`, which `TweenManager.shutdown()` reaches
- * through `killAll()`, nulls `callbacks` and dispatches nothing. The fake below obeys all three.
+ * through `killAll()`, nulls `callbacks` and dispatches nothing.
+ *
+ * The fake obeys the DISPATCH half of all three exactly. It deliberately does **not** reproduce the
+ * one thing Phaser does that this file is trying to observe: writing the end value on completion.
+ * See `complete()` — a fake that helpfully moved the alpha would make the completion assertion pass
+ * on a build whose settles had been deleted.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -107,8 +112,11 @@ function fakeScene() {
           complete() {
             if (!live) return;
             live = false;
-            // Phaser writes the end value itself at v = 1, then dispatches. Modelled, so a test
-            // that only checks the final alpha cannot pass because the FAKE wrote it.
+            // 🔴 The end value is deliberately NOT written here, even though real Phaser does write
+            // it at `v = 1` (`TweenData.js` assigns before its `if (complete)` branch). Modelling
+            // that faithfully would make the completion assertion below pass because the FAKE moved
+            // the alpha — an assertion satisfied by the test harness rather than by the code. Only
+            // `settleFade` / `settleLines` can move it here, so only they can make it green.
             cfg.onComplete?.();
           },
           destroy() {
