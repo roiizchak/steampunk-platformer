@@ -299,38 +299,53 @@ marked passing yet.
 
 ---
 
-## G.7b — the first failure this session that is NOT the environment
+## G.7b — attributed to Phase 9, then disproved by running it again
 
 `tests/e2e/phase-08-gate-perf.spec.ts:264` ("one exit costs a fraction of a millisecond a frame,
-measured by amplification") fails on the phase branch. Four earlier failures this session looked like
-regressions and were all environment, so it was not attributed until a control run on `main` said so.
-That run passed. Both arms, one run each, same box, nothing else running:
+measured by amplification") failed twice on the phase branch and passed on `main`. On that evidence it
+was written up here as **the first failure of the session that was not the environment**. That was
+wrong, and the way it was wrong is worth more than the gate is.
 
-| arm | 1 exit GPU | 41 exits GPU | 21 exits GPU | verdict |
+A Task 6 agent then reported it **passing** on the same branch. Four more runs, back to back, alone on
+a quiet box, on `e23ee9f`:
+
+| run | 1 exit GPU | 41 exits GPU | 21 exits GPU | result |
 |---|---|---|---|---|
-| `main` `080e3e8` | 0.133 ms | **0.218 ms** | 0.219 ms | orders — **passes** |
-| `phase-09-polish` `3bf4c02` | 0.152 ms | **0.055 ms** | 0.189 ms | does not order — **fails** |
+| 1 | 0.036 ms | 0.205 ms | 0.152 ms | pass |
+| 2 | 0.099 ms | 0.155 ms | 0.111 ms | pass |
+| 3 | 0.098 ms | 0.150 ms | 0.116 ms | pass |
+| 4 | **0.133 ms** | **0.135 ms** | 0.111 ms | **fail** |
 
-The **CPU** statistic is unchanged and orders on both arms (`per exit work 0.0025 ms`, identically).
-Only the **GPU** statistic stopped ordering.
+Counting everything this session: **3 failures and 4 passes on the same branch.** It is a coin flip.
 
-**The gate is behaving correctly.** It is not asserting a bound and missing it — its own premise check
-is firing (`phase-08-gate-perf.spec.ts:330-333`): *"40 extra exits did not cost the GPU anything — the
-amplifier is not amplifying, so the per-exit figure is noise over 40 and this gate is measuring
-nothing."* It is refusing to emit a number it cannot trust, which is exactly what it was built to do.
+**Read the first column.** The single-exit baseline ranges 0.036 to 0.133 — a spread of 0.097 ms,
+which is *wider than the entire effect the gate exists to measure*. Run 4 failed for no reason except
+that its baseline landed at the top of that range on the same run its 41-exit figure landed at the
+bottom. Nothing about the exit graphic changed between run 3 and run 4.
 
-**Most likely mechanism, stated as a hypothesis and not a conclusion:** every figure in that table sits
-at or below the GPU timer's ~0.104 ms resolution floor, and Phase 9's added per-frame work pushed the
-exit's marginal cost under it. The branch's own single-exit baseline is already higher (0.152 vs
-0.133), which is the signature of a raised floor rather than of a more expensive exit. Nothing here
-says the exit graphic got slower; it says the measurement lost the ability to see it.
+### What the earlier attribution actually did wrong
 
-**What must NOT happen:** moving the bound. This is the same shape as criterion 6.9's discarded GPU
-ratio, which ranked five full-screen scrims below a clean run — *a statistic that cannot order its own
-mutation cannot be repaired by moving the bound; it has to be replaced.* Two runs, one per arm, are
-also not enough to settle a perf question on this machine.
+It compared **one run per arm** and read the difference as a signal. The project already has this rule
+and it was not applied: *a perf bound is chosen on one set of runs and confirmed on a HELD-OUT set* —
+both gates repaired on 2026-08-18 false-redded on the first run that had no say in their bound. One
+sample per arm from two distributions that overlap almost completely is not a comparison; it is two
+draws. The care that went into refusing to attribute the four earlier failures until a control run
+existed was then spent on trusting that control run's single sample.
 
-**Owner:** the Phase 9 gate's `voltagent-qa-sec:performance-engineer` briefs, which already carry that
-rule. They are to re-run both arms interleaved in one session before believing this pair, and if it
-holds, replace the statistic rather than retune it. **Until then criterion 9.5's neighbour gate is
-failing, and a phase with a failing criterion is reported failing.**
+**The `main` arm was never shown to be different.** It was shown to have produced 0.218 once, which is
+inside the range the branch produces routinely.
+
+### What is actually true about G.7b
+
+The GPU statistic is **noise-dominated at this amplification on this hardware**, and has been since
+before Phase 9. Its own premise check is what fires, and it is right to fire — it refuses to emit a
+per-exit figure when 40 extra exits did not measurably cost anything. The gate is honest; the
+statistic underneath it cannot carry the question.
+
+This is the same shape as criterion 6.9's discarded GPU ratio. The remedy is the standing one and it
+has not changed: **a statistic that cannot order its own mutation cannot be repaired by moving the
+bound — replace it.** What has changed is who owns it: this is an **inherited Phase 8 defect**, not a
+Phase 9 regression, and the CPU arm of the same gate orders reliably on every run above.
+
+**Phase 9 attribution: cleared.** Recorded as a known-flaky inherited gate, assigned to the phase
+gate's `performance-engineer` briefs with the amplification-vs-resolution problem named.
