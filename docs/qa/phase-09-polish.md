@@ -400,3 +400,43 @@ Phase 9 regression, and the CPU arm of the same gate orders reliably on every ru
 
 **Phase 9 attribution: cleared.** Recorded as a known-flaky inherited gate, assigned to the phase
 gate's `performance-engineer` briefs with the amplification-vs-resolution problem named.
+
+---
+
+## 9.5 — "max enemies" is not a bound
+
+The enemy arm of criterion 9.5 is pinned to `DEV_FLEET_COUNT` (`tests/e2e/perfBudget.ts:28`), and that
+is the **declared** worst case, not the largest possible one. Finding **S5**
+(`docs/qa/phase-05-combat-08-gate-10.md:121`) is still open: `DEV_FLEET_COUNT = 20` is a chosen 10×
+multiple, and **nothing in `src/sim/` or the level format caps concurrent enemies**. So "max enemies"
+here means *the largest fleet this project measures*, never *the largest possible*. Adding a real cap
+is a design decision and is out of Phase 9's scope.
+
+The particles beside them are different in kind, and the contrast is the point. They are bounded **by
+construction** at `EFFECT_PEAK_ALIVE = 96` — 32 + 48 + 16, each emitter's `maxAliveParticles` —
+because Phaser's `atLimit()` **drops** an emit request rather than evicting the oldest. The particle
+ceiling is a contract; the enemy ceiling is a habit.
+
+## 9.5 — the measurement floor, and why the shipped number is inferred rather than measured
+
+The shipped 96-particle ceiling costs about **0.06 ms** of main-thread work per frame, and
+`performance.now()` in this browser quantises to **0.1 ms**. The shipped figure is therefore **below
+the grid of the clock that would measure it**: every one of the ten per-pair deltas came back as
+either 0.000 or 0.100 ms, and nothing in between exists to be read.
+
+**So the shipped number is not measured. It is inferred.** What is measured is the amplified storm —
+1024 particles through the same emitters, the same specs and the same `explode()` — and what is
+reported is that delta divided by the particle count.
+
+That divide-back is only a measurement while the cost is linear in the count, so the spec asserts
+linearity instead of assuming it: two independent per-particle estimates taken at 512 and at 1024
+agreed to within 1.00–1.25× on every run, against a 4× bound, and the `storm8192` proof read 4.100 ms
+for 8192 particles — 0.00044 ms each at 85× the shipped ceiling, inside the 0.0004–0.0008 the sweep
+measured. **The inference holds and the divide-back stands.** Had the sweep bent, the spec is written
+to fail rather than report an extrapolation through a region nothing measured.
+
+⚠️ This is the same hazard that made G.7b unmeasurable — a statistic sitting under its clock's
+resolution. The difference, and the only thing that makes this one legitimate, is that the amplifier
+here is **proved to amplify** (the sweep orders monotonically across nine walks) and the linearity that
+licenses the divide-back is **asserted rather than assumed**. G.7b's amplifier does not amplify, which
+is why its own premise check refuses to emit a number.
