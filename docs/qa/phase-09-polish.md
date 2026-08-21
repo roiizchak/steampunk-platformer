@@ -296,3 +296,41 @@ marked passing yet.
     scans the `src/sim` closure only. The three new render modules are covered **dynamically** by
     `npm run test:sim-isolated`, which passes with Phaser uninstalled — evidenced by the
     uninstall/pass/reinstall triple, not by an exit code.
+
+---
+
+## G.7b — the first failure this session that is NOT the environment
+
+`tests/e2e/phase-08-gate-perf.spec.ts:264` ("one exit costs a fraction of a millisecond a frame,
+measured by amplification") fails on the phase branch. Four earlier failures this session looked like
+regressions and were all environment, so it was not attributed until a control run on `main` said so.
+That run passed. Both arms, one run each, same box, nothing else running:
+
+| arm | 1 exit GPU | 41 exits GPU | 21 exits GPU | verdict |
+|---|---|---|---|---|
+| `main` `080e3e8` | 0.133 ms | **0.218 ms** | 0.219 ms | orders — **passes** |
+| `phase-09-polish` `3bf4c02` | 0.152 ms | **0.055 ms** | 0.189 ms | does not order — **fails** |
+
+The **CPU** statistic is unchanged and orders on both arms (`per exit work 0.0025 ms`, identically).
+Only the **GPU** statistic stopped ordering.
+
+**The gate is behaving correctly.** It is not asserting a bound and missing it — its own premise check
+is firing (`phase-08-gate-perf.spec.ts:330-333`): *"40 extra exits did not cost the GPU anything — the
+amplifier is not amplifying, so the per-exit figure is noise over 40 and this gate is measuring
+nothing."* It is refusing to emit a number it cannot trust, which is exactly what it was built to do.
+
+**Most likely mechanism, stated as a hypothesis and not a conclusion:** every figure in that table sits
+at or below the GPU timer's ~0.104 ms resolution floor, and Phase 9's added per-frame work pushed the
+exit's marginal cost under it. The branch's own single-exit baseline is already higher (0.152 vs
+0.133), which is the signature of a raised floor rather than of a more expensive exit. Nothing here
+says the exit graphic got slower; it says the measurement lost the ability to see it.
+
+**What must NOT happen:** moving the bound. This is the same shape as criterion 6.9's discarded GPU
+ratio, which ranked five full-screen scrims below a clean run — *a statistic that cannot order its own
+mutation cannot be repaired by moving the bound; it has to be replaced.* Two runs, one per arm, are
+also not enough to settle a perf question on this machine.
+
+**Owner:** the Phase 9 gate's `voltagent-qa-sec:performance-engineer` briefs, which already carry that
+rule. They are to re-run both arms interleaved in one session before believing this pair, and if it
+holds, replace the statistic rather than retune it. **Until then criterion 9.5's neighbour gate is
+failing, and a phase with a failing criterion is reported failing.**
