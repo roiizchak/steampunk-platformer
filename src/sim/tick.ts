@@ -310,7 +310,8 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     that takes the last gear and steps through the door does both, in that order. `goal.ts`
   //     carries all the reasoning — why completion belongs in the sim, why the `World.spawn`
   //     argument for the respawn is NOT the argument for this, and why the cancel is load-bearing.
-  if (stepGoalEntry(world)) {
+  //     🔴 `motionRan` (Phase 9): a counter must not spend ticks inside a freeze — hold in `goal.ts`.
+  if (stepGoalEntry(world, motionRan)) {
     world.completed = true;
     events.levelCompleted = true;
   }
@@ -342,7 +343,9 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     not an exception to that rule: its cause IS the state step 11 just resolved. The cadence
   //     depends on whether this tick ended up `walk` or `run`, so it cannot be known any earlier.
   //     `advanceStride` lives beside `resolveState` in `player.ts` for the same reason.
-  events.footstep = advanceStride(player);
+  //     🔴 A FROZEN tick does not spend stride either (Phase 9): ungated this RESET the cadence on
+  //     every frozen tick. `playerMotion.ts` has why, and why `motionRan` and not `frozen()`.
+  events.footstep = motionRan ? advanceStride(player) : false;
 
   // 13. Advance every window counter, LAST, after every test of one.
   //

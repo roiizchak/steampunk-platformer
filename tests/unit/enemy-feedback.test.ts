@@ -19,10 +19,14 @@
  *
  * `enemyLayer.ts` takes Phaser as a TYPE-only import, so it can be driven end to end against a fake
  * scene — the `enemy-layer-catalog.test.ts` idiom — and a behavioural assertion beats a text one
- * every time. `gamePlayerDraw.ts` and `gameEffects.ts` genuinely name Phaser VALUES
- * (`Phaser.BlendModes`, `Phaser.Scenes.Events`), and `npm run test:sim-isolated` runs this suite with
- * the engine uninstalled — so those two are guarded as source text in `sprite-draw-path.test.ts`,
- * the idiom `effects-draw-path.test.ts` and `play-anim.test.ts` already use.
+ * every time.
+ *
+ * ⚠️ This header used to end by explaining that `gamePlayerDraw.ts` and `gameEffects.ts` could NOT be
+ * driven the same way, because they named Phaser VALUES and `npm run test:sim-isolated` runs this
+ * suite with the engine uninstalled. **That is no longer true** (QA log entry 33, closed): the first
+ * file's value import was unnecessary, the second's two constants are pinned literals in
+ * `engineLiterals.ts`, and both are driven in `player-draw-behaviour.test.ts` and
+ * `effects-behaviour.test.ts`. `UIScene.ts` still names one and is still gated as source text.
  *
  * ## Every assertion here is written to fail if the module does nothing
  *

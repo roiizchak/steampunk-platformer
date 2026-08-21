@@ -115,8 +115,10 @@ describe('the gate edge is not the gate', () => {
     expect(containedInGoal(world), 'premise: and is NOT inside it').toBe(false);
 
     world.goalEntryTicks = GOAL_ENTRY_TICKS;
+    // `motionRan: true` — steps 5-8 ran. The freeze hold is `hitstop-frozen-counters.test.ts`'s
+    // subject; here it must be out of the way or the step returns before the branch under test.
     expect(
-      stepGoalEntry(world),
+      stepGoalEntry(world, true),
       'a matured counter plus mere overlap must NOT complete the level',
     ).toBe(false);
   });
@@ -127,7 +129,7 @@ describe('the gate edge is not the gate', () => {
     const world = standingAt(CENTRE);
     expect(containedInGoal(world)).toBe(true);
     world.goalEntryTicks = GOAL_ENTRY_TICKS;
-    expect(stepGoalEntry(world)).toBe(true);
+    expect(stepGoalEntry(world, true)).toBe(true);
   });
 });
 

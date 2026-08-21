@@ -552,17 +552,38 @@ recorded, or recorded here as still uncovered.
     ADD-mode flash reads as a hit rather than as a glitch, and whether 3-on/3-off flicker reads as
     invulnerability are all hands-on questions with no metric. Owed at the 9.8 pass, alongside
     entries 1-4.
-33. **STILL NOT COVERED — `gamePlayerDraw.ts` and `gameEffects.ts` are gated as SOURCE TEXT, not
-    behaviour.** Both name Phaser values, and `npm run test:sim-isolated` runs the unit suite with the
-    engine uninstalled, so neither can be driven against a fake scene the way `enemyLayer.ts` and
-    `hudFade.ts` now are. A text gate reds when a call is deleted or rewritten; it cannot tell whether
-    the call did the right thing. The enemy half is behavioural and is the stronger of the two by
-    some distance.
-34. **STILL NOT COVERED — `TINT_MODE_ADD` is a literal transcribed from the vendored engine.**
-    `spriteFlash.ts` cannot import `Phaser.TintModes` for the reason in 33. The number is pinned in
-    `phase-09-draw.spec.ts` against `node_modules/phaser/src/renderer/TintModes.js`, which is a real
-    check — but it runs only in the e2e suite, so a Phaser upgrade landed without running Playwright
-    would not be caught by `npm test`.
+33. ~~**`gamePlayerDraw.ts` and `gameEffects.ts` are gated as SOURCE TEXT, not behaviour.**~~
+    **CLOSED (fix round 10).** The stated blocker did not survive being checked. `gamePlayerDraw.ts`'s
+    `import Phaser from 'phaser'` was a VALUE import that named the engine **only in type positions**
+    — one word, and the whole file was untestable for it. `gameEffects.ts` genuinely needed two
+    values, `Phaser.Scenes.Events.SHUTDOWN` and `Phaser.BlendModes.NORMAL`; both are now pinned
+    literals in `src/scenes/engineLiterals.ts`, the `TINT_MODE_ADD` idiom applied twice more, and
+    `TINT_MODE_ADD` moved there and is re-exported from `spriteFlash.ts` so no caller changed.
+    Both modules are `import type Phaser` now, and `test:sim-isolated` still runs 133 files.
+
+    Two new behavioural suites, seven mutations watched red between them *(C1)*:
+    `player-draw-behaviour.test.ts` — delete the flinch terms, `setAlpha(desc.alpha)`, snap to
+    `frames[0]`; `effects-behaviour.test.ts` — swap `explode`'s argument order, `setBlendMode(1)`,
+    register the teardown on `'destroy'`, write the camera to base while shaking. Every one of those
+    was green before. The source-text gates STAY, retargeted at the two claims a fake scene cannot
+    make: that there is one implementation of the flash and not two, and that the shared constant is
+    used rather than a bare number. `UIScene.ts` still names `Phaser.Display` and remains text-gated.
+34. ~~**`TINT_MODE_ADD` is pinned only in the e2e suite.**~~ **CLOSED (fix round 10).**
+    `tests/unit/engine-literals.test.ts` pins all THREE transcribed constants against the vendored
+    source on every `npm test`, each with a guard declaration from the same file so a match on an
+    unrelated `ADD:` cannot pass vacuously, plus an anchor case asserting the literals are the exact
+    values (a pin that merely follows its own constant is not a pin). Watched red four ways: each of
+    the three literals mutated, and — the mutation that matters — `node_modules`'s own
+    `TintModes.js` edited to `ADD: 9` with the literal left alone. The e2e pin stays.
+
+    🔴 **The skip path had a false green, and that is the reason to write this down.** The first
+    version asked `createRequire(import.meta.url).resolve('phaser/package.json')`, copying the e2e
+    pin. **Node resolution walks UP the directory tree**, so from a git worktree it found the parent
+    checkout's install: `test:sim-isolated` reported **2150/2150 green with nothing skipped**, having
+    pinned a copy of the engine that run was not using. Resolved from the project root instead, the
+    isolated run reports **2147 passed | 3 skipped**, each naming itself on stderr. That is the
+    *"detect greenness positively, including the COUNT"* rule arriving from a new direction: the
+    count was right, and the run had still checked nothing.
 35. **STILL NOT COVERED — the `?hitstop=` knob's upper bound is a judgement, not a measurement.**
     `MAX_HITSTOP_SCALE = 10` is chosen because `lethal` 9 × 10 = 90 ticks stops being a comparison of
     feel. Nothing measures where that line actually is.
@@ -601,16 +622,32 @@ recorded, or recorded here as still uncovered.
 40. **`shakeDurationMs` was dead code kept alive by a tautological test** — no production caller, and
     its only general assertion compared it against `ticksToMs(...)`, which is its own body. Deleted,
     along with the "Phaser's camera API takes milliseconds" paragraph that justified it.
-41. **`advanceStride` (step 12) is frozen by ACCIDENT, not by design.** RECORDED, not changed. It
-    runs on every tick including frozen ones and is inert only because a frozen player is always in a
-    combat state and `player.ts` zeroes the stride counter for any non-`walk`/`run` gait. Arm a
-    freeze on a locomotion event and footsteps fire from a motionless body. Every other counter's
-    freeze decision is written down; this one now is too, in `playerMotion.ts`'s header.
-42. **`goalEntryTicks` still spends ticks inside a freeze.** RECORDED, not changed. Step 9d runs
-    `stepGoalEntry` ungated, so a player frozen inside the goal rect banks run-in ticks while
-    standing still. Reachable only through a swing already in flight when the sequence arms, for 4-9
-    ticks out of `GOAL_ENTRY_TICKS` — cosmetic, and a guard in step 9d is a sim behaviour change with
-    no measured need behind it.
+41. ~~**`advanceStride` (step 12) is frozen by ACCIDENT, not by design.**~~ **FIXED (fix round 10).**
+    Step 12 now takes `motionRan`, gated the way step 13 is and for the same stated reason — **not**
+    on `frozen()`, which differs on the arming tick, where the body genuinely did move.
+
+    ⚠️ **The recorded harm was wrong, and driving the fixture is what showed it.** Ungated,
+    `advanceStride` cannot fire a footstep from a frozen body, because **a frozen body can never be
+    grounded** — and that is structural, not luck: `resolveCollisions` lands a body only when
+    `player.y > solid.y` AND `previousY <= solid.y`, and a freeze skips step 8, so the two are the
+    same number and the conjunction is unsatisfiable. What it did instead is worse than nothing: it
+    reached its own `!grounded` branch and **RESET the stride to 0 on every frozen tick**, so a
+    freeze restarts the cadence rather than holding it, and the foot one tick from landing lands
+    fifteen ticks later. `hitstop-frozen-counters.test.ts` arms a freeze with no blow behind it —
+    writing `hitstopUntil` directly, which is what a parry or a landing freeze would do — and was
+    watched red on the revert. The claim is corrected in `playerMotion.ts` and `tick.ts` *(C9)*.
+42. ~~**`goalEntryTicks` still spends ticks inside a freeze.**~~ **FIXED (fix round 10) — and it is
+    DEFENCE IN DEPTH, not a live fix.** `stepGoalEntry` takes `motionRan` and holds the counter,
+    beside the airborne hold that was already there. `tsc` enforces the argument: it is required
+    rather than defaulted, so a future call site cannot silently take the old behaviour.
+
+    ⚠️ **The recorded defect was already unreachable**, by the same proof as entry 41: 9d's advance
+    sits behind `!world.player.grounded`, and a frozen body is never grounded. Measured rather than
+    argued — removing the new guard alone leaves the suite green. So the gate pins the INVARIANT
+    (*the run-in banks no ticks from a standing body*) and both arms are recorded in its header:
+    **grounded hold removed, `motionRan` kept → green**, the new guard carrying it alone;
+    **both removed → red**, `expected 4 to be 3` on frozen tick 1. Not decoration, and honest about
+    which of the two lines it is buying.
 
 ---
 

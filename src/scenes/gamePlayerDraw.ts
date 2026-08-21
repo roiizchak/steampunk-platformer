@@ -12,9 +12,26 @@
  * The `import.meta.env.DEV` guards moved WITH their bodies and are still at the point of use, so
  * the branches and the imports they reach are tree-shaken out of `dist/` — `verify-dist` proves the
  * absence, and that proof is what the guards exist for.
+ *
+ * ## 🔴 Phaser is a TYPE-only import here, and that is what makes this file testable
+ *
+ * It was `import Phaser from 'phaser'` — a VALUE import — for no reason at all: every occurrence of
+ * the name in this file is a type position (`Phaser.GameObjects.Sprite`, `Phaser.Scene`). The cost
+ * was not a byte of bundle; it was that `npm run test:sim-isolated` runs the unit suite with the
+ * engine uninstalled, so nothing in that suite could import this module and the whole draw path was
+ * guarded as **source text** instead of behaviour (QA log entry 33). A text gate reds when a call is
+ * deleted; it cannot tell whether the call did the right thing.
+ *
+ * Every other module in this file's import graph — `gameAnimations.ts`, `playAnim.ts`,
+ * `spriteFlash.ts`, all of `src/render/` and all of `src/sim/` — was already type-only or
+ * engine-free, so this one line was the entire blocker. `player-draw-behaviour.test.ts` now drives
+ * `renderPlayerSprite` end to end against a fake sprite, the `enemy-feedback.test.ts` idiom.
+ *
+ * ⚠️ **Keep it type-only.** A value import of the engine anywhere in this graph turns a boundary
+ * check into a module-resolution failure and silently costs criterion 1.3.
  */
 
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
 import {
   ATTACK_CONTACT_FRAME_INDEX,

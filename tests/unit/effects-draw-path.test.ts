@@ -95,7 +95,12 @@ describe('the scene applies the band rather than restating it', () => {
     // that ADD *"would cost one flush every frame, forever, and be invisible in a screenshot"* —
     // which is verbatim the `setDepth(13)` argument this whole file was created to close. Depth got
     // a gate, tint got a gate, and the third field in the same argument did not.
-    expect(createEmitter).toContain('Phaser.BlendModes.NORMAL');
+    // The VALUE is now asserted behaviourally in `effects-behaviour.test.ts`, against what
+    // `setBlendMode` was actually called with — `Phaser.BlendModes.NORMAL` became the pinned literal
+    // `BLEND_MODE_NORMAL` (`engineLiterals.ts`) so that file could be driven at all. What is left
+    // here is the claim behaviour cannot make: that the mode comes from the shared constant rather
+    // than from a bare number nobody would recognise as wrong.
+    expect(createEmitter).toContain('setBlendMode(BLEND_MODE_NORMAL)');
     expect(
       src,
       `a non-NORMAL blend mode forces a batch flush every frame and is invisible in a screenshot`,

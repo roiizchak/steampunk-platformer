@@ -240,7 +240,13 @@ function entryBlocked(world: World): boolean {
   return !overlapsGoal(world) || world.player.state === 'hurt' || world.goalEntryBlocked;
 }
 
-export function stepGoalEntry(world: World): boolean {
+/**
+ * @param motionRan did steps 5-8 run this tick, or did hit-stop skip all four? See the HOLD below.
+ *
+ * Required rather than defaulted on purpose: a default would let a future call site silently take
+ * the pre-fix behaviour, and `tsc` is the only thing that can catch a forgotten boolean.
+ */
+export function stepGoalEntry(world: World, motionRan: boolean): boolean {
   if (world.goal === null) {
     return false;
   }
@@ -265,6 +271,36 @@ export function stepGoalEntry(world: World): boolean {
 
   if (entryBlocked(world)) {
     world.goalEntryTicks = null;
+    return false;
+  }
+
+  /**
+   * 🔴 **THE FREEZE HOLD** (Phase 9 fix round). Same shape as the airborne hold below, same reason.
+   *
+   * Step 9d used to run ungated, so a player frozen by hit-stop inside the goal rect banked run-in
+   * ticks — and the alpha ramp derived from them — while standing perfectly still. Recorded as QA
+   * log entry 42 and ruled closed; every other counter in `tick.ts`'s order freezes, and a lone
+   * exception that exists only because nobody measured a need for it is what the next reader trips
+   * over.
+   *
+   * ⚠️ **It is DEFENCE IN DEPTH, not a live bug fix, and the difference is measured.** Removing this
+   * guard changes no observable behaviour today, because **a frozen body can never be grounded** and
+   * the hold below already refuses. That is structural rather than lucky: landing requires
+   * `player.y > solid.y` *and* `previousY <= solid.y`, and a freeze skips step 8, so the two are the
+   * same number and the conjunction is unsatisfiable. `hitstop-frozen-counters.test.ts` pins the
+   * INVARIANT rather than this line, says so in its header, and shows that with the ground hold
+   * removed this guard alone still carries it.
+   *
+   * ⚠️ **`motionRan`, NOT `frozen(player, tickCount)`**, and they differ on exactly one tick. A
+   * freeze armed at 9b of tick `T` makes `frozen()` true for the rest of `T` — but steps 5-8 already
+   * ran on `T`, so the body really did move and that tick is honestly spent. Step 13 takes the same
+   * value for the same reason; `PlayerMotion.ran` is the authority on the distinction, and getting
+   * it backwards made a jump buffer one tick too generous earlier in this phase.
+   *
+   * ARM and CANCEL both stay ungated above: a hit landing at the threshold must still cancel on the
+   * tick it lands, and arming is not a counter — it writes 0. Only the advance is held.
+   */
+  if (!motionRan) {
     return false;
   }
 
