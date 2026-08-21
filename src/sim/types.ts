@@ -390,4 +390,11 @@ export interface World {
    * Applies to GEOMETRY ONLY — velocities and accelerations are never multiplied by it.
    */
   scale: number;
+  /**
+   * Multiplier on every hit-stop freeze — **1 in every shipped build**. `freezePair` (`hitstop.ts`)
+   * carries why it exists, what `0` does, and why it is not a `TuningKnobs` entry; `?hitstop=N` is
+   * read only by `hitstopScaleFromSearch` (`src/scenes/gameLevelPick.ts`), under
+   * `import.meta.env.DEV`, because `src/sim/` reaches no DOM.
+   */
+  hitstopScale: number;
 }

@@ -160,13 +160,17 @@ export function pickLevel(
 /**
  * Every world input, taken from the parsed level and nothing else.
  *
- * ⚠️ The rule this function exists to keep visible: **not one of these fields is a scene constant.**
- * Move an enemy, a spike, a gear or the exit in Tiled and it moves in the game; there is no
- * scene-side list to drift out of step with the file. `solids` has been plain data since Phase 2 and
- * the resolver in `src/sim/player.ts` has never known where it came from.
+ * ⚠️ The rule this function exists to keep visible: **not one field describing the LEVEL is a scene
+ * constant.** Move an enemy, a spike, a gear or the exit in Tiled and it moves in the game; there is
+ * no scene-side list to drift out of step with the file. `solids` has been plain data since Phase 2
+ * and the resolver in `src/sim/player.ts` has never known where it came from.
  *
  * `goal` is Phase 8's addition, and it is the same rectangle `goalLayer.drawGoal` draws — so the
  * doorway the player sees and the volume step 9d triggers on cannot disagree.
+ *
+ * 🔴 **`hitstopScale` is the one field that is NOT off the `.tmj`**, which is why the sentence above
+ * now says "describing the level" rather than "not one of these fields". It is a DEV-only debug
+ * multiplier and it is 1 in every build a player can run — see `hitstopScaleFromSearch` below.
  */
 export function worldOptionsFor(level: LevelData): CreateWorldOptions {
   return {
@@ -179,5 +183,40 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
     enemies: level.enemies,
     gears: level.gears,
     goal: level.goal,
+    hitstopScale: hitstopScaleFromSearch(),
   };
+}
+
+/**
+ * DEV ONLY — `?hitstop=N` scales every hit-stop freeze. 1 (unchanged) everywhere else.
+ *
+ * The shape is `src/game/audio.ts`'s `stallPerCue` verbatim: the production guard first, the query
+ * read second, and both **at the point of use** so Vite folds the whole branch — and the
+ * `URLSearchParams` reach with it — out of `dist/`. `tools/gen/verify-dist.mjs` is what proves the
+ * fold actually happened.
+ *
+ * 🔴 **The read is HERE and not in `src/sim/`, and that is not a stylistic choice.** `src/sim/`
+ * reaches no DOM at all (CLAUDE.md §3), so a freeze knob that parses `window.location` could not
+ * live beside the freeze. What crosses the boundary is a plain number on `CreateWorldOptions`,
+ * which is exactly what `World.hitstopScale`'s docstring asks for.
+ *
+ * Why it exists: `tests/e2e/phase-09-polish.spec.ts` asserts the player's body holds still for
+ * exactly six ticks after a claw lands, and then runs the same driver again at `?hitstop=0` where
+ * that plateau must be **absent**. Same page, same build, back to back — the committed fixture on
+ * both sides of the threshold *(vault C2)*. Without arm B the plateau assertion is a description of
+ * what the game happens to do, not a gate that can go red.
+ *
+ * Anything unparseable, negative or absent is 1. A debug flag that silently half-applies is worse
+ * than one that is ignored, so the fallback is always "the shipped behaviour".
+ */
+function hitstopScaleFromSearch(): number {
+  if (!import.meta.env.DEV) {
+    return 1;
+  }
+  const raw = new URLSearchParams(globalThis.location?.search ?? '').get('hitstop');
+  if (raw === null) {
+    return 1;
+  }
+  const scale = Number(raw);
+  return Number.isFinite(scale) && scale >= 0 ? scale : 1;
 }
