@@ -27,12 +27,24 @@
  * `x += vx` leaves `x` unchanged and the freeze appears to work until the day someone lands a hit
  * at a run.
  *
- * ⚠️ **`advanceStride` (step 12) is NOT gated, and today that is luck rather than design.**
- * `tick.ts` runs it on every tick including frozen ones. It is inert only because a frozen player is
- * always in a combat state and `player.ts` zeroes the stride counter for any gait that is not `walk`
- * or `run`. Arm a freeze on a locomotion event — a parry, a landing freeze, a `?hitstop` experiment
- * on something that is not a blow — and footsteps fire out of a motionless body. Every OTHER
- * counter's freeze decision in this project is written down; this one is written down here.
+ * ✅ **`advanceStride` (step 12) IS gated now** — and it was not, for most of Phase 9. It ran on every
+ * tick including frozen ones, and was inert only because a frozen player happens always to be in a
+ * combat state, with `player.ts` zeroing the stride counter for any gait that is not `walk` or `run`.
+ *
+ * ⚠️ **The gate round recorded that ungated it would fire FOOTSTEPS from a motionless body. Driving
+ * it showed that it cannot**, and the reason closes the question for every counter in the order:
+ * A frozen body can never be GROUNDED, and that is structural rather than lucky:
+ * `resolveCollisions` lands a body only when `player.y > solid.y` AND `previousY <= solid.y`, and a
+ * freeze skips step 8, so the two are the same number and the conjunction is unsatisfiable.
+ * So `advanceStride`'s own `!player.grounded` branch is reached on every frozen tick — and it does
+ * not merely decline to emit, it **RESETS the stride to 0**. That is the real cost, and it is a live
+ * one: a freeze on a locomotion event restarts the cadence instead of holding it, so the foot that
+ * was one tick from landing lands fifteen ticks later. Step 12 now takes `ran` like step 13 does;
+ * `hitstop-frozen-counters.test.ts` drives it and carries the proof above.
+ *
+ * **Step 9d takes it too** — `goalEntryTicks` was the last counter in the order still spending ticks
+ * inside a freeze. There the same proof makes the guard **defence in depth rather than a live fix**,
+ * because 9d's advance is already behind a `grounded` test; `goal.ts` says so at the hold.
  *
  * **`previousX`/`previousY` are captured BEFORE the gate**, so steps 9, 9b and 9c still receive both
  * endpoints of "this tick's motion". While frozen the two are equal, which is exactly right: the
