@@ -91,7 +91,7 @@ import {
   stormCount,
 } from './effectMutation';
 import { bootToGame } from './gameHarness';
-import { median } from './levelPerf';
+import { median, medianPairedDelta } from './levelPerf';
 import { DEV_FLEET_COUNT } from './perfBudget';
 import { counts } from './perfSampler';
 import { assertRealGpu } from './realGpu';
@@ -120,9 +120,11 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
    *
    * ### The sweep is what earns the bound
    *
-   * `SWEEP_ALIVE` is walked `SWEEP_ROUNDS` times, alternating direction, and the per-point medians
-   * must be **monotone non-decreasing in N** before any threshold is applied to any of them. This
-   * gate does not exist until they order.
+   * `SWEEP_ALIVE` is walked `SWEEP_ROUNDS` times, alternating direction, and the cost must be
+   * **monotone non-decreasing in N** before any threshold is applied to any of it. This gate does not
+   * exist until it orders. Each gap is the **median of the per-round deltas**, the same reduction the
+   * pairs below take and for the same reason; `SWEEP_ALIVE`'s docstring has the six runs that ordered
+   * 1/6 the other way, and why sampling harder cannot rescue a gap under the clock's grid.
    *
    * ### The pairs are what make the absolute number trustworthy
    *
@@ -171,6 +173,12 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
       }
     }
     const sweepWork = SWEEP_ALIVE.map((n) => median(sweep.get(n)!));
+    // 🔴 Every sweep delta below is the MEDIAN OF THE PER-ROUND DELTAS, never the delta of two
+    // medians — `levelPerf.ts`'s `medianPairedDelta`, the correction this file's own `PAIRS`
+    // docstring cites and the sweep used to ignore. Adjacent points are visited adjacently in time,
+    // so a per-round subtraction cancels the drift between rounds that a difference of medians keeps.
+    const sweepDelta = (from: number, to: number): number =>
+      medianPairedDelta(sweep.get(from)!, sweep.get(to)!);
     const table = SWEEP_ALIVE.map(
       (n, i) =>
         `N=${String(n).padStart(4)}  work ${sweepWork[i]!.toFixed(3)} ms  ` +
@@ -211,17 +219,21 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
 
     // The amplified storm, divided back. Floored at zero: a delta under the noise can come back
     // negative, and "particles cost less than nothing" is the same statement as "under the floor".
-    const stormDelta = sweepWork[SWEEP_ALIVE.indexOf(STORM_ALIVE)]! - sweepWork[0]!;
-    const halfIndex = SWEEP_ALIVE.length - 2;
-    const halfN = SWEEP_ALIVE[halfIndex]!;
+    const stormDelta = sweepDelta(0, STORM_ALIVE);
+    const halfN = SWEEP_ALIVE[SWEEP_ALIVE.length - 2]!;
+    const halfDelta = sweepDelta(0, halfN);
     const perParticle = Math.max(0, stormDelta / STORM_ALIVE);
-    const perParticleHalf = Math.max(0, (sweepWork[halfIndex]! - sweepWork[0]!) / halfN);
+    const perParticleHalf = Math.max(0, halfDelta / halfN);
 
     const fmt = (v: number[]): string => v.map((x) => x.toFixed(3)).join('/');
     const detail = [
       '',
       `[9.5] renderer ${renderer}`,
       ...table.map((row) => `      ${row}`),
+      `      sweep gaps (median of per-round deltas) ` +
+        SWEEP_ALIVE.slice(1)
+          .map((n, i) => `${SWEEP_ALIVE[i]}->${n} ${sweepDelta(SWEEP_ALIVE[i]!, n).toFixed(3)} ms`)
+          .join(', '),
       `      peak ${peak} on ${fmt(arms.on.work)}`,
       `      peak ${peak} off ${fmt(arms.off.work)}`,
       `      pair deltas ${fmt(pairDeltas)}`,
@@ -271,21 +283,19 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
 
     // ── Guard 1: the statistic ORDERS its own mutation ─────────────────────────────────────────
     //
-    // 🔴 Compared in CLOCK STEPS, not in raw doubles, and that is a correction the first run forced.
-    // Every `workMedianMs` is a difference of two `performance.now()` readings, so it is an exact
-    // multiple of `CLOCK_GRID_MS` carrying float dirt in the digits below it — and the first sweep
-    // read a clean 0.600/0.600/0.600/0.700/0.800/1.100 while failing on `0.6000000089 >= 0.6000000119`.
-    // A genuine one-step inversion still fails here; a tie the clock cannot resolve does not. See
-    // `CLOCK_GRID_MS` for why the ties at the bottom of the table are the instrument and not the gate.
-    const steps = sweepWork.map((ms) => Math.round(ms / CLOCK_GRID_MS));
+    // 🔴 Rounded to CLOCK STEPS, not compared as raw doubles: every `workMedianMs` is a difference of
+    // two `performance.now()` readings, an exact multiple of `CLOCK_GRID_MS` carrying float dirt
+    // below it, and the first sweep failed on `0.6000000089 >= 0.6000000119`. A genuine one-step
+    // inversion still fails; a tie the clock cannot resolve does not.
     for (let i = 1; i < SWEEP_ALIVE.length; i += 1) {
+      const gap = sweepDelta(SWEEP_ALIVE[i - 1]!, SWEEP_ALIVE[i]!);
       expect(
-        steps[i]!,
+        Math.round(gap / CLOCK_GRID_MS),
         `${SWEEP_ALIVE[i]} particles measured CHEAPER than ${SWEEP_ALIVE[i - 1]} ` +
-          `(${sweepWork[i]!.toFixed(3)} ms against ${sweepWork[i - 1]!.toFixed(3)} ms). A statistic ` +
-          'that cannot order its own mutation is not fixed by moving a bound — it is replaced. See ' +
-          `the sweep table above.${detail}`,
-      ).toBeGreaterThanOrEqual(steps[i - 1]!);
+          `(${gap.toFixed(3)} ms per-round paired delta). A statistic that cannot order its own ` +
+          'mutation is not fixed by moving a bound — it is replaced. See the sweep table above, and ' +
+          `SWEEP_ALIVE's docstring for the gap widths this instrument can and cannot resolve.${detail}`,
+      ).toBeGreaterThanOrEqual(0);
     }
 
     // ── Guard 2: the amplifier amplified ───────────────────────────────────────────────────────
@@ -302,16 +312,17 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // 🔴 And the SAME premise under the HALF amplification, which Guard 3 divides by.
     //
     // This is the tightest false-red route in the file and it used to be unguarded and undisclosed.
-    // Guard 1 permits equality, so `sweepWork[512] === sweepWork[0]` is a legal clean outcome —
-    // `perParticleHalf` is then 0, Guard 3's epsilon divisor takes over, and the spread reds at
-    // ~5e5. Across seven clean sweeps the 512-vs-0 gap fell to two clock steps three times, against
-    // five for the 1024 gap.
+    // Guard 1 permits equality, so a half gap of exactly zero is a legal clean outcome —
+    // `perParticleHalf` is then 0, Guard 3's epsilon divisor takes over, and the spread reds at ~5e5.
+    //
+    // 🔴 Its own advice — *raise the sweep points* — is what was taken. At the old half point of 512
+    // this bound sat 1-3 clock steps from the reading and red 1 run in 6 the moment Guard 1 stopped
+    // firing first, which is a false red hiding behind another false red. `halfN` is 1024 now.
     //
     // ⚠️ **The message names QUANTISATION, not non-linearity, and that is the point of the guard.**
     // Failing through Guard 3 instead would tell the next reader "the cost does not scale, withdraw
     // the divide-back" — which under this project's rules sends them to REPLACE THE STATISTIC over
     // one step of `performance.now()` grid. That is the mistake the first sweep already made.
-    const halfDelta = sweepWork[halfIndex]! - sweepWork[0]!;
     expect(
       halfDelta,
       `${halfN} particles measured ${halfDelta.toFixed(4)} ms above the control — under ` +

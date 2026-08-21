@@ -92,6 +92,25 @@ export const median = (xs: number[]): number => {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 };
 
+/**
+ * **The median of the per-pair deltas — never the delta of the two medians.**
+ *
+ * `phase-07-perf.spec.ts` recorded the correction and `phase-09-perf.spec.ts:129-132` cites it for
+ * its `PAIRS` block: two arms sampled seconds apart share whatever the machine was doing at that
+ * moment, so subtracting *within* a pair cancels the drift and subtracting two medians taken minutes
+ * apart does not. Medians-of-medians there could not separate a clean run from a mutated one that
+ * per-pair separated with no overlap at all.
+ *
+ * 🔴 It lives here, beside `median`, because `phase-09-perf.spec.ts`'s **sweep** stated that
+ * principle in a docstring and then reduced its own points the other way. Six back-to-back runs on
+ * `ca3814f` ordered 1/6 under the delta of medians and 6/6 under this, on the same readings. A
+ * primitive is harder to state and then not use than a paragraph is.
+ *
+ * `before` and `after` must be the same length and index-aligned: entry `i` of each is one pair.
+ */
+export const medianPairedDelta = (before: number[], after: number[]): number =>
+  median(after.map((v, i) => v - before[i]!));
+
 /** A save that unlocks everything, so any level can be entered directly. */
 export function unlockAll(): string {
   const levels: Record<string, { completed: boolean; bestGears: number }> = {};
