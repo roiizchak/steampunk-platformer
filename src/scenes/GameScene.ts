@@ -204,7 +204,7 @@ export class GameScene extends Phaser.Scene {
     camera.setBounds(cam.bounds.x, cam.bounds.y, cam.bounds.w, cam.bounds.h);
     camera.setZoom(cam.zoom);
     camera.startFollow(this.playerSprite, false, cam.lerpX, cam.lerpY);
-    this.effects = attachEffects(this, this.world);
+    this.effects = attachEffects(this, this.world, this.playerSprite);
 
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
     // "the gate passed" and "the game is running" are different facts. If this scene fails to

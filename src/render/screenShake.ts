@@ -1,11 +1,17 @@
 /**
  * Screen shake — the DECISION, engine-free *(vault 2.12)*.
  *
- * Phaser owns the mechanism: `camera.shake(duration, intensity, force)` already jitters the camera
- * and already decays its own elapsed time. Reimplementing that here would be a second copy of
- * something the engine does correctly. What lives here is the *inputs* (how long, how hard), the
- * *arbitration* (may this shake replace the one already running), and the *predicate* that says
- * whether a rendered offset was legal.
+ * ⚠️ **`camera.shake()` is not used anywhere in this project, and this header used to say the
+ * opposite** — that Phaser owned the mechanism and that reimplementing it here would be a duplicate.
+ * Every clause of that was false by the time it shipped, and it was the first thing a reader
+ * auditing criterion 9.2 would have been told: that the timing and the decay live inside the engine,
+ * which is precisely the arrangement 9.2 forbids *(C9)*.
+ *
+ * What actually lives here is the whole shake: the *inputs* (how long, how hard), the *arbitration*
+ * (may this shake replace the one already running), the **jitter itself** (`shakeOffset`, a pure
+ * function of the tick), and the *predicate* that says whether a rendered offset was legal.
+ * `gameEffects.applyShake` writes `camera.setPosition(base + offset)` from `shakeOffset` on every
+ * frame and awaits no event — its docstring carries the 9.2 argument for why.
  *
  * ## Why the arbitration cannot be left to Phaser
  *
@@ -34,16 +40,16 @@
  * answer is recomputed from `(state, tick)`, so a scene restart, a death mid-shake and a level change
  * need no cancellation path. A stale `ShakeState` decays to zero on its own and stays there.
  *
- * ## Milliseconds
+ * ## No milliseconds
  *
- * Every duration in this project is an integer count of 60 Hz ticks. `shakeDurationMs` is the ONLY
- * place in `src/render/` where a millisecond exists, and it exists solely because Phaser's camera API
- * takes one. It delegates to the sim's `ticksToMs` rather than restating the arithmetic — a second
- * copy would diverge the day one of them is corrected *(vault 5.3)*.
+ * Every duration in this file is an integer count of 60 Hz ticks, with no conversion anywhere. There
+ * was one — `shakeDurationMs`, justified by "Phaser's camera API takes milliseconds" — and it was
+ * **deleted** rather than kept, because no camera API is called: it had no production caller, and its
+ * only general assertion compared it against `ticksToMs(...)`, which is its own body. A function
+ * whose test restates its implementation cannot fail for any edit that keeps the delegation.
  */
 
 import { HITSTOP_TICKS, type ImpactClass } from '../sim/hitstop';
-import { ticksToMs } from '../sim';
 
 export interface ShakeCommand {
   durationTicks: number;
@@ -156,16 +162,6 @@ export function shakeSettled(state: ShakeState | null, tick: number): boolean {
 }
 
 /**
- * Phaser's camera API takes milliseconds. This is the only place in `src/render/` that one exists.
- *
- * Delegates to the sim's `ticksToMs` — a second implementation of `ticks * 1000 / 60` would be a
- * verbatim duplicate that silently diverges the day one of them is corrected *(vault 5.3)*.
- */
-export function shakeDurationMs(cmd: ShakeCommand): number {
-  return ticksToMs(cmd.durationTicks);
-}
-
-/**
  * The camera jitter, in [-1, 1], as a pure function of the tick.
  *
  * **No `Math.random`.** Two incommensurate frequencies so the two axes never trace a diagonal, and a
@@ -224,8 +220,11 @@ export function shakeOffset(
  *     to the peak box below — reporting a camera thrown ±9.6 px on every frame of the freeze as
  *     inside the envelope. A later e2e spec imports this function *as* its assertion for "the shake
  *     starts after the freeze", so that was a false green waiting to happen.
- *  2. **While running — the PEAK box, not `shakeEnergy`.** Phaser's `Shake` effect jitters at a
- *     constant intensity for the whole duration; it does not taper. `shakeEnergy`'s linear decay is
+ *  2. **While running — the PEAK box, not `shakeEnergy`.** `shakeOffset` jitters at a constant
+ *     amplitude for the whole duration; it does not taper — read its two lines, the only
+ *     tick-dependent terms are the sines. (This used to be justified by the same property of
+ *     *Phaser's* `Shake` effect, which nothing in this project runs: the bound was right and the
+ *     stated reason was a fact about code that never executes.) `shakeEnergy`'s linear decay is
  *     *our* arbitration currency — a claim about which shake deserves the camera next, not a claim
  *     about what is drawn. Bounding this regime by the decayed value would false-red on a correct
  *     camera on almost every frame, which is exactly the class of false red this suite has already

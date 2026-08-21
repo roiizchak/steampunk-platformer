@@ -236,6 +236,16 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
  * `Number.isFinite` left all 2060 tests green, so the fix that closed a HIGH review finding was
  * itself decoration *(C2)*.
  */
+/**
+ * The largest `?hitstop=` multiplier this knob will accept.
+ *
+ * 10 is `lethal` 9 × 10 = **90 ticks**, a second and a half of held frame — far past the point where
+ * a clip stops being a comparison of *feel* and becomes a comparison of *patience*, which is all
+ * criterion 9.8's blind pick needs. Anything above it is a typo or a probe, and the fallback for
+ * both is the shipped behaviour.
+ */
+export const MAX_HITSTOP_SCALE = 10;
+
 export function hitstopScaleFromSearch(search: string): number {
   if (!import.meta.env.DEV) {
     return 1;
@@ -247,7 +257,13 @@ export function hitstopScaleFromSearch(search: string): number {
   const scale = Number(raw);
   // `isSafeInteger`, not `isInteger`: `Number.isInteger(1e308)` is **true** — it is a float with no
   // fractional part — and `1e308 * HITSTOP_TICKS.light` overflows to `Infinity`, which makes
-  // `hitstopUntil` a deadline no tick count can ever pass. That was the third bullet of the review
-  // finding this predicate was written for, and `isInteger` alone did not close it.
-  return Number.isSafeInteger(scale) && scale >= 0 ? scale : 1;
+  // `hitstopUntil` a deadline no tick count can ever pass.
+  //
+  // 🔴 **`isSafeInteger` NARROWED that hole; `MAX_HITSTOP_SCALE` is what CLOSES it**, and the
+  // difference is the whole finding. `Number.isSafeInteger(9007199254740991)` is `true`, so
+  // `?hitstop=9007199254740991` was accepted, produced a perfectly FINITE deadline of 3.6e16 ticks
+  // — about 19 million years at 60 Hz — and froze the body for good. Dying does not release it
+  // either: `combatCounter` is frozen too, so `deathWindowClosed` never becomes true. An overflow
+  // guard cannot see that, because nothing overflowed. Only a bound can.
+  return Number.isSafeInteger(scale) && scale >= 0 && scale <= MAX_HITSTOP_SCALE ? scale : 1;
 }

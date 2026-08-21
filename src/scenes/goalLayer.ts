@@ -172,11 +172,18 @@ export function animateGoalReached(
   scene: Phaser.Scene,
   goalObject: Phaser.GameObjects.GameObject,
 ): void {
-  scene.tweens.add({
+  // 🔴 Criterion 9.3 — HELD, and stopped by its handle on scene shutdown. It was fire-and-forget.
+  //
+  // The race is real and the pulse is the one tween in the repo that had it: ≈533 ms of yoyo against
+  // the goal container, while `gameComplete.bindContinue` starts the next level on ANY key — so a
+  // player who presses ENTER promptly leaves this running against an object `scene.start` destroys.
+  // `once` rather than `on`, so the listener dies with the scene it was registered on.
+  const pulse = scene.tweens.add({
     targets: goalObject,
     alpha: 0.25,
     duration: GOAL_PULSE_HALF_MS,
     yoyo: true,
     repeat: 1,
   });
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => pulse.stop());
 }

@@ -115,6 +115,31 @@ describe('the freeze lengths themselves', () => {
     freezePair(b, b, 'playerHurt', 100, 0.3);
     expect(Number.isInteger(b.hitstopUntil)).toBe(false);
   });
+
+  /**
+   * 🔴 And the rule is now enforced where the rule LIVES, not only at the DOM parser.
+   *
+   * The paragraph above is honest about its own limit: it asserts the CONSEQUENCE because the only
+   * production guard was one call site in a scene file. That leaves any fixture, dev spawn or future
+   * caller of `createWorld` free to put a float — or a 19-million-year deadline — inside `src/sim/`,
+   * against CLAUDE.md §3. `world.ts` already demonstrated the guard shape one line above for
+   * `scale`; this is the same shape for the same reason.
+   */
+  it('createWorld REFUSES a fractional or negative hitstopScale, and accepts the shipped ones', () => {
+    const opts = { seed: 1, scale: SCALE };
+    expect(() => createWorld({ ...opts, hitstopScale: 1.5 })).toThrow(/hitstopScale/);
+    expect(() => createWorld({ ...opts, hitstopScale: -1 })).toThrow(/hitstopScale/);
+    expect(() => createWorld({ ...opts, hitstopScale: Number.NaN })).toThrow(/hitstopScale/);
+    expect(() => createWorld({ ...opts, hitstopScale: Number.POSITIVE_INFINITY })).toThrow(
+      /hitstopScale/,
+    );
+    // Both sides: the guard must not reject what the knob legitimately produces, or the e2e's
+    // `?hitstop=0` arm — the committed fixture the freeze assertion goes red against — cannot boot.
+    for (const scale of [0, 1, 2, 10, undefined]) {
+      expect(() => createWorld({ ...opts, hitstopScale: scale })).not.toThrow();
+    }
+    expect(createWorld({ ...opts, hitstopScale: 0 }).hitstopScale).toBe(0);
+  });
 });
 
 describe('the player→enemy freeze, driven at a run', () => {

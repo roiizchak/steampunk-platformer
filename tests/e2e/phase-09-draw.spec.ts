@@ -61,7 +61,9 @@ import {
 } from './effectMutation';
 import { bootToGame } from './gameHarness';
 import { counts } from './perfSampler';
+import { installRecorder, stopDriving, TAIL_TICKS, waitFor } from './polishSeries';
 import { assertRealGpu } from './realGpu';
+import { TINT_MODE_ADD } from '../../src/scenes/spriteFlash';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -197,5 +199,159 @@ test.describe('Phase 9 — criterion 9.6, the drawn-particle count', () => {
     // ── The enemies are not what changed ───────────────────────────────────────────────────────
     expect(onCounts.sprites, 'the enemy sprite count moved between arms').toBe(offCounts.sprites);
     expect(onCounts.opaque, 'the enemy drawn count moved between arms').toBe(offCounts.opaque);
+  });
+});
+
+/**
+ * 🔴 Does a GAME EVENT produce particles? Nothing in the project asked, and the answer was untested.
+ *
+ * `gameEffects.ts`'s `emit` mutated to `emitter.explode(0, burst.x, burst.y)` — **every in-game
+ * spark, steam and dust burst drawing nothing** — left the unit suite at 2073/2073 with `tsc` clean.
+ * Deleting `strike()`'s spark loop outright was also green.
+ *
+ * And the two criteria that look like they cover it do not, for a mechanical reason rather than an
+ * inferred one: `installStorm` (`effectMutation.ts`) calls `emitter.explode(deficit, x, y)` on
+ * handles taken straight from `scene.effects.emitters()`, so **9.5 and 9.6 measure the storm and
+ * never `gameEffects.emit` at all**. `effectBudget.ts` disclosed the narrowing and then cited a
+ * covering gate that did not exist.
+ *
+ * So: **no storm here.** The only thing that fires an emitter in this test is the game, reacting to a
+ * landing the player actually performed. That is the whole design.
+ *
+ * ## Why a per-frame PEAK and not a point read
+ *
+ * `dust.lifespanTicks` is a fraction of a second, and this harness drains ~2.7 sim ticks per frame
+ * right after boot — a `particleCounts(page)` taken after the wait resolves would very often read a
+ * burst that has already expired, and report "no particles" for a build that drew them. The sampler
+ * runs once per animation frame inside the page and returns an aggregate *(TESTING-RULES: a wait
+ * expressed in ticks cannot bound a sampling window)*.
+ */
+test.describe('Phase 9 — the game’s OWN trigger path emits particles', () => {
+  test('a landing the player performed produces drawn dust, with no storm installed', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+
+    await bootToGame(page);
+    const renderer = await assertRealGpu(page, 'trigger-path');
+
+    // Installed BEFORE anything is triggered, so no burst can happen between boot and the sampler.
+    await page.evaluate(() => {
+      type G = { __phaserGame: { scene: { getScene(k: string): unknown } } };
+      const w = window as unknown as G & { __peak?: unknown; __peakRaf?: number };
+      const scene = w.__phaserGame.scene.getScene('Game') as {
+        effects: { emitters(): Record<string, unknown> };
+        cameras: { main: unknown };
+      };
+      const camera = scene.cameras.main;
+      const peak: Record<string, { alive: number; drawnFrames: number; emitting: boolean }> = {};
+      const step = (): void => {
+        const emitters = scene.effects.emitters() as Record<
+          string,
+          {
+            getAliveParticleCount(): number;
+            willRender(c: unknown): boolean;
+            emitting: boolean;
+          }
+        >;
+        for (const [kind, emitter] of Object.entries(emitters)) {
+          const alive = emitter.getAliveParticleCount();
+          const entry = (peak[kind] ??= { alive: 0, drawnFrames: 0, emitting: false });
+          entry.alive = Math.max(entry.alive, alive);
+          entry.emitting ||= emitter.emitting;
+          if (alive > 0 && emitter.willRender(camera)) entry.drawnFrames += 1;
+        }
+        w.__peakRaf = requestAnimationFrame(step);
+      };
+      w.__peak = peak;
+      w.__peakRaf = requestAnimationFrame(step);
+    });
+
+    await installRecorder(page);
+    // Positive terminal conditions only, never a sleep: the harness's own resolution first, then a
+    // real touchdown recorded in the tick series, then a tail long enough to hold the burst.
+    await waitFor(page, { kind: 'run', n: 12 });
+    await page.keyboard.down('Space');
+    await waitFor(page, { kind: 'land', n: TAIL_TICKS });
+    await page.keyboard.up('Space');
+
+    const peak = await page.evaluate(() => {
+      const w = window as unknown as {
+        __peak: Record<string, { alive: number; drawnFrames: number; emitting: boolean }>;
+        __peakRaf?: number;
+      };
+      if (w.__peakRaf !== undefined) cancelAnimationFrame(w.__peakRaf);
+      return w.__peak;
+    });
+    await stopDriving(page);
+
+    // eslint-disable-next-line no-console
+    console.log(
+      `[trigger] renderer ${renderer} | ` +
+        EFFECT_KINDS.map(
+          (k) => `${k} alive ${peak[k]?.alive} frames ${peak[k]?.drawnFrames}`,
+        ).join(' | '),
+    );
+
+    // Type before value *(vault C1)* — every number here came off the untyped `__phaserGame` route,
+    // and a hook that returned nothing would pass every comparison below vacuously.
+    for (const kind of EFFECT_KINDS) {
+      expect(peak[kind], `no sample was recorded for ${kind}`).toBeDefined();
+      expect(typeof peak[kind].alive, `${kind}.alive must be a number`).toBe('number');
+    }
+
+    // 🔴 THE assertion. A landing is a `Burst` decided by `landingDust` and turned into particles by
+    // `gameEffects.emit`. Zero here means the whole trigger path is dead — which is exactly the
+    // state `explode(0, …)` produces, and exactly what every other gate in this phase reported as
+    // healthy.
+    expect(
+      peak.dust.alive,
+      `the player landed and the dust emitter never held a particle. The burst path from ` +
+        `landingDust -> emit -> explode is dead; 9.5 and 9.6 cannot see this because installStorm ` +
+        `calls explode on the emitter handles directly.`,
+    ).toBeGreaterThan(0);
+
+    // And they were SUBMITTED, not merely alive. `alive` is emitter bookkeeping — at `setScale(0)`
+    // every particle stays alive, visible and positioned, and draws nothing (9.6's whole argument).
+    expect(
+      peak.dust.drawnFrames,
+      'dust particles were alive but the emitter never passed willRender',
+    ).toBeGreaterThan(0);
+
+    // Non-vacuity of a different kind: these are EXPLOSIONS. A `createEmitter` mutated to
+    // `emitting: true` would give every kind a permanent fountain at (0, 0) and satisfy the two
+    // assertions above without a landing ever happening.
+    for (const kind of EFFECT_KINDS) {
+      expect(peak[kind].emitting, `${kind} is a continuous fountain, not a burst`).toBe(false);
+    }
+  });
+});
+
+/**
+ * The one Phaser constant this project writes down as a literal, pinned against the engine.
+ *
+ * `spriteFlash.ts` cannot import `Phaser.TintModes` — both of its callers must stay reachable with
+ * the engine uninstalled, because `npm run test:sim-isolated` runs the unit suite that way. So the
+ * number lives there with the source line that fixes it, and this is where the fixing happens: a
+ * Playwright spec runs in Node, where reading the vendored package costs nothing.
+ *
+ * ⚠️ If this reds, change the CONSTANT, never this assertion.
+ */
+test.describe('the tint-mode literal matches the vendored engine', () => {
+  test('TINT_MODE_ADD is Phaser.TintModes.ADD', async () => {
+    const { createRequire } = await import('node:module');
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const require = createRequire(import.meta.url);
+    const root = dirname(require.resolve('phaser/package.json'));
+    const src = readFileSync(join(root, 'src', 'renderer', 'TintModes.js'), 'utf8');
+    const match = /\bADD:\s*(\d+)/.exec(src);
+    expect(match, 'TintModes.js no longer declares ADD — read it before changing the constant')
+      .not.toBeNull();
+    expect(Number(match![1])).toBe(TINT_MODE_ADD);
+    // Both sides: the file must also still be the one that defines the mode this project avoids,
+    // or a match on some other `ADD:` in some other table would pass vacuously.
+    expect(/\bFILL:\s*\d+/.test(src)).toBe(true);
+    expect(/\bMULTIPLY:\s*0/.test(src)).toBe(true);
   });
 });

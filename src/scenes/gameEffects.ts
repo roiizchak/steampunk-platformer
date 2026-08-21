@@ -52,7 +52,9 @@ import {
   SPARK_CONE_DEG,
   deathSteam,
   hurtVent,
+  impactOf,
   impactSparks,
+  landSquash,
   landingDust,
   type Burst,
   type EffectKind,
@@ -67,7 +69,7 @@ import {
   type ShakeState,
 } from '../render/screenShake';
 import { ticksToMs } from '../sim';
-import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../sim/hitstop';
+import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
 
 /** What `GameScene` holds on to after attaching the effects. */
@@ -139,26 +141,26 @@ function ensureParticleTexture(scene: Phaser.Scene, kind: EffectKind, spec: Emit
   return key;
 }
 
-/**
- * `hitstopUntil - lastHitTick` IS the impact class — `hitstop.ts` says so on the field itself.
- *
- * Built from `HITSTOP_TICKS` rather than from three literals, so a retune of a freeze length cannot
- * leave this lookup pointing at a class nothing writes any more. The three lengths are distinct
- * (4 / 9 / 6), which is what makes the inversion total; `undefined` for anything else, and the
- * caller draws nothing rather than guessing.
- */
-const IMPACT_BY_FREEZE = new Map<number, ImpactClass>(
-  (Object.keys(HITSTOP_TICKS) as ImpactClass[]).map((impact) => [HITSTOP_TICKS[impact], impact]),
-);
-
-function impactOf(body: Readonly<Freezable>): ImpactClass | undefined {
-  return IMPACT_BY_FREEZE.get(body.hitstopUntil - body.lastHitTick);
-}
-
 /** Enough of an enemy to spend particles on. Structural, exactly like `Freezable` itself. */
 type Struck = Readonly<Freezable> & { x: number; y: number; hp: number };
 
-export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachment {
+/**
+ * @param playerSprite the drawn player, for the landing squash.
+ *
+ * 🔴 **The squash is here rather than in `gamePlayerDraw.ts` because the LANDING EDGE is here.**
+ * The other three sprite feedbacks (`flinchOffset`, `hitFlashAlpha`, `iframeAlpha`) are pure
+ * functions of `world.player` and are applied in `gamePlayerDraw.ts`, where the drawn position they
+ * offset is computed. `landSquash` is the one that needs a tick the sim does not carry — the
+ * touchdown zeroes `vy` in the same tick it sets `grounded`, so "when did we land" only exists in
+ * the frame-to-frame `wasGrounded` cursor this closure already keeps for the dust. Adding a second
+ * copy of that cursor to the player draw path is the duplicate this project keeps paying for
+ * *(vault 5.3)*; adding a counter to `PlayerSim` would push `src/sim/types.ts` past 400 lines.
+ */
+export function attachEffects(
+  scene: Phaser.Scene,
+  world: World,
+  playerSprite: Phaser.GameObjects.Sprite,
+): EffectAttachment {
   const built = {} as Record<EffectKind, Phaser.GameObjects.Particles.ParticleEmitter>;
   for (const kind of KINDS) {
     built[kind] = createEmitter(scene, kind, EMITTER_SPECS[kind]);
@@ -170,6 +172,8 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
   /** Landing is the one moment with no sim field to read: `vy` is zeroed by the touchdown itself. */
   let wasGrounded = world.player.grounded;
   let lastAirVy = 0;
+  /** The tick of the most recent touchdown, or `null` for none yet. Drives `landSquash`. */
+  let landedTick: number | null = null;
   /**
    * The camera's unshaken position, captured before anything moves it. `destroy()` restores exactly
    * this, and `render()` writes exactly this on every settled frame — `shakeWithinEnvelope` demands
@@ -203,7 +207,7 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
     shake = { startedTick: shakeStartTick(impact, hitTick), cmd };
   };
 
-  return {
+  const attachment: EffectAttachment = {
     render(w, camera) {
       const tick = w.tickCount;
       // A new world (a restart, or the next level) starts at 0 while the cursor still holds the last
@@ -213,6 +217,7 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
         cursor = 0;
         wasGrounded = w.player.grounded;
         shake = null;
+        landedTick = null;
       }
       const fresh = (hitTick: number): boolean => hitTick > cursor && hitTick <= tick;
 
@@ -220,7 +225,12 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
         if (body.hitstopUntil < 0 || !fresh(body.lastHitTick)) {
           return;
         }
-        const impact = impactOf(body);
+        // ⚠️ **The enemy loop is the ONLY route to a `playerHurt` spark burst.** A scavenger's claw
+        // calls `freezePair(player, scavenger, 'playerHurt', …)`, so the SCAVENGER's own freeze
+        // resolves to `playerHurt` here and sparks fly at the enemy for a hit the player took. That
+        // is deliberate — it is what makes `SPARK_COUNT.playerHurt` reachable at all — and the hurt
+        // vent below is the separate, player-side half of the same moment.
+        const impact = impactOf(body, w.hitstopScale);
         if (impact === undefined) {
           return;
         }
@@ -241,7 +251,8 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
       // `playerHurt` test is what separates "took a hit" from "landed one", and it is why this is
       // not a second `strike()`.
       const player = w.player;
-      if (player.hitstopUntil >= 0 && fresh(player.lastHitTick) && impactOf(player) === 'playerHurt') {
+      const hurt = impactOf(player, w.hitstopScale) === 'playerHurt';
+      if (player.hitstopUntil >= 0 && fresh(player.lastHitTick) && hurt) {
         emit(hurtVent(player.x, player.y, player.facing), specCone('steam'));
         arm('playerHurt', player.lastHitTick, tick);
       }
@@ -256,11 +267,23 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
           emit(dust, specCone('dust'));
         }
         arm('land', tick, tick);
+        // 🔴 Armed on EVERY touchdown, not only the ones the dust threshold accepts. A step-down
+        // too small to puff still squashes — the squash is the body's own weight arriving, and
+        // gating it on `dust !== null` would make the character land differently depending on how
+        // fast they happened to be falling on a 1 px drop.
+        landedTick = tick;
       }
       if (!player.grounded) {
         lastAirVy = player.vy;
       }
       wasGrounded = player.grounded;
+
+      // The landing squash, written ABSOLUTELY every frame from `(landedTick, tick)`. Nothing is
+      // armed and nothing is torn down: past `LAND_SQUASH_TICKS` this is `{1, 1}` forever, which is
+      // the same self-correcting shape as `applyShake`'s settled branch. `renderPlayerSprite` runs
+      // earlier in the frame and never touches scale, so this is the only writer.
+      const squash = landSquash(landedTick === null ? null : tick - landedTick);
+      playerSprite.setScale(squash.sx, squash.sy);
 
       applyShake(camera, tick);
       cursor = tick;
@@ -285,6 +308,25 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
       }
     },
   };
+
+  // 🔴 `destroy()` had NO production caller. `GameScene` names `effects` four times — the field, this
+  // attach, the per-frame render and one unrelated comment — and has no SHUTDOWN handler at all, so
+  // the camera-restore branch was unreachable outside the unit tests.
+  //
+  // Why that matters, and why it is not merely tidy: `baseX`/`baseY` are captured ONCE from
+  // `scene.cameras.main.x`, and `applyShake` writes `baseX + x` absolutely. A camera that survives a
+  // `scene.restart()` mid-shake — an ESC to level select or a death-triggered reload inside the
+  // 8-tick `playerHurt` window — hands the next `attachEffects` the SHAKEN x as its new base, and
+  // every frame after that carries the error forever, including the frames `shakeWithinEnvelope`
+  // requires to be exactly at base. `EffectAttachment.base()` exists to expose exactly this class of
+  // constant error; leaving the restore uncallable was the other half of the same argument.
+  //
+  // Registered here rather than in `GameScene` for the reason `hudFade` and `goalLayer` register
+  // theirs the same way: the teardown belongs to the thing that built the state, `GameScene.ts` sits
+  // at exactly 400 lines, and a handler in the scene is one more thing the next feature forgets.
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => attachment.destroy());
+
+  return attachment;
 
   /**
    * Write the camera's position from the pure decision — never `camera.shake()`.

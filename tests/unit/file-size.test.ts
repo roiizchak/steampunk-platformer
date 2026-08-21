@@ -26,7 +26,11 @@ import { describe, expect, it } from 'vitest';
  * test cannot tell.
  */
 
-const SOURCES = import.meta.glob(['../../src/**/*.ts', '../../tools/**/*.mjs', '../../tests/**/*.ts'], {
+// 🔴 The fourth entry is the ROOT config files, and they were outside every glob. `playwright.config.ts`
+// is 199 lines and gained 34 in Phase 9 — the largest growth of any uncovered file — and neither it
+// nor `vite.config.ts` could ever red this gate. A latent hole rather than a present violation, and
+// the cheapest possible time to close it is while it is still latent.
+const SOURCES = import.meta.glob(['../../src/**/*.ts', '../../tools/**/*.mjs', '../../tests/**/*.ts', '../../*.config.ts', '../../*.config.mjs'], {
   query: '?raw',
   import: 'default',
   eager: true,

@@ -19,6 +19,45 @@
 import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../sim/hitstop';
 
 /**
+ * `hitstopUntil - lastHitTick` IS the impact class — `hitstop.ts` says so on the field itself.
+ *
+ * Built from `HITSTOP_TICKS` rather than from three literals, so a retune of a freeze length cannot
+ * leave this lookup pointing at a class nothing writes any more. The three lengths are distinct
+ * (4 / 9 / 6), which is what makes the inversion total.
+ *
+ * ⚠️ **It lives here, not in `gameEffects.ts`, because it is a DECISION and three separate draw
+ * paths now need it** — the particles, the player sprite and the enemy sprites. It was a private
+ * function in the scene until Phase 9's gate, and the second consumer is exactly when a second copy
+ * gets written *(vault 5.3)*.
+ */
+const IMPACT_BY_FREEZE = new Map<number, ImpactClass>(
+  (Object.keys(HITSTOP_TICKS) as ImpactClass[]).map((impact) => [HITSTOP_TICKS[impact], impact]),
+);
+
+/**
+ * Which impact class froze this body, or `undefined` if the freeze length matches none.
+ *
+ * 🔴 **`hitstopScale` is not optional bookkeeping — without it the debug knob deletes the thing it
+ * exists to show.** `freezePair` writes `tickCount + HITSTOP_TICKS[impact] * scale`, so at
+ * `?hitstop=2` the key asked for is 8 / 18 / 12 while the map holds 4 / 9 / 6: every lookup missed,
+ * and *every* impact spark, death steam, hurt vent, flinch, flash and impact shake vanished at
+ * exactly the scales criterion 9.8's hands-on method compares clips at. Dividing first is what makes
+ * the class scale-invariant. Found by the Phase 9 gate's adversarial brief (B/H2).
+ *
+ * `scale = 0` still resolves to nothing, which is the documented behaviour and still falls out for
+ * free: the numerator is 0 too, and `0 / 0` is `NaN`, which is in no map.
+ *
+ * The default of 1 is the shipped value, so every non-production call site (fixtures, unit tests)
+ * keeps the behaviour it was written against.
+ */
+export function impactOf(
+  body: Readonly<Freezable>,
+  hitstopScale = 1,
+): ImpactClass | undefined {
+  return IMPACT_BY_FREEZE.get((body.hitstopUntil - body.lastHitTick) / hitstopScale);
+}
+
+/**
  * The texture frame the attack clip makes contact on. **A MEASUREMENT, not a preference.**
  *
  * Traced live on **2026-08-20** against the shipped `brass-courier` sheet — see
@@ -29,7 +68,7 @@ import { HITSTOP_TICKS, type Freezable, type ImpactClass } from '../sim/hitstop'
  * ships `brass-courier-attack` with `frameCount: 10, simTicks: 20, fps: 30`, and 20 ticks at 60 Hz
  * is 333 ms, which is 10 frames at 30 fps. The QA log's prose says "12 frames" one line under its
  * own trace table, and that table lists texture frames 0–9 and anims indices 1–10 — ten of each. The
- * catalog is the authority and the prose is not *(CLAUDE.md)*; `effects.test.ts` now reads
+ * catalog is the authority and the prose is not *(CLAUDE.md)*; `sprite-feedback.test.ts` now reads
  * `frameCount` back out of the shipped catalog rather than hard-coding either number, so a
  * regenerated sheet turns the assertion red instead of silently invalidating this comment.
  *
@@ -206,7 +245,7 @@ const IFRAME_FLOOR_ALPHA = 0.35;
  * of that spent at alpha 0 is a player who cannot see where they are while something is still hitting
  * them. Alpha 0 is also exactly how the vault's blocker shipped invisible menu cards with a fully
  * green suite: nothing throws, nothing logs, and the object is present in every assertion about the
- * scene graph. `effects.test.ts` asserts the floor across all 45 ticks with its own message.
+ * scene graph. `sprite-feedback.test.ts` asserts the floor across all 45 ticks with its own message.
  *
  * The window test is `counter < iframeTicks`, the same `windowOpen` predicate the sim uses — a knob
  * of 0 accepts nothing, which is the branch a `<=` typo makes unreachable *(vault 5.5)*. It is

@@ -22,6 +22,7 @@ import { RENDER_SCALE } from '../../src/game/constants';
 import {
   firstLevelId,
   hitstopScaleFromSearch,
+  MAX_HITSTOP_SCALE,
   levelOrder,
   openLevelSelect,
   pickLevel,
@@ -307,6 +308,26 @@ describe('hitstopScaleFromSearch — the DEV freeze knob (`?hitstop=`)', () => {
     expect(Number.isInteger(1e308), 'the premise: isInteger alone does NOT reject this').toBe(true);
     expect(hitstopScaleFromSearch('?hitstop=1e308')).toBe(1);
     expect(hitstopScaleFromSearch('?hitstop=1e21')).toBe(1);
+  });
+
+  it('REFUSES a large SAFE integer — the hole isSafeInteger narrowed but did not close', () => {
+    // 🔴 `Number.isSafeInteger(9007199254740991)` is `true` and it is `>= 0`, so this was ACCEPTED.
+    // The deadline it produces is perfectly finite — `9007199254740991 * 4` ≈ 3.6e16 ticks, about
+    // 19 million years at 60 Hz — so no overflow guard can see it, and the body never moves again.
+    // Dying does not release it either: `combatCounter` is frozen too, so `deathWindowClosed` never
+    // becomes true. Only a BOUND closes this, which is what `MAX_HITSTOP_SCALE` is.
+    expect(Number.isSafeInteger(Number.MAX_SAFE_INTEGER), 'the premise').toBe(true);
+    expect(hitstopScaleFromSearch(`?hitstop=${Number.MAX_SAFE_INTEGER}`)).toBe(1);
+    expect(hitstopScaleFromSearch('?hitstop=100000')).toBe(1);
+  });
+
+  it('accepts exactly up to MAX_HITSTOP_SCALE and refuses the next one — both sides', () => {
+    // Both sides of the threshold, from the constant rather than from a literal repeated here, so a
+    // retune of the bound moves the fixture with it. `lethal` 9 × 10 is 90 ticks — a second and a
+    // half of held frame, which is already past the point of being a comparison of feel.
+    expect(MAX_HITSTOP_SCALE).toBe(10);
+    expect(hitstopScaleFromSearch(`?hitstop=${MAX_HITSTOP_SCALE}`)).toBe(MAX_HITSTOP_SCALE);
+    expect(hitstopScaleFromSearch(`?hitstop=${MAX_HITSTOP_SCALE + 1}`)).toBe(1);
   });
 
   it('REFUSES a negative, an unparseable value and a non-finite one', () => {
