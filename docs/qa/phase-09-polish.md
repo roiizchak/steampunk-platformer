@@ -265,11 +265,17 @@ marked passing yet.
 
 ### Added during the build, from findings ruled "record, do not fix"
 
-10. **`shakeWithinEnvelope`'s running-shake bound is deliberately loose.** It bounds by peak
-    amplitude, because Phaser's Shake does not taper. Only the two *exact* regimes — zero before
-    `startedTick`, zero once settled — are precise assertions. A shake that runs at full amplitude
-    for its whole window is inside the envelope, and the e2e spec that imports this predicate cannot
-    say otherwise.
+⚠️ **Task 8 re-opened this list on the phase owner's ruling and closed six of it.** The entries below
+are what remains; each closed one now says what closed it and where its red-proof is. The audit that
+enumerated them is `task-08-audit.md`, and every "declined" verdict is in `task-08-report.md` with
+its evidence.
+
+10. ~~**`shakeWithinEnvelope`'s running-shake bound is deliberately loose.**~~ **CLOSED (Task 6 F4,
+    recorded stale until Task 8).** The predicate is still bounded by peak amplitude — Phaser's Shake
+    does not taper — but the e2e spec no longer relies on it for amplitude: `phase-09-polish.spec.ts`
+    asserts `[ox, oy]` **exactly equals `shakeOffset(SHAKE.land, tick, w, h)`** for every running
+    sample, off the same function `applyShake` writes from. The envelope is now a second, looser
+    opinion beside an exact one, and a 100× amplitude regression reds.
 11. **The camera shake uses `camera.setPosition`, so a lethal shake reveals up to 9.6 px of
     background at one screen edge.** The same trade Phaser's own `Shake` makes. No gate can see it;
     owner's judgement at the hands-on pass.
@@ -292,10 +298,55 @@ marked passing yet.
     Each enemy is still struck only once and level layout bounds how many bodies can enter reach
     inside 4-9 ticks, but nothing caps the chain. Deliberately uncapped: a cap is a design decision
     outside this phase, and `playerAttack.ts` says so at the site.
-18. **Nothing *statically* forbids a Phaser import in `src/render/`.** `tests/unit/sim-boundary.test.ts`
-    scans the `src/sim` closure only. The three new render modules are covered **dynamically** by
-    `npm run test:sim-isolated`, which passes with Phaser uninstalled — evidenced by the
-    uninstall/pass/reinstall triple, not by an exit code.
+18. ~~**Nothing *statically* forbids a Phaser import in `src/render/`.**~~ **CLOSED (Task 8).**
+    `tests/unit/render-boundary.test.ts` scans the `src/render/` transitive closure with the same
+    scanner `sim-boundary.test.ts` uses, now shared through `tests/unit/sourceScan.ts`. Only the
+    Phaser rule is applied — no document states the clock/RNG/DOM rule for `src/render/`, and
+    inventing one here would be a policy nobody agreed to. Watched failing: adding
+    `import type Phaser from 'phaser'` to `src/render/effects.ts` reds *"imports nothing from Phaser,
+    in any form"* with `{"rule":"Phaser import","line":30}`; reverted, hash restored. A **type-only**
+    import is the form that matters — it erases at compile time, so `test:sim-isolated` cannot see
+    it, which is exactly why the dynamic check was never sufficient.
+
+### Closed by Task 8, from elsewhere in the phase's records
+
+19. **`hitstopScaleFromSearch` had no gate at all.** The parser that closed Task 6's HIGH finding F1
+    was module-private and read `globalThis.location` itself, so mutating `Number.isInteger` to
+    `Number.isFinite` left all 2060 tests green with a float duration reaching `src/sim/`. It now
+    takes the search string as a parameter — `variantFromSearch`'s shape verbatim — and
+    `level-pick.test.ts` drives all seven branches. Two mutations watched red, both named.
+    **A live residual was found while gating it:** `Number.isInteger(1e308)` is `true`, so the
+    shipped predicate did **not** close F1's third bullet (`?hitstop=1e308` → `hitstopUntil =
+    Infinity` → permanently frozen). Now `Number.isSafeInteger`, pinned by its own case.
+20. **The `combatCounter === 1` deletion is no longer ungated by construction.** The clause itself
+    still cannot have a red — it is provably never read — but the invariant that makes it unreadable
+    now does: `hitstop-interactions.test.ts` asserts the counter is **0 on every frozen tick and
+    exactly 1 on the release tick**, with the flag sampled where step 5 would read it. Watched
+    failing by deleting the `!held` guard on step 4b's counter block, the one edit that would make
+    the clause load-bearing again.
+21. **9.1b can no longer miss a partial freeze** (Task 6 review F9, recorded as future-proofing).
+    The recorder now carries `hitstopUntil` off `__phaserGame` — no ninth `__game` field — and the
+    hazard test asserts it holds its `-1` never-frozen sentinel through the window. Nothing clears
+    that field and `freezePair` only raises it, so a freeze of any length at any tick is legible
+    without tick arithmetic and without depending on which ticks were sampled. **Proved both ways:**
+    a hazard-armed freeze with `hitstopUntil = tickCount` — positionally invisible, since that tick's
+    motion steps have already run — leaves the four position assertions GREEN with the sentinel check
+    neutralised, and reds it when restored.
+22. **A constant camera residual is no longer invisible** (Task 6's own post-fix concern 3).
+    `EffectAttachment` publishes `base()`, and the recorder takes its zero from there instead of from
+    `cam.x` at install, so `ox`/`oy` are the offset the game actually applied rather than the offset
+    relative to whatever it was doing when recording started. Watched failing:
+    `camera.setPosition(baseX + x + 5, …)` now reds *"the camera was not at its unshaken base at
+    install"* with `[5, 0]` — the same mutation the old zero cancelled out entirely.
+23. **`waitFor`'s `drop` condition re-arming on the last hit cannot hang** (review F10, recorded as
+    deliberate). The behaviour is unchanged and the reason is now asserted rather than argued: every
+    hp drop routes through `damagePlayer`, which grants `IFRAME_TICKS`, so drops are never closer
+    than 45 ticks against a 14-tick tail. `TAIL_TICKS < IFRAME_TICKS` is pinned in 9.1's body.
+24. **The `KNOCKBACK_SPEED` note in `gamePlayerDraw.ts` described a wire that no longer exists.** It
+    said the constant is "bound to `DEFAULT_TUNING.walkMax` at module load"; it is a plain
+    `export const KNOCKBACK_SPEED = 17.5`, and `playerTuning.ts` says *"Knockback is no longer wired
+    to `walkMax`"*. The limitation it records is real — the constant does not scale with `?feel=` —
+    the mechanism was not. Corrected *(C9)*.
 
 ---
 

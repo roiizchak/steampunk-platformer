@@ -125,9 +125,16 @@ export function registerAnimations(scene: Phaser.Scene): void {
  * does NOT change foot-slide, because ground travel per cycle is `simTicks * topSpeed` and
  * `simTicks` is itself derived from the speed.
  *
- * ⚠️ `KNOCKBACK_SPEED` is bound to `DEFAULT_TUNING.walkMax` at module load, so it does NOT scale
- * with this. That is fine for judging locomotion and would NOT be fine for shipping a retune —
- * recorded rather than papered over.
+ * ⚠️ `KNOCKBACK_SPEED` does NOT scale with this, and the reason matters more than the fact: it is a
+ * **plain constant** — `export const KNOCKBACK_SPEED = 17.5` in `worldDamage.ts` — not a value
+ * derived from tuning at all. `playerTuning.ts` says so in terms: *"Knockback is no longer wired to
+ * `walkMax`."* An earlier version of this note claimed it was bound to `DEFAULT_TUNING.walkMax` at
+ * module load, which described a wiring that had already been deleted, and a wrong comment is worse
+ * than no comment *(C9)*: it would have sent the next reader looking for a live binding to break.
+ *
+ * The consequence is unchanged. Under `?feel=`, combat knockback keeps its shipped magnitude while
+ * locomotion moves around it, so the ratio between the two is not what ships. That is fine for
+ * judging locomotion, which is all this knob is for, and would NOT be fine for measuring a retune.
  */
 export function applyFeelVariant(world: World): void {
   if (!import.meta.env.DEV) {
