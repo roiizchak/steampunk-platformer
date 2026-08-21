@@ -119,3 +119,50 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   Near a map edge the clamp legitimately holds the player far off centre, so a centring assertion
   fails on a correct camera. Assert instead that the target stays inside `worldView` inset by a
   margin — that fails for a camera which stopped following without failing at the boundaries.
+
+## Tint *(Phase 9)*
+
+- 🔴 **`setTintFill(color)` is REMOVED in Phaser 4, and it does not throw.** It survives as a stub
+  that logs to `console.error` and returns `undefined`
+  (`gameobjects/components/Tint.js:271-280`): *"`setTintFill(color)` is removed as of Phaser 4. Use
+  `setTint(color).setTintMode(Phaser.TintModes.FILL)` instead."* A hit flash written the Phaser 3 way
+  therefore draws **nothing**, typechecks against the arity-0 signature if you pass no argument, and
+  reports the failure to a console nobody reads during a spec run. `src/scenes/spriteFlash.ts` is the
+  one place in this project that tints a sprite and carries the note at the call.
+- **Tint colour and tint MODE are separate settings now.** In Phaser 3 `setTint` also swapped the
+  mode; in Phaser 4 you set both. `clearTint()` resets the colour to `0xffffff`, the secondary tint
+  to `0x000000` **and** the mode to `MULTIPLY`, so it is a complete neutral and safe to call every
+  frame.
+- **`TintModes`: MULTIPLY 0, FILL 1, ADD 2, SCREEN, OVERLAY, HARD_LIGHT, MULTIPLY_TWO**
+  (`renderer/TintModes.js`). For a white hit flash prefer **ADD**: a multiply tint cannot make a
+  texture brighter than it already is, so there is no continuous white to lerp toward, and FILL
+  replaces the pixel outright — which turns a decaying flash into a grey silhouette. With ADD, black
+  is a no-op and white is fully blown out, so an alpha in `[0, 1]` maps onto it directly.
+- **Tint is WebGL-only** and this project runs `Phaser.AUTO`. Where a colour can be baked instead —
+  `gameEffects.ts` generates one particle texture per emitter rather than tinting one white dot —
+  bake it.
+
+## Tweens *(Phase 6, corrected Phase 9)*
+
+Read out of the vendored source rather than assumed; two docstrings in this project stated the
+opposite and shipped.
+
+- **Natural completion DOES write the end value.** `tweens/tween/TweenData.js` assigns
+  `target[key] = this.current` *before* its `if (complete)` branch, and at `v = 1` `current` is
+  `end`. An `onComplete` force-settle is redundant for the tweened property — and still load-bearing
+  for anything the tween did not set, such as a tint Phaser never clears.
+- **`stop()` does NOT.** It leaves the targets wherever the interpolation had reached. This is the
+  exit a force-settle exists for: a fade interrupted a third of the way through stays a third dark
+  forever.
+- 🔴 **`destroy()` runs NEITHER callback.** `tweens/tween/BaseTween.js`'s `destroy()` sets
+  `this.callbacks = null`, and `TweenManager.shutdown()` reaches it through `killAll()`. **A scene
+  shutdown is therefore a stop path with no force-settle at all.** Anything that must end at a known
+  value has to settle *directly* rather than through `onStop` — `hudGearPop.destroy()` leaned on the
+  callback and was silently a no-op on that path.
+- **`stop()` is also a no-op on a tween that has already completed or been removed** — it guards on
+  `!isRemoved() && !isPendingRemove() && !isDestroyed()`. A handle held across a completion and
+  stopped later dispatches nothing. A hand-written test fake that calls `onStop` unconditionally is
+  *more generous than the engine* and hides exactly these cases.
+- **Kill-by-target (`killTweensOf`, `killAll`) reaches tweens other features own** and reports
+  nothing about what it hit. Hold the handle. `tests/unit/tween-boundary.test.ts` enforces both
+  halves statically.
