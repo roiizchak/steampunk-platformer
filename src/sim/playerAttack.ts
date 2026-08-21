@@ -176,7 +176,13 @@ export function applyPlayerAttack(world: World): PlayerAttackResult {
     // places to pass the class, and the day they disagree the attacker recovers before its victim.
     // Arming is a WRITE, not a gate — it does not disturb 9b's documented ordering guarantee that
     // the player's own swing resolves before anything can trade a hit back.
-    freezePair(player, enemy, enemy.hp <= 0 ? 'lethal' : 'light', world.tickCount);
+    freezePair(
+      player,
+      enemy,
+      enemy.hp <= 0 ? 'lethal' : 'light',
+      world.tickCount,
+      world.hitstopScale,
+    );
     hits += 1;
     // The `hp > 0` guard at the top of this closure means a corpse is never struck twice, so this
     // counts the transition to zero rather than the state of being at zero.

@@ -86,6 +86,14 @@ export interface CreateWorldOptions {
    * far the player walks, AND every shipped level parses to a non-null goal.
    */
   goal?: Rect | null;
+  /**
+   * DEBUG ONLY. Scales every hit-stop freeze; defaults to 1, which is what every shipped build gets.
+   *
+   * See `World.hitstopScale` for why it exists — it is the `?hitstop=0` arm of Phase 9's freeze
+   * gate, and it is optional here for the same reason `spawn`, `gears` and `goal` are: forty-odd
+   * fixtures call `createWorld({ seed, scale })` and none of them should have to say "unchanged".
+   */
+  hitstopScale?: number;
 }
 
 export function createWorld({
@@ -98,6 +106,7 @@ export function createWorld({
   enemies,
   gears,
   goal,
+  hitstopScale,
 }: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
@@ -124,6 +133,7 @@ export function createWorld({
     goalEntryBlocked: false,
     tuning,
     scale,
+    hitstopScale: hitstopScale ?? 1,
     player: {
       x: spawn?.x ?? SPAWN_X,
       y: spawn?.y ?? SPAWN_Y,

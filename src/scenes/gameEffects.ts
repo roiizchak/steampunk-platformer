@@ -60,6 +60,7 @@ import {
 } from '../render/effects';
 import {
   shakeFor,
+  shakeOffset,
   shakeSettled,
   shakeStartTick,
   shouldPreempt,
@@ -145,17 +146,6 @@ function impactOf(body: Readonly<Freezable>): ImpactClass | undefined {
 
 /** Enough of an enemy to spend particles on. Structural, exactly like `Freezable` itself. */
 type Struck = Readonly<Freezable> & { x: number; y: number; hp: number };
-
-/**
- * The camera jitter, in [-1, 1], as a pure function of the tick.
- *
- * **No `Math.random`.** Two incommensurate frequencies so the two axes never trace a diagonal, and a
- * value that changes once per SIM tick rather than once per frame — a 240 Hz jitter over a 60 Hz
- * world reads as a blur rather than as a shake. Bounded by 1 by construction, which is what keeps
- * the drawn offset inside `shakeWithinEnvelope`'s peak box.
- */
-const JITTER_X_FREQ = 12.9898;
-const JITTER_Y_FREQ = 7.233;
 
 export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachment {
   const built = {} as Record<EffectKind, Phaser.GameObjects.Particles.ParticleEmitter>;
@@ -301,13 +291,13 @@ export function attachEffects(scene: Phaser.Scene, world: World): EffectAttachme
    * and a camera jittering over a still image is precisely what the delay exists to prevent.
    */
   function applyShake(camera: Phaser.Cameras.Scene2D.Camera, tick: number): void {
-    let offsetX = 0;
-    let offsetY = 0;
-    if (shake !== null && tick >= shake.startedTick && !shakeSettled(shake, tick)) {
-      offsetX = shake.cmd.ax * camera.width * Math.sin(tick * JITTER_X_FREQ);
-      offsetY = shake.cmd.ay * camera.height * Math.cos(tick * JITTER_Y_FREQ);
-    }
-    camera.setPosition(baseX + offsetX, baseY + offsetY);
+    // The VALUE is `shakeOffset` (`screenShake.ts`), the BRANCH is here. One definition, asserted
+    // exactly by the e2e spec rather than only bounded by the peak box.
+    const running = shake !== null && tick >= shake.startedTick && !shakeSettled(shake, tick);
+    const { x, y } = running
+      ? shakeOffset(shake!.cmd, tick, camera.width, camera.height)
+      : { x: 0, y: 0 };
+    camera.setPosition(baseX + x, baseY + y);
   }
 }
 

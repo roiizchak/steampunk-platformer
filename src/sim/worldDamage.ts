@@ -234,7 +234,7 @@ export function applyWorldDamage(
         // A LETHAL blow still freezes, unlike the knockback above, which skips a corpse. The two are
         // not the same call: a shove has to move a body that is about to stop being controlled,
         // while the freeze is punctuation on the moment of death and reads correctly on it.
-        freezePair(player, scavenger, 'playerHurt', world.tickCount);
+        freezePair(player, scavenger, 'playerHurt', world.tickCount, world.hitstopScale);
       }
       break;
     }

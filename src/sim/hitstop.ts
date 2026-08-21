@@ -75,9 +75,32 @@ export interface Freezable {
  * **shortens** the lethal freeze — a second blow making the first one read as weaker. A hit can only
  * ever extend a freeze, never cut one short, so `lastHitTick` is written only when the deadline
  * actually moves and the pair keeps describing the impact that is still holding them.
+ *
+ * ## `scale` is a DEBUG multiplier, and it defaults to 1
+ *
+ * Every shipped build passes 1 — `createWorld` writes `World.hitstopScale = 1` unless a caller says
+ * otherwise, and only `?hitstop=0` (parsed in `src/scenes/gameLevelPick.ts`, under
+ * `import.meta.env.DEV`) ever says otherwise. It is the committed fixture that lets Phase 9's e2e
+ * freeze assertion go red on the same build it passes on *(vault C2)*; see `World.hitstopScale`.
+ *
+ * At `scale = 0` the deadline lands on `tickCount` itself, which is the tick the freeze is ARMED on
+ * — step 9b, after steps 5-8 have already run. So `frozen()` is true for the remainder of the
+ * arming tick and false from the next one: **exactly zero frozen ticks of motion**, which is the
+ * whole point. The `-1` sentinel is still cleared (`0 > -1`), so `lastHitTick` is still written and
+ * `impactOf` in `gameEffects.ts` correctly resolves nothing — a zero-length freeze is not an
+ * impact class, and the particles are not what that arm is measuring.
+ *
+ * It rides on `World`, **not** on `TuningKnobs`: `knob-sweep.test.ts` sweeps every knob in
+ * `DEFAULT_TUNING` *(A6)*, and a debug multiplier is not a knob anyone should sweep.
  */
-export function freezePair(a: Freezable, b: Freezable, impact: ImpactClass, tickCount: number): void {
-  const until = tickCount + HITSTOP_TICKS[impact];
+export function freezePair(
+  a: Freezable,
+  b: Freezable,
+  impact: ImpactClass,
+  tickCount: number,
+  scale = 1,
+): void {
+  const until = tickCount + HITSTOP_TICKS[impact] * scale;
   for (const body of [a, b]) {
     if (until > body.hitstopUntil) {
       body.hitstopUntil = until;

@@ -97,6 +97,20 @@ for (const [label, path] of scanned) {
     '__game',
     '__phaserGame',
     'spawnDevEnemies',
+    // 🔴 **No production path in this project parses a query string**, so the constructor itself is
+    // the tell. Added in Phase 9 for `?hitstop=N` (`gameLevelPick.hitstopScaleFromSearch`), and it
+    // pins the four older affordances at the same time — `?perfMutation` (`audio.ts`), `?breakAsset`
+    // and `?breakFilter` (`bootAssets.ts`, `BootScene.ts`), `?feel` (`feelVariants.ts`) and the dev
+    // overlays (`gameDev.ts`). Every one of those is folded out today by an `import.meta.env.DEV`
+    // guard at the point of use, and until now **nothing re-checked that**: the evidence was a
+    // one-shot `grep` by whoever last added one. Hoist any of those reads above its guard and the
+    // build now fails instead of shipping the cheat.
+    //
+    // ⚠️ `feelVariants.variantFromSearch` is the one that is NOT self-guarded — it is an exported
+    // pure function taking `search` as an argument, guarded at both of its callers in
+    // `gamePlayerDraw.ts`. That shape is deliberate (it is what lets `feel-variants.test.ts` call it
+    // directly) and must not be "fixed"; this entry is what keeps its callers honest instead.
+    'URLSearchParams',
   ]) {
     if (src.includes(symbol)) {
       problems.push(`${label} contains the DEV-only symbol ${symbol}`);
