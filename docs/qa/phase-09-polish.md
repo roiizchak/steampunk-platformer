@@ -470,6 +470,41 @@ and the function together (a consistent pair — no red, and a "proof" of nothin
 hit the string inside a **comment** rather than the code, and the suite stayed green, which read
 exactly like a gate that does not work.
 
+### The gate round's e2e runs, and the one real failure among them
+
+| Run | Result | Notes |
+|---|---|---|
+| 1 (invalidated) | — | **My own error, recorded because §5 names it.** I ran `npx vitest` three times during it to check docs gates. *"Only one Playwright run at a time, and nothing heavy beside it"* — six specs failed, and I could not tell load from defect. Diagnosed from the artefacts, not the counts. |
+| 2 (clean) | **114 passed / 5 failed** | 1 real (below) + 4 `chromium-gpu` specs that did not repeat. |
+| 3 (clean, after the fix) | **119 passed / 0 failed**, 17.6m | Baseline was 117; this round adds 2 e2e tests, so 119 is the count read **positively**, not a selection that missed something. |
+
+**The real failure was mine, and only the browser could see it.** Wiring
+`EffectAttachment.destroy()` to SHUTDOWN made an unguarded
+`scene.cameras.main.setPosition(…)` reachable — see entry 16 — and it threw inside Phaser's own
+`Systems.shutdown`, during a `scene.start` mid level transition. The unit gate proved the handler was
+*registered*; nothing in `npm test` could prove it did not throw.
+
+**Then the fixed tree failed a different one, and that spec was right twice.**
+`session-gate-entry.spec.ts`'s *"never pops back"* caught the i-frame flicker multiplying the gate
+run-in's scripted fade — the drawn alpha fell, rose and fell again, off the `1 - k/20` ramp. Fixed by
+suppressing the flicker during the run-in. **And the spec's own sampler was reading the wrong
+window**: its three shape claims came from a series recorded since boot, so a hit taken anywhere on
+the way to the exit could trip `roseAgain`. `offRamp` did not catch that, purely because
+`IFRAME_FLOOR_ALPHA` is 0.35 and `1 - 13/20` is also 0.35 — two unrelated constants colliding.
+Both halves fixed; the coincidence is written into `fadeSampler.ts`.
+
+**The four `chromium-gpu` failures in run 2 did not repeat in run 3** and are recorded as unexplained
+rather than dismissed. That project runs `headless: false` — a real window on a real GPU — and the
+one artefact that survived says *"Execution context was destroyed"*, which is a renderer-level event
+and not an assertion. All four are ratio-based A/Bs whose control and treatment both carry this
+round's new per-frame work, so a systematic cost from it would divide out rather than move a bound
+*(the A/B-toggle lesson)*. If they recur on a quiet box, that reasoning is what to attack first.
+
+**The new browser gate measured something.** `[trigger] … sparks alive 0 frames 0 | steam alive 0
+frames 0 | dust alive 14 frames 80` — a landing the player performed put 14 particles in the air and
+passed `willRender` on 80 frames, with no storm installed. Sparks and steam at 0 is correct for that
+run: nothing was hit.
+
 ### Added by the gate round — what four blind agents found this list was missing
 
 The list above is thorough about what the BUILD found and was **materially incomplete about the
