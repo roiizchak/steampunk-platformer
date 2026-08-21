@@ -34,21 +34,32 @@ import { EMITTER_SPECS, type EffectKind } from '../../src/render/effects';
 
 const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 
-const SCENE_SOURCES = import.meta.glob(['../../src/scenes/gameEffects.ts'], {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+// ⚠️ TWO files, and the second one is not optional. `ensureParticleTexture` moved to
+// `particleTexture.ts` when `gameEffects.ts` crossed 400 lines under the gate round's fixes; a glob
+// that still named one file would have left the `spec.tint` assertion scanning a source the function
+// is no longer in — silently green, which is the exact failure this file exists to catch. The gate
+// follows the FUNCTION, not the filename: `sliceFrom` below finds it in whichever source has it.
+const SCENE_SOURCES = import.meta.glob(
+  ['../../src/scenes/gameEffects.ts', '../../src/scenes/particleTexture.ts'],
+  { query: '?raw', import: 'default', eager: true },
+) as Record<string, string>;
+
+/** The body of `marker`'s declaration, found across every globbed source. Throws if it is nowhere. */
+function sliceFrom(marker: string): string {
+  for (const src of Object.values(SCENE_SOURCES)) {
+    const at = src.indexOf(marker);
+    if (at > -1) return src.slice(at);
+  }
+  throw new Error(`"${marker}" is in none of the globbed scene sources — this gate scans nothing`);
+}
 
 describe('the scene applies the band rather than restating it', () => {
-  const src = Object.values(SCENE_SOURCES)[0];
   // Sliced to `createEmitter` rather than scanned whole, so the containment check is about the draw
   // path and not about a string that happens to appear in a comment.
-  const start = src.indexOf('function createEmitter(');
-  const createEmitter = src.slice(start);
+  const createEmitter = sliceFrom('function createEmitter(');
+  const src = Object.values(SCENE_SOURCES).join('\n');
 
   it('finds createEmitter at all, so the slice below is not empty', () => {
-    expect(start).toBeGreaterThan(-1);
     expect(createEmitter).toContain('scene.add');
   });
 
@@ -62,15 +73,123 @@ describe('the scene applies the band rather than restating it', () => {
       `src/scenes/gameEffects.ts hands setDepth a number of its own. Every emitter must take ` +
         `EMITTER_SPECS[kind].depth, or the 10.1/10.2/10.3 band is a table nobody reads — a "tidy" ` +
         `edit to 13 costs one batch flush every frame forever and is invisible in a screenshot.`,
-    ).not.toMatch(/setDepth\(\s*[\d.]/);
+      // ⚠️ The `-?` is not decoration: without it `setDepth(-1)` — a perfectly plausible "put it
+      // behind everything" edit — slipped the pattern entirely. Caught only by the sibling
+      // `toContain('setDepth(spec.depth)')` above, which is a different claim.
+    ).not.toMatch(/setDepth\(\s*-?[\d.]/);
   });
 
   it('bakes the spec tint into the particle it draws', () => {
+    // Sliced to `ensureParticleTexture`, not scanned whole: the sibling above learned that a
+    // `toContain` over a whole file matches the string inside a COMMENT about the code as happily
+    // as the code, and this file's own header names three comments that mention `spec.tint`.
     expect(
-      src,
+      sliceFrom('export function ensureParticleTexture('),
       `src/scenes/gameEffects.ts never reads spec.tint, so EmitterSpec.tint is a field nothing ` +
         `draws — the same defect class as a burst of zero particles.`,
     ).toContain('spec.tint');
+  });
+
+  it('keeps the NORMAL blend mode — the depth band’s twin, and ungated until now', () => {
+    // 🔴 `NORMAL → ADD` was a green mutation. `createEmitter`'s own comment says of that exact line
+    // that ADD *"would cost one flush every frame, forever, and be invisible in a screenshot"* —
+    // which is verbatim the `setDepth(13)` argument this whole file was created to close. Depth got
+    // a gate, tint got a gate, and the third field in the same argument did not.
+    expect(createEmitter).toContain('Phaser.BlendModes.NORMAL');
+    expect(
+      src,
+      `a non-NORMAL blend mode forces a batch flush every frame and is invisible in a screenshot`,
+    ).not.toMatch(/BlendModes\.(ADD|MULTIPLY|SCREEN|ERASE)/);
+  });
+
+  it('takes every emitter field from the spec rather than from a literal', () => {
+    // `reserve → 0` and `maxAliveParticles → 10000` were both green mutations. `effects.test.ts`
+    // pins them as facts about the TABLE, which is the "table nobody reads" failure, and the e2e
+    // cannot see them either: `effectMutation.ts` overwrites `maxAliveParticles` and re-`reserve`s
+    // before it measures anything, so 9.5/9.6 observe the storm's values and never the shipped ones.
+    for (const field of [
+      'lifespan: ticksToMs(spec.lifespanTicks)',
+      'maxAliveParticles: spec.maxAliveParticles',
+      '.reserve(spec.reserve)',
+      'perSecond(spec.speedMin)',
+      'perSecond(spec.speedMax)',
+      'gravityY: perSecondSquared(spec.gravityY)',
+      'min: spec.angleMin',
+      'start: spec.scaleStart',
+      'start: spec.alphaStart',
+    ]) {
+      expect(createEmitter, `createEmitter no longer reads ${field}`).toContain(field);
+    }
+  });
+
+  it('creates every emitter with emitting:false — these are explosions, never fountains', () => {
+    // `emitting: false → true` was green: every emitter becomes a continuous fountain at (0, 0),
+    // spraying particles into the corner of the world on every frame of the game, forever.
+    expect(createEmitter).toContain('emitting: false');
+  });
+
+  it('converts px/tick to px/s at the right ORDER for each quantity', () => {
+    // Dropping the square in `perSecondSquared` was green — gravity 60× too weak, which reads as
+    // "the dust floats a bit" and nothing else. The helper's own docstring says it exists *"so a
+    // spec value cannot be converted at the wrong order by a future edit that copies the
+    // neighbouring line"*, and nothing checked the order it converts at.
+    const speed = src.slice(src.indexOf('const perSecond ='), src.indexOf('const perSecond =') + 400);
+    expect(speed).toMatch(/perSecond\s*=\s*\(pxPerTick: number\): number =>\s*pxPerTick \* TICK_HZ;/);
+    expect(speed).toMatch(/pxPerTickSquared \* TICK_HZ \* TICK_HZ/);
+  });
+});
+
+/**
+ * 🔴 A `Burst` decided by `effects.ts` must reach Phaser with its own COUNT.
+ *
+ * `gameEffects.ts:188` mutated to `emitter.explode(0, burst.x, burst.y)` — **every in-game spark,
+ * steam and dust burst drawing nothing at all** — left 2073/2073 green and `tsc` clean. Deleting
+ * `strike()`'s spark loop outright was also green.
+ *
+ * The e2e could not see it either, and that is a mechanism rather than an inference: `installStorm`
+ * (`tests/e2e/effectMutation.ts`) calls `emitter.explode(deficit, x, y)` on handles taken from
+ * `scene.effects.emitters()` and **never routes through `gameEffects.emit`**, so criteria 9.5 and
+ * 9.6 measure the storm and not the game.
+ *
+ * `effects.test.ts:12-17` names *"a burst of count 0 satisfied every assertion"* as this phase's
+ * theme, and it was unguarded at the one line that turns a `Burst` into pixels. The behavioural
+ * version of this — a real landing producing real particles in a real browser — is
+ * `tests/e2e/phase-09-draw.spec.ts`'s game-event test; this is the millisecond-cost half.
+ */
+describe('the burst count survives the trip to the emitter', () => {
+  // Found by function, never by glob index — `Object.values(...)[0]` would silently point at
+  // whichever source Vite happened to order first the day a second file joined the glob.
+  const fromEmit = sliceFrom('const emit =');
+  const emit = fromEmit.slice(0, fromEmit.indexOf('const specCone ='));
+  const src = Object.values(SCENE_SOURCES).join('\n');
+
+  it('slices to `emit` and finds something', () => {
+    expect(emit.length).toBeGreaterThan(50);
+    expect(emit).toContain('emitter.explode(');
+  });
+
+  it('passes burst.count, burst.x and burst.y — never a literal', () => {
+    expect(
+      emit,
+      `gameEffects.emit hands Phaser a count of its own. A burst of 0 satisfies every assertion in ` +
+        `effects.test.ts, every depth and tint check in this file, and every particle budget in the ` +
+        `e2e — while the game draws nothing.`,
+    ).toContain('emitter.explode(burst.count, burst.x, burst.y)');
+    expect(emit).not.toMatch(/explode\(\s*[\d.]/);
+  });
+
+  it('and the four trigger paths still call it', () => {
+    // Deleting any one of these is a whole class of effect that never fires: the spark loop, the
+    // death steam, the hurt vent, the landing dust. Each is one `emit(...)` call and nothing else
+    // in the repo observes any of them.
+    for (const call of [
+      'for (const burst of impactSparks(',
+      "emit(deathSteam(body.x, body.y), specCone('steam'))",
+      "emit(hurtVent(player.x, player.y, player.facing), specCone('steam'))",
+      "emit(dust, specCone('dust'))",
+    ]) {
+      expect(src, `the trigger path \`${call}\` is gone`).toContain(call);
+    }
   });
 });
 

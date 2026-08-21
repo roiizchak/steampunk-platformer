@@ -1,14 +1,14 @@
 /**
  * `src/scenes/hudGearPop.ts` — criterion 9.4's OBSERVABLE force-settle.
  *
- * ## Why the gear pop is the subject and the level-complete fade is not
+ * ## The fade is gated too — this is one of two files, not a substitute for the other
  *
- * 9.4 is "a tween's end value is written even when the tween is stopped early". `hudFade.ts` force-
- * settles too, and that settle is **not independently observable**: on its only call path
- * (`UIScene.levelComplete(null)` at shutdown) the targets are destroyed on the next two lines, so an
- * assertion about their final alpha would be an assertion about an object nobody can ever see again.
- * That is decoration, and this project treats decoration as a defect. The gear icon is drawn every
- * frame and **survives its own tween**, so its settle is a fact about the running game.
+ * 9.4's own wording is *"a fade"*, and an earlier version of this header argued that the gear pop
+ * should stand in for it because `hudFade.ts`'s settle is not independently observable. The
+ * substitution was accepted and then it was the finding: deleting **both** of `hudFade.ts`'s
+ * `onStop` settles left 2073/2073 green, so the criterion's named subject had no gate at all while
+ * its stand-in had a good one. `tests/unit/hud-fade.test.ts` now covers the fade directly — the
+ * observability objection was real, and the answer to it was a fake scene, not a substitution.
  *
  * ## Why a hand-written fake and not Phaser
  *
@@ -43,7 +43,12 @@ interface AddedTween {
   cfg: TweenConfig;
   /** The icon's scale AT THE MOMENT `tweens.add` was called — see the fourth test. */
   scaleAtAdd: number;
+  /** Phaser's `stop()`: dispatches `onStop` **only if the tween is still live**. */
   stop(): void;
+  /** Natural completion: dispatches `onComplete`, then the tween is removed. */
+  complete(): void;
+  /** `TweenManager.shutdown()` → `killAll()` → `BaseTween.destroy()`: dispatches NOTHING. */
+  destroy(): void;
 }
 
 function fakeIcon() {
@@ -69,16 +74,41 @@ function fakeIcon() {
   return { icon, scaleCalls, tintCalls, clears: () => cleared };
 }
 
+/**
+ * 🔴 The fake tween obeys Phaser 4.2.1's ACTUAL dispatch contract, and it did not.
+ *
+ * `stop()` used to invoke `cfg.onStop?.()` unconditionally. Real Phaser guards it:
+ * `tweens/tween/BaseTween.js`'s `stop()` returns early unless the tween is live
+ * (`!isRemoved() && !isPendingRemove() && !isDestroyed()`), and `destroy()` — which
+ * `TweenManager.shutdown()` reaches through `killAll()` — sets `this.callbacks = null` and so
+ * dispatches nothing at all.
+ *
+ * A fake that is more generous than the engine hides exactly the cases a force-settle exists for: a
+ * `stop()` on an already-COMPLETED tween is silent, and a scene shutdown is a stop path with **no
+ * callback whatsoever**. `hudGearPop.destroy()` used to lean on `onStop` for its settle, which is
+ * why it now settles directly — a fix this fake could not have motivated and could not have proved.
+ */
 function fakeScene(icon: { scale: number }) {
   const added: AddedTween[] = [];
   const scene = {
     tweens: {
       add(cfg: TweenConfig): AddedTween {
+        let live = true;
         const handle: AddedTween = {
           cfg,
           scaleAtAdd: icon.scale,
           stop() {
+            if (!live) return;
+            live = false;
             cfg.onStop?.();
+          },
+          complete() {
+            if (!live) return;
+            live = false;
+            cfg.onComplete?.();
+          },
+          destroy() {
+            live = false;
           },
         };
         added.push(handle);
@@ -123,21 +153,59 @@ describe('hudGearPop', () => {
   });
 
   it('stopped mid-pop settles to baseScale and clears the tint', () => {
-    const { added, scaleCalls, clears, pop } = build();
+    const { added, icon, scaleCalls, clears, pop } = build();
     pop.pop();
+    // Mid-pop: the running tween has driven the icon somewhere else entirely. Without this the
+    // "ended at BASE" assertion below is satisfied by an icon that never moved.
+    icon.setScale(BASE * 1.31);
     added[0].stop();
 
+    expect(icon.scale).toBe(BASE);
     expect(scaleCalls.at(-1)).toBe(BASE);
-    expect(clears()).toBe(1);
+    // The END STATE, not a call count: `stopAndSettle` settles directly AND `onStop` settles again,
+    // deliberately (see `settle`'s exit 3), so counting invocations would pin the belt-and-braces
+    // rather than the behaviour.
+    expect(clears()).toBeGreaterThanOrEqual(1);
   });
 
   it('run to completion settles to the same end state', () => {
-    const { added, scaleCalls, clears, pop } = build();
+    const { added, icon, scaleCalls, clears, pop } = build();
     pop.pop();
-    added[0].cfg.onComplete?.();
+    icon.setScale(BASE * 1.31);
+    added[0].complete();
 
+    expect(icon.scale).toBe(BASE);
     expect(scaleCalls.at(-1)).toBe(BASE);
-    expect(clears()).toBe(1);
+    expect(clears()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('destroy() AFTER a completed pop still settles — Phaser dispatches nothing there', () => {
+    // 🔴 The case the old fake could not express. Real `stop()` is a no-op on a tween that has
+    // already completed or been removed, and `hudGearPop` never nulls its handle on completion — so
+    // a `destroy()` that trusted `onStop` to settle would silently do nothing. `UIScene.applyLayout`
+    // calls `destroy()` on every resize, which is very often exactly this state.
+    const { added, icon, pop } = build();
+    pop.pop();
+    added[0].complete();
+    // Something else moves the icon after the pop finished — a stale tween, a resize mid-frame.
+    icon.setScale(BASE * 2);
+
+    pop.destroy();
+
+    expect(icon.scale, 'destroy() after completion left the icon off baseScale').toBe(BASE);
+  });
+
+  it('settles even when Phaser destroys the tween without dispatching anything', () => {
+    // `TweenManager.shutdown()` → `killAll()` → `BaseTween.destroy()` nulls `callbacks`, so neither
+    // `onStop` nor `onComplete` runs. The module must not depend on either.
+    const { added, icon, pop } = build();
+    pop.pop();
+    icon.setScale(BASE * 1.31);
+    added[0].destroy();
+
+    pop.destroy();
+
+    expect(icon.scale, 'a callback-free teardown left the icon off baseScale').toBe(BASE);
   });
 
   it('a second pop stops the first, and the icon is back at baseScale before the second config is read', () => {
@@ -155,13 +223,27 @@ describe('hudGearPop', () => {
   });
 
   it('destroy() stops the running tween and settles, and is safe to call twice', () => {
-    const { scaleCalls, clears, pop } = build();
+    const { icon, scaleCalls, clears, pop } = build();
     pop.pop();
+    icon.setScale(BASE * 1.31);
     pop.destroy();
 
+    expect(icon.scale).toBe(BASE);
     expect(scaleCalls.at(-1)).toBe(BASE);
-    expect(clears()).toBe(1);
+    expect(clears()).toBeGreaterThanOrEqual(1);
     expect(() => pop.destroy()).not.toThrow();
+  });
+
+  it('destroy() with NOTHING running still settles — the common case on every resize', () => {
+    // `UIScene.applyLayout` runs `this.gearPop?.destroy()` on build and on every resize, almost
+    // always with no pop in flight. The branch that handled it used to be the only one that settled
+    // directly, and it had no fixture at all; the branch is gone now and this is what says so.
+    const { icon, pop } = build();
+    icon.setScale(BASE * 3);
+
+    pop.destroy();
+
+    expect(icon.scale, 'destroy() with no tween running did not settle').toBe(BASE);
   });
 
   it('the duration is ticksToMs(7) — ticks, never a millisecond literal', () => {

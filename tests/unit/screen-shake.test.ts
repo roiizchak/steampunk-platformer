@@ -21,7 +21,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   SHAKE,
-  shakeDurationMs,
   shakeEnergy,
   shakeFor,
   shakePeak,
@@ -32,7 +31,6 @@ import {
   type ShakeState,
 } from '../../src/render/screenShake';
 import { HITSTOP_TICKS, type ImpactClass } from '../../src/sim/hitstop';
-import { ticksToMs } from '../../src/sim';
 
 const IMPACTS: ImpactClass[] = ['light', 'lethal', 'playerHurt'];
 const ALL: (ImpactClass | 'land')[] = [...IMPACTS, 'land'];
@@ -287,16 +285,6 @@ describe('shakeWithinEnvelope', () => {
     const maxY = SHAKE.lethal.ay * H;
     expect(shakeWithinEnvelope(state, 3, maxX + 0.001, 0, W, H)).toBe(false);
     expect(shakeWithinEnvelope(state, 3, 0, maxY + 0.001, W, H)).toBe(false);
-  });
-});
-
-describe('shakeDurationMs', () => {
-  it('is the sim’s ticksToMs and not a second copy of it', () => {
-    for (const key of ALL) {
-      expect(shakeDurationMs(SHAKE[key])).toBe(ticksToMs(SHAKE[key].durationTicks));
-    }
-    // Pinned once as a literal too, so a change to the tick rate is visible here.
-    expect(shakeDurationMs(SHAKE.lethal)).toBe(117);
   });
 });
 

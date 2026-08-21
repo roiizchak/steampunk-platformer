@@ -79,16 +79,27 @@ export interface Freezable {
  * ## `scale` is a DEBUG multiplier, and it defaults to 1
  *
  * Every shipped build passes 1 — `createWorld` writes `World.hitstopScale = 1` unless a caller says
- * otherwise, and only `?hitstop=0` (parsed in `src/scenes/gameLevelPick.ts`, under
- * `import.meta.env.DEV`) ever says otherwise. It is the committed fixture that lets Phase 9's e2e
- * freeze assertion go red on the same build it passes on *(vault C2)*; see `World.hitstopScale`.
+ * otherwise, and only `?hitstop=` (parsed in `src/scenes/gameLevelPick.ts`, under
+ * `import.meta.env.DEV`) ever says otherwise. `?hitstop=0` is the committed fixture that lets Phase
+ * 9's e2e freeze assertion go red on the same build it passes on *(vault C2)*; see
+ * `World.hitstopScale`.
+ *
+ * ⚠️ This used to say the parser admits *only* 0 and 1. It does not, and the gap was where a real
+ * defect lived: it accepts every integer up to `MAX_HITSTOP_SCALE`, and `?hitstop=3` is pinned as
+ * intended behaviour by `level-pick.test.ts`. Any docstring here that reasons about "which values
+ * reach `freezePair`" has to reason about all of them *(C9)*.
  *
  * At `scale = 0` the deadline lands on `tickCount` itself, which is the tick the freeze is ARMED on
  * — step 9b, after steps 5-8 have already run. So `frozen()` is true for the remainder of the
  * arming tick and false from the next one: **exactly zero frozen ticks of motion**, which is the
  * whole point. The `-1` sentinel is still cleared (`0 > -1`), so `lastHitTick` is still written and
- * `impactOf` in `gameEffects.ts` correctly resolves nothing — a zero-length freeze is not an
- * impact class, and the particles are not what that arm is measuring.
+ * `impactOf` (`src/render/spriteFeedback.ts`) correctly resolves nothing — a zero-length freeze is
+ * not an impact class, and the particles are not what that arm is measuring.
+ *
+ * For `scale >= 2` the resolution is the opposite question and it is `impactOf`'s to answer: it
+ * divides the freeze length by the scale before the lookup, so a class resolves at every accepted
+ * scale. Without that division every particle, flinch, flash and impact shake vanished at exactly
+ * the scales criterion 9.8's blind clip comparison uses.
  *
  * It rides on `World`, **not** on `TuningKnobs`: `knob-sweep.test.ts` sweeps every knob in
  * `DEFAULT_TUNING` *(A6)*, and a debug multiplier is not a knob anyone should sweep.

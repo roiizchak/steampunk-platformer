@@ -58,6 +58,13 @@ interface MockSprite {
   setAlpha: (a: number) => MockSprite;
   setPosition: (x: number, y: number) => MockSprite;
   play: (key: string) => MockSprite;
+  // Phase 9's hit flash (`spriteFlash.applyHitFlash`). Recorded rather than ignored so the sibling
+  // `enemy-feedback.test.ts` can drive the same shape; here they only need to exist.
+  tint: number | null;
+  tintMode: number | null;
+  setTint: (v: number) => MockSprite;
+  setTintMode: (m: number) => MockSprite;
+  clearTint: () => MockSprite;
 }
 
 function makeMockSprite(initialKey: string, scene: unknown): MockSprite {
@@ -78,6 +85,21 @@ function makeMockSprite(initialKey: string, scene: unknown): MockSprite {
     play: (key) => {
       sprite.playCalls.push(key);
       sprite.animKey = key;
+      return sprite;
+    },
+    tint: null,
+    tintMode: null,
+    setTint: (v) => {
+      sprite.tint = v;
+      return sprite;
+    },
+    setTintMode: (m) => {
+      sprite.tintMode = m;
+      return sprite;
+    },
+    clearTint: () => {
+      sprite.tint = null;
+      sprite.tintMode = null;
       return sprite;
     },
   };

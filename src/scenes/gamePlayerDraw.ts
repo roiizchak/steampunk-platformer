@@ -16,13 +16,22 @@
 
 import Phaser from 'phaser';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
-import { ATTACK_CONTACT_FRAME_INDEX } from '../render/effects';
+import {
+  ATTACK_CONTACT_FRAME_INDEX,
+  flinchOffset,
+  hitFlashAlpha,
+  iframeAlpha,
+  impactOf,
+  ticksSinceHit,
+} from '../render/effects';
 import { interpolatedPosition, renderAlpha, type Point } from '../render/interpolate';
 import { animKeyFor, playerRenderDesc } from '../render/playerView';
+import { IFRAME_TICKS } from '../sim';
 import { frozen } from '../sim/hitstop';
 import type { World } from '../sim/types';
 import { registerCatalogAnimations } from './gameAnimations';
 import { playIfChanged } from './playAnim';
+import { applyHitFlash } from './spriteFlash';
 
 export function renderPlayerSprite(
   sprite: Phaser.GameObjects.Sprite,
@@ -39,7 +48,30 @@ export function renderPlayerSprite(
   // `src/render/interpolate.ts`. `accumulatorMs` is already the time since the last whole
   // tick, so it is exactly the blend factor.
   const drawn = interpolatedPosition(prevPlayer, desc, renderAlpha(accumulatorMs));
-  sprite.setPosition(drawn.x, drawn.y);
+
+  // 🔴 Phase 9's per-sprite feedback — the FLINCH, the HIT FLASH and the I-FRAME FLICKER.
+  //
+  // `spriteFeedback.ts` decides all three and this applies them; before the Phase 9 gate the module
+  // had zero consumers, which is the same defect as a burst of zero particles — every assertion
+  // satisfied and nothing on the screen. `tests/unit/sprite-draw-path.test.ts` is what says the
+  // scene reads the table, in `effects-draw-path.test.ts`'s idiom.
+  //
+  // Recomputed from `(player, tickCount)` every frame with nothing armed, so a restart, a death
+  // mid-flinch or a level change needs no cancellation path — `spriteFeedback.ts`'s header carries
+  // the argument, and the `else` branches below are what make it self-correcting.
+  //
+  // `impactOf(...) === 'playerHurt'` is the same test `gameEffects.ts`'s hurt vent uses and it is
+  // load-bearing: `freezePair` freezes BOTH bodies, so the player is frozen with `light`/`lethal`
+  // whenever they LAND a blow, and flinching the player away from their own hit would read as the
+  // enemy hitting back.
+  const since = ticksSinceHit(world.player, world.tickCount);
+  const hurt = impactOf(world.player, world.hitstopScale) === 'playerHurt' ? 'playerHurt' : null;
+  const flinch = hurt === null ? null : flinchOffset(since, hurt, world.player.facing);
+  sprite.setPosition(drawn.x + (flinch?.dx ?? 0), drawn.y + (flinch?.dy ?? 0));
+
+  // The flash. `spriteFlash.ts` owns the Phaser 4 tint-mode detail and the reason `setTintFill` is
+  // not it; the same function draws the enemies' flash, so there is one definition *(vault 5.3)*.
+  applyHitFlash(sprite, hurt === null ? 0 : hitFlashAlpha(since, hurt));
 
   // A real flip at last. Phase 2 drew facing as a "nose" rectangle because Phaser 4's Flip
   // component is mixed into Sprite and Image but NOT into Shape, so the grey-box `Rectangle`
@@ -52,7 +84,22 @@ export function renderPlayerSprite(
   // is self-correcting: a new level builds a world with `goalEntryTicks: null`, the descriptor
   // says 1, and the sprite is opaque again on the first frame with nothing to tear down. See
   // `goalEntryAlpha` in `playerView.ts` for why a Phaser tween was rejected.
-  sprite.setAlpha(desc.alpha);
+  //
+  // MULTIPLIED by the i-frame flicker rather than replaced by it: the two are orthogonal states and
+  // whichever was written second would otherwise erase the other. `iframeAlpha` returns exactly 1
+  // outside the window, so the product is `desc.alpha` on every frame that is not flickering.
+  //
+  // 🔴 **Except during the gate run-in, where the flicker is suppressed outright.** A player who
+  // reaches the exit still invulnerable would otherwise have the scripted fade multiplied by a
+  // 3-on/3-off strobe — the fade would fall, rise, and fall again, and the drawn alpha would be a
+  // product of two ramps rather than a step on the one `goalEntryAlpha` defines. The run-in's alpha
+  // is *"a rendering claim about one scripted moment"* (`playerView.ts`), and a flicker is a claim
+  // about the moment before it. Caught by `session-gate-entry.spec.ts`'s *"never pops back"*, in a
+  // browser, and by nothing else.
+  const flicker = world.goalEntryTicks === null
+    ? iframeAlpha(world.player.iFrameCounter, IFRAME_TICKS)
+    : 1;
+  sprite.setAlpha(desc.alpha * flicker);
 
   // Routed through `playAnim.ts` — see its header for the frame-0 and missing-key guards this
   // used to reimplement inline (R10).

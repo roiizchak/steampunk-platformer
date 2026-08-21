@@ -130,8 +130,22 @@ export const CLOCK_GRID_MS = 0.1;
  * So "worst case" here is *the worst STEADY-STATE frame*: the largest fleet this project measures,
  * the shipped particle ceiling, and everything that draws every frame regardless. It is not the
  * worst frame the game can produce. `MAX_EFFECT_FRAME_P95_MS` is what covers the spiky end of the
- * window, and the trigger path itself is covered by criterion 9.1's behavioural spec rather than
- * here. Vault 9.3: a gate's blind spots are part of its result.
+ * window. Vault 9.3: a gate's blind spots are part of its result.
+ *
+ * ⚠️ **This paragraph used to name a covering gate that did not exist**, and the citation was worse
+ * than the gap it disclosed *(C9)*: it said *"the trigger path itself is covered by criterion 9.1's
+ * behavioural spec rather than here"*, and 9.1's spec reads sim fields and camera offsets and never
+ * observes a particle. Nothing anywhere asserted that a game event produced a burst — so
+ * `gameEffects.emit`'s `emitter.explode(burst.count, …)` mutated to `explode(0, …)`, which is every
+ * in-game spark, steam and dust drawing nothing, left the entire unit suite green and was invisible
+ * to 9.5 and 9.6 as well, because `installStorm` calls `explode` on the emitter handles directly and
+ * **never routes through `gameEffects.emit`**.
+ *
+ * The trigger path is covered now, by two gates written for it: `the game's OWN trigger path emits
+ * particles` in `phase-09-draw.spec.ts` (a real landing, in a browser, with no storm installed), and
+ * the `burst count survives the trip to the emitter` block in
+ * `tests/unit/effects-draw-path.test.ts`. Both name `explode(0, …)` as the mutation they exist to
+ * catch.
  *
  * The selection set then read 0.500 / 0.500 / 0.600 ms, so the bound is roughly 4x above the worst
  * of them. Chosen on one set of runs and confirmed on a HELD-OUT set that had no say in it; both

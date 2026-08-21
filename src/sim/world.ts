@@ -111,6 +111,18 @@ export function createWorld({
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
   }
+  // 🔴 The integer-tick invariant, enforced where the rule LIVES rather than only at the DOM parser.
+  //
+  // `hitstopScaleFromSearch` (`src/scenes/gameLevelPick.ts`) checks the same thing and production is
+  // closed by it — but it is one call site, and `freezePair` computes `tickCount + HITSTOP_TICKS[i] *
+  // scale` with no check of its own. Any fixture, dev spawn or future caller of `createWorld` could
+  // put a FLOAT deadline inside `src/sim/`, against CLAUDE.md §3's "every duration is an integer
+  // count of 60 Hz ticks" — and `?hitstop=1.5` also collides `playerHurt` 9 with `lethal` 9 in
+  // `impactOf`'s reverse lookup, which draws the wrong particles with nothing red anywhere. This
+  // file already demonstrates the guard shape one line up; the rule belongs beside it.
+  if (hitstopScale !== undefined && !(Number.isSafeInteger(hitstopScale) && hitstopScale >= 0)) {
+    throw new Error(`createWorld: hitstopScale must be a non-negative safe integer, got ${hitstopScale}`);
+  }
 
   const tuning = createTuning();
   return {

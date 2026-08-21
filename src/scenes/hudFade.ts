@@ -28,7 +28,13 @@
  * would also fade the overlay text this is meant to reveal.
  */
 
-import Phaser from 'phaser';
+// 🔴 A **TYPE-only** import, and that is what makes criterion 9.4's named subject gateable at all.
+// This file names no Phaser value — every use is `Phaser.GameObjects.*` or `Phaser.Scene` in a type
+// position — so with `import type` the module evaluates with the engine uninstalled and
+// `tests/unit/hud-fade.test.ts` can drive `showLevelComplete` against a fake scene, the idiom
+// `hud-gear-pop.test.ts` already established. It was a value import, and with a value import the
+// fade's two force-settles were unreachable from any unit test: deleting BOTH left the suite green.
+import type Phaser from 'phaser';
 import { HUD_MARGIN } from '../render/hud';
 import { ticksToMs } from '../sim';
 
@@ -150,15 +156,25 @@ export function showLevelComplete(scene: Phaser.Scene, info: LevelCompleteInfo):
    * pointed at these objects, including ones another feature owns, and it reports nothing about
    * what it hit. Two handles cost two locals and stop exactly the two tweens this function started.
    *
-   * 🔴 Criterion 9.4 — the end value is FORCE-SETTLED in both `onStop` and `onComplete`, because
-   * Phaser writes it in neither. `stop()` leaves a tween's targets wherever the interpolation had
-   * reached, so a fade interrupted a third of the way through stays a third dark forever.
+   * 🔴 Criterion 9.4 — the end value is FORCE-SETTLED on `onStop`, and again on `onComplete`.
    *
-   * ⚠️ On today's only call path this settle is **not independently observable**: `destroy()` is
-   * reached from `UIScene.levelComplete(null)`, which destroys these objects on the next two lines.
-   * It is written here because it is the honest shape for a tween handle and because the next caller
-   * will not be that one — but a gate asserting it *alone* would be decoration, which is why 9.4's
-   * observable subject is the HUD gear pop (`hudGearPop.ts`) and not this file.
+   * ⚠️ **What Phaser 4.2.1 actually does, read out of the vendored source rather than assumed.** An
+   * earlier version of this comment said Phaser writes the end value in *neither* callback. That is
+   * wrong in one of the three exits, and a docstring the next tween author will rely on has to be
+   * right *(C9)*:
+   *
+   *  1. **Natural completion DOES write it.** `tweens/tween/TweenData.js` runs
+   *     `target[key] = this.current;` *before* its `if (complete)` branch, and at `v = 1` `current`
+   *     IS `end`. The `onComplete` settle is still kept, because it is the same function and because
+   *     `hudGearPop`'s version of it also clears a tint, which Phaser never does.
+   *  2. **`stop()` does NOT.** It leaves the targets wherever the interpolation had reached, so a
+   *     fade interrupted a third of the way through stays a third dark forever. This is the exit the
+   *     settle exists for, and it is the one `destroy()` below takes.
+   *  3. **`destroy()` runs NEITHER.** `tweens/tween/BaseTween.js`'s `destroy()` sets
+   *     `this.callbacks = null`, and it is reached from `TweenManager.shutdown()` → `killAll()`. A
+   *     scene shutdown is therefore a stop path with no force-settle at all. Nothing here depends on
+   *     one: the objects are destroyed on that path anyway, and `hudGearPop.destroy()` settles
+   *     directly rather than through a callback for exactly this reason.
    */
   const settleFade = (): void => {
     fade.setAlpha(FADE_ALPHA);

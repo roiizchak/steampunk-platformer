@@ -76,6 +76,14 @@ makes their edge cases reachable from a unit test — and the predicates are imp
 **and** the e2e specs, so a criterion is asserted against one definition, not two that agree on the
 happy path.
 
+⚠️ **A decision function with no consumer is the same defect as a burst of zero particles**: it
+satisfies every assertion about itself and draws nothing. Phase 9 shipped `spriteFeedback.ts` — 221
+source lines and a 306-line test file — with **zero** production consumers, and blanking all four
+function bodies left the game byte-identical on screen with the suite green. **Every module here owes
+a draw-path gate**, in the shape of `tests/unit/effects-draw-path.test.ts` (source text, for the
+scenes that name a Phaser value) or `tests/unit/enemy-feedback.test.ts` (behavioural, against a fake
+scene, for the ones that take Phaser as a type only — the stronger of the two, so prefer it).
+
 **`src/game/tilemap.ts` — Tiled `.tmj` → plain data.** Pure: takes an already-parsed object, imports
 nothing from Phaser, does no I/O. That is what lets the unit suite run the **real** validator over the
 **shipped** bytes *(vault 3.1)*. **Collision is an object layer of rectangles carrying a `solid`

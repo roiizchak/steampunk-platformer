@@ -27,6 +27,13 @@
  * `x += vx` leaves `x` unchanged and the freeze appears to work until the day someone lands a hit
  * at a run.
  *
+ * ⚠️ **`advanceStride` (step 12) is NOT gated, and today that is luck rather than design.**
+ * `tick.ts` runs it on every tick including frozen ones. It is inert only because a frozen player is
+ * always in a combat state and `player.ts` zeroes the stride counter for any gait that is not `walk`
+ * or `run`. Arm a freeze on a locomotion event — a parry, a landing freeze, a `?hitstop` experiment
+ * on something that is not a blow — and footsteps fire out of a motionless body. Every OTHER
+ * counter's freeze decision in this project is written down; this one is written down here.
+ *
  * **`previousX`/`previousY` are captured BEFORE the gate**, so steps 9, 9b and 9c still receive both
  * endpoints of "this tick's motion". While frozen the two are equal, which is exactly right: the
  * swept hazard test then sweeps a zero-length segment, and a frozen body cannot tunnel through

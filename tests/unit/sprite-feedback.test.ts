@@ -25,6 +25,7 @@ import {
   flinchOffset,
   hitFlashAlpha,
   iframeAlpha,
+  impactOf,
   landSquash,
   ticksSinceHit,
 } from '../../src/render/effects';
@@ -302,5 +303,65 @@ describe('the attack contact frame', () => {
     ).toBeLessThan(ATTACK_CLIP.frameCount);
     // The swing length the contact tick was traced against, pinned from the same source.
     expect(ATTACK_CLIP.simTicks).toBe(20);
+  });
+});
+
+/**
+ * 🔴 `impactOf` — the reverse lookup every effect in this phase branches on.
+ *
+ * It lived as a private function in `gameEffects.ts` with **no test of any kind**, and both defects
+ * below hid there. It is here now because three separate draw paths need it — the particles, the
+ * player sprite and the enemy sprites — and the second consumer is when a second copy gets written.
+ */
+describe('impactOf resolves the class from the freeze length', () => {
+  const body = (until: number, at: number): Freezable => ({ hitstopUntil: until, lastHitTick: at });
+  const hit = (impact: ImpactClass, tick: number, scale = 1): Freezable =>
+    body(tick + HITSTOP_TICKS[impact] * scale, tick);
+
+  it('the three freeze lengths are DISTINCT, or the inversion is not a function', () => {
+    // The map's own docstring rests on this and nothing asserted it. A retune that made
+    // `playerHurt` 4 to match `light` would update every pin in this suite and silently collapse the
+    // map to two entries — after which taking a hit draws a `light` spark burst and arms a `light`
+    // shake, with nothing red anywhere.
+    const lengths = Object.values(HITSTOP_TICKS);
+    expect(new Set(lengths).size, `HITSTOP_TICKS has a duplicate: ${lengths}`).toBe(lengths.length);
+    expect(lengths).toHaveLength(3);
+  });
+
+  it('resolves every class at the shipped scale, and each to ITSELF', () => {
+    for (const impact of Object.keys(HITSTOP_TICKS) as ImpactClass[]) {
+      expect(impactOf(hit(impact, 100)), `${impact} did not round-trip`).toBe(impact);
+    }
+  });
+
+  it('resolves every class at every scale the knob accepts', () => {
+    // 🔴 The defect. `freezePair` writes `tickCount + HITSTOP_TICKS[i] * scale`, so at `?hitstop=2`
+    // the key asked for was 8 / 18 / 12 while the map held 4 / 9 / 6 — every lookup missed, and
+    // `gameEffects` returns early on `undefined`. At any scale >= 2 the game drew **no impact
+    // sparks, no death steam, no hurt vent, no flinch, no flash and no impact shake**: the debug
+    // knob for looking at the freeze deleted everything there was to look at, at exactly the scales
+    // criterion 9.8's blind clip comparison uses.
+    for (const scale of [1, 2, 3, 5, 10]) {
+      for (const impact of Object.keys(HITSTOP_TICKS) as ImpactClass[]) {
+        expect(impactOf(hit(impact, 100, scale), scale), `${impact} at scale ${scale}`).toBe(impact);
+      }
+    }
+  });
+
+  it('resolves NOTHING for a never-hit body, a zero-length freeze, or a length nothing writes', () => {
+    // The `-1` sentinel: `-1 - 0` is `-1`, in no map.
+    expect(impactOf({ hitstopUntil: -1, lastHitTick: 0 })).toBeUndefined();
+    // `?hitstop=0` — `freezePair` still clears the sentinel, and a zero-length freeze is not an
+    // impact class. `0 / 0` is `NaN`, which is in no map either, so the documented behaviour
+    // survives the scale division rather than depending on it.
+    expect(impactOf(hit('light', 100, 0), 0)).toBeUndefined();
+    expect(impactOf(body(107, 100))).toBeUndefined();
+  });
+
+  it('does not resolve a class at the WRONG scale — the division is real', () => {
+    // Without this, `impactOf(body, scale)` could ignore its second argument entirely and every
+    // assertion above would still pass at scale 1.
+    expect(impactOf(hit('light', 100, 2), 1)).not.toBe('light');
+    expect(impactOf(hit('lethal', 100, 3), 1)).toBeUndefined();
   });
 });

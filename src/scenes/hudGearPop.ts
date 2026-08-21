@@ -70,10 +70,28 @@ export function attachGearPop(scene: Phaser.Scene, icon: GearIcon, baseScale: nu
   let tween: Phaser.Tweens.Tween | null = null;
 
   /**
-   * The force-settle. Phaser writes the end value in **neither** `onStop` nor `onComplete`, so a pop
-   * interrupted at its widest leaves the icon permanently 35 % too big — and, on the textured
-   * branch, permanently tinted. Both callbacks get this, because the two exits are different code
-   * paths in Phaser and only one of them is the one a bug takes.
+   * The force-settle: back to `baseScale`, tint cleared.
+   *
+   * ⚠️ **What Phaser 4.2.1 actually does at each of the THREE exits, read out of the vendored
+   * source.** An earlier version of this comment said Phaser writes the end value in *neither*
+   * callback; that is wrong for one of the three, and it is the sentence the next tween author would
+   * have relied on *(C9)*:
+   *
+   *  1. **Natural completion writes the end value.** `tweens/tween/TweenData.js` assigns
+   *     `target[key] = this.current` *before* its `if (complete)` branch, and `current` is `end` at
+   *     `v = 1`. So `onComplete`'s settle is redundant for the SCALE — and load-bearing for the
+   *     **tint**, which Phaser never clears for anyone.
+   *  2. **`stop()` does not.** The icon is left wherever the interpolation reached: a pop
+   *     interrupted at its widest stays 35 % too big, permanently, and tinted. This is what
+   *     `onStop` is for.
+   *  3. **`destroy()` runs neither callback.** `tweens/tween/BaseTween.js`'s `destroy()` nulls
+   *     `this.callbacks`, and `TweenManager.shutdown()` reaches it through `killAll()`. A scene
+   *     shutdown is a stop path with NO force-settle.
+   *
+   * 🔴 That third exit is why `stopAndSettle` calls `settle()` **directly** instead of trusting
+   * `stop()` to dispatch `onStop`. The callbacks stay registered as the belt for a stop that comes
+   * from somewhere else; the direct call is the braces, and it is what makes "the icon ends at
+   * `baseScale`" true on every path rather than on two of three.
    */
   const settle = (): void => {
     icon.setScale(baseScale);
@@ -82,20 +100,19 @@ export function attachGearPop(scene: Phaser.Scene, icon: GearIcon, baseScale: nu
     }
   };
 
-  /** Stop by HANDLE. Phaser's `stop()` dispatches `onStop`, which is what performs the settle. */
-  const stopRunning = (): Phaser.Tweens.Tween | null => {
+  /** Stop by HANDLE — never `killTweensOf` — then settle unconditionally. See `settle`'s exit 3. */
+  const stopAndSettle = (): void => {
     const running = tween;
     tween = null;
     running?.stop();
-    return running;
+    settle();
   };
 
   return {
     pop() {
-      // Stop first, so `onStop` has already put the icon back at `baseScale` before the new tween's
-      // `from` is read below. Without it a pop landing during a pop would start from a swollen icon
-      // and compound.
-      stopRunning();
+      // Stop first, so the icon is back at `baseScale` before the new tween's `from` is read below.
+      // Without it a pop landing during a pop would start from a swollen icon and compound.
+      stopAndSettle();
       if ('setTint' in icon) {
         icon.setTint(POP_TINT);
       }
@@ -111,12 +128,11 @@ export function attachGearPop(scene: Phaser.Scene, icon: GearIcon, baseScale: nu
       });
     },
     destroy() {
-      // A running tween settles through its own `onStop`; with nothing running there is no callback
-      // to do it, so the settle is performed directly. Either way the icon ends at `baseScale` with
-      // no tint, and calling this twice is safe — the second call takes the second branch.
-      if (stopRunning() === null) {
-        settle();
-      }
+      // One path, not two. The branch this replaced settled only when nothing was running and
+      // otherwise trusted `onStop` — which is silent for a tween that has already COMPLETED and
+      // silent again for one Phaser destroyed under a scene shutdown. Settling unconditionally is
+      // both shorter and true on every exit, and calling this twice is safe: `settle` is idempotent.
+      stopAndSettle();
     },
   };
 }

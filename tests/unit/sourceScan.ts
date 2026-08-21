@@ -279,6 +279,20 @@ export function closureFrom(dirFragment: string, entries: readonly string[] = []
   return closure;
 }
 
+/**
+ * The blanker, for a consumer that has its own rules rather than `FORBIDDEN`'s.
+ *
+ * `tween-boundary.test.ts` (criterion 9.3) needs the same two views and nothing else from this
+ * module: `killTweensOf` appears in `hudFade.ts` and `hudGearPop.ts` as PROSE recording its own
+ * removal, so a rule run over raw text is red on arrival — and a gate that is red on arrival gets
+ * weakened rather than obeyed. Exported rather than copied for the reason the whole module was
+ * extracted: `blank` is 80 lines of hand-written lexer whose entire value is that it has been got
+ * right once.
+ */
+export function blankFor(view: 'code' | 'code+strings', source: string): string {
+  return blank(source, view === 'code');
+}
+
 export function scan(sources: Record<string, string>): Violation[] {
   const violations: Violation[] = [];
 
