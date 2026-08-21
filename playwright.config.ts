@@ -160,7 +160,17 @@ export default defineConfig({
     // Vault C13: launch the dev server's REAL entry point, never `npm run dev`. On Windows the
     // package script is a shell wrapper; killing the wrapper orphans the real process, which
     // then keeps serving stale content after an asset rebuild.
-    command: `node ./node_modules/vite/bin/vite.js --port ${PORT} --strictPort`,
+    // 🔴 **Not vite's CLI directly — `tools/dev/e2e-server.mjs`, which frees the port first and then
+    // serves IN-PROCESS.** Playwright spawns this through `cmd.exe` on Windows and kills the shell at
+    // the end, orphaning whatever the shell launched — the same wrapper-orphans-the-real-process
+    // shape the note above describes for `npm run dev`, one layer further out. The orphan keeps the
+    // port, so the NEXT run cannot bind, aborts before collecting a single test, and **exits 0** with
+    // `expected: 0`. That is a false green, and it is not fixable from a command string.
+    //
+    // A `globalSetup` guard was tried and does not work: **Playwright starts `webServer` BEFORE
+    // `globalSetup`**, so the run aborts on the busy port before the guard's first line runs. Read
+    // that file's header before changing this line.
+    command: `node ./tools/dev/e2e-server.mjs ${PORT}`,
     url: `http://localhost:${PORT}`,
     // false, deliberately. Reusing whatever already answers on this port is how vault C13's
     // stale-server failure happens — "serves stale art after an asset rebuild", presenting as

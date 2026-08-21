@@ -194,6 +194,14 @@ Each rule below cost a real false green or false red. **The evidence for every o
   the statistic. 6.9's GPU ratio put five full-screen scrims below a clean run.
 - **A non-zero exit code is not evidence a gate caught anything.** Detect redness *positively*, from
   `Tests N failed` plus named specs. Drive mutation loops from the shell, never from a Node script.
+- **And detect GREENNESS positively too, including the test COUNT** *(Phase 9)*. A run that selected
+  nothing reports `expected: 0, unexpected: 0` and exits 0 — indistinguishable from a clean pass
+  unless you read the count. Every other rule here assumes the tests ran; this is the one that checks.
+  A zero exit *through a pipe* is `tail`'s exit, not the gate's.
+- **Only one Playwright run at a time, and nothing heavy beside it** *(Phase 9)*. `test:e2e` shares
+  port 5173 and `test-results/`, and its wall-clock-bounded specs read a busy box as a broken game —
+  seven specs once failed for no reason but three concurrent jobs. `tests/e2e/portGuard.ts` now kills
+  the orphaned dev server Playwright leaves behind on Windows; read its header before touching it.
 - **Assert the type before the value** in e2e.
 - **An existence assertion cannot verify a timing claim.** Assert *which tick*.
 - **Never `waitForTimeout`.** Wait on `window.__game.ready`.
