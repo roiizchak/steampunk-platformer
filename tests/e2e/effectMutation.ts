@@ -20,9 +20,14 @@
  * repeats. Both proofs here are one shell variable:
  *
  * ```
- * PERF_MUTATION=storm8192   npm run test:e2e -- tests/e2e/phase-09-perf.spec.ts   # 9.5 red
- * PERF_MUTATION=scale0      npm run test:e2e -- tests/e2e/phase-09-perf.spec.ts   # 9.6 red
+ * PERF_MUTATION=storm8192      …   # 9.5's absolute bound
+ * PERF_MUTATION=scale0         …   # the emitter gate — reds BOTH tests, see the spec's 9.5 note
+ * PERF_MUTATION=particlescale0 …   # the per-particle gate, which `scale0` never reaches
+ * PERF_MUTATION=fleetscale0    …   # 9.5's twenty enemies, drawn
  * ```
+ *
+ * Anything else `PERF_MUTATION` is set to **throws** — see `namedMutation`. A proof that silently
+ * did not run is worse than no proof, because it comes with a green suite as evidence.
  *
  * ## 🔴 The REAL emitters, never a duplicate
  *
@@ -45,12 +50,10 @@
  * a scaled-up version of the shipped worst case and not a different mix of it.
  */
 
-import { expect, type Page } from '@playwright/test';
-
 import { EMITTER_SPECS, type EffectKind } from '../../src/render/effects';
-import { EFFECT_KINDS, EFFECT_SAMPLE_TICKS, SHIPPED_PEAK_ALIVE } from './effectBudget';
-import { DEV_FLEET_COUNT, MIN_SAMPLES } from './perfBudget';
-import { counts, sample, waitForBodyCount, type Sample } from './perfSampler';
+import { EFFECT_KINDS, SHIPPED_PEAK_ALIVE } from './effectBudget';
+
+type Page = import('@playwright/test').Page;
 
 /**
  * The per-kind population for a storm of `alive` particles, in the shipped 32 : 48 : 16 proportion.
@@ -241,7 +244,108 @@ export async function setEmitterScale(page: Page, scale: number): Promise<void> 
 }
 
 /**
- * Read the storm size out of `PERF_MUTATION`, e.g. `storm4096`. Zero when unset or not a storm.
+ * 9.6's SECOND red proof, and it exists because the first one never reaches the code it is for.
+ *
+ * 🔴 `setEmitterScale(0)` is caught at the **emitter** gate — `emitter.willRender(camera)` — which
+ * is the very predicate `perfSampler.counts().opaque` already had. The *per-particle* half of the
+ * transcription, the `continue` on `alpha * emitter.alpha <= 0 || scaleX === 0 || scaleY === 0`,
+ * never executes under it (`emittersDrawing` reads 0 and the loop is skipped), and in a clean run it
+ * excludes nothing at all — `drawn 96 = alive 96`. By vault C2 that branch was decoration.
+ *
+ * This drives the emitter's scale **ops** rather than its transform, so the emitter still renders,
+ * `willRender` still says yes, every particle stays alive and visible — and every one of them takes
+ * the per-particle `continue`. It is the only route that reaches the second half of the predicate.
+ *
+ * ## 🔴 Two wrong levers were tried first, and both went GREEN — which is why this is written down
+ *
+ * **`ParticleEmitter.setParticleScale(0)`** (`ParticleEmitter.js:1593`) delegates to
+ * `EmitterOp.onChange`, and for an eased `{ start, end }` op — which `EMITTER_SPECS` uses for all
+ * three kinds — `onChange` sets only `op.current` (`EmitterOp.js:343-347`). Live particles never
+ * read `current`: `Particle.update` recomputes `this.scaleX = ops.scaleX.onUpdate(...)`
+ * unconditionally every frame (`Particle.js:636`). The run reported `drawn 96` and passed.
+ *
+ * **`loadConfig` alone** is the right lever but not the whole answer: a constant op is **emit-only**.
+ * `setMethods` leaves `onUpdate` as `defaultUpdate`, which returns the particle's existing value
+ * (`EmitterOp.js:453,624-627`), so a scale op set to 0 governs particles emitted AFTER it and never
+ * touches the ones already flying. With the cap already full, almost nothing new is emitted — and
+ * the run reported `drawn 96` and passed a second time.
+ *
+ * So the caller must apply this **before** `setStorm` builds the population, and the spec does, with
+ * the ordering commented at the call site. Two mutations that did nothing, both of which would have
+ * been pasted into a report as proofs *(vault C1: watch the gate fail, and check it failed for the
+ * reason you think)*.
+ *
+ * Restoring feeds `EMITTER_SPECS` back in rather than a remembered literal.
+ */
+export async function setParticleScale(page: Page, scale: number | null): Promise<void> {
+  await page.evaluate(
+    (specs: Record<string, { start: number; end: number } | number>) => {
+      interface Op {
+        propertyKey: string;
+        loadConfig(config: Record<string, unknown>): void;
+      }
+      const scene = (
+        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+      ).__phaserGame.scene.getScene('Game') as unknown as {
+        effects: { emitters(): Record<string, { ops: { scaleX: Op } }> };
+      };
+      for (const [kind, emitter] of Object.entries(scene.effects.emitters())) {
+        // 🔴 Keyed by the op's OWN `propertyKey`, not by "scaleX". `setConfig`'s special `scale`
+        // override loads this op under the key **`scale`** and switches `ops.scaleY` off entirely
+        // (`ParticleEmitter.js:1035-1038`), so `loadConfig({ scaleX: 0 })` looks up a key that is not
+        // there, falls through to `GetFastValue`'s default of 1, and changes nothing — the third of
+        // three wrong levers, and the third green run. Reading the key off the op cannot drift.
+        // `scaleY` is deliberately untouched: it is inactive, and `Particle.update` mirrors scaleX
+        // into it (`Particle.js:638-644`).
+        emitter.ops.scaleX.loadConfig({ [emitter.ops.scaleX.propertyKey]: specs[kind] });
+      }
+      // Two frames, so the update that rewrites every live particle's `scaleX` from the new op has
+      // certainly run before anything is read. A positive wait on the harness, never a sleep — and
+      // never a wait on the quantity being asserted.
+      return new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    },
+    Object.fromEntries(
+      EFFECT_KINDS.map((kind) => [
+        kind,
+        scale === null
+          ? { start: EMITTER_SPECS[kind].scaleStart, end: EMITTER_SPECS[kind].scaleEnd }
+          : scale,
+      ]),
+    ) as Record<string, { start: number; end: number } | number>,
+  );
+}
+
+/**
+ * 9.5's ENEMY-arm red proof: scale every drawn enemy body to zero, or back to one.
+ *
+ * 🔴 **The gate's headline assertion names twenty enemies and nothing checked they were drawn.**
+ * `spawnWorstCaseFleet` asserts `bodies` and `sprites`, and `sprites` is `isSprite` — a flag set
+ * once at creation and never re-derived, recorded verbatim as standing blind spot **T14** in
+ * `perfSampler.ts:137-141`: *"a body made invisible, zero-alpha or scrolled off-camera would still
+ * be counted as a drawn Sprite — while making the frame CHEAPER and the ratio easier to pass."*
+ *
+ * `counts().opaque` is the `willRender(camera)` guard built for exactly that on Codex 5.14 blocker
+ * 1, and it was being called only in the test that runs with **two** enemies. This is the mutation
+ * that makes the fleet arm's version of it go red: same route, same engine predicate, applied to the
+ * twenty bodies the absolute bound is asserted on top of.
+ */
+export async function setEnemyScale(page: Page, scale: number): Promise<void> {
+  await page.evaluate((s) => {
+    const scene = (
+      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+    ).__phaserGame.scene.getScene('Game') as unknown as {
+      enemies: { bodies: { setScale(v: number): unknown }[] };
+    };
+    for (const body of scene.enemies.bodies) {
+      body.setScale(s);
+    }
+  }, scale);
+}
+
+/**
+ * Read the storm size out of `PERF_MUTATION`, e.g. `storm8192`. Zero when unset or not a storm.
  *
  * The amplification IS the mutation the 9.5 bound names: same emitters, same specs, same code path,
  * more of them. If the measured work moves, the only thing that moved is how many particles the
@@ -252,51 +356,32 @@ export function stormCount(mutation: string): number {
   return match === null ? 0 : Number(match[1]);
 }
 
-/** True for `PERF_MUTATION=scale0`, the 9.6 proof. */
-export function wantsZeroScale(mutation: string): boolean {
-  return mutation === 'scale0';
-}
+/** The three non-storm mutations, by exact name. `''` is a clean run. */
+export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0'] as const;
+
+export type NamedMutation = (typeof NAMED_MUTATIONS)[number];
 
 /**
- * Put the declared worst-case ENEMY load on screen, and assert it landed.
+ * Recognise `PERF_MUTATION`, and **throw on anything it does not recognise**.
  *
- * The delta rather than an absolute, exactly as `phase-05-perf.spec.ts` takes it: the level's own
- * enemies satisfy an absolute count on their own, and *"fast because nothing new was drawn"* is the
- * failure this excludes.
+ * 🔴 An unknown value used to fall through both parsers to "no mutation", so `PERF_MUTATION=scale-0`,
+ * `Scale0`, `storm 8192` or a stray trailing space ran **clean and reported `2 passed`** — and an
+ * operator in a hurry reads that as the proof having been run. A red proof that silently did not run
+ * is worse than no red proof, because it comes with evidence.
  *
- * ⚠️ `DEV_FLEET_COUNT` is a **declared** worst case, not a bound. Finding S5 in
- * `docs/qa/phase-05-combat-08-gate-10.md:121` is still open — nothing in `src/sim/` or the level
- * format caps concurrent enemies, so "max enemies" here means *the largest fleet this project
- * measures*. The particles beside them are different in kind: `atLimit()` drops rather than evicts,
- * so `SHIPPED_PEAK_ALIVE` is a ceiling by construction.
+ * This is also the other half of the "one typo from always-on" question: the fixtures are inert with
+ * `PERF_MUTATION` unset, and now a typo is loud rather than inert.
  */
-export async function spawnWorstCaseFleet(page: Page): Promise<void> {
-  const before = await counts(page);
-  await page.keyboard.press('n');
-  await waitForBodyCount(page, before.bodies + DEV_FLEET_COUNT);
-  const after = await counts(page);
-  expect(typeof after.sprites, 'body counts must be typed before they are compared').toBe('number');
-  expect(after.bodies - before.bodies, 'the dev fleet did not spawn').toBe(DEV_FLEET_COUNT);
-  // Type before value, and the vault 9.4 guard: twenty bodies swapped for the cheaper Rectangle
-  // fallback still satisfies the body count, and makes every number in the spec LOOK better.
-  expect(after.sprites - before.sprites, 'the fleet drew as Rectangles, not Sprites').toBe(
-    DEV_FLEET_COUNT,
-  );
-}
-
-/**
- * Put the page into one arm and take one window from it, with the two guards
- * `phase-07-perf.spec.ts` puts on every arm of its pair loop.
- *
- * Here rather than in the spec for the seam `polishSeries.ts` states: everything about *how the game
- * is observed* travels with the instrument, and *"a reading whose preconditions are unchecked is not
- * a reading"* — so the frame-count and tick-span guards live beside the call that produces them.
- * The spec keeps the claims. It is also what holds that file under the 400-line rule.
- */
-export async function sampleArm(page: Page, alive: number, label: string): Promise<Sample> {
-  await setStorm(page, alive);
-  const measured = await sample(page, EFFECT_SAMPLE_TICKS);
-  expect(measured.frames, `${label}: too few frames to reduce`).toBeGreaterThan(MIN_SAMPLES);
-  expect(measured.ticks, `${label}: short window`).toBeGreaterThanOrEqual(EFFECT_SAMPLE_TICKS);
-  return measured;
+export function namedMutation(mutation: string): NamedMutation | '' {
+  if (mutation === '' || stormCount(mutation) > 0) {
+    return '';
+  }
+  if (!(NAMED_MUTATIONS as readonly string[]).includes(mutation)) {
+    throw new Error(
+      `PERF_MUTATION="${mutation}" is not a mutation this spec knows. Expected one of ` +
+        `${NAMED_MUTATIONS.join(', ')}, or storm<N>. Refusing to run clean and report green under a ` +
+        'name that looks like a proof.',
+    );
+  }
+  return mutation as NamedMutation;
 }

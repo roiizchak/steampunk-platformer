@@ -1,31 +1,51 @@
 /**
- * # Phase 9, criteria 9.5 and 9.6 — the frame budget under the worst case, and the guard that stops
- * a blank screen from passing it.
+ * # Phase 9, criterion 9.5 — the frame budget holds under the worst case.
  *
- * ## 9.6 runs FIRST, and it is not a formality
+ * ## 9.6 is not optional scenery, it is inside this file
  *
  * *A frame budget that a blank screen passes is worse than no gate*, because a build that stopped
- * drawing gets FASTER and every millisecond assertion in this file gets easier. This project has
- * shipped that shape twice — twelve of twenty enemies as grey-box Rectangles with every gate green,
- * and a death fade that played a whole ten-frame KO at 35 % opacity while the sampler reported ten
- * of ten poses painted *(vault 9.4)*. So the first test asserts the frames were **drawing
- * particles**, by a statistic that is zero when they are not, and nothing in the second test is
- * trusted until it holds.
+ * drawing gets FASTER and every millisecond assertion below gets easier. This project has shipped
+ * that shape twice — twelve of twenty enemies as grey-box Rectangles with every gate green, and a
+ * death fade that played a whole ten-frame KO at 35 % opacity while the sampler reported ten of ten
+ * poses painted *(vault 9.4)*. `phase-09-draw.spec.ts` owns criterion 9.6, but this file does not
+ * depend on that one having run: **Guard 0 and Guard 0b re-take the same statistic per arm**, on
+ * particles and on the twenty enemies, before a single millisecond is compared here.
  *
- * ## What the two tests measure, and the seam between them
+ * ## The seam
  *
- * `effectBudget.ts` argues the statistic and holds every constant; `effectMutation.ts` holds the two
- * committed proving mutations and the storm that drives the real emitters. This file states the
- * claims and asserts them, and nothing else.
+ * `effectBudget.ts` holds every constant and its derivation; `effectCounts.ts` the drawn counter and
+ * the reading of one window; `effectMutation.ts` the committed mutations and the storm that drives
+ * the real emitters. This file states the claims and asserts them, and nothing else.
  *
- * ## Both mutations are one shell variable — neither has to be reinvented
+ * ## Every mutation is one shell variable — none has to be reinvented
  *
  * ```
- * PERF_MUTATION=scale0    npm run test:e2e -- tests/e2e/phase-09-perf.spec.ts   # 9.6 goes red
- * PERF_MUTATION=storm8192 npm run test:e2e -- tests/e2e/phase-09-perf.spec.ts   # 9.5 goes red
+ * PERF_MUTATION=storm8192   …  # the absolute frame budget
+ * PERF_MUTATION=fleetscale0 …  # Guard 0b — the twenty enemies this test's headline names
+ * PERF_MUTATION=scale0      …  # Guard 0 — the particles, by the emitter render gate
  * ```
+ *
+ * Anything else throws (`namedMutation`): a proof that silently ran clean would report a green
+ * suite, which is the most convincing possible evidence that nothing was tested.
  *
  * ## ⚠️ Stated limits *(vault 9.3 — a gate's blind spots are part of its result)*
+ *
+ *  - **🔴 The measured frame carries NO COMBAT, and the absolute bound must be read that way.**
+ *    `installStorm` holds the player invulnerable on every frame of every arm. It has to — without
+ *    it the shipped effects path fires bursts that `atLimit()` accepts in cheap arms and DROPS in
+ *    expensive ones, an inversion that stops the sweep ordering at all. The price is that the frame
+ *    `MAX_EFFECT_FRAME_WORK_MS` is asserted on contains no `hurt` or `death` state, no hit-stop, no
+ *    knockback, no screen shake, no i-frame flicker and none of `gameEffects.render()`'s own trigger
+ *    paths. It is the worst **steady-state** frame, not the worst frame the game can produce.
+ *  - **🔴 The storm holds a population; it does not measure a single triggered burst.**
+ *    `sampleArm` waits for the population to land *before* sampling, so the frame that first
+ *    constructs N particles is outside the window by construction. What is inside is the top-up —
+ *    which is itself burst-shaped and not a trickle: `EmitterSpec.lifespanTicks` is a scalar, so an
+ *    entire `explode()` expires on one frame and the whole cap is re-exploded on the next, every 18
+ *    ticks for sparks, 45 for steam, 22 for dust, through the shipped call. Those spikes are what
+ *    `MAX_EFFECT_FRAME_P95_MS` gates; every other bound here is a median and blind to them. The
+ *    shipped *trigger* path — `impactSparks`, `deathSteam`, `hurtVent`, `landingDust` deciding
+ *    **when** to burst — is criterion 9.1's behavioural spec, not this one.
  *
  *  - **"Max enemies" here means the largest fleet this project MEASURES, not the largest possible.**
  *    `DEV_FLEET_COUNT` is a chosen 10x multiple; finding S5 in
@@ -47,31 +67,28 @@
 
 import { expect, test } from '@playwright/test';
 
-import { EMITTER_SPECS } from '../../src/render/effects';
 import {
   CLOCK_GRID_MS,
-  EFFECT_KINDS,
+  MAX_EFFECT_FRAME_P95_MS,
   MAX_EFFECT_FRAME_WORK_MS,
   MAX_EFFECT_WORK_DELTA_MS,
   MAX_LINEARITY_SPREAD,
   MAX_PER_PARTICLE_WORK_MS,
-  MIN_DRAWN_AT_PEAK,
+  MIN_HALF_STORM_WORK_DELTA_MS,
   MIN_STORM_WORK_DELTA_MS,
   PAIRS,
   SHIPPED_PEAK_ALIVE,
   STORM_ALIVE,
   SWEEP_ALIVE,
-  particleCounts,
 } from './effectBudget';
+import { sampleArm, spawnWorstCaseFleet } from './effectCounts';
 import {
   installStorm,
-  sampleArm,
+  namedMutation,
   setEmitterScale,
+  setEnemyScale,
   setStorm,
-  spawnWorstCaseFleet,
-  stormCaps,
   stormCount,
-  wantsZeroScale,
 } from './effectMutation';
 import { bootToGame } from './gameHarness';
 import { median } from './levelPerf';
@@ -81,107 +98,15 @@ import { assertRealGpu } from './realGpu';
 
 declare const process: { env: Record<string, string | undefined> };
 
-const MUTATION = process.env.PERF_MUTATION ?? '';
+/** Throws on an unrecognised value rather than running clean and reporting green — see `L2`. */
+const MUTATION = namedMutation(process.env.PERF_MUTATION ?? '');
+const STORM_MUTATION = stormCount(process.env.PERF_MUTATION ?? '');
 
 /** How many times the whole sweep is walked. Odd, so the median of each point is a real reading. */
 const SWEEP_ROUNDS = 5;
 
-const sum = (values: number[]): number => values.reduce((a, b) => a + b, 0);
 
-test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () => {
-  /**
-   * ## 9.6 — the measurement can tell "fast" from "not drawing anything"
-   *
-   * 🔴 **The load-bearing statistic is a per-particle DRAW-SUBMISSION count, not
-   * `getAliveParticleCount()`**, and the difference is the whole criterion. An alive count is
-   * emitter bookkeeping: at `setScale(0)` every particle stays alive, stays `visible`, keeps
-   * `alpha: 1` and a valid position, and **draws nothing** — while making the frame cheaper.
-   * `perfSampler.ts:212-224` closed that exact hole one layer down for enemy bodies on Codex 5.14
-   * blocker 1, by asking Phaser's own `willRender(camera)` instead of guessing at exclusion routes.
-   *
-   * A Phaser 4 `Particle` is not a Game Object and has no `willRender`, so `particleCounts` asks the
-   * question the same way at one remove: the emitter's own `willRender(camera)`, then the exact
-   * per-particle `continue` from `ParticleEmitterWebGLRenderer.js:80-84`. `effectBudget.ts` carries
-   * the transcription and the citation.
-   *
-   * The `setScale(0)` red proof is `PERF_MUTATION=scale0` — the mutation this assertion NAMES, not a
-   * convenient one.
-   */
-  test('the drawn-particle count is zero with the effects off and pinned non-zero with them on', async ({
-    page,
-  }) => {
-    test.setTimeout(120_000);
-
-    await bootToGame(page);
-    const renderer = await assertRealGpu(page, '9.6');
-    await installStorm(page);
-
-    // The storm at the shipped peak IS the shipped configuration, not a lookalike. Asserted rather
-    // than asserted-in-a-comment, and asserted for every sweep point, because a rounding that did
-    // not sum back would make "N particles" a different N in the table below.
-    for (const kind of EFFECT_KINDS) {
-      expect(
-        stormCaps(SHIPPED_PEAK_ALIVE)[kind],
-        `the storm at ${SHIPPED_PEAK_ALIVE} must reproduce the shipped ${kind} ceiling exactly`,
-      ).toBe(EMITTER_SPECS[kind].maxAliveParticles);
-    }
-    for (const n of SWEEP_ALIVE) {
-      expect(sum(Object.values(stormCaps(n))), `the ${n}-particle split does not sum back`).toBe(n);
-    }
-
-    await setStorm(page, 0);
-    const offCounts = await counts(page);
-    const off = await particleCounts(page);
-
-    await setStorm(page, SHIPPED_PEAK_ALIVE);
-    if (wantsZeroScale(MUTATION)) {
-      await setEmitterScale(page, 0);
-    }
-    const onCounts = await counts(page);
-    const on = await particleCounts(page);
-    await setEmitterScale(page, 1);
-    await setStorm(page, 0);
-
-    // Type before value *(vault C1)*: everything here comes off the untyped `__phaserGame` route,
-    // and a debug hook that returns nothing passes every comparison vacuously.
-    for (const [field, value] of Object.entries(on)) {
-      expect(typeof value, `particleCounts().${field} must be a number`).toBe('number');
-    }
-
-    // eslint-disable-next-line no-console
-    console.log(
-      `[9.6] renderer ${renderer} | off drawn ${off.drawn} inView ${off.inView} alive ${off.alive} ` +
-        `emitters ${off.emittersDrawing} | on drawn ${on.drawn} inView ${on.inView} alive ` +
-        `${on.alive} emitters ${on.emittersDrawing} | enemies drawn ${offCounts.opaque}/${onCounts.opaque}`,
-    );
-
-    // ── The OFF arm draws exactly nothing ──────────────────────────────────────────────────────
-    expect(off.drawn, 'the effects-off arm submitted particles — the arms are the same arm').toBe(0);
-    expect(off.alive, 'the effects-off arm still holds live particles').toBe(0);
-
-    // ── The ON arm draws, and the count is PINNED as a literal ─────────────────────────────────
-    //
-    // `setScale(0)` leaves `alive` at the ceiling and takes `drawn` to zero, so this is the
-    // assertion that separates a drawing build from a bookkeeping one.
-    expect(
-      on.drawn,
-      `the effects-on arm submitted ${on.drawn} particles to the batch while holding ${on.alive} ` +
-        'alive. A particle that is alive and not drawn is the whole failure 9.6 exists for: it ' +
-        'reports visible, reports alpha 1, and makes the frame budget below CHEAPER.',
-    ).toBeGreaterThanOrEqual(MIN_DRAWN_AT_PEAK);
-    expect(
-      on.emittersDrawing,
-      'an emitter was excluded from rendering entirely — its transform, visibility or view bounds',
-    ).toBe(EFFECT_KINDS.length);
-    // Submission is the honest statistic for a main-thread budget (Phaser culls no particle), but a
-    // storm somewhere the camera cannot see is still not a drawn effect. Both, so neither can lie.
-    expect(on.inView, 'every submitted particle was outside the camera').toBeGreaterThan(0);
-
-    // ── The enemies are not what changed ───────────────────────────────────────────────────────
-    expect(onCounts.sprites, 'the enemy sprite count moved between arms').toBe(offCounts.sprites);
-    expect(onCounts.opaque, 'the enemy drawn count moved between arms').toBe(offCounts.opaque);
-  });
-
+test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
   /**
    * ## 9.5 — the frame budget holds under the worst case
    *
@@ -215,14 +140,22 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
     const renderer = await assertRealGpu(page, '9.5');
     await installStorm(page);
     await spawnWorstCaseFleet(page);
-    // 🔴 `scale0` is applied HERE too, and not only in the 9.6 test. Guard 0 below is 9.6's statistic
-    // standing in front of this file's milliseconds, and a guard that is never run against the
-    // mutation it exists for is decoration. Under `scale0` every window still holds its full
+    // 🔴 Both drawing mutations are applied HERE too, not only in the 9.6 test. Guard 0 below is
+    // 9.6's statistic standing in front of this file's milliseconds, and a guard never run against
+    // the mutation it exists for is decoration. Under `scale0` every window still holds its full
     // population, still reports it alive, and draws none of it — which makes each arm CHEAPER and
-    // every bound below easier. Guard 0 is what turns that into a failure instead of a good result.
-    if (wantsZeroScale(MUTATION)) {
+    // every bound below easier. Under `fleetscale0` the twenty enemies this test's headline
+    // assertion NAMES go undrawn, which is the same defect one layer out.
+    if (MUTATION === 'scale0') {
       await setEmitterScale(page, 0);
     }
+    if (MUTATION === 'fleetscale0') {
+      await setEnemyScale(page, 0);
+    }
+
+    // The enemy load, read once before sampling so the per-arm reads below have something to be
+    // identical TO. `opaque` is `willRender`, not the creation-time `isSprite` flag.
+    const fleet = await counts(page);
 
     // ── The sweep ──────────────────────────────────────────────────────────────────────────────
     const sweep = new Map<number, number[]>(SWEEP_ALIVE.map((n) => [n, []]));
@@ -232,9 +165,9 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
       // colder machine than every high point, and that bias is exactly the shape the sweep looks for.
       const order = round % 2 === 0 ? [...SWEEP_ALIVE] : [...SWEEP_ALIVE].reverse();
       for (const n of order) {
-        const measured = await sampleArm(page, n, `sweep N=${n}, round ${round}`);
-        sweep.get(n)!.push(measured.workMedianMs);
-        sweepDrawn.get(n)!.push((await particleCounts(page)).drawn);
+        const arm = await sampleArm(page, n, `sweep N=${n}, round ${round}`, fleet);
+        sweep.get(n)!.push(arm.measured.workMedianMs);
+        sweepDrawn.get(n)!.push(arm.particles.drawn);
       }
     }
     const sweepWork = SWEEP_ALIVE.map((n) => median(sweep.get(n)!));
@@ -246,20 +179,30 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
     );
 
     // ── The pairs, at the shipped peak ─────────────────────────────────────────────────────────
-    const peak = stormCount(MUTATION) || SHIPPED_PEAK_ALIVE;
-    const arms: Record<'on' | 'off', { work: number[]; drawn: number[] }> = {
-      on: { work: [], drawn: [] },
-      off: { work: [], drawn: [] },
-    };
+    const peak = STORM_MUTATION || SHIPPED_PEAK_ALIVE;
+    type Arm = { work: number[]; p95: number[]; drawn: number[]; opaque: number[]; sprites: number[] };
+    const blank = (): Arm => ({ work: [], p95: [], drawn: [], opaque: [], sprites: [] });
+    const arms: Record<'on' | 'off', Arm> = { on: blank(), off: blank() };
     for (let pair = 0; pair < PAIRS; pair += 1) {
       const order = pair % 2 === 0 ? (['on', 'off'] as const) : (['off', 'on'] as const);
-      for (const arm of order) {
-        const measured = await sampleArm(page, arm === 'on' ? peak : 0, `arm ${arm}, pair ${pair}`);
-        arms[arm].work.push(measured.workMedianMs);
-        arms[arm].drawn.push((await particleCounts(page)).drawn);
+      for (const name of order) {
+        const arm = await sampleArm(page, name === 'on' ? peak : 0, `arm ${name}, pair ${pair}`, fleet);
+        arms[name].work.push(arm.measured.workMedianMs);
+        arms[name].p95.push(arm.measured.workP95Ms);
+        arms[name].drawn.push(arm.particles.drawn);
+        // 🔴 The ENEMY drawn count, per arm. The assertion this test fails with names twenty
+        // enemies; until this landed, nothing in it checked they were on screen while the windows
+        // were taken. `sprites` is `isSprite`, a creation-time flag — `perfSampler.ts:137-141`
+        // records it as standing blind spot T14 for exactly this reason — so it is kept only as the
+        // "still Sprites, not Rectangles" half and `opaque` carries the drawn claim.
+        arms[name].opaque.push(arm.enemies.opaque);
+        arms[name].sprites.push(arm.enemies.sprites);
       }
     }
     await setStorm(page, 0);
+    if (MUTATION === 'fleetscale0') {
+      await setEnemyScale(page, 1);
+    }
 
     const onWork = median(arms.on.work);
     const offWork = median(arms.off.work);
@@ -283,6 +226,9 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
       `      peak ${peak} off ${fmt(arms.off.work)}`,
       `      pair deltas ${fmt(pairDeltas)}`,
       `      drawn on ${arms.on.drawn.join('/')} vs off ${arms.off.drawn.join('/')}`,
+      `      enemies drawn on ${arms.on.opaque.join('/')} vs off ${arms.off.opaque.join('/')} ` +
+        `(of ${fleet.bodies} bodies, ${fleet.sprites} sprites)`,
+      `      p95 on ${fmt(arms.on.p95)} (bound ${MAX_EFFECT_FRAME_P95_MS})`,
       `      median work on ${onWork.toFixed(3)} ms, off ${offWork.toFixed(3)} ms, ` +
         `paired delta ${delta.toFixed(4)} ms (bound ${MAX_EFFECT_WORK_DELTA_MS})`,
       `      absolute ${onWork.toFixed(3)} ms (bound ${MAX_EFFECT_FRAME_WORK_MS})`,
@@ -304,6 +250,14 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
       );
       expect(arms.off.drawn[pair], `pair ${pair}: the effects-off window drew particles`).toBe(0);
     }
+
+    // ── Guard 0b: the twenty ENEMIES this test's headline assertion names were DRAWN ───────────
+    //
+    // Asserted inside `sampleArm`, at every window of every arm INCLUDING the sweep's, rather than
+    // here — see its `drawnFleet` docstring for why (`opaque` is `willRender`; `sprites` is a
+    // creation-time flag and blind spot T14). It is checked at the reading so the arm that lost the
+    // fleet is the one named, twenty windows earlier than this line. `PERF_MUTATION=fleetscale0` is
+    // its red proof, and the per-arm figures are printed above.
     for (const n of SWEEP_ALIVE) {
       const drawn = sweepDrawn.get(n)!;
       if (n === 0) {
@@ -345,11 +299,37 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
         `and this gate is measuring nothing.${detail}`,
     ).toBeGreaterThanOrEqual(MIN_STORM_WORK_DELTA_MS);
 
+    // 🔴 And the SAME premise under the HALF amplification, which Guard 3 divides by.
+    //
+    // This is the tightest false-red route in the file and it used to be unguarded and undisclosed.
+    // Guard 1 permits equality, so `sweepWork[512] === sweepWork[0]` is a legal clean outcome —
+    // `perParticleHalf` is then 0, Guard 3's epsilon divisor takes over, and the spread reds at
+    // ~5e5. Across seven clean sweeps the 512-vs-0 gap fell to two clock steps three times, against
+    // five for the 1024 gap.
+    //
+    // ⚠️ **The message names QUANTISATION, not non-linearity, and that is the point of the guard.**
+    // Failing through Guard 3 instead would tell the next reader "the cost does not scale, withdraw
+    // the divide-back" — which under this project's rules sends them to REPLACE THE STATISTIC over
+    // one step of `performance.now()` grid. That is the mistake the first sweep already made.
+    const halfDelta = sweepWork[halfIndex]! - sweepWork[0]!;
+    expect(
+      halfDelta,
+      `${halfN} particles measured ${halfDelta.toFixed(4)} ms above the control — under ` +
+        `${MIN_HALF_STORM_WORK_DELTA_MS} ms, which is ${MIN_HALF_STORM_WORK_DELTA_MS / CLOCK_GRID_MS} ` +
+        `steps of this browser's ${CLOCK_GRID_MS} ms clock. This is a RESOLUTION failure, not a ` +
+        'linearity one: the half amplification did not clear the grid, so the per-particle estimate ' +
+        'taken from it is quantisation noise and the linearity check below would divide by it. ' +
+        'Raise the sweep points or the round count — do NOT conclude the cost is non-linear, and do ' +
+        `NOT replace the statistic.${detail}`,
+    ).toBeGreaterThanOrEqual(MIN_HALF_STORM_WORK_DELTA_MS);
+
     // ── Guard 3: the divide-back is a measurement, not an extrapolation ────────────────────────
     //
     // Two independent estimates of one quantity at two amplifications. If the cost scales with the
     // number of particles they agree, and dividing the delta by the count is sound. If they do not,
-    // the inference is broken and the reported per-particle number is fabricated.
+    // the inference is broken and the reported per-particle number is fabricated. Both inputs are
+    // floored above the clock grid by the two guards above, so a failure HERE is a real disagreement
+    // between two resolvable measurements rather than a division by noise.
     const spread =
       Math.max(perParticle, perParticleHalf) / Math.max(1e-9, Math.min(perParticle, perParticleHalf));
     expect(
@@ -376,5 +356,32 @@ test.describe('Phase 9 — criteria 9.5 and 9.6, the effect frame budget', () =>
     expect(perParticle, `one particle costs more per frame than it should${detail}`).toBeLessThanOrEqual(
       MAX_PER_PARTICLE_WORK_MS,
     );
+
+    // ── The burst end of the window ────────────────────────────────────────────────────────────
+    //
+    // 🔴 Every bound above is a median, and two are medians of medians — a stall on one frame in
+    // five hundred moves none of them. `workP95Ms` is in the same `Sample` precisely because
+    // *"a median is by construction blind to a minority of expensive frames"*
+    // (`perfSampler.ts:70-77`), and this gate had reproduced the omission it was added to fix: it
+    // neither asserted nor printed it.
+    //
+    // The spikes are real and they are in the window. `EmitterSpec.lifespanTicks` is a scalar, so a
+    // whole `explode()` expires on one frame and `installStorm` re-explodes the entire cap on the
+    // next — a full-cap burst every 18 ticks for sparks, 45 for steam, 22 for dust, through the
+    // shipped call. What the storm does NOT contain is the shipped TRIGGER deciding when to burst;
+    // that is 9.1's spec, and the stated-limits block says so.
+    //
+    // The bound is `levelPerf.ts:71-84`'s and is deliberately NOT tuned to the observation: one
+    // whole 60 Hz frame, because any single frame costing a whole frame is a defect whatever the
+    // machine reads today. Every arm is asserted, not just the median of them — a percentile that
+    // is medianed across pairs is a median again.
+    for (let pair = 0; pair < PAIRS; pair += 1) {
+      expect(
+        arms.on.p95[pair],
+        `pair ${pair}: the 95th-percentile frame of the effects-on window took ` +
+          `${arms.on.p95[pair]!.toFixed(3)} ms — a whole 60 Hz frame. The medians above cannot see ` +
+          `this by construction.${detail}`,
+      ).toBeLessThanOrEqual(MAX_EFFECT_FRAME_P95_MS);
+    }
   });
 });

@@ -1,21 +1,21 @@
 /**
- * The constants and the counters behind criteria 9.5 and 9.6 — what a frame of particles may cost,
- * and how many particles a frame actually SUBMITTED.
+ * Every constant behind criteria 9.5 and 9.6 — what a frame of particles may cost, and what each
+ * number means.
  *
- * The spec states the claims; this file is the instrument and the numbers, argued once beside the
- * code that implements them. Same seam `perfSampler.ts` draws for 5.11 and `perfBudget.ts` for the
- * fleet — and the same reason: a bound whose derivation lives in a QA log drifts from the assertion
- * that uses it.
+ * The spec states the claims; this file is the numbers, argued once beside the code that uses them.
+ * Same seam `perfBudget.ts` draws for the fleet, and the same reason: a bound whose derivation lives
+ * in a QA log drifts from the assertion that uses it.
  *
- * 🔴 **`perfSampler.ts` is NOT extended.** It sits at 398 of the 400-line limit, and the particle
- * figure below would push it over. `counts(page)` is imported UNCHANGED by the spec and called
- * alongside `particleCounts(page)`, which is the same coverage without editing a file with two
- * lines of headroom.
+ * The COUNTER moved to `effectCounts.ts` when this file crossed 400 lines under review fixes —
+ * "what a frame may cost" here, "what a frame actually drew" there.
+ *
+ * 🔴 **`perfSampler.ts` is NOT extended.** It sits at 398 of the 400-line limit. `counts(page)` is
+ * imported UNCHANGED and called alongside `particleCounts(page)`, which is the same coverage without
+ * editing a file with two lines of headroom.
  */
 
 import { EFFECT_PEAK_ALIVE, EMITTER_SPECS, type EffectKind } from '../../src/render/effects';
 
-type Page = import('@playwright/test').Page;
 
 /** The three kinds, in one place, so nothing below restates them. */
 export const EFFECT_KINDS = Object.keys(EMITTER_SPECS) as EffectKind[];
@@ -119,11 +119,53 @@ export const CLOCK_GRID_MS = 0.1;
  * 16.67 / 6 is 2.78, rounded down to 2.5, and it is tighter than the fleet's own
  * `MAX_FLEET_WORK_MS = 8` that it sits underneath.
  *
+ * ## 🔴 What that sentence does NOT include, and it is a real narrowing
+ *
+ * The frame this is asserted on carries **no combat**. `installStorm` holds the player invulnerable
+ * every frame — it has to, or the sweep cannot order at all (its docstring has the inversion
+ * argument) — and with no hit ever landing there is no `hurt` or `death` state, no `freezePair`
+ * hit-stop, no knockback, no screen shake, no i-frame flicker, and **none of
+ * `gameEffects.render()`'s own trigger paths** (`strike`, `hurtVent`, `landingDust`) ever fires.
+ *
+ * So "worst case" here is *the worst STEADY-STATE frame*: the largest fleet this project measures,
+ * the shipped particle ceiling, and everything that draws every frame regardless. It is not the
+ * worst frame the game can produce. `MAX_EFFECT_FRAME_P95_MS` is what covers the spiky end of the
+ * window, and the trigger path itself is covered by criterion 9.1's behavioural spec rather than
+ * here. Vault 9.3: a gate's blind spots are part of its result.
+ *
  * The selection set then read 0.500 / 0.500 / 0.600 ms, so the bound is roughly 4x above the worst
  * of them. Chosen on one set of runs and confirmed on a HELD-OUT set that had no say in it; both
  * sets are in `docs/qa/phase-09-polish.md`.
  */
 export const MAX_EFFECT_FRAME_WORK_MS = 2.5;
+
+/**
+ * The ceiling on the ON arm's **95th percentile** frame — the burst end of the window.
+ *
+ * 🔴 **Every other millisecond bound in this file is a median, and two are medians of medians**, so
+ * a stall on one frame in five hundred moves none of them. `workP95Ms` exists in the same `Sample`
+ * for exactly that reason — `perfSampler.ts:70-77` records it being added after an adversarial brief
+ * found *"the one frame capable of showing an O(n²) burst was being reported to a human and gated by
+ * nothing"*. This gate had reproduced that omission: it neither asserted nor printed it.
+ *
+ * ## And the burst frames ARE inside the window, which is what makes this worth asserting
+ *
+ * `EmitterSpec.lifespanTicks` is a **scalar**, not a range, so every particle from one `explode()`
+ * expires on the same frame — and `installStorm`'s top-up then re-explodes the whole cap in one
+ * frame. The storm is therefore not a smooth trickle: it is a full-cap `explode()` every 18 ticks
+ * for sparks, 45 for steam, 22 for dust, through the shipped call `gameEffects.emit` uses. The
+ * emission spike the feature actually produces is in the sampled window, several times a second,
+ * and only a percentile can see it.
+ *
+ * ## The number is DELIBERATELY not tuned to the observation
+ *
+ * 16 ms is `levelPerf.ts:71-84`'s `MAX_LEVEL_WORK_P95_MS` and its reasoning verbatim: one whole
+ * 60 Hz frame, chosen because *any* single frame taking a whole frame budget is a defect regardless
+ * of what the machine happens to read today. It is not derived from the measurements and must not be
+ * tightened toward them — the observed p95 is printed in the spec's output for whoever wants the
+ * real figure.
+ */
+export const MAX_EFFECT_FRAME_P95_MS = 16;
 
 /**
  * The floor on the paired delta at the amplified peak — the **premise check**, in the shape
@@ -133,12 +175,40 @@ export const MAX_EFFECT_FRAME_WORK_MS = 2.5;
  * `MAX_EFFECT_FRAME_WORK_MS` would pass for a build whose particles cost anything at all — because
  * a build that drew none would pass it most comfortably of the lot.
  *
- * ⚠️ **It is a FLOOR, so it is the one bound here that can false-RED**, which is why it is set two
- * clock steps rather than close to the reading. The selection set measured 0.500 / 0.600 / 0.700 ms
- * of storm delta; 0.2 sits 2.5x under the weakest of them and is still twice the clock's own
- * resolution, so it cannot be satisfied by a single step of quantisation noise.
+ * ⚠️ **It is a FLOOR, so it is one of the three bounds here that can false-RED.** The other two are
+ * `MIN_HALF_STORM_WORK_DELTA_MS` and, behind it, `MAX_LINEARITY_SPREAD`.
+ *
+ * 🔴 **An earlier version of this docstring called it "the one bound here that can false-RED", and
+ * that was wrong in a way worth recording**: the review found the *half* amplification is the
+ * tighter route by three clock steps, and that its failure mode is catastrophic in magnitude rather
+ * than marginal. `MIN_HALF_STORM_WORK_DELTA_MS` exists because of that, and this sentence is
+ * corrected rather than quietly dropped.
+ *
+ * Set two clock steps rather than close to the reading. Across seven clean sweeps the 1024-vs-0 gap
+ * was never below **five** clock steps (0.500 / 0.600 / 0.700 / 0.600 / 0.500 / 0.600 / 0.700 ms),
+ * so 0.2 needs a three-step adverse move of a median-of-five to fire, and it is still twice the
+ * clock's own resolution — a single step of quantisation noise cannot satisfy it.
  */
 export const MIN_STORM_WORK_DELTA_MS = 0.2;
+
+/**
+ * The same floor under the **half** amplification, and it guards a sharper edge than its sibling.
+ *
+ * 🔴 `MAX_LINEARITY_SPREAD` divides by `perParticleHalf`. Guard 2 floors the 1024 amplification so
+ * `perParticle` cannot be zero — but nothing floored the 512 one, and Guard 1 permits *equality*, so
+ * `sweepWork[512] === sweepWork[0]` is a legal clean outcome. `perParticleHalf` is then 0, the
+ * spread divides by the `1e-9` epsilon, and the run reds at roughly **5 x 10^5**.
+ *
+ * That is not a hypothetical margin: across the same seven sweeps the 512-vs-0 gap fell to **two**
+ * clock steps three times, against five for the 1024 gap. The linearity check was the tightest
+ * false-red route in the file and it was undisclosed.
+ *
+ * ⚠️ **The message this guard carries matters more than the guard.** A bare linearity failure tells
+ * the next reader *"the cost does not scale, withdraw the divide-back"* — which under this repo's own
+ * rule sends them to REPLACE THE STATISTIC over one step of `performance.now()` quantisation. That
+ * is the mistake the first sweep already made once. So this fires first, and it says quantisation.
+ */
+export const MIN_HALF_STORM_WORK_DELTA_MS = 0.2;
 
 /**
  * The ceiling on what the shipped particle peak adds to a frame, measured as the median of ten
@@ -187,7 +257,7 @@ export const MAX_PER_PARTICLE_WORK_MS = 0.003;
 /**
  * How far two per-particle estimates taken at different amplifications may sit apart.
  *
- * `phase-08-gate-perf.spec.ts:137`'s `MAX_LINEARITY_SPREAD`, for its reason verbatim: dividing a
+ * `phase-08-gate-perf.spec.ts:129`'s `MAX_LINEARITY_SPREAD`, for its reason verbatim: dividing a
  * delta by a count is an ASSUMPTION until two amplifications agree, and the answer to that objection
  * is to measure it rather than argue it.
  */
@@ -201,110 +271,3 @@ export const MAX_LINEARITY_SPREAD = 4;
  * broken path produces (which is zero) and far below anything a working one produces (which is 96).
  */
 export const MIN_DRAWN_AT_PEAK = 64;
-
-/** What one read of the emitters returns. `drawn` is the load-bearing figure; the rest support it. */
-export interface ParticleCounts {
-  /**
-   * Particles this frame would SUBMIT to the batch, per Phaser's own renderer.
-   *
-   * 🔴 **Not `getAliveParticleCount()`, and that is criterion 9.6 in one line.** An alive particle
-   * proves emitter STATE, not draw submission: at `setScale(0)` it reports alive, reports
-   * `visible: true`, reports `alpha: 1`, and draws nothing at all. `perfSampler.ts:212-224` closed
-   * exactly this hole one layer down for enemy bodies, on Codex 5.14 blocker 1, by asking Phaser's
-   * `willRender(camera)` instead of guessing at exclusion routes.
-   *
-   * A Phaser 4 `Particle` is **not a Game Object** and has no `willRender` — verified against
-   * `node_modules/phaser/src/gameobjects/particles/Particle.js`, whose whole method list is `emit`,
-   * `isAlive`, `kill`, `setPosition`, `fire`, `update`, `computeVelocity`, `setSizeToFrame`,
-   * `getBounds`, `destroy`. So the predicate is transcribed from the ONE place that decides it,
-   * `ParticleEmitterWebGLRenderer.js:66-85`: the **emitter** must `willRender(camera)` (which is
-   * where an emitter-level `setScale(0)` is caught, exactly as it is for a body), its `viewBounds`
-   * must intersect the camera, and then per particle `alpha * emitter.alpha > 0` and
-   * `scaleX !== 0` and `scaleY !== 0`. Every particle that clears all of that is submitted; every
-   * one that does not is `continue`d over.
-   */
-  drawn: number;
-  /**
-   * `drawn` AND inside the camera's world view — a supporting figure, deliberately not the gate.
-   *
-   * Phaser's particle renderer performs **no per-particle cull** (see the file above: the only
-   * bounds test is the emitter's optional `viewBounds`), so an off-screen particle still costs a
-   * matrix, a quad and a batch slot. Submission is therefore the honest statistic for a main-thread
-   * budget. This one exists so a storm emitted somewhere the camera cannot see is visible as such in
-   * the output rather than passing quietly.
-   */
-  inView: number;
-  /** `getAliveParticleCount()` summed. **Supporting only** — this is the figure 9.6 distrusts. */
-  alive: number;
-  /** How many of the three emitters cleared `willRender(camera)`. 3 when the path is healthy. */
-  emittersDrawing: number;
-}
-
-/**
- * Read all three shipped emitters in one page round trip.
- *
- * The emitters come off `EffectAttachment.emitters()` — the handle the scene publishes — never a
- * duplicate built by the test. A fixture that re-implements the thing it measures proves nothing
- * about the shipped code.
- */
-export async function particleCounts(page: Page): Promise<ParticleCounts> {
-  return page.evaluate(() => {
-    interface P {
-      alpha: number;
-      scaleX: number;
-      scaleY: number;
-      x: number;
-      y: number;
-    }
-    interface E {
-      alive: P[];
-      alpha: number;
-      viewBounds: { x: number; y: number; width: number; height: number } | null;
-      willRender(camera: unknown): boolean;
-      getAliveParticleCount(): number;
-    }
-    const scene = (
-      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('Game') as unknown as {
-      effects: { emitters(): Record<string, E> };
-      cameras: {
-        main: { worldView: { x: number; y: number; width: number; height: number } };
-      };
-    };
-    const camera = scene.cameras.main;
-    const view = camera.worldView;
-    const hit = (a: { x: number; y: number; width: number; height: number }): boolean =>
-      a.x < view.x + view.width &&
-      a.x + a.width > view.x &&
-      a.y < view.y + view.height &&
-      a.y + a.height > view.y;
-
-    let drawn = 0;
-    let inView = 0;
-    let alive = 0;
-    let emittersDrawing = 0;
-    for (const emitter of Object.values(scene.effects.emitters())) {
-      alive += emitter.getAliveParticleCount();
-      // The emitter-level gates, in the renderer's own order. `willRender` is where a `setScale(0)`
-      // on the emitter is caught: Phaser clears the transform render flag when a scale hits zero.
-      if (!emitter.willRender(camera)) {
-        continue;
-      }
-      if (emitter.viewBounds && !hit(emitter.viewBounds)) {
-        continue;
-      }
-      emittersDrawing += 1;
-      for (const p of emitter.alive) {
-        // The per-particle `continue` from ParticleEmitterWebGLRenderer.js, inverted.
-        if (p.alpha * emitter.alpha <= 0 || p.scaleX === 0 || p.scaleY === 0) {
-          continue;
-        }
-        drawn += 1;
-        if (p.x >= view.x && p.x <= view.x + view.width && p.y >= view.y && p.y <= view.y + view.height) {
-          inView += 1;
-        }
-      }
-    }
-    return { drawn, inView, alive, emittersDrawing };
-  });
-}
