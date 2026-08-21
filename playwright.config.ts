@@ -113,7 +113,14 @@ export default defineConfig({
       // `testMatch` below are the SAME pattern and must stay identical — a file that matches neither
       // runs nowhere, and a file that matches both runs twice, once on the rasteriser its assertions
       // are meaningless on.
-      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
+      //
+      // 🔴 **Phase 9 joins with `9-perf` ALONE, not a prefix.** `phase-09-polish.spec.ts` asserts
+      // behaviour — tick indices, hp drops, camera offsets — and belongs here, on the cheap headless
+      // browser. `phase-09-perf.spec.ts` names a frame budget and calls `assertRealGpu`, so it must
+      // have the substrate this phase agreed to measure on. The prefix form the Phase 6-8 entries
+      // use would have dragged the behavioural spec into a headed window for no reason and doubled
+      // its runtime.
+      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-perf)\.spec\.ts/,
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -144,7 +151,11 @@ export default defineConfig({
       // (HANDOFF §14 measured the same scene 21x slower). A `phase-08-*.spec.ts` did not match this
       // regex and would have run headless in silence, which is the failure mode the whole project is
       // built against.
-      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+)\.spec\.ts/,
+      // 🔴 Phase 9's perf spec joins for the TIME reason alone (criteria 9.5 and 9.6), and by exact
+      // name rather than by prefix — see the `testIgnore` above. This pattern and that one are the
+      // SAME pattern and must stay identical: a file matching neither runs nowhere, and a file
+      // matching both runs twice, once on a rasteriser its assertions are meaningless on.
+      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-perf)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,
