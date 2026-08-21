@@ -352,6 +352,24 @@ its evidence.
     the `hudFade` / `goalLayer` idiom, and it costs `GameScene.ts` no line at all, which was the
     stated obstacle. Gated in `tests/unit/sprite-draw-path.test.ts`; watched red by replacing the
     handler body with a no-op.
+
+    🔴 **And the first version of this fix broke six e2e specs, which is the most useful thing that
+    happened in the round.** `scene.cameras.main.setPosition(baseX, baseY)` threw *"Cannot read
+    properties of undefined (reading 'setPosition')"* **inside Phaser's own `Systems.shutdown`**,
+    taking down a `scene.start` mid-transition. `CameraManager` registers `once(SCENE.SHUTDOWN, …)`
+    from its own `start()` — before any scene's `create()` — and its handler sets
+    `this.main = undefined` and destroys every camera, so a SHUTDOWN listener added in `create()`
+    always runs after the cameras are gone. Guarded with `scene.cameras?.main?.setPosition(…)`.
+
+    ⚠️ **That also corrects the hazard this entry was written about.** `CameraManager.shutdown()`
+    destroys every camera and `start()` builds a fresh one, so **the main camera does not survive a
+    `scene.restart()`** — the "next `attachEffects` captures the SHAKEN x as its new base" scenario
+    is not reachable by that route. The restore is for an explicit mid-life `destroy()`, and no
+    caller does that today. The finding was still worth applying (the emitters, and reachability),
+    but the failure scenario recorded for it was INFERRED and is now known to be wrong.
+
+    **The whole thing is also a note about gate strength.** The unit gate proved the handler was
+    *registered*; only the browser could show it *threw*. Recorded as 9.8 entry 33's concrete case.
 17. **A frozen swing's hitbox stays live, so a second enemy walking into reach re-arms the freeze.**
     Each enemy is still struck only once and level layout bounds how many bodies can enter reach
     inside 4-9 ticks, but nothing caps the chain. Deliberately uncapped: a cap is a design decision

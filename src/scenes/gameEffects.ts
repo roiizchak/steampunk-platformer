@@ -71,6 +71,7 @@ import {
 import { ticksToMs } from '../sim';
 import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
+import { ensureParticleTexture } from './particleTexture';
 
 /** What `GameScene` holds on to after attaching the effects. */
 export interface EffectAttachment {
@@ -106,40 +107,6 @@ const KINDS = Object.keys(EMITTER_SPECS) as EffectKind[];
 const perSecond = (pxPerTick: number): number => pxPerTick * TICK_HZ;
 const perSecondSquared = (pxPerTickSquared: number): number =>
   pxPerTickSquared * TICK_HZ * TICK_HZ;
-
-/**
- * The particle: one dot per kind, generated rather than loaded, **in the spec's own colour**.
- *
- * Grey-box before art (CLAUDE.md §3): the mechanics ship first and the fal spend comes after they
- * are playable. Generated into the texture manager once and guarded on `exists`, because
- * `attachEffects` runs again on every `create()` and `generateTexture` on a live key throws.
- *
- * 🔴 **Three textures rather than one white dot plus `setTint`, and that is not a style choice.**
- * `playerView.ts:60-62` records the reason: tint is WebGL-only in Phaser 4, this game runs
- * `Phaser.AUTO` with a live Canvas fallback, and a tinted texture renders **plain white** there. A
- * tint would therefore be correct on the machine it was written on and silently absent on someone
- * else's — with a green suite, because nothing in a unit test has a renderer. Baking the colour at
- * `generateTexture` time is the same picture on both backends.
- *
- * Three textures cost three entries in the texture manager and nothing per frame: the emitters still
- * share one `BatchHandlerQuad` run, so the batch-flush argument in `effects.ts`'s header is
- * unaffected.
- */
-const PARTICLE_TEXTURE_PREFIX = 'fx-particle-';
-const PARTICLE_RADIUS = 6;
-
-function ensureParticleTexture(scene: Phaser.Scene, kind: EffectKind, spec: EmitterSpec): string {
-  const key = `${PARTICLE_TEXTURE_PREFIX}${kind}`;
-  if (scene.textures.exists(key)) {
-    return key;
-  }
-  const size = PARTICLE_RADIUS * 2;
-  const pen = scene.make.graphics({ x: 0, y: 0 }, false);
-  pen.fillStyle(spec.tint, 1).fillCircle(PARTICLE_RADIUS, PARTICLE_RADIUS, PARTICLE_RADIUS);
-  pen.generateTexture(key, size, size);
-  pen.destroy();
-  return key;
-}
 
 /** Enough of an enemy to spend particles on. Structural, exactly like `Freezable` itself. */
 type Struck = Readonly<Freezable> & { x: number; y: number; hp: number };
@@ -302,7 +269,18 @@ export function attachEffects(
         return;
       }
       alive = false;
-      scene.cameras.main.setPosition(baseX, baseY);
+      // 🔴 **The camera may already be gone, and on the shutdown path it always is.**
+      // `CameraManager` registers `once(SCENE.SHUTDOWN, …)` from its own `start()` — before any
+      // scene's `create()` runs — and its handler sets `this.main = undefined` and destroys every
+      // camera. So by the time a SHUTDOWN listener registered in `create()` fires, `cameras.main` is
+      // `undefined`, and the unguarded call threw *"Cannot read properties of undefined (reading
+      // 'setPosition')"* **inside Phaser's own `Systems.shutdown`**, taking six e2e specs down with
+      // it — including a `scene.start` in the middle of a level transition.
+      //
+      // Skipping the restore there is correct rather than a workaround: there is no camera left to
+      // restore, and `CameraManager.start()` builds a fresh one for the next run. This call is for
+      // an explicit mid-life `destroy()`, where the camera object genuinely does survive.
+      scene.cameras?.main?.setPosition(baseX, baseY);
       for (const kind of KINDS) {
         built[kind].destroy();
       }

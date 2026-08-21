@@ -34,21 +34,32 @@ import { EMITTER_SPECS, type EffectKind } from '../../src/render/effects';
 
 const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 
-const SCENE_SOURCES = import.meta.glob(['../../src/scenes/gameEffects.ts'], {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+// ⚠️ TWO files, and the second one is not optional. `ensureParticleTexture` moved to
+// `particleTexture.ts` when `gameEffects.ts` crossed 400 lines under the gate round's fixes; a glob
+// that still named one file would have left the `spec.tint` assertion scanning a source the function
+// is no longer in — silently green, which is the exact failure this file exists to catch. The gate
+// follows the FUNCTION, not the filename: `sliceFrom` below finds it in whichever source has it.
+const SCENE_SOURCES = import.meta.glob(
+  ['../../src/scenes/gameEffects.ts', '../../src/scenes/particleTexture.ts'],
+  { query: '?raw', import: 'default', eager: true },
+) as Record<string, string>;
+
+/** The body of `marker`'s declaration, found across every globbed source. Throws if it is nowhere. */
+function sliceFrom(marker: string): string {
+  for (const src of Object.values(SCENE_SOURCES)) {
+    const at = src.indexOf(marker);
+    if (at > -1) return src.slice(at);
+  }
+  throw new Error(`"${marker}" is in none of the globbed scene sources — this gate scans nothing`);
+}
 
 describe('the scene applies the band rather than restating it', () => {
-  const src = Object.values(SCENE_SOURCES)[0];
   // Sliced to `createEmitter` rather than scanned whole, so the containment check is about the draw
   // path and not about a string that happens to appear in a comment.
-  const start = src.indexOf('function createEmitter(');
-  const createEmitter = src.slice(start);
+  const createEmitter = sliceFrom('function createEmitter(');
+  const src = Object.values(SCENE_SOURCES).join('\n');
 
   it('finds createEmitter at all, so the slice below is not empty', () => {
-    expect(start).toBeGreaterThan(-1);
     expect(createEmitter).toContain('scene.add');
   });
 
@@ -69,13 +80,11 @@ describe('the scene applies the band rather than restating it', () => {
   });
 
   it('bakes the spec tint into the particle it draws', () => {
-    // Sliced to `ensureParticleTexture`, not scanned whole: `:59-66`'s sibling learned that a
+    // Sliced to `ensureParticleTexture`, not scanned whole: the sibling above learned that a
     // `toContain` over a whole file matches the string inside a COMMENT about the code as happily
     // as the code, and this file's own header names three comments that mention `spec.tint`.
-    const start = src.indexOf('function ensureParticleTexture(');
-    expect(start).toBeGreaterThan(-1);
     expect(
-      src.slice(start),
+      sliceFrom('export function ensureParticleTexture('),
       `src/scenes/gameEffects.ts never reads spec.tint, so EmitterSpec.tint is a field nothing ` +
         `draws — the same defect class as a burst of zero particles.`,
     ).toContain('spec.tint');
@@ -148,8 +157,11 @@ describe('the scene applies the band rather than restating it', () => {
  * `tests/e2e/phase-09-draw.spec.ts`'s game-event test; this is the millisecond-cost half.
  */
 describe('the burst count survives the trip to the emitter', () => {
-  const src = Object.values(SCENE_SOURCES)[0];
-  const emit = src.slice(src.indexOf('const emit ='), src.indexOf('const specCone ='));
+  // Found by function, never by glob index — `Object.values(...)[0]` would silently point at
+  // whichever source Vite happened to order first the day a second file joined the glob.
+  const fromEmit = sliceFrom('const emit =');
+  const emit = fromEmit.slice(0, fromEmit.indexOf('const specCone ='));
+  const src = Object.values(SCENE_SOURCES).join('\n');
 
   it('slices to `emit` and finds something', () => {
     expect(emit.length).toBeGreaterThan(50);

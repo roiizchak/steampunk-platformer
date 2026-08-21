@@ -120,6 +120,23 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   fails on a correct camera. Assert instead that the target stays inside `worldView` inset by a
   margin — that fails for a camera which stopped following without failing at the boundaries.
 
+## Scene teardown *(Phase 9)*
+
+- 🔴 **By the time YOUR `SHUTDOWN` listener runs, `scene.cameras.main` is `undefined`.**
+  `CameraManager` registers `once(SceneEvents.SHUTDOWN, this.shutdown, this)` from its own `start()`
+  — which happens before any scene's `create()` — so it is always earlier in the emit order than a
+  listener a scene or an attachment adds. Its handler sets `this.main = undefined` and destroys every
+  camera (`cameras/2d/CameraManager.js:726-741`). An unguarded `scene.cameras.main.setPosition(…)` in
+  a shutdown handler throws **inside `Systems.shutdown`**, which means it throws in the middle of the
+  `scene.start` that triggered it. Guard with `scene.cameras?.main?.…`.
+- **A scene restart does not preserve the main camera.** `CameraManager.shutdown()` destroys all of
+  them and `start()` builds a fresh one, so state captured off `cameras.main` cannot go stale across
+  a restart — it simply does not survive. Worth knowing before writing a restore path for it.
+- **`BaseTween.stop()` IS safe on any teardown path.** It guards on
+  `this.parent && !isRemoved() && !isPendingRemove() && !isDestroyed()`
+  (`tweens/tween/BaseTween.js:507-517`), so stopping a handle after the TweenManager has shut down is
+  a no-op rather than a throw. The camera has no equivalent guard, which is the asymmetry above.
+
 ## Tint *(Phase 9)*
 
 - 🔴 **`setTintFill(color)` is REMOVED in Phaser 4, and it does not throw.** It survives as a stub
