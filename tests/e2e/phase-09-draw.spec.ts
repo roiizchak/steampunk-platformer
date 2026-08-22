@@ -51,6 +51,7 @@ import {
   SWEEP_ALIVE,
 } from './effectBudget';
 import { particleCounts } from './effectCounts';
+import { OFFSCREEN_KINDS, setStormOffscreen } from './effectOffscreen';
 import {
   installStorm,
   namedMutation,
@@ -140,6 +141,11 @@ test.describe('Phase 9 — criterion 9.6, the drawn-particle count', () => {
     if (MUTATION === 'particlescale0') {
       await setParticleScale(page, 0);
     }
+    // The same ordering, for the same reason, and here it is what makes the fixture DISTINGUISHING
+    // rather than merely red: applied after the population exists it would read `inView 96`.
+    if (MUTATION === 'halfoffscreen') {
+      await setStormOffscreen(page, OFFSCREEN_KINDS);
+    }
     await setStorm(page, SHIPPED_PEAK_ALIVE);
     const onCounts = await counts(page);
     const on = await particleCounts(page);
@@ -148,6 +154,9 @@ test.describe('Phase 9 — criterion 9.6, the drawn-particle count', () => {
     }
     if (MUTATION === 'particlescale0') {
       await setParticleScale(page, null);
+    }
+    if (MUTATION === 'halfoffscreen') {
+      await setStormOffscreen(page, []);
     }
     await setStorm(page, 0);
 
@@ -198,7 +207,8 @@ test.describe('Phase 9 — criterion 9.6, the drawn-particle count', () => {
     // particle was outside the camera"* — which 95 of 96 off-camera passes, so the message named the
     // only failure the assertion could not detect. The same floor `drawn` carries, for the same
     // reason: two thirds of the ceiling is far above what a broken path produces and far below what a
-    // working one does.
+    // working one does. Proved in its own DISTINGUISHING range by `PERF_MUTATION=halfoffscreen`, which
+    // reads `drawn 96 inView 48` — red here at `Expected >= 64`, and GREEN under the `> 0` it replaced.
     expect(
       on.inView,
       `only ${on.inView} of the ${on.drawn} submitted particles were inside the camera's world view`,

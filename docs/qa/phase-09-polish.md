@@ -1240,7 +1240,7 @@ and each is recorded failing in the gate round's proof table above. Recorded rat
 | **M3** | the header claims Guard 0/0b re-take three of 9.6's checks, and they re-take one | **APPLIED** — header corrected to name the one, and the `inCameraList` gap marked **INFERRED** (it is inferred to red through the premise floor; it was not watched, and inferred is written down as inferred) |
 | **M4** | the absolute bound's docstring names the level, the HUD and the player sprite, and nothing verifies any of them | **APPLIED as a disclosure** — `effectBudget.ts` now states which three loads are asserted and which three are not, that all three make the bound EASIER when absent, and that it is the one bound in the file they can move; added as §9.8 entry 46. **Not closed**: closing it means a fourth counter and a fourth mutation for loads no phase criterion names |
 | **M5** | four docstring/code disagreements, all describing sweep points that no longer exist | **APPLIED** — all four corrected. The one that mattered (`MIN_HALF_STORM_WORK_DELTA_MS` justified from a 512 distribution while guarding 1024) is fixed structurally as well as in prose: `HALF_ALIVE` is a named constant now, so the index cannot drift the point again |
-| **L1** | `expect(on.inView, 'every submitted particle was outside the camera').toBeGreaterThan(0)` names a failure it cannot detect | **APPLIED** — now a count (`>= MIN_DRAWN_AT_PEAK`) with a message that reads out both numbers; watched failing under mutation 5. Note the strengthening's *distinguishing* range (a partially off-camera storm) is not separately proved — the fixture that reds it reds the old form too |
+| **L1** | `expect(on.inView, 'every submitted particle was outside the camera').toBeGreaterThan(0)` names a failure it cannot detect | **APPLIED** — now a count (`>= MIN_DRAWN_AT_PEAK`) with a message that reads out both numbers; watched failing under mutation 5. Its *distinguishing* range is now proved too — round #3's `PERF_MUTATION=halfoffscreen` reads `drawn 96 inView 48`, red at `Expected >= 64` and GREEN under the restored `> 0` |
 | **L2** | effective sensitivity: 4–5x headroom on three bounds, nothing between a 0.9 ms frame and a dropped one | **RECORDED** — every one of them is derived from a claim rather than fitted, and tightening a derived bound toward today's observation is the move this repo forbids; the headroom is the price of that and the readings are printed on every run |
 | **L3** | *"the whole shipped feature costs roughly 0.06 ms"* is over-stated ~1.9x | **APPLIED** — withdrawn rather than restated. It multiplied a divided-back figure by 96, which at `k > 1` over-states; over-statement is right for a ceiling and wrong for a reported measurement. `MAX_EFFECT_WORK_DELTA_MS`'s own readings (0.000 or 0.100 ms per pair) are cited instead |
 | **L4** | the shake fixture puts the player in a 30-landings-per-second cycle and entry 44 does not say so | **APPLIED** — added to entry 44 below |
@@ -1308,5 +1308,58 @@ is independent of the particle count — is committed as `PERF_MUTATION=flatcost
 producing `k = 0.629` against a floor of 0.9, with every other assertion in the file green.
 
 **This is the fourth rewrite of these perf gates, and each previous one produced the next defect.**
-The one this round could not close is L1's distinguishing range, and it is named above rather than
-left for the fifth round to find.
+The one this round could not close is L1's distinguishing range, named above rather than left for the
+fifth round to find — and closed by round #3 below.
+
+---
+
+## The 9.5/9.6 fix round #3 — L1's distinguishing range, closed
+
+The one item round #2 left open. Its own author stated the gap plainly: *"L1's strengthened bound reds
+under the fixture I built, but that fixture would red the old `> 0` form too, so its distinguishing
+range — a partially off-camera storm — is unproved."* A strengthened bound proved only against a
+mutation the **weak** form also caught has not been shown to be worth its own existence *(vault C2)*.
+
+### The fixture that lives in the gap
+
+`PERF_MUTATION=halfoffscreen`, committed — `tests/e2e/effectOffscreen.ts`, applied by
+`phase-09-draw.spec.ts` **before** `setStorm` builds the population, the same ordering trap
+`particlescale0` fell into twice. It offsets the storm's emit point **per kind**: `sparks` (32) and
+`dust` (16) go 4000 px out, `steam` (48) stays at the view centre. `installStorm`'s loop gained one
+term — `emitter.explode(deficit, x + (handle.offsets[kind] ?? 0), y)` — and nothing else moved: same
+emitters, same caps, same shipped `explode`.
+
+The 48/48 split is **structural, not tuned**. Both numbers are `EMITTER_SPECS`'s own
+`maxAliveParticles`, so the split cannot drift with the harness or the box; `steam` is the kind left
+in view because its 45-tick lifespan holds the steadiest population between top-ups; and 4000 px is
+two view-widths at zoom 1 against a per-particle drift bounded by `speedMax x lifespanTicks` (162 px
+for the fastest kind), so nothing can wander back in.
+
+### Both halves, on the SAME fixture
+
+| form | run | result | verbatim |
+|---|---|---|---|
+| **new** — `on.inView >= MIN_DRAWN_AT_PEAK` | `PERF_MUTATION=halfoffscreen`, 3 collected | **1 failed, 2 passed** | *"only 48 of the 96 submitted particles were inside the camera's world view"* · `Expected: >= 64` / `Received: 48` |
+| **old** — `on.inView > 0`, temporarily restored | `PERF_MUTATION=halfoffscreen`, 3 collected | **3 passed (14.5 s)** | no failure of any kind |
+
+Both runs read the identical sample line:
+
+```
+[9.6] ... | off drawn 0 inView 0 alive 0 emitters 3 rendered 3 | on drawn 96 inView 48 alive 96 emitters 3 rendered 3 | enemies drawn 2/2
+```
+
+`drawn 96` is what makes the fixture **distinguishing rather than merely red**: `drawn >= 64`,
+`emittersDrawing`, `inCameraList` and both enemy assertions all PASS, and the inView count is the only
+thing in the file that moves. The strengthening therefore catches a class of failure the `> 0` form
+could not see, and it is no longer decoration. **L1 is closed.**
+
+The scratch revert to the weak form was undone and verified per **C12**: content changed, the
+`SCRATCH REVERT` marker back to **0** (was 1) and `toBeGreaterThanOrEqual(MIN_DRAWN_AT_PEAK)` back to
+**2** (was 1 under the mutation), with `git diff` showing no change to the assertion at all.
+
+### The standing question, asked of the FIXTURE this time
+
+*If the thing under test did nothing at all, would this still pass?* If `setStormOffscreen` were
+inert the run would report `inView 96` and pass — so the redness is itself the evidence it applied.
+And it applied to exactly the kinds intended, not to "something": 48 is `sparks` + `dust` predicted
+from `EMITTER_SPECS` before the run, matched to the particle.

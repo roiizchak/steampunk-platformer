@@ -119,7 +119,7 @@ export async function installStorm(page: Page): Promise<void> {
       return;
     }
     const emitters = scene.effects.emitters();
-    const handle: { caps: Record<string, number>; raf: number } = { caps: {}, raf: 0 };
+    const handle: { caps: Record<string, number>; raf: number; offsets: Record<string, number> } = { caps: {}, raf: 0, offsets: {} };
     w.__fxStorm = handle;
     const step = (): void => {
       scene.simWorld.player.iFrameCounter = 0;
@@ -129,9 +129,9 @@ export async function installStorm(page: Page): Promise<void> {
       for (const [kind, emitter] of Object.entries(emitters)) {
         const deficit = (handle.caps[kind] ?? 0) - emitter.getAliveParticleCount();
         if (deficit > 0) {
-          // The shipped `explode`, the same call `gameEffects.emit` makes. `emitParticle` breaks at
-          // the cap on its own, so asking for the deficit can never overshoot it.
-          emitter.explode(deficit, x, y);
+          // The shipped `explode`, the same call `gameEffects.emit` makes; `emitParticle` breaks at the cap.
+          // `offsets` is `halfoffscreen`'s only lever (`effectOffscreen.ts`), and 0 for every kind without it.
+          emitter.explode(deficit, x + (handle.offsets[kind] ?? 0), y);
         }
       }
       handle.raf = requestAnimationFrame(step);
@@ -360,17 +360,17 @@ export function stormCount(mutation: string): number {
 }
 
 /**
- * The six non-storm mutations, by exact name. `''` is a clean run.
+ * The seven non-storm mutations, by exact name. `''` is a clean run.
  *
  * This array is the REGISTRY, not the implementation: `noshake` is applied by `effectShake.ts`,
- * `stall` by `effectCounts.ts` and `flatcost` by `effectSweep.ts` — each beside the thing it breaks,
+ * `stall` by `effectCounts.ts`, `flatcost` by `effectSweep.ts`, `halfoffscreen` by `effectOffscreen.ts` — each beside the thing it breaks,
  * as the three above sit beside the emitters they scale. `namedMutation` makes a typo loud.
  *
  * 🔴 **A name here is not a wired proof.** `particlescale0` sat in this array for a whole gate round
  * while `phase-09-perf.spec.ts` applied it nowhere, so it ran that spec clean and reported
  * `1 passed` — `namedMutation`'s own failure mode, reached through a name it recognises.
  */
-export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0', 'noshake', 'flatcost', 'stall'] as const;
+export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'halfoffscreen', 'fleetscale0', 'noshake', 'flatcost', 'stall'] as const;
 
 export type NamedMutation = (typeof NAMED_MUTATIONS)[number];
 
