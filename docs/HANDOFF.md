@@ -121,6 +121,10 @@ regenerating `idle` re-derives the slug scale and silently rescales **every** ot
 *(vault A5)* - so idle is rebuilt FIRST or not at all. A fal batch over 5 generations needs a
 STOP-and-ask.
 
+> ## ➡️ **Next session is a BUG-FIX session — [SESSION-PROMPT-next.md](SESSION-PROMPT-next.md).**
+> Owner’s ruling 2026-08-22: fix what is recorded and unfixed; **Phase 10 is deferred.** The prompt
+> ranks the work player-visible defects first, gate gaps second.
+
 ## What is outstanding
 
 1. **The jump clip** — see the section above. Owner-reported, measured, not yet fixed.
