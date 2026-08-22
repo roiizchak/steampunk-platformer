@@ -15,14 +15,26 @@
  * they belong with the counter rather than with the mutations: both are *readings*, and every
  * assertion in them is a precondition on a reading — `polishSeries.ts`'s seam, one file further out.
  * Imports flow one way, `effectCounts → effectMutation → effectBudget`, so nothing here is circular.
+ *
+ * Two more preconditions on a reading moved out again in the 9.5 fix round, for the same reason and
+ * with the same seam: `effectShake.ts` owns criterion 9.5's third load and the counter Guard 0c
+ * asserts, and `windowStall.ts` owns the deadline that stops a stopped simulation presenting as a
+ * ten-minute hang. Both are *preconditions on a reading*; neither is a count of what was drawn.
  */
 
 import { expect } from '@playwright/test';
 
 import { EFFECT_SAMPLE_TICKS } from './effectBudget';
 import { setStorm } from './effectMutation';
+import {
+  MIN_SHAKEN_FRAME_FRACTION,
+  readShakeCounters,
+  shakenFraction,
+  type ShakeCounters,
+} from './effectShake';
 import { DEV_FLEET_COUNT, MIN_SAMPLES } from './perfBudget';
-import { counts, sample, waitForBodyCount, type Sample } from './perfSampler';
+import { counts, waitForBodyCount, type Sample } from './perfSampler';
+import { boundedWindow, stallReport } from './windowStall';
 
 type Page = import('@playwright/test').Page;
 
@@ -202,7 +214,10 @@ export interface ArmReading {
   particles: ParticleCounts;
   /** `perfSampler.counts()`, UNCHANGED — read per arm so the fleet is checked where it is used. */
   enemies: Awaited<ReturnType<typeof counts>>;
+  /** The fraction of this window's frames on which the camera was off its base — criterion 9.5's shake. */
+  shake: number;
 }
+
 
 /**
  * Put the page into one arm, take one window from it, and read what was drawn while it ran.
@@ -216,6 +231,9 @@ export interface ArmReading {
  * zero-alpha or scale-0 partway through a run makes every millisecond bound pass *more* comfortably,
  * and a check taken before sampling started cannot see it — which is the same shape as measuring
  * particles by `getAliveParticleCount()`, one layer out.
+ *
+ * ⚠️ **Requires `installStorm` AND `installShakeDrive`, in that order**, and says so by throwing
+ * rather than by measuring a window that quietly carried one load fewer than the criterion names.
  */
 export async function sampleArm(
   page: Page,
@@ -235,8 +253,19 @@ export async function sampleArm(
    */
   drawnFleet?: { bodies: number; sprites: number },
 ): Promise<ArmReading> {
-  await setStorm(page, alive);
-  const measured = await sample(page, EFFECT_SAMPLE_TICKS);
+  // The population wait carries a 20 s bound of its own; what it does NOT carry is why it gave up.
+  // Which emitter fell short, and whether the page was still painting at all, is the whole question.
+  try {
+    await setStorm(page, alive);
+  } catch (cause) {
+    throw new Error(
+      `${label}: the storm never reached ${alive} live particles. ` +
+        `${await stallReport(page, alive)} (${String(cause)})`,
+    );
+  }
+  const shakeBefore: ShakeCounters = await readShakeCounters(page);
+  const measured = await boundedWindow(page, alive, label);
+  const shake = shakenFraction(shakeBefore, await readShakeCounters(page));
   expect(measured.frames, `${label}: too few frames to reduce`).toBeGreaterThan(MIN_SAMPLES);
   expect(measured.ticks, `${label}: short window`).toBeGreaterThanOrEqual(EFFECT_SAMPLE_TICKS);
   // 🔴 `MIN_SAMPLES = 60` over a 120-tick window accepts ~30 fps against the ~480 frames this
@@ -249,10 +278,24 @@ export async function sampleArm(
     `${label}: ${measured.frames} frames served across ${measured.ticks} sim ticks — the machine ` +
       'did not keep up with the simulation, so this window is not a reading of per-frame work',
   ).toBeGreaterThanOrEqual(measured.ticks);
+  // ── Guard 0c: the window carried criterion 9.5's THIRD load ────────────────────────────────────
+  //
+  // 🔴 9.5 names *max enemies + max particles + shake*, and the shake was absent from every window
+  // this gate ever took: `installStorm` holds the player invulnerable, so nothing ever hit anything
+  // and `gameEffects` never armed one. `effectShake.ts` drives it through the shipped `land` path —
+  // the one arming route with no burst in it — and this is where the driving is checked rather than
+  // assumed, per arm, exactly as `drawn` and `opaque` are. `PERF_MUTATION=noshake` is its red proof.
+  expect(
+    shake,
+    `${label}: ${(shake * 100).toFixed(1)} % of this window's frames had the camera off its base. ` +
+      "Criterion 9.5's worst case is max enemies AND max particles AND shake, and the bound it " +
+      'asserts is a MEDIAN — so under half is a frame budget measured without the third load in it.',
+  ).toBeGreaterThanOrEqual(MIN_SHAKEN_FRAME_FRACTION);
   const reading = {
     measured,
     particles: await particleCounts(page),
     enemies: await counts(page),
+    shake,
   };
   if (drawnFleet !== undefined) {
     expect(
