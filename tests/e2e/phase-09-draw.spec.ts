@@ -32,9 +32,14 @@
  *
  * ## ⚠️ Stated limits *(vault 9.3)*
  *
- *  - **This measures SUBMISSION, not pixels.** It answers "would Phaser draw this", by Phaser's own
- *    predicate and Phaser's own render list. It cannot tell a particle drawn behind an opaque wall
- *    from one drawn in the open. Criterion 9.8's hands-on pass is where someone looks at the screen.
+ *  - **The COUNT measures submission, not pixels.** It answers "would Phaser draw this", by Phaser's
+ *    own predicate and render list, and cannot tell a particle drawn behind an opaque wall from one
+ *    drawn in the open — 9.8's hands-on pass is where someone looks at the screen. What it no longer
+ *    misses is a submitted quad with *nothing in it*: the last describe here reads the generated
+ *    texture's pixels, after `fillStyle(spec.tint, 0)` made every particle invisible at `drawn 96`.
+ *  - **`TINT_MODE_ADD`'s pin moved OUT** to `tests/unit/engine-literals.test.ts`, which pins all
+ *    three literals in the UNIT suite — a Phaser upgrade cannot slip past a run that skipped
+ *    Playwright. The copy here was the strictly weaker of two; that file's header has the argument.
  *  - **The transcription follows the WebGL path**, which `assertRealGpu` guarantees is the one in
  *    use. The Canvas fallback additionally tests `emitter.visible` and multiplies by `camera.alpha`
  *    (`ParticleEmitterCanvasRenderer.js:61,78`), so under `Phaser.AUTO`'s Canvas fallback a camera
@@ -61,10 +66,10 @@ import {
   stormCaps,
 } from './effectMutation';
 import { bootToGame } from './gameHarness';
+import { particlePixels, tintChannels } from './particlePixels';
 import { counts } from './perfSampler';
 import { installRecorder, stopDriving, TAIL_TICKS, waitFor } from './polishSeries';
 import { assertRealGpu } from './realGpu';
-import { TINT_MODE_ADD } from '../../src/scenes/spriteFlash';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -346,30 +351,50 @@ test.describe('Phase 9 — the game’s OWN trigger path emits particles', () =>
 });
 
 /**
- * The one Phaser constant this project writes down as a literal, pinned against the engine.
+ * 🔴 **The generated texture has opaque pixels, in the spec's colour** — the boundary every other
+ * gate in this phase stopped one layer short of. `particlePixels.ts`'s header carries the argument
+ * and the mutation that proved it was needed; the two red proofs are:
  *
- * `spriteFlash.ts` cannot import `Phaser.TintModes` — both of its callers must stay reachable with
- * the engine uninstalled, because `npm run test:sim-isolated` runs the unit suite that way. So the
- * number lives there with the source line that fixes it, and this is where the fixing happens: a
- * Playwright spec runs in Node, where reading the vendored package costs nothing.
+ * ```
+ * particleTexture.ts:48   fillStyle(spec.tint, 1) -> fillStyle(spec.tint, 0)   // alpha
+ * particleTexture.ts:48   fillStyle(spec.tint, 1) -> fillStyle(0xffffff, 1)    // colour
+ * ```
  *
- * ⚠️ If this reds, change the CONSTANT, never this assertion.
+ * The first is Codex implementation review finding 2, verified green across the whole suite —
+ * including 9.6 on a real GPU at `drawn 96 inView 96` — before this existed.
  */
-test.describe('the tint-mode literal matches the vendored engine', () => {
-  test('TINT_MODE_ADD is Phaser.TintModes.ADD', async () => {
-    const { createRequire } = await import('node:module');
-    const { readFileSync } = await import('node:fs');
-    const { dirname, join } = await import('node:path');
-    const require = createRequire(import.meta.url);
-    const root = dirname(require.resolve('phaser/package.json'));
-    const src = readFileSync(join(root, 'src', 'renderer', 'TintModes.js'), 'utf8');
-    const match = /\bADD:\s*(\d+)/.exec(src);
-    expect(match, 'TintModes.js no longer declares ADD — read it before changing the constant')
-      .not.toBeNull();
-    expect(Number(match![1])).toBe(TINT_MODE_ADD);
-    // Both sides: the file must also still be the one that defines the mode this project avoids,
-    // or a match on some other `ADD:` in some other table would pass vacuously.
-    expect(/\bFILL:\s*\d+/.test(src)).toBe(true);
-    expect(/\bMULTIPLY:\s*0/.test(src)).toBe(true);
+test.describe('the particle textures are actually drawn, not merely submitted', () => {
+  test('every generated dot is opaque at its centre and carries its spec tint', async ({ page }) => {
+    await bootToGame(page);
+    const pixels = await particlePixels(page);
+
+    for (const kind of EFFECT_KINDS) {
+      const px = pixels[kind];
+      // Type before value *(vault C1)*: every number came off the untyped `__phaserGame` route.
+      expect(px, `no pixels were sampled for ${kind}`).toBeDefined();
+      const key = px.key;
+      expect(typeof px.centre[3], `${key} alpha must be a number`).toBe('number');
+      expect(px.width, `${key} is a zero-sized texture`).toBeGreaterThan(1);
+
+      expect(
+        px.centre[3],
+        `${key} is TRANSPARENT at its centre. Every particle in the game is invisible and every ` +
+          `other gate in this phase is green: 9.6 counts draw SUBMISSION, and Phaser submits a ` +
+          `fully transparent quad exactly as happily as an opaque one.`,
+      ).toBe(255);
+      expect(
+        [px.centre[0], px.centre[1], px.centre[2]],
+        `${key} was baked in the wrong colour. EmitterSpec.tint is the art direction for this ` +
+          `burst; a dot that ignores it is a white dot with a table nobody reads.`,
+      ).toEqual(tintChannels(kind));
+
+      // Non-vacuity, and the claim that it is a DOT: a texture filled corner to corner satisfies
+      // everything above, and a square's corner is outside the circle inscribed in it.
+      expect(
+        px.corner[3],
+        `${key} is opaque in its corner — this is a filled square, not the dot the emitter sizes`,
+      ).toBe(0);
+    }
   });
 });
+

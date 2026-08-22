@@ -134,17 +134,20 @@ describe('gameEffects.ts draws the landing squash and tears itself down', () => 
     expect(src).toMatch(/playerSprite\.setScale\(\s*squash\.sx,\s*squash\.sy\s*\)/);
   });
 
-  it('records the landing tick on EVERY touchdown, not only the dusty ones', () => {
-    // `landingDust` returns null below its fall-speed threshold. Gating the squash on that would
-    // make the character land differently depending on how fast they happened to be falling on a
-    // 1 px step-down, which is a different feature from the one `landSquash` describes.
-    const landing = from(src, 'player.grounded && !wasGrounded');
-    const dustGuard = landing.indexOf('if (dust !== null)');
-    const armed = landing.indexOf('landedTick = tick');
-    expect(dustGuard).toBeGreaterThan(-1);
-    expect(armed).toBeGreaterThan(-1);
-    // Outside the `dust !== null` block: the closing brace of that block comes first.
-    expect(landing.slice(dustGuard, armed)).toContain('}');
+  it('takes the touchdown from the SIM, never by comparing grounded across frames', () => {
+    // 🔴 This used to assert the shape of a render-side `landedTick = tick` written inside an
+    // `if (player.grounded && !wasGrounded)` — a cross-frame comparison the Phase 9 Codex
+    // implementation review showed loses the whole landing whenever the touchdown and the buffered
+    // jump that follows it share a render frame. `PlayerSim.landedTick` replaced it, so the claim
+    // the old test made ("armed on every touchdown, not only the dusty ones") is now structural: the
+    // sim stamps every touchdown and this file only reads the stamp. It is asserted BEHAVIOURALLY in
+    // `effects-behaviour.test.ts` — a landing too gentle to puff still squashes — and the one claim
+    // left here is the one behaviour cannot make: that no second, drifting edge detector came back.
+    expect(src).toContain('player.landedTick');
+    expect(
+      src,
+      'gameEffects is inferring the landing from grounded again — see PlayerSim.landedTick',
+    ).not.toMatch(/wasGrounded/);
   });
 
   it('registers its own teardown, so destroy() is reachable in production at all', () => {

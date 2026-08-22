@@ -88,14 +88,12 @@
  * Renumbering was free HERE and only here — nothing depends on the contract yet, which is exactly
  * what the plan review asked to get right before Phase 5 does.
  *
- * **STEPS 5-8 MOVED to `playerMotion.ts` in Phase 9, and the numbering did not.** The block is
- * relocated whole, numbered comments and all, with one-line `5.` `6.` `7.` `8.` markers left at the
- * call site so reading this file still shows fourteen steps in order. **No prior extraction moved a
- * numbered step** — `enemyTurn.ts` and `worldDamage.ts` hold LETTERED sub-steps, and the note at the
- * foot of this file says plainly that `advance` was extracted because it is *"not part of the
- * numbered order above"*. This one is the first, so it is stated rather than justified by precedent.
- * It bought the 400-line rule and a home for the hit-stop gate, which must cover all four steps at
- * once or it is a bug. `playerMotion.ts`'s header carries the gate's reasoning.
+ * **STEPS 5-8 MOVED to `playerMotion.ts` in Phase 9, and the numbering did not** — relocated whole,
+ * numbered comments and all, with one-line `5.` `6.` `7.` `8.` markers left at the call site so
+ * reading this file still shows fourteen steps in order. It is the first extraction in this project
+ * to move a NUMBERED step. **`playerMotion.ts`'s own header is the record of that**: why no prior
+ * extraction is precedent for it, and why the hit-stop gate has to cover all four at once or it is
+ * a bug. Kept there and not restated here — a second copy is what drifts *(5.3)*.
  *
  * **THE WINDOW DEFINITIONS.** They are NOT one sentence. An earlier version of this header claimed
  * both windows behaved identically; the Codex implementation review (finding I1) showed that claim
@@ -208,27 +206,17 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //        the spawn point lives (`world.spawn`).
   //
   //        🔴 There was NO respawn anywhere in this project until 2026-08-14, and `death` did not
-  //        even advance its own counter, so the state was terminal in both senses. `hazards.ts`
-  //        recorded the missing respawn as deliberate Phase-4 debt — "bolting a respawn onto a game
-  //        with no health model would have had to be undone here" — and Phase 5 built the health
-  //        model without coming back for it. The player reported the result as *"I cannot die. It
-  //        gets stuck before I actually see the kill"*, which is exactly what a terminal state with
-  //        a `movementLocked` body looks like from the outside.
+  //        even advance its own counter, so the state was terminal in both senses. That history —
+  //        the Phase-4 debt note, the Phase-5 health model that never came back for it, and what the
+  //        player said it felt like — lives on `respawnPlayer` in `combat.ts`, not in two places.
   //
   //        BEFORE step 5, not after: the respawned player is alive for the whole of this tick's
   //        movement, so the first frame after a death is an ordinary frame at the spawn point
   //        rather than a corpse's pose in a new position.
   //
-  //        🔴 **The respawn also releases every chase.** Aggro is permanent by design — *"it should
-  //        keep coming until I kill it"* — but nothing cleared it on death, so after dying every
-  //        scavenger walked toward the NEW spawn and never patrolled again. Repeated deaths converge
-  //        every scavenger in a level onto the spawn point, and each death leaves the level harder
-  //        than the last: punishing rather than difficult. Decided by the user 2026-08-14 (D4), and
-  //        it does not weaken what was asked for — within ONE life the scavenger still never gives
-  //        up. The player's own death is the only new exit, and it is one they already paid for.
-  //
-  //        Invisible in play today because `level-01` places a single scavenger, which is exactly
-  //        why it is gated in `respawn.test.ts` rather than left to a playtest that cannot see it.
+  //        🔴 **The respawn also releases every chase** — decided by the user 2026-08-14 (D4). Why
+  //        permanent aggro has that second exit is stated on `releaseAggro` (`enemyScavenger.ts`),
+  //        which is the function it is a rule about, and `respawn.test.ts` gates it.
   //
   //        This adds NO new numbered step. It sits inside the existing 4c block, so the 14-step
   //        contract above is untouched — renumbering it would be a balance change, not a refactor.
@@ -281,6 +269,8 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //    death. `clampToBounds` runs after the solids so a level's own geometry wins where the two
   //    overlap, and it zeroes vx as well as x (see `hazards.ts`).
   const wasGrounded = player.grounded;
+  // Captured BEFORE the resolve zeroes it; step 10 stamps it. `playerSim.ts` has the argument.
+  const impactVy = player.vy;
   player.grounded = resolveCollisions(player, world.solids, world.scale, previousX, previousY);
   clampToBounds(player, world.bounds, (PLAYER_BOX.w / 2) * world.scale);
 
@@ -324,6 +314,10 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
     coyoteArmedThisTick = true;
     if (!wasGrounded) {
       events.landed = true;
+      // 🔴 The same edge, STAMPED as well as raised: a boolean carries neither the tick nor the
+      // impact speed the renderer needs. `playerSim.ts` records what it cost not to have these.
+      player.landedTick = world.tickCount;
+      player.landedFallSpeed = impactVy;
     }
   } else if (wasGrounded && !events.jumped) {
     player.ticksSinceGrounded = 0;

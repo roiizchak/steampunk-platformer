@@ -336,10 +336,31 @@ its evidence.
     start values, so a retune is a visible edit in two places.
 14. **The three emitter tints are grey-box choices**, not generated art. `STYLE.md` locks generated
     assets, not render-time tints; the palette question is owed at the hands-on pass.
-15. **`lastAirVy` is sampled per frame, not per tick.** The sim carries no landing-velocity field and
-    `src/sim/` was out of scope for the scene task. At ~240 fps the last sample before touchdown is
-    within one frame of the true impact velocity, so the landing dust magnitude can differ by one
-    frame's gravity from the value the sim would have given.
+
+    🔴 **What this entry did NOT say, and Codex's implementation review (finding 6) was right that it
+    should have: no gate verified the generated texture contained opaque pixels at all.** The
+    *choice* of colour was disclosed as by-eye; the *existence* of any colour was ungated, and the
+    two are not the same admission. `pen.fillStyle(spec.tint, 1)` -> `(spec.tint, 0)` made every
+    particle in the game invisible with the whole suite green, 9.6 included, at `drawn 96 inView 96`
+    on a real GPU. **CLOSED 2026-08-22** by `phase-09-draw.spec.ts`'s *"every generated dot is opaque
+    at its centre and carries its spec tint"*, which reads the texture through
+    `TextureManager.getPixel` and is watched red against both an alpha-0 and a wrong-colour mutation.
+    The by-eye disclosure above stands unchanged — a gate can prove the dot is `0xf0b040`, never that
+    `0xf0b040` is the right brass.
+15. ~~**`lastAirVy` is sampled per frame, not per tick.**~~ **CLOSED 2026-08-22, and the entry
+    understated the defect by a wide margin.** It recorded a one-frame magnitude error. Codex's
+    implementation review (finding 7) pointed at the edge rather than the value, and running it
+    confirmed **total loss**: the landing was inferred from `grounded` changing between `render()`
+    calls, and `tick.ts`'s step 13 guarantees a buffered press fires the tick AFTER touchdown while
+    step 7 clears `grounded` again — so a frame draining both ticks saw `false -> false` and the
+    dust, the squash and the landing shake did not happen at all. Multi-tick frames get *more* common
+    on slower hardware, i.e. on the Phase 10 release target. `PlayerSim.landedTick` and
+    `landedFallSpeed` are stamped at step 10 beside the `events.landed` edge already decided there;
+    `effects-behaviour.test.ts` drives one identical fall at one tick per frame and at two and
+    asserts the arms agree. The stated reason not to fix it — *"adding a counter to `PlayerSim` would
+    push `src/sim/types.ts` past 400 lines"* — was the 400-line rule distorting ownership, which is
+    Codex finding 4's worst instance. `PlayerSim` moved whole to `src/sim/playerSim.ts`: split, not
+    exempted.
 16. ~~**`attachEffects.destroy()` is never called.**~~ **CLOSED in the gate fix round.** The
     reasoning recorded here ("not a leak, just an unreached path") was only half the story: the path
     it left unreachable is `camera.setPosition(baseX, baseY)`, and `baseX`/`baseY` are captured ONCE
@@ -696,6 +717,92 @@ these numbers rather than arguing in parallel with them.
     defect one layer out from Guard 0b, which exists because the headline assertion named twenty
     enemies nobody checked were drawn. **Disclosed, not closed**: closing it means a fourth counter
     and a fourth committed mutation for loads no phase criterion names.
+47. **`MIN_COST_EXPONENT`'s "at most 1.5x understatement" was a model-dependent number stated as an
+    unconditional one, and the band it admits is disclosed rather than covered.** Codex
+    implementation review finding 5, algebra re-derived rather than taken on trust.
+
+    The claim was: at `k = 0.9` exactly, dividing an 8192-particle delta back to the shipped 96
+    under-states the per-particle cost by `(8192/96)^0.1` = 1.56x, against a
+    `MAX_PER_PARTICLE_WORK_MS` sitting ~4x above the reading. **That is true under `c·N^k` and only
+    under it.** The renderer's real cost is not a pure power:
+    `ParticleEmitterWebGLRenderer.js:66-70` early-returns on `particleCount === 0`, so a non-empty
+    population pays a draw call, a bind and a flush that do not scale with `N`, and the storm's
+    `explode` is called per emitter only when the population is non-empty. That is affine, `a + bN`.
+    Codex's numbers check out exactly:
+
+    | | value |
+    |---|---|
+    | intercept giving `k = 0.9` | `a = 0.2732 × 1024b` -> `k = 0.9001` |
+    | reported `d(8192)/8192` | `1.034b` |
+    | true `d(96)/96` | `3.914b` |
+    | **understatement** | **3.79x** — not 1.5x, and not inside the ~4x headroom |
+
+    **The floor stays at 0.9 and the fit stays a power law**, and the reason is the recorded data
+    rather than convenience. An affine law with `a >= 0` has `k -> 1` as `a -> 0` and `k < 1` for
+    every `a > 0`: **`k = 1` is the affine family's ceiling.** All seven recorded sweeps measured
+    `k = 1.086 - 1.286` — super-linear, outside that family — and fitting `a + bN` through those two
+    points returns a **negative** intercept (-0.16 to -0.37 ms), which makes the "true shipped
+    figure" `(a + 96b)/96` negative and meaningless. Two points cannot identify a three-parameter
+    reality; swapping the fit would replace a model wrong in a known direction with one that does not
+    fit the measurements at all. Moving the floor was refused outright — a bound is never fixed by
+    loosening it, and nothing here argues for a tighter one either.
+
+    **What is left, stated as the residual:** for `0.9 <= k < 1` the divide-back under-states by
+    between 1x and 3.8x depending on the law's shape, and only the low end of that is inside the
+    headroom. The floor's job is to catch a run leaving the conservative regime, not to prove how bad
+    the regime it admits can be. No run has ever entered the band. Corrected in
+    `effectSweep.ts`'s `MIN_COST_EXPONENT` docstring and in the 9.5 fix-round section above.
+48. **The 400-line rule distorted ownership and APIs in four places, and three of them stand.** Codex
+    implementation review finding 4, with its citations. The worst instance — the landing edge living
+    in the render attachment because `src/sim/types.ts` would have crossed 400 — **is fixed** (entry
+    15). The remainder is a real structural observation and NOT a defect, and the tick contract is not
+    being restructured to answer it:
+
+    - `tick.ts` no longer contains its own numbered pipeline: steps 5-8 moved to `playerMotion.ts`
+      with a `ran` status threaded back into steps 12 and 13 (`tick.ts:91-98, 264-278`).
+    - `advance` is re-exported from `advanceSplit.ts` solely because `tick.ts` reached 400
+      (`tick.ts:391-400`).
+    - `gameEffects.ts` registers its own scene-shutdown listener because `GameScene.ts` has no
+      remaining line (`gameEffects.ts:306-321`).
+
+    Each is already argued at its site and each split moved whole concerns with their docstrings
+    intact, which is the distinction `file-size.test.ts`'s header draws between splitting and gaming
+    the count. Renumbering or re-merging the tick order is a balance change to a phase that has spent
+    money on art *(vault 2.2)*, and would be a far larger risk than the observation.
+
+    ⚠️ **The pressure is real and this round paid it again.** Fitting the landing stamp into `tick.ts`
+    needed 6 lines back, and they came from two paragraphs that were **second copies**: step 4c's
+    account of the missing respawn (the fuller one is on `respawnPlayer` in `combat.ts`) and its
+    account of why the player's death releases aggro (now on `releaseAggro` in `enemyScavenger.ts`,
+    which is the function it is a rule about). Nothing was deleted — both moved, and one gained the
+    sentence `tick.ts` had that `combat.ts` lacked. `tick.ts` is 394 today. **That is the honest cost
+    of the rule: a file at exactly 400 makes the next correct change require an unrelated edit, and
+    the edit it invites is the one that deletes explanation.** Recorded so the next reader knows the
+    trade was made deliberately and where to look for what moved.
+49. **The emit window in `gameEffects.render` was off by one, and no strike burst had EVER fired in
+    the shipped game.** Not a Codex finding — found while building the proof for finding 7, by running
+    the production order against a fake scene.
+
+    `fresh(hitTick)` asked `hitTick > cursor && hitTick <= tickCount`. Every stamp the sim writes
+    (`lastHitTick`, and now `landedTick`) is taken from `world.tickCount` **before** step 14
+    increments it, and `GameScene.update` renders **after** `advanceSplit` returns — so the tick
+    indices that ran in a frame are `[cursor, tickCount)`. The old window asked for
+    `(cursor, tickCount]`, which at one tick per frame contains no stamp at all: **not one impact
+    spark, death plume or hurt vent, and none of the shakes they arm.** At two or more ticks per frame
+    it fired for every tick but the oldest, which is why it looked alive under a load test.
+
+    Three things hid it, and all three are the same lesson:
+
+    - **Every unit fixture bumped `tickCount` BEFORE stamping** — `world.tickCount += 1; freezePair(…,
+      world.tickCount); render()` — which is the one ordering the game never performs. Corrected; the
+      fixtures now stamp, then increment, then render.
+    - **9.5 and 9.6 call `explode()` on the emitter handles directly** (`installStorm`), so the entire
+      `render()` decision path is outside the counters that were built to prove particles are drawn.
+    - **The landing was the one burst that worked**, and only because it asked `fresh(tick)` — the
+      frame's own count, never a stamp — which reduces to "at least one tick ran".
+
+    Gated by `effects-behaviour.test.ts`'s *"emits for a hit stamped on the tick this frame ran, and
+    NOT twice"*, which drives the production order and asserts both the emit and the non-repeat.
 
 ---
 
@@ -1150,9 +1257,11 @@ fixed before the first run of the new gate. The claim is `k ≥ 1`. One adverse 
 the low delta (~0.5–0.7 ms) is worth `ln(1 + 0.1/0.6)/ln(8)` ≈ **0.07–0.09** of `k`; the same step on
 the high delta (~6 ms) is worth 0.008 and does not matter. 0.1 of `k` is therefore about one clock
 step, and 0.9 is sized to survive the **same three-step adverse move of a median** that
-`MIN_STORM_WORK_DELTA_MS` and `MIN_HALF_STORM_WORK_DELTA_MS` are set for. The cost of the allowance is
-bounded rather than waved away: at the floor exactly, the divide-back under-states by `(8192/96)^0.1`
-= **1.5x**, against a `MAX_PER_PARTICLE_WORK_MS` sitting ~4x above the reading.
+`MIN_STORM_WORK_DELTA_MS` and `MIN_HALF_STORM_WORK_DELTA_MS` are set for. ~~The cost of the allowance
+is bounded rather than waved away: at the floor exactly, the divide-back under-states by
+`(8192/96)^0.1` = **1.5x**, against a `MAX_PER_PARTICLE_WORK_MS` sitting ~4x above the reading.~~
+**CORRECTED 2026-08-22 — see entry 47.** That sentence is true only if the cost law really is
+`c·N^k`. It was stated unconditionally, and it is the model-dependent half of the argument.
 
 **There is no ceiling, and that is a decision.** Super-linearity makes the divide-back *pessimistic*,
 which is the safe direction, and it is already gated — an exponent large enough to matter inflates
@@ -1197,6 +1306,11 @@ Clean, `chromium-gpu`, alone on the box, one run at a time, each read out of a r
 | H3 | 0.400 | 5.800 | **1.286** | 0.00071 | 0.950 | `1 passed` of 1 |
 
 A seventh clean sweep rode inside the `storm8192` mutation run: **k = 1.086** from 0.700 / 6.700.
+
+An **eighth**, from the full-suite run that closed the Codex implementation round (2026-08-22,
+`119 passed` in 16.0m): **k = 1.057** from 0.400 ms at 1024 and 3.600 ms at 8192, `per particle
+0.00044` (bound 0.003), `absolute 0.700` (bound 2.5). Still above 1 — which is the reading entry 47
+turns on, because an affine cost law cannot produce it.
 
 **Measured `k` over all seven: 1.086 – 1.286, never below 1.** The floor at 0.9 is cleared by
 0.19–0.39, which is 3–4 clock steps of adverse movement on the low delta — the low delta would have
@@ -1398,6 +1512,43 @@ amplitudes) remain a **grey-box judgement pending the art pass**. Every one is p
 with a fixture either side, so a retune reds and comes back here for a fresh look — which is the
 protection this criterion actually has. The clip is the record of what "good" looked like on
 2026-08-22, not a proof that the numbers are right in the abstract.
+
+---
+
+## Criterion 9.11 — the Codex implementation round, and what it cost to close
+
+Triage table with a verdict per finding: `docs/reviews/phase-09-impl.md`. Entries 14, 15, 47, 48 and
+49 above are the record; this section is the verification.
+
+**Every gate written or changed in the round was watched failing with the mutation its assertion
+names**, verbatim, then reverted and confirmed by "content changed AND the original count dropped by
+one" *(C1, C12)*:
+
+| gate | mutation | red |
+|---|---|---|
+| `phase-09-draw.spec.ts` — the dot is opaque | `particleTexture.ts:48` `fillStyle(spec.tint, 1)` -> `(spec.tint, 0)` | `1 failed, 2 passed` — *"fx-particle-sparks is TRANSPARENT at its centre"*. The two siblings passing IS Codex finding 2. |
+| the same, colour half | `fillStyle(spec.tint, 1)` -> `fillStyle(0xffffff, 1)` | `1 failed, 2 passed` — *"fx-particle-sparks was baked in the wrong colour"* |
+| `effects-behaviour.test.ts` — the multi-tick landing | the **pre-fix production code itself**: control arm 1 dust + squash, batched arm **0 dust, no squash** | that is finding 7, reproduced |
+| `effects-behaviour.test.ts` — the emit window | the pre-fix `(cursor, tick]` window: zero explosions in the production order | entry 49 |
+| `hitstop-frozen-counters.test.ts` — outgoing i-frames | `combat.ts` step 4b.1 `if (!held)` -> `if (true)` | *"i-frames advanced on frozen tick 1: expected 31 to be 30"* |
+
+**Verification, all four green on the same tree:**
+
+- `npx vitest run` — **2151 passed | 3 skipped (2154)**, 133 files. Baseline was 2147 | 3; the four
+  new tests are the multi-tick landing, the gentle-touchdown squash, the emit window and the outgoing
+  i-frame freeze.
+- `npm run test:sim-isolated` — **2151 passed | 3 skipped (2154)**, `phaser@4.2.1` reinstalled. The
+  round adds a file to `src/sim/` (`playerSim.ts`), so this is the one that matters.
+- `npm run test:e2e` — **119 passed** in 16.0m, exit 0 read from a redirected file, count matched
+  against the baseline of 119. Net zero: the pixel gate is added and the duplicated `TINT_MODE_ADD`
+  pin removed. No re-run was needed — none of the three known-flaky specs fired.
+- `npm run build` — `verify-dist ok: 5 level(s) and 11 audio file(s) shipped byte-identical, no
+  DEV-only scene key or debug surface in 1 bundle(s)`.
+
+**Nothing is over 400 lines.** `src/sim/types.ts` 320 (was 400) after `PlayerSim` moved to
+`playerSim.ts`; `src/sim/tick.ts` 394 (was 400); `src/scenes/gameEffects.ts` 400;
+`tests/e2e/phase-09-draw.spec.ts` 400; `tests/unit/effects-behaviour.test.ts` 322 after its fake
+scene moved to `tests/unit/effects-fixtures.ts`. Entry 48 records what the rule cost this round.
 
 **A note on capturing it, because it cost time and will again.** The first capture attempt produced no
 attacks at all and the keyboard looked broken. It was not: the player had run into the goal, which

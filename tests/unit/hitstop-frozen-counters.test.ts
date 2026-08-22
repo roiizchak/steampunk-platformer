@@ -52,16 +52,26 @@
  *
  * Each case asserts the counter MOVING before the freeze and MOVING again after it, in the same
  * test, so "the counter did not advance" cannot be satisfied by a counter that never advances.
+ *
+ * ## A third describe, added by the Phase 9 Codex implementation round (finding 3)
+ *
+ * The two above are counters that spent ticks they should not have. The third is the mirror: a
+ * counter that correctly does NOT spend them, for a freeze the player caused **themselves**. The
+ * gate at step 4b.1 asks only whether the body is frozen, never what froze it, so landing a blow
+ * inside the 27-tick actionable-invulnerable surplus holds the attacker's own i-frames. That is the
+ * ruling `stepCombat`'s header makes, applied consistently — and nothing covered it, because every
+ * i-frame fixture in the suite drives an INCOMING claw.
  */
 
 import { describe, expect, it } from 'vitest';
 
 import { FOOTSTEP_TICKS } from '../../src/sim/player';
 import { HITSTOP_TICKS, frozen } from '../../src/sim/hitstop';
-import { createSnapshot } from '../../src/sim/input';
+import { invulnerable, movementLocked } from '../../src/sim/combat';
+import { createSnapshot, latchAttackPress } from '../../src/sim/input';
 import { tick } from '../../src/sim/tick';
 import type { InputSnapshot, World } from '../../src/sim/types';
-import { runningWorld } from './hitstop-fixtures';
+import { IDLE, clawedWhileIdle, runningWorld } from './hitstop-fixtures';
 import { GOAL_ENTRY_TICKS } from '../../src/sim/goal';
 import { makeWorld, neutral, runToGate } from './goal-entry-fixture';
 
@@ -187,5 +197,51 @@ describe('step 9d — the goal run-in does not bank ticks inside a freeze', () =
     // And a HOLD again — the entry resumes rather than being cancelled by the freeze.
     tick(world, held);
     expect(world.goalEntryTicks, 'the run-in never resumed after the freeze').toBe(banked! + 1);
+  });
+});
+
+describe('the freeze a player causes THEMSELVES', () => {
+  it('an OUTGOING hit pauses the attacker’s own i-frames — stated behaviour, not an accident', () => {
+    // 🔴 Codex implementation review, finding 3, verified by running it rather than taken on file
+    // evidence, and KEPT rather than fixed — `stepCombat`'s header carries the ruling and why the
+    // 27-tick actionable-invulnerable surplus is unchanged by it. What was missing is coverage: the
+    // sibling above drives an incoming claw only, so the gate had never been asked about the freeze
+    // a player causes themselves.
+    const { world, scavenger } = clawedWhileIdle();
+    const player = world.player;
+    const input = createSnapshot();
+
+    // Out of the hurt lock, still invulnerable: the surplus, reached the way the game reaches it.
+    while (movementLocked(player)) {
+      tick(world, { ...IDLE });
+    }
+    expect(invulnerable(player), 'the surplus is empty — there is nothing to pause').toBe(true);
+
+    // Walk in and keep swinging — the claw's knockback pushed the player out of reach and the
+    // creature patrols, so one press at a fixed distance is a fixture that misses on any retune. The
+    // claw cannot confuse the result: a blow refused by i-frames does not freeze (`worldDamage.ts`
+    // gates that `freezePair` on `hit`), so every freeze from here is the player's own.
+    const hpBefore = scavenger.hp;
+    for (let i = 0; i < 200 && scavenger.hp === hpBefore; i += 1) {
+      input.right = scavenger.x > player.x;
+      input.left = scavenger.x < player.x;
+      latchAttackPress(input);
+      tick(world, input);
+    }
+    expect(scavenger.hp, 'the outgoing swing never connected').toBeLessThan(hpBefore);
+    expect(invulnerable(player), 'the i-frames lapsed before the hit — vacuous').toBe(true);
+    expect(frozen(player, world.tickCount), 'the attacker was not frozen by its own blow').toBe(true);
+
+    const held = player.iFrameCounter;
+    let frozenTicks = 0;
+    while (frozen(player, world.tickCount)) {
+      tick(world, { ...IDLE });
+      frozenTicks += 1;
+      expect(player.iFrameCounter, `i-frames advanced on frozen tick ${frozenTicks}`).toBe(held);
+    }
+    // Non-vacuity both ways: the freeze was real, and the counter is not simply stuck.
+    expect(frozenTicks, 'no frozen tick was observed').toBeGreaterThan(0);
+    tick(world, { ...IDLE });
+    expect(player.iFrameCounter, 'the counter never resumed — this is not a pause').toBe(held + 1);
   });
 });

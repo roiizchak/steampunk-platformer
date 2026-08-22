@@ -130,14 +130,17 @@ type Struck = Readonly<Freezable> & { x: number; y: number; hp: number };
 /**
  * @param playerSprite the drawn player, for the landing squash.
  *
- * 🔴 **The squash is here rather than in `gamePlayerDraw.ts` because the LANDING EDGE is here.**
- * The other three sprite feedbacks (`flinchOffset`, `hitFlashAlpha`, `iframeAlpha`) are pure
- * functions of `world.player` and are applied in `gamePlayerDraw.ts`, where the drawn position they
- * offset is computed. `landSquash` is the one that needs a tick the sim does not carry — the
- * touchdown zeroes `vy` in the same tick it sets `grounded`, so "when did we land" only exists in
- * the frame-to-frame `wasGrounded` cursor this closure already keeps for the dust. Adding a second
- * copy of that cursor to the player draw path is the duplicate this project keeps paying for
- * *(vault 5.3)*; adding a counter to `PlayerSim` would push `src/sim/types.ts` past 400 lines.
+ * The squash is here rather than in `gamePlayerDraw.ts` because the landing DUST is here and both
+ * read the same stamp — one reader, not two *(vault 5.3)*. The other three sprite feedbacks
+ * (`flinchOffset`, `hitFlashAlpha`, `iframeAlpha`) are pure functions of `world.player` and are
+ * applied in `gamePlayerDraw.ts`, where the drawn position they offset is computed.
+ *
+ * ⚠️ This paragraph used to say something else, and the something else was a defect. It claimed the
+ * squash *"needs a tick the sim does not carry"*, and justified inferring the touchdown from a
+ * frame-to-frame `grounded` cursor because adding a field to `PlayerSim` would have pushed
+ * `src/sim/types.ts` past 400 lines. The Phase 9 Codex implementation review (finding 7) named it,
+ * and running it confirmed total loss rather than inaccuracy. `PlayerSim.landedTick` and
+ * `landedFallSpeed` are the fix, and `types.ts` was split rather than exempted.
  */
 export function attachEffects(
   scene: Phaser.Scene,
@@ -152,11 +155,6 @@ export function attachEffects(
   /** The last tick already emitted for. Advanced on EVERY frame — see the header. */
   let cursor = world.tickCount;
   let shake: ShakeState | null = null;
-  /** Landing is the one moment with no sim field to read: `vy` is zeroed by the touchdown itself. */
-  let wasGrounded = world.player.grounded;
-  let lastAirVy = 0;
-  /** The tick of the most recent touchdown, or `null` for none yet. Drives `landSquash`. */
-  let landedTick: number | null = null;
   /**
    * The camera's unshaken position, captured before anything moves it. `destroy()` restores exactly
    * this, and `render()` writes exactly this on every settled frame — `shakeWithinEnvelope` demands
@@ -196,13 +194,32 @@ export function attachEffects(
       // A new world (a restart, or the next level) starts at 0 while the cursor still holds the last
       // run's final tick. Resetting is what keeps the very first hit of the new run from falling
       // outside the window — the defect `UIScene.build()` records against `lastGearTick`.
+      // Nothing landing-shaped is reset here any more: the touchdown stamp lives on the player, so a
+      // new world arrives carrying its own `landedTick: -1` and there is no stale cursor to clear.
       if (tick < cursor) {
         cursor = 0;
-        wasGrounded = w.player.grounded;
         shake = null;
-        landedTick = null;
       }
-      const fresh = (hitTick: number): boolean => hitTick > cursor && hitTick <= tick;
+      /**
+       * Did tick `hitTick` run inside the frame this `render()` closes?
+       *
+       * 🔴 **`[cursor, tick)`, and it was `(cursor, tick]` until the Phase 9 Codex implementation
+       * round — off by exactly one, in the direction that emits NOTHING.** Every stamp the sim
+       * writes (`lastHitTick`, and now `landedTick`) is taken from `world.tickCount` BEFORE step 14
+       * increments it, so the indices that ran this frame are `cursor … tick - 1`. The old window
+       * asked for `cursor + 1 … tick`, which never contains a stamp at one tick per frame: **no
+       * spark, no death steam, no hurt vent and none of the shakes they arm ever fired in the
+       * shipped game.** At two or more ticks per frame it fired for all but the oldest tick, which
+       * is why it looked alive under a load test and dead in play.
+       *
+       * The landing was the one burst that worked, and only because it asked `fresh(tick)` — the
+       * frame's own count, never a stamp — which reduces to "at least one tick ran".
+       *
+       * Found by running the production order (`advanceSplit` then `render`) against a fake scene;
+       * every unit fixture had bumped the count BEFORE stamping, which is the one ordering the game
+       * never performs. `effects-behaviour.test.ts` drives the real one now.
+       */
+      const fresh = (hitTick: number): boolean => hitTick >= cursor && hitTick < tick;
 
       const strike = (body: Struck): void => {
         if (body.hitstopUntil < 0 || !fresh(body.lastHitTick)) {
@@ -240,32 +257,31 @@ export function attachEffects(
         arm('playerHurt', player.lastHitTick, tick);
       }
 
-      // Landing. Sampled across frames rather than read from a field, because the sim has none: the
-      // touchdown zeroes `vy` in the same tick it sets `grounded`, so the fall speed the dust is
-      // worth only exists on the frame before. `landingDust` returns `null` below its threshold,
-      // which is what keeps a 1 px step-down from puffing.
-      if (player.grounded && !wasGrounded && fresh(tick)) {
-        const dust = landingDust(lastAirVy, player.x, player.y, w.tuning.maxFallSpeed);
+      // 🔴 **Landing, read from the SIM — never from `grounded` changing between frames.** It was
+      // the cross-frame comparison until the Phase 9 Codex implementation review, and what that lost
+      // was the whole effect and not merely its timing; `playerSim.ts`'s `landedTick` carries the
+      // argument. The stamp goes through the same window as a hit, so a burst fires once per
+      // touchdown. `landingDust` returns `null` below its threshold — a 1 px step-down does not puff.
+      if (player.landedTick >= 0 && fresh(player.landedTick)) {
+        const dust = landingDust(player.landedFallSpeed, player.x, player.y, w.tuning.maxFallSpeed);
         if (dust !== null) {
           emit(dust, specCone('dust'));
         }
-        arm('land', tick, tick);
         // 🔴 Armed on EVERY touchdown, not only the ones the dust threshold accepts. A step-down
         // too small to puff still squashes — the squash is the body's own weight arriving, and
         // gating it on `dust !== null` would make the character land differently depending on how
         // fast they happened to be falling on a 1 px drop.
-        landedTick = tick;
+        arm('land', player.landedTick, tick);
       }
-      if (!player.grounded) {
-        lastAirVy = player.vy;
-      }
-      wasGrounded = player.grounded;
 
       // The landing squash, written ABSOLUTELY every frame from `(landedTick, tick)`. Nothing is
       // armed and nothing is torn down: past `LAND_SQUASH_TICKS` this is `{1, 1}` forever, which is
       // the same self-correcting shape as `applyShake`'s settled branch. `renderPlayerSprite` runs
       // earlier in the frame and never touches scale, so this is the only writer.
-      const squash = landSquash(landedTick === null ? null : tick - landedTick);
+      // `tick - 1`: `tickCount` counts ticks EXECUTED, so this frame draws the result of index
+      // `tick - 1`. A touchdown stamped there is zero ticks old — the deepest squash, which
+      // measuring from `tick` would skip entirely and start the animation one frame in.
+      const squash = landSquash(player.landedTick < 0 ? null : tick - 1 - player.landedTick);
       playerSprite.setScale(squash.sx, squash.sy);
 
       applyShake(camera, tick);

@@ -79,15 +79,25 @@ describe('the scene applies the band rather than restating it', () => {
     ).not.toMatch(/setDepth\(\s*-?[\d.]/);
   });
 
-  it('bakes the spec tint into the particle it draws', () => {
-    // Sliced to `ensureParticleTexture`, not scanned whole: the sibling above learned that a
-    // `toContain` over a whole file matches the string inside a COMMENT about the code as happily
-    // as the code, and this file's own header names three comments that mention `spec.tint`.
+  it('generates ONE particle texture per kind, and no second generator came back', () => {
+    // 🔴 **This used to assert that the source of `ensureParticleTexture` contains `spec.tint`, and
+    // that assertion was worse than nothing.** `pen.fillStyle(spec.tint, 1)` ->
+    // `pen.fillStyle(spec.tint, 0)` still contains the string, makes every particle in the game
+    // invisible, and left the whole suite green — 9.6 included, on a real GPU, at `drawn 96
+    // inView 96`. Codex named it as the next green mutation (Phase 9 implementation review, finding
+    // 2) and the integrator ran it.
+    //
+    // The colour is now read out of the GENERATED TEXTURE'S PIXELS by
+    // `phase-09-draw.spec.ts`'s "every generated dot is opaque at its centre and carries its spec
+    // tint", against both an alpha-0 and a wrong-colour mutation. A text gate standing beside a real
+    // one is noise, so what is left here is the one claim pixels cannot make: that there is exactly
+    // ONE place a particle texture is generated, so a second, tint-less generator cannot appear
+    // beside the gated one.
+    expect(sliceFrom('export function ensureParticleTexture(')).toContain('generateTexture(');
     expect(
-      sliceFrom('export function ensureParticleTexture('),
-      `src/scenes/gameEffects.ts never reads spec.tint, so EmitterSpec.tint is a field nothing ` +
-        `draws — the same defect class as a burst of zero particles.`,
-    ).toContain('spec.tint');
+      src.match(/generateTexture\(/g)?.length,
+      'a second generateTexture call appeared — the pixel gate covers only the one it samples',
+    ).toBe(1);
   });
 
   it('keeps the NORMAL blend mode — the depth band’s twin, and ungated until now', () => {

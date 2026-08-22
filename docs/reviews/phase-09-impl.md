@@ -31,7 +31,22 @@ Codex could not run Git, unit tests, Playwright, browser rendering, performance 
 
 ## Integrator triage
 
-Pending — every finding to be re-verified locally and then applied or recorded with a one-line reason
-*(C11)*. Codex's shell could not run, so **none of the above has been empirically confirmed**; the
-mutations it names must be executed before they are believed, and the two that are arithmetic claims
-(#5) must be checked against the recorded run data.
+Completed 2026-08-22 *(criterion 9.11, C11)*. Every finding was re-verified locally before it was
+acted on — Codex's shell could not run, so nothing below rests on its file evidence alone. Full
+record in `docs/qa/phase-09-polish.md` §9.8 entries 14, 15, 47, 48 and 49.
+
+| # | sev | verdict | what was actually observed |
+|---|---|---|---|
+| 1 | High | **APPLIED** (with 2, 6) | Correct: no gate read a texture pixel. The transcription in `effectCounts.ts` cannot — Phaser submits a transparent quad as happily as an opaque one. |
+| 2 | Blocker | **APPLIED** | Reproduced. `fillStyle(spec.tint, 0)`: unit suite green, 9.6 `drawn 96 inView 96` **PASS** on a real GPU. Closed by `phase-09-draw.spec.ts`'s pixel read, watched red against that mutation and against `fillStyle(0xffffff, 1)`; the source-text `spec.tint` gate is gone. |
+| 3 | High | **RECORDED** (behaviour kept, ruling written, gate added) | Reachable exactly as described — driven end to end: player leaves the hurt lock still invulnerable, lands a blow, is frozen by it, `iFrameCounter` holds for the whole freeze and resumes after. **Not wrong**: `IFRAME_TICKS`'s surplus is *actionable* ticks, and you cannot leave while frozen. Ruling written into `stepCombat`'s header; `hitstop-frozen-counters.test.ts` gates it, watched red by ungating step 4b.1. |
+| 4 | Medium | **APPLIED where it overlaps 7, RECORDED otherwise** | The worst instance — the landing edge in the render layer because `types.ts` would cross 400 — is fixed by 7. The rest is a structural observation, not a defect; the tick contract is not restructured for it. Entry 48, with the round's own instance of the same pressure. |
+| 5 | High | **PARTIALLY APPLIED — claim corrected, model and floor unchanged** | Codex's algebra is **exact** (`α = 0.2732` -> `k = 0.9001`; reported `1.034b` vs true `3.914b`; **3.79x**). The documented "at most 1.5x" is `(8192/96)^0.1` = 1.56x and holds only under `c·N^k` — it was stated unconditionally, and that is corrected. **The premise is refuted by the recorded data**: an affine law with `a >= 0` caps `k` at 1, and all seven runs measured `k = 1.086-1.286`; fitting `a + bN` through them gives a negative intercept. The floor was not moved. |
+| 6 | High | **APPLIED** (with 1, 2) | Correct. §9.8 entry 14 disclosed the colour *choice* as by-eye and never that its *existence* was ungated. Rewritten, and the gap closed rather than only documented. |
+| 7 | High | **APPLIED** | Confirmed by running it: the identical fall rendered at one tick per frame emits dust and squashes; at two ticks per frame it emits **zero** and never squashes. Fixed at the source — `PlayerSim.landedTick` / `landedFallSpeed`, stamped at step 10; `types.ts` split rather than exempted. |
+
+**And one Codex did not find, uncovered while proving 7.** The emit window in `gameEffects.render`
+was `(cursor, tickCount]` against stamps taken from the pre-increment count, so **no impact spark,
+death plume or hurt vent had ever fired in the shipped game** at one tick per frame. Every unit
+fixture had bumped the count before stamping — the one ordering the game never performs — and 9.5/9.6
+drive `explode()` on the emitter handles directly, bypassing `render()` entirely. Entry 49.
