@@ -74,10 +74,39 @@ type Page = import('@playwright/test').Page;
  * `MIN_HALF_STORM_WORK_DELTA_MS` are set for: it fires only once the low delta reads about 0.93 ms,
  * against readings of 0.5-0.6.
  *
- * ⚠️ **And the cost of the allowance is bounded, not waved away.** At the floor exactly, the
- * divide-back from 8192 to 96 under-states the shipped per-particle cost by `(8192/96)^0.1` =
- * **1.5x**, against a `MAX_PER_PARTICLE_WORK_MS` that sits ~4x above the reading. A build sitting on
- * this floor still cannot pass that bound while exceeding it.
+ * ⚠️ **The cost of the allowance is bounded ONLY IF the law really is `c * N^k`, and this paragraph
+ * used to say so without the "if".** Under a power law, at the floor exactly, the divide-back from
+ * 8192 to 96 under-states the shipped per-particle cost by `(8192/96)^0.1` = **1.56x**, against a
+ * `MAX_PER_PARTICLE_WORK_MS` that sits ~4x above the reading — comfortable.
+ *
+ * Codex's Phase 9 implementation review (finding 5) pointed out that the renderer's cost is not a
+ * pure power: `ParticleEmitterWebGLRenderer.js:66-70` early-returns on `particleCount === 0`, so a
+ * non-empty population additionally pays a draw call, a bind and a flush that do not scale with `N`,
+ * and the storm's `explode` is called per emitter only when the population is non-empty. That is an
+ * **affine** cost, `a + bN`, and its algebra is right — re-derived here rather than taken on trust:
+ *
+ * ```
+ * a = 0.2732 * 1024b   ->   k = ln((a/1024b + 8) / (a/1024b + 1)) / ln 8 = 0.9001
+ * reported  d(8192)/8192 = 1.034b        true  d(96)/96 = 3.914b        ratio 3.79x
+ * ```
+ *
+ * **So the 1.5x was a model-dependent number stated as an unconditional one.** At the same measured
+ * `k = 0.9` an affine law under-states by **3.8x**, which is NOT covered by the ~4x headroom — the
+ * argument in the paragraph above does not survive it.
+ *
+ * 🔴 **The floor and the fit are unchanged anyway, and the reason is the recorded data, not
+ * convenience.** An affine law with `a >= 0` has `k -> 1` as `a -> 0` and `k < 1` for every `a > 0`:
+ * **`k = 1` is the affine family's ceiling.** Every one of the seven recorded sweeps measured
+ * `k = 1.086 - 1.286` — *super*-linear, outside that family entirely — and fitting `a + bN` through
+ * those two points returns a **negative** intercept (-0.16 to -0.37 ms), which makes `(a + 96b)/96`
+ * negative and the "true shipped figure" meaningless. Two points cannot identify a three-parameter
+ * reality, so swapping this fit for an affine one would replace a model that is wrong in a known
+ * direction with one that does not fit the measurements at all.
+ *
+ * What is left is a **disclosed band, not a covered one**: for `0.9 <= k < 1` — sub-linear, which no
+ * run has ever produced — the divide-back under-states by somewhere between 1x and 3.8x, and only
+ * the low end of that is inside the headroom. The floor is what catches a run that leaves the
+ * conservative regime; it is not a proof of how bad the regime it admits can be. QA log entry 47.
  *
  * ## 🔴 There is NO ceiling, and that is a decision rather than an omission
  *

@@ -247,6 +247,16 @@ export interface CombatStep {
  *    cannot act — landing a hit would make the next swing arrive *sooner* than whiffing does, and
  *    `combatTiming.ts` calls moving those numbers *"a balance change that invalidates a generated
  *    sheet"*. Recording it as a known leak was refused.
+ *  - **An OUTGOING blow pauses the attacker's own i-frames too, and that is deliberate.** The gate
+ *    at 1 asks only whether the body is frozen, not what froze it, and `applyPlayerAttack` passes the
+ *    player into `freezePair` — so a player who fights back inside the 27-tick actionable-invulnerable
+ *    surplus (`IFRAME_TICKS` 45 against `HURT_TICKS` 18) keeps the grace period `HITSTOP_TICKS`
+ *    longer. Codex's Phase 9 implementation review (finding 3) called the gate "too broad"; it is the
+ *    same ruling as the bullet above, applied consistently. `IFRAME_TICKS`'s docstring calls the
+ *    surplus *"the window in which you can actually leave"*, and you cannot leave while frozen — an
+ *    escape window that shrank *because you swung* would punish the fight-back. The surplus stays 27
+ *    ACTIONABLE ticks either way. What was genuinely missing is that no document said so and no test
+ *    covered it; `hitstop-interactions.test.ts` drives the outgoing case now.
  *  - **The edge must keep being consumed** or it latches *(vault 2.4)*: a press made during a freeze
  *    would otherwise fire the instant it lifted, or on tick 1 of the next level. A clear, not a gate.
  *
