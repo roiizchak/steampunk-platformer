@@ -1556,3 +1556,41 @@ armed the level-complete sequence and set `GameScene.playerInputEnabled` to `fal
 behaving exactly as designed. **A dead keyboard in a hands-on session is a game-state question before
 it is a harness question** — check `playerInputEnabled` and `goalEntryTicks` first, and reload for a
 clean world rather than restarting the scene, which does not reset player health.
+
+---
+
+## 9.8 item 32 — re-judged on the fixed build, and why the first approval did not count
+
+The first clip (`docs/evidence/phase-09/phase-09-juice-2026-08-22.webm`) was approved on 2026-08-22 and
+**that approval was invalid through no fault of the owner.** It was captured before the emit-window
+fix, so no impact spark, no death plume and no hurt vent had ever fired in the shipped game — only the
+landing dust and the camera shake were real. The caption offered with it named all of them.
+
+**The integrator's error, stated plainly:** the effects were inferred from sim state — hp falling,
+enemy hp falling, `frozen` flipping — and reported as though they had been seen. Nothing in that
+capture confirmed a single particle reached the screen. It is the phase's own defect class, committed
+in the evidence produced to close the phase's own hands-on criterion: *asking whether a value came back
+rather than whether anything was drawn.*
+
+**Re-captured on the fixed build** (`phase-09-juice-v2-2026-08-22.webm`), same three segments — hurt
+100 -> 25, kill 60 -> 0, three landings — and this time the **live particle population was
+instrumented rather than assumed**, sampled once per animation frame:
+
+| emitter | peak alive |
+|---|---|
+| `sparks` | **18** |
+| `steam` | **14** |
+| `dust` | **14** |
+
+All three non-zero. On the previous build the first two would have read **0**, which is precisely what
+the instrumentation exists to say.
+
+**Verdict: APPROVED by the owner on the re-capture** — "looks good".
+
+**The rule this earns, and it belongs beside every other one this phase produced:** *evidence for a
+visual criterion must measure the visual result.* A capture that proves the game reached the right
+state proves nothing about whether it drew anything, and a caption that lists effects the capturer did
+not verify is a false green wearing a video's clothes. The instrumented particle count is now the
+minimum bar for this criterion's evidence.
+
+The earlier clip is kept, deliberately, as the before half of the pair.
