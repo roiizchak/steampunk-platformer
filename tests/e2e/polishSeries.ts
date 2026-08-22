@@ -7,6 +7,13 @@
  * game is observed*, and every `expect` about the observation's validity (the camera at its base,
  * the two `__phaserGame` fields typed, ticks strictly increasing) stays with it, because a reading
  * whose preconditions are unchecked is not a reading.
+ *
+ * 9.2's landing DRIVER (`startHopping`) and its landing SELECTOR (`coveredLanding`) joined them on
+ * 2026-08-22 when the flake fix pushed the spec to 434 lines. They belong on this side of the seam
+ * for the same reason the recorder does: one drives the game and the other decides which touchdown
+ * the harness managed to OBSERVE. Neither says anything about what the camera did — that is the
+ * spec's half, and `coveredLanding` reading `ox`/`oy` would be exactly the vacuous shape *(C2)*
+ * this suite exists to prevent.
  */
 
 import { expect, type Page } from '@playwright/test';
@@ -17,21 +24,42 @@ import { expect, type Page } from '@playwright/test';
 export interface Sample {
   tick: number; hp: number; x: number; y: number; vx: number; vy: number;
   grounded: boolean; ox: number; oy: number; frozenUntil: number;
+  /**
+   * 🔴 The sim's own touchdown STAMP (`PlayerSim.landedTick`), not an edge inferred from `grounded`
+   * moving between two samples. Measured 2026-08-22: this harness runs 1 tick per frame for about
+   * the first second after boot and then settles to **3-4 sim ticks per frame** (SwiftShader, ~18
+   * fps), so the inferred edge lags the real touchdown by 1-4 ticks — and `SHAKE.land` lasts 3. The
+   * inferred edge therefore pointed PAST the end of the shake roughly one run in three, which is
+   * the whole of criterion 9.2's flake. Read the number `gameEffects.arm` read; do not re-derive it.
+   */
+  landedTick: number;
 }
 
 /**
  * What a test waits for, as plain DATA: `waitForFunction` serialises its argument, so a closure would
  * have to be stringified and re-evaluated in the page — fragile, and a second copy of the rule.
  * 🔴 `run` is the harness's own RESOLUTION, not a perf number. One `requestAnimationFrame` cannot
- * observe two sim ticks, so a frame that drains three leaves two that can never be sampled. Right
- * after boot this harness drains ~2.7 ticks/frame (shader compilation, texture upload), making
- * "exactly six frozen ticks" not wrong but *unmeasurable*. Every test waits on `run` first — a
- * positive condition on the INSTRUMENT, never a sleep.
+ * observe two sim ticks, so a frame that drains three leaves two that can never be sampled, making
+ * "exactly six frozen ticks" not wrong but *unmeasurable*.
+ *
+ * ⚠️ **`run`'s cost was measured on 2026-08-22 and it is the opposite shape to what this paragraph
+ * used to claim.** It said the harness drains ~2.7 ticks/frame *right after boot* and settles. A
+ * per-frame probe says the reverse: **1 tick per frame for about the first second, then 3-4 ticks
+ * per frame indefinitely** (~18 fps under SwiftShader). So the longest gap-free run available after
+ * that first second is **1**, and a `{ kind: 'run', n: 12 }` is satisfiable only out of the opening
+ * burst — on a loaded box, not at all, and it then spends its whole 60 s timeout. That was one of
+ * criterion 9.2's two failure modes. **Do not add a `run` wait to a new test**: ask for the
+ * condition the reduction actually needs. 9.2 asks `landings` + `coveredLanding` instead.
  */
 export interface WaitSpec {
-  kind: 'run' | 'drop' | 'airborneDrop' | 'land';
-  /** For `run`, the gap-free series length required; otherwise ticks recorded after the event. */
+  kind: 'run' | 'drop' | 'airborneDrop' | 'land' | 'landings';
+  /**
+   * For `run`, the gap-free series length required; for `landings`, how many distinct touchdown
+   * STAMPS must have been recorded; otherwise ticks recorded after the event.
+   */
   n: number;
+  /** `landings` only: ticks that must also be recorded after the LAST of them. */
+  tail?: number;
 }
 
 /** Generous: a real hang still fails as a timeout rather than passing as a long-enough sleep. */
@@ -49,7 +77,7 @@ export async function installRecorder(page: Page): Promise<void> {
     type G = { __phaserGame: { scene: { getScene(k: string): unknown } } };
     const w = window as unknown as G & { __rec?: unknown[]; __view?: unknown; __recRaf?: number };
     const scene = w.__phaserGame.scene.getScene('Game') as {
-      simWorld: { player: { grounded: boolean; hitstopUntil: number } };
+      simWorld: { player: { grounded: boolean; hitstopUntil: number; landedTick: number } };
       effects: { base(): { x: number; y: number } };
       cameras: { main: { x: number; y: number; width: number; height: number } };
     };
@@ -75,7 +103,7 @@ export async function installRecorder(page: Page): Promise<void> {
         // gap-tolerant series make an untolerant claim. See the hazard test.
         rec.push({
           tick: g.tick, hp: g.health, x, y, vx, vy,
-          grounded: sim.grounded, frozenUntil: sim.hitstopUntil,
+          grounded: sim.grounded, frozenUntil: sim.hitstopUntil, landedTick: sim.landedTick,
           ox: cam.x - baseX, oy: cam.y - baseY,
         });
       }
@@ -99,6 +127,14 @@ export async function waitFor(page: Page, spec: WaitSpec): Promise<void> {
     (s: WaitSpec) => {
       const rec = (window as unknown as { __rec?: Sample[] }).__rec ?? [];
       if (rec.length < 2) return false;
+      // 🔴 Touchdowns counted off the SIM STAMP, so the count does not depend on the harness
+      // catching the frame the `grounded` edge happens to be visible on. A stamp older than the
+      // recorder (the spawn touchdown, `landedTick: 0`) is not one of ours and is excluded.
+      if (s.kind === 'landings') {
+        const stamps = [...new Set(rec.filter((r) => r.landedTick > rec[0].tick).map((r) => r.landedTick))];
+        const last = stamps[stamps.length - 1];
+        return stamps.length >= s.n && rec[rec.length - 1].tick >= last + (s.tail ?? 0);
+      }
       let at = -1;
       let run = 1;
       for (let i = 1; i < rec.length; i++) {
@@ -124,6 +160,7 @@ export async function readSeries(page: Page): Promise<Sample[]> {
   // Type before value for the two fields off the untyped `__phaserGame` route *(C1)*.
   expect(typeof raw[0].grounded, 'grounded, off __phaserGame, must be typed').toBe('boolean');
   expect(typeof raw[0].frozenUntil, 'hitstopUntil, off __phaserGame, must be typed').toBe('number');
+  expect(typeof raw[0].landedTick, 'landedTick, off __phaserGame, must be typed').toBe('number');
   // 🔴 The camera must be quiescent on the first recorded frame, and this is now a REAL check: the
   // zero comes from `attachEffects.base()`, so a non-zero here means the camera genuinely was not at
   // its base — it is no longer `cam.x - cam.x`, which was true by construction and proved nothing.
@@ -139,5 +176,97 @@ export async function stopDriving(page: Page): Promise<void> {
     if (w.__drive !== undefined) cancelAnimationFrame(w.__drive);
     if (w.__recRaf !== undefined) cancelAnimationFrame(w.__recRaf);
   });
+}
+
+/**
+ * Jump on every touchdown, forever, from INSIDE the page — the landing driver for 9.2.
+ *
+ * 🔴 **It replaces a single held `page.keyboard.down('Space')`, and the single hop is what made the
+ * gate flaky.** Measured on 2026-08-22 with a per-frame probe: this harness runs one tick per frame
+ * for roughly the first second after boot and then settles to **3-4 sim ticks per frame** (~18 fps
+ * under SwiftShader). `SHAKE.land` lasts **3 ticks**. So whether any frame at all falls inside a
+ * given landing's shake window is a coin toss, and one hop gave the test exactly one toss — the
+ * `peak > 0` failure. Many hops turn a toss into a selection: `coveredLanding` takes the first
+ * touchdown the harness actually sampled inside, and says so loudly when there is none.
+ *
+ * Full-height hops, released on touchdown rather than after a fixed hold, so consecutive landings
+ * are ~70 ticks apart and no landing's 14-tick tail can contain the next one's shake. `keyCode` is
+ * forced on for the reason `startBrawl` records.
+ */
+export async function startHopping(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type G = { __phaserGame: { scene: { getScene(k: string): unknown } }; __drive?: number };
+    const w = window as unknown as G;
+    const key = (type: 'keydown' | 'keyup'): void => {
+      const e = new KeyboardEvent(type, { code: 'Space', key: ' ', bubbles: true });
+      Object.defineProperty(e, 'keyCode', { get: () => 32 });
+      window.dispatchEvent(e);
+    };
+    const scene = w.__phaserGame.scene.getScene('Game') as {
+      simWorld?: { player: { vy: number; grounded: boolean } };
+    };
+    let holding = false;
+    let leftGround = false;
+    const step = (): void => {
+      const p = scene.simWorld?.player;
+      if (p) {
+        if (holding && !p.grounded) leftGround = true;
+        if (holding && leftGround && p.grounded) {
+          key('keyup');
+          holding = false;
+          leftGround = false;
+        } else if (!holding && p.grounded && p.vy === 0) {
+          key('keydown');
+          holding = true;
+        }
+      }
+      w.__drive = requestAnimationFrame(step);
+    };
+    w.__drive = requestAnimationFrame(step);
+  });
+}
+
+/** How many touchdowns 9.2 drives before choosing one. See `coveredLanding`. */
+export const HOPS = 6;
+
+/**
+ * The first touchdown STAMP the harness recorded a sample inside, with a full tail and no neighbour.
+ *
+ * 🔴 **The tick comes from `PlayerSim.landedTick` — the number `gameEffects.arm` itself passed to
+ * `shakeStartTick` — never from `grounded` changing between two samples.** The inferred edge is the
+ * defect this function exists to remove: a sample at `tickCount` reflects the ticks *before* it, so
+ * the edge is visible one tick late at best, and 3-4 ticks late at this harness's steady frame rate.
+ * `SHAKE.land` lasts 3, so the inferred tick routinely pointed past the end of the shake it was
+ * meant to open, and every offset in the window was a legitimately settled zero. Same lesson as
+ * commit 2d59d5b, one layer out: read the stamp, do not re-derive the edge.
+ *
+ * 🔴 **Every clause here is about TICK COVERAGE — not one of them looks at `ox` or `oy`.** That is
+ * what keeps `peak > 0` falsifiable: this selects a landing the harness could see, and the test then
+ * says what must have been drawn there. A selector that preferred landings where the camera moved
+ * would be the vacuous shape *(C2)* this suite has already found twenty-two of.
+ */
+export function coveredLanding(series: Sample[], span: number): number {
+  const first = series[0].tick;
+  const stamps = [...new Set(series.filter((s) => s.landedTick > first).map((s) => s.landedTick))];
+  // 🔴 `(L, L+span)` — OPEN at the bottom, and that is a fact about the pipeline, not a fudge.
+  // `gameEffects.render` arms on the frame whose `fresh(L)` window `[cursor, tick)` contains `L`,
+  // and that frame reports `tickCount >= L + 1`; the frame reporting `tickCount === L` has not run
+  // index `L` yet, so no shake is armed and it draws a legitimate zero. The offset for tick `L`
+  // itself is therefore never rendered — see the note beside `running` in the test.
+  const inWindow = (L: number): number => series.filter((s) => s.tick > L && s.tick < L + span).length;
+  const inTail = (L: number): number =>
+    series.filter((s) => s.tick >= L + span && s.tick <= L + TAIL_TICKS).length;
+  const alone = (L: number): boolean => !stamps.some((o) => o > L && o <= L + TAIL_TICKS);
+  const hit = stamps.find((L) => inWindow(L) > 0 && inTail(L) > 2 && alone(L));
+  if (hit !== undefined) {
+    return hit;
+  }
+  throw new Error(
+    `No usable touchdown among ${stamps.length} in ${series.length} ticks. Usable = at least one ` +
+      `sample inside [L, L+${span}) (an unobserved tick cannot be asserted about), more than two in ` +
+      `[L+${span}, L+${TAIL_TICKS}] for the settled-to-zero tail, and no second touchdown inside ` +
+      `that tail. Coverage: ${stamps.map((L) => `${L}:win=${inWindow(L)},tail=${inTail(L)}${alone(L) ? '' : ',crowded'}`).join(' ')}. ` +
+      `All win=0 = this harness is draining more than ${span} ticks per frame throughout; raise HOPS.`,
+  );
 }
 

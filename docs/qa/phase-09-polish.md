@@ -1594,3 +1594,98 @@ not verify is a false green wearing a video's clothes. The instrumented particle
 minimum bar for this criterion's evidence.
 
 The earlier clip is kept, deliberately, as the before half of the pair.
+
+---
+
+## Criterion 9.2's landing-shake gate was FLAKY — ~1 run in 3 — and the cause was the spec, not the sim (2026-08-22)
+
+`tests/e2e/phase-09-polish.spec.ts` — *"the landing shake stays inside shakeWithinEnvelope and settles
+to EXACTLY zero"* — failed two different ways on `bf3b280`: `peak > 0 … Received: 0` in the full-suite
+run, and `TimeoutError: page.waitForFunction: Timeout 60000ms` alone. **A flaky gate on the phase's own
+criterion cannot be reported passing**, so it was instrumented before anything was changed.
+
+### The measurement that decided it
+
+A per-frame probe recorded `world.tickCount`, `player.grounded`, `player.landedTick` and the applied
+camera offset, one row per animation frame:
+
+```
+OBSERVED grounded-edge tick = 149   ACTUAL landedTick = 148     (run A)
+OBSERVED grounded-edge tick = 150   ACTUAL landedTick = 148     (run B)
+t=149 ox=0.39357732567026577 oy=-4.2710252547854894 | shakeOffset(149) = 0.3936, -4.2710   ✅ exact
+t=150 ox=0.9688742287151018  oy=-1.9574770869342026 | shakeOffset(150) = 0.9689, -1.9575   ✅ exact
+DELTAS 1,1,1,…(×61)…,1,2,1,2,2,2,3,2,3,3,4,3,3,3,4,3,3,4,3,3,3,4,3,3,3,3,3,4,3,4,3,3,4,3
+RUN LENGTHS [64,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+```
+
+The same deltas appear with **no input at all**, so this is the harness, not the game: **1 sim tick per
+frame for about the first second after boot, then 3-4 ticks per frame indefinitely** (~18 fps under
+SwiftShader).
+
+### Root cause — the spec's driver, twice over. The sim stamp is correct.
+
+`PlayerSim.landedTick` (commit `2d59d5b`) is **right**, and on every frame the harness caught inside the
+window the drawn offset equalled `shakeOffset(SHAKE.land, tick, …)` to the bit. The game is fine.
+
+1. **`peak > 0`.** The spec derived the landing tick by comparing `grounded` between two samples. A
+   sample taken at `tickCount = N` reflects the ticks *before* `N`, so the inferred edge is one tick
+   late at best and **3-4 ticks late at this frame rate** — while `SHAKE.land.durationTicks` is **3**.
+   The inferred tick routinely pointed past the end of the shake it was meant to open, and every
+   offset in the window was a legitimately settled zero.
+2. **The timeout.** `waitFor(page, { kind: 'run', n: 12 })` asks for twelve *consecutive* gap-free
+   ticks. After the opening burst the longest run this harness produces is **1**. On a loaded box the
+   burst does not happen at all and the wait spends its whole 60 s.
+
+### The fix
+
+`Sample` carries `landedTick` off the same `__phaserGame` route `grounded` already used — **no ninth
+`window.__game` field.** A new `WaitSpec` kind `landings` counts touchdowns off the stamp; `startHopping`
+drives `HOPS = 6` full-height hops; `coveredLanding` selects the first touchdown the harness actually
+sampled inside. **Every clause of that selector is about tick coverage — none reads `ox`/`oy`** — so
+`peak > 0` stays falsifiable. The `run 12` wait is gone. Driver and selector live in `polishSeries.ts`,
+which is the instrument side of the seam; the spec stayed under 400 lines by splitting, not exempting.
+
+### Two further findings, one fixed and one recorded
+
+- **The observable shake window is `(L, L+span)`, open at the bottom.** `gameEffects.render` arms on the
+  frame whose `fresh(L) = [cursor, tick)` contains `L`, and that frame reports `tickCount ≥ L+1`, so the
+  offset for tick `L` is **never rendered**: of `land`'s three ticks the renderer can only ever draw two.
+  `applyShake(camera, tick)` uses the frame's `tickCount` while the landing squash three lines above it
+  uses `tick - 1`. **Recorded, not changed** — a one-tick phase change to a shipped effect is a balance
+  decision with its own gate, not part of unflaking a spec.
+- **`toEqual` between a browser value and a Node value is not a safe assertion here.** `Math.sin` is
+  *implementation-approximated* (ECMA-262 §21.3.2.30) and the two V8 builds disagree: measured in the
+  page and in Node for the same argument, `Math.sin(405 * 12.9898)` is `0.9632082153419407` versus
+  `…08` — **1 ULP**, and it red-flagged a correct camera on 1 run in 12. (Not the camera arithmetic:
+  `effects.base()` is exactly `(0, 0)`, so `(0 + x) - 0 === x`.) Bounded at **1e-9 px**, six orders under
+  the 1.536 px / 4.32 px peaks it guards; the `0.01 * cmd.ax` regression misses by 1.46 px.
+
+### Watched failing *(C1, C12)*, verbatim, then reverted
+
+| mutation | count | red on |
+|---|---|---|
+| `arm('land', …)` → `void player.landedTick;` | `arm(` 3 → 2 | `the camera must actually have MOVED during the shake — Expected: > 0, Received: 0` |
+| `setPosition(baseX + 0.01 * x, …)` | `baseX + x, baseY + y` 1 → 0 | `t=90: drawn (0.0061…, -0.0341…) != shakeOffset(…) (0.6116…, -3.4119…) — Expected: < 1e-9, Received: 3.3777976512710315` |
+| `player.landedTick = world.tickCount` → self-assign | 1 → 0 | the `landings` wait never satisfied |
+
+All three reverted; `git diff src/` empty.
+
+### Repetition, not one green run
+
+**14 consecutive isolated runs of the fixed gate: 14 green, 0 red** (greenness read positively — the
+`ok 1 … settles to EXACTLY zero` line *and* `1 passed`, never through a pipe). Before the fix the same
+harness gave 11 green / 1 red in 12 with the ULP bug still present, and pass/pass/FAIL in 3 before that.
+Full suite **119 passed**; unit **133 files / 2151 passed | 3 skipped**; build + `verify-dist` green.
+
+### `phase-01-boot.spec.ts:50` — attributed to LOAD, not to Phase 9
+
+The same full-suite run failed criterion 1.4 on a bare 30 s test timeout. It is not Phase 9's:
+
+- Phase 9's branch diff (`080e3e8..bf3b280`) touches **zero** boot-path files — `BootScene.ts`,
+  `bootAssets.ts`, `bootLevels.ts`, `main.ts` and `public/assets/index.json` are all unchanged.
+- Measured today: **3.6, 3.6, 4.0, 4.0, 4.2 s** isolated, and **5.1 s as test #1 of the 119-test suite**,
+  against a 30 s bound. A run that hits 30 s is 6× slower than the same test with nothing beside it.
+
+This is the contention mode `playwright.config.ts` already documents, and the same note forbids the
+"fix": **do not raise the bound** — one loose enough to survive a contended box is loose enough to hide
+a genuine boot hang *(vault 1.4)*.

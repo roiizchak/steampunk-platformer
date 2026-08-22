@@ -29,10 +29,13 @@ import { HITSTOP_TICKS } from '../../src/sim/hitstop';
 import { IFRAME_TICKS } from '../../src/sim/combatTiming';
 // The instrument — recorder, positive wait, read-back — lives beside the spec, not in it.
 import {
+  HOPS,
   RUN_TIMEOUT,
   TAIL_TICKS,
+  coveredLanding,
   installRecorder,
   readSeries,
+  startHopping,
   stopDriving,
   waitFor,
   type Sample,
@@ -223,23 +226,30 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     await installRecorder(page);
     // 🔴 Nothing awaits `SHAKE_COMPLETE` — `Camera.reset()`/`.destroy()` skip it, so waiting on it
     // hangs on exactly the paths that matter. The wait is the tick series: a landing, then a tail.
-    await waitFor(page, { kind: 'run', n: 12 });
-    await page.keyboard.down('Space');
-    await waitFor(page, { kind: 'land', n: TAIL_TICKS });
-    await page.keyboard.up('Space');
+    // 🔴 No `{ kind: 'run', n: 12 }` here any more, and its removal is half the flake fix. It asked
+    // for twelve CONSECUTIVE gap-free ticks; the same probe that measured the frame rate measured
+    // the run lengths, and after the first second the longest gap-free run this harness produces is
+    // **1**. The wait was satisfiable only out of the post-boot burst, so on a busy box — the full
+    // suite — it was never satisfiable at all and spent its whole 60 s timing out. That is the
+    // second failure mode 9.2 showed. Nothing below needs contiguity: it needs a sampled window,
+    // which `coveredLanding` establishes positively.
+    await startHopping(page);
+    await waitFor(page, { kind: 'landings', n: HOPS, tail: TAIL_TICKS });
     const series = await readSeries(page);
     const view = await page.evaluate(
       () => (window as unknown as { __view: { w: number; h: number } }).__view,
     );
     await stopDriving(page);
     expect([typeof view.w, typeof view.h]).toEqual(['number', 'number']);
-    const landAt = series.findIndex((s, i) => i > 0 && s.grounded && !series[i - 1].grounded);
-    expect(landAt, 'a landing must have been recorded').toBeGreaterThan(0);
-    const landTick = series[landAt].tick;
     const span = SHAKE.land.durationTicks;
+    // 🔴 The touchdown the SIM stamped, chosen for tick coverage alone. The paragraph that used to
+    // sit here claimed a drained frame "costs samples, not truth" because `landTick` and `arm`'s
+    // `tick` moved together — which was wrong twice over: `arm` starts the shake from `hitTick`
+    // (`player.landedTick`), not from the frame's `tick`, and the inferred `grounded` edge is a
+    // frame late on top of that. Both errors pushed the window past the shake.
+    const landTick = coveredLanding(series, span);
     // From the same table `gameEffects.arm` reads, never a second copy; `land` starts on the hit tick,
-    // having no freeze to wait for. 🔴 `landTick` comes from the same `world.tickCount` `arm` reads on
-    // the frame the landing is seen, so a drained frame moves BOTH — a gap costs samples, not truth.
+    // having no freeze to wait for — `shakeStartTick('land', hitTick) === hitTick`.
     const state: ShakeState = { startedTick: landTick, cmd: SHAKE.land };
     const arc = series.filter((s) => s.tick >= landTick - 6 && s.tick <= landTick + TAIL_TICKS);
     for (const s of arc) {
@@ -251,19 +261,41 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     }
     // 🔴 Non-vacuity: a camera that never moves satisfies EVERY branch of the envelope — zero is
     // inside the peak box as well as being the required value outside it.
-    const running = arc.filter((s) => s.tick >= landTick && s.tick < landTick + span);
+    // 🔴 `(landTick, landTick + span)`, open at the bottom. A frame reporting `tickCount === landTick`
+    // has not executed index `landTick` yet — `fresh` is `[cursor, tick)` — so the touchdown is not
+    // stamped, `arm('land')` has not been called, and the camera is correctly at zero. Of `land`'s
+    // three ticks the renderer can only ever put TWO on screen, and this is where that is recorded:
+    // `applyShake(camera, tick)` draws from the frame's `tickCount` while the landing squash three
+    // lines above it draws from `tick - 1`. Left alone here deliberately — a one-tick phase change to
+    // a shipped effect is a balance decision with its own gate, not part of unflaking this spec.
+    const running = arc.filter((s) => s.tick > landTick && s.tick < landTick + span);
     expect(
       running.map((s) => s.tick),
-      `shake window t=${landTick}..${landTick + span - 1} went unsampled; nearby: ${arc.map((s) => s.tick)}`,
+      `shake window t=${landTick + 1}..${landTick + span - 1} went unsampled; nearby: ${arc.map((s) => s.tick)}`,
     ).not.toEqual([]);
     const peak = Math.max(...running.map((s) => Math.max(Math.abs(s.ox), Math.abs(s.oy))));
     expect(peak, 'the camera must actually have MOVED during the shake').toBeGreaterThan(0);
     // 🔴 And the EXACT value: `peak > 0` plus a peak box is not an amplitude claim — a 100×
     // regression (`0.01 * cmd.ax`) is non-zero and inside the box. `shakeOffset` is the same function
     // `applyShake` writes from, deterministic in `(cmd, tick, w, h)`; nothing here need be loose.
+    // 🔴 **1e-9 px, not bit equality — and this is a fact about ECMAScript, not a softened claim.**
+    // The left side is computed by Chromium's V8 and the right by Node's, and `Math.sin` is
+    // *implementation-approximated* (ECMA-262 §21.3.2.30): the two are permitted to disagree.
+    // Measured 2026-08-22 with both engines asked for the same argument:
+    // `Math.sin(405 * 12.9898)` is `0.9632082153419407` in the browser and `…08` in Node — **1 ULP**,
+    // and `toEqual` red-flagged a perfectly correct camera on 1 run in 12 because of it. (The camera
+    // arithmetic is NOT the source: `effects.base()` is exactly `(0, 0)`, so `(0 + x) - 0 === x`.)
+    // The bound is six orders of magnitude under the peaks it guards — `land` moves 1.536 px on x
+    // and 4.32 px on y at 1920×1080 — so the `0.01 * cmd.ax` regression this loop exists to catch
+    // misses by 1.46 px, nine orders clear. Nothing a regression could hide inside.
+    const ULP_PX = 1e-9;
     for (const s of running) {
       const w = shakeOffset(SHAKE.land, s.tick, view.w, view.h);
-      expect([s.ox, s.oy], `t=${s.tick}: drawn offset != shakeOffset(SHAKE.land, …)`).toEqual([w.x, w.y]);
+      const err = Math.max(Math.abs(s.ox - w.x), Math.abs(s.oy - w.y));
+      expect(
+        err,
+        `t=${s.tick}: drawn (${s.ox}, ${s.oy}) != shakeOffset(SHAKE.land, …) (${w.x}, ${w.y})`,
+      ).toBeLessThan(ULP_PX);
     }
     // Exactly zero afterwards: a shake settling at 1e-17 leaves the camera permanently off target.
     const settled = arc.filter((s) => s.tick >= landTick + span);
