@@ -3,17 +3,16 @@
 ← [PRD spine](PRD.md) · [HANDOFF](HANDOFF.md) · [qa/phase-09-polish.md](qa/phase-09-polish.md)
 
 > **This session fixes bugs. It does NOT start Phase 10.** Owner's ruling, 2026-08-22. Phase 10 is
-> deferred; see §7. `main` is `a085d04`, pushed. Phase 9 is merged and owner-approved.
+> deferred; see §7. Phase 9 is merged and owner-approved — but see **Tier 0**, which qualifies that.
 >
 > This list came from a read-only sweep of every `🔴`/`⚠️` comment in `src/`, `tests/`, `tools/`, plus
 > all 23 files in `docs/reviews/`, `docs/HANDOFF.md`, `docs/handoff/`, `docs/ENGINE-NOTES.md` and
 > `docs/lessons/`. **Every claim marked ✅ was opened and read by the integrator** — the rest are the
 > sweep's, and a sweep's summary is a claim, not evidence. **Verify before you fix.**
 >
-> ⚠️ **One sweep is still outstanding: the `docs/qa/` logs.** Phase 5's findings **R1–R8** are known
-> to live there, recorded-not-fixed and never triaged (`docs/handoff/phase-06-owed.md:222-234` calls
-> that *"an omission in my planning, not a deliberate deferral"*). **Read `docs/qa/` yourself before
-> declaring this list complete.**
+> All three sweeps are in — hazard comments, reviews/handoffs, and all 26 `docs/qa/` logs. Phase 5's
+> R1–R8 are included. Three items the logs still call open were **checked against the repo and are
+> stale or refuted** — see §8.
 
 **Good news, established rather than assumed:** there is **no `test.skip`, `.only`, `test.fixme`,
 `test.todo` or `.failing` anywhere** in `src/`, `tests/` or `tools/` — and no `TODO`, `FIXME`, `HACK`
@@ -43,6 +42,29 @@ could *do anything*.
    npm script (`globalSetup` runs after `webServer`; `webServer.command` never runs when the URL
    already answers). In Phase 9 the bypass silently zeroed **three consecutive control runs**, one
    deciding whether a merge had broken the game.
+
+---
+
+## TIER 0 — the record does not match the work. Fix this before anything else.
+
+### 0.1 ✅ Phase 9's own gate table says seven criteria are UNRUN
+
+`docs/qa/phase-09-polish.md:224-245`. The table still reads **UNRUN** for **9.1, 9.2, 9.3, 9.4, 9.7,
+9.9 and 9.11**, and 9.5 as *"RAN ×2 → FAIL twice … still UNRUN in the sense that matters."* Only 9.6
+and 9.10 are marked passing.
+
+**The work was done** — the gate rounds ran (their own sections sit in the same file at `:448`,
+`:494`, `:529`, `:1063`, `:1132`), the 9.5 fix rounds landed, and the Codex implementation review ran
+and was triaged (`docs/reviews/phase-09-impl.md`). **Nobody updated the table.** And `docs/PRD.md:35`
+still shows Phase 9 as `—`, not `✅ done` — which is why `docs-contract.test.ts` stays green: it
+requires a QA-LOG row per criterion only **on a phase marked done**.
+
+So the phase was merged to `main` and approved on a verbal report the project's own authority does
+not corroborate. **Reconcile the table against what actually ran, criterion by criterion, citing the
+evidence section for each — and mark anything you cannot substantiate as still owed rather than
+passing.** Only then decide whether `PRD.md:35` becomes `✅ done`. *A QA-LOG row reading PASS is
+still a sentence a human wrote* (`QA-LOG.md:262`); this item is that failure inverted — the work
+happened and nobody wrote the sentence.
 
 ---
 
@@ -139,6 +161,33 @@ change or not at all.
 | 3.11 | `tools/gen/motion.mjs:206-210` | **The run sheet repeats poses** (~13 distinct, 15 sampled). `gateMotionFloor` compares every frame to frame 0 and **cannot see adjacent duplicates** |
 | 3.12 | `src/render/interpolate.ts:36-40` · `src/scenes/devMotionProbe.ts:15-22` | Interpolation costs up to one tick (16.7 ms) of input latency — **and the judder diagnosis it was built to fix was never proven.** The probe exists to falsify the hypothesis *before* building the fix; the fix ships and no comment records the probe's outcome |
 | 3.13 | `docs/reviews/phase-04-impl.md:31` | `dropCastShadow`'s height guard **cannot distinguish a real art component ≤4% of the figure from a cast shadow**, so a dropped tool, spark or boot can be silently deleted from a generated frame. No-op on today's art only |
+
+---
+
+## TIER 1b — added by the QA-log sweep, ranked with Tier 1
+
+| | citation | what |
+|---|---|---|
+| 1b.1 | `docs/qa/phase-09-polish.md:394` | **The hit-stop chain is uncapped.** A frozen swing keeps its hitbox live, so a second enemy walking into reach re-arms the freeze. **A crowd walking into one swing can hold the game frozen for an unbounded run of 4–9-tick freezes.** Deliberately uncapped — *"a cap is a design decision outside this phase"* |
+| 1b.2 | `docs/qa/phase-07-audio-02-gate-owners.md:78` | **`GameScene.create()` restarts both audio beds from zero**, so music and ambience **cut back to bar 1 at every level boundary.** Recorded as harmless because *"no level transition exists yet; it becomes real in Phase 8"* — **Phase 8 shipped five levels and transitions.** The reason expired by its own terms |
+| 1b.3 | `docs/qa/phase-05-combat-01-timings.md:181` (A1, HIGH) | **The 9b ordering between the player's swing and enemy damage is ungated, and the recorded excuse is geometrically false.** `ATTACK_BOX` reaches ~26 units beyond contact-overlap distance, so a dead zone exists where a swing lands with zero contact damage and therefore no i-frames. Worse: the contact loop iterates only scavengers, so a sentry never deals contact damage and the premise never applies. **Swapping the two calls fails no test.** Raised to blocker-class for "session 4"; session 4 did not do it |
+| 1b.4 | `docs/qa/phase-05-combat-05-gate-08.md:104` (T13) | **The six modules extracted from `GameScene.ts` have no tests.** `parallaxRig.ts` returning `100 + i` instead of `-100 + i` would draw **all three backgrounds over the player** and every gate stays green |
+| 1b.5 | `docs/qa/phase-05-combat-05-gate-08.md:92` (T2) | **Nothing swings the player's attack repeatedly against a live enemy and asserts death** — both tests set `hp = 0` directly. Found independently by both qa-expert briefs and called *"the gap that let P1 ship past the entire gate"* |
+| 1b.6 | `docs/qa/phase-02-player.md:355` | **`resolveCollisions` can tunnel through solids narrower than one tick of travel.** Margin ~1.9× against a 32 px tile at `maxFallSpeed` 17. *"Revisit if a thin hazard is ever authored"* — **Phase 8 authored spike runs and no re-check is recorded** |
+
+## TIER 2b — more player-visible, from the QA logs
+
+| | citation | what |
+|---|---|---|
+| 2b.1 | `docs/qa/session-bugfix-perf-gates-03-hands-on.md:60-74` | **Aggro is permanent and nothing clears it.** A scavenger that has seen you once stares indefinitely from **851 px** — well outside `detectRadius` 480 — and never patrols again. Combined with the run-in-place defect it plays its chase cycle on the spot while doing so |
+| 2b.2 | `docs/qa/phase-05-combat-09-session-11.md:174` (R5) | **`releaseAggro` does not clear `attackCounter`** — a scavenger mid-swing when you die carries the live attack window **through your respawn**. *"Harmless today only because the respawn point is distant — which is a coincidence, not a design"* |
+| 2b.3 | `docs/qa/phase-05-combat-05-gate-08.md:262` | **The sentry's shot is born inside its own body** — no muzzle offset exists; `sentry.x` is the body centre. The sim already stores `lastFireDx`/`lastFireDy` for exactly this and **no renderer reads either** |
+| 2b.4 | `docs/qa/phase-06-hud.md:409`, `:410` | The gear counter measures **3.13:1 on mid-grey and 1.13:1 on bright sky** — below WCAG AA — and Phase 8 shipped four new levels without re-measuring. ⚠️ The sampling method was never written down, so **these numbers may be optimistic** |
+| 2b.5 | `docs/qa/phase-06-hud.md:414` | Collecting a burst of gears produces **overlapping identical flyer sprites** — they stack into one smear instead of reading as N pickups |
+| 2b.6 | `docs/qa/phase-06-hud.md:361` (owed item 10) | **DPR ≠ 1 was never tested.** Letterbox and pillarbox are verified at DPR 1 only, so canvas sizing on any HiDPI display — most laptops — is unverified |
+| 2b.7 | `docs/qa/phase-09-polish.md:318` | The camera shake writes `camera.setPosition`, so a lethal shake **exposes up to 9.6 px of raw background at a screen edge** |
+| 2b.8 | `docs/qa/phase-07-audio.md:99`, `:91`, `:191` | `bed-ambience`'s loop seam is **−27.5 dBFS (4% of peak)** — *"the one defect the numbers say is plausible"*, a click every 120 s · `sfx-jump`'s first sample is **0.084** where every other cue starts under 0.007, so the most-triggered cue may click on every jump · two pickups resolved in the same rendered frame **play one cue** |
+
 
 ---
 
@@ -274,6 +323,9 @@ Documents still describe these as open. They are not. Verified against `src/`.
 | `session-gate-defects-impl.md:50-69` — 6.9 floor bracketed; pairs never counterbalanced | **Closed** — 7.7 rebuilt AB/BA balanced; `MAX_HUD_GPU_RATIO` deleted and replaced |
 | `docs/handoff/phase-06-owed.md` items 1–9, 11, 12 | **Resolved 2026-08-16** per its own banner. Only item 10's DPR half (Tier 2.5) and item 13 (Tier 3.8) survive |
 | `docs/reviews/phase-06-impl.md:58-60` (C3/C4/C5) | **Closed in round 2** — `:107` |
+| `phase-05-combat-05-gate-08.md:264` (A3) — four paid-for enemy animations not in the catalog | ✅ **STALE — all eight are catalogued.** `index.json` carries `rust-scavenger-{walk,death,chase,idle,attack}` and `brass-sentry-{idle,fire,death}` |
+| `phase-05-combat-01-timings.md:186` (R4) — partial catalog makes a killed scavenger's corpse keep walking, `play()` re-firing every frame forever | ✅ **REFUTED — the premise is gone.** It rested on `death`/`chase` being uncatalogued; both ship. The sweep flagged this as the item to check first; it was checked |
+| `phase-05-combat-09-session-11.md` (B35) — 5.3's chase unobservable because `rust-scavenger-chase` is not catalogued | ✅ **STALE** — same reason |
 
 ---
 
