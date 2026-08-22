@@ -72,11 +72,35 @@ export const SHIPPED_PEAK_ALIVE = EFFECT_PEAK_ALIVE;
  * in this file clear it by a margin instead of by luck: `MIN_HALF_STORM_WORK_DELTA_MS` is now read at
  * 1024 rather than 512, where the old sweep put it 1–3 clock steps from the bound and red it 1 run in
  * 6 the moment Guard 1 stopped firing first. **No bound in this file moved.**
+ *
+ * ## 🔴 And 8192 was added, because at a 2x span the EXPONENT is not resolvable either
+ *
+ * The sweep was `[0, 1024, 2048]`, and `effectSweep.ts` has the algebra: over a 2x amplification
+ * ratio no bound on the old per-particle *spread* could order any cost law below `N^3`, and the
+ * replacement statistic — the exponent `k` itself — inherits the same arithmetic. One clock step on
+ * the low delta is worth `ln(1.2)/ln(2)` = **0.26** of `k` at a 2x span; over the 8x span from
+ * `HALF_ALIVE` to `STORM_ALIVE` it is **0.088**. Widening the points is a change of instrument and it
+ * is the move this file's own history already licensed *("the N values have to separate instead")*.
+ *
+ * The cost is five more windows per run, ~10 s a round. 2048 stays as an ordering point for Guard 1:
+ * a middle point is what makes a non-monotonicity between the fit points visible at all.
  */
-export const SWEEP_ALIVE = [0, 1024, 2048] as const;
+export const SWEEP_ALIVE = [0, 1024, 2048, 8192] as const;
 
 /** The top of the sweep, and the amplification the per-particle figure is divided back out of. */
 export const STORM_ALIVE = SWEEP_ALIVE[SWEEP_ALIVE.length - 1];
+
+/**
+ * The lower fit point — the low end of the exponent measurement, and what `MIN_HALF_STORM_WORK_DELTA_MS`
+ * floors.
+ *
+ * 🔴 **Named, not `SWEEP_ALIVE[length - 2]`.** That index is what the gate round found had drifted:
+ * the constant below still argued its value from the 512-vs-0 gap while the index had moved it to
+ * 1024, and adding a fourth sweep point would have silently moved it again — to 2048, away from the
+ * shipped 96 rather than towards it. The lower this point sits, the less of the divide-back is
+ * inference, so it is the *second* element by intent rather than the second-to-last by accident.
+ */
+export const HALF_ALIVE = SWEEP_ALIVE[1];
 
 /**
  * Ten pairs, alternating AB/BA — `phase-07-perf.spec.ts`'s `PAIRS`, for its reasons verbatim.
@@ -114,9 +138,15 @@ export const EFFECT_SAMPLE_TICKS = 120;
  * the quantum, not the gate"*.
  *
  * ⚠️ **This is the measurement floor, stated plainly.** `SHIPPED_PEAK_ALIVE` particles cost well
- * under one step, so `N = 0`, `64` and `128` are indistinguishable here and the table says so. The
- * shipped figure is not read directly at all — it is the amplified storm, divided back, and legal
- * only while the sweep is linear.
+ * under one step, so nothing below ~1024 is distinguishable from the control here — which is why the
+ * sweep's lowest non-zero point IS 1024 and why the table above stops arguing about 64 and 128, two
+ * values `SWEEP_ALIVE` no longer contains. The shipped figure is not read directly at all: it is the
+ * amplified storm, divided back.
+ *
+ * 🔴 **That divide-back used to be justified as "legal only while the sweep is linear", and nothing
+ * asserted linearity** — `effectSweep.ts` has the algebra of the guard that was supposed to. It is
+ * justified now by the measured cost EXPONENT and its floor, and the sentence is corrected here
+ * rather than left to be re-read as a claim.
  */
 export const CLOCK_GRID_MS = 0.1;
 
@@ -147,6 +177,16 @@ export const CLOCK_GRID_MS = 0.1;
  * shipped particle ceiling — stays inside about a sixth of a 60 Hz frame on reference hardware.**
  * 16.67 / 6 is 2.78, rounded down to 2.5, and it is tighter than the fleet's own
  * `MAX_FLEET_WORK_MS = 8` that it sits underneath.
+ *
+ * 🔴 **Three of the four loads in that sentence are asserted; the level, the HUD and the player
+ * sprite are NOT.** The only per-arm draw claims anything takes are `counts().opaque` (enemy bodies),
+ * `particleCounts().drawn` (particles) and `effectShake.ts`'s counter. Nothing observes the tilemap
+ * layer, the parallax layers, `UIScene` or the player. All of them make `onWork` *cheaper* when
+ * absent, and this is the one bound in the file that is not a difference — so it is the one bound
+ * they can move. That is the same defect one layer out from Guard 0b, which exists because the
+ * headline assertion named twenty enemies nobody checked were drawn; it is disclosed here and
+ * recorded as a §9.8 narrowing rather than closed, because closing it means a fourth counter and a
+ * fourth mutation for loads no phase criterion names.
  *
  * ## 🔴 What that sentence does NOT include, and it is a real narrowing
  *
@@ -233,9 +273,16 @@ export const MAX_EFFECT_FRAME_P95_MS = 16;
  * The floor on the paired delta at the amplified peak — the **premise check**, in the shape
  * `phase-08-gate-perf.spec.ts`'s *"the amplifier is not amplifying"* guard establishes.
  *
- * Without it the per-particle figure below is a delta of noise divided by 1024, and
- * `MAX_EFFECT_FRAME_WORK_MS` would pass for a build whose particles cost anything at all — because
- * a build that drew none would pass it most comfortably of the lot.
+ * Without it the per-particle figure below is a delta of noise divided by a big number, and the
+ * exponent taken off the same two deltas is a ratio of two such noises.
+ *
+ * 🔴 **What it does NOT do, and the docstring used to claim it did**: it is not a check that anything
+ * was DRAWN. Under `PERF_MUTATION=scale0` — zero particles submitted to the batch on every window —
+ * `ParticleEmitter.preUpdate` still walks every alive particle, so roughly half the per-particle cost
+ * survives and the amplifier still amplifies: the gate round measured this floor, its sibling, the
+ * ordering check and all three millisecond bounds **passing on a build that drew nothing**, with only
+ * Guard 0 red. This is a RESOLUTION premise. Guard 0 is the draw premise, and a future edit that
+ * weakened Guard 0 on the strength of "the amplifier check also catches that" would be wrong.
  *
  * ⚠️ **It is a FLOOR, so it is one of the three bounds here that can false-RED.** The other two are
  * `MIN_HALF_STORM_WORK_DELTA_MS` and, behind it, `MAX_LINEARITY_SPREAD`.
@@ -246,26 +293,33 @@ export const MAX_EFFECT_FRAME_P95_MS = 16;
  * than marginal. `MIN_HALF_STORM_WORK_DELTA_MS` exists because of that, and this sentence is
  * corrected rather than quietly dropped.
  *
- * Set two clock steps rather than close to the reading. Across seven clean sweeps the 1024-vs-0 gap
- * was never below **five** clock steps (0.500 / 0.600 / 0.700 / 0.600 / 0.500 / 0.600 / 0.700 ms),
- * so 0.2 needs a three-step adverse move of a median-of-five to fire, and it is still twice the
- * clock's own resolution — a single step of quantisation noise cannot satisfy it.
+ * Set two clock steps rather than close to the reading. It guards `sweepDelta(0, STORM_ALIVE)`, which
+ * is the largest gap in the sweep and reads ~6 ms — so its margin is enormous and the tight one is
+ * its sibling below, which is where the seven-sweep distribution belongs and now lives.
  */
 export const MIN_STORM_WORK_DELTA_MS = 0.2;
 
 /**
- * The same floor under the **half** amplification, and it guards a sharper edge than its sibling.
+ * The same floor under the **lower fit point**, `HALF_ALIVE`, and it guards a sharper edge than its
+ * sibling: this is the delta the exponent's error budget is almost entirely made of.
  *
- * 🔴 `MAX_LINEARITY_SPREAD` divides by `perParticleHalf`. Guard 2 floors the 1024 amplification so
- * `perParticle` cannot be zero — but nothing floored the 512 one, and Guard 1 permits *equality*, so
- * `sweepWork[512] === sweepWork[0]` is a legal clean outcome. `perParticleHalf` is then 0, the
- * spread divides by the `1e-9` epsilon, and the run reds at roughly **5 x 10^5**.
+ * 🔴 The exponent takes the log of `stormDelta / halfDelta`. Guard 2 floors the numerator — but
+ * nothing floors the denominator, and Guard 1 permits *equality*, so `sweepWork[HALF_ALIVE] ===
+ * sweepWork[0]` is a legal clean outcome. The log then goes to `+Infinity` and the run reds with a
+ * message about the cost law when what actually happened was that the clock could not separate two
+ * readings.
  *
- * That is not a hypothetical margin: across the same seven sweeps the 512-vs-0 gap fell to **two**
- * clock steps three times, against five for the 1024 gap. The linearity check was the tightest
- * false-red route in the file and it was undisclosed.
+ * That is not a hypothetical margin: it was reproduced. At the sweep's original half point of **512**
+ * this gap fell to **two** clock steps in three of seven sweeps, against five for the 1024 gap, and
+ * it red 1 run in 6 the moment Guard 1 stopped firing first. Its own advice — *raise the sweep
+ * points* — is what was taken, twice: the half point moved to 1024, and `HALF_ALIVE` is now a named
+ * constant so a fourth sweep point cannot move it again.
  *
- * ⚠️ **The message this guard carries matters more than the guard.** A bare linearity failure tells
+ * Across seven clean sweeps the 1024-vs-0 gap it now guards was never below **five** clock steps
+ * (0.500 / 0.600 / 0.700 / 0.600 / 0.500 / 0.600 / 0.700 ms), so 0.2 needs a three-step adverse move
+ * of a median to fire and a single step of quantisation noise cannot satisfy it.
+ *
+ * ⚠️ **The message this guard carries matters more than the guard.** A bare exponent failure tells
  * the next reader *"the cost does not scale, withdraw the divide-back"* — which under this repo's own
  * rule sends them to REPLACE THE STATISTIC over one step of `performance.now()` quantisation. That
  * is the mistake the first sweep already made once. So this fires first, and it says quantisation.
@@ -299,12 +353,19 @@ export const MAX_EFFECT_WORK_DELTA_MS = 0.3;
 /**
  * The ceiling on ONE shipped particle's main-thread cost, in milliseconds per frame.
  *
- * 🔴 **This is a divided-back figure and it is only legitimate because the sweep is linear.** The
+ * 🔴 **This is a divided-back figure, and what makes it legitimate is `MIN_COST_EXPONENT`.** The
  * shipped 96-particle ceiling sits *below* `performance.now()`'s 0.1 ms quantisation grid in this
  * browser, so it cannot be read directly: 0.100 and 0.200 are adjacent steps on the clock, not a
  * measurement. What is measured is the amplified storm; what is reported is that delta over the
- * particle count. If the sweep stops being linear the spec withdraws the divide-back rather than
- * reporting an extrapolation through a region it did not measure.
+ * particle count.
+ *
+ * That division is **conservative exactly while the cost exponent `k` is at least 1** — per-particle
+ * cost is `c * N^(k-1)`, so at `k > 1` a figure divided back from 8192 over-states what 96 particles
+ * cost, and at `k < 1` it under-states it. `effectSweep.ts` measures `k` and floors it; the spec
+ * withdraws the divide-back rather than reporting an extrapolation through a region nothing measured.
+ * The predecessor of that guard bounded a *derived spread* at a 2x amplification ratio and could not
+ * fire below `k = 3`, which is how a constant-cost frame would have been reported as a per-particle
+ * cost.
  *
  * ## Where 0.003 comes from, and it is not from what passes
  *
@@ -313,21 +374,21 @@ export const MAX_EFFECT_WORK_DELTA_MS = 0.3;
  * is 0.0035 ms each, rounded down to 0.003. That is a budget decision about a game, arrived at
  * without looking at a measurement.
  *
- * What the measurements then said: the selection set read 0.00049 / 0.00059 / 0.00068 ms per
- * particle at 1024 and 0.00039 / 0.00059 / 0.00078 at 512 — so the bound sits about 4x above the
- * worst reading in it, and the whole shipped feature costs roughly **0.06 ms**, a third of one step
- * of the clock that measured it.
+ * ⚠️ **The measurements that used to be quoted here cited sweep points that no longer exist** — 512
+ * has not been in `SWEEP_ALIVE` since the sweep was widened, and the figures beside it were never
+ * re-taken. Withdrawn rather than re-cited, exactly as `MAX_EFFECT_FRAME_WORK_MS`'s were. The live
+ * per-particle reading is printed by the spec on every run and tabulated in
+ * `docs/qa/phase-09-polish.md`; the bound sits about 4x above it.
+ *
+ * 🔴 And the derived *"the whole shipped feature costs roughly 0.06 ms"* is withdrawn with them. That
+ * sentence multiplied a per-particle figure divided back from a high-N measurement by 96 — which at
+ * the measured `k > 1` over-states the shipped cost, by ~2x at the exponents this harness reads. The
+ * over-statement is the safe direction for a ceiling and the wrong direction for a *reported
+ * measurement*, so the number is not restated. `MAX_EFFECT_WORK_DELTA_MS`'s own readings — 0.000 or
+ * 0.100 ms per pair, nothing between — are what the shipped peak actually costs, at the only
+ * resolution this clock has.
  */
 export const MAX_PER_PARTICLE_WORK_MS = 0.003;
-
-/**
- * How far two per-particle estimates taken at different amplifications may sit apart.
- *
- * `phase-08-gate-perf.spec.ts:129`'s `MAX_LINEARITY_SPREAD`, for its reason verbatim: dividing a
- * delta by a count is an ASSUMPTION until two amplifications agree, and the answer to that objection
- * is to measure it rather than argue it.
- */
-export const MAX_LINEARITY_SPREAD = 4;
 
 /**
  * The floor on the drawn-particle count at the shipped peak — 9.6's load-bearing literal.

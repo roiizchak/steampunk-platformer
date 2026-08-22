@@ -25,6 +25,7 @@
  * PERF_MUTATION=particlescale0 …   # the per-particle gate, which `scale0` never reaches
  * PERF_MUTATION=fleetscale0    …   # 9.5's twenty enemies, drawn
  * PERF_MUTATION=noshake        …   # 9.5's THIRD load — the shake, see `effectShake.ts`
+ * PERF_MUTATION=flatcost       …   # the cost-law gate — a frame cost that ignores the count
  * PERF_MUTATION=stall          …   # the sampling window never closes — see `sampleArm`'s stall guard
  * ```
  *
@@ -359,14 +360,17 @@ export function stormCount(mutation: string): number {
 }
 
 /**
- * The five non-storm mutations, by exact name. `''` is a clean run.
+ * The six non-storm mutations, by exact name. `''` is a clean run.
  *
- * This array is the REGISTRY, not the implementation: `noshake` is applied by `effectShake.ts` and
- * `stall` by `effectCounts.ts`, each beside the thing it breaks, exactly as the three above sit
- * beside the emitters and bodies they scale. `namedMutation` below is what makes a typo loud, and it
- * only needs the names.
+ * This array is the REGISTRY, not the implementation: `noshake` is applied by `effectShake.ts`,
+ * `stall` by `effectCounts.ts` and `flatcost` by `effectSweep.ts` — each beside the thing it breaks,
+ * as the three above sit beside the emitters they scale. `namedMutation` makes a typo loud.
+ *
+ * 🔴 **A name here is not a wired proof.** `particlescale0` sat in this array for a whole gate round
+ * while `phase-09-perf.spec.ts` applied it nowhere, so it ran that spec clean and reported
+ * `1 passed` — `namedMutation`'s own failure mode, reached through a name it recognises.
  */
-export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0', 'noshake', 'stall'] as const;
+export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0', 'noshake', 'flatcost', 'stall'] as const;
 
 export type NamedMutation = (typeof NAMED_MUTATIONS)[number];
 
