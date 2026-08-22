@@ -336,10 +336,31 @@ its evidence.
     start values, so a retune is a visible edit in two places.
 14. **The three emitter tints are grey-box choices**, not generated art. `STYLE.md` locks generated
     assets, not render-time tints; the palette question is owed at the hands-on pass.
-15. **`lastAirVy` is sampled per frame, not per tick.** The sim carries no landing-velocity field and
-    `src/sim/` was out of scope for the scene task. At ~240 fps the last sample before touchdown is
-    within one frame of the true impact velocity, so the landing dust magnitude can differ by one
-    frame's gravity from the value the sim would have given.
+
+    🔴 **What this entry did NOT say, and Codex's implementation review (finding 6) was right that it
+    should have: no gate verified the generated texture contained opaque pixels at all.** The
+    *choice* of colour was disclosed as by-eye; the *existence* of any colour was ungated, and the
+    two are not the same admission. `pen.fillStyle(spec.tint, 1)` -> `(spec.tint, 0)` made every
+    particle in the game invisible with the whole suite green, 9.6 included, at `drawn 96 inView 96`
+    on a real GPU. **CLOSED 2026-08-22** by `phase-09-draw.spec.ts`'s *"every generated dot is opaque
+    at its centre and carries its spec tint"*, which reads the texture through
+    `TextureManager.getPixel` and is watched red against both an alpha-0 and a wrong-colour mutation.
+    The by-eye disclosure above stands unchanged — a gate can prove the dot is `0xf0b040`, never that
+    `0xf0b040` is the right brass.
+15. ~~**`lastAirVy` is sampled per frame, not per tick.**~~ **CLOSED 2026-08-22, and the entry
+    understated the defect by a wide margin.** It recorded a one-frame magnitude error. Codex's
+    implementation review (finding 7) pointed at the edge rather than the value, and running it
+    confirmed **total loss**: the landing was inferred from `grounded` changing between `render()`
+    calls, and `tick.ts`'s step 13 guarantees a buffered press fires the tick AFTER touchdown while
+    step 7 clears `grounded` again — so a frame draining both ticks saw `false -> false` and the
+    dust, the squash and the landing shake did not happen at all. Multi-tick frames get *more* common
+    on slower hardware, i.e. on the Phase 10 release target. `PlayerSim.landedTick` and
+    `landedFallSpeed` are stamped at step 10 beside the `events.landed` edge already decided there;
+    `effects-behaviour.test.ts` drives one identical fall at one tick per frame and at two and
+    asserts the arms agree. The stated reason not to fix it — *"adding a counter to `PlayerSim` would
+    push `src/sim/types.ts` past 400 lines"* — was the 400-line rule distorting ownership, which is
+    Codex finding 4's worst instance. `PlayerSim` moved whole to `src/sim/playerSim.ts`: split, not
+    exempted.
 16. ~~**`attachEffects.destroy()` is never called.**~~ **CLOSED in the gate fix round.** The
     reasoning recorded here ("not a leak, just an unreached path") was only half the story: the path
     it left unreachable is `camera.setPosition(baseX, baseY)`, and `baseX`/`baseY` are captured ONCE
