@@ -24,6 +24,8 @@
  * PERF_MUTATION=scale0         …   # the emitter gate — reds BOTH tests, see the spec's 9.5 note
  * PERF_MUTATION=particlescale0 …   # the per-particle gate, which `scale0` never reaches
  * PERF_MUTATION=fleetscale0    …   # 9.5's twenty enemies, drawn
+ * PERF_MUTATION=noshake        …   # 9.5's THIRD load — the shake, see `effectShake.ts`
+ * PERF_MUTATION=stall          …   # the sampling window never closes — see `sampleArm`'s stall guard
  * ```
  *
  * Anything else `PERF_MUTATION` is set to **throws** — see `namedMutation`. A proof that silently
@@ -356,8 +358,15 @@ export function stormCount(mutation: string): number {
   return match === null ? 0 : Number(match[1]);
 }
 
-/** The three non-storm mutations, by exact name. `''` is a clean run. */
-export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0'] as const;
+/**
+ * The five non-storm mutations, by exact name. `''` is a clean run.
+ *
+ * This array is the REGISTRY, not the implementation: `noshake` is applied by `effectShake.ts` and
+ * `stall` by `effectCounts.ts`, each beside the thing it breaks, exactly as the three above sit
+ * beside the emitters and bodies they scale. `namedMutation` below is what makes a typo loud, and it
+ * only needs the names.
+ */
+export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'fleetscale0', 'noshake', 'stall'] as const;
 
 export type NamedMutation = (typeof NAMED_MUTATIONS)[number];
 

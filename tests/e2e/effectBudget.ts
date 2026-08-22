@@ -153,8 +153,16 @@ export const CLOCK_GRID_MS = 0.1;
  * The frame this is asserted on carries **no combat**. `installStorm` holds the player invulnerable
  * every frame — it has to, or the sweep cannot order at all (its docstring has the inversion
  * argument) — and with no hit ever landing there is no `hurt` or `death` state, no `freezePair`
- * hit-stop, no knockback, no screen shake, no i-frame flicker, and **none of
- * `gameEffects.render()`'s own trigger paths** (`strike`, `hurtVent`, `landingDust`) ever fires.
+ * hit-stop, no knockback, no i-frame flicker, and **none of `gameEffects.render()`'s own trigger
+ * paths** (`strike`, `hurtVent`, `landingDust`) ever fires.
+ *
+ * 🔴 **It used to say "no screen shake" too, and that was criterion 9.5 failing rather than a
+ * narrowing.** 9.5's sentence is *max enemies + max particles + shake*, so a shake absent from every
+ * window is a load the criterion names and the number does not carry. `effectShake.ts` now drives one
+ * through the shipped `land` arming path — the single route that arms a shake without also emitting a
+ * burst, which is what keeps the inversion out — in **every** arm, so it divides out of the paired
+ * delta while sitting inside the absolute term this constant bounds. `sampleArm`'s Guard 0c fails any
+ * window that did not carry it on more than half its frames.
  *
  * So "worst case" here is *the worst STEADY-STATE frame*: the largest fleet this project measures,
  * the shipped particle ceiling, and everything that draws every frame regardless. It is not the
@@ -176,9 +184,20 @@ export const CLOCK_GRID_MS = 0.1;
  * `tests/unit/effects-draw-path.test.ts`. Both name `explode(0, …)` as the mutation they exist to
  * catch.
  *
- * The selection set then read 0.500 / 0.500 / 0.600 ms, so the bound is roughly 4x above the worst
- * of them. Chosen on one set of runs and confirmed on a HELD-OUT set that had no say in it; both
- * sets are in `docs/qa/phase-09-polish.md`.
+ * ## 🔴 The run sets, corrected — this used to cite evidence that was not there *(C9)*
+ *
+ * It read: *"The selection set then read 0.500 / 0.500 / 0.600 ms … Chosen on one set of runs and
+ * confirmed on a HELD-OUT set that had no say in it; both sets are in `docs/qa/phase-09-polish.md`."*
+ * The gate round's `performance-engineer` brief grepped that log for both figures and found **zero
+ * matches for either** (finding M3) — the same shape as the missing covering gate three paragraphs
+ * up, in the same file, disclosed and then repeated.
+ *
+ * What is true: **2.5 is derived, not fitted.** It is 16.67 / 6 rounded down, from the claim in this
+ * docstring, and no run had a vote in it — so there is no selection set to record and the three
+ * quoted readings were a sanity check whose provenance nobody wrote down. They are withdrawn rather
+ * than re-cited. What DOES exist is confirmation, and it is real: two disjoint held-out sets, the
+ * gate round's 8 runs and the fix round's 10, tabulated under
+ * **§"9.5 — the bound-confirmation run sets"** in `docs/qa/phase-09-polish.md`.
  */
 export const MAX_EFFECT_FRAME_WORK_MS = 2.5;
 
@@ -268,8 +287,12 @@ export const MIN_HALF_STORM_WORK_DELTA_MS = 0.2;
  *
  * 0.3 is `MAX_PER_PARTICLE_WORK_MS * SHIPPED_PEAK_ALIVE` rounded up to the next clock step, so the
  * two bounds state the same claim at the two resolutions the harness can express it in. It is
- * **three** grid steps; the selection set measured one. Chosen from what is correct rather than from
- * what passes, then confirmed on a HELD-OUT set — both are in `docs/qa/phase-09-polish.md`.
+ * **three** grid steps and the readings sit at one, which is the margin, not the derivation.
+ *
+ * 🔴 The sentence that followed cited *"a HELD-OUT set — both are in `docs/qa/phase-09-polish.md`"*
+ * and neither set was in that log (finding M3, and see `MAX_EFFECT_FRAME_WORK_MS` for the same
+ * correction at length). There is no selection set: this is derived from the constant above. The
+ * confirmation is genuine and is now written down — §*"9.5 — the bound-confirmation run sets"*.
  */
 export const MAX_EFFECT_WORK_DELTA_MS = 0.3;
 

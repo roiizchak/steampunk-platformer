@@ -15,7 +15,8 @@
  *
  * `effectBudget.ts` holds every constant and its derivation; `effectCounts.ts` the drawn counter and
  * the reading of one window; `effectMutation.ts` the committed mutations and the storm that drives
- * the real emitters. This file states the claims and asserts them, and nothing else.
+ * the real emitters; `effectShake.ts` the third load and its counter; `windowStall.ts` the deadline
+ * that stops a stopped simulation presenting as a hang. This file states the claims and asserts them.
  *
  * ## Every mutation is one shell variable — none has to be reinvented
  *
@@ -23,6 +24,8 @@
  * PERF_MUTATION=storm8192   …  # the absolute frame budget
  * PERF_MUTATION=fleetscale0 …  # Guard 0b — the twenty enemies this test's headline names
  * PERF_MUTATION=scale0      …  # Guard 0 — the particles, by the emitter render gate
+ * PERF_MUTATION=noshake     …  # Guard 0c — the SHAKE, the third load 9.5's sentence names
+ * PERF_MUTATION=stall       …  # the window's deadline, in place of a ten-minute hang
  * ```
  *
  * Anything else throws (`namedMutation`): a proof that silently ran clean would report a green
@@ -30,37 +33,23 @@
  *
  * ## ⚠️ Stated limits *(vault 9.3 — a gate's blind spots are part of its result)*
  *
- *  - **🔴 The measured frame carries NO COMBAT, and the absolute bound must be read that way.**
- *    `installStorm` holds the player invulnerable on every frame of every arm. It has to — without
- *    it the shipped effects path fires bursts that `atLimit()` accepts in cheap arms and DROPS in
- *    expensive ones, an inversion that stops the sweep ordering at all. The price is that the frame
- *    `MAX_EFFECT_FRAME_WORK_MS` is asserted on contains no `hurt` or `death` state, no hit-stop, no
- *    knockback, no screen shake, no i-frame flicker and none of `gameEffects.render()`'s own trigger
- *    paths. It is the worst **steady-state** frame, not the worst frame the game can produce.
- *  - **🔴 The storm holds a population; it does not measure a single triggered burst.**
- *    `sampleArm` waits for the population to land *before* sampling, so the frame that first
- *    constructs N particles is outside the window by construction. What is inside is the top-up —
- *    which is itself burst-shaped and not a trickle: `EmitterSpec.lifespanTicks` is a scalar, so an
- *    entire `explode()` expires on one frame and the whole cap is re-exploded on the next, every 18
- *    ticks for sparks, 45 for steam, 22 for dust, through the shipped call. Those spikes are what
- *    `MAX_EFFECT_FRAME_P95_MS` gates; every other bound here is a median and blind to them. The
- *    shipped *trigger* path — `impactSparks`, `deathSteam`, `hurtVent`, `landingDust` deciding
- *    **when** to burst — is criterion 9.1's behavioural spec, not this one.
+ * 🔴 **Each one's full text is a numbered §9.8 entry in `docs/qa/phase-09-polish.md`** — the home
+ * criterion 9.8 designates, and where the gate round's `performance-engineer` brief found the shake
+ * half of this list MISSING (finding M2). Summarised here so one narrowing has one authority.
  *
- *  - **"Max enemies" here means the largest fleet this project MEASURES, not the largest possible.**
- *    `DEV_FLEET_COUNT` is a chosen 10x multiple; finding S5 in
- *    `docs/qa/phase-05-combat-08-gate-10.md:121` is still open and nothing in `src/sim/` or the level
- *    format caps concurrent enemies. Particles are different in kind — they are bounded **by
- *    construction** at `SHIPPED_PEAK_ALIVE`, because `atLimit()` drops rather than evicts.
- *  - **The shipped 96-particle cost is below this browser's clock grid**, so it is not read
- *    directly. `performance.now()` quantises to 0.1 ms here; 96 particles do not clear that. What is
- *    measured is the amplified storm and what is reported is the delta over the count — which is a
- *    measurement only while the sweep is linear, and the spec asserts that rather than assuming it.
- *  - **No GPU timer is installed, deliberately.** These particles are a main-thread cost —
- *    `preUpdate` walks every alive particle through its `EmitterOp`s and the renderer builds one
- *    quad each, while the pixels are three 12 px dots' worth of fill. A GPU ratio is the wrong
- *    instrument and 6.9's history is what that costs. Installing the timer would also add its own
- *    per-frame work to the very absolute bound this file asserts.
+ *  - **🔴 NO COMBAT is in the measured frame** — `installStorm` holds the player invulnerable in
+ *    every arm, or `atLimit()` accepts a burst in a cheap arm and drops it in an expensive one and
+ *    the sweep inverts. Worst **steady-state** frame, not the worst. *(entry 43)*
+ *  - **🔴 The shake IS in it, and it did not use to be** — `effectShake.ts` drives one through the
+ *    shipped `land` path, the one arming route with no burst in it, and Guard 0c fails a window that
+ *    did not carry it. `land` is the smallest of the four commands. *(entry 44)*
+ *  - **🔴 A held population, not one triggered burst** — though the top-up is itself burst-shaped and
+ *    `MAX_EFFECT_FRAME_P95_MS` gates the spikes every median here is blind to. *(entry 45)*
+ *  - **"Max enemies" is the largest fleet this project MEASURES** — S5, still open. *(entry 6)*
+ *  - **96 particles sit below this browser's clock grid** — the amplified storm is measured and
+ *    divided back, legal only while linear, and the spec asserts the linearity. *(entry 5)*
+ *  - **No GPU timer, deliberately** — a main-thread cost, so a GPU ratio is the wrong instrument
+ *    (6.9's history), and the timer would add work to this file's own absolute bound.
  *  - **An absolute millisecond from this harness is not one from a player's machine.** The renderer
  *    is asserted and printed for exactly that reason.
  */
@@ -90,11 +79,13 @@ import {
   setStorm,
   stormCount,
 } from './effectMutation';
+import { DRIVEN_SHAKE, MIN_SHAKEN_FRAME_FRACTION, installShakeDrive } from './effectShake';
 import { bootToGame } from './gameHarness';
 import { median, medianPairedDelta } from './levelPerf';
 import { DEV_FLEET_COUNT } from './perfBudget';
 import { counts } from './perfSampler';
 import { assertRealGpu } from './realGpu';
+import { stallSimulation } from './windowStall';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -141,7 +132,13 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     await bootToGame(page);
     const renderer = await assertRealGpu(page, '9.5');
     await installStorm(page);
+    // 🔴 Criterion 9.5's THIRD load. `installStorm` makes combat impossible on purpose, which took
+    // the shake out of every window this gate ever took. `noshake` is Guard 0c's red proof.
+    await installShakeDrive(page, MUTATION !== 'noshake');
     await spawnWorstCaseFleet(page);
+    if (MUTATION === 'stall') {
+      await stallSimulation(page);
+    }
     // 🔴 Both drawing mutations are applied HERE too, not only in the 9.6 test. Guard 0 below is
     // 9.6's statistic standing in front of this file's milliseconds, and a guard never run against
     // the mutation it exists for is decoration. Under `scale0` every window still holds its full
@@ -162,6 +159,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // ── The sweep ──────────────────────────────────────────────────────────────────────────────
     const sweep = new Map<number, number[]>(SWEEP_ALIVE.map((n) => [n, []]));
     const sweepDrawn = new Map<number, number[]>(SWEEP_ALIVE.map((n) => [n, []]));
+    const shakes: number[] = []; // every window's shaken-frame fraction; Guard 0c asserts each one
     for (let round = 0; round < SWEEP_ROUNDS; round += 1) {
       // Alternating direction, for `PAIRS`'s reason: a fixed walk order gives every low point a
       // colder machine than every high point, and that bias is exactly the shape the sweep looks for.
@@ -170,6 +168,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
         const arm = await sampleArm(page, n, `sweep N=${n}, round ${round}`, fleet);
         sweep.get(n)!.push(arm.measured.workMedianMs);
         sweepDrawn.get(n)!.push(arm.particles.drawn);
+        shakes.push(arm.shake);
       }
     }
     const sweepWork = SWEEP_ALIVE.map((n) => median(sweep.get(n)!));
@@ -205,6 +204,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
         // "still Sprites, not Rectangles" half and `opaque` carries the drawn claim.
         arms[name].opaque.push(arm.enemies.opaque);
         arms[name].sprites.push(arm.enemies.sprites);
+        shakes.push(arm.shake);
       }
     }
     await setStorm(page, 0);
@@ -238,6 +238,8 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
       `      peak ${peak} off ${fmt(arms.off.work)}`,
       `      pair deltas ${fmt(pairDeltas)}`,
       `      drawn on ${arms.on.drawn.join('/')} vs off ${arms.off.drawn.join('/')}`,
+      `      shaken frames ${(Math.min(...shakes) * 100).toFixed(1)}-${(Math.max(...shakes) * 100).toFixed(1)} % ` +
+        `over ${shakes.length} windows (floor ${MIN_SHAKEN_FRAME_FRACTION * 100} %, ${DRIVEN_SHAKE.durationTicks}-tick land shake)`,
       `      enemies drawn on ${arms.on.opaque.join('/')} vs off ${arms.off.opaque.join('/')} ` +
         `(of ${fleet.bodies} bodies, ${fleet.sprites} sprites)`,
       `      p95 on ${fmt(arms.on.p95)} (bound ${MAX_EFFECT_FRAME_P95_MS})`,

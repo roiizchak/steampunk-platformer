@@ -232,8 +232,8 @@ marked passing yet.
 | 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | UNRUN |
 | 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | UNRUN |
 | 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | UNRUN — ⚠️ see the substitution note below |
-| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | UNRUN |
-| 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | UNRUN |
+| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | **RAN → FAIL** (1 critical, 4 major); **all three remaining problems repaired 2026-08-22** — see §*"9.5 — the gate round FAILED it"*. **Still UNRUN in the sense that matters: the owner agent has not re-run it against the fix.** |
+| 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN → PASS**, checklist verified item by item; brief 2 outstanding *(A7)* |
 | 9.7 | Thresholds pinned as literals, fixtures both sides | `qa-expert` ×2 | UNRUN |
 | 9.8 | What the gates do NOT cover is stated here | — | DRAFTED, below |
 | 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | UNRUN |
@@ -649,6 +649,39 @@ recorded, or recorded here as still uncovered.
     **both removed → red**, `expected 4 to be 3` on frozen tick 1. Not decoration, and honest about
     which of the two lines it is buying.
 
+### Added by the 9.5 fix round — the narrowings criterion 9.5 was FAILED for not stating
+
+🔴 **These three lived in `phase-09-perf.spec.ts`'s header and nowhere else, and one of them —
+the shake — was not a narrowing at all but an unmet criterion.** That is the whole of finding M2: 9.8
+designates *this log* as a narrowing's home, the spec header is not it, and a narrowing that only a
+reader of the spec ever sees is one the gate cannot check. The spec header now summarises and cites
+these numbers rather than arguing in parallel with them.
+
+43. **The measured frame carries NO COMBAT, and the absolute bound must be read that way.**
+    `installStorm` holds the player invulnerable on every frame of every arm. It has to — without it
+    the shipped effects path fires bursts that `atLimit()` **accepts** in cheap arms and **drops** in
+    expensive ones, an inversion that stops the sweep ordering at all. The price is that the frame
+    `MAX_EFFECT_FRAME_WORK_MS` is asserted on contains no `hurt` or `death` state, no hit-stop, no
+    knockback, no i-frame flicker and none of `gameEffects.render()`'s own trigger paths. It is the
+    worst **steady-state** frame, not the worst frame the game can produce.
+44. **The shake in the window is `land`, the SMALLEST of the four commands.** The load itself is no
+    longer missing — see §*"9.5 — the gate round FAILED it"* for the mechanism and the 100 % measured
+    coverage — but `light`, `lethal` and `playerHurt` (up to 8 ticks and ±7.6 px against `land`'s 3
+    and ±1.5) are unreachable without the combat entry 43 excludes. The argument that this does not
+    matter is that a shake's per-frame cost is its **branch**, not its amplitude: two trigonometric
+    evaluations plus a non-zero `camera.setPosition`, and `BaseCamera.updateSystem` flips
+    `_customViewport` on `_x !== 0 || _y !== 0` at any amplitude. **That is an argument and not a
+    measurement**, and nobody — including the gate round — has measured a shake's cost directly,
+    because it sits far below the 0.1 ms grid and nothing amplifies it.
+45. **The storm holds a population; it does not measure a single triggered burst.** `sampleArm` waits
+    for the population to land *before* sampling, so the frame that first constructs N particles is
+    outside the window by construction. What is inside is the top-up — itself burst-shaped, because
+    `EmitterSpec.lifespanTicks` is a scalar, so a whole `explode()` expires on one frame and the whole
+    cap is re-exploded on the next, every 18 ticks for sparks, 45 for steam, 22 for dust, through the
+    shipped call. Those spikes are what `MAX_EFFECT_FRAME_P95_MS` gates; every other bound in the file
+    is a median and blind to them. The shipped *trigger* path deciding **when** to burst is criterion
+    9.1's behavioural spec, not 9.5's.
+
 ---
 
 ## G.7b — attributed to Phase 9, then disproved by running it again
@@ -726,21 +759,275 @@ the grid of the clock that would measure it**: every one of the ten per-pair del
 either 0.000 or 0.100 ms, and nothing in between exists to be read.
 
 **So the shipped number is not measured. It is inferred.** What is measured is the amplified storm —
-1024 particles through the same emitters, the same specs and the same `explode()` — and what is
+**2048** particles through the same emitters, the same specs and the same `explode()` — and what is
 reported is that delta divided by the particle count.
 
+> ⚠️ **This paragraph said 1024, and the two below said 512 and 1024, until the fix round.** They
+> described the sweep `[0, 64, 128, 256, 512, 1024]` that the gate round replaced with
+> `[0, 1024, 2048]`, and a stale figure in a log is how a reader is told a number was measured that
+> never was *(C9)*. Corrected here against the runs actually on this tree.
+
 That divide-back is only a measurement while the cost is linear in the count, so the spec asserts
-linearity instead of assuming it: two independent per-particle estimates taken at 512 and at 1024
-agreed to within 1.00–1.25× on every run, against a 4× bound, and the `storm8192` proof read 4.100 ms
-for 8192 particles — 0.00044 ms each at 85× the shipped ceiling, inside the 0.0004–0.0008 the sweep
-measured. **The inference holds and the divide-back stands.** Had the sweep bent, the spec is written
-to fail rather than report an extrapolation through a region nothing measured.
+linearity instead of assuming it: two independent per-particle estimates taken at **1024 and at
+2048** agreed to within **1.0–1.4×** on the gate round's held-out runs and **1.000–1.256×** on the fix
+round's ten, against a 4× bound; and the `storm8192` proof read a **6.050 ms** paired delta for 8192
+particles — **0.00074 ms** each at 85× the shipped ceiling, near the top of the 0.0004–0.0008 the
+sweep measured (2026-08-22, `absolute 6.550 ms` against `off 0.500`). **The inference
+holds and the divide-back stands.** Had the sweep bent, the spec is written to fail rather than
+report an extrapolation through a region nothing measured.
+
+🔴 **The spread is above 1 on every gate-round run rather than scattered around it — the sweep is
+mildly SUPERLINEAR** (gate-round finding N3). The direction is the safe one: if cost grows faster
+than the count, dividing a 2048-particle delta down to 96 **overstates** the shipped figure, so the
+reported ~0.06 ms is an upper bound rather than a best estimate. It does not threaten the
+divide-back and it is recorded so that nobody reads the agreement as exact.
 
 ⚠️ This is the same hazard that made G.7b unmeasurable — a statistic sitting under its clock's
 resolution. The difference, and the only thing that makes this one legitimate, is that the amplifier
-here is **proved to amplify** (the sweep orders monotonically across nine walks) and the linearity that
-licenses the divide-back is **asserted rather than assumed**. G.7b's amplifier does not amplify, which
-is why its own premise check refuses to emit a number.
+is **proved to amplify** and the linearity that licenses the divide-back is **asserted rather than
+assumed**. G.7b's amplifier does not amplify, which is why its own premise check refuses to emit a
+number.
+
+> 🔴 **The parenthesis here used to read *"the sweep orders monotonically across nine walks"*, and on
+> `ca3814f` it ordered 1 walk in 6** (gate-round finding M4). That is the half of the sentence a
+> reader would have leaned on, and it was the false half. The claim is sound and the evidence is
+> different: on the **per-round** reduction the amplifier ordered **+29 / −0 / =1** across 0→1024 on
+> the old points and **+40 / −0 / =0** across 1024→2048 on the new ones, with **zero inversions in
+> 80 per-round observations** over 8 held-out runs — and Guard 3 *measures* the linearity rather than
+> assuming it. Nothing about the amplifier changed; what changed is that the sentence now cites the
+> statistic the spec actually computes.
+
+---
+
+## 9.5 — the gate round FAILED it, and what the fix round did (task 11, 2026-08-22)
+
+The `performance-engineer` gate briefs returned **9.5 FAIL / 9.6 PASS** with 1 critical, 4 major, 4
+minor and 1 nit. The critical — the sweep statistic that could not order itself — was repaired and
+merged as `f829914` before this round started. Three problems remained, and this section is what was
+done about each. **Every finding from that report is marked APPLIED or RECORDED at the end.**
+
+### Problem 1 — the criterion names three loads and the measured frame carried two (finding M2)
+
+Criterion 9.5 is *"frame budget holds under worst case: **max enemies + max particles + shake**"*.
+`installStorm` sets `player.iFrameCounter = 0` on every frame of every arm, so no hit ever lands, so
+`gameEffects` never armed a shake and **no sampled window in the history of this gate contained
+one**. The invulnerability itself is legitimate and signed off — without it `atLimit()` admits a
+combat burst in a cheap arm and drops it in an expensive one, which inverts the sweep — but the
+resulting measurement is not the criterion's worst case.
+
+**The choice taken is the preferred one: the shake is now MEASURED, not narrowed.** The criterion is
+met as written and no criterion text was weakened.
+
+**How, and why it does not re-import the inversion.** `attachEffects` arms a shake from four places.
+Three of them (`light`, `lethal`, `playerHurt`) emit a burst in the same breath — `impactSparks`,
+`deathSteam`, `hurtVent` — and a burst is exactly what must stay out of this measurement. The fourth
+is the **touchdown**, and `gameEffects.ts` says so at the line: *"🔴 Armed on EVERY touchdown, not
+only the ones the dust threshold accepts."* `landingDust` returns `null` below `DUST_MIN_FALL_PX`
+(9 px/tick), so a slow enough landing arms `land` and **emits nothing at all**.
+
+`tests/e2e/effectShake.ts` drives that seam with one `requestAnimationFrame` that writes
+`player.vy = -1` whenever the player is grounded. Against `gravity` 0.675 the arithmetic is fixed
+rather than tuned:
+
+| tick | `vy` after step 6 | `y` vs the floor | `grounded` after step 9 |
+|---|---|---|---|
+| A | `-1 + 0.675 = -0.325` | `-0.325`, clear of the solid | **false** — airborne |
+| B | `-0.325 + 0.675 = +0.35` | `+0.025`, overlapping again | **true** — touchdown, `arm('land')` |
+
+So the player lands **every second tick**, on a fall of 0.325 px/tick — **28× under** the dust
+threshold. `SHAKE.land.durationTicks` is 3 and `shouldPreempt` re-arms on every touchdown, so the
+shake never settles. **Measured: 100.0 % of frames in 100.0 % of windows, 35 windows per run, on
+every run of both sets below.** The loop runs in *every* arm, so it divides out of the paired delta
+while sitting inside `onWork`, which is the term `MAX_EFFECT_FRAME_WORK_MS` — criterion 9.5's own
+sentence — asserts.
+
+**Guard 0c** (`effectCounts.ts`, inside `sampleArm`) fails any window whose shaken-frame fraction is
+under `MIN_SHAKEN_FRAME_FRACTION`. The floor is **0.5 and is derived from the statistic, not fitted**:
+the bound it stands in front of is a *median*, so for the median frame to carry a shake more than
+half the window's frames must. It counts frames on which `camera.x/y` differed from
+`EffectAttachment.base()` — the **drawn** camera, never a `ShakeState` that merely existed, the same
+distinction `drawn` draws against `getAliveParticleCount()` one file over.
+
+**What the shake cost: nothing the clock can see.** With it in, `N=0` medians and `onWork` sit inside
+the no-shake baseline's own range (0.5–0.8 ms and 0.5–0.75 ms across 10 runs each). That is expected
+and it is *why the small `land` amplitude does not weaken the claim*: `applyShake` runs on every
+frame either way, and what a running shake adds is two trigonometric evaluations plus a **non-zero**
+`camera.setPosition` — and the non-zero is the part with a render-path consequence, because
+`BaseCamera.updateSystem` sets `_customViewport` from `this._x !== 0 || this._y !== 0`. That branch
+is amplitude-independent: `land`'s ±1.5 px is exactly as non-zero as `playerHurt`'s ±7.6 px.
+
+**What is still narrowed, and it is 9.8 entry 44:** the *larger* commands. `land` is the smallest of
+the four, and `playerHurt`'s 8 ticks cannot be reached without the combat this window excludes by
+construction. The cost argument above says that should not matter; it is an argument, and it is
+logged as a narrowing rather than left as a claim.
+
+### Problem 2 — two bounds cited run sets that are not in this log (finding M3)
+
+`effectBudget.ts` told the reader that `MAX_EFFECT_FRAME_WORK_MS`'s and `MAX_EFFECT_WORK_DELTA_MS`'s
+selection and held-out sets were *"in `docs/qa/phase-09-polish.md`"*. They were not: the gate brief
+grepped for both quoted figures and found **zero matches for either**. That is the same C9 shape the
+same file already records having been burned by — a citation worse than the gap it discloses.
+
+**Resolved by correcting the citations to what is really there**, because the missing half cannot be
+recovered honestly: **there is no selection set.** Both bounds are *derived* — 2.5 is 16.67 / 6
+rounded down, 0.3 is `MAX_PER_PARTICLE_WORK_MS × 96` rounded up to a clock step — and no run had a
+vote in either. The three readings the docstring quoted (`0.500 / 0.500 / 0.600 ms`) were a sanity
+check whose provenance nobody wrote down, so they are **withdrawn rather than re-cited**. What does
+exist is confirmation, on two disjoint held-out sets, and it is written down below.
+
+### Problem 3 — the gate HUNG instead of failing, and now it fails in a minute with the reason
+
+The phase owner observed `Error: page.evaluate: Test timeout of 600000ms exceeded` on roughly **1 run
+in 6** of the merged repair. The cause is structural and is not the population wait (`setStorm`
+already carries a 20 s bound, and its failure message names `page.waitForFunction`, not
+`page.evaluate`). It is `perfSampler.sample()`: its in-page promise is resolved by **exactly one
+condition**, `window.__game.tick` advancing `tickSpan` ticks, and it carries no deadline of its own.
+Anything that stops the simulation stops the spec forever — ten minutes of silence, then a message
+naming neither the arm nor the sweep point nor the cause. **A hang gets attributed to the machine; a
+red gets fixed.**
+
+**Measured rate, before:** `0 in 11` runs of criterion 9.5 alone on an idle box, 2026-08-22 (one
+validation run plus a 10-run loop, all `1 passed`, 80–84 s each). It did **not** reproduce here. The
+phase owner's 1-in-7 was measured in a session with other work on the box, which is the condition
+`docs/qa/phase-09-polish.md` §*"Nothing heavy may run beside the e2e suite"* already names — so the
+honest statement is that the trigger is environmental and the **exposure** is the unbounded wait.
+
+**Measured rate, after:** `0 hangs in 19` further runs — 9 valid in the confirmation loop plus set B's
+10 on the frozen tree. (The confirmation loop's tenth run aborted in 2 s with exit **127** and no
+Playwright output at all, `playwright` not found: an npm/PATH hiccup while a `tsc` ran beside it, not
+a test result, and recorded rather than quietly dropped.) **The repair is not a reduction in the rate
+— it is that the failure mode is no longer a hang.** `PERF_MUTATION=stall` produces the exact observed
+state on demand, and the gate now reports, in 60 s:
+
+```
+Error: sweep N=0, round 0: the 120-tick window did not close within 60000 ms. over 500 ms:
+0 sim ticks and 121 animation frames; live 0 of a target 0 (sparks 0/32, steam 0/48, dust 0/16);
+ready true, bootError null, visibility visible
+```
+
+Those counters are the discriminator, and they are read over a 500 ms stretch driven by `setTimeout`
+and **never** by `requestAnimationFrame` — a rAF-terminated probe would hang exactly like the window
+it was sent to explain. *"0 sim ticks and 121 animation frames"* says the simulation stopped and the
+page did not; the reverse says the page stopped painting; a short `live` count says the storm never
+populated, per emitter.
+
+**On the raised sweep point specifically:** the top-up loop is not racing the cap raise.
+`setStorm`'s `page.evaluate` is synchronous — it writes `__fxStorm.caps`, then `killAll()`,
+`maxAliveParticles` and `reserve()` for all three emitters in one uninterruptible block — so the rAF
+that tops up cannot observe a half-applied state. `drawn 2048/2048/2048/2048/2048` on every sweep
+round of all **30** clean runs in this session, and the population wait never once fired. **No stall
+at 2048 was reproduced and none is now silent: it would name itself**, per emitter, in 60 s.
+
+**Residual, recorded not fixed:** the same unbounded wait is still reachable from every other
+`sample()` caller — `phase-05-perf`, `phase-07-perf`, `phase-08-gate-perf`. The bound is in
+`windowStall.ts` wrapping the call rather than inside `sample()` because `perfSampler.ts` is at 398
+of the 400-line limit and the rule is *split, never exempt*; splitting a file shared by three
+inherited phase specs is out of this task's scope. It belongs with G.7b and 5.11 in whatever session
+takes the perf-gate family on.
+
+---
+
+## 9.5 — the bound-confirmation run sets
+
+Written here because `effectBudget.ts` cites this heading, and because a docstring that cites
+evidence which does not exist is worse than one that cites nothing *(C9, finding M3)*.
+
+**There is no selection set for the three ceilings.** `MAX_EFFECT_FRAME_WORK_MS = 2.5`,
+`MAX_EFFECT_WORK_DELTA_MS = 0.3` and `MAX_PER_PARTICLE_WORK_MS = 0.003` are derived from the frame
+budget (16.67 / 6; 0.003 × 96 rounded up; 16.67 × 2 % / 96 rounded down) and no run had a say in any
+of them. What follows is **confirmation only**, and the two sets are disjoint in time, in tree state
+and in author.
+
+### Set A — the gate round, 8 runs, `performance-engineer`, 2026-08-21
+
+Taken after that round's sweep design was frozen, with no say in it. **8 / 8 green**, zero inversions
+in 80 per-round observations (0→1024: +38 / −0 / =2; 1024→2048: +40 / −0 / =0).
+
+| quantity | held-out range | bound | margin |
+|---|---|---|---|
+| half gap `d(0→1024)` | 0.40 – 0.70 ms | ≥ 0.2 | 2 – 3.5× |
+| storm gap `d(0→2048)` | 0.90 – 1.50 ms | ≥ 0.2 | 4.5 – 7.5× |
+| linearity spread | 1.0 – 1.4× | < 4 | ≥ 2.9× |
+| per particle | ~0.0005 ms | ≤ 0.003 | ~6× |
+| absolute `onWork` | 0.55 – 0.70 ms | ≤ 2.5 | ~3.6× |
+
+### Set B — the fix round, 10 runs, task 11, 2026-08-22
+
+Taken on the byte-frozen tree **after** every change in this section landed, including the shake now
+being in every window. `MIN_SHAKEN_FRAME_FRACTION = 0.5` was fixed from the statistic before any of
+these ran and none of them had a vote in it either.
+
+**10 / 10 green**, 80–81 s each, `drawn 2048/2048/2048/2048/2048` at the top sweep point on every
+round of every run, and the sweep ordered on every gap of all ten.
+
+| quantity | held-out range | bound | margin |
+|---|---|---|---|
+| half gap `d(0→1024)` | 0.399 – 0.604 ms | ≥ 0.2 | 2.0 – 3.0× |
+| storm gap `d(0→2048)` | 1.004 – 1.290 ms | ≥ 0.2 | 5.0 – 6.5× |
+| linearity spread | 1.000 – 1.256× | < 4 | ≥ 3.2× |
+| per particle | 0.00049 – 0.00063 ms | ≤ 0.003 | ≥ 4.8× |
+| absolute `onWork` | 0.600 – 0.750 ms | ≤ 2.5 | 3.3 – 4.2× |
+| paired delta at the shipped peak | 0.000 – 0.100 ms | ≤ 0.3 | ≥ 3× |
+| `workP95Ms`, every ON window | 0.800 – 3.300 ms (n = 100) | ≤ 16 | ≥ 4.8× |
+| **shaken frames** | **100.0 % of every one of 350 windows** | ≥ 50 % | 2× |
+
+Two things worth reading off that table rather than only the margins. The **shaken-frame fraction is
+100.0 % on all 350 windows with no spread at all** — which is what a 2-tick landing cycle against a
+3-tick shake predicts, so the mechanism is doing what its arithmetic says and not something
+approximate that happens to clear a floor. And the **absolute and per-particle figures land inside
+set A's ranges** (0.55–0.70 ms and ~0.0005 ms) despite every window now carrying a shake set A's did
+not, which is the measurement backing the claim in entry 44 that a shake's cost is under this clock's
+grid.
+
+### The fix round's mutation proofs — every new gate watched failing
+
+One at a time, alone on the box, `npm run test:e2e -- --project=chromium-gpu -g "the worst case …"`.
+Redness read **positively** from `1 failed` plus the named assertion text — never from an exit code,
+never through a pipe. The three inherited proofs were **re-run** rather than assumed, because the
+harness they run through changed.
+
+| # | Mutation | Where | Result |
+|---|---|---|---|
+| 1 | `PERF_MUTATION=noshake` — the shake drive installed but not hopping | harness | **FAIL (1)** — *"sweep N=0, round 0: 0.0 % of this window's frames had the camera off its base"* |
+| 2 | `camera.setPosition(baseX + x, baseY + y)` → `camera.setPosition(baseX, baseY)` | `src/scenes/gameEffects.ts` | **FAIL (1)** — same assertion, 0.0 %. The SHIPPED-code version of #1, and the one Guard 0c actually names |
+| 3 | `PERF_MUTATION=stall` — `scene.scene.pause()` | harness | **FAIL (1)** in **60 s** — *"the 120-tick window did not close … 0 sim ticks and 121 animation frames"*. Unbounded, this is the 600 s hang |
+| 4 | `PERF_MUTATION=scale0` (re-run) | harness | **FAIL (1)** — *"pair 0: the effects-on window drew no particles"* |
+| 5 | `PERF_MUTATION=fleetscale0` (re-run) | harness | **FAIL (1)** — *"only 0 of 22 enemy bodies were drawn while this window ran"* |
+| 6 | `PERF_MUTATION=storm8192` (re-run) | harness | **FAIL (1)** — *"the worst case — 20 enemies and 8192 particles — left the frame budget"*, `absolute 6.550 ms` |
+
+Mutation 2 is the one worth reading twice. `noshake` proves the *guard* can see an absent shake;
+mutation 2 proves it sees a **shipped shake that stopped working**, which is the failure the
+assertion's sentence claims to cover. Reverted with `git checkout --` and verified per C12:
+`grep -c "camera.setPosition(baseX + x, baseY + y);"` back to **1** (it was **0** under the
+mutation), `grep -c "SCRATCH MUTATION"` **0**, `git status --short` showing only the intended files.
+
+Asking the standing question of Guard 0c — *if the thing under test did nothing at all, would this
+still pass?* — the answer is no, and the reason is mechanical: `applyShake` is the **only** writer of
+`camera.x` / `camera.y` anywhere in `src/` (`grep -rn "camera.setPosition\|\.main\.x =" src/` returns
+one call site), and the guard compares against `EffectAttachment.base()` rather than against a zero
+it read for itself. The camera follow moves `scrollX`/`scrollY` and cannot satisfy it.
+
+### The gate round's findings — every one applied or recorded
+
+| # | Finding | Disposition |
+|---|---|---|
+| **C1** | the sweep statistic cannot order itself | **APPLIED** before this round — merged as `f829914`; re-confirmed green 10 / 10 in the baseline set and 10 / 10 in set B |
+| **M1** | `MIN_HALF_STORM_WORK_DELTA_MS` was a second false red hiding behind the first | **APPLIED** in `f829914` (`halfN` is 1024); confirmed again here — the half gap never approached 0.2 in 20 runs |
+| **M2** | 9.5 names shake and the frame carries none, undisclosed | **APPLIED** — the shake is measured (problem 1 above), Guard 0c enforces it, and 9.8 entries 43–45 state what is still narrowed |
+| **M3** | two bounds cite run sets not in this log | **APPLIED** — both citations corrected in `effectBudget.ts`, both confirmation sets written up above; the unrecoverable "selection set" figures withdrawn rather than re-cited |
+| **M4** | the divide-back's stated licence rests on a claim false on this tree | **APPLIED** — the *"orders monotonically across nine walks"* parenthesis corrected to the per-round evidence in §*"the measurement floor"*; the divide-back is **not** withdrawn, and the brief's reasoning for keeping it is recorded there |
+| **N1** | G.7b: 1 failure in 8, GPU arm does not order at all | **RECORDED** — inherited Phase 8 criterion, out of this diff; the numbers are in §*"G.7b"* and the missing half-amplification floor is named there |
+| **N2** | criterion 5.11 takes one window per arm | **RECORDED** — inherited Phase 5 criterion; the finding is file evidence (marked INFERRED by its author) and sits in §*"Criterion 5.11"* |
+| **N3** | the sweep is mildly superlinear and the log's figure is stale | **APPLIED** — §*"the measurement floor"* now records 1.0–1.4× and states that superlinearity makes the reported ~0.06 ms an upper bound |
+| **N4** | the shipped-peak paired delta comes back negative routinely | **RECORDED** — correct behaviour (`MAX_EFFECT_WORK_DELTA_MS` is a ceiling) and already disclosed at `effectBudget.ts`; seen again here, `-0.000` in the fix round's own runs |
+| **nit** | the per-particle figure is machine-state dependent to a degree the docs do not admit | **RECORDED** — set B read 0.00049–0.00054 ms at 2048 where the old sweep read ~0.0012 at 1024 on the same box; the printed figure is a reading of this harness on this run, which is what `MAX_PER_PARTICLE_WORK_MS`'s 6× headroom absorbs |
+| **9.6** | PASS, checklist verified item by item | no action |
+
+The gate round's project-wide generalisation — *the failing shape is **reducing each arm to one
+unpaired median and then subtracting or dividing**, with a quiet denominator as an aggravator rather
+than the cause* — is **accepted and not re-argued here**. It is the right correction to the
+"GPU ratios are suspect" version, and the evidence is that 9.5's own Guard 1 had the identical defect
+with no ratio and no denominator anywhere in it.
 
 ---
 
