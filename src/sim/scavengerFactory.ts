@@ -105,6 +105,8 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     hp,
     maxHp: hp,
     lastHitSwing: -1,
+    hitstopUntil: -1,
+    lastHitTick: -1,
     // Saturated: a scavenger that spawns already next to the player swings on its first tick
     // rather than granting a free cooldown of safety.
     attackCounter: attackCooldown,

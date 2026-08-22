@@ -79,6 +79,10 @@ export interface Scavenger {
   maxHp: number;
   /** The start tick of the swing that last connected, or `-1`. See `playerAttack.ts`. */
   lastHitSwing: number;
+  /** Phase 9 hit-stop: the last tick this body is frozen, `-1` for never. See `hitstop.ts`. */
+  hitstopUntil: number;
+  /** Phase 9 hit-stop: the tick of the hit that froze it. */
+  lastHitTick: number;
   /**
    * Ticks since this scavenger's last swing STARTED, saturating at `attackCooldown`.
    *
@@ -119,6 +123,16 @@ export function detects(scavenger: Scavenger, at: Sighting): boolean {
  *
  *   - **the scavenger's own death** (`stepEnemies`) — a corpse must not read as hunting;
  *   - **the player's death** (`tick`, step 4c) — decided by the user 2026-08-14 (D4).
+ *
+ * 🔴 **Why the player's death is an exit at all**, moved here from step 4c so it lives beside the
+ * function it justifies rather than in two places *(vault 5.3)*. Aggro is permanent by design —
+ * *"it should keep coming until I kill it"* — but nothing cleared it on death, so after dying every
+ * scavenger walked toward the NEW spawn and never patrolled again. Repeated deaths converge every
+ * scavenger in a level onto the spawn point, and each death leaves the level harder than the last:
+ * punishing rather than difficult. It does not weaken what was asked for — within ONE life the
+ * scavenger still never gives up, and the player's own death is an exit they already paid for.
+ * Invisible in play today because `level-01` places a single scavenger, which is exactly why
+ * `respawn.test.ts` gates it rather than a playtest that cannot see it.
  *
  * ⚠️ It deliberately does NOT touch `moving`. That is a readback of `x` recomputed every live tick,
  * so it has no stale value to clear — and `scavengerAnim` tests `hp <= 0` before it reads `moving`

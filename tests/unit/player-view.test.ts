@@ -42,8 +42,15 @@ function playerAt(overrides: Partial<PlayerSim> = {}): PlayerSim {
     combatCounter: 0,
     iFrameCounter: IFRAME_TICKS,
     knockbackPending: false,
+    // Phase 9 hit-stop: never frozen, never hit, never swung. The render layer reads none of these
+    // — they are here because `PlayerSim` is a total type and a hand-built fixture must satisfy it.
+    hitstopUntil: -1,
+    lastHitTick: -1,
+    swingStartTick: -1,
     strideCounter: 0,
     strideGait: null,
+    landedTick: -1,
+    landedFallSpeed: 0,
     ...overrides,
   };
 }

@@ -60,6 +60,10 @@ export interface Sentry {
    * anything an id.
    */
   lastHitSwing: number;
+  /** Phase 9 hit-stop: the last tick this body is frozen, `-1` for never. See `hitstop.ts`. */
+  hitstopUntil: number;
+  /** Phase 9 hit-stop: the tick of the hit that froze it. */
+  lastHitTick: number;
   /**
    * Toward the player while the sentry can see them **and they are outside `deadZone`**; HELD
    * otherwise. Read by the render layer and never re-derived from velocity, because a stationary
@@ -134,6 +138,8 @@ export function createSentry(options: SentryOptions): Sentry {
     hp,
     maxHp: hp,
     lastHitSwing: -1,
+    hitstopUntil: -1,
+    lastHitTick: -1,
     facing: 1,
     lastFireDx: null,
     lastFireDy: null,

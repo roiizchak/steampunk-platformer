@@ -16,6 +16,7 @@
 import type { EnemySet } from './enemies';
 import type { WorldBounds } from './hazards';
 import type { GearSim } from './pickups';
+import type { PlayerSim } from './playerSim';
 import type { Projectile } from './projectiles';
 
 /** Axis-aligned box. `x`/`y` are the TOP-LEFT corner in world space, where +y is DOWN. */
@@ -170,73 +171,16 @@ export interface TuningKnobs {
   jumpBufferTicks: number;
 }
 
-export interface PlayerSim {
-  /** World position of the player's FEET: `x` is the horizontal centre, `y` is the sole. */
-  x: number;
-  y: number;
-  /** px/tick. Never scaled — vault 2.11: scaling a velocity is a balance change in disguise. */
-  vx: number;
-  vy: number;
-  /** `+1` right, `-1` left. Feeds the `toWorld` sign flip and the render flip; never derived twice. */
-  facing: 1 | -1;
-  grounded: boolean;
-  state: PlayerState;
-  /**
-   * Ticks since the player was last on the ground. `0` on the tick they left it.
-   * An INCREMENTING counter, not a decrementing timer — see the window rule in `tick.ts`.
-   */
-  ticksSinceGrounded: number;
-  /** Ticks since the jump edge was consumed. Same mechanism, so both windows behave identically. */
-  ticksSinceJumpPressed: number;
-  /** True while a jump is rising and has not yet been cut short by releasing the button. */
-  jumpCutPending: boolean;
-
-  /* --- Phase 5 combat. Every counter increments; none is a decrementing timer. --- */
-
-  hp: number;
-  maxHp: number;
-  /**
-   * Ticks spent in the CURRENT combat state. Meaningless unless `state` is a `CombatState`.
-   *
-   * **One counter for all three combat states, not three.** They are mutually exclusive — you
-   * cannot be attacking and dead — so a counter each would admit "attacking on tick 4 and hurt on
-   * tick 9 simultaneously", a state nothing can draw *(vault 5.1: two counters admit the
-   * unrepresentable state)*. `enterState` resets it, which is why that funnel exists.
-   */
-  combatCounter: number;
-  /**
-   * Ticks since damage was last taken. Invulnerable while this window is open.
-   *
-   * Separate from `combatCounter` on purpose, and this is NOT the case vault 5.1 warns about:
-   * i-frames are **orthogonal** to the combat state, not a second counter for the same concept.
-   * They outlast hitstun by design, so the player is idle, walking or jumping — a movement state —
-   * while still invulnerable. One counter could not represent that.
-   */
-  iFrameCounter: number;
-  /**
-   * FIX 2 (QA gate, session 8): did an actual knockback IMPULSE land this hit, not merely "is the
-   * player `hurt`"? `knockbackSettling` (`combat.ts`) used to key on `state === 'hurt' &&
-   * combatCounter === 1` alone, so a hazard hit — which deliberately writes no `vx` shove — got the
-   * friction exemption anyway and bought one free tick of preserved momentum for nothing. Set true
-   * where `applyKnockback` actually writes `vx` (`worldDamage.ts`), read and cleared exactly once
-   * by `stepHorizontal`'s `knockbackSettling` branch (`player.ts`) so the exemption stays ONE tick.
-   */
-  knockbackPending: boolean;
-
-  /* --- Phase 7 audio. --- */
-
-  /**
-   * Ticks spent in the CURRENT locomotion state since the last footfall — Phase 7's `footstep` cue.
-   *
-   * Zeroed whenever the feet are not planted and moving, so a jump does not carry a half-stride into
-   * the landing. Compared against `FOOTSTEP_TICKS[state]`, which is derived from the drawn animation
-   * loop rather than from a speed — see `playerTuning.ts` for why a distance accumulator was
-   * rejected.
-   */
-  strideCounter: number;
-  /** Which gait `strideCounter` counts for. Two cadences share one counter — see `advanceStride`. */
-  strideGait: 'walk' | 'run' | null;
-}
+/**
+ * The player body lives in `playerSim.ts` and is re-exported here.
+ *
+ * Moved out in the Phase 9 Codex implementation round, which had to add `landedTick` and
+ * `landedFallSpeed` — the landing stamp that stopped the renderer inferring a touchdown by comparing
+ * `grounded` across frames — to a file already at exactly 400 lines. Same shape, same reason and
+ * same re-export as `events.ts` below: every existing `import type { PlayerSim } from './types'`
+ * still resolves.
+ */
+export type { PlayerSim } from './playerSim';
 
 /**
  * The event edges live in `events.ts` and are re-exported here.
@@ -366,4 +310,11 @@ export interface World {
    * Applies to GEOMETRY ONLY — velocities and accelerations are never multiplied by it.
    */
   scale: number;
+  /**
+   * Multiplier on every hit-stop freeze — **1 in every shipped build**. `freezePair` (`hitstop.ts`)
+   * carries why it exists, what `0` does, and why it is not a `TuningKnobs` entry; `?hitstop=N` is
+   * read only by `hitstopScaleFromSearch` (`src/scenes/gameLevelPick.ts`), under
+   * `import.meta.env.DEV`, because `src/sim/` reaches no DOM.
+   */
+  hitstopScale: number;
 }

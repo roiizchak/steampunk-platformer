@@ -88,6 +88,13 @@
  * Renumbering was free HERE and only here — nothing depends on the contract yet, which is exactly
  * what the plan review asked to get right before Phase 5 does.
  *
+ * **STEPS 5-8 MOVED to `playerMotion.ts` in Phase 9, and the numbering did not** — relocated whole,
+ * numbered comments and all, with one-line `5.` `6.` `7.` `8.` markers left at the call site so
+ * reading this file still shows fourteen steps in order. It is the first extraction in this project
+ * to move a NUMBERED step. **`playerMotion.ts`'s own header is the record of that**: why no prior
+ * extraction is precedent for it, and why the hit-stop gate has to cover all four at once or it is
+ * a bug. Kept there and not restated here — a second copy is what drifts *(5.3)*.
+ *
  * **THE WINDOW DEFINITIONS.** They are NOT one sentence. An earlier version of this header claimed
  * both windows behaved identically; the Codex implementation review (finding I1) showed that claim
  * was false, and the buffer tests could not have caught it because they asked "did a jump happen
@@ -118,14 +125,7 @@
  */
 
 import { consumeAttackPress, consumeJumpPress } from './input';
-import {
-  PLAYER_BOX,
-  advanceStride,
-  resolveCollisions,
-  resolveState,
-  stepHorizontal,
-  stepVertical,
-} from './player';
+import { PLAYER_BOX, advanceStride, resolveCollisions, resolveState } from './player';
 import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
 import { releaseAggro } from './enemies';
 import { noEvents } from './events';
@@ -134,10 +134,11 @@ import { goalEntryDir, stepGoalEntry } from './goal';
 import { clampToBounds } from './hazards';
 import { collectGears } from './pickups';
 import { applyPlayerAttack } from './playerAttack';
+import { stepPlayerMotion } from './playerMotion';
 import { applyWorldDamage } from './worldDamage';
 import { nextFloat } from './rng';
 import type { InputSnapshot, TickEvents, World } from './types';
-import { advanceWindow, windowOpen } from './windows';
+import { advanceWindow } from './windows';
 
 export { GREY_BOX_SOLIDS, createWorld } from './world';
 export type { CreateWorldOptions } from './world';
@@ -196,7 +197,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
     consumeAttackPress(input);
   }
 
-  const combat = stepCombat(player, input);
+  const combat = stepCombat(player, input, world.tickCount);
   events.attackStarted = combat.attackStarted;
   events.hitActive = combat.hitActive;
 
@@ -205,27 +206,17 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //        the spawn point lives (`world.spawn`).
   //
   //        🔴 There was NO respawn anywhere in this project until 2026-08-14, and `death` did not
-  //        even advance its own counter, so the state was terminal in both senses. `hazards.ts`
-  //        recorded the missing respawn as deliberate Phase-4 debt — "bolting a respawn onto a game
-  //        with no health model would have had to be undone here" — and Phase 5 built the health
-  //        model without coming back for it. The player reported the result as *"I cannot die. It
-  //        gets stuck before I actually see the kill"*, which is exactly what a terminal state with
-  //        a `movementLocked` body looks like from the outside.
+  //        even advance its own counter, so the state was terminal in both senses. That history —
+  //        the Phase-4 debt note, the Phase-5 health model that never came back for it, and what the
+  //        player said it felt like — lives on `respawnPlayer` in `combat.ts`, not in two places.
   //
   //        BEFORE step 5, not after: the respawned player is alive for the whole of this tick's
   //        movement, so the first frame after a death is an ordinary frame at the spawn point
   //        rather than a corpse's pose in a new position.
   //
-  //        🔴 **The respawn also releases every chase.** Aggro is permanent by design — *"it should
-  //        keep coming until I kill it"* — but nothing cleared it on death, so after dying every
-  //        scavenger walked toward the NEW spawn and never patrolled again. Repeated deaths converge
-  //        every scavenger in a level onto the spawn point, and each death leaves the level harder
-  //        than the last: punishing rather than difficult. Decided by the user 2026-08-14 (D4), and
-  //        it does not weaken what was asked for — within ONE life the scavenger still never gives
-  //        up. The player's own death is the only new exit, and it is one they already paid for.
-  //
-  //        Invisible in play today because `level-01` places a single scavenger, which is exactly
-  //        why it is gated in `respawn.test.ts` rather than left to a playtest that cannot see it.
+  //        🔴 **The respawn also releases every chase** — decided by the user 2026-08-14 (D4). Why
+  //        permanent aggro has that second exit is stated on `releaseAggro` (`enemyScavenger.ts`),
+  //        which is the function it is a rule about, and `respawn.test.ts` gates it.
   //
   //        This adds NO new numbered step. It sits inside the existing 4c block, so the 14-step
   //        contract above is untouched — renumbering it would be a balance change, not a refactor.
@@ -258,69 +249,28 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
           ? 1
           : -1;
 
-  // 5. Horizontal. `walkHeld` forced FALSE under the run-in: it is a RUN into the doorway by
-  //    definition, and a held walk modifier would otherwise halve the speed and double the window.
-  stepHorizontal(player, tuning, dir, entryLocked ? false : input.walkHeld);
-
-  // 6. Vertical.
+  // 5. Horizontal — accel / air-accel / friction, clamped to runMax.
+  // 6. Vertical — gravity, fall clamp, early-release jump cut.
+  // 7. Jump resolution — buffer open AND (grounded OR coyote open) -> impulse, close both.
+  // 8. Integrate, semi-implicit Euler: v first, then position (vault 2.14).
   //
-  //    Codex implementation review 5.14 (MAJOR): this ran unconditionally, before step 7's
-  //    `hitstunLocked` gate even exists, so releasing jump during the hard lock still cut the
-  //    player's own ascent — trajectory control inside a window that is supposed to mean "not
-  //    being in control". Treat jump as held while locked so the cut branch in `stepVertical`
-  //    (player.ts) can never see `!jumpHeld`. Gravity still runs — it is the same unconditional
-  //    call — and `jumpCutPending` is untouched, so the cut is still available the instant the
-  //    lock lifts, still rising and still holding: `hitstun-jump-cut.test.ts` pins that too.
-  stepVertical(player, tuning, hitstunLocked || input.jumpHeld);
-
-  // 7. Jump resolution. Both windows are tested BEFORE step 13 advances them, which is what makes
-  //    the definition above true rather than one tick optimistic.
-  //
-  //    FIX 1 (QA gate, session 8): hitstun locked `dir` at step 5 but never gated a jump's
-  //    EXECUTION here, so a jump pressed on the first locked tick fired anyway. `hitstunLocked` is
-  //    ANDed into this condition only — the latch and buffer arming at steps 2-3 are untouched.
-  //
-  //    DECISION (b), not (a): a press made during the lock is consumed into the buffer exactly as
-  //    always and stays alive there; it is not discarded. It fires the instant the lock lifts (or
-  //    expires on its own by the ordinary `jumpBufferTicks` window, same as any other press made
-  //    while "not yet able to jump"). This is consistent with how `grounded`/`coyoteOpen` already
-  //    work — the buffer's own documented purpose is to remember a press and "fire the moment the
-  //    player is next able to jump" (see the header's window definitions above), and hitstun is
-  //    just one more reason the player is not yet able. Option (a) — clearing
-  //    `ticksSinceJumpPressed` here to silently eat the press — was rejected: it would turn a
-  //    forgiveness mechanic into a punishment for pressing jump at the wrong moment, which
-  //    contradicts that documented purpose. Pinned by
-  //    `tests/unit/player-combat.test.ts` — "a buffered press made during hitstun fires when the
-  //    lock lifts, not discarded".
-  const bufferOpen = windowOpen(player.ticksSinceJumpPressed, tuning.jumpBufferTicks);
-  const coyoteOpen = windowOpen(player.ticksSinceGrounded, tuning.coyoteTicks);
-  //    ⚠️ On the ARMING tick this lock is still false — `entryLocked` is cached before step 1 and 9d
-  //    arms at the end of the tick — so a jump pressed exactly then does fire. Codex's implementation
-  //    review raised it, and the fix is NOT here: a position test at step 7 reads the player's
-  //    PRE-movement coordinates, so on the arming tick it reports "not in the doorway" and blocks
-  //    nothing. Tried, measured, reverted. The sequence refuses to arm off the ground instead — see
-  //    `stepGoalEntry` — which makes the hop harmless rather than forbidden.
-  if (bufferOpen && !hitstunLocked && !entryLocked && (player.grounded || coyoteOpen)) {
-    player.vy = -tuning.jumpVelocity;
-    player.jumpCutPending = true;
-    player.grounded = false;
-    // Close BOTH windows. Closing only the buffer would leave the coyote window open for a second
-    // free jump; closing only coyote would let the buffered press fire again on landing.
-    player.ticksSinceJumpPressed = tuning.jumpBufferTicks;
-    player.ticksSinceGrounded = tuning.coyoteTicks;
-    events.jumped = true;
-  }
-
-  // 8. Integrate — semi-implicit Euler, velocity already updated above, then position (vault 2.14).
-  const previousX = player.x;
-  const previousY = player.y;
-  player.x += player.vx;
-  player.y += player.vy;
+  //    All four live in `playerMotion.ts`, moved there whole in Phase 9 — see this file's header:
+  //    the BLOCK moved, the NUMBERING did not. That module also owns the hit-stop gate, which is one
+  //    early return covering all four steps, and it captures `previousX`/`previousY` outside that
+  //    gate so 9, 9b and 9c below still get both endpoints of this tick's motion.
+  const { previousX, previousY, ran: motionRan } = stepPlayerMotion(
+    world,
+    input,
+    { dir, hitstunLocked, entryLocked },
+    events,
+  );
 
   // 9. Collide and resolve — including the world's three solid edges, which are collision and not
   //    death. `clampToBounds` runs after the solids so a level's own geometry wins where the two
   //    overlap, and it zeroes vx as well as x (see `hazards.ts`).
   const wasGrounded = player.grounded;
+  // Captured BEFORE the resolve zeroes it; step 10 stamps it. `playerSim.ts` has the argument.
+  const impactVy = player.vy;
   player.grounded = resolveCollisions(player, world.solids, world.scale, previousX, previousY);
   clampToBounds(player, world.bounds, (PLAYER_BOX.w / 2) * world.scale);
 
@@ -350,7 +300,8 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     that takes the last gear and steps through the door does both, in that order. `goal.ts`
   //     carries all the reasoning — why completion belongs in the sim, why the `World.spawn`
   //     argument for the respawn is NOT the argument for this, and why the cancel is load-bearing.
-  if (stepGoalEntry(world)) {
+  //     🔴 `motionRan` (Phase 9): a counter must not spend ticks inside a freeze — hold in `goal.ts`.
+  if (stepGoalEntry(world, motionRan)) {
     world.completed = true;
     events.levelCompleted = true;
   }
@@ -363,6 +314,10 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
     coyoteArmedThisTick = true;
     if (!wasGrounded) {
       events.landed = true;
+      // 🔴 The same edge, STAMPED as well as raised: a boolean carries neither the tick nor the
+      // impact speed the renderer needs. `playerSim.ts` records what it cost not to have these.
+      player.landedTick = world.tickCount;
+      player.landedFallSpeed = impactVy;
     }
   } else if (wasGrounded && !events.jumped) {
     player.ticksSinceGrounded = 0;
@@ -382,7 +337,9 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     not an exception to that rule: its cause IS the state step 11 just resolved. The cadence
   //     depends on whether this tick ended up `walk` or `run`, so it cannot be known any earlier.
   //     `advanceStride` lives beside `resolveState` in `player.ts` for the same reason.
-  events.footstep = advanceStride(player);
+  //     🔴 A FROZEN tick does not spend stride either (Phase 9): ungated this RESET the cadence on
+  //     every frozen tick. `playerMotion.ts` has why, and why `motionRan` and not `frozen()`.
+  events.footstep = motionRan ? advanceStride(player) : false;
 
   // 13. Advance every window counter, LAST, after every test of one.
   //
@@ -406,10 +363,13 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     The `advanceWindow` call is the shared saturating increment from `windows.ts`; the guard in
   //     front of it — WHETHER this tick is spent at all — is the step-order rule above and stays
   //     here, with the numbered order that owns it.
-  if (!coyoteArmedThisTick) {
+  //     🔴 **A FROZEN tick is not spent either** (Phase 9): step 7 did not run at all. Ungated, a
+  //     9-tick `lethal` freeze saturated both knobs from inside itself and ate the press. `motionRan`
+  //     and NOT `frozen()` — `PlayerMotion.ran` says why they differ on the arming tick.
+  if (!coyoteArmedThisTick && motionRan) {
     player.ticksSinceGrounded = advanceWindow(player.ticksSinceGrounded, tuning.coyoteTicks);
   }
-  if (!events.landed) {
+  if (!events.landed && motionRan) {
     player.ticksSinceJumpPressed = advanceWindow(
       player.ticksSinceJumpPressed,
       tuning.jumpBufferTicks,

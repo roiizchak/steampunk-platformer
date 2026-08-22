@@ -160,13 +160,17 @@ export function pickLevel(
 /**
  * Every world input, taken from the parsed level and nothing else.
  *
- * ⚠️ The rule this function exists to keep visible: **not one of these fields is a scene constant.**
- * Move an enemy, a spike, a gear or the exit in Tiled and it moves in the game; there is no
- * scene-side list to drift out of step with the file. `solids` has been plain data since Phase 2 and
- * the resolver in `src/sim/player.ts` has never known where it came from.
+ * ⚠️ The rule this function exists to keep visible: **not one field describing the LEVEL is a scene
+ * constant.** Move an enemy, a spike, a gear or the exit in Tiled and it moves in the game; there is
+ * no scene-side list to drift out of step with the file. `solids` has been plain data since Phase 2
+ * and the resolver in `src/sim/player.ts` has never known where it came from.
  *
  * `goal` is Phase 8's addition, and it is the same rectangle `goalLayer.drawGoal` draws — so the
  * doorway the player sees and the volume step 9d triggers on cannot disagree.
+ *
+ * 🔴 **`hitstopScale` is the one field that is NOT off the `.tmj`**, which is why the sentence above
+ * now says "describing the level" rather than "not one of these fields". It is a DEV-only debug
+ * multiplier and it is 1 in every build a player can run — see `hitstopScaleFromSearch` below.
  */
 export function worldOptionsFor(level: LevelData): CreateWorldOptions {
   return {
@@ -179,5 +183,87 @@ export function worldOptionsFor(level: LevelData): CreateWorldOptions {
     enemies: level.enemies,
     gears: level.gears,
     goal: level.goal,
+    hitstopScale: hitstopScaleFromSearch(globalThis.location?.search ?? ''),
   };
+}
+
+/**
+ * DEV ONLY — `?hitstop=N` scales every hit-stop freeze. 1 (unchanged) everywhere else.
+ *
+ * The shape is `src/game/audio.ts`'s `stallPerCue` verbatim: the production guard first, the query
+ * read second, and both **at the point of use** so Vite folds the whole branch — and the
+ * `URLSearchParams` reach with it — out of `dist/`. `tools/gen/verify-dist.mjs` is what proves the
+ * fold actually happened.
+ *
+ * 🔴 **The read is HERE and not in `src/sim/`, and that is not a stylistic choice.** `src/sim/`
+ * reaches no DOM at all (CLAUDE.md §3), so a freeze knob that parses `window.location` could not
+ * live beside the freeze. What crosses the boundary is a plain number on `CreateWorldOptions`,
+ * which is exactly what `World.hitstopScale`'s docstring asks for.
+ *
+ * Why it exists: `tests/e2e/phase-09-polish.spec.ts` asserts the player's body holds still for
+ * exactly six ticks after a claw lands, and then runs the same driver again at `?hitstop=0` where
+ * that plateau must be **absent**. Same page, same build, back to back — the committed fixture on
+ * both sides of the threshold *(vault C2)*. Without arm B the plateau assertion is a description of
+ * what the game happens to do, not a gate that can go red.
+ *
+ * Anything unparseable, negative, fractional or absent is 1. A debug flag that silently
+ * half-applies is worse than one that is ignored, so the fallback is always "the shipped behaviour".
+ *
+ * 🔴 **`Number.isInteger` is a CORRECTNESS check, not an invariant kept for tidiness.** Two separate
+ * things break on a fractional scale, and the second is the dangerous one:
+ *
+ *  1. `hitstopUntil` becomes a float duration inside `src/sim/`, against CLAUDE.md §3 — *every
+ *     duration is an integer count of 60 Hz ticks*.
+ *  2. **`?hitstop=1.5` makes `playerHurt` 6 × 1.5 = 9, which COLLIDES with `lethal`'s 9 in
+ *     `IMPACT_BY_FREEZE`** (`gameEffects.ts`), the reverse lookup keyed on
+ *     `hitstopUntil - lastHitTick`. That map's docstring rests on "the three lengths are distinct
+ *     (4 / 9 / 6)"; a fractional scale is the first thing in this project that can break the
+ *     premise, and the symptom is silent — taking a hit draws **lethal** sparks and arms a lethal
+ *     shake, with nothing red anywhere.
+ *
+ * Enforced HERE, at the parse boundary, so the sim never sees a value it would have to re-check.
+ *
+ * ⚠️ The empty-string case needs its own line and `Number.isInteger` does not cover it: `Number('')`
+ * is **0**, and `0` is an integer. `?hitstop=` would otherwise get the single most destructive
+ * setting while this docstring promised the fallback is always the shipped behaviour.
+ *
+ * 🔴 **The search string is a PARAMETER, not a `globalThis` read, and that is what makes the two
+ * paragraphs above gateable.** It is `variantFromSearch`'s shape verbatim
+ * (`src/game/feelVariants.ts`), for the same reason: the DOM read stays at the one call site and the
+ * parser is a pure function of a string, so `tests/unit/level-pick.test.ts` can drive every branch
+ * in milliseconds instead of a 15-second browser round trip. The first version of this function read
+ * `globalThis.location` itself and had **no test of any kind** — mutating `Number.isInteger` to
+ * `Number.isFinite` left all 2060 tests green, so the fix that closed a HIGH review finding was
+ * itself decoration *(C2)*.
+ */
+/**
+ * The largest `?hitstop=` multiplier this knob will accept.
+ *
+ * 10 is `lethal` 9 × 10 = **90 ticks**, a second and a half of held frame — far past the point where
+ * a clip stops being a comparison of *feel* and becomes a comparison of *patience*, which is all
+ * criterion 9.8's blind pick needs. Anything above it is a typo or a probe, and the fallback for
+ * both is the shipped behaviour.
+ */
+export const MAX_HITSTOP_SCALE = 10;
+
+export function hitstopScaleFromSearch(search: string): number {
+  if (!import.meta.env.DEV) {
+    return 1;
+  }
+  const raw = new URLSearchParams(search).get('hitstop');
+  if (raw === null || raw.trim() === '') {
+    return 1;
+  }
+  const scale = Number(raw);
+  // `isSafeInteger`, not `isInteger`: `Number.isInteger(1e308)` is **true** — it is a float with no
+  // fractional part — and `1e308 * HITSTOP_TICKS.light` overflows to `Infinity`, which makes
+  // `hitstopUntil` a deadline no tick count can ever pass.
+  //
+  // 🔴 **`isSafeInteger` NARROWED that hole; `MAX_HITSTOP_SCALE` is what CLOSES it**, and the
+  // difference is the whole finding. `Number.isSafeInteger(9007199254740991)` is `true`, so
+  // `?hitstop=9007199254740991` was accepted, produced a perfectly FINITE deadline of 3.6e16 ticks
+  // — about 19 million years at 60 Hz — and froze the body for good. Dying does not release it
+  // either: `combatCounter` is frozen too, so `deathWindowClosed` never becomes true. An overflow
+  // guard cannot see that, because nothing overflowed. Only a bound can.
+  return Number.isSafeInteger(scale) && scale >= 0 && scale <= MAX_HITSTOP_SCALE ? scale : 1;
 }

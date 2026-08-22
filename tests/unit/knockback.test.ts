@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { HAZARD_DAMAGE } from '../../src/sim/hazards';
+import { HITSTOP_TICKS } from '../../src/sim/hitstop';
 import { HURT_LOCK_TICKS, IFRAME_TICKS, PLAYER_MAX_HP } from '../../src/sim/combat';
 import { SCAVENGER, SCAVENGER_ATTACK, SENTRY } from '../../src/sim/enemies';
 import { createSnapshot } from '../../src/sim/input';
@@ -55,6 +56,13 @@ const LEFT = { ...createSnapshot(), left: true };
  *
  * Codex's finding 3 was that "covers all three sources" is easy to claim and easy to get wrong.
  * Projectile, contact and hazard each get their own named test below.
+ *
+ * ## 🔴 Every CONTACT window is `HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS` (Phase 9) — the claw
+ * arms hit-stop at 9b, on the tick it writes the impulse, so steps 5-8 do not run for the next
+ * `HITSTOP_TICKS.playerHurt` ticks. **The friction series is unchanged** — a freeze skips step 5, so
+ * nothing decays and nothing integrates; it starts later, so windows widen rather than sums being
+ * re-derived. Projectile and hazard windows are NOT widened, which is the assertion hiding in plain
+ * sight: neither freezes anything (`worldDamage.ts` says why), so both go red if either starts to.
  */
 describe('knockback (Phase 5 scope, step 9b)', () => {
   /**
@@ -87,7 +95,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     tick(world, { ...IDLE });
     expect(world.player.hp).toBe(PLAYER_MAX_HP - SCAVENGER.damage);
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
 
@@ -100,7 +108,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     tick(world, { ...IDLE });
     expect(world.player.hp).toBe(PLAYER_MAX_HP - SCAVENGER.damage);
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
 
@@ -140,7 +148,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     const before = world.player.x;
 
     tick(world, { ...IDLE });
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
 
@@ -184,6 +192,11 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     tick(world, { ...IDLE }); // hit lands at 9b, vx set, position unmoved this tick
     const atImpact = world.player.x;
 
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt; i += 1) {
+      tick(world, { ...IDLE }); // frozen: steps 5-8 skipped, so the impulse is held, not spent
+    }
+    expect(world.player.x, 'the hit-stop did not cover step 8').toBe(atImpact);
+
     tick(world, { ...IDLE }); // settling tick: exempt, full impulse moves the player
     const afterSettlingTick = world.player.x;
     expect(afterSettlingTick - atImpact).toBeCloseTo(KNOCKBACK_SPEED, 5);
@@ -223,7 +236,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
     expect(world.player.hp).toBe(PLAYER_MAX_HP - SCAVENGER.damage);
     expect(world.player.grounded).toBe(false);
 
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
 
@@ -308,7 +321,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
 
     tick(world, { ...IDLE });
     expect(world.player.hp).toBe(0);
-    for (let i = 0; i < HURT_LOCK_TICKS; i += 1) {
+    for (let i = 0; i < HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }
 
@@ -368,7 +381,7 @@ describe('knockback (Phase 5 scope, step 9b)', () => {
      * `SETTLE_TICKS` is generous on purpose: it only has to outlast the tail, and over-waiting
      * cannot hide a second hit — the i-frame window is what bounds the whole fixture.
      */
-    const SETTLE_TICKS = HURT_LOCK_TICKS + 4;
+    const SETTLE_TICKS = HITSTOP_TICKS.playerHurt + HURT_LOCK_TICKS + 4;
     for (let i = 0; i < SETTLE_TICKS; i += 1) {
       tick(world, { ...IDLE });
     }

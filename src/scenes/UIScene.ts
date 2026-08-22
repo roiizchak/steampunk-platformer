@@ -40,29 +40,12 @@
 
 import Phaser from 'phaser';
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
-import {
-  counterText,
-  gearsCollectedFrom,
-  hudLayout,
-  type HudLayout,
-} from '../render/hud';
+import { counterText, hudLayout, type HudLayout } from '../render/hud';
 import { addGearObject } from './gearLayer';
 import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from './hudFade';
-import { ticksToMs } from '../sim';
+import { attachGearFlyers, type GearFlyers } from './hudGearFlyers';
+import { attachGearPop, type GearPop } from './hudGearPop';
 import type { World } from '../sim/types';
-
-/**
- * How long a collected gear takes to fly to the counter, as an INTEGER COUNT OF TICKS.
- *
- * 🔴 This was `const TWEEN_MS = 260`, and Codex's implementation review called it a blocker against
- * the project's own rule: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6 ticks
- * — a float of seconds wearing a millisecond's clothes, in the one layer where the rule is easiest
- * to forget because Phaser's tween API genuinely takes milliseconds.
- *
- * 15 ticks is 250 ms exactly. The conversion goes through `ticksToMs`, the same function the rest of
- * the project uses, so the number that reaches Phaser is derived rather than authored.
- */
-const TWEEN_TICKS = 15;
 
 /**
  * The counter's colours.
@@ -124,12 +107,16 @@ export class UIScene extends Phaser.Scene {
    * grey box and the sprite would end up different sizes.
    */
   private iconBaseDiameter = 1;
+  private gearPop?: GearPop;
+  /** The collect flight, and the handles it holds — criterion 9.3. See `hudGearFlyers.ts`. */
+  private flyers?: GearFlyers;
 
   constructor() {
     super('UI');
   }
 
   create(): void {
+    this.flyers = attachGearFlyers(this);
     this.build();
     // Re-layout rather than re-create: the objects keep their identity, so an e2e spec holding a
     // reference across a resize is still looking at the thing on screen.
@@ -140,6 +127,13 @@ export class UIScene extends Phaser.Scene {
       // Phase 8. `destroy()` kills the tweens first — a tween still running against a destroyed
       // target throws inside Phaser's update loop, and a throw there stops every scene after it.
       this.levelComplete(null);
+      // 🔴 Phase 9 added TWO more tween owners to this scene and neither was added here. The gear
+      // pop targets `gearIcon`, which this shutdown destroys; the flyers target objects of their
+      // own. `gearPop` is also NULLED, or the next `create()`'s first `applyLayout` calls
+      // `destroy()` on the previous run's handle and settles a destroyed icon from a dead list.
+      this.gearPop?.destroy();
+      this.gearPop = undefined;
+      this.flyers?.destroy();
     });
   }
 
@@ -260,7 +254,9 @@ export class UIScene extends Phaser.Scene {
       this.layout.gearIcon.x + this.layout.gearIcon.w / 2,
       this.layout.gearIcon.y + this.layout.gearIcon.h / 2,
     );
+    this.gearPop?.destroy();
     this.gearIcon.setScale(this.layout.gearIcon.w / this.iconBaseDiameter);
+    this.gearPop = attachGearPop(this, this.gearIcon, this.layout.gearIcon.w / this.iconBaseDiameter);
 
     this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
     this.counter.setFontSize(this.layout.counter.fontPx);
@@ -299,7 +295,8 @@ export class UIScene extends Phaser.Scene {
     if (world.gearsCollected !== this.drawnGearCount) {
       this.drawnGearCount = world.gearsCollected;
       this.counter.setText(counterText(world.gearsCollected));
-      this.spawnCollectTweens(world, worldCamera);
+      this.gearPop?.pop();
+      this.flyers?.spawn(world, this.lastGearTick, this.layout.gearIcon, worldCamera);
     }
     this.lastGearTick = world.tickCount;
   }
@@ -322,50 +319,6 @@ export class UIScene extends Phaser.Scene {
     }
   }
 
-  /** One flying gear per gear collected since the last frame — position and count from the sim. */
-  private spawnCollectTweens(world: World, worldCamera: Phaser.Cameras.Scene2D.Camera): void {
-    // `lastGearTick` is advanced by the caller, on EVERY frame — including the ones that skip this
-    // function. It has to be: if it only moved when a gear was collected, the window would grow
-    // without bound and a gear collected long ago would be re-tweened the next time any gear was.
-    const fresh = gearsCollectedFrom(world.gears, this.lastGearTick);
-    if (fresh.length === 0) {
-      return;
-    }
-
-    const target = this.layout.gearIcon;
-    for (const gear of fresh) {
-      // World space to this scene's screen space. `getBounds()` is not used: the world camera's
-      // scroll and zoom ARE the transform, and asking the camera is what keeps this correct when
-      // the zoom is not 1.
-      const screenX = (gear.x - worldCamera.scrollX) * worldCamera.zoom;
-      const screenY = (gear.y - worldCamera.scrollY) * worldCamera.zoom;
-
-      const flyer = addGearObject(this, screenX, screenY, target.w).setDepth(1003);
-
-      // 🔴 `from` is the flyer's OWN scale, never a literal 1.
-      //
-      // `addGearObject` sizes an `Image` with `setDisplaySize`, i.e. it sets `scaleX`. Tweening
-      // `scale` from a literal 1 overwrote that on the first step — correct only by coincidence at
-      // the design size, where `target.w` happens to equal the texture's own 72 px. After a
-      // `scale.resize(1280, 720)` the icon is 48 px, the flyer's real scale is 0.667, and every
-      // flyer would have snapped to 72 px before shrinking. The `Arc` branch was unaffected, which
-      // is exactly how this would have shipped: the grey-box path looked right.
-      const flyerScale = flyer.scale;
-
-      this.tweens.add({
-        targets: flyer,
-        x: target.x + target.w / 2,
-        y: target.y + target.h / 2,
-        scale: { from: flyerScale, to: flyerScale * 0.6 },
-        alpha: { from: 1, to: 0.25 },
-        duration: ticksToMs(TWEEN_TICKS),
-        ease: 'Quad.easeIn',
-        // Destroyed rather than hidden: an invisible object still costs a display-list walk every
-        // frame, and a HUD that leaks one object per gear is a leak with a level-sized bound.
-        onComplete: () => flyer.destroy(),
-      });
-    }
-  }
 
   /**
    * The drawn objects, for the e2e spec.

@@ -76,6 +76,14 @@ makes their edge cases reachable from a unit test — and the predicates are imp
 **and** the e2e specs, so a criterion is asserted against one definition, not two that agree on the
 happy path.
 
+⚠️ **A decision function with no consumer is the same defect as a burst of zero particles**: it
+satisfies every assertion about itself and draws nothing. Phase 9 shipped `spriteFeedback.ts` — 221
+source lines and a 306-line test file — with **zero** production consumers, and blanking all four
+function bodies left the game byte-identical on screen with the suite green. **Every module here owes
+a draw-path gate**, in the shape of `tests/unit/effects-draw-path.test.ts` (source text, for the
+scenes that name a Phaser value) or `tests/unit/enemy-feedback.test.ts` (behavioural, against a fake
+scene, for the ones that take Phaser as a type only — the stronger of the two, so prefer it).
+
 **`src/game/tilemap.ts` — Tiled `.tmj` → plain data.** Pure: takes an already-parsed object, imports
 nothing from Phaser, does no I/O. That is what lets the unit suite run the **real** validator over the
 **shipped** bytes *(vault 3.1)*. **Collision is an object layer of rectangles carrying a `solid`
@@ -194,6 +202,14 @@ Each rule below cost a real false green or false red. **The evidence for every o
   the statistic. 6.9's GPU ratio put five full-screen scrims below a clean run.
 - **A non-zero exit code is not evidence a gate caught anything.** Detect redness *positively*, from
   `Tests N failed` plus named specs. Drive mutation loops from the shell, never from a Node script.
+- **And detect GREENNESS positively too, including the test COUNT** *(Phase 9)*. A run that selected
+  nothing reports `expected: 0, unexpected: 0` and exits 0 — indistinguishable from a clean pass
+  unless you read the count. Every other rule here assumes the tests ran; this is the one that checks.
+  A zero exit *through a pipe* is `tail`'s exit, not the gate's.
+- **Only one Playwright run at a time, and nothing heavy beside it** *(Phase 9)*. `test:e2e` shares
+  port 5173 and `test-results/`, and its wall-clock-bounded specs read a busy box as a broken game —
+  seven specs once failed for no reason but three concurrent jobs. `tests/e2e/portGuard.ts` now kills
+  the orphaned dev server Playwright leaves behind on Windows; read its header before touching it.
 - **Assert the type before the value** in e2e.
 - **An existence assertion cannot verify a timing claim.** Assert *which tick*.
 - **Never `waitForTimeout`.** Wait on `window.__game.ready`.

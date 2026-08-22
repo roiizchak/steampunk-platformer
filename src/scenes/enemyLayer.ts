@@ -1,11 +1,14 @@
 import type Phaser from 'phaser';
 
+import { flinchOffset, hitFlashAlpha, impactOf, ticksSinceHit } from '../render/effects';
 import { healthBarDesc, type BarSubject } from '../render/enemyHealthBar';
 import { scavengerRenderDesc, sentryRenderDesc, type EnemyRenderDesc } from '../render/enemyView';
 import { interpolatedPosition, type Point } from '../render/interpolate';
 import type { EnemySlug } from '../sim/enemies';
+import type { Freezable } from '../sim/hitstop';
 import type { World } from '../sim/types';
 import { playIfChanged } from './playAnim';
+import { applyHitFlash } from './spriteFlash';
 
 /**
  * Draws the enemies, their health bars and the shots in flight.
@@ -124,9 +127,9 @@ export class EnemyLayer {
    * `bodies`, in `prevPositions` and here — the alternative is an id on every enemy for a list that
    * is built once and never reordered.
    */
-  private subjects(): [BarSubject, EnemyRenderDesc, EnemySlug][] {
+  private subjects(): [BarSubject & Freezable, EnemyRenderDesc, EnemySlug][] {
     const { scale } = this.world;
-    const out: [BarSubject, EnemyRenderDesc, EnemySlug][] = [];
+    const out: [BarSubject & Freezable, EnemyRenderDesc, EnemySlug][] = [];
     for (const sentry of this.world.enemies.sentries) {
       out.push([sentry, sentryRenderDesc(sentry, scale), 'brass-sentry']);
     }
@@ -159,6 +162,8 @@ export class EnemyLayer {
    */
   sync(alpha: number): void {
     const { scale } = this.world;
+    const tick = this.world.tickCount;
+    const facing = this.world.player.facing;
     const subjects = this.subjects();
 
     // Growth path: a dev spawn (or anything else that appends after `create()`) has no body yet.
@@ -179,11 +184,27 @@ export class EnemyLayer {
       // (the dev fleet) has no entry, and `interpolatedPosition` draws it at `cur`, which is right:
       // a spawn is a teleport, and there is nothing to blend from.
       const drawn = interpolatedPosition(this.prevPositions?.[i] ?? null, desc, alpha);
-      body.setPosition(drawn.x, drawn.y);
+      // 🔴 Phase 9's per-sprite feedback, the enemy half. `spriteFeedback.ts` decides, this applies.
+      //
+      // Thrown along the PLAYER's facing, not its own: the blow comes from the player, which is the
+      // same argument `impactSparks(body.x, body.y, w.player.facing, impact)` already makes one file
+      // over. And `playerHurt` is excluded because a scavenger's own claw calls
+      // `freezePair(player, scavenger, 'playerHurt', …)` — that freeze makes the scavenger the
+      // ATTACKER, and flinching the thing that just hit you reads as it being hit.
+      const hit = this.hitClass(subject);
+      const off = hit === null ? null : flinchOffset(ticksSinceHit(subject, tick), hit, facing);
+      const bodyX = drawn.x + (off?.dx ?? 0);
+      const bodyY = drawn.y + (off?.dy ?? 0);
+      body.setPosition(bodyX, bodyY);
       if (this.isSprite[i]) {
         const sprite = body as Phaser.GameObjects.Sprite;
         sprite.setFlipX(desc.flipX);
         playIfChanged(sprite, desc.animKey);
+        // The same `applyHitFlash` the player is drawn with — one definition of "what a hit flash
+        // looks like", never two that agree on the happy path. A `Rectangle` fallback has no Tint
+        // component at all (Phase 2's `setFlipX` lesson), which is why this is inside the sprite
+        // branch rather than guarded by a second `in` check.
+        applyHitFlash(sprite, hit === null ? 0 : hitFlashAlpha(ticksSinceHit(subject, tick), hit));
       } else {
         (body as Phaser.GameObjects.Rectangle).setFillStyle(desc.colour);
       }
@@ -209,9 +230,12 @@ export class EnemyLayer {
       // enemy's tick position, so without this shift the bar would sit still while the body it
       // describes slides under it — the interpolation defect reintroduced one layer up, and more
       // obvious than the original because the two are inches apart on screen.
+      // The FLINCH is included: the offset displaces the whole enemy for a few ticks, and a bar that
+      // stayed on the sim position while the body it describes stepped out from under it is the
+      // interpolation defect above reintroduced by a different route.
       const bar = healthBarDesc(subject, slug, scale);
-      const barX = bar.x + (drawn.x - desc.x);
-      const barY = bar.y + (drawn.y - desc.y);
+      const barX = bar.x + (bodyX - desc.x);
+      const barY = bar.y + (bodyY - desc.y);
       this.bars.fillStyle(0x1a1512, 1).fillRect(barX, barY, bar.w, bar.h);
       if (bar.fillW > 0) {
         this.bars.fillStyle(0xc4463f, 1).fillRect(barX, barY, bar.fillW, bar.h);
@@ -242,6 +266,19 @@ export class EnemyLayer {
    * A Rectangle fallback has no `anims` at all and reports false, so it fades immediately — the
    * behaviour before this existed, which is right: there is no death animation to wait for.
    */
+  /**
+   * The impact class this enemy should REACT to, or `null`.
+   *
+   * `light` and `lethal` are hits it took from the player. `playerHurt` is deliberately excluded:
+   * `freezePair` freezes both bodies, so a scavenger that claws the player carries a `playerHurt`
+   * freeze of its own — it is the attacker in that exchange, and flinching it would draw the blow
+   * backwards. `undefined` (no class resolves) is the never-hit and zero-length-freeze cases.
+   */
+  private hitClass(subject: Readonly<Freezable>): 'light' | 'lethal' | null {
+    const impact = impactOf(subject, this.world.hitstopScale);
+    return impact === 'light' || impact === 'lethal' ? impact : null;
+  }
+
   private playingDeath(i: number, desc: EnemyRenderDesc): boolean {
     if (!this.isSprite[i]) {
       return false;

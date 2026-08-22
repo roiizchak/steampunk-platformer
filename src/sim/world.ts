@@ -86,6 +86,14 @@ export interface CreateWorldOptions {
    * far the player walks, AND every shipped level parses to a non-null goal.
    */
   goal?: Rect | null;
+  /**
+   * DEBUG ONLY. Scales every hit-stop freeze; defaults to 1, which is what every shipped build gets.
+   *
+   * See `World.hitstopScale` for why it exists — it is the `?hitstop=0` arm of Phase 9's freeze
+   * gate, and it is optional here for the same reason `spawn`, `gears` and `goal` are: forty-odd
+   * fixtures call `createWorld({ seed, scale })` and none of them should have to say "unchanged".
+   */
+  hitstopScale?: number;
 }
 
 export function createWorld({
@@ -98,9 +106,22 @@ export function createWorld({
   enemies,
   gears,
   goal,
+  hitstopScale,
 }: CreateWorldOptions): World {
   if (!(scale > 0) || !Number.isFinite(scale)) {
     throw new Error(`createWorld: scale must be a finite number greater than 0, got ${scale}`);
+  }
+  // 🔴 The integer-tick invariant, enforced where the rule LIVES rather than only at the DOM parser.
+  //
+  // `hitstopScaleFromSearch` (`src/scenes/gameLevelPick.ts`) checks the same thing and production is
+  // closed by it — but it is one call site, and `freezePair` computes `tickCount + HITSTOP_TICKS[i] *
+  // scale` with no check of its own. Any fixture, dev spawn or future caller of `createWorld` could
+  // put a FLOAT deadline inside `src/sim/`, against CLAUDE.md §3's "every duration is an integer
+  // count of 60 Hz ticks" — and `?hitstop=1.5` also collides `playerHurt` 9 with `lethal` 9 in
+  // `impactOf`'s reverse lookup, which draws the wrong particles with nothing red anywhere. This
+  // file already demonstrates the guard shape one line up; the rule belongs beside it.
+  if (hitstopScale !== undefined && !(Number.isSafeInteger(hitstopScale) && hitstopScale >= 0)) {
+    throw new Error(`createWorld: hitstopScale must be a non-negative safe integer, got ${hitstopScale}`);
   }
 
   const tuning = createTuning();
@@ -124,6 +145,7 @@ export function createWorld({
     goalEntryBlocked: false,
     tuning,
     scale,
+    hitstopScale: hitstopScale ?? 1,
     player: {
       x: spawn?.x ?? SPAWN_X,
       y: spawn?.y ?? SPAWN_Y,
@@ -145,8 +167,16 @@ export function createWorld({
       iFrameCounter: IFRAME_TICKS,
       // FIX 2: no impulse has landed yet.
       knockbackPending: false,
+      // Phase 9: never frozen, never hit, never swung. `-1` is the sentinel `lastHitSwing` uses.
+      hitstopUntil: -1,
+      lastHitTick: -1,
+      swingStartTick: -1,
       strideCounter: 0,
       strideGait: null,
+      // Phase 9 review round: never landed. `-1` is `lastHitTick`'s sentinel, used for the same
+      // reason — a `0` here would read as "landed on tick 0" and squash the player on spawn.
+      landedTick: -1,
+      landedFallSpeed: 0,
     },
   };
 }

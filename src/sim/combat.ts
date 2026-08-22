@@ -14,6 +14,7 @@
 import { consumeAttackPress } from './input';
 import type { CombatState, InputSnapshot, PlayerSim, PlayerState, TuningKnobs } from './types';
 import { advanceWindow, windowOpen } from './windows';
+import { frozen } from './hitstop';
 import {
   ATTACK,
   DEATH_TICKS,
@@ -138,7 +139,10 @@ export function deathWindowClosed(player: PlayerSim): boolean {
  * deliberate debt, because *"bolting a respawn onto a game with no health model would have had to
  * be undone here"*. Phase 5 built the health model and never came back for the respawn, so death
  * became a **terminal freeze** — the exact defect that note was deferring, arriving through combat
- * instead of through the kill plane.
+ * instead of through the kill plane. The player reported it as *"I cannot die. It gets stuck before
+ * I actually see the kill"*, which is what a terminal state with a `movementLocked` body looks like
+ * from the outside. (That sentence used to sit at step 4c of `tick.ts` as a second copy of this
+ * paragraph; it is here now, with the rest of it — one concept, one place *(vault 5.3)*.)
  *
  * ## What it resets, and what it deliberately does not
  *
@@ -153,6 +157,13 @@ export function deathWindowClosed(player: PlayerSim): boolean {
  *
  * Vertical state is cleared too: `grounded` false and **both forgiveness counters saturated**, so a
  * respawn cannot hand out a free coyote jump or fire a jump buffered while the player was dead.
+ *
+ * Phase 9's three hit-stop fields are cleared for exactly that reason and not because the case is
+ * reachable: the longest freeze is `HITSTOP_TICKS.lethal` 9 against a `DEATH_TICKS` window of 45, so
+ * a freeze armed on the killing blow has always lapsed by the time this runs. It stops being true
+ * the moment either knob moves, and the failure it becomes is a player who respawns unable to move
+ * with nothing on screen to explain it — the shape of defect this docstring exists to prevent, and
+ * one that would be blamed on the respawn rather than on the retune.
  *
  * `tuning` is a REQUIRED argument for the same reason `createWorld`'s `scale` is *(vault 2.11)*: the
  * window lengths belong to the tuning in play, and defaulting them here would silently close the
@@ -186,6 +197,9 @@ export function respawnPlayer(
   // not from `DEFAULT_TUNING`: a feel variant with a longer coyote window must close ITS window.
   player.ticksSinceGrounded = tuning.coyoteTicks;
   player.ticksSinceJumpPressed = tuning.jumpBufferTicks;
+  player.hitstopUntil = -1;
+  player.lastHitTick = -1;
+  player.swingStartTick = -1;
 }
 
 /**
@@ -220,10 +234,43 @@ export interface CombatStep {
  *
  * Damage, hazards and knockback are applied by the caller between 1 and 2, because they need world
  * geometry this module deliberately does not import.
+ *
+ * ## Phase 9: the COUNTERS freeze, the input EDGE does not — and the split is the whole ruling
+ *
+ * Hit-stop stops 1 and 2 and leaves 3 and 4 running. Both halves were got wrong in an earlier draft,
+ * in opposite directions, and an independent review ruled on the middle:
+ *
+ *  - **Freezing all of it re-strikes.** The live hitbox at 4 is what step 9b resolves; suppressed, a
+ *    frozen swing draws its active pose and connects with nothing.
+ *  - **Freezing none of it silently eats the freeze.** With `ATTACK` at `{6, 4, 10}`, 4-9 live ticks
+ *    inside a freeze are 4-9 ticks of swing recovery, hurt-lock and i-frames spent while the player
+ *    cannot act — landing a hit would make the next swing arrive *sooner* than whiffing does, and
+ *    `combatTiming.ts` calls moving those numbers *"a balance change that invalidates a generated
+ *    sheet"*. Recording it as a known leak was refused.
+ *  - **An OUTGOING blow pauses the attacker's own i-frames too, and that is deliberate.** The gate
+ *    at 1 asks only whether the body is frozen, not what froze it, and `applyPlayerAttack` passes the
+ *    player into `freezePair` — so a player who fights back inside the 27-tick actionable-invulnerable
+ *    surplus (`IFRAME_TICKS` 45 against `HURT_TICKS` 18) keeps the grace period `HITSTOP_TICKS`
+ *    longer. Codex's Phase 9 implementation review (finding 3) called the gate "too broad"; it is the
+ *    same ruling as the bullet above, applied consistently. `IFRAME_TICKS`'s docstring calls the
+ *    surplus *"the window in which you can actually leave"*, and you cannot leave while frozen — an
+ *    escape window that shrank *because you swung* would punish the fight-back. The surplus stays 27
+ *    ACTIONABLE ticks either way. What was genuinely missing is that no document said so and no test
+ *    covered it; `hitstop-interactions.test.ts` drives the outgoing case now.
+ *  - **The edge must keep being consumed** or it latches *(vault 2.4)*: a press made during a freeze
+ *    would otherwise fire the instant it lifted, or on tick 1 of the next level. A clear, not a gate.
+ *
+ * `tickCount` is REQUIRED, not optional, for the reason `respawnPlayer`'s `tuning` is: this function
+ * cannot ask the world for the clock, and a default would make the freeze quietly inoperative at any
+ * call site that forgot one.
  */
-export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep {
-  // 1. i-frames.
-  player.iFrameCounter = advanceWindow(player.iFrameCounter, IFRAME_TICKS);
+export function stepCombat(player: PlayerSim, input: InputSnapshot, tickCount: number): CombatStep {
+  const held = frozen(player, tickCount);
+
+  // 1. i-frames. A FROZEN body does not spend them — see the ruling above.
+  if (!held) {
+    player.iFrameCounter = advanceWindow(player.iFrameCounter, IFRAME_TICKS);
+  }
 
   // 2. Combat-state expiry.
   //
@@ -240,7 +287,11 @@ export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep 
   //    `idle`, because that would let a dead player walk. The counter advances so `deathWindowClosed`
   //    below can be asked; the respawn is still the caller's decision, taken in `tick.ts` step 4c
   //    where the spawn point lives.
-  if (isCombatState(player.state)) {
+  //
+  //    Phase 9: the whole block — the advance AND the expiry test — is skipped while the body is
+  //    frozen. The expiry test cannot be left running on its own: it reads the counter this branch
+  //    advances, so a live test over a frozen counter would simply never fire.
+  if (isCombatState(player.state) && !held) {
     player.combatCounter += 1;
     if (player.state !== 'death' && !windowOpen(player.combatCounter, combatStateTicks(player.state))) {
       // Hand the body back to step 11, which re-derives a movement state from grounded/moving.
@@ -255,6 +306,11 @@ export function stepCombat(player: PlayerSim, input: InputSnapshot): CombatStep 
   let attackStarted = false;
   if (pressed && canAct(player)) {
     enterCombatState(player, 'attack');
+    // The swing's identity, STORED. `playerAttack.ts` used to derive it as
+    // `tickCount - combatCounter`, which stops being unique the moment one of the two freezes and
+    // the other does not — see `PlayerSim.swingStartTick`. This is the only site that starts a
+    // swing, so it is the only site that has to write it.
+    player.swingStartTick = tickCount;
     attackStarted = true;
   }
 
@@ -270,82 +326,11 @@ export function canAct(player: PlayerSim): boolean {
 }
 
 /**
- * How long hitstun locks movement: the knob is **6**, the same wind-up `ATTACK.startup` already
- * spends being read as "the swing is coming". Reused deliberately rather than authoring an eighth
- * number — one measured constant, two consumers.
+ * `HURT_LOCK_TICKS`, `movementLocked` and `knockbackSettling` live in `movementLock.ts`.
  *
- * ⚠️ **The knob is 6; the observed lock is FIVE ticks.** `hurt` is armed at step 9b and read at
- * step 5 of the next tick, so its `counter === 0` is never seen. `movementLocked`'s docstring
- * derives this in full — read it before changing either number.
- *
- * The rest of `HURT_TICKS` is animation only: the `hurt` label and pose persist for all 18 ticks,
- * but the player is free to move again after the lock, and the attack edge stays blocked for the
- * whole 18 by `canAct`. **Three different windows, three different lengths — do not conflate them.**
+ * The same split, for the same reason and with the same one-way dependency, that moved the frozen
+ * timings to `combatTiming.ts` in Phase 4: this file is the combat STATE MACHINE, that one is the
+ * LOCKS derived from it. Re-exported here so the ~20 existing `from './combat'` call sites and
+ * `src/sim/index.ts` are untouched — read that file's header before changing either predicate.
  */
-export const HURT_LOCK_TICKS = ATTACK.startup;
-
-/**
- * Is movement locked this tick? Grounded or airborne alike. Mirrors `canAct`'s shape — one
- * predicate, imported at the call site, never restated *(vault 5.3)*.
- *
- * ## The lock is FIVE ticks, not six, and that is not a bug — state it rather than round it
- *
- * `HURT_LOCK_TICKS` is 6 and `windowOpen` accepts `0 … 5`, so a naive reading says six locked
- * ticks. It is five, and the reason is the same one the tick contract's header exists to state:
- * **where in the tick a window is ARMED decides how much of it a later step can see.**
- *
- * - `attack` is armed at **step 4b**, by `enterCombatState` inside `stepCombat`, and
- *   `hitWindowOpen` reads the counter later in that same call — so `counter === 0` **is** observed
- *   and `ATTACK.startup` spans **six** ticks.
- * - `hurt` is armed at **step 9b**, by `damagePlayer`, which is *after* step 4b has already run
- *   this tick. The `counter === 0` instant is therefore never read by `movementLocked`, which is
- *   called from step 5 of the *following* tick with the counter already advanced to 1. The lock
- *   spans counters `1 … 5`: **five ticks, 83 ms.**
- *
- * The two are not symmetric because damage and attack entry sit on opposite sides of step 4b —
- * exactly the shape of the buffered-jump asymmetry `tick.ts` documents. What the shared constant
- * buys is still the useful property: **the movement lock ends on precisely the tick an attack's
- * active frames would have begun.** One measured constant, two consumers, one stated asymmetry.
- *
- * ## 🔴 `death` locks too, and it did not until 2026-08-14
- *
- * This tested `hurt` alone, so **a corpse could still be walked around** — `canAct` blocks a dead
- * player from ATTACKING, and nothing blocked them from moving. It went unnoticed because death was
- * terminal: the state never ended, so nobody looked at what could be done inside it, and the
- * respawn tests were the first thing to hold a direction key while dead.
- *
- * There is no window on this half. Death is locked for as long as it lasts, which is what
- * `deathWindowClosed` and the respawn now bound. Friction still applies (step 5 sees `dir === 0`
- * rather than being skipped), so a body killed mid-run slides to a stop instead of stopping dead —
- * which is the behaviour a corpse should have and the one a hard velocity clear would lose.
- */
-export function movementLocked(player: PlayerSim): boolean {
-  if (player.state === 'death') {
-    return true;
-  }
-  return player.state === 'hurt' && windowOpen(player.combatCounter, HURT_LOCK_TICKS);
-}
-
-/**
- * Is this the ONE tick a knockback impulse needs friction skipped, so it can actually move the
- * player? FIX 2.
- *
- * Knockback writes `player.vx` at step 9b of the hit tick. On the *next* tick, `movementLocked`
- * zeroes `dir`, so `stepHorizontal`'s `dir === 0` branch decelerates `vx` by `groundFriction`
- * (3.69) BEFORE step 8 integrates it — a 5.54 px/tick impulse moved the player under 2 px and was
- * gone. `damagePlayer` sets `combatCounter = 0` at step 9b, and step 4b of the very next tick
- * advances it to 1 before step 5 runs — so `state === 'hurt' && combatCounter === 1` identifies
- * exactly, and only, that one tick. No new counter: this reads the same one `movementLocked` does.
- *
- * ⚠️ **That alone is not enough.** Hazards deliberately apply no shove (`worldDamage.ts` — a swept
- * rectangle has no origin to shove away from), but a hazard hit still sets `state === 'hurt'` and
- * still passes through `combatCounter === 1` on the following tick — so it was buying the friction
- * exemption for an impulse that was never written, one free tick of preserved momentum for nothing.
- * `knockbackPending` (`PlayerSim`) is set only where `applyKnockback` actually runs, so this now
- * requires a REAL impulse landed, not merely that the player is `hurt`. The flag is cleared by
- * `stepHorizontal` (`player.ts`) the one time it is consumed, which is what keeps the exemption to
- * one tick rather than letting it become a second, permanent name for `movementLocked`.
- */
-export function knockbackSettling(player: PlayerSim): boolean {
-  return player.state === 'hurt' && player.combatCounter === 1 && player.knockbackPending;
-}
+export { HURT_LOCK_TICKS, knockbackSettling, movementLocked } from './movementLock';

@@ -75,6 +75,24 @@ test.describe('Phase 3 — tilemap collision and camera', () => {
   });
 
   test('3.2 the player cannot pass through a solid horizontally', async ({ page }) => {
+    // 🔴 A LIVENESS bound, not a performance one, and the distinction is the whole comment.
+    //
+    // `sampleHorizontalRun` waits for 400 animation frames — 1.7 s at the ~240 fps this machine
+    // serves when it is idle. Under load the headless page has been measured at roughly 8 fps, where
+    // the same 400 frames take 47 s and blow the 30 s default. Phase 9 spent a long stretch treating
+    // that as a collision regression: it reproduced on `main`, on the phase branch, and in an
+    // agent's worktree, and it was three concurrent heavy jobs every time. Run alone the test passes
+    // in 46.7 s.
+    //
+    // So the number below is NOT a claim about how fast the game is — no assertion here reads a
+    // clock. It is the ceiling above which "the page stopped painting" is the likelier explanation
+    // than "the box is busy". Generous on purpose: a real hang still fails, two minutes later, and
+    // this project would rather wait than read a busy machine as a broken one.
+    //
+    // The honest fix for the slowness is not here — see `docs/qa/phase-09-polish.md`: nothing heavy
+    // may run beside the e2e suite, and only one Playwright run may exist at a time.
+    test.setTimeout(120_000);
+
     await bootToGame(page);
     const level = await shippedLevel(page);
     const wall = wallRightOfSpawn(level);
