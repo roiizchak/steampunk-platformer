@@ -1310,3 +1310,43 @@ producing `k = 0.629` against a floor of 0.9, with every other assertion in the 
 **This is the fourth rewrite of these perf gates, and each previous one produced the next defect.**
 The one this round could not close is L1's distinguishing range, and it is named above rather than
 left for the fifth round to find.
+
+---
+
+## 9.8 item 32 — CLOSED by hands-on judgement, 2026-08-22
+
+The item read: *"STILL NOT COVERED — the visual result of the sprite feedback. Whether a 6-10 px
+flinch READS as impact, whether the ADD-mode flash reads as a hit rather than as a glitch, and whether
+3-on/3-off flicker reads as invulnerability are all hands-on questions with no metric."*
+
+**They still have no metric, and that is the point** *(vault C4)*. The project's own rule is that a
+playtest finds what gates cannot, and that a hands-on criterion is never reported done on automated
+evidence. So this was not closed by a gate. It was closed by the owner watching it.
+
+**Evidence:** `docs/evidence/phase-09/phase-09-juice-2026-08-22.webm`, one take, captured through `playwright-cli` against the real dev
+build on a real GPU, and driven through the shipped keyboard path. Three segments, in order:
+
+1. **Hurt** — the player stands beside the scavenger taking repeated contact hits, hp 100 -> 25.
+   Exercises the ADD-mode hit flash, the hurt vent, the flinch offset and the 3-on/3-off i-frame
+   flicker.
+2. **Kill** — four swings, scavenger 60 -> 40 -> 20 -> 0. Impact sparks and the 4-tick light hit-stop
+   on each landed hit, then the 9-tick lethal freeze and the death steam.
+3. **Landings** — three drops from `y = 1450`, clearing `DUST_MIN_FALL_PX`, for the landing dust and
+   the `land` shake.
+
+**Verdict: APPROVED by the owner** — "looks good". The flinch reads as impact, the flash reads as a
+hit rather than a glitch, and the flicker reads as invulnerability.
+
+⚠️ **What this does NOT close.** This is one viewing on one machine at one scale, and the numbers
+behind it (`FLINCH_LIFT`, `LAND_SQUASH_SX`, `IFRAME_FLICKER_ON`, `IFRAME_FLOOR_ALPHA`, the four shake
+amplitudes) remain a **grey-box judgement pending the art pass**. Every one is pinned as a literal
+with a fixture either side, so a retune reds and comes back here for a fresh look — which is the
+protection this criterion actually has. The clip is the record of what "good" looked like on
+2026-08-22, not a proof that the numbers are right in the abstract.
+
+**A note on capturing it, because it cost time and will again.** The first capture attempt produced no
+attacks at all and the keyboard looked broken. It was not: the player had run into the goal, which
+armed the level-complete sequence and set `GameScene.playerInputEnabled` to `false`. The game was
+behaving exactly as designed. **A dead keyboard in a hands-on session is a game-state question before
+it is a harness question** — check `playerInputEnabled` and `goalEntryTicks` first, and reload for a
+clean world rather than restarting the scene, which does not reset player health.
