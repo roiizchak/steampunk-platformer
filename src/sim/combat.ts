@@ -139,7 +139,10 @@ export function deathWindowClosed(player: PlayerSim): boolean {
  * deliberate debt, because *"bolting a respawn onto a game with no health model would have had to
  * be undone here"*. Phase 5 built the health model and never came back for the respawn, so death
  * became a **terminal freeze** — the exact defect that note was deferring, arriving through combat
- * instead of through the kill plane.
+ * instead of through the kill plane. The player reported it as *"I cannot die. It gets stuck before
+ * I actually see the kill"*, which is what a terminal state with a `movementLocked` body looks like
+ * from the outside. (That sentence used to sit at step 4c of `tick.ts` as a second copy of this
+ * paragraph; it is here now, with the rest of it — one concept, one place *(vault 5.3)*.)
  *
  * ## What it resets, and what it deliberately does not
  *

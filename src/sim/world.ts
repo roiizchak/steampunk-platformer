@@ -173,6 +173,10 @@ export function createWorld({
       swingStartTick: -1,
       strideCounter: 0,
       strideGait: null,
+      // Phase 9 review round: never landed. `-1` is `lastHitTick`'s sentinel, used for the same
+      // reason — a `0` here would read as "landed on tick 0" and squash the player on spawn.
+      landedTick: -1,
+      landedFallSpeed: 0,
     },
   };
 }
