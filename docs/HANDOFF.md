@@ -1,4 +1,90 @@
-# Session handoff — the gate-art + gate-entry session
+# Session handoff — Phase 9 (polish, juice, particles)
+
+> ## ✅ All eleven Phase 9 criteria are green. **STOP for the owner's approval before merging.**
+>
+> Both Codex reviews ran and every finding from both is applied or recorded with a reason. The gate
+> owners ran twice each *(A7)* in isolated worktrees. The juice has been played by hand and the
+> evidence clip approved — **twice**, because the first approval was withdrawn (see §3 below).
+> Nothing is merged and nothing should be until the owner says so.
+>
+> **One gate is red and it is NOT a Phase 9 criterion:** Phase 8's **G.7b** — inherited, flaky at
+> roughly 3 runs in 8 on `main` as well as here, and under repair in its own worktree. Phase 9 did
+> not cause it and cannot close it.
+>
+> Full record: [qa/phase-09-polish.md](qa/phase-09-polish.md) (including
+> **§ Vault-out — Phase 9**) · [plan review](reviews/phase-09-plan.md) ·
+> [implementation review](reviews/phase-09-impl.md) · [evidence/phase-09/](evidence/phase-09/)
+
+## What shipped
+
+Hit-stop as a **per-body integer tick counter** — attacker and victim both freeze for the same count,
+the rest of the world keeps ticking — armed at a new lettered step **9b** in the tick contract, with
+`hitstopUntil` and `lastHitTick` as absolute deadlines. Screen shake, landing squash, impact sparks,
+death plumes, hurt vents, landing dust, i-frame flicker, HUD gear flyers and a level-complete fade.
+New sim modules `hitstop.ts`, `playerMotion.ts`, `playerSim.ts`; new scene modules
+`particleTexture.ts`, `spriteFlash.ts`, `hudGearFlyers.ts`, `engineLiterals.ts`.
+
+**The 14-step order was NOT renumbered.** Everything added went in as a lettered insert (4a/4b/4c,
+9b/9c/9d). Renumbering is a balance change and needs a STOP-and-ask.
+
+## The traps this phase paid for — read these before touching the same ground
+
+**1. A draw-count gate cannot see an invisible particle.** Setting every generated particle texture
+to fully transparent (`fillStyle(spec.tint, 0)`) left the unit suite 2150/2150 green and criterion
+9.6 reporting `drawn 96 inView 96` **PASS** on a real GPU. Phaser submits a transparent quad exactly
+as happily as an opaque one. Closed by an actual pixel read in `phase-09-draw.spec.ts` — **do not
+weaken it.** Twenty-two gates of this same class were found and fixed this phase.
+
+**2. `src/render/` modules need a draw-path gate or they are decoration.** `spriteFeedback.ts`
+shipped with 221 source lines, a 306-line test file and **zero production consumers**; blanking all
+four bodies left the game byte-identical with the suite green. `tests/unit/enemy-feedback.test.ts`
+(behavioural, against a fake scene) is the stronger shape — prefer it over source-text scanning.
+
+**3. Never infer an event edge from two samples of a level.** The landing edge used to be derived in
+the render layer from `grounded` changing between render calls. At 1 sim tick per frame it emitted
+dust and squashed; at 2 ticks per frame it emitted **zero**. Fixed at the source — `PlayerSim.landedTick`
+stamped at step 10, read by the renderer. **The same mistake then recurred one layer out in criterion
+9.2's own spec** and made it flake ~1 run in 3; that spec now reads the stamp too.
+
+**4. The emit window was off by one and nothing had ever fired.** `(cursor, tickCount]` against
+pre-increment stamps meant **no impact spark, death plume or hurt vent had ever appeared in the
+shipped game**. Every unit fixture bumped the count before stamping — an ordering production never
+performs — and 9.5/9.6 drove `explode()` on emitter handles directly, bypassing the trigger path.
+The current form is `hitTick >= cursor && hitTick < tick`; restoring the old one reds six tests.
+
+**5. Perf gates fail on an UNPAIRED median per arm.** Not on "a ratio with a quiet denominator" —
+that first diagnosis was wrong and is corrected in the vault-out. `performance.now()` quantises to
+**0.1 ms** here. Pair the rounds and separate the arms past the grid; never move the bound.
+
+**6. The DEV hit-stop knob must fold away.** `?hitstop=` is `import.meta.env.DEV`-guarded and folds
+to `function Yn(){return 1}` in `dist/`; `verify-dist.mjs` now fails the build on `URLSearchParams`
+in the bundle. It also needs `Number.isSafeInteger` **and** a `MAX_HITSTOP_SCALE` — `isFinite` alone
+accepted `1e308` and froze the game permanently, and `isSafeInteger` alone still accepted a
+19-million-year freeze that death cannot release.
+
+## Verification at the tip (`fbb0631`)
+
+| gate | result |
+|---|---|
+| `npm run typecheck` | clean |
+| `npm test` | **2154 pass, 0 fail** (133 files) |
+| `npm run build` + `verify-dist` | green |
+| `npm run test:sim-isolated` | **2151 passed, 3 skipped**; Phaser restored |
+| `npm run test:e2e` | **118 passed, 1 failed** — the failure is Phase 8's G.7b |
+| criterion 9.2 in isolation | **8 consecutive green**, integrator-run, after 14 by the fixing agent |
+
+Greenness was read **positively** — the test count, not the exit code, and never through a pipe.
+
+## What is outstanding
+
+1. **G.7b** (`tests/e2e/phase-08-gate-perf.spec.ts:264`) — inherited Phase 8 gate, both arms measured
+   `0.0000 ms`. Under repair using 9.5's pattern: pair the rounds, widen the arm separation. Moving
+   the bound, skipping and deleting are all forbidden.
+2. **Phase 9 has not been merged to `main`** and must not be until the owner approves.
+
+---
+
+# Superseded — the gate-art + gate-entry session (Phase 8). **Superseded by the section above.**
 
 > ## ✅ Every criterion is green. **STOP for the owner's approval before merging.**
 >

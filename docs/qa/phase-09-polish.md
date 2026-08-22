@@ -1689,3 +1689,147 @@ The same full-suite run failed criterion 1.4 on a bare 30 s test timeout. It is 
 This is the contention mode `playwright.config.ts` already documents, and the same note forbids the
 "fix": **do not raise the bound** — one loose enough to survive a contended box is loose enough to hide
 a genuine boot hang *(vault 1.4)*.
+
+---
+
+## Vault-out — Phase 9
+
+**Status: written 2026-08-22, at the close of the phase. All eleven Phase 9 criteria are green;
+one INHERITED gate (Phase 8's G.7b) is under repair and is not a Phase 9 criterion.** Vault-in
+*(B1)* recorded that the vault had nothing on particle cost or frame budget. It still does not have
+what follows, and this is the phase that had to pay for it.
+
+Phase 9 found **twenty-two** gates of a single defect class, plus a shipped-game bug none of them
+could see. Sections 1–3 are that class. Sections 4–6 are what the phase learned about measuring.
+
+### 1. The defect class: a gate that asks whether a value CAME BACK, not whether it can DO anything
+
+Every one of the twenty-two has the same shape. Something is counted, or returned, or found present
+in a source file — and the gate treats presence as proof of function. The canonical instance is the
+one Codex found, and it is worth stating exactly because the suite's own numbers argued the other way:
+
+> Change `pen.fillStyle(spec.tint, 1)` to `pen.fillStyle(spec.tint, 0)` in `particleTexture.ts`.
+> **Every particle texture in the game becomes fully transparent.** The unit suite stays 2150/2150
+> green, and criterion 9.6 reports `drawn 96 inView 96` — **PASS**, on a real GPU.
+
+The reason is mechanical and generalises: **Phaser submits a fully transparent quad exactly as
+happily as an opaque one.** A draw-count gate measures *submission*. Nothing about visibility follows
+from it. The three gates that were supposed to cover this each stopped one step short — one scanned
+the function's *source text* for `spec.tint`, one read emitter/particle *alpha and scale*, one counted
+*alive particles plus emitter `willRender`*. None read a pixel.
+
+Closed by an actual pixel read (`phase-09-draw.spec.ts`), watched red against both that mutation and
+`fillStyle(0xffffff, 1)`. **The generalisation: if a gate can be satisfied without the thing existing
+on screen, it is not a gate about the screen.**
+
+### 2. A decision function with no consumer is the same defect as a burst of zero particles
+
+`spriteFeedback.ts` shipped with **221 source lines and a 306-line test file** — and **zero production
+consumers**. Blanking all four function bodies left the game byte-identical on screen with the suite
+green. It satisfied every assertion about itself and drew nothing.
+
+This is the cost of the `src/render/` pattern, and it is worth paying with the guard rather than
+avoiding: pulling decisions out of scenes is what makes their edge cases unit-testable, but a
+decision nobody applies is invisible to exactly those tests. **Every module in `src/render/` now owes
+a draw-path gate.** Two shapes, and the second is stronger — prefer it:
+
+| shape | example | when |
+|---|---|---|
+| source text | `effects-draw-path.test.ts` | the scene names a Phaser value the test cannot construct |
+| behavioural, against a fake scene | `enemy-feedback.test.ts` | the module takes Phaser as a *type* only |
+
+### 3. The bug all twenty-two missed, and why the fixtures hid it
+
+The emit window in `gameEffects.render` was `(cursor, tickCount]` while the stamps it compares against
+are taken from the **pre-increment** count. The consequence, unnoticed through the entire phase:
+
+> **No impact spark, death plume or hurt vent had ever fired in the shipped game.**
+
+Two independent things kept it invisible, and each is its own lesson:
+
+- **Every unit fixture bumped the tick count before stamping** — an ordering the game never performs.
+  A fixture that sets up its state in a different order than production does is not testing production.
+- **The perf gates drove `explode()` on the emitter handles directly**, from `installStorm`, bypassing
+  `gameEffects.emit` entirely. So 9.5 and 9.6 measured *the storm*, never *the game*. The narrowing
+  was disclosed in a comment that then cited a covering gate **which did not exist**.
+
+Correcting to `fresh = hitTick >= cursor && hitTick < tick` reds six tests. **A disclosure that names
+a covering gate must name one you have opened.**
+
+### 4. A render-frame-derived edge is LOST whenever a frame drains several sim ticks
+
+The landing edge was inferred in the render layer, from `grounded` changing between two render calls.
+Driven directly:
+
+| frame rate | result |
+|---|---|
+| 1 sim tick per frame | dust emits, player squashes |
+| 2 sim ticks per frame | **zero particles, no squash, no shake** |
+
+A buffered jump lands on one tick and jumps on the next; the jump clears `grounded`, so the renderer
+observes `false -> false` and the whole event never happened. **This gets worse on faster release
+hardware**, where multi-tick frames are the norm — the opposite of the direction people test in.
+
+**The fix is the general one: stamp the event in the sim (`PlayerSim.landedTick`, step 10) and have
+the renderer read the stamp. Never re-derive an edge from two samples of a level.** The same lesson
+recurred one layer out when criterion 9.2's own spec inferred the same edge the same way and flaked
+one run in three — this harness drains 3–4 ticks per frame while `SHAKE.land` lasts 3, so the inferred
+edge routinely pointed *past the end of the shake*, and every offset it read was a legitimately
+settled zero.
+
+### 5. Perf: the shape that fails is an UNPAIRED median per arm, subtracted or divided
+
+Four gates in this project have now failed this way — 6.9's GPU ratio (discarded), G.7b, 5.11, and
+9.5's Guard 1. The first diagnosis written down was wrong and the correction is the valuable part:
+it is **not** "a ratio with a quiet denominator". A quiet denominator is an aggravator. The cause is
+
+> reducing each arm to a single **unpaired** median, then subtracting or dividing, when the effect is
+> within a few timer quanta.
+
+`performance.now()` quantises to **0.1 ms** on this machine, and that quantum is the root of nearly
+every perf-gate failure recorded here. Guard 1 had **no denominator at all** and false-redded 5 runs
+in 6.
+
+**The repair is two things and both are needed:** pair the observations and take the median of
+per-round *deltas*; and separate the arms far enough that the effect clears the grid. Pairing alone on
+9.5's old sample points still ordered only 4 runs in 6. Sampling harder cannot rescue the old shape —
+resolving a 0.06 ms gap against a 0.1 ms grid needs ~225 rounds, about six hours per run.
+
+And two rules that cost real time here:
+
+- **A statistic that cannot order its own mutation is not fixed by moving the bound.** 9.5's linearity
+  guard reduced algebraically to `2^|k-1|` and could only fire at N-cubed or steeper. It was replaced,
+  not retuned.
+- **Never attribute a perf red from one run per arm.** I attributed G.7b to Phase 9 on exactly that,
+  and was wrong: the tally across eight runs was 3 fail / 4 pass with the *failing direction
+  inconsistent*, and the single-exit baseline ranges 0.036–0.152 ms — wider than the effect.
+
+### 6. Detect GREENNESS positively, including the count
+
+A Playwright run that selected **nothing** reports `expected: 0, unexpected: 0` and exits **0** —
+indistinguishable from a clean pass unless you read the count. Every other testing rule in this
+project assumes the tests ran; this is the one that checks. Corollaries paid for this phase:
+
+- **A zero exit through a pipe is `tail`'s exit, not the gate's.**
+- `test:sim-isolated` reported 2150/2150 with **nothing skipped** while pinning an engine that run was
+  not using — `require.resolve` had walked up to the parent checkout's `node_modules`.
+
+### 7. Two smaller ones worth keeping
+
+- **`Math.sin` is implementation-approximated** (ECMA-262 §21.3.2.30). Chromium's V8 and Node's V8
+  return values differing by **1 ULP** for the same argument, so a cross-engine `toEqual` on anything
+  trigonometric red-flags a correct result about 1 run in 12. Bound it — 9.2 uses 1e-9 px, six orders
+  under the peaks it guards.
+- **A dead keyboard in a hands-on session is a game-state question before it is a harness question.**
+  Input appeared broken during playtest; the player had run into the goal and `playerInputEnabled` was
+  false.
+
+### 8. Evidence for a visual criterion must MEASURE the visual result
+
+The first juice clip approved for criterion 9.8 was captured on a build where the emit window bug of
+section 3 was still live, so sparks and steam **were not on screen at all**. The caption named them
+because the sim state (hp dropping, enemy hp falling) was read and the effects *inferred* from it.
+Re-captured with instrumented per-effect particle counts printed as it ran — sparks 18, steam 14,
+dust 14 — and the first approval was withdrawn rather than quietly superseded. **A visual criterion is
+closed by measuring pixels or counting emissions, never by inferring them from the state that should
+have caused them.**
