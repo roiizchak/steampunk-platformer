@@ -1,10 +1,10 @@
 /**
- * Criterion G.7b — what the exit's art and the entry fade cost per frame.
+ * Criterion G.7b — what the exit's art costs per frame.
  *
- * ## 🔴 Why a new spec exists at all, instead of a number added to 8.7
+ * ## 🔴 Why a separate spec exists at all, instead of a number added to 8.7
  *
- * Both perf gate-owner briefs concluded, independently, that **no statistic in the existing suite
- * can see this change**, and they were right on two counts:
+ * Both Phase 8 perf gate-owner briefs concluded, independently, that **no statistic in the existing
+ * suite can see this change**, and they were right on two counts:
  *
  *  - `sampleLevel` never moves the player. The camera stays at the spawn, the exit is a screen and a
  *    half away and is culled, and `stepGoalEntry` never leaves its `goalEntryTicks === null` early
@@ -12,10 +12,6 @@
  *  - 8.7's statistic is a RATIO of level-05 to level-01. All three additions — one `stepGoalEntry`
  *    call per tick, one `goalEntryAlpha` plus `setAlpha` per frame, one image at depth 7 — are
  *    identical in both levels, so they divide out exactly. A ratio cannot see a constant.
- *
- * Per this project's own rule, **a statistic that cannot order its own mutation is not fixed by
- * moving its bound — it is replaced.** That is what this file is. It does not touch 8.7 or any other
- * existing gate.
  *
  * ## What is measured, and what deliberately is not
  *
@@ -38,95 +34,43 @@
  * surface is closed at eight fields. The body is placed **short of the rect** so nothing arms — every
  * arm is ordinary steady play with the exit in view, which is exactly the frame the criterion is
  * about.
+ *
+ * ## 🔴 2026-08-22 — the linearity guard was flaky, and it was replaced
+ *
+ * `spread < 4` over two unpaired per-exit estimates red about 3 runs in 8. The failure, the four
+ * times this project has now met its shape, the measurements, and every number this spec asserts
+ * against live in **`exitCostBudget.ts`** — read its header before changing anything here.
  */
 
 import { expect, test, type Page } from '@playwright/test';
 
 import { bootToGame } from './gameHarness';
 import { installGpuTimer } from './gpuTimer';
+import {
+  BASE_COPIES,
+  CAPDRAW_LIMIT,
+  FIT_HIGH,
+  FIT_MID,
+  MARGINAL_COPIES,
+  MAX_EXIT_GPU_MS,
+  MAX_EXIT_WORK_MS,
+  MIN_SWEEP_GAP_GPU_MS,
+  MIN_SWEEP_GAP_WORK_MS,
+  installPerExitCostFixture,
+  PER_EXIT_COST_MS,
+  POOL_COPIES,
+  ROUNDS,
+  SWEEP_COPIES,
+} from './exitCostBudget';
 import { MIN_GPU_SAMPLES, MIN_SAMPLES, SAMPLE_TICKS } from './perfBudget';
-import { median } from './levelPerf';
+import { median, medianPairedDelta } from './levelPerf';
 import { sample, type Sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 
-/** Interleaved pairs. Matches 8.7's `PAIRS`, for the same reason: three is enough to median over. */
-const PAIRS = 3;
+declare const process: { env: Record<string, string | undefined> };
 
-/**
- * The ceiling on ONE exit's draw, in milliseconds of main-thread work per frame.
- *
- * ## 🔴 Why this is not a ratio, after a ratio was tried and thrown away
- *
- * The first version sampled *exit drawn* against *exit hidden* and compared medians. It measured:
- *
- * ```
- *   exit drawn   work 0.600 ms   gpu 0.161 ms
- *   exit hidden  work 0.400 ms   gpu 0.270 ms
- *   ratios       work 1.500      gpu 0.595
- * ```
- *
- * Neither number is a measurement. `performance.now()` is quantised to **0.1 ms** in this browser, so
- * `0.600` and `0.400` are adjacent steps on the clock's own grid and that 1.500 is the quantum, not
- * the gate. And the GPU arm says drawing an extra 124 416-pixel image made the frame **40 % faster** —
- * which is not a small effect measured imprecisely, it is noise with a sign.
- *
- * A bound over that could be set anywhere and would mean nothing anywhere, and this project's rule is
- * explicit: *a statistic that cannot order its own mutation is replaced, not re-bounded.*
- *
- * ## What replaced it: measure many, divide by many
- *
- * The standard answer to a signal under the timer's resolution — amplify until it clears, then divide
- * back down. `MUTATION_COPIES` extra exits are stacked on the real one: identical texture, size,
- * origin, depth and position, so the ONLY thing that changes is how much exit gets drawn. The delta
- * over that window divided by the number of copies is the per-exit cost, measured well above the
- * 0.1 ms grid instead of underneath it.
- *
- * This also makes the gate structurally able to go red: an exit that got twice as expensive to draw
- * doubles the measured delta and therefore the reported per-exit figure. The mutation is not a
- * separate test somebody has to remember to run — **it is how the measurement is taken.**
- *
- * ## The number
- *
- * Chosen on one set of runs and confirmed on a HELD-OUT set; both are recorded in
- * `docs/qa/phase-08-gate-entry.md`. A 60 Hz frame is 16.67 ms, so a per-exit cost in hundredths of a
- * millisecond is the finding — the bound exists to catch the day the exit stops being one static
- * image at depth 7.
- */
-const MAX_EXIT_WORK_MS = 0.05;
-
-/** The same ceiling on the GPU side, where the exit is 124 416 pixels of fill per frame. */
-const MAX_EXIT_GPU_MS = 0.05;
-
-/**
- * How many extra copies of the exit the measurement draws.
- *
- * 🔴 **The amplification IS the mutation the bound names** — same texture, same size, same depth,
- * same position, stacked. Nothing about the sim, the tilemap or the cull changes, so if the delta
- * moves, the only thing that moved is how much exit got drawn.
- *
- * 40, because that is what it takes to clear a 0.1 ms clock grid: 40 exits at 288 x 432 is roughly
- * 2.5 screens of extra fill, which a GPU timer can resolve and a quantised `performance.now()` can
- * too.
- */
-const MUTATION_COPIES = 40;
-
-/**
- * A second, smaller amplification — and the reason it exists.
- *
- * 🔴 Codex's implementation review made the fair objection that `(41 exits − 1 exit) / 40` is a
- * MARGINAL cost, not a total one: it omits whatever the first gate costs that the next forty do not,
- * and stacking co-located identical images could hit a batching or overdraw path a lone image never
- * takes. Divide by forty and any of that becomes invisible.
- *
- * The answer is not to argue about it, it is to measure whether the thing is linear. If the per-exit
- * figure at 20 copies and at 40 copies agree, the cost scales with the number drawn and the division
- * is sound. If they disagree badly, the inference is broken and the spec says so instead of
- * reporting a number.
- */
-const HALF_COPIES = 20;
-
-/** How far apart the two per-exit estimates may sit before the amplify-and-divide inference fails. */
-const MAX_LINEARITY_SPREAD = 4;
+/** `PERF_MUTATION=capdraw` — the gap floors' red proof. `exitCostBudget.ts` owns the why. */
+const MUTATION = process.env.PERF_MUTATION ?? '';
 
 /**
  * Put the exit on screen, short of its own trigger rect, and clear the doorstep.
@@ -194,72 +138,91 @@ async function exitState(page: Page): Promise<{ armed: boolean; onScreen: boolea
       goalObject?: { willRender(c: unknown): boolean };
       cameras: { main: unknown };
       simWorld: { goalEntryTicks: number | null; completed: boolean };
-      __gateBloat?: unknown[];
+      __gateBloat?: { visible: boolean }[];
     };
     return {
       armed: scene.simWorld.goalEntryTicks !== null || scene.simWorld.completed,
       onScreen: Boolean(scene.goalObject?.willRender(scene.cameras.main)),
-      copies: (scene.__gateBloat ?? []).length,
+      copies: (scene.__gateBloat ?? []).filter((o) => o.visible).length,
     };
   });
 }
 
-/** Stack `copies` more exits on the real one, or clear them. The amplifier. */
-async function setExitCopies(page: Page, copies: number): Promise<void> {
-  await page.evaluate((n) => {
-    const scene = (
-      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-    ).__phaserGame.scene.getScene('Game') as {
-      goalObject?: {
-        x: number;
-        y: number;
-        originX: number;
-        originY: number;
-        texture: { key: string };
-        displayWidth: number;
-        displayHeight: number;
-      };
-      add: {
-        image(
-          x: number,
-          y: number,
-          k: string,
-        ): {
-          setOrigin(x: number, y: number): {
-            setDisplaySize(w: number, h: number): { setDepth(d: number): { destroy(): void } };
+/**
+ * Show `copies` extra exits stacked on the real one. The amplifier.
+ *
+ * 🔴 **The pool is built ONCE, at `POOL_COPIES`, and the arms toggle `visible`.** The first version
+ * destroyed and re-created the whole stack between arms, which put up to 2560 allocations and their
+ * collection immediately before — and often inside — the window being measured. That is a per-arm
+ * cost with nothing to do with drawing an exit, it varies with whatever the collector felt like, and
+ * it is the difference between the two 2026-08-22 selection runs: `k` read 1.000 and then 0.500 on
+ * an unchanged tree. Pooling makes the display-list walk identical in every arm, so the ONLY thing
+ * the delta contains is submission of the visible ones — which is what the criterion names.
+ */
+async function setExitCopies(page: Page, copies: number, pool: number): Promise<void> {
+  await page.evaluate(
+    ({ n, size }) => {
+      const scene = (
+        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+      ).__phaserGame.scene.getScene('Game') as {
+        goalObject?: {
+          x: number;
+          y: number;
+          originX: number;
+          originY: number;
+          texture: { key: string };
+          displayWidth: number;
+          displayHeight: number;
+        };
+        add: {
+          image(
+            x: number,
+            y: number,
+            k: string,
+          ): {
+            setOrigin(x: number, y: number): {
+              setDisplaySize(w: number, h: number): { setDepth(d: number): { setVisible(v: boolean): unknown } };
+            };
           };
         };
+        __gateBloat?: { visible: boolean }[];
       };
-      __gateBloat?: { destroy(): void }[];
-    };
-    for (const o of scene.__gateBloat ?? []) o.destroy();
-    scene.__gateBloat = [];
-    const g = scene.goalObject;
-    if (!g) throw new Error('no exit to multiply');
-    for (let i = 0; i < n; i += 1) {
-      scene.__gateBloat.push(
-        scene.add
-          .image(g.x, g.y, g.texture.key)
-          .setOrigin(g.originX, g.originY)
-          .setDisplaySize(g.displayWidth, g.displayHeight)
-          .setDepth(7),
-      );
-    }
-  }, copies);
+      const g = scene.goalObject;
+      if (!g) throw new Error('no exit to multiply');
+      if (!scene.__gateBloat || scene.__gateBloat.length !== size) {
+        scene.__gateBloat = [];
+        for (let i = 0; i < size; i += 1) {
+          scene.__gateBloat.push(
+            scene.add
+              .image(g.x, g.y, g.texture.key)
+              .setOrigin(g.originX, g.originY)
+              .setDisplaySize(g.displayWidth, g.displayHeight)
+              .setDepth(7)
+              .setVisible(false) as { visible: boolean },
+          );
+        }
+      }
+      scene.__gateBloat.forEach((o, i) => {
+        o.visible = i < n;
+      });
+    },
+    { n: copies, size: pool },
+  );
 }
 
 /** Set the copy count, confirm it landed, then sample one window. */
 async function sampleArm(page: Page, copies: number): Promise<Sample> {
-  await setExitCopies(page, copies);
+  const drawn = MUTATION === 'capdraw' ? Math.min(copies, CAPDRAW_LIMIT) : copies;
+  await setExitCopies(page, drawn, POOL_COPIES);
   const state = await exitState(page);
-  expect(state.copies, 'the copy count did not land, so both arms drew the same thing').toBe(copies);
+  expect(state.copies, 'the copy count did not land, so both arms drew the same thing').toBe(drawn);
   expect(state.onScreen, 'the exit left the screen, so this window measures nothing').toBe(true);
   expect(state.armed, 'the run-in armed — the sim freezes and the sampler will hang').toBe(false);
   return sample(page, SAMPLE_TICKS);
 }
 
 test.describe('G.7b — the frame cost of the exit', () => {
-  test.setTimeout(240_000);
+  test.setTimeout(600_000);
 
   test('one exit costs a fraction of a millisecond a frame, measured by amplification', async ({
     page,
@@ -268,85 +231,116 @@ test.describe('G.7b — the frame cost of the exit', () => {
     const renderer = await assertRealGpu(page, 'G.7b');
     await installGpuTimer(page);
     await parkAtExit(page);
-
-    const one: Sample[] = [];
-    const half: Sample[] = [];
-    const many: Sample[] = [];
-    for (let i = 0; i < PAIRS; i += 1) {
-      // The order alternates: three A-then-B rounds would give every A a cooler machine.
-      if (i % 2 === 0) {
-        one.push(await sampleArm(page, 0));
-        half.push(await sampleArm(page, HALF_COPIES));
-        many.push(await sampleArm(page, MUTATION_COPIES));
-      } else {
-        many.push(await sampleArm(page, MUTATION_COPIES));
-        half.push(await sampleArm(page, HALF_COPIES));
-        one.push(await sampleArm(page, 0));
-      }
+    // The pool is built here, before any window, so no arm pays for creating it.
+    await setExitCopies(page, 0, POOL_COPIES);
+    if (MUTATION === 'perexit') {
+      await installPerExitCostFixture(page, PER_EXIT_COST_MS);
     }
-    await setExitCopies(page, 0);
 
-    for (const s of [...one, ...half, ...many]) {
+    // ── The sweep, walked in ALTERNATING order ────────────────────────────────────────────────
+    // Round 0 forward, round 1 reversed, round 2 forward: three A-then-B rounds would give every
+    // control a cooler machine than every amplified arm, which is the drift the pairing removes.
+    const rows = new Map<number, Sample[]>(SWEEP_COPIES.map((n) => [n, [] as Sample[]]));
+    for (let r = 0; r < ROUNDS; r += 1) {
+      const order = r % 2 === 0 ? [...SWEEP_COPIES] : [...SWEEP_COPIES].reverse();
+      for (const n of order) rows.get(n)!.push(await sampleArm(page, n));
+    }
+    await setExitCopies(page, 0, POOL_COPIES);
+
+    const all = [...rows.values()].flat();
+    for (const s of all) {
       expect(s.frames, 'too few frames served to say anything').toBeGreaterThanOrEqual(MIN_SAMPLES);
       expect(s.ticks, 'the window spanned no sim ticks').toBeGreaterThan(0);
     }
-    expect(one[0]!.gpuSupported, 'no GPU timing, so half of this was never measured').toBe(true);
-    expect(median(one.map((s) => s.gpuSamples))).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
+    const base = rows.get(BASE_COPIES)!;
+    expect(base[0]!.gpuSupported, 'no GPU timing, so half of this was never measured').toBe(true);
+    expect(median(base.map((s) => s.gpuSamples))).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
 
-    const oneWork = median(one.map((s) => s.workMedianMs));
-    const manyWork = median(many.map((s) => s.workMedianMs));
-    const oneGpu = median(one.map((s) => s.gpuMedianMs));
-    const manyGpu = median(many.map((s) => s.gpuMedianMs));
+    // 🔴 Every figure below is the MEDIAN OF THE PER-ROUND DELTAS, never the delta of two medians.
+    // `medianPairedDelta`'s docstring carries why, and the 2026-08-22 readings that paid for it are
+    // in this file's header.
+    const workOf = (n: number): number[] => rows.get(n)!.map((s) => s.workMedianMs);
+    const gpuOf = (n: number): number[] => rows.get(n)!.map((s) => s.gpuMedianMs);
+    const workDelta = (n: number): number => medianPairedDelta(workOf(BASE_COPIES), workOf(n));
+    const gpuDelta = (n: number): number => medianPairedDelta(gpuOf(BASE_COPIES), gpuOf(n));
 
-    // The amplified delta, divided back down. Floored at 0 because a delta under the noise can come
-    // back slightly negative, and "the exit costs less than nothing" is not a claim worth asserting —
-    // it is the same statement as "under the floor", which is what the bound then reads.
-    const perExitWork = Math.max(0, (manyWork - oneWork) / MUTATION_COPIES);
-    const perExitGpu = Math.max(0, (manyGpu - oneGpu) / MUTATION_COPIES);
+    // The MARGINAL cost, not the total delta over the total count. The gap between the top two
+    // sweep points contains only what the extra `MARGINAL_COPIES` cost: the ~0.5 ms the amplifier
+    // charges for making any copies visible at all is in both points and subtracts out. That is
+    // Codex's Phase 8 finding 3 answered by measurement - `exitCostBudget.ts` has the table.
+    const workGap = (hi: number, lo: number): number => workDelta(hi) - workDelta(lo);
+    const gpuGap = (hi: number, lo: number): number => gpuDelta(hi) - gpuDelta(lo);
+    const perExitWork = Math.max(0, workGap(FIT_HIGH, FIT_MID) / MARGINAL_COPIES);
+    const perExitGpu = Math.max(0, gpuGap(FIT_HIGH, FIT_MID) / MARGINAL_COPIES);
 
-    // The same estimate taken at half the amplification. If the cost is linear in the number drawn,
-    // these two agree and the division above is sound.
-    const halfGpu = median(half.map((s) => s.gpuMedianMs));
-    const perExitGpuHalf = Math.max(0, (halfGpu - oneGpu) / HALF_COPIES);
-
+    const fmt = (v: number[]): string => v.map((x) => x.toFixed(3)).join('/');
+    const detail = [
+      '',
+      `[G.7b] renderer ${renderer}${MUTATION ? `   MUTATION ${MUTATION}` : ''}`,
+      ...SWEEP_COPIES.map(
+        (n) =>
+          `       ${String(n + 1).padStart(5)} exits  work ${fmt(workOf(n))}  gpu ${fmt(gpuOf(n))}` +
+          `  frames ${rows.get(n)!.map((x) => x.frames).join('/')}` +
+          `  per-round paired work ${fmt(workOf(n).map((v, i) => v - workOf(BASE_COPIES)[i]!))}` +
+          `  gpu ${fmt(gpuOf(n).map((v, i) => v - gpuOf(BASE_COPIES)[i]!))}` +
+          `  median work ${workDelta(n).toFixed(3)} gpu ${gpuDelta(n).toFixed(3)} ms`,
+      ),
+      `       sweep gaps  ` +
+        SWEEP_COPIES.slice(1)
+          .map(
+            (n, i) =>
+              `${SWEEP_COPIES[i]}->${n} work ${workGap(n, SWEEP_COPIES[i]!).toFixed(3)} ` +
+              `gpu ${gpuGap(n, SWEEP_COPIES[i]!).toFixed(3)} ms`,
+          )
+          .join(', ') +
+        `  (floors work ${MIN_SWEEP_GAP_WORK_MS}, gpu ${MIN_SWEEP_GAP_GPU_MS})`,
+      `       per exit, marginal over the top ${MARGINAL_COPIES} copies:` +
+        `   work ${perExitWork.toFixed(5)} ms (bound ${MAX_EXIT_WORK_MS})` +
+        `   gpu ${perExitGpu.toFixed(5)} ms (bound ${MAX_EXIT_GPU_MS})`,
+      '',
+    ].join('\n');
     // eslint-disable-next-line no-console
-    console.log(
-      [
-        '',
-        `[G.7b] renderer ${renderer}`,
-        `       1 exit      work ${oneWork.toFixed(3)} ms   gpu ${oneGpu.toFixed(3)} ms`,
-        `       ${MUTATION_COPIES + 1} exits    work ${manyWork.toFixed(3)} ms   gpu ${manyGpu.toFixed(3)} ms`,
-        `       ${HALF_COPIES + 1} exits    work ${median(half.map((s) => s.workMedianMs)).toFixed(3)} ms   gpu ${halfGpu.toFixed(3)} ms`,
-        `       per exit    work ${perExitWork.toFixed(4)} ms   gpu ${perExitGpu.toFixed(4)} ms`,
-        `       per exit at ${HALF_COPIES}          gpu ${perExitGpuHalf.toFixed(4)} ms   (linearity check)`,
-        `       bounds      work ${MAX_EXIT_WORK_MS} ms   gpu ${MAX_EXIT_GPU_MS} ms`,
-        '',
-      ].join('\n'),
-    );
+    console.log(detail);
 
-    // 🔴 The premise the whole measurement rests on: the amplifier has to have DONE something. If 40
-    // extra exits cost nothing measurable, the divisor is dividing noise, and the bound below would
-    // pass for any exit at all — including a ruinously expensive one.
-    expect(
-      manyGpu,
-      `${MUTATION_COPIES} extra exits did not cost the GPU anything — the amplifier is not amplifying, ` +
-        'so the per-exit figure is noise over 40 and this gate is measuring nothing',
-    ).toBeGreaterThan(oneGpu);
+    // -- Guard 1: every gap in the sweep RESPONDS to the count ---------------------------------
+    //
+    // **The statistic that replaced `MAX_LINEARITY_SPREAD`**, and the thing that guard's error
+    // message always claimed to be checking. A gap is a difference two medians of per-round paired
+    // deltas apart, so the amplifier's count-independent cost cancels out of it and what is left is
+    // exactly "did drawing more exit cost more". `PERF_MUTATION=capdraw` is the red proof.
+    for (let i = 1; i < SWEEP_COPIES.length; i += 1) {
+      const lo = SWEEP_COPIES[i - 1]!;
+      const hi = SWEEP_COPIES[i]!;
+      expect(
+        gpuGap(hi, lo),
+        `going from ${lo} to ${hi} extra exits cost the GPU ${gpuGap(hi, lo).toFixed(3)} ms more, ` +
+          `under the ${MIN_SWEEP_GAP_GPU_MS} ms floor. The frame stopped getting more expensive ` +
+          'when more exit was drawn, so dividing a delta by a copy count is not a per-exit figure ' +
+          `and the ceilings below would pass for an exit of any cost at all.${detail}`,
+      ).toBeGreaterThanOrEqual(MIN_SWEEP_GAP_GPU_MS);
+      expect(
+        workGap(hi, lo),
+        `going from ${lo} to ${hi} extra exits cost the main thread ` +
+          `${workGap(hi, lo).toFixed(3)} ms more, under the ${MIN_SWEEP_GAP_WORK_MS} ms floor. ` +
+          'The frame stopped getting more expensive when more exit was drawn, so dividing a delta ' +
+          `by a copy count is not a per-exit figure.${detail}`,
+      ).toBeGreaterThanOrEqual(MIN_SWEEP_GAP_WORK_MS);
+    }
 
-    // 🔴 LINEARITY. Without this the division is an assumption, not a measurement — Codex's
-    // implementation review, finding 3. Two independent estimates of the same quantity, taken at
-    // different amplifications; if the cost of drawing the exit scales with how many are drawn, they
-    // agree. A ratio rather than a difference, because both are tiny and an absolute tolerance would
-    // be a bound on noise.
-    const spread =
-      Math.max(perExitGpu, perExitGpuHalf) / Math.max(1e-6, Math.min(perExitGpu, perExitGpuHalf));
-    expect(
-      spread,
-      `the per-exit cost measured at ${HALF_COPIES} copies (${perExitGpuHalf.toFixed(4)} ms) and at ` +
-        `${MUTATION_COPIES} (${perExitGpu.toFixed(4)} ms) disagree by ${spread.toFixed(1)}x. The cost ` +
-        'does not scale with the number drawn, so dividing the delta by the count is not a per-exit ' +
-        'figure and this gate is not measuring what it says it is.',
-    ).toBeLessThan(MAX_LINEARITY_SPREAD);
+    // -- Guard 2: the amplifier amplified, PER ROUND, on the GPU -------------------------------
+    //
+    // The premise the whole measurement rests on, and the reason it is per-round rather than on the
+    // medians: the statistic this replaced compared two medians and read the amplifier as *cheaper*
+    // than the control in 1 round of 6.
+    const gpuBase = gpuOf(BASE_COPIES);
+    gpuOf(FIT_HIGH).forEach((v, i) => {
+      expect(
+        v - gpuBase[i]!,
+        `round ${i}: ${FIT_HIGH} extra exits cost the GPU ${(v - gpuBase[i]!).toFixed(4)} ms more ` +
+          'than none - the amplifier is not amplifying in this round, so every figure taken from ' +
+          `it is noise.${detail}`,
+      ).toBeGreaterThan(0);
+    });
 
     expect(perExitWork, 'the exit costs the main thread more per frame than it should').toBeLessThan(
       MAX_EXIT_WORK_MS,

@@ -362,7 +362,7 @@ that its reasoning talked past finding 1.
 | G.5 | Alpha reaches 0 over a tick-counted window; the curve has a red proof | unit + e2e | `voltagent-qa-sec:code-reviewer` | ✅ curve, window length and override all watched failing |
 | G.6 | No blink-out, no pop-back — all 5 levels, by hand | `playwright-cli` + hands-on *(C4)* | play | ✅ 5 levels pre-fix; probe-driven re-check after |
 | G.7a | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | `voltagent-qa-sec:code-reviewer` | ✅ 1 file over 400, cited |
-| G.7b | Frame budget unchanged | amplified A/B on real GPU | `voltagent-qa-sec:performance-engineer` | ✅ **0.0009-0.0065 ms/frame per exit, bound 0.05** |
+| G.7b | Frame budget unchanged | amplified sweep on real GPU | `voltagent-qa-sec:performance-engineer` | ✅ **0.00038-0.00050 ms gpu, 0.00098-0.00188 ms work per exit, bound 0.05** — restated 2026-08-22 when the linearity guard was replaced; the 0.0009-0.0065 band it used to read came from the unpaired statistic that was retired |
 | G.8 | Codex plan review ran; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-plan.md) | — | ✅ **12 findings, 10 applied, 2 recorded** |
 | G.9 | Codex implementation review ran on the diff; every finding applied or recorded | [the review](../reviews/session-gate-art-and-entry-impl.md) | codex | ✅ **BLOCK, 4 findings, all applied** |
 
@@ -850,3 +850,206 @@ Constraints say **$50** (raised from $25 on 2026-08-16). `GENERATION-LOG.md` say
 *"Running total after Phase 6: $47.61 of the **$55** ceiling."* This session's $0.15–$0.30 fits
 under either reading, so it proceeds and names the contradiction rather than quietly picking a
 winner. **Which number is current is the owner's call.**
+
+---
+
+## 2026-08-22 — G.7b was flaky, and its linearity guard was replaced
+
+**Inherited, not a Phase 9 regression.** The criterion is Phase 8's; the repair was taken on the
+Phase 9 branch because that is where the full-suite red surfaced. `src/` was not touched — the defect
+was in the gate, and nothing in the readings implicates the game.
+
+### The failure, reproduced
+
+Reported failure text, from the full suite:
+
+```
+Error: the per-exit cost measured at 20 copies (0.0000 ms) and at 40 (0.0000 ms) disagree by 25.6x.
+```
+
+Reproduced on the **first** attempt of this session:
+
+```
+       1 exit      work 0.400 ms   gpu 0.166 ms
+       41 exits    work 0.400 ms   gpu 0.226 ms
+       21 exits    work 0.500 ms   gpu 0.145 ms
+       per exit    work 0.0000 ms   gpu 0.0015 ms
+       per exit at 20          gpu 0.0000 ms   (linearity check)
+Error: the per-exit cost measured at 20 copies (0.0000 ms) and at 40 (0.0015 ms) disagree by 1510.4x.
+```
+
+🔴 **Read the 21-exit line.** It measured **0.145 ms** against the 1-exit control's **0.166 ms** —
+twenty extra exits made the GPU *faster*. That is the whole defect in one row.
+
+### The statistic that failed, verbatim
+
+```ts
+const perExitGpu     = Math.max(0, (manyGpu - oneGpu) / MUTATION_COPIES);   // 40 copies
+const perExitGpuHalf = Math.max(0, (halfGpu - oneGpu) / HALF_COPIES);       // 20 copies
+const spread = Math.max(a, b) / Math.max(1e-6, Math.min(a, b));
+expect(spread).toBeLessThan(MAX_LINEARITY_SPREAD);                          // 4
+```
+
+`oneGpu`, `halfGpu` and `manyGpu` are each `median(...)` over three windows sampled **minutes apart**.
+
+### Root cause — three defects, measured
+
+| | Defect | The measurement that proves it |
+|---|---|---|
+| **1** | **Unpaired medians of a within-noise effect.** 6.9's discarded GPU ratio, 5.11 and 9.5's Guard 1 are the earlier three sightings. | Per-**round paired** deltas at 40 copies, six rounds: **0.924 / 0.063 / 0.063 / −0.071 / 0.146 / 0.164 ms**. One round in six is negative; the spread is ±300 % of the median. |
+| **2** | **`spread < 4` at an amplification ratio of 2 cannot fire in the range it polices.** Under `c·N^k` the spread is `R^|k−1|`, so at `R = 2` every law from `O(1)` to `O(N^2.99)` satisfies it. | Already established by 9.5, which retired the identical statistic. Restated here because G.7b was the *source* 9.5's Guard 3 docstring cites. |
+| **3** | **The amplifier destroyed and re-created the whole stack between arms** — up to 2560 allocations and their collection immediately before, and often inside, the measured window. | Two selection runs on an unchanged tree disagreed about the cost of 2560 copies by **2x**: work paired delta **3.600 ms** then **1.600 ms**. After pooling, the per-round GPU deltas at 5120 read **2.470 / 2.468 / 2.463**. |
+
+### 9.5's repair transfers by half, and the half that does not is a measurement
+
+**Pairing** transfers unchanged — every delta is now `medianPairedDelta`, the median of per-round
+differences. **Widening the arms** transfers — 40 copies became a sweep to 5120, and every reading is
+whole milliseconds instead of one step of a 0.1 ms clock.
+
+🔴 **9.5's cost EXPONENT does not transfer, and it was tried before it was rejected.** Fitted on this
+gate's readings, `k` swung **0.50 / 0.84 / 1.00 / 1.52** across four runs of an unchanged tree, on the
+main-thread and the GPU arm alike. One of those runs (`sel-02`) is a false red against a floor of
+0.78, watched. `k` is a ratio of two differences and the smaller one is a few clock steps wide however
+far the arms are separated — a floor tight enough to mean anything false-reds, a floor loose enough to
+survive means nothing. Under this project's rule the statistic was replaced a **second** time rather
+than re-bounded.
+
+### What the sweep showed, and the statistic that came out of it
+
+Paired deltas against the 1-exit control, pooled amplifier:
+
+| copies | 640 | 1280 | 2560 | 5120 |
+|---|---|---|---|---|
+| gpu | 0.888 | 1.176 | 1.468 | 2.468 ms |
+| work | 0.000 | 0.400 | 1.200 | 3.300 ms |
+
+The GPU column is **not proportional to the count**: making *any* copies visible costs ~**0.5 ms** on
+its own — a render-state and batch cost of splitting the scene at depth 7 — and only the rest scales.
+Dividing a total delta by the count attributes that fixed half-millisecond to individual exits, which
+is **Codex's Phase 8 finding 3 arriving as a measurement rather than an objection**.
+
+**So the gate reports the MARGINAL cost and the fixed part cancels.** `perExit` is the gap between the
+top two sweep points over the copies added between them, not the top delta over the top count. A
+count-independent cost appears in both points and subtracts out, so the statistic is *immune* to the
+defect the old guard was *guarding* against.
+
+| | old | new |
+|---|---|---|
+| deltas | difference of two independently-taken medians | **median of per-round paired differences** |
+| amplification | 20 and 40 copies | sweep **0 / 2560 / 5120**, pooled and toggled by `visible` |
+| per-exit figure | `delta(40) / 40` — a total over a count | **`(delta(5120) − delta(2560)) / 2560`** — a marginal cost |
+| the guard | `spread < 4` over two per-exit estimates | **every sweep gap ≥ `MIN_SWEEP_GAP_*_MS`** (0.3 ms, both arms) |
+| red proof | none — the guard was never watched failing | **`PERF_MUTATION=capdraw`**, below |
+
+### 🔴 Watched failing — `PERF_MUTATION=capdraw`
+
+The visible count is capped at 2560, so the top arm asks for 5120 copies and draws 2560. Nothing else
+changes: same pool, same display list, same control, every window still over `MIN_SAMPLES`, first gap
+still clears its floor. Verbatim:
+
+```
+        2561 exits  per-round paired work 1.600/1.700/1.800  gpu 1.404/1.307/1.407  median work 1.700 gpu 1.404 ms
+        5121 exits  per-round paired work 1.500/1.900/1.700  gpu 1.349/1.308/1.269  median work 1.700 gpu 1.308 ms
+       sweep gaps  0->2560 work 1.700 gpu 1.404 ms, 2560->5120 work -0.000 gpu -0.096 ms  (floors work 0.3, gpu 0.3)
+
+Error: going from 2560 to 5120 extra exits cost the GPU -0.096 ms more, under the 0.3 ms floor. The
+frame stopped getting more expensive when more exit was drawn, so dividing a delta by a copy count is
+not a per-exit figure and the ceilings below would pass for an exit of any cost at all.
+
+    expect(received).toBeGreaterThanOrEqual(expected)
+    Expected: >= 0.3
+    Received:    -0.09625600000000012
+```
+
+Against a clean band of **0.976 – 1.482 ms** on that same gap over twenty runs, the mutated reading is
+**−0.096**. The mutation is a committed, env-gated fixture (`CAPDRAW_LIMIT`), not a source edit, so
+there is nothing to revert and nothing to leave applied by accident — the C12 hazard the rule names
+does not exist for it. The tree carries no mutation: the twenty clean runs below were taken from it.
+
+### 🔴 And the ceilings ORDER a genuine per-exit regression — `PERF_MUTATION=perexit`
+
+A per-frame main-thread cost of **0.005 ms for every visible copy**: an exit that got more expensive
+to draw, which is what `MAX_EXIT_WORK_MS` exists for.
+
+| | clean (green-1) | `perexit` | expected |
+|---|---|---|---|
+| per exit, work | 0.00188 ms | **0.00605 ms** | 0.00188 + 0.005 = 0.0069 |
+| sweep gaps | 2.000 / 4.800 | 17.500 / 15.500 | still ordered, still green |
+| frames served | 720 / 720 / 720 | 720 / 175 / 93 | over `MIN_SAMPLES` 60 |
+
+The reported figure tracks the injected cost to within the clock's own resolution, and the gap guards
+correctly stay **green** — the cost still scales with the count, so nothing about the inference broke.
+
+⚠️ **The 0.05 ms ceilings themselves are NOT watchable-red on this harness, and that is arithmetic.**
+0.05 ms per exit at 5120 copies is **256 ms** added to every frame of the top arm, which serves ~11
+frames in a `SAMPLE_TICKS` window against a `MIN_SAMPLES` of 60 — `sampleArm`'s own precondition fires
+first, so the ceiling can never be the assertion that reds. At 0.005 ms the top arm is already down to
+93 frames. This is recorded, not worked around: the ceilings are a smoke alarm for a catastrophic
+change, and what stands behind the number is the gap guard plus the ordering evidence above. **Moving
+them was out of scope for this repair and they are byte-identical to Phase 8's.**
+
+### The bound, chosen on one set and confirmed on a HELD-OUT set
+
+`MIN_SWEEP_GAP_GPU_MS = MIN_SWEEP_GAP_WORK_MS = 0.3`, at roughly a quarter of the smallest reading in
+the selection set.
+
+| set | runs | `0→2560` gpu | `2560→5120` gpu | `0→2560` work | `2560→5120` work | outcome |
+|---|---|---|---|---|---|---|
+| **selection** | 4 clean of 5 | 1.278 – 1.384 | 1.043 – 1.152 | 1.800 – 2.500 | 2.700 – 4.400 | bound set at 0.3 |
+| **held out** | 5 | 1.151 – 1.319 | 1.113 – 1.435 | 3.000 – 5.100 | 2.700 – 4.400 | **5/5 green** |
+| **flake proof** | 10 | 1.287 – 1.482 | 0.976 – 1.162 | 1.500 – 2.400 | 2.500 – 4.800 | **10/10 green** |
+
+The worst reading any run has produced against the floor is **0.976 ms**, 3.25x above it. The
+mutation reads **−0.096**. Nothing sits between them.
+
+**One selection run (`pick-2`) did not produce a reading**: it hung in `perfSampler.sample()` and hit
+the 600 s test timeout. It is excluded from the selection band because it measured nothing, and it is
+**disclosed rather than dismissed** — see *Open, for the owner* below.
+
+### The flake proof — 10 consecutive green, detected POSITIVELY
+
+Each of `green-1` … `green-10` was checked for three things, never for a zero exit code and never
+through a pipe:
+
+```
+Running 1 test using 1 worker
+  ok 1 [chromium-gpu] › tests\e2e\phase-08-gate-perf.spec.ts:227:3 › G.7b — the frame cost of the
+      exit › one exit costs a fraction of a millisecond a frame, measured by amplification (31.3s)
+  1 passed (36.0s)
+```
+
+The **test count** (`Running 1 test`, `1 passed`) is read as well as the name — a run that selected
+nothing reports `expected: 0` and exits 0. No run in the ten printed a `failed` line.
+
+Before the repair the same command reproduced the failure on run 1 of 1.
+
+An **eleventh** run was taken after merging `main` at `8faba6f` (docs only) — green, with gaps
+`0→2560 work 1.400 gpu 1.317`, `2560→5120 work 1.800 gpu 1.057`. That 1.400 is the smallest work gap
+any of the twenty-one clean runs produced, and it is still **4.7x** above the floor.
+
+### The finding
+
+**One exit costs 0.00038 – 0.00050 ms of GPU and 0.00098 – 0.00188 ms of main-thread work per frame**,
+marginal, over twenty runs. Against a 16.67 ms frame that is **0.011 %** at worst, and the ceilings sit
+26x above the worst main-thread reading and 100x above the worst GPU one.
+
+### Files
+
+| File | What changed |
+|---|---|
+| `tests/e2e/phase-08-gate-perf.spec.ts` | the measurement: pooled amplifier, paired deltas, marginal per-exit, two gap guards and the per-round premise guard. 352 lines. |
+| `tests/e2e/exitCostBudget.ts` | **new** — every number and both fixtures, split out when the repair took the spec over 400 lines. The seam `perfBudget.ts` and `effectBudget.ts` already use. 217 lines. |
+
+Neither is over 400 lines, so no `SIZE-EXEMPTION` is claimed.
+
+### Open, for the owner
+
+⚠️ **One run in twenty-two hung, and the cause is not established.** `pick-2` sat in
+`page.evaluate` inside `perfSampler.sample()` until the 600 s timeout, having produced no reading; the
+other twenty-one clean runs and both mutation runs completed in 31–48 s. The likely cause is the one
+this project has already recorded — **another Playwright job on the same box** (`tasklist` showed
+several other `node.exe` processes throughout the session, and a sibling agent was repairing a
+different gate at the same time), which CLAUDE.md §5 names as producing exactly this presentation. It
+is possible instead that 5120 stacked copies at 637 Mpx/frame provoked a driver stall. **It did not
+recur in the twenty runs taken after it**, but it was not chased to a root cause and the copy count
+was not lowered on a hypothesis. Recorded rather than assumed away.
