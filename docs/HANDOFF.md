@@ -1,12 +1,12 @@
 # Session handoff — Phase 9 (polish, juice, particles)
 
-> ## ✅ All eleven Phase 9 criteria are green. **STOP for the owner's approval before merging.**
+> ## ✅ Phase 9 is APPROVED and MERGED. Owner tested it 2026-08-22; `main` is `a99c1f7`, pushed.
+>
+> **One defect came out of that playtest and is next session's first job — the jump clip. See below.**
 >
 > Both Codex reviews ran and every finding from both is applied or recorded with a reason. The gate
 > owners ran twice each *(A7)* in isolated worktrees. The juice has been played by hand and the
 > evidence clip approved — **twice**, because the first approval was withdrawn (see §3 below).
-> Nothing is merged and nothing should be until the owner says so.
->
 > **One gate is red and it is NOT a Phase 9 criterion:** Phase 8's **G.7b** — inherited, flaky at
 > roughly 3 runs in 8 on `main` as well as here, and under repair in its own worktree. Phase 9 did
 > not cause it and cannot close it.
@@ -75,12 +75,60 @@ accepted `1e308` and froze the game permanently, and `isSafeInteger` alone still
 
 Greenness was read **positively** — the test count, not the exit code, and never through a pipe.
 
+## Next session's first job — the jump clip reads smaller and different (owner-reported, 2026-08-22)
+
+The owner played the merged Phase 9 build and approved it, with one defect to fix next session:
+**the jump animation looks different from the rest of the animations, and looks smaller.**
+
+**Measured before writing this note**, so next session starts from numbers rather than an
+impression. Drawn figure height per frame (opaque rows within the 336x384 cell, read off the shipped
+`public/assets/characters/brass-courier/sheets/*.png` with `tools/gen/png.mjs`):
+
+| clip | per-frame heights | mean | vs idle |
+|---|---|---|---|
+| idle | 287-289 | 288.1 | - |
+| walk | 286-292 | 288.9 | 100% |
+| attack | 283-289 | 287.6 | 100% |
+| run | 261-279 | 275.7 | 96% |
+| fall | 277,263,246,224,206,203,206,218,232 | 230.6 | starts full, tapers |
+| **jump** | **215,186,195,201,204,197** | **199.7** | **69%** |
+| death | 288 -> 64 | 145.2 | shrinks legitimately (collapse) |
+
+**Jump never reaches full height on any of its six frames** (max 215). Fall's first frame is 277, so
+an airborne pose *can* read near-full height on this character - jump is uniformly short, not merely
+tucked. `renderHeightPx` is 288.
+
+Two leads, in the order worth testing:
+
+1. **Jump has no `_actionScale` override and may need one.** In
+   `public/assets/config/character-bounds.json`, `fall` carries `scale: 0.6`, `attack` `0.6` and
+   `death` `0.60504202` - per-(slug, action) overrides added because those were shot from PADDED
+   generations. **`jump` carries none**, so it packs at the unpadded slug default `0.23723229`.
+   Jump and fall are the airborne pair and share `verticalAnchor: "centroid"`; one having a padded
+   scale and the other not is the asymmetry to check first. **Caveat, do not skip it:** a straight
+   missing 0.6 override would make jump ~40% of idle, and it measures 69% - so if this is the cause
+   the padding differs from fall's, and the number must be RE-DERIVED, never guessed.
+   `node tools/gen/build-assets.mjs brass-courier jump --derive-scale` prints it; **a human pastes
+   it** *(vault A5)*. The scale lives in the config on purpose - `assets:build` reads it and never
+   computes it.
+2. **"Looks different" is probably the derivation path, not the pose.** In `public/assets/index.json`
+   `jump` and `fall` are `derivedFrom: "sim"` while `idle`/`walk`/`run` are `"authored"`. The two
+   airborne clips came through a different pipeline from everything the owner is comparing them
+   against.
+
+**Before regenerating anything:** re-read `docs/ASSET-PIPELINE.md` and `docs/STYLE.md`, and note that
+regenerating `idle` re-derives the slug scale and silently rescales **every** other animation
+*(vault A5)* - so idle is rebuilt FIRST or not at all. A fal batch over 5 generations needs a
+STOP-and-ask.
+
 ## What is outstanding
 
-1. **G.7b** (`tests/e2e/phase-08-gate-perf.spec.ts:264`) — inherited Phase 8 gate, both arms measured
+1. **The jump clip** — see the section above. Owner-reported, measured, not yet fixed.
+2. **G.7b** (`tests/e2e/phase-08-gate-perf.spec.ts:264`) — inherited Phase 8 gate, both arms measured
    `0.0000 ms`. Under repair using 9.5's pattern: pair the rounds, widen the arm separation. Moving
    the bound, skipping and deleting are all forbidden.
-2. **Phase 9 has not been merged to `main`** and must not be until the owner approves.
+3. ~~Phase 9 is unmerged~~ — **DONE.** Owner tested and approved 2026-08-22; merged to `main` as
+   `a99c1f7` and pushed to `origin`.
 
 ---
 
