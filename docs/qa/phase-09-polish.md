@@ -1307,6 +1307,11 @@ Clean, `chromium-gpu`, alone on the box, one run at a time, each read out of a r
 
 A seventh clean sweep rode inside the `storm8192` mutation run: **k = 1.086** from 0.700 / 6.700.
 
+An **eighth**, from the full-suite run that closed the Codex implementation round (2026-08-22,
+`119 passed` in 16.0m): **k = 1.057** from 0.400 ms at 1024 and 3.600 ms at 8192, `per particle
+0.00044` (bound 0.003), `absolute 0.700` (bound 2.5). Still above 1 — which is the reading entry 47
+turns on, because an affine cost law cannot produce it.
+
 **Measured `k` over all seven: 1.086 – 1.286, never below 1.** The floor at 0.9 is cleared by
 0.19–0.39, which is 3–4 clock steps of adverse movement on the low delta — the low delta would have
 to read ~1.1 ms against an observed range of 0.400–0.700. `shaken frames 100.0–100.0 %` on all 280
@@ -1507,6 +1512,43 @@ amplitudes) remain a **grey-box judgement pending the art pass**. Every one is p
 with a fixture either side, so a retune reds and comes back here for a fresh look — which is the
 protection this criterion actually has. The clip is the record of what "good" looked like on
 2026-08-22, not a proof that the numbers are right in the abstract.
+
+---
+
+## Criterion 9.11 — the Codex implementation round, and what it cost to close
+
+Triage table with a verdict per finding: `docs/reviews/phase-09-impl.md`. Entries 14, 15, 47, 48 and
+49 above are the record; this section is the verification.
+
+**Every gate written or changed in the round was watched failing with the mutation its assertion
+names**, verbatim, then reverted and confirmed by "content changed AND the original count dropped by
+one" *(C1, C12)*:
+
+| gate | mutation | red |
+|---|---|---|
+| `phase-09-draw.spec.ts` — the dot is opaque | `particleTexture.ts:48` `fillStyle(spec.tint, 1)` -> `(spec.tint, 0)` | `1 failed, 2 passed` — *"fx-particle-sparks is TRANSPARENT at its centre"*. The two siblings passing IS Codex finding 2. |
+| the same, colour half | `fillStyle(spec.tint, 1)` -> `fillStyle(0xffffff, 1)` | `1 failed, 2 passed` — *"fx-particle-sparks was baked in the wrong colour"* |
+| `effects-behaviour.test.ts` — the multi-tick landing | the **pre-fix production code itself**: control arm 1 dust + squash, batched arm **0 dust, no squash** | that is finding 7, reproduced |
+| `effects-behaviour.test.ts` — the emit window | the pre-fix `(cursor, tick]` window: zero explosions in the production order | entry 49 |
+| `hitstop-frozen-counters.test.ts` — outgoing i-frames | `combat.ts` step 4b.1 `if (!held)` -> `if (true)` | *"i-frames advanced on frozen tick 1: expected 31 to be 30"* |
+
+**Verification, all four green on the same tree:**
+
+- `npx vitest run` — **2151 passed | 3 skipped (2154)**, 133 files. Baseline was 2147 | 3; the four
+  new tests are the multi-tick landing, the gentle-touchdown squash, the emit window and the outgoing
+  i-frame freeze.
+- `npm run test:sim-isolated` — **2151 passed | 3 skipped (2154)**, `phaser@4.2.1` reinstalled. The
+  round adds a file to `src/sim/` (`playerSim.ts`), so this is the one that matters.
+- `npm run test:e2e` — **119 passed** in 16.0m, exit 0 read from a redirected file, count matched
+  against the baseline of 119. Net zero: the pixel gate is added and the duplicated `TINT_MODE_ADD`
+  pin removed. No re-run was needed — none of the three known-flaky specs fired.
+- `npm run build` — `verify-dist ok: 5 level(s) and 11 audio file(s) shipped byte-identical, no
+  DEV-only scene key or debug surface in 1 bundle(s)`.
+
+**Nothing is over 400 lines.** `src/sim/types.ts` 320 (was 400) after `PlayerSim` moved to
+`playerSim.ts`; `src/sim/tick.ts` 394 (was 400); `src/scenes/gameEffects.ts` 400;
+`tests/e2e/phase-09-draw.spec.ts` 400; `tests/unit/effects-behaviour.test.ts` 322 after its fake
+scene moved to `tests/unit/effects-fixtures.ts`. Entry 48 records what the rule cost this round.
 
 **A note on capturing it, because it cost time and will again.** The first capture attempt produced no
 attacks at all and the keyboard looked broken. It was not: the player had run into the goal, which
