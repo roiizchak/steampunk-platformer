@@ -66,6 +66,47 @@ passing.** Only then decide whether `PRD.md:35` becomes `✅ done`. *A QA-LOG ro
 still a sentence a human wrote* (`QA-LOG.md:262`); this item is that failure inverted — the work
 happened and nobody wrote the sentence.
 
+### 0.2 ✅ The DEV SERVER boots in 33 s; the shipped build boots in 0.4 s. Do this before any e2e.
+
+`tests/e2e/phase-01-boot.spec.ts:50` (criterion 1.4) fails **consistently — 6 runs of 6** — with
+`Test timeout of 30000ms exceeded`. **The game is not broken.** Measured directly on 2026-08-22, not
+through the harness:
+
+| what | time to terminal state |
+|---|---|
+| production build (`vite preview` over `dist/`) | **0.4 s** to a 1920-wide canvas |
+| dev server, stale dep cache | **33.1 s** to `ready:true` |
+| dev server, after `vite --force` | **12.9 s** |
+| a real browser against the dev server | `ready:true`, `bootError:null`, **0 console errors** |
+
+So this is **vite's dependency pre-bundling**, not the boot path, and **a player is unaffected**. But
+it fails criterion 1.4 on every run and it makes the whole e2e suite look broken, so it comes first.
+
+**The cause and the fix.** `node_modules/.vite/` holds a leftover `deps_temp_<hash>/` directory — an
+interrupted optimizer run. Every `npm run test:e2e` starts a **fresh** vite through `webServer`, which
+re-does that work, and cold-start + optimize + first transform exceeds the 30 s test timeout.
+`vite --force` on an already-running server cut 33 s to 12.9 s but did **not** make the spec pass,
+because Playwright's server is always cold.
+
+Clear the cache and re-measure before touching anything else:
+
+```bash
+rm -rf node_modules/.vite        # regenerable build cache, not project state
+npm run test:e2e -- tests/e2e/phase-01-boot.spec.ts -g "1.4 canvas mounts"
+```
+
+⚠️ **The likely trigger is `npm run test:sim-isolated`**, which uninstalls and reinstalls Phaser
+(`CLAUDE.md §1` already warns it mutates `node_modules`). That invalidates vite's dep optimization,
+and Phaser unbundled is ~1000 ES modules served one HTTP request at a time. **If that is confirmed,
+it belongs in `CLAUDE.md §1` beside the existing warning** — the recovery line there covers a missing
+Phaser, not a poisoned dep cache.
+
+⚠️ **Do not "fix" this by raising `BOOT_TIMEOUT` or the test timeout.** There is deliberately no
+loader timeout *(vault 1.4)*; a bound loose enough to survive a 33 s dev boot is loose enough to hide
+a genuine hang. If the cache clear does not fix it, measure `dist/` again before suspecting the game.
+
+---
+
 ---
 
 ## TIER 1 — can break a playthrough. Fix these first.
@@ -368,7 +409,7 @@ npm run typecheck · npm test · npm run build · npm run test:sim-isolated · n
 
 Phase 9 closed at: typecheck clean · unit **2154 / 0 fail** (133 files) · build exit 0 with
 `verify-dist ok: 5 level(s) and 11 audio file(s) byte-identical` · `test:sim-isolated` **2151 passed /
-3 skipped** · e2e **118 passed / 1 failed** (G.7b). **Anything worse is a regression this session
+3 skipped** · e2e **118 passed / 1 failed** — G.7b is now FIXED (`368577f`, verified independently: watched red under `PERF_MUTATION=capdraw`, 5/5 clean with gaps 1.091–1.314 ms against a 0.3 floor). The remaining failure is **1.4**, which is §0.2, not the game. **Anything worse is a regression this session
 caused.** Every fix should *raise* the unit count — one that lands without raising it probably
 shipped without a gate.
 

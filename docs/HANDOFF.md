@@ -7,9 +7,13 @@
 > Both Codex reviews ran and every finding from both is applied or recorded with a reason. The gate
 > owners ran twice each *(A7)* in isolated worktrees. The juice has been played by hand and the
 > evidence clip approved — **twice**, because the first approval was withdrawn (see §3 below).
-> **One gate is red and it is NOT a Phase 9 criterion:** Phase 8's **G.7b** — inherited, flaky at
-> roughly 3 runs in 8 on `main` as well as here, and under repair in its own worktree. Phase 9 did
-> not cause it and cannot close it.
+> **G.7b is FIXED** (`368577f`) — Phase 8's inherited gate, flaky ~3 runs in 8. Its statistic was
+> replaced, not its bound: a paired 0/2560/5120 sweep with a 0.3 ms floor per gap and a MARGINAL
+> per-exit cost, so the amplifier's count-independent overhead cancels. Verified independently.
+>
+> **The e2e suite now fails on criterion 1.4 instead, and that is the DEV SERVER, not the game:**
+> `dist/` boots in **0.4 s**, the dev server in **33 s** with a stale `node_modules/.vite` dep cache.
+> See SESSION-PROMPT-next.md §0.2.
 >
 > Full record: [qa/phase-09-polish.md](qa/phase-09-polish.md) (including
 > **§ Vault-out — Phase 9**) · [plan review](reviews/phase-09-plan.md) ·
