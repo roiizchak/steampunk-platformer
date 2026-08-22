@@ -8,8 +8,16 @@
  * that shape twice — twelve of twenty enemies as grey-box Rectangles with every gate green, and a
  * death fade that played a whole ten-frame KO at 35 % opacity while the sampler reported ten of ten
  * poses painted *(vault 9.4)*. `phase-09-draw.spec.ts` owns criterion 9.6, but this file does not
- * depend on that one having run: **Guard 0 and Guard 0b re-take the same statistic per arm**, on
+ * depend on that one having run: **Guard 0 and Guard 0b re-take a drawn count per arm**, on
  * particles and on the twenty enemies, before a single millisecond is compared here.
+ *
+ * 🔴 **One of 9.6's three particle checks, not three.** `sampleArm` re-takes `particleCounts().drawn`
+ * and `counts().opaque`; it does **not** re-take `emittersDrawing`, `inCameraList` or `inView`. The
+ * named regression `inCameraList` exists for — `scene.add.particles` → `scene.make.particles`, which
+ * leaves the emitter on no display list while `willRender` still returns true — has no copy here. It
+ * is INFERRED (not watched) that it would still red this file, through the premise floor rather than
+ * through Guard 0: off the update list the particles stop ageing, the sweep goes flat and the 0.2 ms
+ * gap fires. Inferred is written down as inferred.
  *
  * ## The seam
  *
@@ -21,12 +29,19 @@
  * ## Every mutation is one shell variable — none has to be reinvented
  *
  * ```
- * PERF_MUTATION=storm8192   …  # the absolute frame budget
- * PERF_MUTATION=fleetscale0 …  # Guard 0b — the twenty enemies this test's headline names
- * PERF_MUTATION=scale0      …  # Guard 0 — the particles, by the emitter render gate
- * PERF_MUTATION=noshake     …  # Guard 0c — the SHAKE, the third load 9.5's sentence names
- * PERF_MUTATION=stall       …  # the window's deadline, in place of a ten-minute hang
+ * PERF_MUTATION=storm8192     …  # the absolute frame budget
+ * PERF_MUTATION=fleetscale0   …  # Guard 0b — the twenty enemies this test's headline names
+ * PERF_MUTATION=scale0        …  # Guard 0 — the particles, by the emitter render gate
+ * PERF_MUTATION=particlescale0…  # Guard 0 — the particles, by the PER-PARTICLE gate `scale0` misses
+ * PERF_MUTATION=noshake       …  # Guard 0c — the SHAKE, the third load 9.5's sentence names
+ * PERF_MUTATION=flatcost      …  # Guard 3 — a frame cost that does not scale with the count
+ * PERF_MUTATION=stall         …  # the window's deadline, in place of a ten-minute hang
  * ```
+ *
+ * 🔴 **`particlescale0` was registered and applied NOWHERE in this file**, so it ran clean and
+ * reported `1 passed` — one of the six names producing exactly the outcome the paragraph below calls
+ * impossible, and it meant Guard 0 had never been watched failing against the per-particle branch at
+ * all. Registering a mutation is not wiring one.
  *
  * Anything else throws (`namedMutation`): a proof that silently ran clean would report a green
  * suite, which is the most convincing possible evidence that nothing was tested.
@@ -47,7 +62,12 @@
  *    `MAX_EFFECT_FRAME_P95_MS` gates the spikes every median here is blind to. *(entry 45)*
  *  - **"Max enemies" is the largest fleet this project MEASURES** — S5, still open. *(entry 6)*
  *  - **96 particles sit below this browser's clock grid** — the amplified storm is measured and
- *    divided back, legal only while linear, and the spec asserts the linearity. *(entry 5)*
+ *    divided back. That is conservative while the cost exponent is at least 1, and Guard 3 measures
+ *    the exponent. It used to say *"legal only while linear, and the spec asserts the linearity"*,
+ *    and the spec asserted no such thing — see Guard 3. *(entry 5)*
+ *  - **🔴 The level, the HUD and the player sprite are in the frame and nothing checks they are** —
+ *    only the enemies, the particles and the shake are re-taken per arm, and all three unchecked
+ *    loads make the absolute bound EASIER when absent. *(entry 46)*
  *  - **No GPU timer, deliberately** — a main-thread cost, so a GPU ratio is the wrong instrument
  *    (6.9's history), and the timer would add work to this file's own absolute bound.
  *  - **An absolute millisecond from this harness is not one from a player's machine.** The renderer
@@ -58,10 +78,10 @@ import { expect, test } from '@playwright/test';
 
 import {
   CLOCK_GRID_MS,
+  HALF_ALIVE,
   MAX_EFFECT_FRAME_P95_MS,
   MAX_EFFECT_FRAME_WORK_MS,
   MAX_EFFECT_WORK_DELTA_MS,
-  MAX_LINEARITY_SPREAD,
   MAX_PER_PARTICLE_WORK_MS,
   MIN_HALF_STORM_WORK_DELTA_MS,
   MIN_STORM_WORK_DELTA_MS,
@@ -70,18 +90,26 @@ import {
   STORM_ALIVE,
   SWEEP_ALIVE,
 } from './effectBudget';
-import { sampleArm, spawnWorstCaseFleet } from './effectCounts';
+import { spawnWorstCaseFleet, walkPairs } from './effectCounts';
 import {
   installStorm,
   namedMutation,
   setEmitterScale,
   setEnemyScale,
+  setParticleScale,
   setStorm,
   stormCount,
 } from './effectMutation';
+import {
+  MIN_COST_EXPONENT,
+  assertSweepDrew,
+  costExponent,
+  installCostLawFixture,
+  walkSweep,
+} from './effectSweep';
 import { DRIVEN_SHAKE, MIN_SHAKEN_FRAME_FRACTION, installShakeDrive } from './effectShake';
 import { bootToGame } from './gameHarness';
-import { median, medianPairedDelta } from './levelPerf';
+import { median } from './levelPerf';
 import { DEV_FLEET_COUNT } from './perfBudget';
 import { counts } from './perfSampler';
 import { assertRealGpu } from './realGpu';
@@ -109,20 +137,15 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
    * clean run, and the rule that came out of it is that a statistic which cannot order its own
    * mutation is replaced rather than re-bounded.
    *
-   * ### The sweep is what earns the bound
+   * ### The sweep is what earns the bound, and the pairs are what make it trustworthy
    *
-   * `SWEEP_ALIVE` is walked `SWEEP_ROUNDS` times, alternating direction, and the cost must be
-   * **monotone non-decreasing in N** before any threshold is applied to any of it. This gate does not
-   * exist until it orders. Each gap is the **median of the per-round deltas**, the same reduction the
-   * pairs below take and for the same reason; `SWEEP_ALIVE`'s docstring has the six runs that ordered
-   * 1/6 the other way, and why sampling harder cannot rescue a gap under the clock's grid.
-   *
-   * ### The pairs are what make the absolute number trustworthy
-   *
-   * Ten AB/BA pairs at the shipped peak, in the same page, seconds apart, taking the **median of the
-   * ten per-pair deltas** rather than the delta of two medians — the correction
-   * `phase-07-perf.spec.ts` records, where medians-of-medians could not separate a clean run from a
-   * mutated one that per-pair separated with no overlap at all.
+   * `walkSweep` walks `SWEEP_ALIVE` `SWEEP_ROUNDS` times and the cost must be **monotone
+   * non-decreasing in N** before any threshold is applied to any of it — this gate does not exist
+   * until it orders. `walkPairs` takes ten AB/BA pairs at the shipped peak, in the same page, seconds
+   * apart. Both reduce to the **median of the per-round or per-pair deltas** rather than a delta of
+   * medians; both alternate direction. `effectSweep.ts` and `effectCounts.ts` carry the evidence for
+   * each of those three choices, and `SWEEP_ALIVE`'s docstring has the six runs that ordered 1/6 the
+   * other way.
    */
   test('the worst case stays inside the frame budget, and the cost rises with the particle count', async ({
     page,
@@ -148,8 +171,19 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     if (MUTATION === 'scale0') {
       await setEmitterScale(page, 0);
     }
+    // 🔴 BEFORE any `setStorm` builds a population, and that ordering is the mutation working at all:
+    // a constant scale op is emit-only, so it governs particles emitted after it and never the ones
+    // already flying. `setParticleScale`'s docstring has the two wrong levers that went green first.
+    if (MUTATION === 'particlescale0') {
+      await setParticleScale(page, 0);
+    }
     if (MUTATION === 'fleetscale0') {
       await setEnemyScale(page, 0);
+    }
+    // Guard 3's red proof: a per-frame cost independent of the particle count, with every particle
+    // still emitted, alive and drawn. `installCostLawFixture` argues why that is the named mutation.
+    if (MUTATION === 'flatcost') {
+      await installCostLawFixture(page, 0);
     }
 
     // The enemy load, read once before sampling so the per-arm reads below have something to be
@@ -157,56 +191,16 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     const fleet = await counts(page);
 
     // ── The sweep ──────────────────────────────────────────────────────────────────────────────
-    const sweep = new Map<number, number[]>(SWEEP_ALIVE.map((n) => [n, []]));
-    const sweepDrawn = new Map<number, number[]>(SWEEP_ALIVE.map((n) => [n, []]));
+    //
+    // Walked, reduced and tabulated by `effectSweep.ts`, which also owns what its shape licenses.
+    // Every gap below is the MEDIAN OF THE PER-ROUND DELTAS, never the delta of two medians.
     const shakes: number[] = []; // every window's shaken-frame fraction; Guard 0c asserts each one
-    for (let round = 0; round < SWEEP_ROUNDS; round += 1) {
-      // Alternating direction, for `PAIRS`'s reason: a fixed walk order gives every low point a
-      // colder machine than every high point, and that bias is exactly the shape the sweep looks for.
-      const order = round % 2 === 0 ? [...SWEEP_ALIVE] : [...SWEEP_ALIVE].reverse();
-      for (const n of order) {
-        const arm = await sampleArm(page, n, `sweep N=${n}, round ${round}`, fleet);
-        sweep.get(n)!.push(arm.measured.workMedianMs);
-        sweepDrawn.get(n)!.push(arm.particles.drawn);
-        shakes.push(arm.shake);
-      }
-    }
-    const sweepWork = SWEEP_ALIVE.map((n) => median(sweep.get(n)!));
-    // 🔴 Every sweep delta below is the MEDIAN OF THE PER-ROUND DELTAS, never the delta of two
-    // medians — `levelPerf.ts`'s `medianPairedDelta`, the correction this file's own `PAIRS`
-    // docstring cites and the sweep used to ignore. Adjacent points are visited adjacently in time,
-    // so a per-round subtraction cancels the drift between rounds that a difference of medians keeps.
-    const sweepDelta = (from: number, to: number): number =>
-      medianPairedDelta(sweep.get(from)!, sweep.get(to)!);
-    const table = SWEEP_ALIVE.map(
-      (n, i) =>
-        `N=${String(n).padStart(4)}  work ${sweepWork[i]!.toFixed(3)} ms  ` +
-        `(runs ${sweep.get(n)!.map((v) => v.toFixed(3)).join('/')}; ` +
-        `drawn ${sweepDrawn.get(n)!.join('/')})`,
-    );
+    const sweep = await walkSweep(page, SWEEP_ROUNDS, fleet, shakes);
+    const sweepDelta = sweep.delta;
 
     // ── The pairs, at the shipped peak ─────────────────────────────────────────────────────────
     const peak = STORM_MUTATION || SHIPPED_PEAK_ALIVE;
-    type Arm = { work: number[]; p95: number[]; drawn: number[]; opaque: number[]; sprites: number[] };
-    const blank = (): Arm => ({ work: [], p95: [], drawn: [], opaque: [], sprites: [] });
-    const arms: Record<'on' | 'off', Arm> = { on: blank(), off: blank() };
-    for (let pair = 0; pair < PAIRS; pair += 1) {
-      const order = pair % 2 === 0 ? (['on', 'off'] as const) : (['off', 'on'] as const);
-      for (const name of order) {
-        const arm = await sampleArm(page, name === 'on' ? peak : 0, `arm ${name}, pair ${pair}`, fleet);
-        arms[name].work.push(arm.measured.workMedianMs);
-        arms[name].p95.push(arm.measured.workP95Ms);
-        arms[name].drawn.push(arm.particles.drawn);
-        // 🔴 The ENEMY drawn count, per arm. The assertion this test fails with names twenty
-        // enemies; until this landed, nothing in it checked they were on screen while the windows
-        // were taken. `sprites` is `isSprite`, a creation-time flag — `perfSampler.ts:137-141`
-        // records it as standing blind spot T14 for exactly this reason — so it is kept only as the
-        // "still Sprites, not Rectangles" half and `opaque` carries the drawn claim.
-        arms[name].opaque.push(arm.enemies.opaque);
-        arms[name].sprites.push(arm.enemies.sprites);
-        shakes.push(arm.shake);
-      }
-    }
+    const arms = await walkPairs(page, PAIRS, peak, fleet, shakes);
     await setStorm(page, 0);
     if (MUTATION === 'fleetscale0') {
       await setEnemyScale(page, 1);
@@ -219,17 +213,18 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
 
     // The amplified storm, divided back. Floored at zero: a delta under the noise can come back
     // negative, and "particles cost less than nothing" is the same statement as "under the floor".
+    // Divided back from the TOP of the sweep on purpose — at the exponents this measures, the higher
+    // the amplification the more the figure over-states the shipped one, which is the safe direction.
     const stormDelta = sweepDelta(0, STORM_ALIVE);
-    const halfN = SWEEP_ALIVE[SWEEP_ALIVE.length - 2]!;
-    const halfDelta = sweepDelta(0, halfN);
+    const halfDelta = sweepDelta(0, HALF_ALIVE);
     const perParticle = Math.max(0, stormDelta / STORM_ALIVE);
-    const perParticleHalf = Math.max(0, halfDelta / halfN);
+    const exponent = costExponent(HALF_ALIVE, halfDelta, STORM_ALIVE, stormDelta);
 
     const fmt = (v: number[]): string => v.map((x) => x.toFixed(3)).join('/');
     const detail = [
       '',
       `[9.5] renderer ${renderer}`,
-      ...table.map((row) => `      ${row}`),
+      ...sweep.table.map((row) => `      ${row}`),
       `      sweep gaps (median of per-round deltas) ` +
         SWEEP_ALIVE.slice(1)
           .map((n, i) => `${SWEEP_ALIVE[i]}->${n} ${sweepDelta(SWEEP_ALIVE[i]!, n).toFixed(3)} ms`)
@@ -246,8 +241,10 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
       `      median work on ${onWork.toFixed(3)} ms, off ${offWork.toFixed(3)} ms, ` +
         `paired delta ${delta.toFixed(4)} ms (bound ${MAX_EFFECT_WORK_DELTA_MS})`,
       `      absolute ${onWork.toFixed(3)} ms (bound ${MAX_EFFECT_FRAME_WORK_MS})`,
-      `      per particle ${perParticle.toFixed(5)} ms at ${STORM_ALIVE}, ` +
-        `${perParticleHalf.toFixed(5)} ms at ${halfN} (bound ${MAX_PER_PARTICLE_WORK_MS})`,
+      `      per particle ${perParticle.toFixed(5)} ms at ${STORM_ALIVE} ` +
+        `(bound ${MAX_PER_PARTICLE_WORK_MS})`,
+      `      cost exponent k ${exponent.toFixed(3)} from ${halfDelta.toFixed(3)} ms at ${HALF_ALIVE} ` +
+        `and ${stormDelta.toFixed(3)} ms at ${STORM_ALIVE} (floor ${MIN_COST_EXPONENT})`,
       '',
     ].join('\n');
     // eslint-disable-next-line no-console
@@ -272,16 +269,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // creation-time flag and blind spot T14). It is checked at the reading so the arm that lost the
     // fleet is the one named, twenty windows earlier than this line. `PERF_MUTATION=fleetscale0` is
     // its red proof, and the per-arm figures are printed above.
-    for (const n of SWEEP_ALIVE) {
-      const drawn = sweepDrawn.get(n)!;
-      if (n === 0) {
-        expect(drawn, 'the N=0 control drew particles').toEqual(drawn.map(() => 0));
-      } else {
-        for (const d of drawn) {
-          expect(d, `the N=${n} sweep point drew ${d} particles`).toBeGreaterThan(0);
-        }
-      }
-    }
+    assertSweepDrew(sweep);
 
     // ── Guard 1: the statistic ORDERS its own mutation ─────────────────────────────────────────
     //
@@ -327,7 +315,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // one step of `performance.now()` grid. That is the mistake the first sweep already made.
     expect(
       halfDelta,
-      `${halfN} particles measured ${halfDelta.toFixed(4)} ms above the control — under ` +
+      `${HALF_ALIVE} particles measured ${halfDelta.toFixed(4)} ms above the control — under ` +
         `${MIN_HALF_STORM_WORK_DELTA_MS} ms, which is ${MIN_HALF_STORM_WORK_DELTA_MS / CLOCK_GRID_MS} ` +
         `steps of this browser's ${CLOCK_GRID_MS} ms clock. This is a RESOLUTION failure, not a ` +
         'linearity one: the half amplification did not clear the grid, so the per-particle estimate ' +
@@ -336,22 +324,33 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
         `NOT replace the statistic.${detail}`,
     ).toBeGreaterThanOrEqual(MIN_HALF_STORM_WORK_DELTA_MS);
 
-    // ── Guard 3: the divide-back is a measurement, not an extrapolation ────────────────────────
+    // ── Guard 3: the cost EXPONENT, which is what the divide-back actually depends on ──────────
     //
-    // Two independent estimates of one quantity at two amplifications. If the cost scales with the
-    // number of particles they agree, and dividing the delta by the count is sound. If they do not,
-    // the inference is broken and the reported per-particle number is fabricated. Both inputs are
-    // floored above the clock grid by the two guards above, so a failure HERE is a real disagreement
-    // between two resolvable measurements rather than a division by noise.
-    const spread =
-      Math.max(perParticle, perParticleHalf) / Math.max(1e-9, Math.min(perParticle, perParticleHalf));
+    // 🔴 This replaces a bound on a derived *spread* that could not fire in the range it policed.
+    // `spread = R^|k-1|` over an amplification ratio `R`, so `spread < 4` at `R = 2` was satisfied by
+    // every cost law from O(1) to O(N^2.99) — including the constant-cost frame its own message
+    // described. The rule here is that a statistic which cannot order its own mutation is REPLACED
+    // rather than re-bounded, so the exponent is measured directly and the ratio widened to 8x to
+    // resolve it. `effectSweep.ts` carries the algebra, the error budget and the fixture.
+    //
+    // The claim, and it is an asymmetric one: per-particle cost is `c * N^(k-1)`, so dividing the
+    // 8192-particle delta back to 96 OVER-states the shipped cost at `k > 1` and UNDER-states it at
+    // `k < 1`. Only the under-statement is dangerous, so only the floor is asserted — the reason
+    // there is deliberately no ceiling is on `MIN_COST_EXPONENT`, and it is that no fixture can drive
+    // one red on this harness without stalling the window first.
+    //
+    // Both inputs are floored above the clock grid by the two guards above, so a failure HERE is a
+    // real cost law rather than a ratio of two quantisation steps. `PERF_MUTATION=flatcost` is its
+    // red proof, and the guard it replaces PASSES that fixture.
     expect(
-      spread,
-      `the per-particle cost at ${halfN} (${perParticleHalf.toFixed(5)} ms) and at ${STORM_ALIVE} ` +
-        `(${perParticle.toFixed(5)} ms) disagree by ${spread.toFixed(1)}x. The cost does not scale ` +
-        'with the count, so dividing by it is not a per-particle figure. Withdraw the divide-back ' +
-        `rather than reporting an extrapolation through a region nothing measured.${detail}`,
-    ).toBeLessThan(MAX_LINEARITY_SPREAD);
+      exponent,
+      `the cost grows as N^${exponent.toFixed(3)} between ${HALF_ALIVE} particles ` +
+        `(${halfDelta.toFixed(3)} ms) and ${STORM_ALIVE} (${stormDelta.toFixed(3)} ms). Below ` +
+        `N^1 the per-particle cost FALLS as the count rises, so dividing the ${STORM_ALIVE}-particle ` +
+        `delta back to ${SHIPPED_PEAK_ALIVE} reports less than the shipped particles really cost. ` +
+        'Withdraw the divide-back rather than reporting an extrapolation through a region nothing ' +
+        `measured — do not move this floor.${detail}`,
+    ).toBeGreaterThanOrEqual(MIN_COST_EXPONENT);
 
     // ── The budget ─────────────────────────────────────────────────────────────────────────────
     //

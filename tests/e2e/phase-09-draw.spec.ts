@@ -194,7 +194,15 @@ test.describe('Phase 9 — criterion 9.6, the drawn-particle count', () => {
     ).toBe(EFFECT_KINDS.length);
     // Submission is the honest statistic for a main-thread budget (Phaser culls no particle), but a
     // storm somewhere the camera cannot see is still not a drawn effect. Both, so neither can lie.
-    expect(on.inView, 'every submitted particle was outside the camera').toBeGreaterThan(0);
+    // 🔴 A COUNT, not a `> 0`. It read `toBeGreaterThan(0)` under the message *"every submitted
+    // particle was outside the camera"* — which 95 of 96 off-camera passes, so the message named the
+    // only failure the assertion could not detect. The same floor `drawn` carries, for the same
+    // reason: two thirds of the ceiling is far above what a broken path produces and far below what a
+    // working one does.
+    expect(
+      on.inView,
+      `only ${on.inView} of the ${on.drawn} submitted particles were inside the camera's world view`,
+    ).toBeGreaterThanOrEqual(MIN_DRAWN_AT_PEAK);
 
     // ── The enemies are not what changed ───────────────────────────────────────────────────────
     expect(onCounts.sprites, 'the enemy sprite count moved between arms').toBe(offCounts.sprites);

@@ -289,7 +289,8 @@ export async function sampleArm(
     shake,
     `${label}: ${(shake * 100).toFixed(1)} % of this window's frames had the camera off its base. ` +
       "Criterion 9.5's worst case is max enemies AND max particles AND shake, and the bound it " +
-      'asserts is a MEDIAN — so under half is a frame budget measured without the third load in it.',
+      `asserts is a MEDIAN. The fixture predicts 100 %; under ${MIN_SHAKEN_FRAME_FRACTION * 100} % ` +
+      'this is a frame budget measured with the third load missing from most of it.',
   ).toBeGreaterThanOrEqual(MIN_SHAKEN_FRAME_FRACTION);
   const reading = {
     measured,
@@ -311,4 +312,53 @@ export async function sampleArm(
     ).toBe(drawnFleet.sprites);
   }
   return reading;
+}
+
+/** One arm of the paired design, ten readings deep. Parallel arrays, one entry per pair. */
+export interface PairArm {
+  work: number[];
+  p95: number[];
+  drawn: number[];
+  opaque: number[];
+  sprites: number[];
+}
+
+/**
+ * Walk `pairs` AB/BA pairs at the shipped peak — the paired half of criterion 9.5.
+ *
+ * Split out of `phase-09-perf.spec.ts` in the 9.5 fix round, symmetrically with `effectSweep.ts`'s
+ * `walkSweep`, and it belongs here for the reason this file's header gives: it is a *reading*, and
+ * every line of it is a call into `sampleArm`.
+ *
+ * 🔴 **Alternating order, never a fixed one.** `phase-07-perf.spec.ts`'s correction verbatim: a fixed
+ * order does not cancel a first-position penalty, it ATTRIBUTES it to the treatment arm.
+ *
+ * 🔴 **The ENEMY drawn count is recorded per arm.** The assertion this walk feeds names twenty
+ * enemies, and until it landed nothing checked they were on screen while the windows were taken.
+ * `sprites` is `isSprite`, a creation-time flag — `perfSampler.ts:137-141` records it as standing
+ * blind spot T14 for exactly this reason — so it is kept only as the "still Sprites, not Rectangles"
+ * half and `opaque` (`willRender`) carries the drawn claim.
+ */
+export async function walkPairs(
+  page: Page,
+  pairs: number,
+  peak: number,
+  fleet: { bodies: number; sprites: number },
+  shakes: number[],
+): Promise<Record<'on' | 'off', PairArm>> {
+  const blank = (): PairArm => ({ work: [], p95: [], drawn: [], opaque: [], sprites: [] });
+  const arms: Record<'on' | 'off', PairArm> = { on: blank(), off: blank() };
+  for (let pair = 0; pair < pairs; pair += 1) {
+    const order = pair % 2 === 0 ? (['on', 'off'] as const) : (['off', 'on'] as const);
+    for (const name of order) {
+      const arm = await sampleArm(page, name === 'on' ? peak : 0, `arm ${name}, pair ${pair}`, fleet);
+      arms[name].work.push(arm.measured.workMedianMs);
+      arms[name].p95.push(arm.measured.workP95Ms);
+      arms[name].drawn.push(arm.particles.drawn);
+      arms[name].opaque.push(arm.enemies.opaque);
+      arms[name].sprites.push(arm.enemies.sprites);
+      shakes.push(arm.shake);
+    }
+  }
+  return arms;
 }

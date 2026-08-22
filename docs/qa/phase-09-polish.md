@@ -232,8 +232,8 @@ marked passing yet.
 | 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | UNRUN |
 | 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | UNRUN |
 | 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | UNRUN — ⚠️ see the substitution note below |
-| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | **RAN → FAIL** (1 critical, 4 major); **all three remaining problems repaired 2026-08-22** — see §*"9.5 — the gate round FAILED it"*. **Still UNRUN in the sense that matters: the owner agent has not re-run it against the fix.** |
-| 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN → PASS**, checklist verified item by item; brief 2 outstanding *(A7)* |
+| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | **RAN ×2 → FAIL twice.** Brief B (adversarial) FAILED it again on H1: the guard licensing the divide-back could not fire below `k = 3`. **All 11 findings applied or recorded 2026-08-22** — see §*"The 9.5 fix round #2"*. **Still UNRUN in the sense that matters: neither owner brief has re-run it against this fix.** |
+| 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN ×2 → PASS ×2**, checklist verified item by item by both briefs; brief B's one finding (L1, `inView` was an existence check) applied |
 | 9.7 | Thresholds pinned as literals, fixtures both sides | `qa-expert` ×2 | UNRUN |
 | 9.8 | What the gates do NOT cover is stated here | — | DRAFTED, below |
 | 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | UNRUN |
@@ -673,6 +673,12 @@ these numbers rather than arguing in parallel with them.
     `_customViewport` on `_x !== 0 || _y !== 0` at any amplitude. **That is an argument and not a
     measurement**, and nobody — including the gate round — has measured a shake's cost directly,
     because it sits far below the 0.1 ms grid and nothing amplifies it.
+    🔴 **Addendum from the second 9.5 fix round (finding L4): the fixture's CADENCE is a narrowing
+    too.** `SHAKE_HOP_VY = -1` against `gravity 0.675` lands the player every 2 ticks — 30 landings a
+    second — so every measured frame also carries a `landSquash` write (`gameEffects.ts:268-269`) and
+    an `arm('land')` every other tick. That is extra cost in **every** arm: it divides out of the
+    paired delta and makes the absolute bound stricter, both safe, but the measured frame is not one
+    the game can produce.
 45. **The storm holds a population; it does not measure a single triggered burst.** `sampleArm` waits
     for the population to land *before* sampling, so the frame that first constructs N particles is
     outside the window by construction. What is inside is the top-up — itself burst-shaped, because
@@ -681,6 +687,15 @@ these numbers rather than arguing in parallel with them.
     shipped call. Those spikes are what `MAX_EFFECT_FRAME_P95_MS` gates; every other bound in the file
     is a median and blind to them. The shipped *trigger* path deciding **when** to burst is criterion
     9.1's behavioural spec, not 9.5's.
+46. **Three of the four loads the absolute bound's claim names are not verified to be in the frame.**
+    Added by the second 9.5 fix round, finding M4. The per-arm draw claims taken are
+    `counts().opaque` (enemy bodies), `particleCounts().drawn` (particles) and `effectShake.ts`'s
+    shake counter. **Nothing observes the tilemap layer, the parallax layers, `UIScene` or the player
+    sprite.** All of them make `onWork` cheaper when absent, and `MAX_EFFECT_FRAME_WORK_MS` is the one
+    bound in the file that is not a difference — so it is the one bound they can move. It is the same
+    defect one layer out from Guard 0b, which exists because the headline assertion named twenty
+    enemies nobody checked were drawn. **Disclosed, not closed**: closing it means a fourth counter
+    and a fourth committed mutation for loads no phase criterion names.
 
 ---
 
@@ -1074,3 +1089,224 @@ control.**
 **Recorded, not fixed.** 5.11 is Phase 5's criterion and repairing it is out of Phase 9's scope. It
 belongs with G.7b in whatever session takes the perf-gate family on, and the two should be fixed
 together, because the diagnosis is the same one.
+
+---
+
+## The 9.5 fix round #2 — the guard that licensed the divide-back could not fire
+
+Criterion 9.5 was FAILED a second time by the adversarial `voltagent-qa-sec:performance-engineer`
+brief (2 high, 5 medium, 4 low, 26 bounded runs). Its headline finding is the phase's house-style
+defect landing in the one place 9.5's reported number depends on it.
+
+### H1 — `MAX_LINEARITY_SPREAD` passed for every cost law from O(1) to O(N^2.99)
+
+`MAX_LINEARITY_SPREAD = 4` was applied to two per-particle estimates taken at `SWEEP_ALIVE`'s top two
+points — an amplification ratio of exactly **2x**. Write the cost law as `c·N^k`. Per-particle cost is
+then `c·N^(k-1)`, two estimates a ratio `R` apart sit `R^|k-1|` apart, and
+
+```
+spread < 4   at R = 2   ⟺   |k - 1| < 2   ⟺   -1 < k < 3
+```
+
+So the guard could only fire for a cost law of `N^3` or steeper. **A cost completely independent of
+the particle count — the exact case its own failure message described** (*"the cost does not scale
+with the count, so dividing by it is not a per-particle figure"*) — lands at `spread = 2.0` and reads
+as healthy. The clean spreads of 1.0–1.3 reported as evidence of linearity are `2^0.0` to `2^0.4`;
+every value up to `2^2` would have looked identical.
+
+Two docstrings (`effectBudget.ts` at the per-particle constant, and the spec's stated-limits block)
+cited that guard as *"legal only while linear, and the spec asserts the linearity"*. The spec asserted
+no such thing. Same shape as the covering gate that did not exist, disclosed in one docstring and
+reproduced two docstrings later.
+
+And the sweep is measurably **not** linear: the brief fitted `k ≈ 1.10–1.36` on five runs and 1.18
+over 1024→8192, never 1.0. The dangerous region (`k < 1`, where the divide-back *understates* the
+shipped cost) sat entirely inside the pass region.
+
+### The ruling — replace the statistic, do not move the bound
+
+Tightening 4 to a smaller number would be moving a bound on a derived quantity chosen to make the
+arithmetic come out — the same error one layer along. What the divide-back actually depends on is
+measured instead.
+
+**The replacement statistic: the cost exponent `k` itself**, fitted from two sweep deltas
+(`effectSweep.ts:costExponent`):
+
+```
+k = ln( sweepDelta(0, 8192) / sweepDelta(0, 1024) ) / ln(8192 / 1024)
+```
+
+**The band, and why it is a floor with no ceiling.** Per-particle cost is `c·N^(k-1)`, so dividing an
+8192-particle delta back to the shipped 96 **over**-states the shipped figure at `k > 1` (safe) and
+**under**-states it at `k < 1` (unsafe). That asymmetry is the whole band:
+
+| bound | value | status |
+|---|---|---|
+| `MIN_COST_EXPONENT` | **0.9** | load-bearing — the divide-back is conservative only above 1 |
+| ceiling | **none** | deliberate; see below |
+
+`MIN_COST_EXPONENT` is derived from the claim plus the clock, and **no run had a vote in it** — it was
+fixed before the first run of the new gate. The claim is `k ≥ 1`. One adverse `CLOCK_GRID_MS` step on
+the low delta (~0.5–0.7 ms) is worth `ln(1 + 0.1/0.6)/ln(8)` ≈ **0.07–0.09** of `k`; the same step on
+the high delta (~6 ms) is worth 0.008 and does not matter. 0.1 of `k` is therefore about one clock
+step, and 0.9 is sized to survive the **same three-step adverse move of a median** that
+`MIN_STORM_WORK_DELTA_MS` and `MIN_HALF_STORM_WORK_DELTA_MS` are set for. The cost of the allowance is
+bounded rather than waved away: at the floor exactly, the divide-back under-states by `(8192/96)^0.1`
+= **1.5x**, against a `MAX_PER_PARTICLE_WORK_MS` sitting ~4x above the reading.
+
+**There is no ceiling, and that is a decision.** Super-linearity makes the divide-back *pessimistic*,
+which is the safe direction, and it is already gated — an exponent large enough to matter inflates
+`perParticle` into `MAX_PER_PARTICLE_WORK_MS`, which fails. A ceiling would also be **decoration under
+C2**: to drive `k` to 1.5 on this harness a fixture must add ~11 ms to the 8192 frame, and a frame
+that expensive serves fewer animation frames than the window has sim ticks, so `sampleArm`'s *"the
+machine did not keep up with the simulation"* precondition fires first. **No fixture can watch a
+ceiling here go red**, so none ships. This is a deliberate deviation from the brief's suggestion that
+a ceiling be added as a sanity check, and the reason is written here rather than left implicit.
+
+### The instrument had to widen too — `SWEEP_ALIVE` is now `[0, 1024, 2048, 8192]`
+
+`k` inherits the same arithmetic the old spread had: at a 2x span one clock step on the low delta is
+worth `ln(1.2)/ln(2)` = **0.26** of `k`, which is a third of the whole band. Over the 8x span from
+`HALF_ALIVE` to `STORM_ALIVE` it is **0.07–0.09**. This is the move `SWEEP_ALIVE`'s own history
+already licensed — *"the N values have to separate instead, which is a change of instrument, not of
+bound"*. 2048 stays as an ordering point for Guard 1. Cost: five more windows a run, ~10 s a round.
+
+`STORM_ALIVE` is 8192 now, so the divide-back is taken from the *top* of the sweep — at `k > 1` the
+higher the amplification the more the reported figure over-states the shipped one, which is the safe
+direction. `HALF_ALIVE` is a **named** constant (`SWEEP_ALIVE[1]`) rather than `SWEEP_ALIVE[len-2]`:
+that index is what silently drifted the half point from 512 to 1024 while its docstring went on
+arguing 512, and a fourth sweep point would have drifted it again — to 2048, *away* from the shipped
+96 instead of towards it.
+
+### The selection set — three runs that had a say in nothing, but were looked at first
+
+Clean, `chromium-gpu`, alone on the box, one run at a time, each read out of a redirected file.
+
+| run | `d(0→1024)` | `d(0→8192)` | **k** | per particle @8192 | absolute | result |
+|---|---|---|---|---|---|---|
+| S1 | 0.700 | 6.900 | **1.100** | 0.00084 | 0.750 | `1 passed` of 1 |
+| S2 | 0.700 | 7.100 | **1.114** | 0.00087 | 1.000 | `1 passed` of 1 |
+| S3 | 0.700 | 6.700 | **1.086** | 0.00082 | 0.900 | `1 passed` of 1 |
+
+### The HELD-OUT set — three runs with no say in any bound, reported separately
+
+| run | `d(0→1024)` | `d(0→8192)` | **k** | per particle @8192 | absolute | result |
+|---|---|---|---|---|---|---|
+| H1 | 0.700 | 6.900 | **1.100** | 0.00084 | 0.950 | `1 passed` of 1 |
+| H2 | 0.500 | 6.400 | **1.226** | 0.00078 | 0.800 | `1 passed` of 1 |
+| H3 | 0.400 | 5.800 | **1.286** | 0.00071 | 0.950 | `1 passed` of 1 |
+
+A seventh clean sweep rode inside the `storm8192` mutation run: **k = 1.086** from 0.700 / 6.700.
+
+**Measured `k` over all seven: 1.086 – 1.286, never below 1.** The floor at 0.9 is cleared by
+0.19–0.39, which is 3–4 clock steps of adverse movement on the low delta — the low delta would have
+to read ~1.1 ms against an observed range of 0.400–0.700. `shaken frames 100.0–100.0 %` on all 280
+windows; sweep ordered on every gap of every round of every run.
+
+### Every gate watched failing — the mutation each assertion NAMES
+
+| # | mutation | red? | verbatim |
+|---|---|---|---|
+| 1 | **`PERF_MUTATION=flatcost`** — a per-frame busy-wait of 1.5 ms whenever the storm is non-empty | **FAIL (1 of 1)** | *"the cost grows as N^0.629 between 1024 particles (2.000 ms) and 8192 (7.400 ms). Below N^1 the per-particle cost FALLS as the count rises…"* |
+| 2 | `PERF_MUTATION=particlescale0`, now WIRED into this spec | **FAIL (1 of 1)** | *"pair 0: the effects-on window drew no particles"*, `drawn 0/0/0/0/0` at every sweep point |
+| 3 | `PERF_MUTATION=noshake`, against the RAISED floor | **FAIL (1 of 1)** | *"sweep N=0, round 0: 0.0 % of this window's frames had the camera off its base … The fixture predicts 100 %; under 90 % …"* |
+| 4 | `PERF_MUTATION=storm8192`, against the WIDENED sweep | **FAIL (1 of 1)** | *"the worst case — 20 enemies and 8192 particles — left the frame budget"*, `absolute 7.400 ms` |
+| 5 | scratch: `installStorm`'s emit point → `view.x - 4000` | **FAIL (1 of 3)** in `phase-09-draw.spec.ts` | *"only 0 of the 96 submitted particles were inside the camera's world view"* |
+
+**Mutation 1 is the one worth reading twice.** Every other guard passed on it — `drawn` 1024 / 2048 /
+8192 at every sweep point, the ordering check, both premise floors, `absolute 2.450 ≤ 2.5`,
+`per particle 0.00090 ≤ 0.003` — and only the exponent fired. **And the guard it replaces PASSES this
+fixture**: `perParticle` 0.000903 against `perParticleHalf` 0.001221 is a spread of **1.35**, against
+a bound of 4, at the old 2x ratio *and* at the widened one. That is the proof that the defect was the
+statistic and not the ratio, rather than an argument for it.
+
+Mutation 5 was a scratch edit, reverted with `git checkout --` and verified per **C12**: content
+changed, then `grep -c "const x = view.x + view.width / 2;"` back to **1** (it was **0** under the
+mutation) and `grep -c "SCRATCH MUTATION"` **0**. 🔴 That revert also discarded the round's own
+uncommitted edits to `effectMutation.ts`, which had to be re-applied and re-typechecked — `git
+checkout -- <file>` does not distinguish a scratch mutation from the work beside it.
+
+`scale0`, `fleetscale0` and `stall` were **not** re-run: their code paths are untouched by this diff
+and each is recorded failing in the gate round's proof table above. Recorded rather than re-proved.
+
+### Every finding from the brief — applied or recorded
+
+| # | finding | disposition |
+|---|---|---|
+| **H1** | the linearity guard cannot fire below `k = 3`, and the sweep is not linear | **APPLIED** — statistic replaced with the cost exponent, sweep widened to 8x, band derived and confirmed on a held-out set; both docstrings that claimed the spec asserted linearity corrected |
+| **H2** | `particlescale0` runs the 9.5 spec clean and reports `1 passed` | **APPLIED** — wired into `phase-09-perf.spec.ts` **before** `setStorm` builds the population (a constant scale op is emit-only), watched failing, and `NAMED_MUTATIONS` now says in its own docstring that a registered name is not a wired proof |
+| **M1** | Guard 2's docstring claims a draw premise it does not have — `scale0` passes it | **APPLIED** — docstring corrected to say it is a RESOLUTION premise, that `preUpdate` keeps ~half the per-particle cost alive under `scale0`, and that Guard 0 is the draw premise a future edit must not weaken |
+| **M2** | `MIN_SHAKEN_FRAME_FRACTION = 0.5` is the boundary value of the nearest retune | **APPLIED** — raised to **0.9**, derived from the fixture's predicted 1.0 rather than placed on `land.durationTicks: 3 → 1`'s exact 50 %; re-watched failing under `noshake`; 280 held-out windows read 100.0 % |
+| **M3** | the header claims Guard 0/0b re-take three of 9.6's checks, and they re-take one | **APPLIED** — header corrected to name the one, and the `inCameraList` gap marked **INFERRED** (it is inferred to red through the premise floor; it was not watched, and inferred is written down as inferred) |
+| **M4** | the absolute bound's docstring names the level, the HUD and the player sprite, and nothing verifies any of them | **APPLIED as a disclosure** — `effectBudget.ts` now states which three loads are asserted and which three are not, that all three make the bound EASIER when absent, and that it is the one bound in the file they can move; added as §9.8 entry 46. **Not closed**: closing it means a fourth counter and a fourth mutation for loads no phase criterion names |
+| **M5** | four docstring/code disagreements, all describing sweep points that no longer exist | **APPLIED** — all four corrected. The one that mattered (`MIN_HALF_STORM_WORK_DELTA_MS` justified from a 512 distribution while guarding 1024) is fixed structurally as well as in prose: `HALF_ALIVE` is a named constant now, so the index cannot drift the point again |
+| **L1** | `expect(on.inView, 'every submitted particle was outside the camera').toBeGreaterThan(0)` names a failure it cannot detect | **APPLIED** — now a count (`>= MIN_DRAWN_AT_PEAK`) with a message that reads out both numbers; watched failing under mutation 5. Note the strengthening's *distinguishing* range (a partially off-camera storm) is not separately proved — the fixture that reds it reds the old form too |
+| **L2** | effective sensitivity: 4–5x headroom on three bounds, nothing between a 0.9 ms frame and a dropped one | **RECORDED** — every one of them is derived from a claim rather than fitted, and tightening a derived bound toward today's observation is the move this repo forbids; the headroom is the price of that and the readings are printed on every run |
+| **L3** | *"the whole shipped feature costs roughly 0.06 ms"* is over-stated ~1.9x | **APPLIED** — withdrawn rather than restated. It multiplied a divided-back figure by 96, which at `k > 1` over-states; over-statement is right for a ceiling and wrong for a reported measurement. `MAX_EFFECT_WORK_DELTA_MS`'s own readings (0.000 or 0.100 ms per pair) are cited instead |
+| **L4** | the shake fixture puts the player in a 30-landings-per-second cycle and entry 44 does not say so | **APPLIED** — added to entry 44 below |
+| **G.7b / 5.11** | both reduce `Sample.gpuMedianMs` to a ratio of two such medians | **RECORDED, not repaired** — out of scope by instruction; brief B's diagnosis is written up below |
+
+### The two §9.8 entries this round wrote
+
+Both live with their siblings in §*"Added by the 9.5 fix round"* above, not here, so a narrowing has
+one home: **new entry 46** (M4 — the level, the HUD and the player sprite are in the frame and
+nothing verifies it) and an **addendum to entry 44** (L4 — the shake fixture's 30-landings-a-second
+cadence).
+
+### G.7b and criterion 5.11 — brief B's diagnosis, recorded and NOT repaired
+
+Both are inherited criteria (Phase 8 and Phase 5) and out of scope for this diff. Recorded here
+because the diagnosis is sharper than the one already above.
+
+**The shape they share, in one sentence:** both take `Sample.gpuMedianMs` — an
+`EXT_disjoint_timer_query` median whose run-to-run spread on this machine is comparable to or larger
+than the effect being resolved — and both then reduce it to a **ratio of two such medians**, so the
+noise enters twice and multiplicatively.
+
+**G.7b: 3 failures in 8 interleaved runs, all three on the linearity spread, none on the premise.**
+The 1-exit control spans **0.139–0.220 ms (±0.081)**. The effect the *half* amplification must resolve
+is `20 × ~0.003` = **0.06 ms** — smaller than the control's own run-to-run spread. The *full*
+amplification's `40 × ~0.003` = 0.19 ms separated on **8 of 8** (min margin 0.072 ms). So: at 40
+copies the GPU arm resolves, at 20 it does not, and `perExitGpuHalf` floors to 0 whenever the half arm
+lands under the control (2 of 8 runs), putting the spread at an epsilon-divided infinity. Worse, **the
+CPU arm does not order on any of the 8 runs** — `1/21/41 exits` read `0.600/0.600/0.600`,
+`0.500/0.500/0.500`, `0.600/0.600/0.600` — and on 4 of 8 `perExitWork` was exactly 0.0000, floored, so
+`MAX_EXIT_WORK_MS = 0.05` passed because the value came back rather than because it was measured.
+
+**And G.7b's bound is the same constant as H1's**, `MAX_LINEARITY_SPREAD = 4` over the same 2x ratio
+(`HALF_COPIES = 20`, `MUTATION_COPIES = 40`) — the identical structural defect in two gates pointing
+in opposite directions: in G.7b the half point cannot clear the noise so it **false-reds**; in 9.5 the
+ratio was too small to order any cost law below `N^3` so it **false-greened**. A 2x amplification
+ratio cannot support a linearity inference in either direction. Whoever takes G.7b on should read
+`effectSweep.ts` first: 9.5's answer was to widen the ratio and replace the derived statistic, and the
+same two moves apply.
+
+**Criterion 5.11: 20 of 20 green across brief B's runs — its failure did not reproduce, but its cause
+did.** `gpuMedianMs` for the same scene, back to back:
+
+| run | baseline GPU | fleet GPU | ratio (bound < 5) |
+|---|---|---|---|
+| F03 | 0.210 | 0.383 | 1.82x |
+| **F05** | 0.220 | **0.050** | **0.23x** |
+| **F06** | 0.232 | **0.050** | **0.22x** |
+| **F08** | **0.046** | 0.169 | **3.67x** |
+| F10 | 0.136 | 0.135 | 0.99x |
+
+Adding twenty on-screen enemies made the GPU **four times cheaper** twice, cost nothing once, and cost
+3.67x once. The control alone spans 0.046–0.232 — a **5x swing in the denominator**, and F08 is one
+adverse control draw from `MAX_GPU_RATIO = 5`. `gpuTimer.ts:46-56` already records this failure in an
+earlier form (a bimodal baseline, 13x, supposedly fixed by moving to the `prerender`/`postrender`
+bracket); the bimodality is smaller now and still larger than everything either gate measures.
+Neither is repairable by moving a threshold.
+
+### The standing question, asked of the new guard
+
+*If the thing under test did nothing at all, would this still pass?* No, and the reason is mechanical
+rather than argued: the exponent is computed from two deltas that Guards 2 and 2b have already floored
+above the clock grid, and the one build where "the thing under test does nothing" — a frame whose cost
+is independent of the particle count — is committed as `PERF_MUTATION=flatcost` and was watched
+producing `k = 0.629` against a floor of 0.9, with every other assertion in the file green.
+
+**This is the fourth rewrite of these perf gates, and each previous one produced the next defect.**
+The one this round could not close is L1's distinguishing range, and it is named above rather than
+left for the fifth round to find.

@@ -95,11 +95,22 @@ export const SHAKE_HOP_VY = -1;
  * a frame carrying a shake, more than half the window's frames must carry one. Anything less and the
  * criterion's third load is present in the sample but absent from the number taken off it.
  *
- * The mechanism above predicts ~1.0, so this sits at roughly 2x margin; the measured fractions are
- * in `docs/qa/phase-09-polish.md`. It is a floor on the HARNESS, exactly as `Guard 0`'s
- * `drawn > 0` is: it fails when the window did not contain the thing the bound claims to cover.
+ * 🔴 **It was 0.5, and 0.5 is the boundary value of the nearest retune rather than a margin.**
+ * Working `shakeEnergy`/`shakeSettled` through the fixture: `gravity >= 1` kills the touchdown edge
+ * and reads 0 % (loud red, safe); `DUST_MIN_FALL_PX < 0.35` makes the OFF arm emit dust and reds on
+ * `drawn` (safe); `land.durationTicks: 3 -> 2` still reads 100 % (safe). But
+ * **`land.durationTicks: 3 -> 1`** lets the shake settle on every odd tick and predicts **exactly
+ * 50 %** — which `toBeGreaterThanOrEqual(0.5)` passes, on a coin flip, while half the window's
+ * frames carry no shake and `MAX_EFFECT_FRAME_WORK_MS` is asserted on a MEDIAN. The guard's own
+ * message would have been describing the window it just accepted.
+ *
+ * So it is derived with a margin over the fixture's prediction instead of placed on the nearest
+ * failure: the mechanism above predicts **1.0** — 175 measured windows read 100.0 % — and 0.9 leaves
+ * a tenth of a window for frame/tick misalignment while failing that retune by 40 points. It is a
+ * floor on the HARNESS, exactly as `Guard 0`'s `drawn > 0` is: it fails when the window did not
+ * contain the thing the bound claims to cover.
  */
-export const MIN_SHAKEN_FRAME_FRACTION = 0.5;
+export const MIN_SHAKEN_FRAME_FRACTION = 0.9;
 
 /** A snapshot of the drive's two monotone counters. Differences of these describe one window. */
 export interface ShakeCounters {
