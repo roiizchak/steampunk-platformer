@@ -23,9 +23,12 @@
 import { decodePng } from './png.mjs';
 import { CHROMA, hasRealAlpha } from './chroma.mjs';
 
-export const PASS = 'PASS';
-export const FAIL = 'FAIL';
-export const INDETERMINATE = 'INDETERMINATE';
+// The three statuses and `verdict` moved to the LEAF `gateVerdict.mjs` (inventory 5.25) so that
+// `gatesBrassCap.mjs` can reach them without importing this module back. Re-exported here because
+// nineteen files import them from this path and none of them needed to change.
+import { FAIL, INDETERMINATE, PASS, verdict } from './gateVerdict.mjs';
+
+export { PASS, FAIL, INDETERMINATE, verdict };
 
 /** Paint a filled rectangle into an RGBA image. Fixture helper. */
 export function fill(image, x0, y0, w, h, rgba) {
@@ -42,9 +45,6 @@ export function fill(image, x0, y0, w, h, rgba) {
   return image;
 }
 
-export function verdict(status, value, reason) {
-  return { status, value, reason };
-}
 
 /* ------------------------------------------------------------------ *
  * 1. Dimensions — read from the FILE, never from the aspect label.

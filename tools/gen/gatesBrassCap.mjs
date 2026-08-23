@@ -12,7 +12,7 @@
  * and those import sites are not being changed by this split.
  */
 
-import { FAIL, INDETERMINATE, PASS, verdict } from './gates.mjs';
+import { FAIL, INDETERMINATE, PASS, verdict } from './gateVerdict.mjs';
 
 /**
  * Mean saturation and value of a region, for the warm-foreground / cool-background rule.

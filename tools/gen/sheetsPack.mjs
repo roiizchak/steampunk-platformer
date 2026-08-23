@@ -8,7 +8,7 @@
  * vertical) this file implements.
  */
 
-import { figureMetrics } from './sheets.mjs';
+import { figureMetrics } from './figureMetrics.mjs';
 import { crop, downscale } from './resize.mjs';
 
 /**
