@@ -60,6 +60,54 @@ export const HUD_MARGIN = 24;
 export const HELP_BANNER_Y = HUD_MARGIN * 3 + HUD_PLATE.h;
 
 /**
+ * Ticks of delay for the *n*th collect-flyer spawned in the same frame *(inventory 2b.5)*.
+ *
+ * Two gears collected on one frame produced two flyers with the same duration and the same
+ * destination. Even from different start points the eased paths converge, and at the landing they
+ * are one sprite drawn twice — the smear the UI/UX gate owner reported.
+ *
+ * ⚠️ **Index, never `Math.random`.** This is render-side, so the sim's ban does not formally reach
+ * it — but a non-deterministic HUD makes a screenshot gate unreproducible, and the collected-gear
+ * list is already ordered, so there is nothing to gain by reaching for randomness.
+ *
+ * **3 ticks (50 ms) is deliberately small.** Under the ~100 ms at which two events stop reading as
+ * simultaneous, so a pair still feels like one pickup moment — while being enough that the two
+ * arrivals at the counter are visibly separate rather than one doubled sprite. A stagger comparable
+ * to the flight time would fix the smear and introduce a different defect.
+ *
+ * It lives here, engine-free, rather than inside `hudGearFlyers.ts`, because that module imports
+ * Phaser as a **value** (through `gearLayer.ts`) and therefore cannot be imported by a unit test at
+ * all. Putting the decision here is what makes it testable — `playerView.ts`'s pattern *(vault
+ * 2.12)*, applied to the one number in this effect anybody would want to tune.
+ */
+export const FLYER_STAGGER_TICKS = 3;
+
+/**
+ * How long a collected gear takes to fly to the counter, as an INTEGER COUNT OF TICKS.
+ *
+ * 🔴 This was `const TWEEN_MS = 260`, and Codex's implementation review called it a blocker against
+ * the project's own rule: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6 ticks
+ * — a float of seconds wearing a millisecond's clothes, in the one layer where the rule is easiest
+ * to forget because Phaser's tween API genuinely takes milliseconds.
+ *
+ * 15 ticks is 250 ms exactly. The conversion goes through `ticksToMs`, the same function the rest of
+ * the project uses, so the number that reaches Phaser is derived rather than authored.
+ *
+ * ⚠️ **Moved here from `hudGearFlyers.ts` on 2026-08-23**, with `flyerDelayTicks`, and for the same
+ * reason: that module reaches `gearLayer.ts`, which imports Phaser as a **value**, so importing it
+ * from a unit test throws `window is not defined` and the test file contributes **zero tests while
+ * the run still exits 0**. Measured — a gate written against it reported `PASS (0) FAIL (0)`. A
+ * constant a test cannot reach is a constant nothing can hold in relation to anything else.
+ */
+export const FLYER_TWEEN_TICKS = 15;
+
+export function flyerDelayTicks(index: number): number {
+  // Negative or fractional indices are not reachable from `fresh.entries()`, but returning a
+  // negative delay would be a silent Phaser misconfiguration rather than a throw.
+  return Math.max(0, Math.floor(index)) * FLYER_STAGGER_TICKS;
+}
+
+/**
  * The catalog key the generated gear sprite lands under. One string, three consumers.
  *
  * 🔴 It lived in `src/scenes/gearLayer.ts` until a unit test tried to import it — and importing

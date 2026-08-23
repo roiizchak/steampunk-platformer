@@ -26,7 +26,7 @@
  */
 
 import type Phaser from 'phaser';
-import { gearsCollectedFrom, type HudLayout } from '../render/hud';
+import { FLYER_TWEEN_TICKS, flyerDelayTicks, gearsCollectedFrom, type HudLayout } from '../render/hud';
 import { ticksToMs } from '../sim';
 import type { World } from '../sim/types';
 import { addGearObject } from './gearLayer';
@@ -34,18 +34,6 @@ import { addGearObject } from './gearLayer';
 /** Where a flyer is headed: the HUD gear icon's slot, from `hudLayout`. */
 type FlyTarget = HudLayout['gearIcon'];
 
-/**
- * How long a collected gear takes to fly to the counter, as an INTEGER COUNT OF TICKS.
- *
- * 🔴 This was `const TWEEN_MS = 260`, and Codex's implementation review called it a blocker against
- * the project's own rule: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6 ticks
- * — a float of seconds wearing a millisecond's clothes, in the one layer where the rule is easiest
- * to forget because Phaser's tween API genuinely takes milliseconds.
- *
- * 15 ticks is 250 ms exactly. The conversion goes through `ticksToMs`, the same function the rest of
- * the project uses, so the number that reaches Phaser is derived rather than authored.
- */
-export const TWEEN_TICKS = 15;
 
 /** Above every HUD object, so a flyer passes over the plate rather than under it. */
 const FLYER_DEPTH = 1003;
@@ -55,6 +43,7 @@ const FLYER_END_SCALE = 0.6;
 
 /** And how far it fades. Not to 0 — it should still read as arriving, not as evaporating. */
 const FLYER_END_ALPHA = 0.25;
+
 
 export interface GearFlyers {
   /**
@@ -77,6 +66,13 @@ export interface GearFlyers {
 export function attachGearFlyers(scene: Phaser.Scene): GearFlyers {
   /** Every tween still in flight. See the header on why a Set and not a field. */
   const live = new Set<Phaser.Tweens.Tween>();
+  /**
+   * Every flyer object still on screen — **inventory 3.7**.
+   *
+   * Tracked separately from the tweens because the two are torn down by different mechanisms and
+   * only one of them was ever explicit. See `destroy()`.
+   */
+  const flyers = new Set<Phaser.GameObjects.GameObject>();
 
   return {
     spawn(world, sinceTick, target, worldCamera) {
@@ -85,7 +81,7 @@ export function attachGearFlyers(scene: Phaser.Scene): GearFlyers {
       // without bound and a gear collected long ago would be re-tweened the next time any gear was.
       const fresh = gearsCollectedFrom(world.gears, sinceTick);
 
-      for (const gear of fresh) {
+      for (const [index, gear] of fresh.entries()) {
         // World space to the HUD scene's screen space. `getBounds()` is not used: the world camera's
         // scroll and zoom ARE the transform, and asking the camera is what keeps this correct when
         // the zoom is not 1.
@@ -110,16 +106,22 @@ export function attachGearFlyers(scene: Phaser.Scene): GearFlyers {
           y: target.y + target.h / 2,
           scale: { from: flyerScale, to: flyerScale * FLYER_END_SCALE },
           alpha: { from: 1, to: FLYER_END_ALPHA },
-          duration: ticksToMs(TWEEN_TICKS),
+          duration: ticksToMs(FLYER_TWEEN_TICKS),
+          // Staggered by index so two gears collected in one frame do not land as one sprite
+          // — inventory 2b.5. The number and the reasoning live in `hud.ts`, engine-free, because
+          // this module cannot be imported by a unit test.
+          delay: ticksToMs(flyerDelayTicks(index)),
           ease: 'Quad.easeIn',
           // Destroyed rather than hidden: an invisible object still costs a display-list walk every
           // frame, and a HUD that leaks one object per gear is a leak with a level-sized bound.
           onComplete: () => {
             live.delete(tween);
+            flyers.delete(flyer);
             flyer.destroy();
           },
         });
         live.add(tween);
+        flyers.add(flyer);
       }
       return fresh.length;
     },
@@ -128,15 +130,31 @@ export function attachGearFlyers(scene: Phaser.Scene): GearFlyers {
       // Stopped BEFORE anything destroys their targets — a tween still running against a destroyed
       // object throws inside Phaser's update loop, and a throw there stops every scene after it.
       //
-      // ⚠️ The flyers themselves are NOT destroyed here, and that is deliberate rather than an
-      // omission: neither `stop()` nor Phaser's own `BaseTween.destroy()` dispatches `onComplete`,
-      // so the only path that ever destroys a flyer is natural completion. The single caller is the
-      // scene's own SHUTDOWN, which tears the display list down immediately afterwards — so there is
-      // nothing left to leak. A `destroy()` reachable from anywhere else would need its own sweep.
       for (const tween of live) {
         tween.stop();
       }
       live.clear();
+
+      // 🔴 **The flyers are destroyed HERE now — inventory 3.7.**
+      //
+      // This block used to say the opposite, and the reasoning was: *"neither `stop()` nor Phaser's
+      // own `BaseTween.destroy()` dispatches `onComplete`, so the only path that ever destroys a
+      // flyer is natural completion. The single caller is the scene's own SHUTDOWN, which tears the
+      // display list down immediately afterwards — so there is nothing left to leak."*
+      //
+      // The first half is exactly right and is why this sweep is needed at all. The second half is
+      // **an assumption about Phaser's teardown that nothing in this repository verifies**, and it
+      // is doing all the work: it is the only thing standing between a stopped tween and an
+      // orphaned sprite. The same paragraph then concedes the point — *"a `destroy()` reachable
+      // from anywhere else would need its own sweep"* — while leaving the sweep unwritten.
+      //
+      // Writing it costs one loop and removes the dependency on an engine behaviour we have not
+      // measured. Destroying an already-destroyed object is a no-op in Phaser, so a shutdown that
+      // *did* clear the display list first is unharmed by this.
+      for (const flyer of flyers) {
+        flyer.destroy();
+      }
+      flyers.clear();
     },
   };
 }
