@@ -141,6 +141,7 @@ export const SUPERSEDED_CLIPS = Object.freeze({
     'brass-sentry-fire-r2.mp4',
     'brass-sentry-fire-r3.mp4',
     'brass-sentry-fire-r5.mp4',
+    'brass-sentry-fire-r4.mp4',
   ]),
 });
 

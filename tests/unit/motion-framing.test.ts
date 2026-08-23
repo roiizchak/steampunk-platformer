@@ -162,12 +162,29 @@ describe('both brass-sentry/fire records bound the discharge, not just the subje
   });
 
   it.each(FIRE_KEYS)('%s measures the flash against the barrel', (key) => {
-    expect(renderedPrompt(key)).toContain('no further from the muzzle than the length of the barrel');
+    // 🔴 Re-taken 2026-08-23 (inventory 3.10). The clause was reversed on the owner's ruling: it
+    // asked for a flash reaching *no further than* the barrel and got a machine that barely fired.
+    // It now asks for one reaching about TWICE the barrel.
+    //
+    // **The property this test exists for is unchanged and is why it survives the reversal**: the
+    // flash is measured against the BARREL — the one part of the machine whose length the identity
+    // clause already commits to — rather than against the frame, which the model cannot see, or
+    // against nothing, which is how it came back small in the first place.
+    expect(renderedPrompt(key)).toContain('the length of the barrel itself');
   });
 
-  it.each(FIRE_KEYS)('%s requires margin on all four edges, not just left and right', (key) => {
-    // FRAME_MARGIN speaks only about frame WIDTH. `fire` was cut on the top and bottom too.
-    expect(renderedPrompt(key)).toContain('margin stays visible on all four edges');
+  it.each(FIRE_KEYS)('%s keeps the MACHINE off every edge, whatever the flash does', (key) => {
+    // 🔴 Re-taken 2026-08-23 (inventory 3.10). This asserted 'margin stays visible on all four
+    // edges', which bound the flash as well as the machine — and binding the flash is what made the
+    // sentry barely fire.
+    //
+    // `FRAME_MARGIN` speaks only about frame WIDTH, and `fire` was cut top and bottom too, so the
+    // requirement is real. What changed is its SUBJECT: the machine is still held off every edge;
+    // the discharge is explicitly allowed to leave the right one. `-r6` passes G6 anyway, so no
+    // waiver is carried — see `edge-exceptions.test.ts`.
+    const prompt = renderedPrompt(key);
+    expect(prompt).toContain('The MACHINE ITSELF never touches any edge');
+    expect(prompt).toContain('above, below and to the left of the turret');
   });
 
   it('keeps the elevated record identical in angle, which is its stated invariant', () => {

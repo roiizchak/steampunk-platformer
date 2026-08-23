@@ -155,7 +155,7 @@ const CLIP_FILES = Object.freeze({
    * (`request_id 019ff0db-0597-7490-ae69-921c125fed29`). It is the best fire this project has, and
    * its one remaining failure is the muzzle blast leaving frame, not the turret.
    */
-  'brass-sentry/fire': 'brass-sentry-fire-r4.mp4',
+  'brass-sentry/fire': 'brass-sentry-fire-r6.mp4',
   'brass-sentry/death': 'brass-sentry-death-r4.mp4',
   /**
    * First take, adopted. `request_id 01a003ac-ba90-7fd1-acf6-ec8e8c32a81d`, seed 1373696602,

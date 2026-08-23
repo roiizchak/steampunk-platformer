@@ -195,9 +195,9 @@ export const COMBAT_MOTIONS = Object.freeze({
       'leg, no arm and no head. It never becomes a person or a creature.',
     span: poseSpan(
       'the barrel is level and still, the muzzle dark and empty.',
-      'a small bright muzzle flash sits at the mouth of the barrel, reaching forward from the ' +
-        'muzzle no further than the length of the barrel itself, and the whole drum housing has ' +
-        'kicked backward on its legs from the recoil.',
+      'a big bright muzzle flash bursts from the mouth of the barrel, reaching forward about twice ' +
+        'the length of the barrel itself with smoke billowing behind it, and the whole drum ' +
+        'housing has kicked backward on its legs from the recoil.',
       'the flash is gone, a thin wisp of smoke hangs close to the muzzle, and the barrel has ' +
         'settled back to level.',
     ),
@@ -222,8 +222,8 @@ export const COMBAT_MOTIONS = Object.freeze({
     span: poseSpan(
       'the barrel is raised at a steep angle, about 35 degrees above horizontal, and still, the ' +
         'muzzle dark and empty.',
-      'a small bright muzzle flash sits at the mouth of the raised barrel, reaching forward from ' +
-        'the muzzle no further than the length of the barrel itself, and the whole drum ' +
+      'a big bright muzzle flash bursts from the mouth of the raised barrel, reaching forward ' +
+        'about twice the length of the barrel itself with smoke billowing behind it, and the drum ' +
         'housing has kicked backward on its legs from the recoil, the barrel still held at that ' +
         'same steep upward angle.',
       'the flash is gone, a thin wisp of smoke hangs close to the muzzle, and the barrel has ' +

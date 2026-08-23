@@ -92,38 +92,67 @@ void HOLD_CENTRED_REJECTED;
 /**
  * Appended to the two `brass-sentry/fire*` records, and to nothing else.
  *
- * **G6 fails `fire` on a frame where the turret is COMPLETE.** What reaches the edge is the muzzle
- * flash and the smoke plume, not a sheared limb — confirmed by looking at the six-frame strip at
- * full resolution. G6 measures an opaque subject mask and reads one byte per pixel
- * (`edgeGate.mjs:91`, alpha only), so it cannot tell discharge from a crop. That is the same class
- * of blind spot already recorded for G1, which *"cannot tell a boot from a hand"*.
+ * ## 🔴 Reversed 2026-08-23, on the owner's ruling — inventory 3.10
  *
- * **The user's decision was to constrain the effect rather than teach the gate** — so no threshold
- * in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255.
+ * This clause used to read *"The muzzle flash and the smoke are SMALL and CONTAINED: the flash
+ * reaches no further from the muzzle than the length of the barrel itself … Neither the flash nor
+ * the smoke ever reaches any edge of the frame."* It was written under an earlier ruling —
+ * **"constrain the effect rather than teach the gate"** — after G6 failed `fire` on a frame where
+ * the turret was complete and only the discharge crossed the edge.
  *
- * ⚠️ **That premise has since expired, and this clause has not caught up** *(inventory 3.10,
- * recorded 2026-08-23)*. `edgeExceptions.mjs` now carries an `ACCEPTED_EDGE_BLEED` entry for
- * `brass-sentry/fire` permitting the discharge to cross the right edge — which **is** teaching the
- * gate, the outcome this ruling was chosen to avoid. So the two now contradict each other: this
- * clause forbids the flash from reaching any edge, while the gate accepts it doing exactly that.
+ * **It worked, and it cost the feature.** Item 3.10: the shipped `fire` clip has a *"nearly absent"*
+ * discharge, because *"the margin constraint was met by the model largely not firing."* The model
+ * obeyed the cheapest way available to it.
  *
- * The cost is item 3.10: the discharge is *"nearly absent … the margin constraint was met by the
- * model largely not firing."* This clause is suppressing it and, since the gate no longer objects,
- * buying nothing.
+ * ⚠️ **And the ruling's premise expired without the clause catching up.** A later session added an
+ * `ACCEPTED_EDGE_BLEED` entry for `brass-sentry/fire` in `edgeExceptions.mjs`, permitting the
+ * discharge to cross the right edge — *confirmed by eye at full resolution*. That **is** teaching the
+ * gate. So the tree carried both decisions at once: this clause forbidding the flash from reaching
+ * any edge, and the gate accepting it doing exactly that. The suppression was buying nothing.
  *
- * **Relaxing it reverses an owner ruling, so it was NOT done and the authorised re-shoot was NOT
- * taken.** The options are laid out in `docs/qa/session-bugfix-tiers.md` § 3.10 — read that before
- * spending on a sixth `fire` round, because `-r5` already refuted the only other lever (more
- * padding, single-variable, did not move the discharge). `FRAME_MARGIN` alone does not cover
- * this: it binds "the subject and anything it holds", and a turret does not *hold* its own muzzle
- * flash. The flash needed its own ruler, and it is measured against the barrel — the one part of
- * the machine whose length the model has already committed to in the identity clause.
+ * The owner reopened the ruling on 2026-08-23 and chose to relax the clause.
+ *
+ * ## What replaced it, and why it is not simply the negation removed
+ *
+ * STYLE.md §6: **a NAMED element beats a negation**, and this model responds to *geometry* rather
+ * than to permission. Deleting the containment would leave the flash unspecified, which is how it
+ * came back small the first time. So the flash is now given a size — measured against the barrel,
+ * the one part whose length the identity clause already commits to, exactly as the old clause was.
+ *
+ * **The machine itself is still bound.** `FRAME_MARGIN` is unchanged and still holds *"the subject
+ * and anything it holds"* inside the middle 70 % — a turret does not *hold* its own muzzle flash,
+ * which is precisely why the flash needed its own ruler in both directions.
+ *
+ * ⚠️ `-r5` already refuted the other lever: a 4024² anchor at `--fill 0.35`, single-variable against
+ * `-r4`'s 3130², **did not move the discharge**. This clause was the only variable left, so `-r6`
+ * changed it and nothing else.
+ *
+ * ## ✅ The result, measured — and it satisfies BOTH rulings
+ *
+ * | | turret alone | widest frame | discharge visible in |
+ * |---|---|---|---|
+ * | `-r4` (old clause) | 206 px | 305 px | **1 of 6 frames** |
+ * | `-r6` (this clause) | 193 px | 294 px | **5 of 6 frames** |
+ *
+ * The flash is now present across nearly the whole clip instead of a single frame — which matters
+ * because `fire` plays over an 18-tick window, so a one-frame flash is a flicker and a five-frame one
+ * is a shot.
+ *
+ * 🔴 **And it passes G6 outright.** The `ACCEPTED_EDGE_BLEED` entry for `brass-sentry/fire` has been
+ * **deleted**, because nothing bleeds any more: asking for a bigger flash *by geometry* produced one
+ * that still fits the frame, where asking for a small one produced a machine that barely fired.
+ *
+ * So the contradiction is resolved in the direction the ORIGINAL ruling wanted. The effect is
+ * constrained — no gate threshold moved, no exception carried — and it is visible. The earlier
+ * clause achieved the first by sacrificing the second; this one gets both, and the gate is back to
+ * being untaught.
  */
 export const DISCHARGE_MARGIN =
-  ' The muzzle flash and the smoke are SMALL and CONTAINED: the flash reaches no further from the ' +
-  'muzzle than the length of the barrel itself, and the smoke stays a thin wisp close to the ' +
-  'muzzle. Neither the flash nor the smoke ever reaches any edge of the frame, and clear green ' +
-  'margin stays visible on all four edges throughout.';
+  ' The shot is POWERFUL and clearly visible: a bright hot muzzle flash bursts forward from the ' +
+  'mouth of the barrel, reaching forward about TWICE the length of the barrel itself, with a ' +
+  'billow of smoke behind it. The flash and smoke may run off the right edge of the frame. The ' +
+  'MACHINE ITSELF never touches any edge: clear green margin stays visible above, below and to the ' +
+  'left of the turret at all times.';
 
 /**
  * Appended to the two death records whose wreckage genuinely leaves the frame, and to nothing else.

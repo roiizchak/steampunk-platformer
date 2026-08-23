@@ -1495,3 +1495,88 @@ it is listed last despite being the status quo.
 
 Nothing in the tree changed for 3.10. The contradiction is recorded here and cross-referenced from
 `motionClauses.mjs`, so the next reader finds a decision rather than a puzzle.
+
+---
+
+## 3.10 — RESOLVED. The discharge is back, and the waiver is gone
+
+**Status: FIXED.** Owner reopened the ruling; `-r6` shot for $1.19. Running total **$52.67 of $55**.
+
+### What changed, and it was one variable
+
+`-r5` had already refuted the padding lever (a 4024² anchor at `--fill 0.35`, single-variable against
+`-r4`'s 3130², **did not move the discharge**). So `DISCHARGE_MARGIN` was the only thing left, and
+`-r6` changed it and nothing else.
+
+| | old clause | new clause |
+|---|---|---|
+| flash size | *"no further from the muzzle than the length of the barrel"* | *"about TWICE the length of the barrel itself"* |
+| edges | *"neither the flash nor the smoke ever reaches any edge"* | *"the flash and smoke may run off the right edge"* |
+| the machine | (covered by the same sentence) | *"the MACHINE ITSELF never touches any edge"* |
+
+Per STYLE.md §6 — **a named element beats a negation** — the flash was given a *size* rather than
+permission. Deleting the containment would have left it unspecified, which is how it came back small
+the first time. It is still measured against the **barrel**, the one part whose length the identity
+clause commits to.
+
+### Measured
+
+| | turret alone | widest frame | discharge visible in |
+|---|---|---|---|
+| `-r4` | 206 px | 305 px | **1 of 6 frames** |
+| `-r6` | 193 px | 294 px | **5 of 6 frames** |
+
+`fire` plays over an 18-tick window, so a one-frame flash is a flicker and a five-frame one is a shot.
+
+### ✅ And it satisfies BOTH rulings, which is the outcome worth having
+
+`-r6` **passes G6 outright**. The `ACCEPTED_EDGE_BLEED` entry for `brass-sentry/fire` has been
+**deleted** — nothing bleeds any more.
+
+That is the contradiction resolved in the direction the *original* ruling wanted. Asking for a bigger
+flash *by geometry* produced one that still fits the frame, where asking for a small one produced a
+machine that barely fired. No gate threshold moved, no waiver is carried, and the effect is visible.
+`edge-exceptions.test.ts` now asserts the **absence** of that waiver, so re-adding one is a
+conversation rather than a commit.
+
+### 🔴 The regression it caused, and the rule that caught it
+
+Repacking at the inherited scale made the turret draw **23.4 % too small** — tripod base 157 px
+against idle's 205. That is the exact defect the user reported twice: *"the stationary character, when
+they play the K/O animation, it becomes smaller."*
+
+**The cause is the fix.** A bigger muzzle flash inflates the silhouette without making the machine
+bigger, so any scale derived from the silhouette shrinks the turret by however much the flash added.
+`character-bounds-brass-sentry.json` already carried the rule — *"Re-derive from the tripod, never
+from the silhouette, if either clip is ever re-shot"* — and this is its best demonstration yet.
+
+Re-derived from the tripod: `0.44081578 × 205/157 = 0.57558748`. **Verified after repacking: idle 205,
+fire 205, death 205.** `sprite-size-consistency.test.ts` is what caught it, and it named the cause in
+its own failure message before anyone looked.
+
+`fire` and `death` no longer share one scale. That is **correct, not a regression**: they shared it
+because they were shot from the same padded anchor in the same round, and `fire` is now a different
+round with a different discharge.
+
+### Four readings re-taken
+
+`clip-jobs` (`-r4` → `-r6`), `edge-exceptions` (acceptance → asserted absence), and the two
+`motion-framing` wording gates. The second of those changed its **subject** rather than its strength:
+it asserted *"margin stays visible on all four edges"*, which bound the flash as well as the machine —
+and binding the flash is what made the sentry barely fire. It now holds the machine off every edge and
+lets the discharge leave the right one.
+
+### ⚠️ Found on the way, and NOT fixed: `brass-sentry/idle` fails its own loop gate
+
+`⚠ idle 8 frames … FAIL — loop: wrap 0.01371 exceeds 0.01143 — it snaps.`
+
+**Pre-existing** — reproduced with every change from this session stashed. It is not mine and it is
+not new.
+
+The reason nobody has seen it is worth more than the defect: **`npm run assets:build` with no slug
+does not build the sentry at all.** It builds `brass-courier` only, so the sentry's gates run only
+when someone types the slug by hand. A failing gate that the default command never runs is a gate
+nobody reads.
+
+Recorded, not fixed: `idle` is the sheet the whole slug's `scale` is derived from, so re-shooting it
+moves every sentry number in the file — a piece of work, not a line change. **Owed.**

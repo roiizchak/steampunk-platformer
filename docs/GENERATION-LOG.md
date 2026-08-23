@@ -269,3 +269,7 @@ footstep and a landing are live on that tick, and a worst case should over-state
 | [qa/session-bugfix-tiers.md § 2.2](qa/session-bugfix-tiers.md) | **`brass-courier/fall` re-shoot — PAID AND REJECTED.** `01a02e75-f146-77e0-bbb6-78723778be42`. Applied both levers that made `jump-r4` pass (padded square anchor + the `SAME SIZE` clause) and passed **every** gate — G6, motion floor, adjacent distinctness — while measuring **worse** on the defect: worst adjacent height step 30 px against the shipped clip's 22. `fall-r2.mp4` still ships. The clip is kept, superseded, never deleted | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
 
 **Running total: $51.48 of the $55 ceiling. $3.52 remains.**
+
+| [qa/session-bugfix-tiers.md § 3.10](qa/session-bugfix-tiers.md) | **`brass-sentry/fire` re-shoot — ADOPTED.** `01a02eb2-9ec0-7b93-982f-f060bbcbffb1`. `DISCHARGE_MARGIN` reversed on the owner's ruling: the flash now reaches about **twice** the barrel instead of no further than it. Discharge visible in **5 of 6 frames**, up from 1 — and it **passes G6 outright**, so the `ACCEPTED_EDGE_BLEED` waiver was deleted. Forced a tripod re-derive (0.44081578 → 0.57558748); the turret had gone 23.4 % small | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Running total: $52.67 of the $55 ceiling. $2.33 remains.**

@@ -212,7 +212,8 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
 
     it('brass-sentry/fire submits the PADDED canvas, matching the clip it declares', () => {
       const fire = CLIP_JOBS['brass-sentry/fire'];
-      expect(fire.file).toBe('brass-sentry-fire-r4.mp4');
+      // Re-taken 2026-08-23: `-r6` supersedes `-r4` (inventory 3.10).
+      expect(fire.file).toBe('brass-sentry-fire-r6.mp4');
       expect(fire.anchorPadded).toBe(true);
       // The decisive assertion: not merely "an anchor is set", but "not the one that was replaced".
       expect(fire.anchorUrl).not.toBe(SENTRY_UNPADDED);

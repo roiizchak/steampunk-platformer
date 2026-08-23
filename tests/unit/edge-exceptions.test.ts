@@ -93,12 +93,30 @@ describe('the exception table is pinned to what was actually examined', () => {
 
 describe('acceptedEdgeBleed — the refusals matter more than the acceptances', () => {
   it('accepts the examined failure on the examined clip', () => {
-    expect(acceptedEdgeBleed('brass-sentry/fire', 'brass-sentry-fire-r4.mp4', RIGHT_BLED)).toContain(
-      'muzzle discharge',
-    );
     expect(acceptedEdgeBleed('brass-sentry/death', 'brass-sentry-death-r4.mp4', TOP_BLED)).toContain(
       'steam plume',
     );
+  });
+
+  it('brass-sentry/fire has NO waiver any more, and that is the point (3.10)', () => {
+    // 🔴 The `fire` entry was DELETED on 2026-08-23, and this test replaces the acceptance that used
+    // to live above.
+    //
+    // It existed because the muzzle discharge crossed the right edge. The owner reopened the ruling
+    // that had produced that situation — `DISCHARGE_MARGIN` told the model to keep the flash small
+    // and inside the frame, and it obeyed by *barely firing*, which is inventory 3.10. The clause
+    // now asks for a flash reaching about twice the barrel's length instead.
+    //
+    // ⚠️ **The bigger flash still fits.** `-r6` passes G6 outright, so the waiver has nothing to
+    // waive. That resolves the contradiction in the direction the ORIGINAL ruling wanted: the effect
+    // is constrained, no gate threshold moved, and no exception is carried — while the discharge is
+    // now visible in 5 of 6 frames instead of 1.
+    //
+    // A red here means someone re-added the waiver. Ask why the flash stopped fitting first.
+    expect(
+      acceptedEdgeBleed('brass-sentry/fire', 'brass-sentry-fire-r6.mp4', RIGHT_BLED),
+      'a fire waiver is back — the clip should pass G6 on its own since -r6',
+    ).toBeNull();
   });
 
   it('REFUSES a different round of the same clip', () => {
