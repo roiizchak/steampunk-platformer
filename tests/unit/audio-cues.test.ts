@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 
 import { AUDIO_CUES, SILENT_EDGES, audioCues } from '../../src/sim/audioCues';
 import { noEvents } from '../../src/sim/tick';
+import catalog from '../../public/assets/index.json';
 import type { AudioCue } from '../../src/sim/audioCues';
 import type { TickEvents } from '../../src/sim/types';
 
@@ -121,8 +122,26 @@ describe('no edge is left unaccounted for', () => {
 
   it('every cue name in the union is reachable from some edge', () => {
     const reachable = new Set(Object.values(AUDIO_CUES));
-    // Nine SFX. The two beds are not cues — nothing in the sim starts or stops them.
-    expect(reachable.size).toBe(9);
+    // 🔴 Re-taken 2026-08-23: this was `toBe(9)` and inventory 3.6 made it ten (`complete`, on
+    // `goalReached`). Derived now rather than re-pinned — the property is that the union has no
+    // UNREACHABLE member, and a literal restates the count instead of asserting the property. The
+    // beds are not cues: nothing in the sim starts or stops them.
+    // Derived from the SHIPPED catalog, which is the only runtime enumeration of the cue set —
+    // `AudioCue` is a type-only union and cannot be iterated. This ties the two together: a cue that
+    // ships with no edge is dead weight, and an edge naming a cue that does not ship is silence.
+    const shippedCues = (catalog.audio as { key: string }[])
+      .map((row) => row.key)
+      .filter((key) => key.startsWith('sfx-'))
+      .map((key) => key.slice('sfx-'.length));
+    expect(shippedCues.length, 'no sfx rows in the catalog — this assertion is vacuous').toBeGreaterThan(5);
+    expect(
+      shippedCues.filter((cue) => !reachable.has(cue as never)),
+      'these cues ship but no edge can play them',
+    ).toEqual([]);
+    expect(
+      [...reachable].filter((cue) => !shippedCues.includes(cue)),
+      'these edges name a cue that does not ship — they are silence',
+    ).toEqual([]);
   });
 });
 

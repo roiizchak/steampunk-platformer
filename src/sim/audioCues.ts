@@ -31,7 +31,8 @@ export type AudioCue =
   | 'pickup'
   | 'hurt'
   | 'death'
-  | 'footstep';
+  | 'footstep'
+  | 'complete';
 
 /**
  * Edge → cue. **Declaration order is the emission order**, so a given tick always produces the same
@@ -57,6 +58,17 @@ export const AUDIO_CUES = {
   jumped: 'jump',
   landed: 'land',
   footstep: 'footstep',
+  /**
+   * The level-complete sting — **inventory 3.6**, generated 2026-08-23.
+   *
+   * On `goalReached`, **not** `levelCompleted`, and that is the same decision C6 made about the
+   * visual flourish. `goalReached` is the tick the courier arrives at the door; `levelCompleted` is
+   * twenty ticks later, after the fade, over an empty doorway. Putting the sound on the arrival
+   * makes it land with the flourish rather than after it — one moment, not two.
+   *
+   * `levelCompleted` therefore stays in `SILENT_EDGES`, with its own reason.
+   */
+  goalReached: 'complete',
 } as const satisfies Partial<Record<keyof TickEvents, AudioCue>>;
 
 /**
@@ -73,21 +85,16 @@ export const AUDIO_CUES = {
  *     it would machine-gun. `attackStarted` is the audible moment.
  *   - `respawned` — the death cue already sounded. A second cue `DEATH_TICKS` later marks a moment
  *     the player is not acting in.
- *   - `levelCompleted` — silent **for now, and by decision rather than by omission** (Phase 8). The
- *     level-complete overlay is the feedback: it fades the screen, so the moment is not ambiguous and
- *     an unheard cue is not what would make it unclear. A completion sting is real Phase 9 work — it
- *     needs a generated cue, which costs fal spend against a ceiling declared before generating, and
- *     `audio-cue-edges.test.ts` sits at exactly 400 lines so a tenth cue would need that file split
- *     first. Recorded here so the next phase finds a decision rather than a gap.
+ *   - `levelCompleted` — silent, and **still silent now that the sting exists** (inventory 3.6,
+ *     2026-08-23). The sting fires on `goalReached`, twenty ticks earlier, where the courier is
+ *     still at the door; a second cue here would mark a moment the player is not acting in — the
+ *     same objection `respawned` carries. The overlay is this edge's feedback: it fades the screen,
+ *     so the moment is not ambiguous.
  */
 export const SILENT_EDGES = [
   'leftGround',
   'hitActive',
   'respawned',
-  // No cue yet. Inventory 3.6 owes a level-complete sting and 2.6's arrival is the better moment
-  // for one — but a generated cue is fal spend, so both stay silent and are recorded rather than
-  // quietly given the wrong sound.
-  'goalReached',
   'levelCompleted',
 ] as const satisfies readonly (keyof TickEvents)[];
 

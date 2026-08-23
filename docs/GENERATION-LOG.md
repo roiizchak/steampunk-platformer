@@ -233,3 +233,14 @@ Three things there are worth reading even if the numbers are not:
   but **its seed does not** — it is the one Phase 7 cue that cannot be re-generated identically.
   Same class of gap as [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md),
   caught one phase earlier and one recovery cheaper.
+
+| [generations/phase-07-audio.md](generations/phase-07-audio.md) | **The level-complete sting** (inventory 3.6), added in the bug-fix session 2026-08-23 on the owner's authorisation. One take, adopted. `request_id` `01a02e6e-2db2-7a01-b469-8a2bf09549bf`, seed **7301**, 4 s WAV — reproducible, unlike `hit`. Mixed at −2 dB, and the pipeline **clamped its gain to 1** because the master came back at −13.64 dBFS: the achieved level is ~0.7 dB under the weight asked for, recorded rather than re-shot for a rounding | `fal-ai/stable-audio-3/small/sfx/text-to-audio` | 1 · $0.02 |
+
+**Audio ceiling after the sting: $0.25 of $5. $4.75 remains.**
+
+⚠️ **Adding a tenth cue RE-SOLVES the whole mix.** The headroom scalar is solved against the
+worst-case stack, so every shipped cue's gain changed when `complete` joined it — this is the
+pipeline working as designed, and it is why the audio row count in `verify-dist` went 11 → 12 and
+every gain in `index.json` moved. `complete` was put **into** the worst-case stack rather than
+argued out of it: `levelCompleted` arrives while the player is still walking into the gate, so a
+footstep and a landing are live on that tick, and a worst case should over-state.

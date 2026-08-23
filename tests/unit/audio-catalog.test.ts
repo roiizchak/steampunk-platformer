@@ -101,12 +101,14 @@ describe('the SHIPPED catalog satisfies its own validator', () => {
     expect(describeCatalogProblem(shipped as unknown as AssetCatalog)).toBeNull();
   });
 
-  it('ships all nine cues and both beds', () => {
+  it('ships every cue and both beds', () => {
     const keys = (shipped as unknown as AssetCatalog).audio.map((row) => row.key).sort();
     expect(keys).toEqual([
       'bed-ambience',
       'bed-music',
       'sfx-attack',
+      // Added by inventory 3.6, 2026-08-23 — the level-complete sting, on `goalReached`.
+      'sfx-complete',
       'sfx-death',
       'sfx-footstep',
       'sfx-hit',

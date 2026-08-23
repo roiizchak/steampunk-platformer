@@ -22,6 +22,7 @@
 import { describe, expect, it } from 'vitest';
 
 import catalog from '../../public/assets/index.json';
+import { AUDIO_CUES } from '../../src/sim/audioCues';
 import { SILENCE_FLOOR_DBFS, measureCue } from '../../tools/gen/audioGate.mjs';
 import { readBytes } from '../../tools/gen/png.mjs';
 import { readWav } from '../../tools/gen/wav.mjs';
@@ -58,8 +59,12 @@ describe('the catalog and the files on disk agree', () => {
     }
   });
 
-  it('ships nine cues and two beds', () => {
-    expect(CUES).toHaveLength(9);
+  it('ships every declared cue and two beds', () => {
+    // 🔴 Re-taken 2026-08-23: this was `toHaveLength(9)` and inventory 3.6 made it ten. The count
+    // is now read off `AUDIO_CUES` rather than restated, so adding an eleventh cue cannot leave
+    // this assertion quietly describing the previous game *(vault 5.3)*.
+    const declared = new Set(Object.values(AUDIO_CUES));
+    expect(CUES).toHaveLength(declared.size);
     expect(BEDS).toHaveLength(2);
   });
 });

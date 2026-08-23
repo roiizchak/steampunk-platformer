@@ -95,3 +95,28 @@ if (process.argv[1]?.endsWith('audioFade.mjs')) {
   const now = firstSampleMagnitude(readFileSync(path));
   console.log(`${path}: first sample ${was?.toFixed(4)} -> ${now?.toFixed(4)} (${ms}ms fade)`);
 }
+
+/**
+ * The float-domain fade, applied by `build-audio.mjs` immediately after `trimToEvent`.
+ *
+ * 🔴 **This is where the 2b.8 fix belongs, and the byte-level `fadeInWav` above is not.**
+ *
+ * `trimToEvent` cuts each master back to just before its loudest moment *(vault 7.1)*. That cut
+ * lands on whatever sample happens to be there — it is not a zero crossing, and nothing made it
+ * one. So the trim **creates** the discontinuity: `jump` opened at 0.0888 not because the master
+ * did, but because that is where its event began.
+ *
+ * Fixing the shipped `.wav` after the fact would therefore be undone by the next
+ * `npm run assets:audio`, silently, with the click back and every gate green. Fading here makes it
+ * a property of the pipeline instead of a property of one file.
+ *
+ * Applied to EVERY cue rather than only the one that was measurably bad: the others are small
+ * because their events happen to start quietly, which is luck, not design.
+ */
+export function fadeInChannels(channels, rate, fadeMs = DEFAULT_FADE_MS) {
+  const frames = Math.min(Math.floor((rate * fadeMs) / 1000), channels[0]?.length ?? 0);
+  for (const channel of channels) {
+    for (let i = 0; i < frames; i += 1) channel[i] *= i / frames;
+  }
+  return channels;
+}

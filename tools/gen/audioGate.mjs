@@ -172,6 +172,12 @@ export function measureCue(channels) {
  * worst case errs in the safe direction; do not "fix" it.
  */
 export const WORST_CASE_STACK = [
+  // 🔴 `complete` joins the stack — inventory 3.6, 2026-08-23. It fires once per level, but not in
+  // isolation: `levelCompleted` arrives while the player is still walking into the gate, so a
+  // footstep and a landing are both live on that tick, and a gear collected on the same tick as the
+  // goal is reachable. A worst case should OVER-state — the same argument this file already makes
+  // about the beds — so it is counted rather than argued away.
+  'complete',
   'land',
   'footstep',
   'hurt',

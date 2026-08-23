@@ -3,6 +3,8 @@ import { createWorld, tick } from '../../src/sim/tick';
 import { createSnapshot } from '../../src/sim/input';
 import { rollChance } from '../../src/sim/rng';
 import { HITSTOP_TICKS } from '../../src/sim/hitstop';
+import { AUDIO_CUES, SILENT_EDGES } from '../../src/sim/audioCues';
+import catalog from '../../public/assets/index.json';
 import type { Rect } from '../../src/sim/types';
 
 /**
@@ -181,5 +183,54 @@ describe('the setTintFill hazard is gated (ENGINE-NOTES :142-148)', () => {
     expect(all, 'nothing sets a tint mode — the flash path may have been removed').toContain(
       'setTintMode',
     );
+  });
+});
+
+/**
+ * ## 3.6 — the level-complete sting exists, and fires on ARRIVAL
+ *
+ * `levelCompleted` sat in `SILENT_EDGES` with an honest reason: a sting *"needs a generated cue,
+ * which costs fal spend against a ceiling declared before generating, and `audio-cue-edges.test.ts`
+ * sits at exactly 400 lines so a tenth cue would need that file split first."* Owner authorised the
+ * spend on 2026-08-23; the cue was generated for **$0.02** against the audio ceiling's remaining
+ * $4.77.
+ *
+ * 🔴 **It fires on `goalReached`, not `levelCompleted`** — the same decision C6 made about the
+ * visual flourish, for the same reason. `goalReached` is the tick the courier arrives at the door;
+ * `levelCompleted` is twenty ticks later, after the fade, over an empty doorway. Sound and flourish
+ * now land together, which is one moment instead of two.
+ *
+ * `levelCompleted` therefore **stays silent**, and its entry says so rather than being deleted: a
+ * second cue there would mark a moment the player is not acting in, the same objection `respawned`
+ * already carries.
+ *
+ * **The mutation this names:** move `complete` back to `levelCompleted`.
+ */
+describe('3.6 — the completion sting', () => {
+  it('the arrival edge plays it', () => {
+    expect(AUDIO_CUES.goalReached).toBe('complete');
+  });
+
+  it('and the completion edge stays silent — one moment, not two', () => {
+    expect(SILENT_EDGES).toContain('levelCompleted');
+    expect(Object.keys(AUDIO_CUES)).not.toContain('levelCompleted');
+  });
+
+  it('the cue actually ships', () => {
+    // A cue mapped to a key the catalog does not carry is silence with extra steps — and the boot
+    // gate would refuse the level rather than say so quietly.
+    const keys = (catalog.audio as { key: string }[]).map((row) => row.key);
+    expect(keys).toContain('sfx-complete');
+  });
+
+  it('it is mixed as a reward, not as a footnote', () => {
+    // The intent is "loudest after the three at 0". Asserted against the shipped gain rather than
+    // the design table, because the pipeline CLAMPS gain at 1 and the master came back quiet — so
+    // the achieved level is what matters, not the weight that was asked for.
+    const row = (catalog.audio as { key: string; gain?: number }[]).find(
+      (r) => r.key === 'sfx-complete',
+    );
+    expect(row, 'sfx-complete is not in the catalog').toBeDefined();
+    expect(row!.gain, 'the sting was mixed below a footstep').toBeGreaterThan(0.29);
   });
 });
