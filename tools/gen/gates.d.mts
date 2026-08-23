@@ -31,7 +31,7 @@ export declare function gateMotionFloor(frames: RgbaImage[], floor?: number): Ve
 export declare function gateLoopWrap(
   frames: RgbaImage[],
   slack?: number,
-): Verdict<{ wrap: number; medianStep: number; budget: number } | null>;
+): Verdict<{ wrap: number; medianStep: number; largestStep: number; budget: number } | null>;
 export declare function gateReachBand(
   frames: RgbaImage[],
   threshold?: number,

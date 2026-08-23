@@ -13,7 +13,7 @@
           "index": 0,
           "sourceMinY": 6,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 613.608,
+          "sourceCentroidY": 613.6084828355465,
           "drawnHeight": 288,
           "liftPx": 0
         },
@@ -21,7 +21,7 @@
           "index": 1,
           "sourceMinY": 8,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 614.703,
+          "sourceCentroidY": 614.7028979359708,
           "drawnHeight": 287,
           "liftPx": 0
         },
@@ -29,7 +29,7 @@
           "index": 2,
           "sourceMinY": 10,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 615.94,
+          "sourceCentroidY": 615.9402772077163,
           "drawnHeight": 287,
           "liftPx": 0
         },
@@ -37,7 +37,7 @@
           "index": 3,
           "sourceMinY": 10,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 615.543,
+          "sourceCentroidY": 615.5431664206502,
           "drawnHeight": 287,
           "liftPx": 0
         },
@@ -45,7 +45,7 @@
           "index": 4,
           "sourceMinY": 6,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 612.085,
+          "sourceCentroidY": 612.0852288700498,
           "drawnHeight": 288,
           "liftPx": 0
         },
@@ -53,7 +53,7 @@
           "index": 5,
           "sourceMinY": 4,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 609.968,
+          "sourceCentroidY": 609.9677348176187,
           "drawnHeight": 288,
           "liftPx": 0
         },
@@ -61,7 +61,7 @@
           "index": 6,
           "sourceMinY": 0,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 604.737,
+          "sourceCentroidY": 604.7371761964631,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -69,7 +69,7 @@
           "index": 7,
           "sourceMinY": 0,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 604.326,
+          "sourceCentroidY": 604.3258529281447,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -77,7 +77,7 @@
           "index": 8,
           "sourceMinY": 0,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 604.194,
+          "sourceCentroidY": 604.1935513425033,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -85,7 +85,7 @@
           "index": 9,
           "sourceMinY": 0,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 606.155,
+          "sourceCentroidY": 606.1545716386812,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -93,7 +93,7 @@
           "index": 10,
           "sourceMinY": 2,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 609.238,
+          "sourceCentroidY": 609.2384710264545,
           "drawnHeight": 288,
           "liftPx": 0
         },
@@ -101,7 +101,7 @@
           "index": 11,
           "sourceMinY": 6,
           "sourceMaxY": 1217,
-          "sourceCentroidY": 614.371,
+          "sourceCentroidY": 614.3707406106097,
           "drawnHeight": 288,
           "liftPx": 0
         }
@@ -117,7 +117,7 @@
           "index": 0,
           "sourceMinY": 20,
           "sourceMaxY": 1227,
-          "sourceCentroidY": 641.456,
+          "sourceCentroidY": 641.4560972334139,
           "drawnHeight": 287,
           "liftPx": 3
         },
@@ -125,7 +125,7 @@
           "index": 1,
           "sourceMinY": 20,
           "sourceMaxY": 1235,
-          "sourceCentroidY": 639.094,
+          "sourceCentroidY": 639.0941991473311,
           "drawnHeight": 288,
           "liftPx": 1
         },
@@ -133,7 +133,7 @@
           "index": 2,
           "sourceMinY": 20,
           "sourceMaxY": 1235,
-          "sourceCentroidY": 638.861,
+          "sourceCentroidY": 638.8608982822599,
           "drawnHeight": 288,
           "liftPx": 1
         },
@@ -141,7 +141,7 @@
           "index": 3,
           "sourceMinY": 12,
           "sourceMaxY": 1231,
-          "sourceCentroidY": 619.946,
+          "sourceCentroidY": 619.9461999707503,
           "drawnHeight": 289,
           "liftPx": 2
         },
@@ -149,7 +149,7 @@
           "index": 4,
           "sourceMinY": 4,
           "sourceMaxY": 1225,
-          "sourceCentroidY": 591.449,
+          "sourceCentroidY": 591.4493888635888,
           "drawnHeight": 290,
           "liftPx": 3
         },
@@ -157,7 +157,7 @@
           "index": 5,
           "sourceMinY": 4,
           "sourceMaxY": 1225,
-          "sourceCentroidY": 590.576,
+          "sourceCentroidY": 590.5759624163748,
           "drawnHeight": 290,
           "liftPx": 3
         },
@@ -165,7 +165,7 @@
           "index": 6,
           "sourceMinY": 2,
           "sourceMaxY": 1219,
-          "sourceCentroidY": 576.155,
+          "sourceCentroidY": 576.1549813936377,
           "drawnHeight": 289,
           "liftPx": 5
         },
@@ -173,7 +173,7 @@
           "index": 7,
           "sourceMinY": 4,
           "sourceMaxY": 1219,
-          "sourceCentroidY": 576.141,
+          "sourceCentroidY": 576.1410698822166,
           "drawnHeight": 288,
           "liftPx": 5
         },
@@ -181,7 +181,7 @@
           "index": 8,
           "sourceMinY": 8,
           "sourceMaxY": 1215,
-          "sourceCentroidY": 604.844,
+          "sourceCentroidY": 604.8439472278862,
           "drawnHeight": 287,
           "liftPx": 6
         },
@@ -189,7 +189,7 @@
           "index": 9,
           "sourceMinY": 8,
           "sourceMaxY": 1215,
-          "sourceCentroidY": 604.825,
+          "sourceCentroidY": 604.8245927336343,
           "drawnHeight": 287,
           "liftPx": 6
         },
@@ -197,7 +197,7 @@
           "index": 10,
           "sourceMinY": 16,
           "sourceMaxY": 1221,
-          "sourceCentroidY": 613.729,
+          "sourceCentroidY": 613.7291703514952,
           "drawnHeight": 286,
           "liftPx": 4
         },
@@ -205,7 +205,7 @@
           "index": 11,
           "sourceMinY": 18,
           "sourceMaxY": 1233,
-          "sourceCentroidY": 616.297,
+          "sourceCentroidY": 616.2974831957183,
           "drawnHeight": 288,
           "liftPx": 1
         },
@@ -213,7 +213,7 @@
           "index": 12,
           "sourceMinY": 20,
           "sourceMaxY": 1233,
-          "sourceCentroidY": 615.729,
+          "sourceCentroidY": 615.7293341622818,
           "drawnHeight": 288,
           "liftPx": 1
         },
@@ -221,7 +221,7 @@
           "index": 13,
           "sourceMinY": 19,
           "sourceMaxY": 1237,
-          "sourceCentroidY": 610.84,
+          "sourceCentroidY": 610.8396511559558,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -229,7 +229,7 @@
           "index": 14,
           "sourceMinY": 14,
           "sourceMaxY": 1239,
-          "sourceCentroidY": 604.616,
+          "sourceCentroidY": 604.6162731389331,
           "drawnHeight": 291,
           "liftPx": 0
         },
@@ -237,7 +237,7 @@
           "index": 15,
           "sourceMinY": 14,
           "sourceMaxY": 1239,
-          "sourceCentroidY": 604.72,
+          "sourceCentroidY": 604.7204553302824,
           "drawnHeight": 291,
           "liftPx": 0
         },
@@ -245,7 +245,7 @@
           "index": 16,
           "sourceMinY": 6,
           "sourceMaxY": 1235,
-          "sourceCentroidY": 592.101,
+          "sourceCentroidY": 592.1014666742891,
           "drawnHeight": 292,
           "liftPx": 1
         },
@@ -253,7 +253,7 @@
           "index": 17,
           "sourceMinY": 4,
           "sourceMaxY": 1233,
-          "sourceCentroidY": 582.307,
+          "sourceCentroidY": 582.3074253514505,
           "drawnHeight": 292,
           "liftPx": 1
         },
@@ -261,7 +261,7 @@
           "index": 18,
           "sourceMinY": 0,
           "sourceMaxY": 1229,
-          "sourceCentroidY": 604.05,
+          "sourceCentroidY": 604.0504134870207,
           "drawnHeight": 292,
           "liftPx": 2
         },
@@ -269,7 +269,7 @@
           "index": 19,
           "sourceMinY": 0,
           "sourceMaxY": 1229,
-          "sourceCentroidY": 604.096,
+          "sourceCentroidY": 604.0963505234984,
           "drawnHeight": 292,
           "liftPx": 2
         },
@@ -277,7 +277,7 @@
           "index": 20,
           "sourceMinY": 6,
           "sourceMaxY": 1223,
-          "sourceCentroidY": 624.416,
+          "sourceCentroidY": 624.4159044327853,
           "drawnHeight": 289,
           "liftPx": 4
         },
@@ -285,7 +285,7 @@
           "index": 21,
           "sourceMinY": 12,
           "sourceMaxY": 1221,
-          "sourceCentroidY": 632.571,
+          "sourceCentroidY": 632.5710794733689,
           "drawnHeight": 287,
           "liftPx": 4
         },
@@ -293,7 +293,7 @@
           "index": 22,
           "sourceMinY": 12,
           "sourceMaxY": 1221,
-          "sourceCentroidY": 632.933,
+          "sourceCentroidY": 632.9330648241846,
           "drawnHeight": 287,
           "liftPx": 4
         },
@@ -301,7 +301,7 @@
           "index": 23,
           "sourceMinY": 20,
           "sourceMaxY": 1227,
-          "sourceCentroidY": 640.335,
+          "sourceCentroidY": 640.3350181550193,
           "drawnHeight": 287,
           "liftPx": 3
         }
@@ -317,7 +317,7 @@
           "index": 0,
           "sourceMinY": 4,
           "sourceMaxY": 1177,
-          "sourceCentroidY": 588.933,
+          "sourceCentroidY": 588.932677882463,
           "drawnHeight": 279,
           "liftPx": 5
         },
@@ -325,7 +325,7 @@
           "index": 1,
           "sourceMinY": 0,
           "sourceMaxY": 1101,
-          "sourceCentroidY": 583.688,
+          "sourceCentroidY": 583.688437769816,
           "drawnHeight": 261,
           "liftPx": 23
         },
@@ -333,7 +333,7 @@
           "index": 2,
           "sourceMinY": 6,
           "sourceMaxY": 1157,
-          "sourceCentroidY": 584.275,
+          "sourceCentroidY": 584.2752883342787,
           "drawnHeight": 273,
           "liftPx": 9
         },
@@ -341,7 +341,7 @@
           "index": 3,
           "sourceMinY": 18,
           "sourceMaxY": 1189,
-          "sourceCentroidY": 584.366,
+          "sourceCentroidY": 584.3655707685738,
           "drawnHeight": 278,
           "liftPx": 2
         },
@@ -349,7 +349,7 @@
           "index": 4,
           "sourceMinY": 28,
           "sourceMaxY": 1195,
-          "sourceCentroidY": 567.688,
+          "sourceCentroidY": 567.687558685446,
           "drawnHeight": 277,
           "liftPx": 0
         },
@@ -357,7 +357,7 @@
           "index": 5,
           "sourceMinY": 26,
           "sourceMaxY": 1189,
-          "sourceCentroidY": 544.476,
+          "sourceCentroidY": 544.476252827816,
           "drawnHeight": 276,
           "liftPx": 2
         },
@@ -365,7 +365,7 @@
           "index": 6,
           "sourceMinY": 10,
           "sourceMaxY": 1181,
-          "sourceCentroidY": 545.233,
+          "sourceCentroidY": 545.2325621464898,
           "drawnHeight": 278,
           "liftPx": 4
         },
@@ -373,7 +373,7 @@
           "index": 7,
           "sourceMinY": 0,
           "sourceMaxY": 1137,
-          "sourceCentroidY": 535.962,
+          "sourceCentroidY": 535.9624016519236,
           "drawnHeight": 270,
           "liftPx": 14
         },
@@ -381,7 +381,7 @@
           "index": 8,
           "sourceMinY": 0,
           "sourceMaxY": 1147,
-          "sourceCentroidY": 536.215,
+          "sourceCentroidY": 536.2148930594836,
           "drawnHeight": 272,
           "liftPx": 12
         },
@@ -389,7 +389,7 @@
           "index": 9,
           "sourceMinY": 12,
           "sourceMaxY": 1181,
-          "sourceCentroidY": 541.089,
+          "sourceCentroidY": 541.0886387043163,
           "drawnHeight": 278,
           "liftPx": 4
         },
@@ -397,7 +397,7 @@
           "index": 10,
           "sourceMinY": 12,
           "sourceMaxY": 1181,
-          "sourceCentroidY": 541.099,
+          "sourceCentroidY": 541.0993165409915,
           "drawnHeight": 278,
           "liftPx": 4
         },
@@ -405,7 +405,7 @@
           "index": 11,
           "sourceMinY": 22,
           "sourceMaxY": 1197,
-          "sourceCentroidY": 557.44,
+          "sourceCentroidY": 557.4400405217172,
           "drawnHeight": 279,
           "liftPx": 0
         },
@@ -413,7 +413,7 @@
           "index": 12,
           "sourceMinY": 24,
           "sourceMaxY": 1197,
-          "sourceCentroidY": 571.806,
+          "sourceCentroidY": 571.8055340149303,
           "drawnHeight": 279,
           "liftPx": 0
         },
@@ -421,7 +421,7 @@
           "index": 13,
           "sourceMinY": 14,
           "sourceMaxY": 1189,
-          "sourceCentroidY": 589.598,
+          "sourceCentroidY": 589.5978200487884,
           "drawnHeight": 279,
           "liftPx": 2
         },
@@ -429,7 +429,7 @@
           "index": 14,
           "sourceMinY": 4,
           "sourceMaxY": 1175,
-          "sourceCentroidY": 589.754,
+          "sourceCentroidY": 589.7540054252304,
           "drawnHeight": 278,
           "liftPx": 5
         }
@@ -445,7 +445,7 @@
           "index": 0,
           "sourceMinY": 66,
           "sourceMaxY": 505,
-          "sourceCentroidY": 286.742,
+          "sourceCentroidY": 286.7417673260586,
           "drawnHeight": 264,
           "liftPx": 18
         },
@@ -453,7 +453,7 @@
           "index": 1,
           "sourceMinY": 88,
           "sourceMaxY": 417,
-          "sourceCentroidY": 256.614,
+          "sourceCentroidY": 256.61427959853495,
           "drawnHeight": 198,
           "liftPx": 53
         },
@@ -461,7 +461,7 @@
           "index": 2,
           "sourceMinY": 86,
           "sourceMaxY": 423,
-          "sourceCentroidY": 255.466,
+          "sourceCentroidY": 255.46600856770348,
           "drawnHeight": 203,
           "liftPx": 49
         },
@@ -469,7 +469,7 @@
           "index": 3,
           "sourceMinY": 4,
           "sourceMaxY": 443,
-          "sourceCentroidY": 193.878,
+          "sourceCentroidY": 193.8781825368071,
           "drawnHeight": 264,
           "liftPx": 0
         },
@@ -477,7 +477,7 @@
           "index": 4,
           "sourceMinY": 0,
           "sourceMaxY": 437,
-          "sourceCentroidY": 190.868,
+          "sourceCentroidY": 190.86811266955647,
           "drawnHeight": 263,
           "liftPx": 2
         },
@@ -485,7 +485,7 @@
           "index": 5,
           "sourceMinY": 57,
           "sourceMaxY": 459,
-          "sourceCentroidY": 245.948,
+          "sourceCentroidY": 245.9483334838768,
           "drawnHeight": 242,
           "liftPx": 21
         }
@@ -501,7 +501,7 @@
           "index": 0,
           "sourceMinY": 0,
           "sourceMaxY": 461,
-          "sourceCentroidY": 213.59,
+          "sourceCentroidY": 213.58998870399407,
           "drawnHeight": 277,
           "liftPx": 0
         },
@@ -509,7 +509,7 @@
           "index": 1,
           "sourceMinY": 4,
           "sourceMaxY": 441,
-          "sourceCentroidY": 202.973,
+          "sourceCentroidY": 202.97296408481176,
           "drawnHeight": 263,
           "liftPx": 5
         },
@@ -517,7 +517,7 @@
           "index": 2,
           "sourceMinY": 8,
           "sourceMaxY": 417,
-          "sourceCentroidY": 191.839,
+          "sourceCentroidY": 191.83901213600822,
           "drawnHeight": 246,
           "liftPx": 13
         },
@@ -525,7 +525,7 @@
           "index": 3,
           "sourceMinY": 12,
           "sourceMaxY": 385,
-          "sourceCentroidY": 179.759,
+          "sourceCentroidY": 179.7590799698712,
           "drawnHeight": 224,
           "liftPx": 26
         },
@@ -533,7 +533,7 @@
           "index": 4,
           "sourceMinY": 14,
           "sourceMaxY": 357,
-          "sourceCentroidY": 169.443,
+          "sourceCentroidY": 169.44312423218673,
           "drawnHeight": 206,
           "liftPx": 36
         },
@@ -541,7 +541,7 @@
           "index": 5,
           "sourceMinY": 16,
           "sourceMaxY": 355,
-          "sourceCentroidY": 167.228,
+          "sourceCentroidY": 167.22806983397885,
           "drawnHeight": 204,
           "liftPx": 36
         },
@@ -549,7 +549,7 @@
           "index": 6,
           "sourceMinY": 22,
           "sourceMaxY": 365,
-          "sourceCentroidY": 172.312,
+          "sourceCentroidY": 172.31155644622578,
           "drawnHeight": 206,
           "liftPx": 33
         },
@@ -557,7 +557,7 @@
           "index": 7,
           "sourceMinY": 24,
           "sourceMaxY": 387,
-          "sourceCentroidY": 183.932,
+          "sourceCentroidY": 183.9315672878232,
           "drawnHeight": 218,
           "liftPx": 27
         },
@@ -565,7 +565,7 @@
           "index": 8,
           "sourceMinY": 32,
           "sourceMaxY": 417,
-          "sourceCentroidY": 201.516,
+          "sourceCentroidY": 201.51639109584139,
           "drawnHeight": 232,
           "liftPx": 19
         }
@@ -581,7 +581,7 @@
           "index": 0,
           "sourceMinY": 2,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 613.521,
+          "sourceCentroidY": 613.5206098665037,
           "drawnHeight": 287,
           "liftPx": 0
         },
@@ -589,7 +589,7 @@
           "index": 1,
           "sourceMinY": 136,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 642.947,
+          "sourceCentroidY": 642.9470441105829,
           "drawnHeight": 255,
           "liftPx": 0
         },
@@ -597,7 +597,7 @@
           "index": 2,
           "sourceMinY": 136,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 642.874,
+          "sourceCentroidY": 642.8742785294373,
           "drawnHeight": 255,
           "liftPx": 0
         },
@@ -605,7 +605,7 @@
           "index": 3,
           "sourceMinY": 114,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 640.625,
+          "sourceCentroidY": 640.6250012865686,
           "drawnHeight": 260,
           "liftPx": 0
         },
@@ -613,7 +613,7 @@
           "index": 4,
           "sourceMinY": 28,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 633.153,
+          "sourceCentroidY": 633.1532970872463,
           "drawnHeight": 281,
           "liftPx": 0
         },
@@ -621,7 +621,7 @@
           "index": 5,
           "sourceMinY": 0,
           "sourceMaxY": 1211,
-          "sourceCentroidY": 607.547,
+          "sourceCentroidY": 607.5468944237965,
           "drawnHeight": 288,
           "liftPx": 0
         }
@@ -637,7 +637,7 @@
           "index": 0,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 236.84,
+          "sourceCentroidY": 236.83996749108775,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -645,7 +645,7 @@
           "index": 1,
           "sourceMinY": 8,
           "sourceMaxY": 481,
-          "sourceCentroidY": 231.554,
+          "sourceCentroidY": 231.55354354762068,
           "drawnHeight": 284,
           "liftPx": 0
         },
@@ -653,7 +653,7 @@
           "index": 2,
           "sourceMinY": 10,
           "sourceMaxY": 481,
-          "sourceCentroidY": 229.779,
+          "sourceCentroidY": 229.77897200167155,
           "drawnHeight": 283,
           "liftPx": 0
         },
@@ -661,7 +661,7 @@
           "index": 3,
           "sourceMinY": 6,
           "sourceMaxY": 481,
-          "sourceCentroidY": 242.552,
+          "sourceCentroidY": 242.55165923165245,
           "drawnHeight": 286,
           "liftPx": 0
         },
@@ -669,7 +669,7 @@
           "index": 4,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 232.138,
+          "sourceCentroidY": 232.13845045786604,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -677,7 +677,7 @@
           "index": 5,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 232.032,
+          "sourceCentroidY": 232.03196989122793,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -685,7 +685,7 @@
           "index": 6,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 232.112,
+          "sourceCentroidY": 232.11242542260524,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -693,7 +693,7 @@
           "index": 7,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 240.961,
+          "sourceCentroidY": 240.96051811453057,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -701,7 +701,7 @@
           "index": 8,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 226.589,
+          "sourceCentroidY": 226.58888014776304,
           "drawnHeight": 289,
           "liftPx": 0
         },
@@ -709,7 +709,7 @@
           "index": 9,
           "sourceMinY": 0,
           "sourceMaxY": 481,
-          "sourceCentroidY": 232.777,
+          "sourceCentroidY": 232.77680762528007,
           "drawnHeight": 289,
           "liftPx": 0
         }
@@ -725,7 +725,7 @@
           "index": 0,
           "sourceMinY": 0,
           "sourceMaxY": 475,
-          "sourceCentroidY": 242.27,
+          "sourceCentroidY": 242.2704000293196,
           "drawnHeight": 288,
           "liftPx": 7
         },
@@ -733,7 +733,7 @@
           "index": 1,
           "sourceMinY": 60,
           "sourceMaxY": 475,
-          "sourceCentroidY": 284.317,
+          "sourceCentroidY": 284.31676667457003,
           "drawnHeight": 252,
           "liftPx": 7
         },
@@ -741,7 +741,7 @@
           "index": 2,
           "sourceMinY": 164,
           "sourceMaxY": 481,
-          "sourceCentroidY": 348.611,
+          "sourceCentroidY": 348.6112571516932,
           "drawnHeight": 192,
           "liftPx": 4
         },
@@ -749,7 +749,7 @@
           "index": 3,
           "sourceMinY": 246,
           "sourceMaxY": 479,
-          "sourceCentroidY": 369.964,
+          "sourceCentroidY": 369.9642205459094,
           "drawnHeight": 142,
           "liftPx": 5
         },
@@ -757,7 +757,7 @@
           "index": 4,
           "sourceMinY": 244,
           "sourceMaxY": 479,
-          "sourceCentroidY": 365.528,
+          "sourceCentroidY": 365.52763713523393,
           "drawnHeight": 143,
           "liftPx": 5
         },
@@ -765,7 +765,7 @@
           "index": 5,
           "sourceMinY": 328,
           "sourceMaxY": 483,
-          "sourceCentroidY": 416.538,
+          "sourceCentroidY": 416.5377889447236,
           "drawnHeight": 94,
           "liftPx": 2
         },
@@ -773,7 +773,7 @@
           "index": 6,
           "sourceMinY": 374,
           "sourceMaxY": 487,
-          "sourceCentroidY": 433.904,
+          "sourceCentroidY": 433.9044155576189,
           "drawnHeight": 69,
           "liftPx": 0
         },
@@ -781,7 +781,7 @@
           "index": 7,
           "sourceMinY": 382,
           "sourceMaxY": 487,
-          "sourceCentroidY": 437.584,
+          "sourceCentroidY": 437.583635207256,
           "drawnHeight": 64,
           "liftPx": 0
         },
@@ -789,7 +789,7 @@
           "index": 8,
           "sourceMinY": 382,
           "sourceMaxY": 487,
-          "sourceCentroidY": 437.541,
+          "sourceCentroidY": 437.5411409079564,
           "drawnHeight": 64,
           "liftPx": 0
         }
