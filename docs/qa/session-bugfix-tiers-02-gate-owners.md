@@ -325,3 +325,113 @@ and a clip kept in `docs/evidence/`:
 
 **Four criteria FAIL and one is UNRUN. The session is reported FAILING**, with every fix that did land
 recorded and gated.
+
+---
+
+# Session close — the second half, after the QA gate
+
+The gate ran, failed the session, and the owner said *"fix all and if there's something I need to
+decide give options."* Three decisions were put and answered — all three fal jobs authorised, 3.1
+aligned to the landing tick, 2b.4 to get a backing plate **if** it failed. What follows is what that
+bought.
+
+## Fixed since the gate, each watched red first
+
+| item | what it was | what it is |
+|---|---|---|
+| **scavenger snap-back** | released past `patrolMax`, a scavenger **clamped position** — 480 px in one tick at a `patrolSpeed` of 2.5 — and `blockedAt` tests endpoints, not the span, so it **walked through walls**. Measured: ended at 1102.5 with a wall at 1400 | walks back at patrol speed; cannot pass the wall |
+| **`detectRadius` knob** | draggable past `releaseRadius` on a live scavenger — the constructor throw cannot see a knob moved after construction | capped at `releaseRadius - 1`, the `deadZone` pattern |
+| **`globalSetup` port** | a second definition of 5173; if the port moved, the warm-up aborts the run with **zero tests collected**, reporting `0 passed`, exit 0 | reads `baseURL` from the config, throws by name |
+| **3.8(b)** | the counter centres on Phaser's ascent+descent box; digits have no descenders, so the ink read **2–4 px high**. Silently omitted from 3.8's fix and never recorded | corrected by a fraction of the font size, gated |
+| **audio adopt path** | **no test at all**: 7.5 restarts Boot, which empties `liveBeds` first — a different branch | e2e that stops a bed then restarts `GameScene`; reds on Y3 at `1 failed, 1 passed` |
+| **dev-guard census** | counted guard **lines**, so it red on a deleted guard and nothing else | inversion and emptied-block both red with the line count unchanged |
+| **`GameScene` extraction** | 396/400, hit the ceiling four times in one session | `gameFrameDraw.ts`, 388, with a draw-**order** gate |
+| **3.1** | shake read `tick`, squash read `tick - 1`; **two of three shake ticks ever reached the screen** | aligned; 9.2's window moved with it in both layers |
+| **3.7** | `destroy()` stopped tweens and left the sprites, on an unverified assumption about Phaser's teardown | flyers tracked and swept |
+| **2b.5** | two gears in one frame drew as one sprite | staggered by index, deterministic |
+| **3.13** | a dropped brass tool below the figure was deleted as a cast shadow | a fourth axis — luminance |
+| **2b.7** | `setPosition` moved the viewport, uncovering **9.6 px** of raw page background on impact | viewport grown by a derived margin |
+| **3.4** | *"nothing can catch a stale number here"* | it can: the PNG is in the repo and `readPng` already existed |
+| **2b.4** | recorded failing at 1.13:1 | **passes at 3.80:1** — see below |
+| **2b.6** | DPR ≠ 1 never tested, deferred three times | its own Playwright project, 7 tests |
+| **2b.8** | `jump.wav` opened at **0.0888**, twelve times its nearest neighbour | faded **in the pipeline**, all ten cues now open at 0.0000 |
+| **3.12** | the judder probe stepped a literal 12 px against a `runMax` of **9.0** | reads the tuning |
+| **5.26** | `IMPACT_BY_FREEZE` collides silently on a retune → a light hit fires a `hurtVent` | one entry per impact class |
+| **`setTintFill`** | removed in Phaser 4, does not throw, nothing grepped the tree | three lines, four phases late |
+| **3.6** | no level-complete sting | generated, $0.02, on `goalReached` |
+
+## The four findings that inverted their own item
+
+**2b.4 passes.** The recorded 3.13:1 and 1.13:1 — and both accessibility gate owners' independent
+re-derivations — measured the **fill** against the background and ignored the stroke, which
+`UIScene.ts` already documented as load-bearing. The right statistic is `max(fill:bg, stroke:bg)`,
+and swept over every possible background luminance it bottoms out at **3.80:1** against the 3:1 bar
+a 14 pt bold face earns at 852×480. **The pre-authorised backing plate was not added, because the
+measurement said not to.**
+
+**2b.6's real answer is better than the question.** The spec was written asserting the backing store
+follows the CSS size and gets upscaled on HiDPI. Measured: **1920 px of backing store for an 852 px
+CSS canvas** — `FIT` holds the render target at the design size, so a DPR-2 screen *downsamples*.
+No blur to fix. The uncomfortable half is recorded with it: **a small window costs the same GPU as a
+large one**, so every frame-budget figure in `docs/qa/` is the figure for every size.
+
+**3.4, 5.13 and 3.10 were each wrong about themselves.** 3.4 said no gate could catch a stale
+`HUD_PLATE`; the authority is a file in the repo and `readPng` already existed. 5.13 asks for
+mutation M9 to be killed — **measured, it cannot be**, because the guard is unobservable from
+outside the function, exactly as `rng.ts` said three sessions ago. 3.10's only remaining lever
+reverses an owner ruling whose premise **has already expired** — the gate now accepts the very bleed
+the ruling exists to avoid.
+
+**2.2 was paid for and rejected.** The re-shoot passed **every** gate and measured worse: worst
+adjacent height step **30 px against the shipped clip's 22**. It improved the number the inventory
+records (spread 74 → 68), so a reader trusting the inventory would have adopted it. The replacement
+statistic was written, measured across all eight courier clips, and **refuted itself** — `jump`, the
+successful re-shoot, has the largest step of all eight because a jump crouches and extends. The gate
+was deleted rather than shipped.
+
+## Spend
+
+| | |
+|---|---|
+| main ceiling | **$51.48 of $55** — $3.52 remains |
+| audio ceiling | **$0.25 of $5** — $4.75 remains |
+| authorised and deliberately **not** spent | $1.19 (3.10, blocked on the ruling above) |
+
+## Final sweep
+
+| check | result |
+|---|---|
+| typecheck | clean |
+| unit | **2363 passed / 0 failed** (154 files) |
+| build | `verify-dist ok` — 5 levels + **12** audio byte-identical, no DEV key in the bundle |
+| `test:sim-isolated` | **2360 passed / 3 skipped**, Phaser restored to 4.2.1 |
+| e2e | **128 selected, 128 passed** (was 119) |
+| port 5173 | clear *(C13)* |
+
+⚠️ **The full e2e caught two regressions the unit layer could not**, both because a fix moved a
+reading and only the unit-side oracle was re-taken. 9.2 needed three shifts — the index, the
+amplitude basis, and the window itself. **The 3.1 commit claimed 9.2's window had moved with the
+fix; it had not.** That claim is now true.
+
+## Still owed
+
+**`play`-owned, and no agent can close them:**
+
+- **2.2's by-eye reading.** Two numeric proxies have failed to separate `fall` from seven clips
+  nobody complains about. Watch it frame by frame and say **what** judders — silhouette, legs or
+  arms — before a third statistic is worth writing.
+- **3.12's judder probe.** Now correctly calibrated; needs a 240 Hz display. Three outcomes, each
+  deciding the next step, are in `devMotionProbe.ts`.
+- **The sentry coverage question.** Three of nine sentries lost downward shots to a correct fix.
+  Whether the levels were authored assuming those shots cannot be answered from a number.
+- **B3's refusal-after-boot**, **3.3's spark colour**, **C1's jump-vs-idle height by eye**, and every
+  UI reading at 852×480 the S.7 owner listed.
+
+**One decision:** 3.10's three options, above.
+
+**Not reached:** 5.2–5.12, 5.15–5.18, 5.20–5.21, 5.24–5.25, 4.5, 4.6, the remaining engine hazards,
+and 2b.8's other two defects — the `bed-ambience` loop seam needs an OGG decoder this project has no
+dependency for, and two-pickups-one-cue needs `TickEvents` to carry a count rather than a boolean,
+which changes the sim's event contract.
+
+**45 commits on `session-bugfix-tiers`. Nothing merged to `main`.**
