@@ -100,6 +100,73 @@ function guardLines(source: string): number {
   return source.split('\n').filter((line) => line.includes('import.meta.env.DEV')).length;
 }
 
+/**
+ * The BODY behind the guards, in statement-ish lines.
+ *
+ * ⚠️ **Counting guard lines alone reds on a deleted guard and on nothing else** — the S.3 gate
+ * owner's finding, and the deleted guard is the one mutation this file had run. An **inverted**
+ * guard (`!import.meta.env.DEV`), an **emptied** guarded block, or a statement **hoisted out** of
+ * the block above it all leave the line count untouched, and all three ship dev code to `dist/` or
+ * silently drop a dev affordance.
+ *
+ * This walks the braces after each guard and counts the non-blank, non-comment lines strictly
+ * inside. It is a heuristic, not a parser — `@types/node` is not a dependency and neither is a TS
+ * AST, so a brace scan is what is available. It catches the emptied block, which is the mutation
+ * that matters; the negation check below catches the inversion.
+ */
+/**
+ * The negated (early-return) guards, per file, 2026-08-23.
+ *
+ * `if (!import.meta.env.DEV) return;` is the correct idiom for a whole-function guard and is not a
+ * defect. What matters is that a guard does not silently move between this column and the positive
+ * one — see the split test below.
+ */
+const NEGATED_CENSUS: ReadonlyArray<readonly [string, number]> = [
+  ['src/debug/globals.ts', 2],
+  ['src/game/audio.ts', 1],
+  ['src/scenes/BootScene.ts', 2],
+  ['src/scenes/bootAssets.ts', 1],
+  ['src/scenes/gameDev.ts', 1],
+  ['src/scenes/gameLevelPick.ts', 1],
+  ['src/scenes/gamePlayerDraw.ts', 1],
+];
+
+/**
+ * The measured total of guarded dev-only body lines, 2026-08-23.
+ *
+ * Per-file, for the record: `gameDev.ts` 15 · `gamePlayerDraw.ts` 10 · `BootScene.ts` 5 ·
+ * `gameInput.ts` 5 · `globals.ts` 2 · `audio.ts` 1 · `main.ts` 1 · `bootAssets.ts` 1 ·
+ * `gameLevelPick.ts` 1. Note `config.ts`, `feelVariants.ts`, `hitstop.ts` and `types.ts` contribute
+ * **zero**: their guards are ternaries and type positions, not blocks, which the brace scan does not
+ * and should not count.
+ */
+const GUARDED_BODY_LINES = 41;
+
+function guardedBodyLines(source: string): number {
+  const lines = source.split('\n');
+  let total = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (!line.includes('import.meta.env.DEV') || !line.includes('{')) continue;
+    let depth = 0;
+    for (let j = i; j < lines.length; j += 1) {
+      const body = lines[j]!;
+      for (const ch of body) {
+        if (ch === '{') depth += 1;
+        else if (ch === '}') depth -= 1;
+      }
+      if (j > i) {
+        const trimmed = body.trim();
+        const isComment =
+          trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*');
+        if (trimmed.length > 0 && trimmed !== '}' && !isComment) total += 1;
+      }
+      if (depth <= 0) break;
+    }
+  }
+  return total;
+}
+
 describe('the DEV-guard census (inventory 5.1)', () => {
   const actual = new Map<string, number>();
   for (const [globKey, source] of Object.entries(SOURCES)) {
@@ -132,4 +199,59 @@ describe('the DEV-guard census (inventory 5.1)', () => {
       ).toBe(expected);
     });
   }
+});
+
+/**
+ * The two mutations the line census could not see (S.3 gate owner).
+ *
+ * `verify-dist` catches a dev-only **scene key** in the bundle. It provably cannot see a guarded
+ * **module body** — esbuild removes those names entirely, which is what A2 measured. So this census
+ * is the only thing standing between a broken guard and a shipped dev affordance, and it needs to
+ * red on more than a deletion.
+ */
+describe('the census sees more than a deleted guard', () => {
+  const all = Object.entries(SOURCES);
+
+  it('the POSITIVE / NEGATED split is unchanged — flipping one is the inversion mutation', () => {
+    // 🔴 The first version of this test banned `!import.meta.env.DEV` outright and **red-flagged
+    // correct code**: `if (!import.meta.env.DEV) return;` is the early-return idiom, and
+    // `globals.ts` uses it deliberately for both the installer and `updateDebugState`. The check was
+    // wrong, not the source. Recorded because a gate that reds on the right answer gets "fixed" by
+    // deleting it, and then the real hole is open again.
+    //
+    // What actually distinguishes an inversion is the SPLIT: turning `if (DEV) { body }` into
+    // `if (!DEV) { body }` moves one guard from the positive column to the negative one, and turning
+    // an early return the other way moves it back. Neither changes the line total the census above
+    // pins, which is why that census could not see it.
+    const negated = new Map<string, number>();
+    for (const [globKey, source] of all) {
+      const n = (source.match(/!import\.meta\.env\.DEV/g) ?? []).length;
+      if (n > 0) negated.set(repoPath(globKey), n);
+    }
+    expect(
+      [...negated.entries()].sort(),
+      'the positive/negated guard split moved. A guard was inverted, which flips WHICH BUILD gets ' +
+        'the body — invisible to the line census and, for a module-scope body, to verify-dist too.',
+    ).toEqual([...NEGATED_CENSUS].sort());
+  });
+
+  it('the guarded BODIES are the measured size — an emptied block keeps its guard line', () => {
+    // Pinned in total rather than per file: the per-file table above already localises a change,
+    // and a total is what notices a statement quietly hoisted OUT of a block into the open.
+    //
+    // ⚠️ This number moves whenever dev-only code is legitimately added or removed. That is the
+    // point — it is an approval checkpoint, not a constraint. Re-take it deliberately; do not
+    // adjust it to make a red go away.
+    const total = all.reduce((sum, [, source]) => sum + guardedBodyLines(source), 0);
+    expect(
+      total,
+      `guarded dev-only body lines total ${total}, not ${GUARDED_BODY_LINES}. If you added or ` +
+        `removed dev-only code this is expected — re-take the number. If you did NOT, a guarded ` +
+        `block was emptied or a statement was hoisted out of one.`,
+    ).toBe(GUARDED_BODY_LINES);
+  });
+
+  it('and the bodies are not all empty, which would satisfy the total trivially', () => {
+    expect(GUARDED_BODY_LINES).toBeGreaterThan(10);
+  });
 });

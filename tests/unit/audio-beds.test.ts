@@ -133,11 +133,16 @@ describe('the decision has a consumer (CLAUDE.md §2 draw-path gate)', () => {
    * So Codex's Y3 regression could have been reintroduced in full with every gate green, on a fix
    * whose disposition this session had already written down as APPLIED.
    *
-   * 🔴 **This is the weak shape and it does not close the gap.** Asserting the call *appears* is not
-   * asserting `sound.sounds` stays bounded across a level transition. The behavioural gate is an e2e
-   * that reaches `createAudio`'s **adopt** path — `retireCurrent()` then `startBeds()` with a
-   * predecessor's beds still live — and it is **owed, not written**. Recorded here so the next
-   * session finds the gap rather than the reassurance.
+   * ✅ **The behavioural gate now exists**: `tests/e2e/phase-07-audio-adopt.spec.ts`, which drives
+   * `createAudio`'s **adopt** path — `retireCurrent()` then `startBeds()` with a predecessor's beds
+   * still live — and reds on this exact mutation at `1 failed, 1 passed`.
+   *
+   * ⚠️ **And its first version was decoration too.** It restarted the Game scene five times and
+   * counted tracks; it passed with `sound.remove(bed)` deleted. Beds are created `{ loop: true }`,
+   * so `isPlaying` never goes false on its own and the retirement loop's body never runs during an
+   * ordinary transition. The gate had to **stop a bed first** to reach the branch at all. Two
+   * successive attempts at the same gate were unfalsifiable for two different reasons, which is the
+   * argument for running the mutation every time rather than reasoning about coverage.
    */
   it('a stopped bed is REMOVED from the manager, not merely dropped from the array', () => {
     // `splice` alone leaves the object in `sound.sounds`, which is vault 7.5's defect exactly: a
