@@ -62,6 +62,26 @@ if (!existsSync(catalogPath)) {
 // 3. No DEV-only surface survived into the bundle. Scene KEYS are checked as string literals,
 //    because the identifiers `togglePlayground`/`toggleElementEditor` legitimately remain as empty
 //    method stubs once Vite folds their guarded bodies away.
+//
+//    ## What this section CAN and CANNOT catch — measured 2026-08-23, not argued
+//
+//    Session inventory 5.1 recorded this as "the gate meant to stop DEV code shipping cannot fire
+//    either way for module-scope code". Half right, and the wrong half is the believed one. Two
+//    mutations, each rebuilt and read:
+//
+//      * drop the `import.meta.env.DEV` ternary in `src/game/config.ts`, registering the three dev
+//        scenes in production  ->  **FAILED**: 3 scene keys, 1 symbol, 1 prose hit. Covered.
+//      * drop the `import.meta.env.DEV` early-return in `src/debug/globals.ts`'s
+//        `updateDebugState`  ->  **`verify-dist ok`**. NOT covered, and it ships
+//        `Object.assign(state, patch)` into every tick of production play.
+//
+//    The difference is what the tell is made of. A scene key is a quoted string literal and esbuild
+//    keeps it. A guarded body whose only tell is a module-scope identifier is renamed, so no grep
+//    over a minified bundle can ever see it -- and no amount of adding symbols to the list below
+//    changes that, which is why the fix is NOT here.
+//
+//    `tests/unit/dev-guard-census.test.ts` covers that half, in the layer where a guard is still
+//    legible. **Do not delete a guard on the strength of a green build.**
 const assetsDir = join(root, 'dist/assets');
 if (!existsSync(assetsDir)) {
   // Reading a missing directory would throw and kill the build with a stack trace instead of the

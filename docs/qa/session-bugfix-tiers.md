@@ -135,3 +135,45 @@ finding, and it is why it ran first.
 | **2b.1 aggro** | Permanent aggro is written down as the design (`enemyScavenger.ts:128`), and the run-in-place symptom that made it look broken is already fixed. **Reopen it, or keep the ruling?** |
 | **1b.1 hit-stop cap** | A crowd walking into one swing can freeze the game for an unbounded chain. Capping it is a feel decision: a **deadline** (one swing freezes until tick T; later hits do not extend it) or a **budget**. And explicitly: does a later *heavier* hit extend the deadline? |
 | **1b.3 the 9b ordering** | Player-first (today) means a lethal swing kills an overlapping scavenger and takes no contact damage. Contact-first means you trade the hit. **Pin today's behaviour, or change it?** |
+
+---
+
+## A2 — 5.1, and the half of it that was wrong
+
+**Status: FIXED, with the claim corrected.**
+
+The inventory recorded 5.1 as *"the gate meant to stop DEV code shipping cannot fire either way for
+module-scope code"*, and the plan promoted it to Batch A because it protects a non-negotiable. Two
+mutations were built and each was rebuilt and read *(C1)* rather than reasoned about:
+
+| mutation | rebuilt `verify-dist` said |
+|---|---|
+| drop the `import.meta.env.DEV` ternary in `src/game/config.ts`, registering the three dev scenes in production | **FAILED** — 3 scene keys, 1 symbol, 1 prose hit |
+| drop the `import.meta.env.DEV` early-return in `src/debug/globals.ts`'s `updateDebugState` | **`verify-dist ok`** |
+
+So **the scene-roster half was already covered and the inventory is wrong about it.** A scene key is
+a quoted string literal and esbuild keeps it. What is genuinely open is a guarded body whose only
+tell is a **module-scope identifier** — esbuild renames those, so no grep over a minified bundle can
+ever see one, and adding more symbols to the list would not change that. Row two ships
+`Object.assign(state, patch)` into every tick of production play with the build printing `ok`.
+
+`globals.ts:67` predicted this in as many words — *"pass while the seam's internals were still in
+the bundle"* — which is why **both** the installer and `updateDebugState` are guarded. Nothing
+re-checked that the second guard was still there.
+
+**The fix is not a bundler plugin.** The named fix was a `generateBundle` zero-rendered-bytes hook;
+row one shows it would be redundant for the modules it can judge, and it cannot judge `globals.ts`
+at all — that module legitimately ships while its guarded bodies must not.
+
+`tests/unit/dev-guard-census.test.ts` pins the guard-line count per file. A removed guard reds it; so
+does an added one, which is a *(vault 1.6)* which-side-of-the-gate decision worth stopping on. It is
+a source-text gate, and the reason a behavioural one cannot reach is written in its header:
+`import.meta.env.DEV` is `true` under vitest, so the guarded body always runs and there is nothing
+to observe.
+
+**Watched red** *(C1)*: with the `globals.ts` mutation live, `PASS (17) FAIL (1)`, the failure named
+`src/debug/globals.ts still carries its 3 DEV guard(s)`. **Revert confirmed** *(C12)*: content
+changed (guard lines 2 -> 3) **and** the failure count dropped by exactly one -> `PASS (18) FAIL (0)`.
+
+Suite after: typecheck clean, **2172 passed / 0 failed**, up 18 from the 2154 baseline — the census's
+own 18 tests, no other movement.
