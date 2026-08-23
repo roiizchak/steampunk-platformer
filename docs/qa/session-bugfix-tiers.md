@@ -688,3 +688,51 @@ would mean reaching into UIScene's display list, and no defect currently makes t
 Also closes **4.4**, which was the same item seen from the Tier-4 side.
 
 Spec green after revert: **5 passed**. Port 5173 clear *(C13)*.
+
+---
+
+## B8 / 1b.4 (T13) — the parallax rig, and the three modules still uncovered
+
+**Status: PARTIALLY FIXED. The named module is gated; three siblings are still open and are named.**
+
+T13, recorded LOW in Phase 5 and never done:
+
+> The six modules extracted from `GameScene.ts` have **no tests**. `parallaxRig.ts` returning
+> `100 + i` instead of `-100 + i` would draw all three backgrounds *over* the player and every gate
+> would stay green.
+
+Its own disposition names the class: *"the same defect as 'deleting `renderPlayer()` left every
+Phase 2 test green' — reintroduced by a split."* Splitting a file to satisfy the 400-line rule moves
+code out of whatever coverage the original had, and nothing notices. CLAUDE.md §2 requires a
+draw-path gate for every `src/render/` module; `parallaxRig.ts` had none.
+
+### Behavioural, not source text
+
+`gameParallax.ts` takes Phaser as a **type-only** import, so the whole path is driven against a fake
+scene — the `enemy-feedback.test.ts` idiom, which CLAUDE.md prefers. That matters here: the defect
+T13 names is not a missing call but **a number reaching `setDepth` with the wrong sign**, and no
+source scan can see that.
+
+### Both named mutations, run
+
+| mutation | result |
+|---|---|
+| `depth: -100 + i` → `100 + i` *(T13's own)* | **`PASS (2221) FAIL (1)`** across the whole suite — one failure, `EVERY depth is negative`. One in 2222 is the measure of how uncovered it was |
+| `image.tilePositionX = …` → `image.x = …` | `PASS (8) FAIL (2)` — the texture-offset assertion and the further-moves-less one |
+
+The second mutation is the defect `gameParallax.ts`'s own comment records having **already shipped
+once**: setting position instead of texture offset double-applies the scroll and slides the layer off
+the viewport, *"which showed up as a black band above a strip of background."* It was fixed by hand
+and nothing has watched it since.
+
+**Revert confirmed** *(C12)*: suite **2222 / 0**, up 10.
+
+### ⚠️ Still uncovered, named individually
+
+T13 says *six* modules. Two now have behavioural tests (`gameParallax`, and `goalArtSize` via
+`shipped-gate.test.ts`). **Three have none**: `gameAnimations.ts`, `gameHud.ts`, `gameLevelDraw.ts`
+— each appears in `tests/` only through `file-size.test.ts`, which counts their lines.
+
+They are **not reached this session** rather than judged safe. `gameAnimations.ts` is the one to do
+first: its own header records a Codex finding that a comment there had been *believed* while being
+false about where the fps comes from, which is the same failure this session keeps meeting.
