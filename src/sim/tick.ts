@@ -277,8 +277,10 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
   //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
   //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
-  //     The player's own swing resolves FIRST, so a killing blow lands before the thing it killed
-  //     can trade a hit back — see `playerAttack.ts`, which also records why that is ungated.
+  //     🔴 **The player's swing resolves FIRST. Pinned 2026-08-23, owner ruling** (inventory 1b.3),
+  //     after three phases ungated — swapping these two calls failed no test. The gate is
+  //     `tests/unit/tick-9b-order.test.ts`; it names the swap and was watched red under it.
+  //     What discriminates the order is the FREEZE, not the kill — see that file and `playerAttack.ts`.
   const swing = applyPlayerAttack(world);
   events.hitLanded = swing.hits > 0;
   events.enemyKilled = swing.kills > 0;

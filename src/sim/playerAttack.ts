@@ -107,16 +107,21 @@ export interface PlayerAttackResult {
  * also hurt you on the tick it dies. That ordering is a deliberate choice — trading hits with
  * something you just killed reads as the game cheating.
  *
- * **It is currently UNGATED, and that is recorded rather than hidden** *(C11)*. Swapping the two
- * calls fails no test, and the reason is not a missing test but a masked effect: to be in contact
- * range at all, the player must already have taken contact damage, which grants `IFRAME_TICKS` 45
- * of invulnerability — longer than the whole 20-tick swing. So on the tick the enemy dies the
- * player is invulnerable either way, and no fixture can tell the orderings apart without
- * contriving one. Writing a test that only passes because of how it was posed would be worse than
- * saying this.
+ * ✅ **GATED 2026-08-23** by `tests/unit/tick-9b-order.test.ts`, on the owner's ruling to keep this
+ * order *(inventory 1b.3)*. It had been ungated for three phases.
  *
- * It stops being masked the moment `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`, which is
- * a plausible retune. If that happens, the case becomes reachable and needs a gate.
+ * ⚠️ **The excuse this paragraph used to give was wrong, and so was the rebuttal.** It argued the
+ * case was unreachable: to be in contact range the player must already have taken contact damage,
+ * granting `IFRAME_TICKS` 45 — longer than the 20-tick swing. `phase-05-combat-01-timings.md` (A1)
+ * called that geometrically false because `ATTACK_BOX` reaches ~26 units past contact distance.
+ *
+ * **Both miss it.** A reach-only dead zone cannot discriminate the ordering: no enemy damage happens
+ * out there, so the two orderings behave identically in it. What discriminates is the **freeze** —
+ * `freezePair` below stops the struck scavenger dealing contact damage this tick, because
+ * `worldDamage.ts` skips a frozen body. No kill and no dead zone required, only an overlap and a
+ * live claw, which is the ordinary shape of trading blows.
+ *
+ * Verified by running the swap: 2 failures in 2197, both in that gate.
  *
  * ## A frozen swing's hitbox CHAINS the freeze — capped 2026-08-23 *(inventory 1b.1)*
  *

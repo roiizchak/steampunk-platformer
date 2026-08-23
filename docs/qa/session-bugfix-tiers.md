@@ -443,3 +443,60 @@ three would have stayed green if the distances had been left alone and only the 
 patched. That is the difference between re-taking a reading and editing a number.
 
 Suite **2193 / 0**, up 6 from 2187 — the new file's six tests, nothing else net.
+
+---
+
+## B7 / 1b.3 — the 9b ordering, pinned
+
+**Status: GATED. Owner ruling 2026-08-23: keep today's player-first order.**
+
+`tick.ts` step 9b calls `applyPlayerAttack` then `applyWorldDamage`, so a killing blow lands before
+the thing it killed can trade back. Recorded as **ungated for three phases** — *"swapping the two
+calls fails no test"* — and raised to blocker-class for *"session 4"*, which did not do it.
+
+### Both recorded arguments were beside the point
+
+| | claim |
+|---|---|
+| `playerAttack.ts` | unreachable: to be in contact range you must already have taken contact damage, granting `IFRAME_TICKS` 45, longer than the 20-tick swing |
+| `phase-05-combat-01-timings.md` (A1) | that is geometrically false — `ATTACK_BOX` reaches ~26 units beyond contact distance, so a dead zone exists |
+
+⚠️ **A reach-only dead zone cannot discriminate the ordering at all.** No enemy damage happens out
+there, so both orderings behave identically in it. A gate built on A1's zone would have been
+decoration — the exact defect class this session exists to remove, and it was the plan's first
+proposal until the Codex review caught it.
+
+### What actually discriminates it: the freeze, not the kill
+
+`applyPlayerAttack` freezes **both** bodies, and `applyWorldDamage` skips a frozen scavenger (*"a
+frozen scavenger deals no damage"*, Phase 9). So on any tick the player strikes a scavenger whose
+claw is already live:
+
+- **player first (shipped)** — the scavenger is struck and frozen, contact damage skips it, the
+  player takes nothing;
+- **contact first** — the player is hurt and gains i-frames.
+
+No kill and no dead zone required: an overlap and one live claw, which is the ordinary shape of
+trading blows with a scavenger.
+
+### The mutation, run
+
+Swapping the two calls in step 9b: **`PASS (2195) FAIL (2)` across the whole suite — both failures in
+`tick-9b-order.test.ts` and nowhere else.** That is simultaneously the proof the gate works and the
+confirmation of the inventory's claim that nothing else covers this.
+
+Under the swap the swing did not land *at all* (`expected 60 to be less than 60`): contact damage put
+the player into `hurt`, which ended the attack state before it could resolve. Worse than predicted.
+
+**Revert confirmed** *(C12)*: `PASS (2197) FAIL (0)`.
+
+⚠️ Accounting: the first draft of the inline note took `src/sim/tick.ts` to 406 lines and reddened
+`file-size.test.ts`, correctly. Trimmed to four lines (400 exactly); the argument lives in the test
+file. Second time this session that a comment has hit that ceiling — `tick.ts` has no headroom left.
+
+### A test-authoring trap worth recording
+
+The i-frame assertion first read `expect(player.iFrameCounter).toBe(0)` and **failed on a correct
+game**. The counter reads the opposite way round to the obvious guess: `world.ts` seeds it at
+`IFRAME_TICKS` as the CLOSED sentinel, and taking damage sets it to **0** to OPEN the window. Now
+asserted through `invulnerable()` *(vault 5.3 — do not restate a predicate at a call site)*.
