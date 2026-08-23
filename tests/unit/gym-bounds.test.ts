@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   boundsRect,
-  editsFromConfig,
-  emptyEdits,
   frameCells,
   liftAboveCellFloor,
   measureCellBounds,
+} from '../../src/render/gymBounds';
+import {
+  editsFromConfig,
+  emptyEdits,
   mergeEdits,
   serialiseBounds,
-} from '../../src/render/gymBounds';
-import type { BoundsEdits } from '../../src/render/gymBounds';
+} from '../../src/render/gymEdits';
+import type { BoundsEdits } from '../../src/render/gymEdits';
 
 // Read as RAW TEXT, not as a JSON import: the round-trip claim below is about BYTES, and a parsed
 // import cannot tell a save that preserves the file from one that reformats it. Same idiom, and

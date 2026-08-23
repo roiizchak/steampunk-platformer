@@ -9,7 +9,14 @@
  * Phaser scene.
  */
 
-import { configPathFor, editsFromConfig, emptyEdits, type BoundsEdits } from './gymBounds';
+import {
+  configPathFor,
+} from './gymBounds';
+import {
+  editsFromConfig,
+  emptyEdits,
+} from './gymEdits';
+import type { BoundsEdits } from './gymEdits';
 
 export interface BoundsConfigResult {
   rawConfig: unknown;

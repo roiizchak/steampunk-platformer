@@ -4,21 +4,24 @@ import { RENDER_SCALE } from '../game/constants';
 import {
   actionFromKey,
   configFilenameFor,
-  editsFromConfig,
-  mergeEdits,
-  emptyEdits,
   frameCells,
   measureCellBounds,
   readoutLines,
-  serialiseBounds,
   slugFromSheetKey,
   slugOf,
   type Bounds,
-  type BoundsEdits,
 } from '../render/gymBounds';
+import {
+  editsFromConfig,
+  emptyEdits,
+  mergeEdits,
+  serialiseBounds,
+  type BoundsEdits,
+} from '../render/gymEdits';
 import { loadBoundsConfig } from '../render/gymConfigLoader';
 import { computeGymGeometry } from '../render/gymGeometry';
 import { readRgba } from '../render/gymPixels';
+import { bindGymKeys } from './gymKeys';
 import { PLAYER_BOX } from '../sim/player';
 
 /**
@@ -151,10 +154,8 @@ export class GymScene extends Phaser.Scene {
   private async loadConfig(): Promise<void> {
     const result = await loadBoundsConfig(this.slug);
     this.rawConfig = result.rawConfig;
-    // 🔴 MERGE, never replace — inventory 4.6. The scene is interactive the instant `create()`
-    // returns, so a nudge can land before this promise settles. `this.edits = result.edits` threw
-    // that work away and `refresh()` then drew the FILE's value, making the loss invisible rather
-    // than loud. `mergeEdits` gives the in-flight edit precedence, per action.
+    // 🔴 MERGE, never replace (4.6) — `mergeEdits` carries the reason. A nudge can land before
+    // this promise settles, and an assignment here threw that work away silently.
     this.edits = mergeEdits(result.edits, this.edits);
     if (result.error) {
       this.note.setText(
@@ -164,28 +165,20 @@ export class GymScene extends Phaser.Scene {
     this.refresh();
   }
 
+  /** The key map lives in `gymKeys.ts` — a flat table with no state, extracted for the 400 rule. */
   private bindKeys(): void {
-    const keyboard = this.input.keyboard;
-    if (!keyboard) {
-      return;
-    }
-    const { G, SPACE, OPEN_BRACKET, CLOSED_BRACKET, COMMA, PERIOD, Z, X, A, S, R, M } =
-      Phaser.Input.Keyboard.KeyCodes;
-
-    // `{ levelId: null }` — a bare start re-delivers the last payload; see `BootScene`'s note.
-    keyboard.addKey(G, true, false).on('down', () => this.scene.start('Game', { levelId: null }));
-    keyboard.addKey(SPACE, true, false).on('down', () => this.togglePlaying());
-    keyboard.addKey(OPEN_BRACKET, true, false).on('down', () => this.stepSheet(-1));
-    keyboard.addKey(CLOSED_BRACKET, true, false).on('down', () => this.stepSheet(1));
-    keyboard.addKey(COMMA, true, true).on('down', () => this.stepFrame(-1));
-    keyboard.addKey(PERIOD, true, true).on('down', () => this.stepFrame(1));
-    keyboard.addKey(Z, true, true).on('down', () => this.nudge(-1));
-    keyboard.addKey(X, true, true).on('down', () => this.nudge(1));
-    keyboard.addKey(A, true, false).on('down', () => this.toggleActiveFrame());
-    keyboard.addKey(S, true, false).on('down', () => this.save());
-    keyboard.addKey(R, true, false).on('down', () => this.revert());
-    keyboard.addKey(M, true, false).on('down', () => this.cycleZoom());
-    keyboard.addCapture('SPACE,G,Z,X,A,S,R,M,COMMA,PERIOD,OPEN_BRACKET,CLOSED_BRACKET');
+    bindGymKeys(this.input.keyboard, {
+      // `{ levelId: null }` — a bare start re-delivers the last payload; see `BootScene`'s note.
+      backToGame: () => this.scene.start('Game', { levelId: null }),
+      togglePlaying: () => this.togglePlaying(),
+      stepSheet: (d) => this.stepSheet(d),
+      stepFrame: (d) => this.stepFrame(d),
+      nudge: (d) => this.nudge(d),
+      toggleActiveFrame: () => this.toggleActiveFrame(),
+      save: () => this.save(),
+      revert: () => this.revert(),
+      cycleZoom: () => this.cycleZoom(),
+    });
   }
 
   private get sheet(): SheetEntry {
