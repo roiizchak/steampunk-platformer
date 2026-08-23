@@ -627,3 +627,26 @@ grep is only as good as the grep, and `head` is not a filter.** Both the restora
 are written into `animTiming.ts` rather than quietly undone.
 
 Suite **2212 / 0**, build green.
+
+---
+
+## Verification sweep — 2026-08-23, after twelve items
+
+| check | baseline (Phase 9 close) | now |
+|---|---|---|
+| typecheck | clean | **clean** |
+| unit | 2154 / 0 fail, 133 files | **2212 / 0 fail** |
+| build | exit 0, `verify-dist ok` | **exit 0, `verify-dist ok`: 5 levels + 11 audio byte-identical** |
+| `test:sim-isolated` | 2151 passed / 3 skipped | **2209 passed / 3 skipped**, Phaser reinstalled cleanly |
+| e2e | 118 passed / **1 failed** (criterion 1.4) | **119 passed / 0 failed** |
+
+**The e2e suite is fully green for the first time in this record.** Criterion 1.4 had failed 6 runs
+of 6; G.7b stayed fixed.
+
+⚠️ Worth noting for the inventory's §0.2: this e2e run came **immediately after
+`npm run test:sim-isolated`**, which is the exact sequence the inventory blamed for poisoning the
+dep cache. The warm-up absorbed it — `dev server warm in 34.4s` — and all 119 specs then ran warm.
+That is the second measurement showing cache state was never the variable; the first page load
+costs ~33 s whatever the cache holds.
+
+Port 5173 confirmed clear afterwards *(C13)*.
