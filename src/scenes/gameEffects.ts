@@ -80,7 +80,9 @@ import {
   shakeStartTick,
   shouldPreempt,
   type ShakeState,
+  shakeSafeMargin,
 } from '../render/screenShake';
+import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
 import { SCENE_SHUTDOWN } from './engineLiterals';
@@ -145,6 +147,16 @@ export function attachEffects(
    * this, and `render()` writes exactly this on every settled frame — `shakeWithinEnvelope` demands
    * EXACTLY zero offset outside the shake, not approximately zero.
    */
+  /**
+   * 🔴 **The viewport is grown by the shake margin and its base moved to `-margin`** — inventory
+   * 2b.7. `setPosition` moves the viewport RECTANGLE, so a viewport exactly screen-sized uncovers
+   * up to 9.6 px of raw page background at whichever edge the shake moves it away from. The
+   * reasoning, and why clamping and scroll-shaking are both worse, is in `shakeSafeMargin`.
+   */
+  const margin = shakeSafeMargin(GAME_WIDTH, GAME_HEIGHT);
+  scene.cameras.main.setSize(GAME_WIDTH + margin.x * 2, GAME_HEIGHT + margin.y * 2);
+  scene.cameras.main.setPosition(-margin.x, -margin.y);
+
   const baseX = scene.cameras.main.x;
   const baseY = scene.cameras.main.y;
   let alive = true;
@@ -361,7 +373,11 @@ export function attachEffects(
     // exactly by the e2e spec rather than only bounded by the peak box.
     const running = shake !== null && tick >= shake.startedTick && !shakeSettled(shake, tick);
     const { x, y } = running
-      ? shakeOffset(shake!.cmd, tick, camera.width, camera.height)
+      // 🔴 The DESIGN size, not `camera.width`/`camera.height` — inventory 2b.7. The viewport is now
+      // grown by the shake margin, and feeding that grown size back in would raise the amplitude,
+      // which raises the required margin, which raises the amplitude. `shakeSafeMargin` is derived
+      // from the same two numbers for the same reason.
+      ? shakeOffset(shake!.cmd, tick, GAME_WIDTH, GAME_HEIGHT)
       : { x: 0, y: 0 };
     camera.setPosition(baseX + x, baseY + y);
   }

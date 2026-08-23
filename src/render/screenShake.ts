@@ -83,6 +83,49 @@ export const SHAKE: Readonly<Record<ImpactClass | 'land', ShakeCommand>> = {
   land: { durationTicks: 3, ax: 0.0008, ay: 0.004 },
 };
 
+/**
+ * How much bigger than the screen the shaken camera's viewport must be — **inventory 2b.7**.
+ *
+ * `applyShake` moves the camera with `setPosition`, which moves the **viewport rectangle on the
+ * canvas**, not the world scroll. A viewport exactly the size of the screen therefore uncovers a
+ * strip of raw page background at whichever edge it moves away from. Measured at the design size:
+ * `lethal.ax` 0.005 × 1920 = **9.6 px** horizontally, `playerHurt.ay` 0.007 × 1080 = **7.6 px**
+ * vertically. Small, and unmissable once seen — it is a bright seam that appears only on impact.
+ *
+ * ## Why not the two obvious alternatives
+ *
+ * **Clamping the offset to the screen** biases the shake: the camera could then only move inward
+ * from an edge, so a shake at `x = 0` is a one-sided lurch rather than a jitter.
+ *
+ * **Shaking `scrollX/scrollY` instead** keeps the viewport still, and Phaser clamps scroll to the
+ * camera bounds — so the shake would silently damp or vanish at a level edge, which is exactly
+ * where heavy landings happen. That trades a visible seam for an invisible absence, which is worse.
+ *
+ * So the viewport is grown by this margin on every side and its base moved to `-margin`. The camera
+ * draws a little more world than the screen shows, and the shake moves within that slack.
+ *
+ * ⚠️ **Derived from the SHAKE table, not authored.** Adding a heavier shake widens the margin
+ * automatically; a hardcoded 10 would be silently wrong the first time someone tunes `ax`.
+ *
+ * ⚠️ **Takes the DESIGN size, not the grown viewport.** Feeding the enlarged camera's own width
+ * back in would grow the amplitude, which would grow the required margin, which would grow the
+ * amplitude. `applyShake` passes the same design size for the same reason.
+ */
+export function shakeSafeMargin(
+  designW: number,
+  designH: number,
+): { x: number; y: number } {
+  let ax = 0;
+  let ay = 0;
+  for (const cmd of Object.values(SHAKE)) {
+    if (cmd.ax > ax) ax = cmd.ax;
+    if (cmd.ay > ay) ay = cmd.ay;
+  }
+  // Ceil, because a fractional margin still leaves a sub-pixel seam that a browser will happily
+  // render as a grey line.
+  return { x: Math.ceil(ax * designW), y: Math.ceil(ay * designH) };
+}
+
 /** The command an impact is worth. Returns the table entry itself — commands are immutable data. */
 export function shakeFor(impact: ImpactClass | 'land'): ShakeCommand {
   return SHAKE[impact];
