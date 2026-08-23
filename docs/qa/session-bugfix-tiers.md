@@ -336,3 +336,57 @@ FAIL (0)` on the file, `2181 / 0` across the suite.
 ⚠️ One accounting note: the first version of the inline comment pushed `src/sim/tick.ts` from 394 to
 406 lines and reddened `file-size.test.ts` — correctly. Trimmed to four lines (398); the full account
 lives in the test file, which is where it is legible anyway.
+
+---
+
+## A1 / 0.2 — criterion 1.4, and the diagnosis that was wrong
+
+**Status: FIXED. The inventory's recorded cause is refuted.**
+
+§0.2 blamed a leftover `node_modules/.vite/deps_temp_<hash>/` from an interrupted optimizer run and
+prescribed clearing the cache. **Measured, not assumed:**
+
+| | criterion 1.4 |
+|---|---|
+| cache cleared, first run | **FAILED** — `Test timeout of 30000ms exceeded` |
+| cache now warm, second run | **FAILED** again |
+
+So the cache was never the variable. Measured directly against a dev server instead — three page
+loads, one browser:
+
+| load | to a terminal state |
+|---|---|
+| first | **33.4 s** |
+| second | 3.2 s |
+| third | 2.6 s |
+
+`ready:true`, `bootError:null`, `sceneKey:'Game'` on all three. **The game is neither slow nor
+hanging.** Vite optimizes dependencies and transforms on the **first page request**, not at server
+start, and Phaser unbundled is ~1000 ES modules served one request at a time. `webServer` starts a
+*fresh* server every run (`reuseExistingServer: false`), so whichever spec loads the page first pays
+that 33 s alone inside its own 30 s budget. It is always 1.4, because it is first in the file — and
+the two specs after it passed in ~4 s, which is the tell that was there all along.
+
+### The fix moves the cost, it does not loosen a bound
+
+`tests/e2e/globalSetup.ts` loads the page once and waits for a terminal state before any spec runs.
+**No timeout changed.** `BOOT_TIMEOUT`, `REFUSAL_TIMEOUT` and the test timeout are untouched — the
+inventory is explicit that a bound loose enough to survive a 33 s cold transform is loose enough to
+hide a genuine hang *(vault 1.4)*, and `playwright.config.ts` already refuses that trade once for
+`workers`.
+
+It also makes a real hang **louder**: it now fails in warm-up, named, before any spec runs, instead
+of presenting as one arbitrary spec timing out. A boot that reaches a *refusal* throws there too
+rather than being warmed past in silence.
+
+⚠️ Recorded against it: a `globalSetup` failure aborts with **zero tests collected**, which is the
+`expected: 0, unexpected: 0` false-green shape `free-port.mjs` exists to warn about. The throw names
+itself so the count has an explanation beside it. **Read the count, not the exit code.**
+
+**Result:** `[e2e warmup] dev server warm in 32.9s (ready:true)` then `Running 14 tests using 1
+worker` → **14 passed**, criterion 1.4 among them. It had failed 6 runs of 6.
+
+**Not confirmed:** the inventory's suspicion that `npm run test:sim-isolated` poisons the dep cache.
+Moot now — the warm-up absorbs a cold cache and a warm one alike, and the measurements above show
+cache state was never what decided this. No line added to `CLAUDE.md §1`, because the claim it would
+have recorded is not true.

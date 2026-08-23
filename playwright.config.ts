@@ -174,6 +174,15 @@ export default defineConfig({
       },
     },
   ],
+  /**
+   * Absorbs Vite's one-time cold transform (~33 s, measured) BEFORE the first spec, so no test
+   * budget has to accommodate it. Session inventory 0.2 — the recorded "stale dep cache" diagnosis
+   * was measured and refuted; read `tests/e2e/globalSetup.ts` before touching any boot timeout.
+   *
+   * Runs AFTER `webServer` — the ordering that makes a globalSetup port guard impossible is the
+   * ordering a warm-up wants.
+   */
+  globalSetup: './tests/e2e/globalSetup.ts',
   webServer: {
     // Vault C13: launch the dev server's REAL entry point, never `npm run dev`. On Windows the
     // package script is a shell wrapper; killing the wrapper orphans the real process, which
