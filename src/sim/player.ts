@@ -287,6 +287,12 @@ export function resolveCollisions(
   scale: number,
   previousX: number,
   previousY: number,
+  /**
+   * The body to collide, defaulting to the player's. A parameter only so the vertical-offset case
+   * is REACHABLE from a test *(5.11)* — before this, `PLAYER_BOX` was read from module scope and
+   * no test could vary it, which is precisely why the assumption below survived three phases.
+   */
+  bodyBox: LocalBox = PLAYER_BOX,
 ): boolean {
   /**
    * Through `toWorld`, THE single local→world conversion (vault 2.10).
@@ -301,19 +307,37 @@ export function resolveCollisions(
    * `facing` is pinned to `1`: the COLLISION box does not mirror. Only a hitbox should, and that
    * is what Phase 5 added at step 4 of the tick contract — see `playerAttack.ts`.
    */
-  const box = toWorld(PLAYER_BOX, player.x, player.y, 1, scale);
+  const box = toWorld(bodyBox, player.x, player.y, 1, scale);
   const leftOffset = player.x - box.x;
   const rightOffset = box.x + box.w - player.x;
-  const height = box.h;
+  /**
+   * ⚠️ **The vertical pair is derived, not assumed** — inventory 5.11, `phase-03-impl.md:94`.
+   *
+   * The horizontal offsets above have come from `toWorld` since Phase 3, for exactly the reason the
+   * comment above gives. The vertical ones did not: this read `const height = box.h` and then used
+   * `player.y` as the body's BOTTOM and `player.y - height` as its TOP. Both are correct **only
+   * because `PLAYER_BOX.y === 0`** — a box resting exactly on the feet. Lift the box off the feet
+   * and the bottom is `player.y - box.y * scale`, so every landing snap, every ceiling snap and
+   * both overlap rejections above are silently off by that much: the player lands with their feet
+   * inside the floor, or stops short of it, with nothing throwing.
+   *
+   * Identical output today (`PLAYER_BOX.y === 0` makes `bottomOffset` zero and `topOffset` equal to
+   * the old `height`) and correct if the box is ever lifted — the same standard the horizontal
+   * offsets were already held to. `SENTRY_BOX` and `SCAVENGER_BOX` are also `y: 0`, so a shared
+   * body rule stays available.
+   */
+  const topOffset = player.y - box.y;
+  const bottomOffset = player.y - (box.y + box.h);
 
   for (const solid of solids) {
     const left = player.x - leftOffset;
     const right = player.x + rightOffset;
-    const top = player.y - height;
+    const top = player.y - topOffset;
+    const bottom = player.y - bottomOffset;
     if (right <= solid.x || left >= solid.x + solid.w) {
       continue;
     }
-    if (player.y <= solid.y || top >= solid.y + solid.h) {
+    if (bottom <= solid.y || top >= solid.y + solid.h) {
       continue;
     }
     const wasLeft = previousX + rightOffset <= solid.x;
@@ -331,21 +355,22 @@ export function resolveCollisions(
   for (const solid of solids) {
     const left = player.x - leftOffset;
     const right = player.x + rightOffset;
-    const top = player.y - height;
+    const top = player.y - topOffset;
+    const bottom = player.y - bottomOffset;
     if (right <= solid.x || left >= solid.x + solid.w) {
       continue;
     }
-    if (player.y <= solid.y || top >= solid.y + solid.h) {
+    if (bottom <= solid.y || top >= solid.y + solid.h) {
       continue;
     }
     // Land only when arriving from ABOVE. Without the previous-position check, walking into the
     // side of a platform teleports the player onto its roof.
-    if (player.vy >= 0 && previousY <= solid.y) {
-      player.y = solid.y;
+    if (player.vy >= 0 && previousY - bottomOffset <= solid.y) {
+      player.y = solid.y + bottomOffset;
       player.vy = 0;
       grounded = true;
-    } else if (player.vy < 0 && previousY - height >= solid.y + solid.h) {
-      player.y = solid.y + solid.h + height;
+    } else if (player.vy < 0 && previousY - topOffset >= solid.y + solid.h) {
+      player.y = solid.y + solid.h + topOffset;
       player.vy = 0;
     }
   }
