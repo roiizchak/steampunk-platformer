@@ -31,12 +31,30 @@
 /** Clips on disk that are DELIBERATELY not adopted, per key. */
 export const SUPERSEDED_CLIPS = Object.freeze({
   /**
-   * The `1:1` re-shoot of Phase 4's `jump` (`request_id 019fecbf-9ad4-7f93-a134-003e743b0a82`,
-   * $1.19). It fixed the horizontal crop and replaced it with a vertical one — top edge 0 on five of
-   * six frames. **Neither clip passes G6**; `jump` stays on the Phase 4 debt ledger and `jump.mp4`
-   * remains declared. Kept, never deleted: paid, non-regenerable input.
+   * ✅ **`jump` is off the debt ledger as of 2026-08-23** *(session inventory 2.1)*. `jump-r4.mp4` is
+   * declared in `CLIP_FILES` and is **the first jump take in this project's history to pass G6.**
+   * The three below are its predecessors, kept and never deleted — paid, non-regenerable input, and
+   * the before-column for the comparison.
+   *
+   * The four takes, and the axis each failed on. This is the record that made the fix findable:
+   *
+   * | take | anchor / ratio | G6 margins L/R/T/B | verdict |
+   * |---|---|---|---|
+   * | `jump.mp4` | unpadded 9:16 | 64 / **0** / 24 / 336 | cut RIGHT. Shipped since Phase 4 anyway — it predates G6 |
+   * | `jump-r2.mp4` | padded 1:1 | 252 / 204 / **0** / 58 | cut TOP. The only take with real side room |
+   * | `jump-r3.mp4` | unpadded 9:16 + size clause | 74 / **0** / 96 / 246 | cut RIGHT. The clause fixed the vertical; the frame was still too narrow |
+   * | **`jump-r4.mp4`** | **padded 1:1 + size clause** | — | **PASS** |
+   *
+   * **A standing figure is narrow; a jump is wide.** 9:16 suits idle, walk and run and cuts a jump
+   * at the sides every time it was tried. r2 proved the square canvas gives the horizontal room and
+   * failed on the vertical instead; the size clause in `motionAirborne.mjs` is what closed that half.
+   * Neither change works alone, which is why three takes read as random before the axes were tabled.
+   *
+   * Round 1's cost was not only the crop: it drew the figure at **69.3 % of idle height** with a head
+   * **1.65× too wide**. r4 draws at 82.9 %, beside `fall`'s 80.0 %, from the same padded anchor and
+   * the same `scale: 0.6` that `attack`, `death` and `fall` already pack at.
    */
-  jump: Object.freeze(['jump-r2.mp4']),
+  jump: Object.freeze(['jump.mp4', 'jump-r2.mp4', 'jump-r3.mp4']),
 
   /**
    * Round 1 of `fall`: `9:16` from the unpadded courier anchor, cut left, right and top. Superseded

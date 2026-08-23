@@ -437,57 +437,57 @@
     },
     "jump": {
       "anchor": "centroid",
-      "scale": 0.23723229,
-      "scaleSource": "slug",
-      "deepestSourceY": 905,
+      "scale": 0.6,
+      "scaleSource": "action",
+      "deepestSourceY": 505,
       "frames": [
         {
           "index": 0,
-          "sourceMinY": 0,
-          "sourceMaxY": 905,
-          "sourceCentroidY": 441.707,
-          "drawnHeight": 215,
-          "liftPx": 3
-        },
-        {
-          "index": 1,
-          "sourceMinY": 0,
-          "sourceMaxY": 785,
-          "sourceCentroidY": 381.664,
-          "drawnHeight": 186,
+          "sourceMinY": 66,
+          "sourceMaxY": 505,
+          "sourceCentroidY": 286.742,
+          "drawnHeight": 264,
           "liftPx": 18
         },
         {
+          "index": 1,
+          "sourceMinY": 88,
+          "sourceMaxY": 417,
+          "sourceCentroidY": 256.614,
+          "drawnHeight": 198,
+          "liftPx": 53
+        },
+        {
           "index": 2,
-          "sourceMinY": 0,
-          "sourceMaxY": 819,
-          "sourceCentroidY": 375.134,
-          "drawnHeight": 195,
-          "liftPx": 7
+          "sourceMinY": 86,
+          "sourceMaxY": 423,
+          "sourceCentroidY": 255.466,
+          "drawnHeight": 203,
+          "liftPx": 49
         },
         {
           "index": 3,
-          "sourceMinY": 0,
-          "sourceMaxY": 847,
-          "sourceCentroidY": 387.78,
-          "drawnHeight": 201,
-          "liftPx": 4
-        },
-        {
-          "index": 4,
           "sourceMinY": 4,
-          "sourceMaxY": 863,
-          "sourceCentroidY": 386.325,
-          "drawnHeight": 204,
+          "sourceMaxY": 443,
+          "sourceCentroidY": 193.878,
+          "drawnHeight": 264,
           "liftPx": 0
         },
         {
-          "index": 5,
+          "index": 4,
           "sourceMinY": 0,
-          "sourceMaxY": 831,
-          "sourceCentroidY": 388.895,
-          "drawnHeight": 197,
-          "liftPx": 8
+          "sourceMaxY": 437,
+          "sourceCentroidY": 190.868,
+          "drawnHeight": 263,
+          "liftPx": 2
+        },
+        {
+          "index": 5,
+          "sourceMinY": 57,
+          "sourceMaxY": 459,
+          "sourceCentroidY": 245.948,
+          "drawnHeight": 242,
+          "liftPx": 21
         }
       ]
     },

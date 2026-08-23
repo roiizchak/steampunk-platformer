@@ -178,7 +178,12 @@ const CLIP_FILES = Object.freeze({
   idle: 'idle.mp4',
   walk: 'walk.mp4',
   run: 'run.mp4',
-  jump: 'jump.mp4',
+  /**
+   * ✅ **`jump-r4.mp4` — the first jump take ever to pass G6**, adopted 2026-08-23 (inventory 2.1).
+   * Round 1 shipped from Phase 4 without passing G6 (it predates the gate) at 69.3 % of idle height.
+   * All four takes and their failure axes: `clipAdoption.mjs`'s `SUPERSEDED_CLIPS.jump`.
+   */
+  jump: 'jump-r4.mp4',
   /**
    * The re-shoot that closes the `fall` judder (D1). `request_id 01a003ea-9fee-7080-9d8e-053c205f7cc4`,
    * seed 1749000706, 2026-08-15, $1.19 — **first take, adopted.**

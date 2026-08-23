@@ -981,3 +981,93 @@ A decision, not more analysis:
 ⚠️ **`assets:build` was re-run during this investigation and is byte-identical** — `git status` clean
 across `public/assets/`. That incidentally verifies 4.15's *"success is byte-identical PNGs"* claim,
 which nothing had checked.
+
+---
+
+## C1 / 2.1 — RESOLVED. The first jump clip in this project's history to pass G6
+
+**Status: FIXED.** Owner instruction: *"try 2, if it not fix do 1"* — option 2 was tried and refused;
+option 1 took two takes. **Total spend: 2 generations (~$2.38).**
+
+### Option 2 first, and it failed for a reason worth keeping
+
+`CLIP_FILES` declared `jump: 'jump.mp4'` while **`jump-r2.mp4` sat on disk undeclared** — and the
+paragraph directly above that table had predicted exactly this miss: *"once `jump-r2.mp4` lands
+beside it, an undeclared `file` would make the glob ambiguous."* It landed and the line was never
+switched, so every build since packed round 1 while the paid r2 went unused.
+
+Switching it and re-extracting: **G6 refused it** — frame 0, top margin **0 px**.
+
+⚠️ Running the same gate against round 1 shows **it fails G6 too** (frame 1, right 0 px). The
+inventory's *"the sheet shipping today never passed G6 either"* is exact: today's jump is un-gated
+art that predates the gate.
+
+### The four takes, and why three read as random until they were tabled
+
+| take | anchor / ratio | G6 margins L/R/T/B | cut |
+|---|---|---|---|
+| `jump.mp4` (shipped since Phase 4) | unpadded 9:16 | 64 / **0** / 24 / 336 | RIGHT |
+| `jump-r2.mp4` | padded 1:1 | 252 / 204 / **0** / 58 | TOP |
+| `jump-r3.mp4` | unpadded 9:16 **+ size clause** | 74 / **0** / 96 / 246 | RIGHT |
+| **`jump-r4.mp4`** | **padded 1:1 + size clause** | — | **PASS** |
+
+**A standing figure is narrow; a jump is wide.** 9:16 suits idle, walk and run and cut the jump at the
+sides in *both* takes shot that way. r2 was the only take with real horizontal room and failed
+vertically instead. **Neither change works alone** — which is why three takes looked like bad luck.
+
+### The prompt fix, and why it is not "a stronger instruction"
+
+`motionAirborne.mjs` warned in its own header that two earlier regenerations backfired (one
+somersaulted *"straight through five explicit negations"*) and concluded *"the fix is NOT a stronger
+instruction in this paragraph."*
+
+The paragraph **asked for margins and never named a size** — *"plain green above his head and below
+his boots"* is satisfiable at any scale, so the model oscillated between the only two ways to satisfy
+it. The replacement **names the size by reference to the anchor**, which is the one move STYLE.md §6
+says works on this model: **a named element beats a negation.**
+
+⚠️ Verified **not** under `style-lock.test.ts`, which hashes STYLE.md §2/§4/§5 only — so this was not
+an approval checkpoint, and that was checked rather than assumed.
+
+### On the instruction that it use the same character as the rest
+
+r4 is shot from **the same padded courier anchor `attack`, `death` and `fall` already use** — same
+PNG, same sha256, same fill — and packs at the **same `scale: 0.6`** they do. Identity is pinned by
+the shared anchor rather than by prompt wording, which matters: `jump.prompt.txt`'s IDENTITY clause
+was *already byte-identical* to `idle.prompt.txt`'s while round 1 came back off-model, so wording
+alone demonstrably does not buy it.
+
+### The result, measured
+
+| | round 1 (shipped) | **r4** | idle |
+|---|---|---|---|
+| drawn height | 199.7 px — **69.3 %** of idle | **238.8 px — 82.9 %** | 288.1 |
+| G6 | FAIL (right edge) | **PASS** | PASS |
+| anchor / scale | unpadded, 0.237 | padded, **0.6** | unpadded, 0.237 |
+
+82.9 % sits beside `fall`'s 80.0 % — an airborne pose slightly shorter than a stand is the expected
+sign, and it is the same consistency check `fall`'s own scale note uses.
+
+### The scale, derived by the documented rule and NOT by the tool's number
+
+`--derive-scale` printed **0.72361809**. ⚠️ **Pasting it would have been a bug**, for exactly the
+reason `character-bounds.json` records for `death` (1.195) and `fall` (0.748): a mean across a
+deforming action is not a standing-height measurement, and 0.7236 would have drawn the courier **21 %
+larger in the air than on the ground**.
+
+Jump has no upright frame at all, so `death`'s by-hand rule does not transfer either. The number comes
+from the one standing measurement this anchor has — `attack`'s independently-derived 480 source px,
+**288 / 480 = 0.6** — with the same consistency check `fall` uses: jump's tallest frame (440) is
+**91.7 %** of 480, against fall's 96.3 %.
+
+⚠️ **No automated gate covers this number**: `sprite-size-consistency.test.ts` deliberately does not
+measure `brass-courier`, so it is verified **by eye in play and nowhere else**. Unchanged by this
+work, and stated rather than glossed.
+
+### Bookkeeping
+
+`SUPERSEDED_CLIPS.jump` now lists all three predecessors (kept, never deleted — paid,
+non-regenerable input). Suite **2256 / 0**, all 8 courier clips PASS, `verify-dist ok`.
+
+⚠️ **2.2 (`fall` judders) is NOT closed.** `fall` already ran its r2 and packs at 80.0 %; its 74 px
+frame-to-frame height spread is untouched by this work and remains open.

@@ -230,6 +230,30 @@ export const PADDED_ANCHORS = Object.freeze({
    * pure translation. Uploaded 2026-08-11 (session 6) and hash-verified by re-download. One padded
    * PNG serves both courier combat actions, same as the sentry and scavenger's single canvas each.
    */
+  /**
+   * 🔴 **Added 2026-08-23 for the jump re-shoot** *(session inventory 2.1)*. The same padded canvas
+   * `attack` and `death` already use — same character, same anchor, same fill.
+   *
+   * **Why jump needs the square canvas and idle does not.** Three takes measured, three G6 failures,
+   * and the axis is the tell:
+   *
+   * | take | ratio | margins L/R/T/B | cut |
+   * |---|---|---|---|
+   * | `jump.mp4` (round 1, shipped) | 9:16 | 64 / **0** / 24 / 336 | right |
+   * | `jump-r2.mp4` | 1:1 | 252 / 204 / **0** / 58 | top |
+   * | `jump-r3.mp4` | 9:16 | 74 / **0** / 96 / 246 | right |
+   *
+   * A standing or walking figure is NARROW, so 9:16 suits idle/walk/run. **A jump is WIDE** — arms
+   * and legs out — and 9:16 cuts it at the sides every time, in both takes shot that way. r2 is the
+   * only take with real horizontal room (252/204) and it failed on the vertical instead, which is
+   * what the size clause in `motionAirborne.mjs` addresses. This entry is the two halves together.
+   */
+  jump: Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
+    sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
+    source: '_generated/anchors-padded/brass-courier-padded.png',
+  }),
+
   'brass-courier/attack': Object.freeze({
     url: 'https://v3b.fal.media/files/b/0aa5ecf2/oFqZnuImzFA5fTQWGNoT6_brass-courier-padded.png',
     sha256: 'f0785a0393eb57f6295369175b20428cb49662d7dc4d6ff9cec607900274fe8a',
