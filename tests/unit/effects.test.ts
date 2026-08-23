@@ -44,12 +44,33 @@ import {
   type EffectKind,
 } from '../../src/render/effects';
 import { type ImpactClass } from '../../src/sim/hitstop';
+import { DEFAULT_TUNING } from '../../src/sim/playerTuning';
 
 const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 const IMPACTS: ImpactClass[] = ['light', 'lethal', 'playerHurt'];
 
-/** The sim's own terminal velocity. Landing dust is expressed against it, not an invented number. */
-const MAX_FALL = 51.6;
+/**
+ * The sim's own terminal velocity. Landing dust is expressed against it, not an invented number.
+ *
+ * ⚠️ **Imported, never copied — but NOT for the reason the finding that prompted it gave.**
+ *
+ * A Phase 9 `qa-expert` brief (F6) flagged the old literal `51.6` as a hard-coded copy of
+ * `playerTuning.ts`'s swept `maxFallSpeed` *(A6)*, and predicted a retune would leave every ramp
+ * literal below "pinned against a terminal velocity the game no longer has". **That prediction is
+ * false, and it was measured rather than argued** (2026-08-23): with the copy in place,
+ * `maxFallSpeed: 51.6 → 40.0` left this file at 30 passed / 0 failed — and it still does WITH the
+ * import. One import cannot close it, because there was nothing there to close.
+ *
+ * The reason is `landingDust`'s shape: `maxFall` only **clamps** `|impactVy|`, and the ramp saturates
+ * at `DUST_MAX_COUNT` by `fall = 18`. Every literal below is an **absolute** vy in px/frame, well
+ * under that clamp, so no value of `maxFall` above 18 can move any of them. The parameter is inert
+ * across its whole plausible range.
+ *
+ * The import is kept anyway — three definitions of one number is worse than one — and the real gap
+ * is closed separately: **the clamp-headroom assertion below** is the invariant the copied literal
+ * was hiding, and it is the only way a `maxFallSpeed` retune can reach this file at all.
+ */
+const MAX_FALL = DEFAULT_TUNING.maxFallSpeed;
 
 describe('the depth band', () => {
   it('puts every emitter STRICTLY inside (10, 11)', () => {
@@ -223,7 +244,7 @@ describe('landingDust', () => {
     expect(at(17)).toBe(13);
 
     // Strict, between well-separated points. A flat or saturated ramp cannot survive this.
-    expect(at(51.6) as number).toBeGreaterThan(at(17) as number);
+    expect(at(MAX_FALL) as number).toBeGreaterThan(at(17) as number);
     expect(at(17) as number).toBeGreaterThan(at(12) as number);
     expect(at(12) as number).toBeGreaterThan(at(10) as number);
     expect(at(10) as number).toBeGreaterThan(at(DUST_MIN_FALL_PX) as number);
@@ -231,6 +252,38 @@ describe('landingDust', () => {
     // The cap is reached from BELOW, so a below-cap value is pinned as well as the ceiling.
     expect(at(18)).toBe(14);
     expect(at(17) as number).toBeLessThan(14);
+  });
+
+  it('the terminal-velocity clamp stays INERT — the invariant the copied literal was hiding', () => {
+    // 🔴 This is the assertion F6 was reaching for and did not find. `maxFall` clamps `|impactVy|`,
+    // and the ramp saturates at DUST_MAX_COUNT well below it — so every absolute-vy literal in this
+    // file is valid only while the clamp sits ABOVE the saturation point. Nothing checked that, and
+    // the copied literal is why: a number that cannot change cannot be noticed going stale.
+    //
+    // Drop `maxFallSpeed` under the saturation point and the clamp starts biting: the top of the
+    // ramp stops being reachable. That is the ONLY route by which a maxFallSpeed retune reaches this
+    // file's assertions, which is also why importing the constant alone changed nothing.
+    //
+    // ⚠️ A red here is NOT fixed by lowering this bound. It means the sim's terminal velocity fell
+    // below the dust ramp's cap, and every ramp literal above needs re-taking against the new one.
+    // Found from the shipped function rather than from its private constants: the lowest fall at
+    // which one more px/frame buys no more particles. Derived, so a ramp retune moves it too.
+    const capped = landingDust(1e6, 0, 0, 1e6)!.count;
+    let saturationVy = DUST_MIN_FALL_PX;
+    while (saturationVy < 1000 && landingDust(saturationVy, 0, 0, 1e6)!.count < capped) {
+      saturationVy += 1;
+    }
+    expect(
+      MAX_FALL,
+      `maxFallSpeed is ${MAX_FALL}, at or below the ${saturationVy} px/frame at which landing dust ` +
+        `saturates. The clamp is no longer inert, so the absolute-vy literals in this file are ` +
+        `measuring the clamp instead of the ramp.`,
+    ).toBeGreaterThan(saturationVy);
+
+    // Non-vacuity: the clamp has to be a real clamp, or the assertion above guards nothing.
+    expect(landingDust(MAX_FALL * 2, 0, 0, MAX_FALL)?.count).toBe(
+      landingDust(MAX_FALL, 0, 0, MAX_FALL)?.count,
+    );
   });
 
   it('treats a fall and an equal-magnitude rise identically — it reads |vy|', () => {

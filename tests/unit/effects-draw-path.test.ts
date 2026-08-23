@@ -39,6 +39,13 @@ const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 // that still named one file would have left the `spec.tint` assertion scanning a source the function
 // is no longer in — silently green, which is the exact failure this file exists to catch. The gate
 // follows the FUNCTION, not the filename: `sliceFrom` below finds it in whichever source has it.
+// ⚠️ **Vitest caches `?raw` glob results, and this gate is red-proved by editing its own fixture.**
+// Phase 9 `qa-expert` finding F8, applied 2026-08-23. Every mutation that proves this file works —
+// changing a `setDepth`, removing a `spec.tint` — is an edit to `gameEffects.ts`, which is not the
+// test file but IS the fixture. Vitest resolves `import.meta.glob` at transform time and caches it,
+// so a landed source change can be scanned as its PREVIOUS text: the mutation reports green and
+// reads exactly like a gate that does not work. This project has already lost a `.tmj` mutation to
+// it. **Touch this file as well as the source before re-running any mutation here.**
 const SCENE_SOURCES = import.meta.glob(
   [
     '../../src/scenes/gameEffects.ts',
