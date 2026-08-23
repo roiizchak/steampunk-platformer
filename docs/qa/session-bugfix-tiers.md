@@ -228,3 +228,60 @@ to read the row's verdict, not merely its presence.
 
 **Revert confirmed** *(C12)*: content restored to `—`, and the failure count dropped by exactly one
 → `PASS (92) FAIL (0)`.
+
+---
+
+## B1 — the gear seam, and the six-times error in the inventory
+
+**Status: FIXED.** `src/game/tiledEntities.ts` now compares the gear's **body** against every solid
+with a half-open overlap, in world px.
+
+**Two holes, not one, and one fixture cannot prove both.**
+
+- **The seam.** A gear at exactly `solid.x + solid.width` satisfied *neither* abutting rect —
+  `1920 < 1920` is false on the left, `1920 > 1920` is false on the right — so it passed the gate and
+  sat inside collision geometry, permanently uncollectable. With `MAX_LEVEL_GEARS` that is an
+  uncompletable level. On a 96 px grid **a seam is the default authoring outcome**.
+- **The body.** The check tested the authored point. A centre 20 px above a floor's top edge is
+  outside every rect while the real 72 × 72 body reaches 16 px into it.
+
+### The policy was measured, not argued
+
+The worry with "no gear body may overlap a solid" is that it refuses legal-but-tight authoring. So it
+was measured first: across the **five shipped levels, all 45 gears, zero** have a body touching a
+solid. The generator already keeps them clear, so the strict rule costs nothing today — and it is one
+test where the alternative is two.
+
+### ⚠️ The inventory's own number was wrong by 6×
+
+It describes `GEAR_BOX` as *"72 × 72 world px"*. It is **12 local units**; `× RENDER_SCALE` is what
+makes it 72. `describeGearProblem` had no scale argument, so a fix written from that sentence would
+have used a 12 px box — **and still passed the seam fixture**. That is precisely why the two fixtures
+are committed as separate rows.
+
+### Watched red *(C1)*, both mutations named by the fix's own claim
+
+| | mutation | result |
+|---|---|---|
+| before the fix | none — the fixtures as committed | `PASS (38) FAIL (2)`, both new rows named |
+| A | drop `× RENDER_SCALE` (box 72 → 12) | `PASS (39) FAIL (1)` — **`gear-body-in-a-solid` alone**, seam green. The two fixtures are independent. |
+| B | revert to the strict point test | `PASS (38) FAIL (2)` — both |
+
+**Revert confirmed** *(C12)*: content restored and the failure count dropped to zero →
+`PASS (40) FAIL (0)` on that file.
+
+### One thing found on the way
+
+`gear-inside-solid.fixture` derives from an **older** level-01 and carries a *second*, latent defect:
+its sentry at (4800, 1344) 192 × 192 overlaps the gear at (4848, 1488). Nothing had ever seen it,
+because the gear-in-solid check fired first and masked it. Both new fixtures move that gear clear so
+each has exactly one defect — otherwise they would have been rejected for the wrong reason and the
+rows would have gone green without proving anything.
+
+**And the comment that let this ship.** `tiledPlacement.ts:41` read *"whose disposition reads 'Phase 8
+owns it'. It does now."* Phase 8 added gear-vs-**enemy** body-vs-body and left gear-vs-**solid**
+testing the point. The sentence was read as closing both, and the seam bug shipped through two more
+phases. Corrected in place.
+
+Suite after: typecheck clean, **2176 passed / 0 failed** — up 4 from 2172 (two rows, plus the two new
+fixtures in `tilemap-data.test.ts`'s distinct-reason sweep).

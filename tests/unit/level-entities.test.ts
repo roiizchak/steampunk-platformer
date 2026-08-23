@@ -267,6 +267,26 @@ describe('REJECTS hazards and enemies authored wrongly', () => {
     // from the shipped level with ONE gear's y moved from 1872 to 2016: inside the floor solid at
     // y 1920, height 192. Nothing else in the file differs.
     ['gear-inside-solid', /is inside the solid at/],
+    // 🔴 The two holes in that same check, session inventory item 1.1, 2026-08-23.
+    //
+    // The check was `gx > solid.x && gx < solid.x + solid.width && …` — STRICT inequalities, against
+    // ONE rect at a time, testing the authored POINT.
+    //
+    // `gear-on-a-tile-seam` is the first hole and it is not an edge case: on a 96 px grid a seam
+    // between two abutting floor rects is the DEFAULT authoring outcome. A gear at exactly
+    // `solid.x + solid.width` satisfies neither rect — `1920 < 1920` is false for the left one and
+    // `1920 > 1920` is false for the right one — so it passes the gate, sits inside collision
+    // geometry, and can never be picked up. With the gear cap, that is an uncompletable level.
+    //
+    // `gear-body-in-a-solid` is the second: the gear's centre is 20 px ABOVE the floor's top edge,
+    // outside every rect, while its real 72 × 72 body reaches 16 px into it.
+    //
+    // The two are deliberately separate rows because ONE of them cannot prove the fix. Making the
+    // comparison inclusive closes the seam and leaves the body hole wide open; the seam fixture
+    // would go green and the defect would ship. Dropping `RENDER_SCALE` from the body maths shrinks
+    // the box 6× — 72 px to 12 — and turns the body row red while the seam row stays green.
+    ['gear-on-a-tile-seam', /body is inside the solid at/],
+    ['gear-body-in-a-solid', /body is inside the solid at/],
     // 🔴 The three PLACEMENT fixtures, added 2026-08-18 with the rule they prove.
     //
     // They were committed without a row here, and the gate owner's first brief caught it: the

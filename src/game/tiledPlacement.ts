@@ -38,8 +38,13 @@ import type { Rect } from '../sim/types';
  * **2. Body-vs-body for gears, never point-in-body.** A gear is authored as a POINT but plays as
  * `GEAR_BOX` — 12 local units, **72 x 72 world px**. Testing the point lets a gear centre sit just
  * outside the enemy while the drawn, collectable gear is still inside it. That exact blindness is
- * already on the record against the Phase 6 gear-burial check, which misses a gear on the seam
- * between two floor rects, and whose disposition reads *"Phase 8 owns it"*. It does now.
+ * already on the record against the Phase 6 gear-burial check, which missed a gear on the seam
+ * between two floor rects, and whose disposition read *"Phase 8 owns it"*.
+ *
+ * ⚠️ **It did not.** Phase 8 added gear-vs-ENEMY body-vs-body — this file — and left gear-vs-SOLID
+ * still testing the point. The sentence above was read as though it had closed both, and the seam
+ * bug went on shipping for two more phases. `describeGearProblem` compares bodies too as of
+ * 2026-08-23, with `gear-on-a-tile-seam` and `gear-body-in-a-solid` committed against it.
  *
  * **3. The beat is SWEPT.** A scavenger walks its whole beat, so a spike halfway along it is as
  * real as one under its spawn. The swept box is the union of the body at `patrolMin` and at

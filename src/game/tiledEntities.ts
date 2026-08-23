@@ -12,7 +12,8 @@
  * looks merely *empty*, which is vault 1.3's named bug wearing a level designer's clothes.
  */
 
-import { MAX_LEVEL_ENEMIES, MAX_LEVEL_GEARS } from './constants';
+import { MAX_LEVEL_ENEMIES, MAX_LEVEL_GEARS, RENDER_SCALE } from './constants';
+import { GEAR_BOX } from '../sim/pickups';
 import { ENEMY_SLUGS } from '../sim/enemies';
 import { boolProperty, hasGroundBelow, stringProperty, type TiledObject } from './tiledObjects';
 
@@ -87,21 +88,56 @@ export function describeGearProblem(
      * Still not a reachability check — nothing here knows whether a gear can be jumped to. A gear
      * *inside* geometry is a different and decidable question: the collision box can never overlap
      * the player's, because the player can never be there.
+     *
+     * ## 🔴 Two holes in the version that shipped *(session inventory 1.1, closed 2026-08-23)*
+     *
+     * It was `gx > solid.x && gx < solid.x + solid.width && …`: **strict** inequalities, against
+     * **one rect at a time**, testing the authored **point**.
+     *
+     * **The seam.** A gear at exactly `solid.x + solid.width` — the join between two abutting floor
+     * rects — satisfies *neither*. `1920 < 1920` is false for the left rect and `1920 > 1920` is
+     * false for the right one, so it passed, sat inside collision geometry, and could never be
+     * picked up. With `MAX_LEVEL_GEARS` that is an uncompletable level, and **on a 96 px grid a
+     * seam is the DEFAULT authoring outcome, not an edge case**. `goal-inside-abutting-solids` is
+     * the same bug already found once, for the exit.
+     *
+     * **The body.** It tested the authored point, not the gear's real box. A centre 20 px above a
+     * floor's top edge is outside every rect while a 72 × 72 body reaches 16 px into it.
+     *
+     * ## Why a whole-body overlap, and why that is not over-strict
+     *
+     * The obvious worry is that refusing *any* overlap refuses legal-but-tight authoring. Measured
+     * before choosing, rather than argued: across the **five shipped levels, all 45 gears, zero**
+     * have a body that touches a solid. The generator already keeps them clear, so the strict rule
+     * costs nothing today — and it is one test where the alternative is two.
+     *
+     * ⚠️ **Units.** `GEAR_BOX` is **12 local units**, not 72 world px; solids are world px. The
+     * `× RENDER_SCALE` is what reconciles them and is exactly what `tiledPlacement.ts` does. The
+     * session inventory quoted the box as "72 × 72 world px", and a fix written from that sentence
+     * is wrong by 6× — small enough to still pass the seam fixture, which is why
+     * `gear-body-in-a-solid` is committed as a *separate* row. That mutation was run: it reds
+     * `gear-body-in-a-solid` alone and leaves `gear-on-a-tile-seam` green.
      */
     // Hoisted: the `typeof` guards above narrow `gear.x`/`gear.y` in straight-line code, but that
     // narrowing does not survive into the callback below.
     const gx = gear.x;
     const gy = gear.y;
+    const left = gx + GEAR_BOX.x * RENDER_SCALE;
+    const top = gy + GEAR_BOX.y * RENDER_SCALE;
+    const right = left + GEAR_BOX.w * RENDER_SCALE;
+    const bottom = top + GEAR_BOX.h * RENDER_SCALE;
+    // Half-open on both axes, so a seam belongs to exactly one rect and a shared EDGE — a gear
+    // resting with its box exactly on a floor's surface — is not an overlap.
     const buried = solids.find(
       (solid) =>
-        gx > (solid.x as number) &&
-        gx < (solid.x as number) + (solid.width as number) &&
-        gy > (solid.y as number) &&
-        gy < (solid.y as number) + (solid.height as number),
+        left < (solid.x as number) + (solid.width as number) &&
+        (solid.x as number) < right &&
+        top < (solid.y as number) + (solid.height as number) &&
+        (solid.y as number) < bottom,
     );
     if (buried !== undefined) {
       return (
-        `gear #${index} at (${gear.x}, ${gear.y}) is inside the solid at ` +
+        `gear #${index} at (${gear.x}, ${gear.y}) body is inside the solid at ` +
         `(${buried.x}, ${buried.y}) ${buried.width} x ${buried.height} — the player can never ` +
         `reach it, so the level can never be completed`
       );
