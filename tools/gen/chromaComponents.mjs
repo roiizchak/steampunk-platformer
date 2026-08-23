@@ -141,6 +141,24 @@ export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
  * speck that an `alpha > 0` check scores as a whole second figure.
  */
 /**
+ * Mean relative luminance of one labelled component, 0..1.
+ *
+ * Rec. 709 coefficients, the same ones the WCAG contrast work in `hud.ts` uses — one definition of
+ * "how bright is this" across the project rather than two that agree *(vault 5.3)*.
+ */
+function meanLuminance(image, labels, label) {
+  let sum = 0;
+  let n = 0;
+  for (let p = 0; p < labels.length; p += 1) {
+    if (labels[p] !== label) continue;
+    const i = p * 4;
+    sum += (0.2126 * image.data[i] + 0.7152 * image.data[i + 1] + 0.0722 * image.data[i + 2]) / 255;
+    n += 1;
+  }
+  return n === 0 ? 0 : sum / n;
+}
+
+/**
  * Drop a cast SHADOW: a detached blob lying wholly below the figure, far wider than it is tall.
  *
  * The airborne prompts say *"nothing casts a shadow"* and name the reason — a figure implied to be
@@ -164,7 +182,10 @@ export function trimHalo(image, { solidAlpha = 192, maxDistance = 2 } = {}) {
  * entirely below the main mass and it is a flat smear. A detached boot is neither — it sits within
  * or beside the figure's vertical span, and it is not 10:1 wide. Both conditions must hold.
  */
-export function dropCastShadow(image, { minAspect = 4, minPx = 40, maxHeightFraction = 0.04 } = {}) {
+export function dropCastShadow(
+  image,
+  { minAspect = 4, minPx = 40, maxHeightFraction = 0.04, maxLuminanceFraction = 0.6 } = {},
+) {
   const { labels, sizes } = components(image);
   if (sizes.length < 2) return image;
 
@@ -206,7 +227,30 @@ export function dropCastShadow(image, { minAspect = 4, minPx = 40, maxHeightFrac
     // were severed at once — two boots side by side is a wide flat blob and clears 4:1 easily.
     const mainHeight = box[main].maxY - box[main].minY + 1;
     const tooTallToBeAShadow = h > mainHeight * maxHeightFraction;
-    if (b.minY > box[main].maxY && w >= h * minAspect && !tooTallToBeAShadow) doomed.add(i);
+    // FOUR conditions now. The fourth closes inventory 3.13, and the item's own suggested fix — a
+    // position test — was already condition one (`b.minY > box[main].maxY`, wholly below the main
+    // mass). What that misses is a component that genuinely IS below the figure and IS a flat
+    // smear: **a dropped tool, a spark trail, a thrown wrench lying on the ground.** All three
+    // original conditions hold for it, and it is silently deleted.
+    //
+    // A shadow is DARK — that is what makes it a shadow. STYLE.md's palette puts brass and lit
+    // metal well above the shadow tones it also names, so luminance separates the two cleanly where
+    // shape and position cannot. Measured against the MAIN MASS rather than an absolute, so it
+    // survives a lighting change and a re-shoot: a shadow is a fraction of the figure's brightness,
+    // whatever the figure's brightness is.
+    //
+    // 0.6 is deliberately generous. The point is not to catch every shadow — the other three
+    // conditions do that — it is to refuse to delete anything that is plainly not one.
+    const tooBrightToBeAShadow =
+      meanLuminance(image, labels, i) > meanLuminance(image, labels, main) * maxLuminanceFraction;
+    if (
+      b.minY > box[main].maxY &&
+      w >= h * minAspect &&
+      !tooTallToBeAShadow &&
+      !tooBrightToBeAShadow
+    ) {
+      doomed.add(i);
+    }
   }
   if (doomed.size === 0) return image;
 

@@ -183,3 +183,31 @@ opposite and shipped.
 - **Kill-by-target (`killTweensOf`, `killAll`) reaches tweens other features own** and reports
   nothing about what it hit. Hold the handle. `tests/unit/tween-boundary.test.ts` enforces both
   halves statically.
+
+## Scale · `FIT` keeps the backing store at the GAME size, at every DPR
+
+**Measured 2026-08-23** (inventory 2b.6), against a prediction that was wrong — which is why the
+measurement is here rather than the prediction.
+
+| viewport | `devicePixelRatio` | canvas CSS size | canvas backing store |
+|---|---|---|---|
+| 852 × 480 | **2** | 852 × 479 | **1920 × 1080** |
+| 1400 × 900 | **2** | 1400 × 787 | **1920 × 1080** |
+
+The game sets no explicit `resolution`, and the natural reading of Phaser's default is that the
+backing store follows the CSS size and the browser upscales on a HiDPI display. **It does not.**
+`Phaser.Scale.FIT` holds the render target at the configured game size — 1920 × 1080 — and scales the
+element with CSS.
+
+Two consequences, and they pull in opposite directions:
+
+- ✅ **There is no HiDPI blur.** At 852 CSS px on a DPR-2 screen the physical canvas is 1704 device
+  px against a 1920 px backing store, so the frame is *downsampled*. Supersampling, not upscaling.
+  Item 2b.6 asked whether DPR ≠ 1 needed a sharpness fix; it does not.
+- ⚠️ **A small window costs the same GPU as a large one.** The game always rasterises 1920 × 1080.
+  Every frame-budget figure in `docs/qa/` was taken at the design size and is therefore the figure
+  for *every* size — which is convenient, and is not what a reader would assume.
+
+Pinned by `tests/e2e/phase-06-dpr2.spec.ts` under the `chromium-dpr2` project. A red there means an
+explicit `resolution` was set or Phaser changed `FIT`'s behaviour; both are decisions that belong in
+this file rather than in an updated assertion.

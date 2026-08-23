@@ -134,30 +134,40 @@ describe('episode commitment — criterion 5.3, the flap test (Codex C9)', () =>
   });
 
   /**
-   * 🔴 **The reversal, asserted directly.** This slot used to hold two tests —
-   * `releaseRadius > detectRadius` and "a chase commits for `CHASE_COMMIT_TICKS`" — and the second
-   * one ended `expect(s.chasing).toBe(false)`, which is exactly what the user asked to stop
-   * happening: *"it should keep coming until I kill it"* (2026-08-14).
+   * 🔴 **INVERTED 2026-08-23, and the history matters** *(session inventory 2b.1)*.
    *
-   * Both mechanisms are gone rather than re-tuned, and the flap test above still passes without
-   * them, because **a state with no exit cannot flap**. That is the property worth having; the
-   * hysteresis gap was only ever an approximation of it.
+   * This slot has now held the assertion in both directions, which is why it is inverted rather than
+   * deleted — a reader needs to see the reversal, not a test that quietly stopped existing.
    *
-   * 1000 ticks is 16 seconds of the player being 100 000 px away — two orders of magnitude past the
-   * old 720 px release. If anything in the sim can still end a chase from geometry, this finds it.
+   *  1. Originally two tests: `releaseRadius > detectRadius`, and "a chase commits for
+   *     `CHASE_COMMIT_TICKS`". Both were deleted on **2026-08-14** on user ruling D4 — *"it should
+   *     keep coming until I kill it"*.
+   *  2. Replaced by *"never gives up"*, asserting `chasing` stayed true with the player 100 000 px
+   *     away. The argument for it was real: **a state with no exit cannot flap**, which is stronger
+   *     than any hysteresis gap.
+   *  3. **Reversed by the owner on 2026-08-23.** What (2) did not weigh is what permanence looks
+   *     like from the other side: a scavenger that saw you once stares from 851 px forever and never
+   *     patrols again, found by playing
+   *     (`docs/qa/session-bugfix-perf-gates-03-hands-on.md:60-74`).
+   *
+   * So the flap risk (2) removed is genuinely back, and the gap between `detectRadius` 480 and
+   * `releaseRadius` 720 is what now stands in for it — enforced by a throw in `createScavenger` and
+   * measured by `tests/unit/aggro-release-radius.test.ts`, which owns the positive assertions. This
+   * test keeps the *same 1000-tick scenario* with the opposite expectation, so the diff shows the
+   * reversal at the exact line that asserted the old rule.
    */
-  it('never gives up: a chase entered once survives the player leaving the level', () => {
+  it('gives up: a chase ends once the player is far enough away, and stays ended', () => {
     const s = createScavenger({ x: 500, y: 0, patrolMin: 400, patrolMax: 700 });
     stepScavenger(s, { playerX: 500, playerY: 0 }, EVERYWHERE); // in range → chase
     expect(s.chasing).toBe(true);
 
     for (let i = 0; i < 1000; i += 1) {
       stepScavenger(s, { playerX: 99999, playerY: 0 }, EVERYWHERE);
-      expect(s.chasing).toBe(true);
+      expect(s.chasing, 'a chase survived the player leaving the level').toBe(false);
     }
-    // Non-vacuity: the counter must be counting the episode, or "still chasing" could be a flag
-    // nothing ever reads. It is the ONE counter vault 5.1 allows, and this is what it is now for.
-    expect(s.chaseCounter).toBe(1000);
+    // Non-vacuity, inverted with it: `releaseAggro` zeroes the episode's age, so a counter still
+    // climbing would mean the flag was cleared without going through the one exit *(vault 5.3)*.
+    expect(s.chaseCounter).toBe(0);
   });
 
   /**
@@ -298,17 +308,22 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
    */
   it('leaves its patrol zone to keep chasing, rather than pinning at the bound', () => {
     const s = createScavenger({ x: 500, y: 960, patrolMin: 400, patrolMax: 700 });
-    // Sighted from inside detectRadius first — 3000 alone is 2500 px away and would never be seen.
-    // From here on the chase is permanent, so the player can run as far as they like.
+    // Sighted from inside detectRadius first — 1100 alone is 600 px away, which IS inside it, but
+    // sighting explicitly keeps the fixture honest about which threshold it depends on.
+    //
+    // ⚠️ **1100, not 3000** *(inventory 2b.1, 2026-08-23)*. This test is about leaving the PATROL
+    // ZONE (400-700), and 3000 was only ever "well outside it". A chase now ends beyond
+    // `releaseRadius` 720, so 3000 releases on the first step and the test would fail for a reason
+    // unrelated to patrol bounds. 1100 is 400 px past `patrolMax` and inside the band.
     stepScavenger(s, { playerX: 900, playerY: 960 }, EVERYWHERE);
     expect(s.chasing).toBe(true);
     for (let i = 0; i < 600; i += 1) {
-      stepScavenger(s, { playerX: 3000, playerY: 960 }, EVERYWHERE);
+      stepScavenger(s, { playerX: 1100, playerY: 960 }, EVERYWHERE);
     }
     expect(s.chasing).toBe(true);
     expect(s.x).toBeGreaterThan(700);
-    // It closed on the player rather than merely drifting: 60 ticks at chaseSpeed covers the gap.
-    expect(Math.abs(3000 - s.x)).toBeLessThan(s.deadZone + s.chaseSpeed);
+    // It closed on the player rather than merely drifting.
+    expect(Math.abs(1100 - s.x)).toBeLessThan(s.deadZone + s.chaseSpeed);
   });
 
   it('never teleports — no single tick moves it further than one chaseSpeed', () => {
@@ -316,8 +331,11 @@ describe('rust-scavenger — W2, chase dead zone and patrol-bound clamp', () => 
     stepScavenger(s, { playerX: 900, playerY: 960 }, EVERYWHERE);
     let maxDelta = 0;
     let prevX = s.x;
+    // 1100, not 99999: 800 px would be past `releaseRadius` 720, the chase would end, and this
+    // would measure PATROL speed while claiming to bound CHASE speed — green, and no longer testing
+    // its own name. That is exactly the reading that went `expected 2.5 to be 6` (inventory 2b.1).
     for (let i = 0; i < 200; i += 1) {
-      stepScavenger(s, { playerX: 99999, playerY: 960 }, EVERYWHERE);
+      stepScavenger(s, { playerX: 1100, playerY: 960 }, EVERYWHERE);
       const delta = Math.abs(s.x - prevX);
       if (delta > maxDelta) maxDelta = delta;
       prevX = s.x;

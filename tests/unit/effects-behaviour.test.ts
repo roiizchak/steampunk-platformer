@@ -39,6 +39,7 @@ import { freezePair } from '../../src/sim/hitstop';
 import { advance, createWorld } from '../../src/sim/tick';
 import type { InputSnapshot } from '../../src/sim/types';
 import { BASE, build } from './effects-fixtures';
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 
 describe('a landed blow reaches the emitters', () => {
   it('explodes the spark bursts the render layer decided on, and NOTHING before the hit', () => {
@@ -140,10 +141,18 @@ describe('the camera carries the shake, and returns to EXACTLY its base', () => 
     // exactly what `shakeStartTick` exists to prevent — so sample a tick inside the live window.
     const cmd = shakeFor('light');
     const startedTick = shakeStartTick('light', hitTick);
-    world.tickCount = startedTick + 1;
+    world.tickCount = startedTick + 2;
     render();
 
-    const want = shakeOffset(cmd, world.tickCount, camera.width, camera.height);
+    // 🔴 `tickCount - 1`, re-taken 2026-08-23 for inventory 3.1. `applyShake` now reads `tick - 1`
+    // so it is in phase with the landing squash, which means the DRAWN offset is the one for index
+    // `tick - 1`. Re-taken, not adjusted: the oracle has to name the same index the renderer does,
+    // and `startedTick + 2` is chosen so that index lands inside the live window.
+    // 🔴 The DESIGN size, not `camera.width`/`camera.height` — re-taken 2026-08-23 for inventory
+    // 2b.7. The viewport is now GROWN by the shake margin, so the camera's own dimensions are no
+    // longer the amplitude's basis; feeding them back in would raise the amplitude, which raises
+    // the required margin, which raises the amplitude. `applyShake` passes the same two numbers.
+    const want = shakeOffset(cmd, world.tickCount - 1, GAME_WIDTH, GAME_HEIGHT);
     expect(want.x === 0 && want.y === 0, 'the sampled tick has no offset — vacuous').toBe(false);
     expect([camera.x, camera.y]).toEqual([BASE.x + want.x, BASE.y + want.y]);
 

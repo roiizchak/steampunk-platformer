@@ -163,6 +163,11 @@ export default defineConfig({
       // SAME pattern and must stay identical: a file matching neither runs nowhere, and a file
       // matching both runs twice, once on a rasteriser its assertions are meaningless on.
       testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/,
+      // 🔴 ONE named exclusion, the shape Phase 9 established above. `phase-06-dpr2` matches the
+      // pattern by prefix but must NOT run here: this project is DPR 1, and a DPR-2 spec running at
+      // DPR 1 would pass while measuring the exact case inventory 2b.6 says is untested. It runs in
+      // `chromium-dpr2` instead, whose `testMatch` is the mirror of this line.
+      testIgnore: /phase-06-dpr2\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         headless: false,
@@ -173,7 +178,46 @@ export default defineConfig({
         },
       },
     },
+    /**
+     * 🔴 **Device pixel ratio 2 — inventory 2b.6, and the only project that is not DPR 1.**
+     *
+     * *"DPR ≠ 1 never tested"* was recorded in Phase 6, deferred to Phase 9, deferred again, and
+     * still open when the UI/UX gate owner re-found it. **Most laptops are HiDPI**, so this is the
+     * common case rather than an edge one.
+     *
+     * A separate project rather than a flag on an existing one, because the question is a
+     * COMPARISON: the same viewports are asserted at DPR 1 in `phase-06-chrome.spec.ts` and here at
+     * DPR 2, and "FIT sizes off CSS pixels so DPR changes nothing" is only a claim until both have
+     * been run.
+     *
+     * `headless: false` and the GPU flags match `chromium-gpu`: this reads real pixel geometry, and
+     * SwiftShader is not what a player's display does.
+     *
+     * ⚠️ Its `testMatch` is the mirror of `chromium-gpu`'s `testIgnore`. A file matching neither
+     * runs nowhere and reports `0 passed` — the false green this config already warns about twice.
+     */
+    {
+      name: 'chromium-dpr2',
+      testMatch: /phase-06-dpr2\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        headless: false,
+        deviceScaleFactor: 2,
+        launchOptions: {
+          args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'],
+        },
+      },
+    },
   ],
+  /**
+   * Absorbs Vite's one-time cold transform (~33 s, measured) BEFORE the first spec, so no test
+   * budget has to accommodate it. Session inventory 0.2 — the recorded "stale dep cache" diagnosis
+   * was measured and refuted; read `tests/e2e/globalSetup.ts` before touching any boot timeout.
+   *
+   * Runs AFTER `webServer` — the ordering that makes a globalSetup port guard impossible is the
+   * ordering a warm-up wants.
+   */
+  globalSetup: './tests/e2e/globalSetup.ts',
   webServer: {
     // Vault C13: launch the dev server's REAL entry point, never `npm run dev`. On Windows the
     // package script is a shell wrapper; killing the wrapper orphans the real process, which

@@ -40,6 +40,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFi
 import { join } from 'node:path';
 
 import { WORST_CASE_STACK, peakDbfs, sumPeakDbfs } from './audioGate.mjs';
+import { fadeInChannels } from './audioFade.mjs';
 import { decodeWav, encodeWav, trimToEvent } from './wav.mjs';
 
 const MASTERS = '_generated/audio';
@@ -70,6 +71,18 @@ const MIX_DB = {
   land: -3,
   attack: -5,
   pickup: -5,
+  /**
+   * The level-complete sting — **inventory 3.6**, added 2026-08-23.
+   *
+   * At −2, the loudest cue in the game after the three at 0, and deliberately: it fires **once per
+   * level**, at the only moment the player has unambiguously succeeded, and nothing else is
+   * competing for attention — `levelCompleted` arrives after the courier has faded and the
+   * completion overlay is going up. A reward cue that has to be listened for is not a reward.
+   *
+   * Not 0, because the three at 0 are about survival — death, kill, hurt — and a success sting
+   * shouting over them would flatten the only hierarchy this mix has.
+   */
+  complete: -2,
   footstep: -11,
   'bed-music': -13,
   'bed-ambience': -15,
@@ -125,6 +138,14 @@ function main() {
 
     const decoded = decodeWav(new Uint8Array(readFileSync(master)));
     const trimmed = trimToEvent(decoded.channels, decoded.sampleRate);
+    // 🔴 **The trim is what creates the click** *(inventory 2b.8)*. `trimToEvent` cuts back to just
+    // before the loudest moment, and that cut lands on whatever sample is there — not a zero
+    // crossing. Measured across the nine cues: `jump` opened at **0.0888** where six others were
+    // under 0.0013, i.e. twelve times its nearest neighbour, on the most-triggered cue in the game.
+    //
+    // Faded HERE rather than on the shipped file, because a post-hoc edit to `public/assets/audio/`
+    // is undone by the next `assets:audio` run — silently, with the click back and every gate green.
+    fadeInChannels(trimmed.channels, decoded.sampleRate);
     const url = `assets/audio/${key}.wav`;
     writeFileSync(join('public', url), encodeWav(trimmed.channels, decoded.sampleRate));
 

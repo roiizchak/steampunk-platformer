@@ -111,13 +111,8 @@ export function freezePair(
   tickCount: number,
   scale = 1,
 ): void {
-  const until = tickCount + HITSTOP_TICKS[impact] * scale;
-  for (const body of [a, b]) {
-    if (until > body.hitstopUntil) {
-      body.hitstopUntil = until;
-      body.lastHitTick = tickCount;
-    }
-  }
+  freezeOne(a, impact, tickCount, scale);
+  freezeOne(b, impact, tickCount, scale);
 }
 
 /**
@@ -127,6 +122,32 @@ export function freezePair(
  * The `-1` sentinel falls out of it — no tick count is ever negative, so a body that has never been
  * hit is never frozen without a second comparison to remember.
  */
+/**
+ * Freeze ONE body. `freezePair` is still the only way to freeze an attacker and its victim together.
+ *
+ * ⚠️ The header above argues against two `freeze()` calls at a call site, and that argument stands:
+ * two calls is two places to pass the impact class, and the day they disagree the attacker recovers
+ * before the thing it hit. This exists for the case where freezing **one** body is the intent rather
+ * than an accident — the hit-stop chain cap *(inventory 1b.1)*, where a later victim in the same
+ * swing must still freeze while the player's deadline stays where the first hit put it. The class is
+ * passed once because only one body is being frozen.
+ */
+export function freezeOne(
+  body: Freezable,
+  impact: ImpactClass,
+  tickCount: number,
+  scale = 1,
+): void {
+  const until = tickCount + HITSTOP_TICKS[impact] * scale;
+  // `Math.max` semantics, kept: a `light` hit must never SHORTEN a `lethal` freeze in progress, or a
+  // second blow makes the first read as weaker. This is a different question from the per-swing cap
+  // in `applyPlayerAttack`, and neither replaces the other.
+  if (until > body.hitstopUntil) {
+    body.hitstopUntil = until;
+    body.lastHitTick = tickCount;
+  }
+}
+
 export function frozen(body: Readonly<Freezable>, tickCount: number): boolean {
   return tickCount <= body.hitstopUntil;
 }

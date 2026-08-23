@@ -48,9 +48,13 @@ export function stepEnemies(world: World): void {
       }
       continue;
     }
-    // 🔴 Death is the ONLY exit from a chase now that aggro is permanent, so it has to be written
-    // down somewhere — and this loop, which every cause of death routes through, is the one place
-    // that sees every corpse regardless of what killed it. Before this the loop just `continue`d,
+    // 🔴 Death is ONE of three exits from a chase — the other two are `releaseAggro` at the release
+    // radius and the same call on the attack window, both in `enemyScavenger.ts`. This line read
+    // "the ONLY exit … now that aggro is permanent" until 2026-08-23, when the owner reopened that
+    // ruling (inventory 2b.1) and the release radius came back. It is written down here because
+    // this loop, which every cause of death routes through, is the one place that sees every corpse
+    // regardless of what killed it — a role the other two exits do not share. Before this the loop
+    // just `continue`d,
     // which left a dead scavenger flagged `chasing` forever: `enemyView.ts` would pick the `chase`
     // sheet for a body, and any future "is anything hunting the player" question would answer yes
     // from a corpse. Harmless while a chase could lapse on its own; a permanent state with no exit
@@ -62,10 +66,15 @@ export function stepEnemies(world: World): void {
     releaseAggro(scavenger);
   }
 
+  // `world.solids` since 2026-08-23: a bolt now stops at a wall instead of flying through it
+  // (inventory 1.2). Passing them is the whole wiring — the clip lives in `stepProjectiles`, and a
+  // `solids` argument that never arrived would leave the feature a decision function with no
+  // consumer, which is this project's most expensive recurring defect.
   world.projectiles = stepProjectiles(
     world.projectiles,
     world.bounds.widthPx,
     world.bounds.heightPx,
+    world.solids,
   );
 
   for (const sentry of world.enemies.sentries) {

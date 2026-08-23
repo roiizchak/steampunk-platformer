@@ -53,10 +53,17 @@ import { healthBarFillWidth } from './enemyHealthBar';
  * largest contiguous run of columns carrying that colour is x 129–373, y 45–83. Inset by 3 px on
  * each side so the fill sits inside the bezel rather than overpainting it.
  *
- * Confirmed by drawing the rectangle back onto the plate and looking at it *(vault C4 — no gate can
- * see a stale slot; the fill would simply sit slightly off inside the frame)*.
+ * Confirmed by drawing the rectangle back onto the plate and looking at it.
  *
- * 🔴 **If `hud-health` is regenerated again, re-measure these four numbers and `HUD_PLATE`.**
+ * ⚠️ This used to add *"(vault C4 — no gate can see a stale slot; the fill would simply sit slightly
+ * off inside the frame)"*. **Partly false, and corrected for inventory 3.4.** A gate cannot see
+ * whether the slot lands on the bezel — that is genuinely by eye — but it *can* see the slot leave
+ * the plate, or collapse to a degenerate rectangle, and `hud-plate-matches-art.test.ts` now does
+ * both by decoding the shipped PNG. The exact placement stays a by-eye reading; the containment
+ * does not, and calling the whole thing uncheckable is what kept either half unchecked.
+ *
+ * 🔴 **If `hud-health` is regenerated again, re-measure these four numbers and `HUD_PLATE`.** The
+ * gate will tell you if the plate changed size; it will not tell you the bar moved within it.
  */
 export const HUD_SLOT = { x: 132, y: 48, w: 239, h: 33 } as const;
 

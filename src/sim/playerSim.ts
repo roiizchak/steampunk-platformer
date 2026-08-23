@@ -91,6 +91,23 @@ export interface PlayerSim {
    * on each enemy still compares against it, with its `-1` sentinel unchanged.
    */
   swingStartTick: number;
+  /**
+   * The swing that last froze THIS body, or `-1`. The hit-stop chain's cap *(inventory 1b.1)*.
+   *
+   * A frozen swing keeps its hitbox live — `applyPlayerAttack` is ungated by hit-stop and
+   * `combatCounter` does not advance while frozen — so a second enemy walking into reach during the
+   * pause is struck and, before this field existed, extended the deadline through `freezePair`'s
+   * `Math.max`. Measured: twelve bodies turned a 4-tick freeze into **15**.
+   *
+   * Ruled 2026-08-23: one swing freezes the player once, and later hits in that swing do not extend
+   * it — **including a heavier one**, so the worst case cannot depend on the order a crowd arrives
+   * in. The victim still freezes for its own class; only the player's pause is bounded, because the
+   * player's pause is what reads as *"the game stopped"*.
+   *
+   * Per SWING, not per lifetime: a new `swingStartTick` may freeze again. It rides on the player
+   * rather than on `Freezable` because a swing is a thing only the player has.
+   */
+  hitstopSwing: number;
 
   /* --- Phase 7 audio. --- */
 

@@ -26,6 +26,7 @@ import { bootToGame } from './gameHarness';
 import { EFFECT_DEPTH, type EffectKind } from '../../src/render/effects';
 import { SHAKE, shakeOffset, shakeWithinEnvelope, type ShakeState } from '../../src/render/screenShake';
 import { HITSTOP_TICKS } from '../../src/sim/hitstop';
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { IFRAME_TICKS } from '../../src/sim/combatTiming';
 // The instrument — recorder, positive wait, read-back — lives beside the spec, not in it.
 import {
@@ -241,6 +242,16 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     );
     await stopDriving(page);
     expect([typeof view.w, typeof view.h]).toEqual(['number', 'number']);
+    // 🔴 The amplitude basis is the DESIGN size, not `view` — re-taken 2026-08-23 for inventory
+    // 2b.7. `__view` records the LIVE camera, and `attachEffects` now grows that viewport by the
+    // shake margin so a shake cannot uncover the page background: `cam.width` is 1940, not 1920.
+    // `applyShake` deliberately passes the design size (feeding the grown size back in would raise
+    // the amplitude, which raises the required margin, which raises the amplitude), so the oracle
+    // has to name the same two numbers or it is measuring a different shake.
+    //
+    // `view` is still read, and this assertion still earns its place: it is what catches the
+    // recorder returning `undefined`, which would make every offset below compare against NaN.
+    expect(view.w, 'the live viewport is not grown — 2b.7 regressed').toBeGreaterThan(GAME_WIDTH);
     const span = SHAKE.land.durationTicks;
     // 🔴 The touchdown the SIM stamped, chosen for tick coverage alone. The paragraph that used to
     // sit here claimed a drained frame "costs samples, not truth" because `landTick` and `arm`'s
@@ -254,8 +265,12 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     const arc = series.filter((s) => s.tick >= landTick - 6 && s.tick <= landTick + TAIL_TICKS);
     for (const s of arc) {
       expect([typeof s.ox, typeof s.oy]).toEqual(['number', 'number']);
+      // 🔴 `s.tick - 1`, re-taken 2026-08-23 for inventory 3.1. `applyShake` now reads `tick - 1` so
+      // it is in phase with the landing squash, which means the offset a frame REPORTING tick `t`
+      // has drawn is the one for index `t - 1`. Re-taken, not loosened — the envelope is unchanged
+      // and still exact; only the index the oracle names moved, to the one the renderer uses.
       expect(
-        shakeWithinEnvelope(state, s.tick, s.ox, s.oy, view.w, view.h),
+        shakeWithinEnvelope(state, s.tick - 1, s.ox, s.oy, GAME_WIDTH, GAME_HEIGHT),
         `t=${s.tick} (land=${landTick}): offset (${s.ox}, ${s.oy}) outside the envelope`,
       ).toBe(true);
     }
@@ -268,7 +283,16 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     // `applyShake(camera, tick)` draws from the frame's `tickCount` while the landing squash three
     // lines above it draws from `tick - 1`. Left alone here deliberately — a one-tick phase change to
     // a shipped effect is a balance decision with its own gate, not part of unflaking this spec.
-    const running = arc.filter((s) => s.tick > landTick && s.tick < landTick + span);
+    // 🔴 **The window moved by one frame — inventory 3.1, and this is the half the unit layer could
+    // not show.** `applyShake` now reads `tick - 1`, so the offset drawn on a frame REPORTING tick
+    // `t` is the one for index `t - 1`; the shake's indices `[landTick, landTick + span)` are
+    // therefore reported at `[landTick + 1, landTick + span]`.
+    //
+    // The upper bound went `<` to `<=` because that extra frame is the whole point of 3.1: of
+    // `SHAKE.land`'s three ticks the renderer could previously only ever put TWO on screen, and the
+    // third is now one of these samples. A window left where it was would have measured the old
+    // phase and called the fix a regression.
+    const running = arc.filter((s) => s.tick > landTick && s.tick <= landTick + span);
     expect(
       running.map((s) => s.tick),
       `shake window t=${landTick + 1}..${landTick + span - 1} went unsampled; nearby: ${arc.map((s) => s.tick)}`,
@@ -290,7 +314,11 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
     // misses by 1.46 px, nine orders clear. Nothing a regression could hide inside.
     const ULP_PX = 1e-9;
     for (const s of running) {
-      const w = shakeOffset(SHAKE.land, s.tick, view.w, view.h);
+      // 🔴 `s.tick - 1`, re-taken 2026-08-23 for inventory 3.1 — the same index shift as the
+      // envelope check above, for the same reason: `applyShake` reads `tick - 1` so it is in phase
+      // with the landing squash, and the offset a frame reporting tick `t` has DRAWN is the one for
+      // index `t - 1`. The 1e-9 bound is untouched; only the index moved.
+      const w = shakeOffset(SHAKE.land, s.tick - 1, GAME_WIDTH, GAME_HEIGHT);
       const err = Math.max(Math.abs(s.ox - w.x), Math.abs(s.oy - w.y));
       expect(
         err,
@@ -298,7 +326,10 @@ test.describe('9.2 the effects are sequenced off the tick series, never off an e
       ).toBeLessThan(ULP_PX);
     }
     // Exactly zero afterwards: a shake settling at 1e-17 leaves the camera permanently off target.
-    const settled = arc.filter((s) => s.tick >= landTick + span);
+    // `+ 1` for the same index shift: the first frame that draws a SETTLED camera is the one
+    // reporting `landTick + span + 1`, because the frame reporting `landTick + span` is still
+    // drawing index `landTick + span - 1` — the last live tick.
+    const settled = arc.filter((s) => s.tick >= landTick + span + 1);
     expect(settled.length, 'the tail after the shake must have been sampled').toBeGreaterThan(2);
     for (const s of settled) {
       expect(s.ox, `t=${s.tick}: ox after the shake window`).toBe(0);

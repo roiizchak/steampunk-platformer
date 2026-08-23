@@ -19,6 +19,7 @@ export interface ScavengerOptions {
   patrolSpeed?: number;
   chaseSpeed?: number;
   detectRadius?: number;
+  releaseRadius?: number;
   deadZone?: number;
   hp?: number;
   attackRange?: number;
@@ -37,6 +38,28 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
       `createScavenger: attackCooldown must be an integer tick count greater than ` +
         `SCAVENGER_ATTACK_TICKS (${SCAVENGER_ATTACK_TICKS}), or the swing never closes — the ` +
         `scavenger freezes mid-attack and never moves again, got ${attackCooldown}`,
+    );
+  }
+
+  const detectRadius = options.detectRadius ?? SCAVENGER.detectRadius;
+  const releaseRadius = options.releaseRadius ?? SCAVENGER.releaseRadius;
+  /**
+   * 🔴 **`releaseRadius` must be STRICTLY greater than `detectRadius`** *(inventory 2b.1)*.
+   *
+   * Equal radii is one threshold wearing two names: a player standing on it is detected and released
+   * on alternate ticks forever, and the sprite strobes between `chase` and `walk`. That flapping is
+   * exactly what deleting the release radius on 2026-08-14 was meant to make impossible — *"a flag
+   * that cannot be un-set cannot flap"* — so reintroducing the radius means reintroducing the risk,
+   * and the gap is the only thing standing in for the old guarantee.
+   *
+   * Required-args-throw *(vault 2.11)*: substituting a default here would hide the very
+   * configuration the gap exists to refuse.
+   */
+  if (!(releaseRadius > detectRadius)) {
+    throw new Error(
+      `createScavenger: releaseRadius (${releaseRadius}) must be strictly greater than ` +
+        `detectRadius (${detectRadius}), or the two thresholds are one and a player standing on it ` +
+        `is detected and released on alternate ticks forever`,
     );
   }
 
@@ -96,7 +119,8 @@ export function createScavenger(options: ScavengerOptions): Scavenger {
     patrolMax: options.patrolMax,
     patrolSpeed: options.patrolSpeed ?? SCAVENGER.patrolSpeed,
     chaseSpeed: options.chaseSpeed ?? SCAVENGER.chaseSpeed,
-    detectRadius: options.detectRadius ?? SCAVENGER.detectRadius,
+    detectRadius,
+    releaseRadius,
     deadZone,
     facing: 1,
     chasing: false,

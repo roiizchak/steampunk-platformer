@@ -25,20 +25,151 @@
  * two assertions that happen to agree on the happy path are not one gate.
  */
 
-import { GAME_HEIGHT } from '../game/constants';
+import { GAME_HEIGHT, MAX_LEVEL_GEARS } from '../game/constants';
 import type { GearSim } from '../sim/pickups';
 
 /**
  * The authored size of `hud-health.png`, in its own pixels.
  *
- * 🔴 **Measured from the shipped file, and it must be re-measured if the HUD is re-generated** —
- * the same warning `HUD_SLOT` carries in `playerHud.ts`, for the same reason: nothing can catch a
- * stale number here, because a wrong plate size draws a HUD that is merely slightly off.
+ * 🔴 **Measured from the shipped file, and it must be re-measured if the HUD is re-generated.**
+ *
+ * ✅ **And a gate DOES catch a stale number now** — `tests/unit/hud-plate-matches-art.test.ts`
+ * decodes the PNG and compares. This block used to end *"nothing can catch a stale number here,
+ * because a wrong plate size draws a HUD that is merely slightly off"* (inventory 3.4), and that was
+ * false: the authority for this number is a file in the repository, and `tools/gen/png.mjs` already
+ * exported `readPng`. Nothing had to be built; the gate just had to be written.
+ *
+ * The first half stands. A wrong plate size does not throw and does not look broken in a
+ * screenshot — it slides the icon, the counter and `hudFits`' whole bounding box by a few pixels.
  */
 export const HUD_PLATE = { w: 413, h: 128 } as const;
 
 /** Distance from the top-left corner of the screen to the plate, in DESIGN pixels. */
 export const HUD_MARGIN = 24;
+
+/**
+ * Where the controls banner sits: one clear margin below the HUD plate, in DESIGN space.
+ *
+ * ⚠️ **This is here so there is ONE definition, not two that agree** *(vault 5.3)*. `gameDev.ts`
+ * computed `HUD_MARGIN + HUD_PLATE.h + HUD_MARGIN * 2` by hand — a second derivation of the plate's
+ * bottom edge, in a different module from the one that owns HUD geometry.
+ *
+ * The S.7 gate owner found it and named the inconsistency rather than the arithmetic: this same
+ * session routed the banner's **font size** through a shared constant (`HELP_FONT_PX`) while leaving
+ * its **position** as a hand-summed copy. Both numbers describe the same object; only one of them
+ * had one owner. It is numerically correct today and would drift silently the day `hudLayout`'s
+ * margin or gap formula changes — and no gate checks spacing between HUD elements *(item 5.20)*.
+ *
+ * `HUD_MARGIN * 3` rather than `* 2` because the plate itself starts one margin down: the gap
+ * *below* the plate is `HUD_MARGIN * 2`, deliberately double, so the banner reads as a separate
+ * element instead of part of the plate.
+ */
+
+/**
+ * The gear counter's colours, and **the contrast method that was never written down** — 2b.4.
+ *
+ * Item 2b.4 recorded **3.13:1 and 1.13:1**, both failing WCAG AA, across four levels never
+ * re-measured — *and flagged that the sampling method itself had never been recorded*, so the
+ * numbers might be optimistic. Two accessibility gate owners re-derived them and got the same
+ * failing figures. **All of them measured the FILL against the background and ignored the stroke.**
+ *
+ * ## The method, written down
+ *
+ * 1. The counter is drawn **over the level**, not over the HUD plate — `hudLayout` puts `counter.x`
+ *    beyond `plate.x + plate.w`. So the background is whatever the world draws there: the three
+ *    parallax layers and the two tilesets. Nothing else can be behind it.
+ * 2. Decode all five shipped PNGs and take the **brightest and darkest fully-opaque pixel** of each.
+ *    Not an average, and not one sampled frame — the counter is over a scrolling scene, so a figure
+ *    that holds at spawn and fails 40 m later has not passed.
+ * 3. The glyph has **two** inks: a `#f7e3b8` fill inside a 6 px `#1a1410` stroke. A reader
+ *    distinguishes the glyph from the background by whichever of the two contrasts with it, so the
+ *    ratio that matters is **`max(fill:bg, stroke:bg)`**, not `fill:bg` alone.
+ * 4. Compare against the bar the **effective size** earns at the smallest supported window.
+ *
+ * ## What it measured, 2026-08-23
+ *
+ * | background | brightest | `stroke:bg` | `fill:bg` |
+ * |---|---|---|---|
+ * | `far.png` | rgb(248,255,255) | **18.01:1** | 1.25:1 |
+ * | `mid.png` | rgb(226,255,255) | **17.35:1** | 1.20:1 |
+ * | `near.png` | rgb(214,251,255) | **16.59:1** | 1.15:1 |
+ * | `industrial.png` | rgb(244,248,249) | **17.06:1** | 1.18:1 |
+ * | `walkway.png` | rgb(251,228,118) | **14.30:1** | 1.01:1 |
+ *
+ * Against the *darkest* pixels the pair inverts: `fill:bg` reaches 15.95–16.63:1 while the stroke
+ * disappears. **So the recorded 1.13:1 is real and is not the whole glyph** — at every background in
+ * the game, one of the two inks is at 14:1 or better, and `fill:stroke` is **14.45:1**, so the glyph
+ * is self-defining even where the background is not helping.
+ *
+ * The genuine worst case is a **mid-luminance** background where neither ink is favoured. Solving
+ * `fill:L = stroke:L` gives L = 0.1689 and a ratio of **3.80:1** — the floor across every possible
+ * background, not merely every shipped one.
+ *
+ * ## The bar it has to clear
+ *
+ * 44 design px × 0.44375 (852/1920) = **19.5 physical px**, `fontStyle: 'bold'`. WCAG's large-text
+ * threshold is 18 pt (24 px) or **14 pt bold (≈18.7 px)**, so this is large text at the smallest
+ * supported window and the bar is **3:1**. 3.80 > 3.0 — **it passes, with 27 % of headroom.**
+ *
+ * ⚠️ **A backing plate was pre-authorised if this failed. It did not fail, so none was added** —
+ * the measurement decided it, not a preference.
+ *
+ * 🔴 **`COUNTER_STROKE` is load-bearing, not decoration.** Removing it or thinning it drops the
+ * worst case to 1.01:1. `contrast-floor.test.ts` holds the whole relationship.
+ */
+export const COUNTER_FILL = '#f7e3b8';
+export const COUNTER_STROKE = '#1a1410';
+export const COUNTER_STROKE_PX = 6;
+
+export const HELP_BANNER_Y = HUD_MARGIN * 3 + HUD_PLATE.h;
+
+/**
+ * Ticks of delay for the *n*th collect-flyer spawned in the same frame *(inventory 2b.5)*.
+ *
+ * Two gears collected on one frame produced two flyers with the same duration and the same
+ * destination. Even from different start points the eased paths converge, and at the landing they
+ * are one sprite drawn twice — the smear the UI/UX gate owner reported.
+ *
+ * ⚠️ **Index, never `Math.random`.** This is render-side, so the sim's ban does not formally reach
+ * it — but a non-deterministic HUD makes a screenshot gate unreproducible, and the collected-gear
+ * list is already ordered, so there is nothing to gain by reaching for randomness.
+ *
+ * **3 ticks (50 ms) is deliberately small.** Under the ~100 ms at which two events stop reading as
+ * simultaneous, so a pair still feels like one pickup moment — while being enough that the two
+ * arrivals at the counter are visibly separate rather than one doubled sprite. A stagger comparable
+ * to the flight time would fix the smear and introduce a different defect.
+ *
+ * It lives here, engine-free, rather than inside `hudGearFlyers.ts`, because that module imports
+ * Phaser as a **value** (through `gearLayer.ts`) and therefore cannot be imported by a unit test at
+ * all. Putting the decision here is what makes it testable — `playerView.ts`'s pattern *(vault
+ * 2.12)*, applied to the one number in this effect anybody would want to tune.
+ */
+export const FLYER_STAGGER_TICKS = 3;
+
+/**
+ * How long a collected gear takes to fly to the counter, as an INTEGER COUNT OF TICKS.
+ *
+ * 🔴 This was `const TWEEN_MS = 260`, and Codex's implementation review called it a blocker against
+ * the project's own rule: *every duration is an integer count of 60 Hz ticks*. 260 ms is 15.6 ticks
+ * — a float of seconds wearing a millisecond's clothes, in the one layer where the rule is easiest
+ * to forget because Phaser's tween API genuinely takes milliseconds.
+ *
+ * 15 ticks is 250 ms exactly. The conversion goes through `ticksToMs`, the same function the rest of
+ * the project uses, so the number that reaches Phaser is derived rather than authored.
+ *
+ * ⚠️ **Moved here from `hudGearFlyers.ts` on 2026-08-23**, with `flyerDelayTicks`, and for the same
+ * reason: that module reaches `gearLayer.ts`, which imports Phaser as a **value**, so importing it
+ * from a unit test throws `window is not defined` and the test file contributes **zero tests while
+ * the run still exits 0**. Measured — a gate written against it reported `PASS (0) FAIL (0)`. A
+ * constant a test cannot reach is a constant nothing can hold in relation to anything else.
+ */
+export const FLYER_TWEEN_TICKS = 15;
+
+export function flyerDelayTicks(index: number): number {
+  // Negative or fractional indices are not reachable from `fresh.entries()`, but returning a
+  // negative delay would be a silent Phaser misconfiguration rather than a throw.
+  return Math.max(0, Math.floor(index)) * FLYER_STAGGER_TICKS;
+}
 
 /**
  * The catalog key the generated gear sprite lands under. One string, three consumers.
@@ -66,6 +197,44 @@ const COUNTER_GAP = 24;
  * that by looking; this is the number it is looking at.
  */
 const COUNTER_FONT_PX = 44;
+
+/**
+ * How far down to nudge a digit string so its ink centres, as a fraction of the font size.
+ *
+ * A typical font's descent is ~20–22% of its em box, and digits use none of it — so a glyph box
+ * centred on `ascent + descent` puts the ink about **half the descent** too high. Half of ~0.21 is
+ * ~0.105, which at the shipped 44 px is **4.6 design px** — the top of the 2–4 px range item 3.8
+ * reported, measured at 1920 × 1080 where the report was made.
+ *
+ * ⚠️ **A fraction, not a literal.** The correction has to move with `COUNTER_FONT_PX`; a hardcoded
+ * 4 px would be silently wrong the next time the font changes, which is the shape of half this
+ * session's Tier 4.
+ *
+ * ⚠️ **This is a by-eye number and the by-eye read is still owed** *(S.9)*. The browser is the only
+ * thing that knows the real metrics of the fallback font it picks, and at 852 × 480 the whole
+ * correction is under 2 physical px — possibly imperceptible even though it is real at the design
+ * resolution. Recorded rather than presented as measured.
+ */
+const DIGIT_DESCENT_FRACTION = 0.105;
+
+/**
+ * The controls banner's type size, in DESIGN pixels *(session inventory 2.5, fixed 2026-08-23)*.
+ *
+ * 🔴 **It was `'18px'`, hard-coded in `gameDev.ts`, which is ~8 physical pixels at 852 × 480** — a
+ * third under the ~11 px floor the counter above is sized against, and confirmed illegible in a
+ * playtest screenshot rather than inferred.
+ *
+ * That matters more than it sounds: the banner **ships**, and it is the only place the game tells
+ * anyone the controls at all — `helpLine()`'s own comment says the mute keys and `ESC levels` are in
+ * the shipped half deliberately, because *"a mute control the player cannot discover is a mute
+ * control they do not have."* An illegible banner is those controls not existing.
+ *
+ * **28**, by the same arithmetic the counter uses: 28 × 0.444 = **12.4 physical px** at the smallest
+ * supported size, over the floor with a little room. Not larger, because the line is ~110 characters
+ * and ~150 in a DEV build — see `addHelpBanner`, which wraps rather than letting it run off the
+ * edge, which is what any size above this would do.
+ */
+export const HELP_FONT_PX = 28;
 
 /**
  * The gear icon beside the counter, square, in DESIGN pixels.
@@ -145,7 +314,15 @@ export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
     gearIcon,
     counter: {
       x: gearIcon.x + iconSize + COUNTER_GAP * 0.5 * scale,
-      y: plate.y + plate.h / 2 - fontPx / 2,
+      // 🔴 The descender correction — inventory 3.8's second clause, and the one that was silently
+      // left out when 3.8's padding half was fixed. Phaser `Text` lays out on the font's full
+      // ascent + descent box, so `y = middle - fontPx / 2` centres THAT box. Digits have no
+      // descenders, so the ink sits in the upper part of it and reads **2–4 px high** against the
+      // gear icon beside it, which is centred on its own bounds.
+      //
+      // `DIGIT_DESCENT_FRACTION` is scaled with the font rather than added as a literal, so the
+      // correction survives a font-size change instead of becoming wrong at the next one.
+      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * DIGIT_DESCENT_FRACTION,
       fontPx,
     },
   };
@@ -199,7 +376,18 @@ export function gearsCollectedFrom(gears: readonly GearSim[], fromTick: number):
   return gears.filter((gear) => gear.collectedTick !== null && gear.collectedTick >= fromTick);
 }
 
-/** The counter's text. Zero-padded so its width never changes — see `UIScene` for why that matters. */
+/**
+ * The counter's text. Zero-padded so its width never changes — see `UIScene` for why that matters.
+ *
+ * 🔴 **The width is DERIVED from `MAX_LEVEL_GEARS`, and was a hard-coded `3`** *(session inventory
+ * 3.8, fixed 2026-08-23)*. The cap is **64**, so a third digit can never be reached: `000` was
+ * padding to a width the game cannot produce, and `docs/handoff/phase-06-owed.md` recorded that it
+ * *"reads as a placeholder"* — `level-01` ships **7** gears and drew `007`.
+ *
+ * Derived rather than re-typed as `2`: raise the cap past 99 and the counter widens with it, instead
+ * of silently truncating the way a literal would. One number, one definition *(vault 5.3)*.
+ */
 export function counterText(collected: number): string {
-  return String(Math.max(0, Math.trunc(collected))).padStart(3, '0');
+  const width = String(MAX_LEVEL_GEARS).length;
+  return String(Math.max(0, Math.trunc(collected))).padStart(width, '0');
 }

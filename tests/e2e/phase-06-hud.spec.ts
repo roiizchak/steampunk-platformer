@@ -26,6 +26,7 @@
 import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
 import { collectGears, readHud, visibleGearCount, waitForHud } from './hudHelpers';
+import { MAX_LEVEL_GEARS } from '../../src/game/constants';
 
 
 test.describe('criterion 6.1 — the gear counter', () => {
@@ -33,7 +34,10 @@ test.describe('criterion 6.1 — the gear counter', () => {
     await bootToGame(page);
 
     const before = await readHud(page);
-    expect(before.counter.text).toBe('000');
+    // 🔴 RE-TAKEN 2026-08-23 (inventory 3.8). This read '000'. `counterText` now derives its pad width
+  // from `MAX_LEVEL_GEARS` (64), so a third digit is unreachable and `007` no longer reads as a
+  // placeholder. Derived here too, so the spec and the counter cannot drift apart.
+  expect(before.counter.text).toBe('0'.repeat(String(MAX_LEVEL_GEARS).length));
     expect(await page.evaluate(() => window.__game?.score)).toBe(0);
 
     await collectGears(page, 1);
@@ -45,7 +49,7 @@ test.describe('criterion 6.1 — the gear counter', () => {
     expect(score).toBeGreaterThanOrEqual(1);
     // The DRAWN text, not the number behind it. A counter wired to nothing keeps saying 000 while
     // the score climbs, and that is the defect this asserts against.
-    expect(after.counter.text).not.toBe('000');
+    expect(after.counter.text).not.toBe('0'.repeat(String(MAX_LEVEL_GEARS).length));
     expect(Number(after.counter.text)).toBe(score);
   });
 

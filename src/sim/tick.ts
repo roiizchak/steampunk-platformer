@@ -277,8 +277,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
   //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
   //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
-  //     The player's own swing resolves FIRST, so a killing blow lands before the thing it killed
-  //     can trade a hit back — see `playerAttack.ts`, which also records why that is ungated.
+  //     🔴 The swing resolves FIRST — owner ruling, `tests/unit/tick-9b-order.test.ts` (inventory 1b.3).
   const swing = applyPlayerAttack(world);
   events.hitLanded = swing.hits > 0;
   events.enemyKilled = swing.kills > 0;
@@ -301,10 +300,13 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     carries all the reasoning — why completion belongs in the sim, why the `World.spawn`
   //     argument for the respawn is NOT the argument for this, and why the cancel is load-bearing.
   //     🔴 `motionRan` (Phase 9): a counter must not spend ticks inside a freeze — hold in `goal.ts`.
+  // 9d's ARRIVAL edge (inventory 2.6): both samples straddle the arming step INSIDE its own tick.
+  const entryWas = world.goalEntryTicks;
   if (stepGoalEntry(world, motionRan)) {
     world.completed = true;
     events.levelCompleted = true;
   }
+  events.goalReached = entryWas === null && world.goalEntryTicks !== null;
 
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at
   //     step 8 and must not reopen it here, or every jump would buy a second one in mid-air.
@@ -329,7 +331,11 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     position published in the same tick describe the same moment — see the header note on
   //     Codex review 2 finding I4.
 
-  resolveState(player, dir !== 0 || player.vx !== 0, input.walkHeld, tuning);
+  //     🔴 `dir !== 0` was an OR term here until 2026-08-23 (inventory 2.3). "A key is down" is not
+  //     "the body is moving", and against a wall they disagree completely — so a pinned player
+  //     published `run` while covering no ground. Movement is the only term left.
+  //     Full account: `tests/unit/wall-pin-locomotion.test.ts`; it also closes 3.5 and 2.8.
+  resolveState(player, player.vx !== 0, input.walkHeld, tuning);
 
   // 12. Emit edges (vault 2.5) — returned, never reconstructed by comparing state across frames.
   //

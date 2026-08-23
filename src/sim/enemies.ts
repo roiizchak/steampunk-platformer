@@ -27,10 +27,18 @@
  * `enemyTuning.ts` and `PlaygroundScene.ts` were all updated — this barrel, which every importer
  * reads first, was not. Finding S6's exact shape, in the file that names 5.3's own vault items.
  *
- * **What actually commits, now:** the chase is a one-way transition. `chasing` is set by
- * `detects()` and **nothing inside `stepScavenger` can clear it**; only death does, in
- * `enemyTurn.ts`. A flag that cannot be un-set cannot flap, which is a stronger guarantee than two
- * thresholds — there is no gap to stand in the middle of. `chaseCounter` is the episode's age.
+ * ⚠️ **And on 2026-08-23 `releaseRadius` came BACK** *(session inventory 2b.1, owner reversal)*, so
+ * this paragraph has now been wrong in both directions. `CHASE_COMMIT_TICKS` did not return.
+ *
+ * **What actually commits, now:** `chasing` is set by `detects()` at `detectRadius` 480 and cleared
+ * by `stepScavenger` beyond `releaseRadius` 720 — plus the two death exits in `enemyTurn.ts`. It is
+ * **not** a one-way transition any more, so the old guarantee is gone: *a flag that cannot be un-set
+ * cannot flap* was stronger than hysteresis, and hysteresis is what replaced it. The 240 px band is
+ * the whole of that replacement; `createScavenger` throws if it is empty.
+ *
+ * The permanence was reversed because of what it looked like in play rather than in code: a
+ * scavenger that saw you once stared from 851 px forever and never patrolled again.
+ * `chaseCounter` is still the episode's age, and `releaseAggro` still zeroes it.
  *
  * `enemy-ai.test.ts` gates this with a flap test rather than by reading the structure, because the
  * structure looks correct either way.

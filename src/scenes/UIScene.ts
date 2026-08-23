@@ -40,7 +40,14 @@
 
 import Phaser from 'phaser';
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
-import { counterText, hudLayout, type HudLayout } from '../render/hud';
+import {
+  COUNTER_FILL,
+  COUNTER_STROKE,
+  COUNTER_STROKE_PX,
+  counterText,
+  hudLayout,
+  type HudLayout,
+} from '../render/hud';
 import { addGearObject } from './gearLayer';
 import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from './hudFade';
 import { attachGearFlyers, type GearFlyers } from './hudGearFlyers';
@@ -48,28 +55,11 @@ import { attachGearPop, type GearPop } from './hudGearPop';
 import type { World } from '../sim/types';
 
 /**
- * The counter's colours.
- *
- * 🔴 **Criterion 6.6 requires a MEASURED contrast ratio of at least 4.5:1** — WCAG 2.2 SC 1.4.3,
- * Level AA. Measured 2026-08-15 by the accessibility gate owner against background pixels sampled
- * from the running game: **9.47:1 to 11.87:1**, well clear of the 4.5:1 normal-text threshold and
- * of the 3:1 large-text one this 44 px bold face actually qualifies for. Changing either colour
- * without re-measuring breaks the criterion silently.
- *
- * 🔴 **The counter is drawn over the LEVEL, not over the HUD plate.** An earlier version of this
- * comment claimed the opposite — that the text sat on the plate's own dark background, so the
- * measurement was stable. It is false: `hudLayout` puts `counter.x` beyond `plate.x + plate.w`, so
- * whatever the world happens to be behind it IS the background. The accessibility gate owner
- * caught it while verifying the claim rather than assuming it *(vault C9 — a comment describing a
- * mechanism that does not exist turns nothing red)*.
- *
- * That makes `COUNTER_STROKE` load-bearing rather than decorative: a 6 px dark outline is what
- * holds the contrast when the player walks in front of something pale. The measurement above is of
- * the shipped level's actual background, not of a guaranteed one, and that limitation is recorded
- * in `docs/qa/phase-06-hud.md` rather than papered over.
+ * The counter's colours moved to `hud.ts` on 2026-08-23 *(inventory 2b.4)*, with the contrast
+ * method that had never been written down and the measurement that method produces. They live in
+ * the engine-free layer so a test can hold them in relation to the shipped backgrounds; this file
+ * imports them and applies them, which is the same split as every other HUD decision.
  */
-const COUNTER_FILL = '#f7e3b8';
-const COUNTER_STROKE = '#1a1410';
 
 export class UIScene extends Phaser.Scene {
   /**
@@ -218,7 +208,7 @@ export class UIScene extends Phaser.Scene {
         fontStyle: 'bold',
         color: COUNTER_FILL,
         stroke: COUNTER_STROKE,
-        strokeThickness: 6,
+        strokeThickness: COUNTER_STROKE_PX,
       })
       .setOrigin(0, 0)
       .setDepth(1002);

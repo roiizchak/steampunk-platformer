@@ -233,3 +233,43 @@ Three things there are worth reading even if the numbers are not:
   but **its seed does not** — it is the one Phase 7 cue that cannot be re-generated identically.
   Same class of gap as [generations/phase-05-request-id-recovery.md](generations/phase-05-request-id-recovery.md),
   caught one phase earlier and one recovery cheaper.
+
+| [generations/phase-07-audio.md](generations/phase-07-audio.md) | **The level-complete sting** (inventory 3.6), added in the bug-fix session 2026-08-23 on the owner's authorisation. One take, adopted. `request_id` `01a02e6e-2db2-7a01-b469-8a2bf09549bf`, seed **7301**, 4 s WAV — reproducible, unlike `hit`. Mixed at −2 dB, and the pipeline **clamped its gain to 1** because the master came back at −13.64 dBFS: the achieved level is ~0.7 dB under the weight asked for, recorded rather than re-shot for a rounding | `fal-ai/stable-audio-3/small/sfx/text-to-audio` | 1 · $0.02 |
+
+**Audio ceiling after the sting: $0.25 of $5. $4.75 remains.**
+
+### 🔴 The main (video/image) ceiling, reconciled 2026-08-23
+
+The running total had not been updated since the gate-entry session, and this session had already
+spent against it:
+
+| | |
+|---|---|
+| after the gate-entry session | **$47.91** |
+| + C1's jump re-shoot, this session (2 generations) | **$2.38** |
+| **total** | **$50.29 of the $55 ceiling** |
+| **remaining** | **$4.71** |
+
+⚠️ **That is not two comfortable re-shoots.** A Seedance clip is ~$1.19, so two takes each of
+`brass-courier/fall` (2.2) and `brass-sentry/fire` (3.10) would be **$4.76 — over the ceiling by
+five cents.** The jump needed two paid takes to land, so two-each is the realistic figure, not the
+pessimistic one.
+
+So each is shot **once**, judged against its gate, and a second take is a STOP-and-ask rather than
+an assumption. Recorded here before spending, which is the rule the Phase 4 overrun bought:
+*"budget from the invoice, not the estimate."*
+
+⚠️ **Adding a tenth cue RE-SOLVES the whole mix.** The headroom scalar is solved against the
+worst-case stack, so every shipped cue's gain changed when `complete` joined it — this is the
+pipeline working as designed, and it is why the audio row count in `verify-dist` went 11 → 12 and
+every gain in `index.json` moved. `complete` was put **into** the worst-case stack rather than
+argued out of it: `levelCompleted` arrives while the player is still walking into the gate, so a
+footstep and a landing are live on that tick, and a worst case should over-state.
+
+| [qa/session-bugfix-tiers.md § 2.2](qa/session-bugfix-tiers.md) | **`brass-courier/fall` re-shoot — PAID AND REJECTED.** `01a02e75-f146-77e0-bbb6-78723778be42`. Applied both levers that made `jump-r4` pass (padded square anchor + the `SAME SIZE` clause) and passed **every** gate — G6, motion floor, adjacent distinctness — while measuring **worse** on the defect: worst adjacent height step 30 px against the shipped clip's 22. `fall-r2.mp4` still ships. The clip is kept, superseded, never deleted | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Running total: $51.48 of the $55 ceiling. $3.52 remains.**
+
+| [qa/session-bugfix-tiers.md § 3.10](qa/session-bugfix-tiers.md) | **`brass-sentry/fire` re-shoot — ADOPTED.** `01a02eb2-9ec0-7b93-982f-f060bbcbffb1`. `DISCHARGE_MARGIN` reversed on the owner's ruling: the flash now reaches about **twice** the barrel instead of no further than it. Discharge visible in **5 of 6 frames**, up from 1 — and it **passes G6 outright**, so the `ACCEPTED_EDGE_BLEED` waiver was deleted. Forced a tripod re-derive (0.44081578 → 0.57558748); the turret had gone 23.4 % small | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Running total: $52.67 of the $55 ceiling. $2.33 remains.**

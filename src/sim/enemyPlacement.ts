@@ -113,10 +113,37 @@ export const SCAVENGER_BOX: LocalBox = { x: -10, y: 0, w: 20, h: 40 };
  * 106.8 px behind the barrel and 39.6 px below it. The user reported it as "the sentry fires from
  * its belly" off a screen recording, and no test asking "did a projectile spawn" could have seen it.
  *
- * ⚠️ **This is art-derived, so re-measure it if `brass-sentry/idle` is ever re-shot.** This note
- * used to say `brass-sentry/fire` was "not in the catalog yet"; it landed in session 7 and the
- * sentence outlived it. **The muzzle is still measured against the IDLE pose**, and re-measuring it
- * against the firing one is open work — recorded here rather than silently assumed equal.
+ * ⚠️ **This is art-derived, so re-measure it if `brass-sentry/idle` is ever re-shot.**
+ *
+ * ## The FIRE pose was measured on 2026-08-23, and it cannot be used yet *(inventory 2.7)*
+ *
+ * This note used to say only that re-measuring against the firing pose was open work. It has now
+ * been attempted, with the same method that produced the numbers above — outermost 14 opaque columns
+ * per frame, against the `(0.5, 1)` origin:
+ *
+ * ```
+ *          frames   forward      above feet   frame-to-frame spread
+ *   idle   8        108.6 px     134.1 px     3.0 / 8.9      <- reproduces 17.8 / 22.6, so the method is sound
+ *   fire   6        137.5 px     136.8 px     78.0 / 190.8   <- unusable
+ * ```
+ *
+ * **The fire sheet has no stable barrel silhouette to measure.** Its per-frame readings scatter from
+ * `forward 116.5, above 5.7` to `forward 194.5, above 145.4`: the column heuristic is finding the
+ * discharge and the debris, not the barrel. An average over that is a number, not a measurement.
+ *
+ * That is not a flaw in the method — it is `clipAdoption.mjs`'s recorded defect arriving from
+ * another direction. The shipped `brass-sentry/fire` clip has a *"nearly-absent discharge"* because
+ * *"the margin constraint was met by the model largely not firing"*, and it was adopted *"because it
+ * is the round the gates must now judge, not because it is agreed to be better art"*.
+ *
+ * **So the constant stays on IDLE**, deliberately: pinning a sim value to art that is known-bad and
+ * expected to be re-shot would have to be undone twice. Re-measure this the same day that clip is
+ * regenerated — the numbers above are what to compare against.
+ *
+ * For scale: the most barrel-like fire frame reads `20.1 / 23.3` local against IDLE's `17.8 / 22.6`,
+ * so the error the current value carries is on the order of **2 local units forward, ~14 world px** —
+ * visible on a screen recording if you know to look, and smaller than the belly-fire defect this
+ * constant already fixed.
  */
 export const SENTRY_MUZZLE: LocalBox = { x: 17.8, y: 22.6, w: 0, h: 0 };
 

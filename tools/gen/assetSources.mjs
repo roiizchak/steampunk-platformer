@@ -22,9 +22,13 @@ export function findSource(generated, slug, action) {
   if (!existsSync(generated)) {
     throw new Error(
       `assets:build: ${generated} does not exist. Raw model output is gitignored by design — ` +
-        `run \`npm run assets:fetch\` to re-fetch it from the request ids in ` +
-        `docs/generations/ (indexed by docs/GENERATION-LOG.md). This build does NOT substitute ` +
-        `a placeholder (vault 4.16).`,
+        // 🔴 This used to say "run `npm run assets:fetch`". **That script does not exist**, and has
+        // not for as long as the message has (session inventory 4.5, corrected 2026-08-23). An error
+        // that tells you to run a command that is not there is worse than one that says nothing: it
+        // spends the reader's time proving the tool is missing before they can start recovering.
+        `re-fetch it with \`genmedia\` from the request ids recorded in docs/generations/ ` +
+        `(indexed by docs/GENERATION-LOG.md); completed job records are free to re-fetch (4.9). ` +
+        `This build does NOT substitute a placeholder (vault 4.16).`,
     );
   }
   // Exact filename, not a prefix scan: the producer (`build-clips.mjs`) writes

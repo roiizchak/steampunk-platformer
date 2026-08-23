@@ -183,19 +183,37 @@ test('restarting GameScene keeps exactly one HUD, rather than deleting it', asyn
  * So this boots successfully first — the HUD really is running — and only then breaks an asset and
  * restarts `BootScene`. Now the refusal has something to stop, and the line has coverage.
  *
- * ## 🔴 `test.fixme` — it FAILS, and the failure is a real defect, not a flaky test
+ * ## ✅ It PASSES, and the bug it found is fixed — the paragraph that said otherwise is gone
  *
- * Written to close the coverage gap; it immediately found that the gap was hiding a live bug. On a
- * refusal that follows a successful boot the HUD is **never stopped**, and the console carries
- * `TypeError: Cannot read properties of null (reading 'glTexture')` — the render loop is throwing
- * on destroyed textures, which leaves the HUD frozen on screen rather than merely un-stopped.
+ * *(Session inventory 1.3 / 4.4, settled 2026-08-23.)*
  *
- * This is **pre-existing** and belongs to the boot/refusal path, not to anything Phase 6 changed:
- * no Phase 6 criterion covers a refusal-after-boot, and the fresh-page refusal (the sibling test
- * above) is correct. It is marked `fixme` rather than deleted so the evidence survives and the
- * suite stays honest — a green suite that quietly dropped this test would be exactly the false
- * green this project keeps paying for. **Phase 7 owns it**, and it is recorded in
- * `docs/qa/phase-06-hud.md §Session 2`.
+ * This heading read **"🔴 `test.fixme` — it FAILS, and the failure is a real defect"** for three
+ * phases, describing a live bug: on a refusal following a successful boot the HUD was never stopped,
+ * the console carried `TypeError: Cannot read properties of null (reading 'glTexture')`, and the
+ * render loop threw on destroyed textures leaving the HUD frozen over the error screen. It said
+ * *"Phase 7 owns it"*. Phases 7, 8 and 9 all shipped.
+ *
+ * Meanwhile the test below has been a plain `test(...)`, and passing. Exactly one of two things
+ * could be true — the bug was fixed and nobody deleted the paragraph, or the test passes without
+ * detecting it and the defect ships *(C2: a gate that cannot go red is decoration)*.
+ *
+ * **It is the first, and it was settled by running the mutation rather than by reading the green.**
+ * The fix is in `BootScene.init()`: it stops `Game` and `UI` **before** the reload, unconditionally,
+ * rather than relying on `refuseToRoute`'s stops at the end of a boot attempt. That file's own
+ * comment records it as *"found by writing the restart-based refusal test Codex's second
+ * implementation review asked for"* — this test.
+ *
+ * | mutation on `BootScene.init()` | this spec |
+ * |---|---|
+ * | remove **both** pre-reload stops | **FAILS**, and only this test of the five — `bootError` never arrives, a 20 s timeout. Nothing further runs after the render loop throws, so the refusal never completes: the described bug exactly |
+ * | remove **only** `stop('UI')` | all 5 still pass |
+ *
+ * ⚠️ **That second row is a real, narrower gap and is recorded rather than hidden.** The `Game` stop
+ * is what this test depends on — `GameScene` draws the world textures `preload` frees, and the HUD
+ * alone does not touch them. So an edit that dropped only the UI stop would go unnoticed here. It is
+ * harmless today (the HUD still stops via `refuseToRoute`, because nothing threw), which is why it
+ * is left as redundancy rather than chased: the assertion below would have to reach into UIScene's
+ * display list to see it, and no defect currently makes that worth doing.
  */
 test('a refusal AFTER a successful boot stops the HUD that was already running', async ({
   page,

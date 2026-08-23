@@ -48,6 +48,31 @@ import { FRAME_MARGIN } from './motionClauses.mjs';
  *
  * Both are reverted. The non-monotonic middle is a real defect and is still open; the fix is NOT a
  * stronger instruction in this paragraph.
+ *
+ * ## 🔴 2026-08-23: the SIZE clause, and why this one is not "a stronger instruction"
+ *
+ * *(Session inventory 2.1.)* Both existing jump takes fail G6, in **opposite directions**:
+ *
+ * | take | G6 | what it did |
+ * |---|---|---|
+ * | `jump.mp4` (round 1, SHIPPED) | frame 1, **right 0px** | figure shrank to **63.4 %** of frame height against idle's 91.4 %, head 1.65× too wide, curled |
+ * | `jump-r2.mp4` | frame 0, **top 0px** | figure grew to ~94 % and put the head through the top edge |
+ *
+ * That is not two unlucky rolls. The paragraph **asked for margins and never named a size**, and
+ * *"plain green above his head and plain green below his boots"* is satisfiable at any scale — so
+ * the model oscillated between the only two ways to satisfy it. Round 1 is what ships today, and it
+ * never passed G6 either; it predates the gate.
+ *
+ * The replacement **names the size** rather than negating a failure, which is the one move
+ * STYLE.md §6 says works on this model — *a NAMED element beats a negation*, the same rule that
+ * explains why the monotonicity clause above overrode five explicit prohibitions. It names it by
+ * reference to the anchor (*"the same size as in the reference image"*), which is the identity
+ * source every other action already shares, so the scale and the character are pinned by the same
+ * sentence.
+ *
+ * ⚠️ This is an art-direction change and it is **not** under `style-lock.test.ts`, which hashes
+ * STYLE.md §2/§4/§5 only — verified, `UPRIGHT_IN_AIR` appears nowhere in that document. Recorded
+ * here rather than treated as a silent tweak.
  */
 const UPRIGHT_IN_AIR = `
 
@@ -61,8 +86,9 @@ He HANGS IN ONE PLACE. His body does not travel up, down, left or right in the f
 Only his arms and legs move. His head and torso stay at the same height in the frame throughout.
 There is no ground, no floor, no surface and no horizon anywhere in the frame, not even far below him.
 Nothing casts a shadow. The flat chroma green continues past every edge of the frame.
-His whole body is in frame at every moment, from the top of his hair to the soles of his boots.
-There is plain green above his head and plain green below his boots in every frame.
+He is the SAME SIZE in the frame as he is in the reference image, and stays exactly that size in every frame.
+He is never enlarged, never shrunk and never re-framed relative to the reference image.
+There is a clear band of plain green above his head, below his boots, and to his left and right.
 No part of him is ever cut off by the top, bottom, left or right edge.
 Locked camera. No zoom. No pan. No dolly. No camera movement of any kind.`;
 

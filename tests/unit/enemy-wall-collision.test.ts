@@ -144,9 +144,14 @@ describe('a chasing scavenger and a wall — the reported bug', () => {
       stepScavenger(s, { playerX: 2200, playerY: 0 }, footing);
     }
     const held = s.x;
-    // Aggro is permanent, so the chase continues — the player has simply gone the other way.
+    // The chase continues — the player has simply gone the other way.
+    //
+    // ⚠️ **1400, not 0** *(inventory 2b.1, 2026-08-23)*. From a body held at ~1940 a player at 0 is
+    // now outside `releaseRadius` 720, so the chase would END and this would measure a patrol while
+    // claiming to measure a recovery. The test is about walking away from the wall, so the player
+    // has to be somewhere it is still hunting.
     for (let i = 0; i < 60; i += 1) {
-      stepScavenger(s, { playerX: 0, playerY: 0 }, footing);
+      stepScavenger(s, { playerX: 1400, playerY: 0 }, footing);
     }
     expect(s.x).toBeLessThan(held);
     expect(s.moving).toBe(true);

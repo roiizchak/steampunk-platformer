@@ -223,22 +223,65 @@ that only one Playwright run may exist at a time.
 
 ## QA gate — status
 
-**Every row below is UNRUN until its owner agent has run it, twice, per (A7).** Nothing here is
-marked passing yet.
+**Every row below is UNRUN until its owner agent has run it, twice, per (A7).**
+
+**Reconciled 2026-08-23** by the bug-fix session (inventory item 0.1), criterion by criterion against
+the evidence sections in this file. The table had never been updated after the rounds ran, so it read
+UNRUN for seven criteria whose rounds are written up below at `:448`, `:494`, `:529`, `:1063`,
+`:1132`, `:1320` and `:1518`. **That was the easy half.** The hard half is that reconciling it
+honestly does **not** turn most of those rows green — see §*"The reconciliation, and why Phase 9 is
+still not done"* below the table.
 
 | # | Criterion | Owner | Status |
 |---|---|---|---|
-| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | UNRUN |
-| 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | UNRUN |
-| 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | UNRUN |
-| 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | UNRUN — ⚠️ see the substitution note below |
+| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | **OWED.** The gate round ran and its mutation proofs are at `:448`; T1's re-mutations by the integrator are at `:108`. But the four blind briefs' write-up at `:529` names 9.3, 9.4, 9.7 and 9.9 as what they failed and does not record a verdict on this one either way. **A round with no recorded verdict is not a pass.** |
+| 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | **OWED.** Same as 9.1 — no verdict recorded by either brief. And its landing-shake gate was afterwards found **flaky ~1 run in 3** and repaired (`:1600`), with the repair's own red watched at `:1663`. The criterion has therefore changed since any brief looked at it. |
+| 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | **RAN ×2 → FAILED.** `:529` — four blind briefs failed it. Findings closed in the fix round with their reds recorded. **No owner brief has re-run it against the fix**, which is the standard 9.5's row already applies to itself. |
+| 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | **RAN ×2 → FAILED** (`:529`), findings closed in the fix round, **not re-run against the fix**. ⚠️ And see the substitution note below — its observable subject changed mid-phase, so a re-run is against a different subject than the first run was. |
 | 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | **RAN ×2 → FAIL twice.** Brief B (adversarial) FAILED it again on H1: the guard licensing the divide-back could not fire below `k = 3`. **All 11 findings applied or recorded 2026-08-22** — see §*"The 9.5 fix round #2"*. **Still UNRUN in the sense that matters: neither owner brief has re-run it against this fix.** |
 | 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN ×2 → PASS ×2**, checklist verified item by item by both briefs; brief B's one finding (L1, `inView` was an existence check) applied |
-| 9.7 | Thresholds pinned as literals, fixtures both sides | `qa-expert` ×2 | UNRUN |
-| 9.8 | What the gates do NOT cover is stated here | — | DRAFTED, below |
-| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | UNRUN |
+| 9.7 | Thresholds pinned as literals, fixtures both sides | `qa-expert` ×2 | **RAN ×2 → FAILED** (`:529`), findings closed in the fix round, **not re-run against the fix**. |
+| 9.8 | What the gates do NOT cover is stated here | — | ✅ **PASS.** Drafted below and extended through every round (entries 25, 36, 37, 43–45, and the two written at `:1363`). Item 32 was closed by hands-on judgement and then **re-judged on the fixed build** because the first approval did not count (`:1485`, `:1562`). |
+| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | **RAN ×2 → FAILED** (`:529`), findings closed in the fix round, **not re-run against the fix**. The line-count half is separately green and mechanical (`:1550`); the adversarial-pass half is what is owed. |
 | 9.10 | Codex plan review ran; every finding applied or recorded | — | ✅ **PASS** — [phase-09-plan.md](../reviews/phase-09-plan.md), 4 blockers + 2 highs applied, 3 lows recorded |
-| 9.11 | Codex implementation review ran on the diff | codex | UNRUN |
+| 9.11 | Codex implementation review ran on the diff | codex | ✅ **PASS** — `:1518`. Triage with a verdict per finding in [phase-09-impl.md](../reviews/phase-09-impl.md); five gates watched failing with the mutation each assertion names, reverted and confirmed per *(C1, C12)*; four verification runs green on the same tree (unit 2151|3, sim-isolated 2151|3, e2e 119, build `verify-dist ok`). |
+
+### The reconciliation, and why Phase 9 is still not done
+
+**Inventory item 0.1 asked for the table to be brought in line with what ran. It now is, and the
+answer is not the comfortable one.** Four rows are substantiated; seven are owed.
+
+| verdict | criteria | why |
+|---|---|---|
+| ✅ **PASS**, substantiated | 9.6 · 9.8 · 9.10 · 9.11 | each has a round with a **recorded verdict** and its evidence section cited in the row |
+| **OWED — ran, failed, fixed, never re-run** | 9.3 · 9.4 · 9.5 · 9.7 · 9.9 | the four blind briefs at `:529` failed all of these; the fixes landed with their reds recorded; **no owner brief has looked at the result** |
+| **OWED — no verdict either way** | 9.1 · 9.2 | the round ran, but `:529` records verdicts only for 9.3/9.4/9.7/9.9 and neither brief's write-up decides these |
+
+**The standard applied here is the log's own.** 9.5's row was already written as *"RAN ×2 → FAIL
+twice … all 11 findings applied or recorded … **still UNRUN in the sense that matters: neither owner
+brief has re-run it against this fix**"* — and nothing distinguishes 9.3, 9.4, 9.7 or 9.9 from it.
+Applying the standard to one criterion and not to its four siblings would be picking the answer
+first.
+
+**So `PRD.md:36` stays `—`.** Phase 9 is not marked done, and `docs-contract.test.ts` stays green for
+the reason it always did rather than because the phase earned it. *(Global Constraints: a phase with
+a failing or unrun criterion is reported failing, never as done.)*
+
+**What this means about the merge.** The phase was merged to `main` and approved on a verbal report,
+and the project's own authority does not corroborate it. That is item 0.1's finding stated plainly.
+It is **not** a claim that the work is bad — the mutation proofs at `:448` and `:1320`, the
+integrator's own re-mutations at `:104`, and the Codex round at `:1518` are as thorough as anything
+in this repository. It is a claim that **the last step of the protocol was skipped**: agent-owned
+criteria that FAILED were fixed and never handed back to their owners.
+
+**What closing it costs.** One gate round: `code-reviewer` ×2 over 9.1, 9.2, 9.3, 9.9 and
+`qa-expert` ×2 over 9.4, 9.7, plus `performance-engineer` ×2 over 9.5 against the fix round #2/#3
+tree — each with two briefs *(A7)*, brief 1's findings withheld from brief 2. That is a session's
+work and it is **not** this session's scope, so it is recorded here as owed rather than quietly
+absorbed. *A QA-LOG row reading PASS is still a sentence a human wrote* (`QA-LOG.md:262`); this
+section exists so nobody writes seven of them.
+
+---
 
 ### ⚠️ 9.4's subject: the substitution, and why it is now BOTH
 

@@ -149,6 +149,15 @@ export function deriveFps(renderFrames: number, simTicks: number): number {
  * the raw quotient. Every duration in this project is an integer count of 60 Hz ticks, so an fps
  * derived from `13.846…` describes a cycle length the simulation can never actually have. Codex
  * plan review finding 9 flagged the missing rounding rule.
+ *
+ * ⚠️ **This was deleted on 2026-08-23 as dead, and put straight back.** The Tier-4 sweep proposed
+ * removing it alongside `MeasuredStrides` and `EnemyStrides`; the grep that "confirmed" it was dead
+ * had been truncated by a `head -5` and hid the two files that import it —
+ * `tests/unit/anim-timing.test.ts` and `tests/unit/catalog-timings.test.ts`, the second of which
+ * checks `tools/gen/catalogTimings.mjs`'s mirror of it agrees. `MeasuredStrides`'s claim that this
+ * is *"still exported and tested"* was **correct**, and the removal was caught by `tsc` and four
+ * red tests within a minute. Recorded because the near-miss is the lesson: a deletion justified by a
+ * grep is only as good as the grep, and `head` is not a filter.
  */
 export function strideTicks(stridePx: number, speedPxPerTick: number): number {
   if (!(stridePx > 0) || !Number.isFinite(stridePx)) {
@@ -188,16 +197,19 @@ export function cadenceTicks(renderFrames: number, authoredFps: number): number 
 }
 
 /**
- * Stride lengths measured off the generated sheets, in world pixels, keyed by animation.
+ * 🔴 **`MeasuredStrides` and `EnemyStrides` were DELETED here on 2026-08-23** *(session inventory,
+ * Tier 4)*. Both typed stride lengths measured off generated sheets, both said *"no longer used for
+ * timing"*, and **neither was imported anywhere** — verified across `src/`, `tests/` and `tools/`
+ * with no truncation, unlike the grep that briefly convinced this session `strideTicks` was dead
+ * too. `strideTicks` stays; see its docstring.
  *
- * ⚠️ **No longer used for timing.** Kept because `character-bounds.json` still records the
- * measurements and `strideTicks` is still exported and tested — but locomotion cadence is authored
- * now, so a wrong stride can no longer reach the screen. See the header.
+ * `character-bounds.json` still records the measurements and keeps its shape whether or not a
+ * TypeScript interface describes it — `tests/unit/asset-catalog.test.ts` declares the field it needs
+ * inline. A type nobody reads is an invitation to reach for a retired number, which is exactly how
+ * Phase 7's plan went wrong (Codex plan review F8).
+ *
+ * Removing an export is not STOP-and-ask; deleting a *file* is (CLAUDE.md §3).
  */
-export interface MeasuredStrides {
-  run: number;
-  walk: number;
-}
 
 /**
  * Authored locomotion cadences, in frames per second, read from `character-bounds.json`.
@@ -266,16 +278,6 @@ export function animTimings(
 /* ------------------------------------------------------------------ *
  * Enemy timings — guard G2 extended to the subjects Phase 5 adds.
  * ------------------------------------------------------------------ */
-
-/**
- * Stride lengths measured off an ENEMY sheet, world px per cycle.
- *
- * ⚠️ No longer used for timing — see the header. Kept as the recorded measurement.
- */
-export interface EnemyStrides {
-  walk: number;
-  chase: number;
-}
 
 /** Authored loop cadences for an enemy's locomotion, frames per second. */
 export interface EnemyCadence {

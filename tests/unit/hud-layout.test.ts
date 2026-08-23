@@ -14,9 +14,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
+import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
-import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
 
 /** The three sizes this project supports, per the Phase 6 decision. */
@@ -71,6 +71,26 @@ describe('hudLayout is derived from the live game size', () => {
     // ~11 physical px stops being readable digits on a low-DPI screen.
     const layout = hudLayout(852, 480, HUD_SLOT);
     expect(layout.counter.fontPx).toBeGreaterThanOrEqual(11);
+  });
+
+  it('the CONTROLS BANNER stays legible at the smallest supported size too', () => {
+    // 🔴 Session inventory 2.5. `addHelpBanner` hard-coded `'18px'`, which is 18 x 0.444 = **8
+    // physical px** at 852 x 480 — a third under the same floor the counter above is measured
+    // against, and confirmed illegible in a playtest screenshot rather than inferred.
+    //
+    // The banner SHIPS: `helpLine()` deliberately keeps the mute keys and `ESC levels` in the
+    // shipped half, because "a mute control the player cannot discover is a mute control they do
+    // not have". An illegible banner is those controls not existing.
+    //
+    // Asserted against the same 0.444 scale `hudLayout` derives, so the two cannot drift apart.
+    const scale = hudLayout(852, 480, HUD_SLOT).scale;
+    expect(
+      HELP_FONT_PX * scale,
+      'the controls banner is under the legibility floor',
+    ).toBeGreaterThanOrEqual(11);
+    // And it must not have been "fixed" by growing past what one wrapped banner can show: above
+    // ~40 design px the DEV line needs three rows and starts eating the play area.
+    expect(HELP_FONT_PX).toBeLessThanOrEqual(40);
   });
 
   it('refuses a nonsense game size instead of laying out into it', () => {
@@ -138,22 +158,132 @@ describe('gearsCollectedFrom drives the tween', () => {
 });
 
 describe('counterText gives tabular figures a fixed width', () => {
-  it('pads to three digits, so the string length never changes', () => {
-    expect(counterText(0)).toBe('000');
-    expect(counterText(9)).toBe('009');
-    expect(counterText(10)).toBe('010');
-    expect(counterText(123)).toBe('123');
-    for (const n of [0, 1, 9, 10, 99, 100, 999]) {
-      expect(counterText(n)).toHaveLength(3);
+  it('pads to the width MAX_LEVEL_GEARS needs, so the string length never changes', () => {
+    // 🔴 RE-TAKEN 2026-08-23 (inventory 3.8). This asserted a hard-coded three digits, which is a
+    // width the game cannot reach: MAX_LEVEL_GEARS is 64. `level-01` ships 7 gears and drew `007`,
+    // recorded in phase-06-owed.md as reading like a placeholder.
+    //
+    // Derived from the cap on both sides, so raising the cap past 99 widens the counter and this
+    // test together rather than leaving one to be found by eye.
+    const width = String(MAX_LEVEL_GEARS).length;
+    expect(width, 'the cap changed — check the counter still fits its slot').toBe(2);
+
+    expect(counterText(0)).toBe('00');
+    expect(counterText(9)).toBe('09');
+    expect(counterText(10)).toBe('10');
+    expect(counterText(MAX_LEVEL_GEARS)).toBe('64');
+    for (const n of [0, 1, 9, 10, 64]) {
+      expect(counterText(n)).toHaveLength(width);
     }
   });
 
-  it('does not truncate past three digits — a wrong count beats a lying one', () => {
+  it('does not truncate past its pad width — a wrong count beats a lying one', () => {
+    // Above the cap is unreachable from shipped data (`describeGearProblem` refuses it), but a
+    // truncating counter would lie rather than look wrong, so the overflow behaviour is pinned.
     expect(counterText(1234)).toBe('1234');
   });
 
   it('clamps nonsense rather than rendering it', () => {
-    expect(counterText(-5)).toBe('000');
-    expect(counterText(3.7)).toBe('003');
+    expect(counterText(-5)).toBe('00');
+    expect(counterText(3.7)).toBe('03');
+  });
+});
+
+/**
+ * # The banner's font size reaches the banner (S.3 gate owner, brief 1)
+ *
+ * The code-review gate owner found item 2.5's fix had **no draw-path gate**: every assertion above
+ * is about the constant, and the session log's watched-red was *"`HELP_FONT_PX` back to 18"* — which
+ * mutates the constant, not the consumer.
+ *
+ * So reverting `gameDev.ts`'s `fontSize` to a hardcoded `'18px'` restored the shipped defect — an
+ * ~8 physical-pixel banner at the supported minimum — **with the whole suite green**. CLAUDE.md §2:
+ * *"every module here owes a draw-path gate."* This is that gate.
+ *
+ * Source text rather than behaviour, because `gameDev.ts` imports Phaser as a **value** and cannot
+ * be imported here. The weaker of the two shapes CLAUDE.md allows, and the only one reachable.
+ */
+describe('HELP_FONT_PX has a consumer (CLAUDE.md §2 draw-path gate)', () => {
+  // ⚠️ vitest caches `?raw` glob results — touch this file too when re-running after an edit.
+  const sources = import.meta.glob('../../src/scenes/gameDev.ts', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+  }) as Record<string, string>;
+  const source = Object.values(sources)[0] ?? '';
+
+  it('the source was actually read — an empty glob would make the rest vacuous', () => {
+    expect(source.length).toBeGreaterThan(1000);
+  });
+
+  it('the banner draws at HELP_FONT_PX, not at a literal', () => {
+    expect(source, 'gameDev.ts no longer imports the constant').toContain('HELP_FONT_PX');
+    expect(source, 'the banner does not use HELP_FONT_PX for its fontSize').toContain(
+      '`${HELP_FONT_PX}px`',
+    );
+  });
+
+  it('no hardcoded pixel fontSize survives in the banner', () => {
+    // The exact regression: `fontSize: '18px'` is what shipped, and 2.5 is the record of it.
+    expect(source, "a literal px fontSize is back — that is item 2.5's defect").not.toMatch(
+      /fontSize:\s*'\d+px'/,
+    );
+  });
+});
+
+/**
+ * # The counter's digits centre on their INK, not on their glyph box (inventory 3.8, clause 2)
+ *
+ * Item 3.8 named three UI defects. The padding half was fixed; **this one was silently left out and
+ * never recorded** — found by the S.7 gate owner, which makes it a C11 gap as well as a visual one.
+ *
+ * Phaser `Text` lays out on the font's full ascent + descent box. Digits have no descenders, so
+ * centring that box leaves the ink sitting **2–4 px high** next to the gear icon, which is centred
+ * on its own bounds.
+ *
+ * ⚠️ Changing `counter.y` moved **no test at all** — 2283 passed before and after. That is the
+ * finding this file exists to close: the value was ungated, so the defect could be introduced or
+ * removed without anything noticing, in either direction.
+ *
+ * **The mutation this names:** drop the `+ fontPx * DIGIT_DESCENT_FRACTION` term.
+ */
+describe('the gear counter is nudged for the descender it does not have (3.8)', () => {
+  const layout = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
+
+  /** Where a naive ascent+descent centring would put it — the defect's position. */
+  function naiveY(l: ReturnType<typeof hudLayout>): number {
+    return l.plate.y + l.plate.h / 2 - l.counter.fontPx / 2;
+  }
+
+  it('sits BELOW naive centring — the whole point', () => {
+    expect(
+      layout.counter.y,
+      'the counter is centred on its glyph box again, so the digits read high',
+    ).toBeGreaterThan(naiveY(layout));
+  });
+
+  it('the nudge is a plausible half-descent, not an arbitrary shove', () => {
+    // Asserted as a range rather than an equality: an equality against the constant would be the
+    // same expression twice and could never fail. A half-descent is ~10% of the em box; anything
+    // outside 5–15% is a different decision that should be argued, not tuned in.
+    const nudge = (layout.counter.y - naiveY(layout)) / layout.counter.fontPx;
+    expect(nudge, `nudge is ${(nudge * 100).toFixed(1)}% of the font size`).toBeGreaterThan(0.05);
+    expect(nudge).toBeLessThan(0.15);
+  });
+
+  it('scales with the font — it is a fraction, not a literal', () => {
+    // The regression that a hardcoded 4 px would cause: correct at 1920x1080, wrong everywhere else.
+    // This is half of what Tier 4 was about.
+    const small = hudLayout(852, 480, HUD_SLOT);
+    const big = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
+    const smallNudge = (small.counter.y - naiveY(small)) / small.counter.fontPx;
+    const bigNudge = (big.counter.y - naiveY(big)) / big.counter.fontPx;
+    expect(smallNudge).toBeCloseTo(bigNudge, 6);
+  });
+
+  it('still leaves the whole HUD on screen at the minimum window', () => {
+    // The counter moving down cannot be allowed to push it off the bottom — `hudFits` measures the
+    // counter's bottom as `y + fontPx`, so the nudge is inside that budget or it is not.
+    expect(hudFits(hudLayout(852, 480, HUD_SLOT), 852, 480, 60)).toBe(true);
   });
 });

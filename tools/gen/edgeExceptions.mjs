@@ -58,14 +58,6 @@
  * drift into different vocabularies.
  */
 export const ACCEPTED_EDGE_BLEED = Object.freeze({
-  'brass-sentry/fire': Object.freeze({
-    file: 'brass-sentry-fire-r4.mp4',
-    edges: Object.freeze(['right']),
-    reason:
-      'the muzzle discharge leaves the frame. The turret is complete and sits at L232 T278 B244; ' +
-      'what crosses the right edge is the flash and the departing bolt. Confirmed by eye at full ' +
-      'resolution, and re-shot once from a larger padded anchor (-r5) which did not move it.',
-  }),
 
   'brass-sentry/death': Object.freeze({
     file: 'brass-sentry-death-r4.mp4',

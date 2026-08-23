@@ -115,7 +115,9 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
       const footing = scavengerFooting([{ x: -500, y: 10, w: 500, h: 100 }], 6);
       const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
       s.chasing = true;
-      stepScavenger(s, { playerX: 5000, playerY: 0 }, footing);
+      // 500, not 5000: a chase now ends beyond `releaseRadius` 720 (inventory 2b.1), and this
+      // fixture is about the ANIMATION a stalled chaser draws, not about detection range.
+      stepScavenger(s, { playerX: 500, playerY: 0 }, footing);
       expect(s.x, 'the ledge veto means it did not travel').toBe(0);
       expect(scavengerAnim(s)).toBe('idle');
       expect(s.facing, 'but it still LOOKS at the player it cannot reach').toBe(1);
@@ -124,7 +126,9 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
     it('plays chase when it is genuinely closing', () => {
       const s = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
       s.chasing = true;
-      stepScavenger(s, { playerX: 5000, playerY: 0 }, EVERYWHERE_HERE);
+      // 500, not 5000: a chase now ends beyond `releaseRadius` 720 (inventory 2b.1), and this
+      // fixture is about the ANIMATION a stalled chaser draws, not about detection range.
+      stepScavenger(s, { playerX: 500, playerY: 0 }, EVERYWHERE_HERE);
       expect(s.x).toBeGreaterThan(0);
       expect(scavengerAnim(s)).toBe('chase');
     });
@@ -204,7 +208,9 @@ describe('enemy animation keys come from sim state (criterion 5.4, guard G2)', (
 
     const chasing = createScavenger({ x: 0, y: 0, patrolMin: -1000, patrolMax: 1000 });
     chasing.chasing = true;
-    stepScavenger(chasing, { playerX: 5000, playerY: 0 }, everywhere);
+    // 500, not 5000 — past `releaseRadius` 720 this subject releases and stops being able to ASK for
+    // the `chase` key, which is what dropped the declared-key count from 8 to 7 (inventory 2b.1).
+    stepScavenger(chasing, { playerX: 500, playerY: 0 }, everywhere);
 
     const stalled = createScavenger({ x: 0, y: 0, patrolMin: 0, patrolMax: 0 });
     stepScavenger(stalled, { playerX: 99999, playerY: 0 }, everywhere);

@@ -49,7 +49,9 @@
       "loop": false,
       "verticalAnchor": "centroid",
       "footOffsetPx": 0,
-      "activeFrames": []
+      "activeFrames": [],
+      "scale": 0.6,
+      "_scaleNote": "JUMP (added 2026-08-23, session inventory 2.1): the fourth padded courier action, same 5050px anchor as attack/death/fall, seed 703584449 — the FIRST jump take ever to pass G6. Its 6 frame heights are 440,330,338,440,438,403 (mean 398, spread 110px/27.6%), so build-assets --derive-scale printed 0.72361809 and THAT WOULD BE A BUG TO PASTE, for exactly the reason death 1.195 and fall 0.748 were: a jump deforms, and a mean across a tuck-and-extend is not a standing-height measurement. Death by-hand rule does not transfer either -- death frame 0 IS the upright anchor pose, and jump has NO upright frame at all: the courier is airborne from the first sample to the last. So the number comes from the one standing measurement this anchor has, exactly as fall does: attack independently-derived 480 source px, giving 288/480 = 0.6 exactly, the same value attack and fall pack at. The consistency check is that jump tallest frame (440) is 91.7% of that 480 -- a tucked airborne pose being slightly shorter than a stand is the expected sign and magnitude, and fall tallest was 96.3% by the same check. Pasting 0.7236 instead would have drawn the courier 21% LARGER in the air than on the ground, the same pop the session-6 padded-attack defect produced. WHY THE RE-SHOOT: round 1 (jump.mp4, shipped since Phase 4) never passed G6 -- frame 1 cut on the right -- and drew the figure at 69.3% of idle height with a head 1.65x too wide. jump-r2 (1:1) cut the head off at the top; jump-r3 (9:16, size clause added) cut the right edge again. A jump is a WIDE pose and 9:16 is a narrow frame, so the square padded canvas plus the size clause is what finally cleared G6. NO AUTOMATED GATE COVERS THIS NUMBER: sprite-size-consistency.test.ts deliberately does not measure brass-courier, so it is verified BY EYE in play and nowhere else."
     },
     "fall": {
       "loop": false,

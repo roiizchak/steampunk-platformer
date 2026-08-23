@@ -320,16 +320,31 @@ describe('death releases aggro, so a respawn is not walked to', () => {
    * The half of the decision that must NOT change: permanent aggro within one life. A test that only
    * proved the release would stay green if death released aggro every tick.
    */
-  it('does not release aggro while the player is merely running away', () => {
+  /**
+   * 🔴 **RE-TAKEN 2026-08-23** *(inventory 2b.1)*. This asserted *"within one life it never gives up
+   * — that is the whole design"*, which was true of ruling D4 and is not true of its reversal.
+   *
+   * What this file is actually for is unchanged: **death** is an exit, and it must not be confused
+   * with distance. So the reading is re-taken at a distance *inside* the hysteresis band, where the
+   * two exits are distinguishable — a chase that ended here would mean death was leaking into the
+   * living case, which is the bug `releaseAggro`'s two call sites exist to prevent.
+   *
+   * The far-away case moved to `aggro-release-radius.test.ts`, which owns it now.
+   */
+  it('does not release aggro while the player is merely running away INSIDE the band', () => {
     const w = worldWithChaser();
     const scavenger = w.enemies.scavengers[0]!;
     w.player.x = scavenger.x - 300;
     tick(w, createSnapshot());
     expect(scavenger.chasing).toBe(true);
 
-    w.player.x = 0; // far outside detectRadius, alive
+    // Past `detectRadius` 480, short of `releaseRadius` 720: committed, and still alive.
+    w.player.x = scavenger.x - 600;
     run(w, 60);
-    expect(scavenger.chasing, 'within one life it never gives up — that is the whole design').toBe(true);
+    expect(
+      scavenger.chasing,
+      'gave up inside the band while the player was alive — only death and the release radius end a chase',
+    ).toBe(true);
   });
 });
 

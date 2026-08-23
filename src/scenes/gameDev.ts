@@ -31,7 +31,8 @@ import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
-import { HUD_MARGIN, HUD_PLATE } from '../render/hud';
+import { HELP_BANNER_Y, HELP_FONT_PX, HUD_MARGIN } from '../render/hud';
+import { GAME_WIDTH } from '../game/constants';
 import type { World } from '../sim/types';
 
 /**
@@ -133,9 +134,20 @@ export function helpLine(): string {
  * height — which, this phase having just watched the plate change size, is not hypothetical.
  */
 export function addHelpBanner(scene: Phaser.Scene, text: string): void {
-  const y = HUD_MARGIN + HUD_PLATE.h + HUD_MARGIN * 2;
   scene.add
-    .text(HUD_MARGIN, y, text, { fontFamily: 'monospace', fontSize: '18px', color: '#8f8776' })
+    .text(HUD_MARGIN, HELP_BANNER_Y, text, {
+      fontFamily: 'monospace',
+      // 🔴 Was a hard-coded `'18px'` — ~8 physical px at 852 x 480, a third under the legibility
+      // floor the gear counter is sized against, and confirmed illegible in a playtest screenshot
+      // *(inventory 2.5)*. `HELP_FONT_PX` carries the derivation; `hud-layout.test.ts` fails if it
+      // ever drops back under the floor.
+      fontSize: `${HELP_FONT_PX}px`,
+      color: '#8f8776',
+      // At 28 px the line is wider than the view — ~110 characters shipped and ~150 in a DEV build.
+      // Wrapping is what makes the legible size affordable; without it the fix would simply push the
+      // right-hand controls off the edge, which is the same defect wearing a bigger font.
+      wordWrap: { width: GAME_WIDTH - HUD_MARGIN * 2 },
+    })
     .setScrollFactor(0);
 }
 

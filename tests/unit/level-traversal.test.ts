@@ -288,13 +288,27 @@ describe('permanent aggro is bounded by the level, not just by the code', () => 
     // not whether it notices. Waiting would make the test pass for the wrong reason if the player
     // happened to be out of the 480 px radius.
     scavenger.chasing = true;
+    /**
+     * 🔴 **The release radius is disabled for this fixture, deliberately** *(inventory 2b.1,
+     * 2026-08-23)*. A chase now ends beyond `releaseRadius` 720 and the scavenger starts far more
+     * than that from the x:3198 stall, so it would give up on tick 1 — and the travel bound below
+     * would then pass because the creature *stopped trying*, not because it could not get there.
+     * That is the weaker claim, and this test exists for the stronger one.
+     *
+     * This is the fixture's own stated intent, one threshold further out: *"the question is how far
+     * it can TRAVEL, not whether it notices."* Release behaviour is owned by
+     * `aggro-release-radius.test.ts`; this file owns the level geometry.
+     */
+    scavenger.releaseRadius = Number.MAX_SAFE_INTEGER;
 
     const input: InputSnapshot = createSnapshot();
     for (let i = 0; i < 1200; i += 1) {
       tick(world, input);
     }
 
-    expect(scavenger.chasing, 'the chase ended on its own — aggro is no longer permanent').toBe(true);
+    expect(scavenger.chasing, 'the forced chase was cleared by something other than distance').toBe(
+      true,
+    );
     // Stopped at the pit's eastern side, a clear margin from the player.
     expect(
       scavenger.x - world.player.x,

@@ -36,8 +36,10 @@ import Phaser from 'phaser';
 import type { AssetCatalog } from '../game/assetCatalog';
 import { recordCompletion, readProgress, safeLocalStorage, writeProgress } from '../game/save';
 import { nextLevelId } from '../sim/progress';
-import type { World } from '../sim/types';
+import { shouldRunCompletion } from './completionGate';
 import { animateGoalReached } from './goalLayer';
+import type { AdvanceEvents } from '../sim/types';
+import type { World } from '../sim/types';
 import { LEVEL_SELECT_KEY, levelOrder } from './gameLevelPick';
 import type { LevelCompleteInfo } from './hudFade';
 import type { UIScene } from './UIScene';
@@ -77,7 +79,10 @@ export function onLevelCompleted(ctx: CompletionContext): void {
   const save = recordCompletion(readProgress(storage), levelId, world.gearsCollected, total);
   writeProgress(storage, save);
 
-  animateGoalReached(scene, ctx.goalObject);
+  // 🔴 `animateGoalReached` used to be called here and is not any more *(inventory 2.6)*. This
+  // function runs on `levelCompleted`, twenty ticks after the player reached the door and one tick
+  // after the courier finished fading out — so the exit's flourish played over an empty doorway.
+  // `GameScene.update()` fires it on the `goalReached` arrival edge instead.
   ctx.ui?.levelComplete(panelText(save.levels[levelId]?.bestGears ?? 0, world, total, next));
   bindContinue(scene, next);
 }
@@ -130,4 +135,56 @@ function bindContinue(scene: Phaser.Scene, next: string | null): void {
     // is the level just finished.
     scene.scene.start('Game', { levelId: next });
   });
+}
+
+/**
+ * Both edge-driven halves of reaching the exit, in one call: the ARRIVAL flourish and the
+ * COMPLETION flow. Returns the latches so the scene keeps owning its own state.
+ *
+ * ## Why the two are separate edges *(session inventory 2.6, 2026-08-23)*
+ *
+ * `animateGoalReached` used to be called from `onLevelCompleted`, which runs on `levelCompleted` —
+ * **twenty ticks after** the player reached the door, and one tick after the courier finished fading
+ * out. The exit's flourish therefore played over an **empty doorway**: the *completed-it* animation
+ * where the *reached-it* one belongs. `tick.ts` step 9d now emits `goalReached` on the tick the
+ * run-in arms, and those twenty ticks are the run-in itself — so the pulse plays under a courier who
+ * is still there to see it.
+ *
+ * ## Why both are latched
+ *
+ * `advanceSplit` OR-accumulates edges across a frame's ticks, so a long frame can present the same
+ * edge once for several ticks' worth of work. Firing twice would stack two tweens on one target —
+ * criterion 9.3's kill-by-target hazard from the other side — and would re-enter the completion flow.
+ *
+ * ## Why it lives here and not in `GameScene.update()`
+ *
+ * It did live there. `GameScene.ts` sat at **exactly 400 lines with no headroom**, so adding the
+ * arrival branch put it over — which is 4.16 and T16's recorded pressure arriving again rather than
+ * anything new. This file's own header already claims the flow; moving the dispatch to it is where
+ * the code was supposed to be.
+ */
+export interface GoalFlowContext extends CompletionContext {
+  events: AdvanceEvents;
+  pulseFired: boolean;
+  handled: boolean;
+  /** Run once, when the completion flow fires. The scene's own input flag lives in the scene. */
+  onCompleted: () => void;
+}
+
+export function runGoalFlow(ctx: GoalFlowContext): { pulseFired: boolean; handled: boolean } {
+  let { pulseFired, handled } = ctx;
+
+  if (ctx.events.goalReached && !pulseFired) {
+    pulseFired = true;
+    animateGoalReached(ctx.scene, ctx.goalObject);
+  }
+
+  if (shouldRunCompletion(ctx.events.levelCompleted, ctx.world.completed, handled)) {
+    // Set BEFORE the flow runs, so a handler that throws is not re-entered every frame.
+    handled = true;
+    ctx.onCompleted();
+    onLevelCompleted(ctx);
+  }
+
+  return { pulseFired, handled };
 }

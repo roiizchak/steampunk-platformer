@@ -83,6 +83,49 @@ export const SHAKE: Readonly<Record<ImpactClass | 'land', ShakeCommand>> = {
   land: { durationTicks: 3, ax: 0.0008, ay: 0.004 },
 };
 
+/**
+ * How much bigger than the screen the shaken camera's viewport must be — **inventory 2b.7**.
+ *
+ * `applyShake` moves the camera with `setPosition`, which moves the **viewport rectangle on the
+ * canvas**, not the world scroll. A viewport exactly the size of the screen therefore uncovers a
+ * strip of raw page background at whichever edge it moves away from. Measured at the design size:
+ * `lethal.ax` 0.005 × 1920 = **9.6 px** horizontally, `playerHurt.ay` 0.007 × 1080 = **7.6 px**
+ * vertically. Small, and unmissable once seen — it is a bright seam that appears only on impact.
+ *
+ * ## Why not the two obvious alternatives
+ *
+ * **Clamping the offset to the screen** biases the shake: the camera could then only move inward
+ * from an edge, so a shake at `x = 0` is a one-sided lurch rather than a jitter.
+ *
+ * **Shaking `scrollX/scrollY` instead** keeps the viewport still, and Phaser clamps scroll to the
+ * camera bounds — so the shake would silently damp or vanish at a level edge, which is exactly
+ * where heavy landings happen. That trades a visible seam for an invisible absence, which is worse.
+ *
+ * So the viewport is grown by this margin on every side and its base moved to `-margin`. The camera
+ * draws a little more world than the screen shows, and the shake moves within that slack.
+ *
+ * ⚠️ **Derived from the SHAKE table, not authored.** Adding a heavier shake widens the margin
+ * automatically; a hardcoded 10 would be silently wrong the first time someone tunes `ax`.
+ *
+ * ⚠️ **Takes the DESIGN size, not the grown viewport.** Feeding the enlarged camera's own width
+ * back in would grow the amplitude, which would grow the required margin, which would grow the
+ * amplitude. `applyShake` passes the same design size for the same reason.
+ */
+export function shakeSafeMargin(
+  designW: number,
+  designH: number,
+): { x: number; y: number } {
+  let ax = 0;
+  let ay = 0;
+  for (const cmd of Object.values(SHAKE)) {
+    if (cmd.ax > ax) ax = cmd.ax;
+    if (cmd.ay > ay) ay = cmd.ay;
+  }
+  // Ceil, because a fractional margin still leaves a sub-pixel seam that a browser will happily
+  // render as a grey line.
+  return { x: Math.ceil(ax * designW), y: Math.ceil(ay * designH) };
+}
+
 /** The command an impact is worth. Returns the table entry itself — commands are immutable data. */
 export function shakeFor(impact: ImpactClass | 'land'): ShakeCommand {
   return SHAKE[impact];
@@ -190,6 +233,26 @@ const JITTER_Y_FREQ = 7.233;
  * Returns the offset unconditionally — WHETHER a shake is running is `shakeSettled`'s question and
  * the caller's branch, not this function's. Keeping the two apart is what lets the spec assert the
  * value on exactly the ticks it has already established are inside the window.
+ */
+/**
+ * ## 🔴 The caller must sample at `tick - 1`, not `tick` — inventory 3.1, owner ruling 2026-08-23
+ *
+ * `gameEffects.ts` called `applyShake(camera, tick)` while the landing squash three lines above it
+ * used `tick - 1`. One tick apart, and the cost was recorded in the QA log and then left: of
+ * `SHAKE.land`'s **three** ticks the renderer could only ever put **two** on screen.
+ *
+ * `tickCount` counts ticks EXECUTED, so a frame draws the result of index `tick - 1`. A shake
+ * evaluated at `tick` is therefore already one tick into its own window before its first drawn
+ * frame, and settles one tick early — the third tick exists in the sim and never reaches a screen.
+ *
+ * ⚠️ **This was a feel change, not a refactor.** A shipped landing now delivers 50 % more of the
+ * amplitude it was always authored with, for the same numbers. It was put to the owner as a balance
+ * decision and taken as one, and criterion 9.2's `(landTick, landTick + span)` sampling window moved
+ * with it rather than being left measuring the old phase.
+ *
+ * The reading in `effects-behaviour.test.ts` was **re-taken**, not adjusted: its oracle now names
+ * the same index the renderer does. A test whose expected value is edited to match a changed
+ * product has stopped being a test.
  */
 export function shakeOffset(
   cmd: ShakeCommand,
