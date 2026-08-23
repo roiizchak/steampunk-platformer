@@ -81,9 +81,25 @@ export interface CreateWorldOptions {
    * `createWorld({ seed, scale })` and are entitled to a world with nothing to finish. A required
    * field would have meant editing every one to say "no exit here".
    *
-   * ⚠️ The cost is that "9d no-ops on null" can silently become "9d never fires", so
-   * `goal-completion.test.ts` gates it from BOTH directions: a null-goal world never completes however
-   * far the player walks, AND every shipped level parses to a non-null goal.
+   * ⚠️ The cost is that "9d no-ops on null" can silently become "9d never fires". That IS gated from
+   * both directions — but **not by the file this comment used to name**, and the correction is worth
+   * more than the citation *(inventory 5.19)*.
+   *
+   * | direction | what actually holds it |
+   * |---|---|
+   * | a null-goal world never completes | `goal-completion.test.ts` — *"does not complete a world with no goal, however far the player runs"* |
+   * | a shipped level's exit reaches the sim | `level-goal-fits.test.ts` (the five `.tmj` rects, read from the files) · `level-pick.test.ts` (`worldOptionsFor` passes `goal` through) · the auto-play completions built by `levelAutoPlay.ts` |
+   *
+   * This said `goal-completion.test.ts` gated both. It gates only the first — **every world in it is
+   * built by hand and it never opens a `.tmj`**. The second direction is real and is spread across
+   * three other files, which is why nobody noticed the citation was wrong.
+   *
+   * Measured 2026-08-23 rather than argued, because a comment claiming coverage is exactly the thing
+   * that should not be taken on trust: `goal: goal ?? null` → `goal: null` reds **67** tests;
+   * deleting `goal: level.goal` from `worldOptionsFor` reds one named for it; making
+   * `containedInGoal`'s top edge strict reds **49**. A purpose-built end-to-end gate was written for
+   * this item and then **deleted** — every mutation it named was already caught, and a redundant
+   * gate is worse than none, because it implies the coverage elsewhere is thinner than it is.
    */
   goal?: Rect | null;
   /**
