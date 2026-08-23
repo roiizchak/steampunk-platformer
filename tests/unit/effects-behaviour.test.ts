@@ -140,10 +140,14 @@ describe('the camera carries the shake, and returns to EXACTLY its base', () => 
     // exactly what `shakeStartTick` exists to prevent — so sample a tick inside the live window.
     const cmd = shakeFor('light');
     const startedTick = shakeStartTick('light', hitTick);
-    world.tickCount = startedTick + 1;
+    world.tickCount = startedTick + 2;
     render();
 
-    const want = shakeOffset(cmd, world.tickCount, camera.width, camera.height);
+    // 🔴 `tickCount - 1`, re-taken 2026-08-23 for inventory 3.1. `applyShake` now reads `tick - 1`
+    // so it is in phase with the landing squash, which means the DRAWN offset is the one for index
+    // `tick - 1`. Re-taken, not adjusted: the oracle has to name the same index the renderer does,
+    // and `startedTick + 2` is chosen so that index lands inside the live window.
+    const want = shakeOffset(cmd, world.tickCount - 1, camera.width, camera.height);
     expect(want.x === 0 && want.y === 0, 'the sampled tick has no offset — vacuous').toBe(false);
     expect([camera.x, camera.y]).toEqual([BASE.x + want.x, BASE.y + want.y]);
 

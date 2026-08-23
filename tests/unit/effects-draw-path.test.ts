@@ -40,7 +40,16 @@ const KINDS: EffectKind[] = ['sparks', 'steam', 'dust'];
 // is no longer in — silently green, which is the exact failure this file exists to catch. The gate
 // follows the FUNCTION, not the filename: `sliceFrom` below finds it in whichever source has it.
 const SCENE_SOURCES = import.meta.glob(
-  ['../../src/scenes/gameEffects.ts', '../../src/scenes/particleTexture.ts'],
+  [
+    '../../src/scenes/gameEffects.ts',
+    // Added 2026-08-23: `createEmitter` moved to `gameEmitters.ts` when `gameEffects.ts` hit the
+    // 400-line ceiling. **This gate is what noticed** — it threw "is in none of the globbed scene
+    // sources", by design, rather than passing on an empty scan. That is the whole reason line 41
+    // says the gate follows the FUNCTION and not the filename, and it is the T13 defect (a split
+    // moving code out of its coverage) being caught instead of shipped.
+    '../../src/scenes/gameEmitters.ts',
+    '../../src/scenes/particleTexture.ts',
+  ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>;
 
@@ -56,7 +65,7 @@ function sliceFrom(marker: string): string {
 describe('the scene applies the band rather than restating it', () => {
   // Sliced to `createEmitter` rather than scanned whole, so the containment check is about the draw
   // path and not about a string that happens to appear in a comment.
-  const createEmitter = sliceFrom('function createEmitter(');
+  const createEmitter = sliceFrom('export function createEmitter(');
   const src = Object.values(SCENE_SOURCES).join('\n');
 
   it('finds createEmitter at all, so the slice below is not empty', () => {

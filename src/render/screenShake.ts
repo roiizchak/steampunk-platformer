@@ -191,6 +191,26 @@ const JITTER_Y_FREQ = 7.233;
  * the caller's branch, not this function's. Keeping the two apart is what lets the spec assert the
  * value on exactly the ticks it has already established are inside the window.
  */
+/**
+ * ## 🔴 The caller must sample at `tick - 1`, not `tick` — inventory 3.1, owner ruling 2026-08-23
+ *
+ * `gameEffects.ts` called `applyShake(camera, tick)` while the landing squash three lines above it
+ * used `tick - 1`. One tick apart, and the cost was recorded in the QA log and then left: of
+ * `SHAKE.land`'s **three** ticks the renderer could only ever put **two** on screen.
+ *
+ * `tickCount` counts ticks EXECUTED, so a frame draws the result of index `tick - 1`. A shake
+ * evaluated at `tick` is therefore already one tick into its own window before its first drawn
+ * frame, and settles one tick early — the third tick exists in the sim and never reaches a screen.
+ *
+ * ⚠️ **This was a feel change, not a refactor.** A shipped landing now delivers 50 % more of the
+ * amplitude it was always authored with, for the same numbers. It was put to the owner as a balance
+ * decision and taken as one, and criterion 9.2's `(landTick, landTick + span)` sampling window moved
+ * with it rather than being left measuring the old phase.
+ *
+ * The reading in `effects-behaviour.test.ts` was **re-taken**, not adjusted: its oracle now names
+ * the same index the renderer does. A test whose expected value is edited to match a changed
+ * product has stopped being a test.
+ */
 export function shakeOffset(
   cmd: ShakeCommand,
   tick: number,

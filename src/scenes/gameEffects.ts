@@ -61,7 +61,6 @@
  */
 
 import type Phaser from 'phaser';
-import { TICK_HZ } from '../game/constants';
 import {
   EMITTER_SPECS,
   SPARK_CONE_DEG,
@@ -73,7 +72,6 @@ import {
   landingDust,
   type Burst,
   type EffectKind,
-  type EmitterSpec,
 } from '../render/effects';
 import {
   shakeFor,
@@ -83,11 +81,10 @@ import {
   shouldPreempt,
   type ShakeState,
 } from '../render/screenShake';
-import { ticksToMs } from '../sim';
 import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
-import { BLEND_MODE_NORMAL, SCENE_SHUTDOWN } from './engineLiterals';
-import { ensureParticleTexture } from './particleTexture';
+import { SCENE_SHUTDOWN } from './engineLiterals';
+import { createEmitter } from './gameEmitters';
 
 /** What `GameScene` holds on to after attaching the effects. */
 export interface EffectAttachment {
@@ -111,18 +108,6 @@ export interface EffectAttachment {
 
 const KINDS = Object.keys(EMITTER_SPECS) as EffectKind[];
 
-/**
- * 🔴 The ONE place ticks become Phaser's units.
- *
- * `EmitterSpec`'s `speedMin`/`speedMax` are px per TICK and `gravityY` is px per tick SQUARED,
- * because `src/render/` is not allowed to know what a second is. Phaser's emitter wants px/s and
- * px/s². `TICK_HZ` is the project's single authority for the ratio (`src/game/constants.ts`), and
- * the square is written once here rather than inline at the config, so a spec value cannot be
- * converted at the wrong order by a future edit that copies the neighbouring line.
- */
-const perSecond = (pxPerTick: number): number => pxPerTick * TICK_HZ;
-const perSecondSquared = (pxPerTickSquared: number): number =>
-  pxPerTickSquared * TICK_HZ * TICK_HZ;
 
 /** Enough of an enemy to spend particles on. Structural, exactly like `Freezable` itself. */
 type Struck = Readonly<Freezable> & { x: number; y: number; hp: number };
@@ -284,7 +269,21 @@ export function attachEffects(
       const squash = landSquash(player.landedTick < 0 ? null : tick - 1 - player.landedTick);
       playerSprite.setScale(squash.sx, squash.sy);
 
-      applyShake(camera, tick);
+      // 🔴 `tick - 1`, in phase with the squash above — **inventory 3.1, owner ruling 2026-08-23:
+      // align both to the landing tick.**
+      //
+      // This read `tick` while the squash read `tick - 1`, one tick out of step, and the QA log
+      // recorded the cost and then left it: of `SHAKE.land`'s **three** ticks the renderer could
+      // only ever put **two** on screen. `tickCount` counts ticks EXECUTED, so a frame draws index
+      // `tick - 1`; a shake evaluated at `tick` is already a tick into its own window before its
+      // first drawn frame, and settles a tick early.
+      //
+      // ⚠️ A **feel change**, not a refactor: the same authored amplitude now delivers 50 % more of
+      // itself. Put to the owner as a balance decision and taken as one. Criterion 9.2's
+      // `(landTick, landTick + span)` window moved with it rather than measuring the old phase, and
+      // `effects-behaviour.test.ts`'s reading was **re-taken** — its oracle names the same index the
+      // renderer does. A test whose expected value is edited to match a changed product is not one.
+      applyShake(camera, tick - 1);
       cursor = tick;
     },
 
@@ -366,35 +365,4 @@ export function attachEffects(
       : { x: 0, y: 0 };
     camera.setPosition(baseX + x, baseY + y);
   }
-}
-
-/**
- * One emitter per `EffectKind`, every field read out of the spec.
- *
- * `emitting: false` because every one of these is an `explode()`, never a flow. `reserve()` walks
- * the particle pool up front so a burst neither allocates nor spikes GC at the exact moment the
- * frame budget is tightest.
- */
-function createEmitter(
-  scene: Phaser.Scene,
-  kind: EffectKind,
-  spec: EmitterSpec,
-): Phaser.GameObjects.Particles.ParticleEmitter {
-  return scene.add
-    .particles(0, 0, ensureParticleTexture(scene, kind, spec), {
-      lifespan: ticksToMs(spec.lifespanTicks),
-      speed: { min: perSecond(spec.speedMin), max: perSecond(spec.speedMax) },
-      scale: { start: spec.scaleStart, end: spec.scaleEnd },
-      alpha: { start: spec.alphaStart, end: spec.alphaEnd },
-      gravityY: perSecondSquared(spec.gravityY),
-      angle: { min: spec.angleMin, max: spec.angleMax },
-      maxAliveParticles: spec.maxAliveParticles,
-      emitting: false,
-    })
-    .setDepth(spec.depth)
-    // NORMAL, and load-bearing: a blend-mode change forces a batch flush, and the depth band exists
-    // so these join the player's existing quad run for zero extra flushes. ADD would cost one flush
-    // every frame, forever, and be invisible in a screenshot.
-    .setBlendMode(BLEND_MODE_NORMAL)
-    .reserve(spec.reserve);
 }
