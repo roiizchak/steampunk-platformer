@@ -5,6 +5,7 @@ import {
   actionFromKey,
   configFilenameFor,
   editsFromConfig,
+  mergeEdits,
   emptyEdits,
   frameCells,
   measureCellBounds,
@@ -150,7 +151,11 @@ export class GymScene extends Phaser.Scene {
   private async loadConfig(): Promise<void> {
     const result = await loadBoundsConfig(this.slug);
     this.rawConfig = result.rawConfig;
-    this.edits = result.edits;
+    // 🔴 MERGE, never replace — inventory 4.6. The scene is interactive the instant `create()`
+    // returns, so a nudge can land before this promise settles. `this.edits = result.edits` threw
+    // that work away and `refresh()` then drew the FILE's value, making the loss invisible rather
+    // than loud. `mergeEdits` gives the in-flight edit precedence, per action.
+    this.edits = mergeEdits(result.edits, this.edits);
     if (result.error) {
       this.note.setText(
         `${configFilenameFor(this.slug)} unreadable (${result.error}) — S will refuse to save`,

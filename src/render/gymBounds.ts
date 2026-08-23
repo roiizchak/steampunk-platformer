@@ -270,6 +270,40 @@ export function emptyEdits(): BoundsEdits {
 }
 
 /**
+ * Fold edits made **while a config fetch was in flight** onto the values that fetch returned.
+ *
+ * ## Why this exists — inventory 4.6, `phase-04-impl.md:29`
+ *
+ * `GymScene.create()` starts `loadConfig()` and returns; the scene is interactive immediately. Any
+ * nudge or active-frame toggle made before that promise settles landed in `this.edits`, and
+ * `loadConfig` then did `this.edits = result.edits` — **replacing the object outright**. The work was
+ * gone, and `refresh()` redrew from the file's values, so the readout showed a plausible number
+ * rather than an error. Silent, and on the one screen whose whole job is measuring by eye.
+ *
+ * The recorded fix was to make the loss *loud*. This makes it **impossible** instead, which is
+ * cheaper than a warning and leaves nothing for the user to react to.
+ *
+ * ## The precedence, and why it is this way round
+ *
+ * `pending` wins. A keystroke happened **after** the fetch was issued, so it is the newer statement
+ * of intent — and it is the only one the person can see on screen. Silently reverting it to the
+ * file's value is precisely the defect.
+ *
+ * Per action, not per object: an in-flight nudge to `walk` must not discard the file's `run` offset.
+ * That is what makes this a merge rather than a pick.
+ *
+ * ⚠️ **Not for a slug change.** `stepSheet` clears the edits before re-loading on purpose — carrying
+ * one character's offsets onto another would edit the wrong file. Merging against `emptyEdits()`
+ * there is a no-op, which is why that path stays correct without a special case.
+ */
+export function mergeEdits(loaded: BoundsEdits, pending: BoundsEdits): BoundsEdits {
+  return {
+    footOffsetPx: { ...loaded.footOffsetPx, ...pending.footOffsetPx },
+    activeFrames: { ...loaded.activeFrames, ...pending.activeFrames },
+  };
+}
+
+/**
  * The edits implied by a config file — i.e. the values already in it for the fields the Gym owns.
  *
  * The Gym must START from these, not from each type's zero, because `serialiseBounds` ASSIGNS what

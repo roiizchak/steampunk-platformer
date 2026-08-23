@@ -6,8 +6,10 @@ import {
   frameCells,
   liftAboveCellFloor,
   measureCellBounds,
+  mergeEdits,
   serialiseBounds,
 } from '../../src/render/gymBounds';
+import type { BoundsEdits } from '../../src/render/gymBounds';
 
 // Read as RAW TEXT, not as a JSON import: the round-trip claim below is about BYTES, and a parsed
 // import cannot tell a save that preserves the file from one that reformats it. Same idiom, and
@@ -280,5 +282,72 @@ describe('editsFromConfig — the Gym must start from the file, not from zero', 
   it('ignores fields of the wrong type instead of copying them through', () => {
     const junk = { animations: { idle: { footOffsetPx: '3', activeFrames: 'nope' } } };
     expect(editsFromConfig(junk)).toEqual(emptyEdits());
+  });
+});
+
+/**
+ * # Edits made during an in-flight config fetch survive it — inventory 4.6
+ *
+ * `docs/reviews/phase-04-impl.md:29`: *"Gym edits made before the async config fetch resolves are
+ * silently discarded — `loadConfig` replaces the whole edit object and the readout then shows the
+ * file's value, so the loss is invisible rather than loud."*
+ *
+ * `GymScene.create()` fires `loadConfig()` and returns; the scene takes keys immediately. The
+ * recorded fix was to make the loss loud. `mergeEdits` makes it **impossible**, which needs no
+ * warning and no reaction from the person at the keyboard.
+ *
+ * **The mutation this names:** revert `GymScene.loadConfig` to `this.edits = result.edits`, or make
+ * `mergeEdits` spread `pending` first so the file wins. Each reds a different case below.
+ */
+describe('mergeEdits (4.6)', () => {
+  it('keeps an in-flight edit that the file has no opinion about', () => {
+    const loaded: BoundsEdits = { footOffsetPx: { walk: 3 }, activeFrames: {} };
+    const pending: BoundsEdits = { footOffsetPx: { run: -2 }, activeFrames: {} };
+
+    expect(mergeEdits(loaded, pending).footOffsetPx).toEqual({ walk: 3, run: -2 });
+  });
+
+  it('gives the in-flight edit precedence where both have one — it is the newer intent', () => {
+    // 🔴 The defect's exact shape: the person nudged `walk` to 9 while the fetch was out, and the
+    // file says 3. Replacing hands them 3 back with no error. The keystroke is newer AND is the
+    // only one of the two they can see.
+    const loaded: BoundsEdits = { footOffsetPx: { walk: 3 }, activeFrames: {} };
+    const pending: BoundsEdits = { footOffsetPx: { walk: 9 }, activeFrames: {} };
+
+    expect(mergeEdits(loaded, pending).footOffsetPx.walk).toBe(9);
+  });
+
+  it('merges per ACTION, so one in-flight nudge does not discard the rest of the file', () => {
+    // Why this is a merge and not a pick. Taking `pending` wholesale would lose `run` entirely.
+    const loaded: BoundsEdits = { footOffsetPx: { walk: 3, run: 5 }, activeFrames: {} };
+    const pending: BoundsEdits = { footOffsetPx: { walk: 9 }, activeFrames: {} };
+
+    expect(mergeEdits(loaded, pending).footOffsetPx).toEqual({ walk: 9, run: 5 });
+  });
+
+  it('does the same for activeFrames, which is a different field with the same failure', () => {
+    const loaded: BoundsEdits = { footOffsetPx: {}, activeFrames: { attack: [1, 2] } };
+    const pending: BoundsEdits = { footOffsetPx: {}, activeFrames: { attack: [4], walk: [0] } };
+
+    expect(mergeEdits(loaded, pending).activeFrames).toEqual({ attack: [4], walk: [0] });
+  });
+
+  it('merging onto empty pending is the identity — the slug-change path stays correct', () => {
+    // `stepSheet` clears edits before re-loading, deliberately: carrying one character's offsets
+    // onto another edits the wrong file. That path must not change behaviour.
+    const loaded: BoundsEdits = { footOffsetPx: { walk: 3 }, activeFrames: { attack: [1] } };
+
+    expect(mergeEdits(loaded, emptyEdits())).toEqual(loaded);
+  });
+
+  it('does not mutate either input', () => {
+    // The scene keeps `this.edits` and assigns the result back. An in-place merge would make the
+    // two aliases of one object and the next load would compound rather than replace.
+    const loaded: BoundsEdits = { footOffsetPx: { walk: 3 }, activeFrames: {} };
+    const pending: BoundsEdits = { footOffsetPx: { walk: 9 }, activeFrames: {} };
+    mergeEdits(loaded, pending);
+
+    expect(loaded.footOffsetPx.walk).toBe(3);
+    expect(pending.footOffsetPx.walk).toBe(9);
   });
 });
