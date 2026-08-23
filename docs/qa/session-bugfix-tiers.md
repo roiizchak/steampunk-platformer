@@ -500,3 +500,40 @@ The i-frame assertion first read `expect(player.iFrameCounter).toBe(0)` and **fa
 game**. The counter reads the opposite way round to the obvious guess: `world.ts` seeds it at
 `IFRAME_TICKS` as the CLOSED sentinel, and taking damage sets it to **0** to OPEN the window. Now
 asserted through `invulnerable()` *(vault 5.3 — do not restate a predicate at a call site)*.
+
+---
+
+## B9 / 1b.5 — STALE, and the test I wrote for it was deleted
+
+**Status: NOT A DEFECT. No code change, no test added.** *(C11)*
+
+The inventory says *"nothing swings the player's attack repeatedly against a live enemy and asserts
+death — both tests set `hp = 0` directly"*, quoting T2, which **both** qa-expert briefs found
+independently and called *"the gap that let P1 ship past the entire gate"*.
+
+It was true when written and is not true now. `tests/unit/enemy-ai-lifecycle.test.ts:125` —
+*"a CHASING scavenger, killed by real swings, stops chasing"* — drives twenty real swings through
+`tick()` with a re-latched attack edge and asserts the death. Its own comment marks it as the
+repair: *"what the old version of this test never established."* The claim survived in the QA log
+because the log was never revisited, which is A0's whole subject.
+
+### I wrote the test anyway, then deleted it, and the mutations are why
+
+A 150-line `kill-by-swinging.test.ts` was written and passed 4/4. Before keeping it, three mutations
+were run to find one it caught *alone*:
+
+| mutation | failures across the suite, WITHOUT the new file |
+|---|---|
+| delete `enemy.hp = Math.max(0, enemy.hp - PLAYER_ATTACK_DAMAGE)` | **22** |
+| `Math.max(0, …)` → `Math.max(1, …)` — damage lands, death impossible | **11** |
+| `PLAYER_ATTACK_DAMAGE` 20 → 1000 — everything dies in one swing | **11** |
+
+Every claim it made was already provable without it: the damage arithmetic, the death, the
+proportionality between hp and swings, and the one-hit-per-swing rule (`hitstop.test.ts`'s *"one
+swing costs one target one hit"*).
+
+**So it was deleted.** A gate that cannot be the one to go red is not free — it is lines someone
+maintains and a reader trusts. *(C2 inverted: a gate that cannot go red is decoration, and so is one
+whose red is always somebody else's.)*
+
+The honest outcome of this item is the reconciliation itself, and a QA-log claim corrected.
