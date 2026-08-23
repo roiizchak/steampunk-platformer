@@ -178,7 +178,27 @@ export function liftProfileEntry({ anchor, scale, scaleSource, deepestSourceY, f
       index: f.index,
       sourceMinY: f.sourceMinY,
       sourceMaxY: f.sourceMaxY,
-      sourceCentroidY: Number(f.sourceCentroidY.toFixed(3)),
+      /**
+       * ⚠️ **Written at FULL precision on purpose** — inventory 5.15, `phase-04-impl.md:11`,
+       * recorded there as *"the centroid oracle rounds to three decimals before an exact
+       * assertion, so a future centroid near a half-pixel boundary could produce a false red"*,
+       * and accepted as a real latent defect in the safe direction.
+       *
+       * This read `Number(f.sourceCentroidY.toFixed(3))`. The packer computes `liftPx` from the
+       * FULL-precision centroid; `sheet-packing-lift-profile.test.ts` re-derives it from whatever
+       * this writes and compares the two `Math.round`s for exact equality. Any precision dropped
+       * here is therefore injected straight into a rounding comparison the packer never made, and
+       * a value landing within it of a `.5` boundary reds a correct sheet.
+       *
+       * Measured 2026-08-23 on the shipped art: the closest centroid frame (`jump` 4) sits
+       * **0.0208** from a boundary against a **0.0003** injected error — 69x headroom, so it was
+       * latent rather than live. Writing the real number removes the envelope instead of betting
+       * on it, and `sheet-packing-lift-profile.test.ts` now gates the margin directly.
+       *
+       * Three decimals bought readable JSON. A readable diff is not worth a gate that can red on
+       * correct art.
+       */
+      sourceCentroidY: f.sourceCentroidY,
       drawnHeight: f.drawnHeight,
       liftPx: f.liftPx,
     })),

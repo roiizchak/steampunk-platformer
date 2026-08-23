@@ -85,6 +85,52 @@ describe('shipped strips carry the source lift profile (4.19, 4.20)', () => {
     expect(Math.min(...anim.frames.map((f) => f.liftPx))).toBe(0);
   });
 
+  it.each(actions)(
+    '%s: no centroid frame sits close enough to a half-pixel boundary to false-red (5.15)',
+    (action) => {
+      /**
+       * 🔴 The assertion above compares two `Math.round` results for exact equality: the packer's,
+       * taken from the full-precision centroid, and this file's, re-derived from what the profile
+       * carries. `phase-04-impl.md:11` recorded the consequence and it was accepted rather than
+       * fixed — *"a future centroid near a half-pixel boundary could produce a false red"*.
+       *
+       * The precision loss itself is now gone (`catalogDecision.mjs` writes the real number), so
+       * the envelope is float representation rather than three decimals. **This gate is what makes
+       * that checkable instead of assumed**: it measures how far each frame's derived lift sits
+       * from the `.5` boundary where the two roundings could diverge.
+       *
+       * Measured 2026-08-23: the closest frame is `jump` 4 at **0.0208**, against a former injected
+       * error of 0.0003 — which is why the defect was latent, and why nobody ever saw it red.
+       *
+       * ⚠️ A red here does NOT mean the sheet is wrong. It means a frame drifted into the zone where
+       * the exact assertion above stops being trustworthy, and the fix is that assertion's form —
+       * never this bound, and never the art.
+       */
+      const anim = liftProfile.animations[action];
+      if (anim.anchor !== 'centroid') return;
+
+      const margins = anim.frames.map((f) => {
+        const v = (f.sourceCentroidY - f.sourceMinY) * anim.scale - f.drawnHeight;
+        return Math.abs(v - Math.floor(v) - 0.5);
+      });
+      const worst = Math.min(...margins);
+
+      expect(
+        worst,
+        `${action} frame ${margins.indexOf(worst)} derives a lift ${worst.toFixed(6)} from a ` +
+          `half-pixel boundary. The exact Math.round comparison above can diverge from the ` +
+          `packer's there. Change that assertion's form — do not lower this bound.`,
+      ).toBeGreaterThan(0.001);
+    },
+  );
+
+  it('and some action IS centroid-anchored, or the gate above ran on nothing', () => {
+    // The zero-selection guard. Every `feet` action early-returns above, so if the shipped profile
+    // ever loses its airborne anchors the whole check passes while measuring nothing.
+    const centroid = actions.filter((a) => liftProfile.animations[a].anchor === 'centroid');
+    expect(centroid.length, 'no centroid-anchored action in the shipped profile').toBeGreaterThan(0);
+  });
+
   it.each(actions)('%s: the drawn gap below the feet matches the manifest exactly', (action) => {
     const anim = liftProfile.animations[action];
     const strip = readPng(`${SHEETS}/${action}.png`);

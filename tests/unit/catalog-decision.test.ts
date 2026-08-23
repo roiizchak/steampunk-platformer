@@ -195,11 +195,17 @@ describe('the extracted row shapes still produce what the build wrote before', (
 
     // The profile is committed so a bad regeneration is reviewable in a diff, and a summary cannot
     // show WHICH frame moved.
+    //
+    // 🔴 `sourceCentroidY` was pinned at `1.235` here — the three-decimal rounding this function
+    // used to apply. That rounding was inventory 5.15: the packer computes `liftPx` from the full
+    // centroid, `sheet-packing-lift-profile.test.ts` re-derives it from what this writes, and the
+    // dropped precision went straight into a `Math.round` comparison as a false-red envelope. The
+    // literal moved deliberately, with the source, and this assertion is what pins that it did.
     expect(built.frames[0]).toEqual({
       index: 0,
       sourceMinY: 1,
       sourceMaxY: 2,
-      sourceCentroidY: 1.235,
+      sourceCentroidY: 1.23456,
       drawnHeight: 3,
       liftPx: 4,
     });
