@@ -285,3 +285,54 @@ phases. Corrected in place.
 
 Suite after: typecheck clean, **2176 passed / 0 failed** — up 4 from 2172 (two rows, plus the two new
 fixtures in `tilemap-data.test.ts`'s distinct-reason sweep).
+
+---
+
+## C2 — the run cycle against a wall, and the cost that never arrived
+
+**Status: FIXED. Closes 2.3, and 3.5 with it.**
+
+`tick.ts` step 11 passed `movingHorizontally = dir !== 0 || player.vx !== 0`. The `dir !== 0` term
+asks *"is a key down"*, which against a wall is not the same question as *"is the body moving"*:
+`resolveCollisions` pins `vx` to zero, the key stays held, and the player published `run` while
+covering **no ground at all** — a whole run cycle of foot-slide, every cycle. **One call site**, so
+the fix is one expression: `resolveState(player, player.vx !== 0, …)`.
+
+### The deferral cost nothing, and that is the finding worth keeping
+
+`player.ts:166-170` declined this for three phases with a **scheduling** reason: *"changing it moves
+every locomotion assertion from Phase 2 onward."*
+
+**It moved none.** The suite went 2176 → **2181**, which is exactly the five new tests in
+`tests/unit/wall-pin-locomotion.test.ts` and nothing else. Not one Phase 2–9 locomotion assertion
+needed re-taking. The feared cost is the whole reason this sat open, and it was never measured until
+now — a deferral justified by an estimate that a single run would have refuted.
+
+### Watched red *(C1)* — and the first red was a false one
+
+The mutation is the fix's own inverse: keep the `dir !== 0` term. Pre-fix, with the gate committed:
+`PASS (4) FAIL (1)`, the failure `expected 'run' to be 'idle'`.
+
+⚠️ **The first run of this gate was a false green and it caught itself.** The test set `input.dir = 1`
+— a field `InputSnapshot` does not have — so the player never moved, and every "pinned" assertion
+passed *vacuously* while the counter-fixture (*"still runs when the body IS moving"*) failed with
+`expected 0 to be greater than 0`. That counter-fixture exists precisely because a fix that made the
+player never animate would satisfy all four other assertions, and it earned its place before the
+fix was even written. **A gate that asserts only the absence of something can be satisfied by
+nothing happening at all** — this session's own defect class, in the test I wrote to close it.
+
+**Revert confirmed** *(C12)*: content changed and the failure count dropped by one → `PASS (5)
+FAIL (0)` on the file, `2181 / 0` across the suite.
+
+### What it does and does not take with it
+
+- **3.5 (footstep phase after a wall pin): CLOSED.** Not by changing `advanceStride` — by removing
+  the mid-cycle run there was to come back to. The cadence is still *locked, not phase-locked*, which
+  is the recorded trade and is unchanged.
+- **2.8 (goal run-in foot-slide): the state half is closed**, since a stationary body inside the dead
+  zone now reads `idle`. The deceleration **ramp** the `ponytail:` comment names is a separate feel
+  change and is not built — per the plan, it waits on a playtest that still finds a defect.
+
+⚠️ One accounting note: the first version of the inline comment pushed `src/sim/tick.ts` from 394 to
+406 lines and reddened `file-size.test.ts` — correctly. Trimmed to four lines (398); the full account
+lives in the test file, which is where it is legible anyway.

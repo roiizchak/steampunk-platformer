@@ -329,7 +329,11 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     position published in the same tick describe the same moment — see the header note on
   //     Codex review 2 finding I4.
 
-  resolveState(player, dir !== 0 || player.vx !== 0, input.walkHeld, tuning);
+  //     🔴 `dir !== 0` was an OR term here until 2026-08-23 (inventory 2.3). "A key is down" is not
+  //     "the body is moving", and against a wall they disagree completely — so a pinned player
+  //     published `run` while covering no ground. Movement is the only term left.
+  //     Full account: `tests/unit/wall-pin-locomotion.test.ts`; it also closes 3.5 and 2.8.
+  resolveState(player, player.vx !== 0, input.walkHeld, tuning);
 
   // 12. Emit edges (vault 2.5) — returned, never reconstructed by comparing state across frames.
   //
