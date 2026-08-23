@@ -66,7 +66,7 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * the declared file. Newest does not win; a human says which, and that is the whole point of this
    * table.
    */
-  fall: Object.freeze(['fall.mp4']),
+  fall: Object.freeze(['fall.mp4', 'fall-r3.mp4']),
 
   /**
    * Round 1 everywhere below: shot `9:16` from a `1:1` anchor — session 1's parameter error, and the

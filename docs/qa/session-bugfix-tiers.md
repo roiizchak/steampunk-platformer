@@ -1334,3 +1334,89 @@ Review 2 ran on the 24-commit diff and **BLOCKED**. All findings re-verified loc
 the missing sweep would hide**, found within the hour of the review naming it.
 
 Port 5173 confirmed clear *(C13)*.
+
+---
+
+## 2.2 — the courier fall re-shoot: PAID, MEASURED, **NOT ADOPTED**
+
+**Status: still OPEN.** $1.19 spent, one take, rejected on measurement. `fall-r2.mp4` still ships,
+byte-identical.
+
+### What was shot
+
+The re-shoot applied **both** levers that made `jump-r4` the first jump clip in this project's
+history to pass G6: the square padded courier anchor, and the `UPRIGHT_IN_AIR` size clause (*"He is
+the SAME SIZE in the frame as he is in the reference image … There is a clear band of plain green
+above his head, below his boots, and to his left and right"*). `fall`'s anchor record already
+carried the padded canvas; the prompt already carried the clause.
+
+`request_id` `01a02e75-f146-77e0-bbb6-78723778be42`, seed unset, 4 s, 1:1, 720p.
+
+### It passed every gate the project has, and is worse
+
+| | spread | worst adjacent step | per-frame heights |
+|---|---|---|---|
+| **`fall-r2`** (shipped) | 74 px | **22 px** | 277 263 246 224 206 203 206 218 232 |
+| `fall-r3` (re-shoot) | **68 px** | **30 px** | 288 275 258 245 244 254 271 **250 220** |
+
+G6 edge-bleed: pass. Motion floor: pass, 0.075 against a floor of 0.002. Adjacent distinctness:
+pass, closest pair 0.026 against a floor of 0.0004. Loop wrap: n/a, one-shot. Nine frames extracted
+cleanly from motion onset.
+
+**And it is worse where it counts.** `fall-r2`'s heights fall smoothly to a minimum and rise back —
+one tuck, one extension, which is what a fall *is*. `fall-r3` reaches 271 and then drops twice
+(250, 220), a direction change in the last two frames, with a worst step of 30 px against r2's 22.
+
+⚠️ **The re-shoot improved the number the inventory recorded and made the number that matters
+worse.** 2.2 is written down as *"a 74 px frame-to-frame height spread"*. Spread went 74 → 68. A
+reader taking the inventory at its word would have adopted this clip.
+
+### The statistic problem, and the gate I built and then deleted
+
+*(vault C2)*: **a statistic that does not order its own mutation cannot be fixed by moving the bound
+— replace the statistic.** Spread does not order it, as above. So a replacement was written —
+`gateHeightTrail.mjs`, measuring the worst adjacent height step as a fraction of the tallest frame,
+plus the number of direction reversals — on the theory that judder is a *lurch*, not a *range*.
+
+**Measured across all eight shipped courier clips, and it refutes itself:**
+
+| clip | worst step | reversals |
+|---|---|---|
+| `idle` | 1 px (0.3 %) | 2 |
+| `walk` | 3 px (1.0 %) | 3 |
+| `run` | 18 px (6.5 %) | 6 |
+| `jump` | **66 px (25.0 %)** | 2 |
+| `fall` | 22 px (7.9 %) | **1** |
+| `hurt` | 32 px (11.1 %) | 1 |
+| `attack` | 5 px (1.7 %) | 1 |
+| `death` | **60 px (20.8 %)** | 2 |
+
+`jump` — the clip this session re-shot *successfully*, the first ever to pass G6 — has the **largest**
+step of all eight, because a jump crouches and extends and that is the animation. `death` is second,
+because a body collapsing is supposed to change height by 224 px. And `fall`, the clip that has been
+called juddery since Phase 4, has the **fewest reversals of any clip in the set**.
+
+So the second statistic does not order the defect either. **The gate was deleted rather than
+shipped**, because a gate that flags six of eight good clips is decoration that gets disabled within
+a session — and shipping it would have been the same mistake as keeping spread, one layer along.
+
+### What is actually owed
+
+**A by-eye reading, and nothing else will do yet.** Two independent numeric proxies have now failed
+to separate `fall` from seven clips nobody complains about. That is evidence that the defect is not
+in the height envelope at all — it is more likely *pose* judder (the figure's limbs hunting between
+frames) than *silhouette* judder, and pose distance is what `gateAdjacentDistinct` already measures,
+where `fall` passes comfortably.
+
+Owed, and on the S.9 list:
+
+1. Watch `fall` frame by frame at full size and say **what** is juddering — the whole silhouette, the
+   legs, or the arms.
+2. Only then decide whether a third statistic is worth writing.
+
+Both takes are kept on disk. `fall-r3.mp4` is in `SUPERSEDED_CLIPS` — paid, non-regenerable input,
+superseded but never deleted, so the next attempt can compare against it rather than re-buy it.
+
+### Spend
+
+$1.19. Running total **$51.48 of $55**, **$3.52 remaining**.
