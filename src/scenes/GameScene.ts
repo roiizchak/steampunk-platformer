@@ -5,7 +5,7 @@ import { drainTicks } from '../game/frameClock';
 import type { LevelData } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
-import { renderAlpha, type Point } from '../render/interpolate';
+import type { Point } from '../render/interpolate';
 import type { MotionProbe } from './devMotionProbe';
 import {
   addHelpBanner,
@@ -26,9 +26,10 @@ import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
 import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor } from './gameLevelPick';
 import { runGoalFlow } from './gameComplete';
+import { drawFrame } from './gameFrameDraw';
 import { drawGoal } from './goalLayer';
-import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
-import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
+import { createParallax, type ParallaxImage } from './gameParallax';
+import { applyFeelVariant, registerAnimations } from './gamePlayerDraw';
 import { createSnapshot } from '../sim/input';
 import { createWorld } from '../sim/tick';
 import { advanceSplit } from '../sim/advanceSplit';
@@ -294,26 +295,17 @@ export class GameScene extends Phaser.Scene {
     // unit suite asserts are one definition, not two that agree on the happy path.
     this.audio?.playCues(audioCues(events));
 
-    renderPlayerSprite(
-      this.playerSprite,
-      this.world,
-      this.prevPlayer,
-      this.accumulatorMs,
-      import.meta.env.DEV ? this.feelTuner : undefined,
-    );
-    // The HUD lives in `UIScene`, so this hands it the world and this scene's camera. The camera
-    // goes across because the collect tween has to turn a gear's WORLD position into a screen
-    // position, and the camera's scroll and zoom are that transform — doing the conversion here
-    // would put HUD arithmetic in the one file this project cannot let grow.
-    this.effects.render(this.world, this.cameras.main);
-    this.ui?.render(this.world, this.cameras.main);
-    this.gears.sync();
-    this.enemies.sync(renderAlpha(this.accumulatorMs));
-    renderParallax(this.parallax, this.cameras.main.scrollX);
-    // DEV ONLY. Driven by the RAW millisecond delta, not by `ticks` — the whole point is that one
-    // lane advances between ticks and the other does not.
-    this.motionProbe?.update(delta);
-    publishWorldState(this.world);
+    // The draw fan-out, and its ORDER, live in `gameFrameDraw.ts` — the seventh extraction out of
+    // this file, and the first one to take logic rather than trim lines. Order is load-bearing:
+    // see that file's header before rearranging anything.
+    drawFrame({
+      world: this.world, camera: this.cameras.main, playerSprite: this.playerSprite,
+      prevPlayer: this.prevPlayer, accumulatorMs: this.accumulatorMs,
+      feelTuner: import.meta.env.DEV ? this.feelTuner : undefined,
+      effects: this.effects, ui: this.ui, gears: this.gears, enemies: this.enemies,
+      parallax: this.parallax, motionProbe: this.motionProbe, deltaMs: delta,
+      publish: publishWorldState,
+    });
   }
 
   private bindKeys(): void {
