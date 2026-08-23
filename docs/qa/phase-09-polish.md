@@ -310,8 +310,17 @@ call site). Reds recorded in the row table below.
 
 ## 9.8 — what the gates do NOT cover (draft, finalised at the gate)
 
+> ✅ **The owner playtested the shipped game and accepts it — 2026-08-23, stated twice.** That is the
+> `play`-owned sign-off for the feel questions in this list *(C4)*, and it is recorded as a human
+> reading rather than an automated result. Items 1–4 below are **closed by it**: they are all "does
+> this read right at play speed", and it does.
+>
+> ⚠️ **It does NOT close 5, 6 or 7**, which are measurement gaps a player cannot see, nor the four
+> `play`-owned items in `SESSION-PROMPT-next.md §4` — 852×480, DPR 2, 240 Hz and the sentry-coverage
+> question — because ordinary play cannot reach any of them.
+
 1. **Whether 4 ticks reads as "solid" or "mushy".** No assertion distinguishes 3, 4 and 5 ticks.
-   Owner picks blind from clips at three `?hitstop=` scales.
+   Owner picks blind from clips at three `?hitstop=` scales. **✅ Closed by the 2026-08-23 playtest.**
 2. **Whether a light hit and a killing blow are distinguishable at play speed**, without a
    side-by-side. The tests prove they differ numerically, not that a player notices.
 3. **Whether the freeze reads as impact or as a dropped frame.** The phase's central risk, no metric.

@@ -11,9 +11,10 @@
 > replaced, not its bound: a paired 0/2560/5120 sweep with a 0.3 ms floor per gap and a MARGINAL
 > per-exit cost, so the amplifier's count-independent overhead cancels. Verified independently.
 >
-> **The e2e suite now fails on criterion 1.4 instead, and that is the DEV SERVER, not the game:**
-> `dist/` boots in **0.4 s**, the dev server in **33 s** with a stale `node_modules/.vite` dep cache.
-> See SESSION-PROMPT-next.md §0.2.
+> **~~The e2e suite now fails on criterion 1.4~~ — FIXED** in the tiers session (clearing the stale
+> `node_modules/.vite` dep cache). e2e is **128 selected, 128 passed** as of 2026-08-23. The dev
+> server / `dist/` boot gap was the cause and is recorded in `CLAUDE.md §1`; the citation that used
+> to sit here pointed at a §0.2 the prompt no longer has.
 >
 > Full record: [qa/phase-09-polish.md](qa/phase-09-polish.md) (including
 > **§ Vault-out — Phase 9**) · [plan review](reviews/phase-09-plan.md) ·
@@ -125,9 +126,22 @@ regenerating `idle` re-derives the slug scale and silently rescales **every** ot
 *(vault A5)* - so idle is rebuilt FIRST or not at all. A fal batch over 5 generations needs a
 STOP-and-ask.
 
-> ## ➡️ **Next session is a BUG-FIX session — [SESSION-PROMPT-next.md](SESSION-PROMPT-next.md).**
-> Owner’s ruling 2026-08-22: fix what is recorded and unfixed; **Phase 10 is deferred.** The prompt
-> ranks the work player-visible defects first, gate gaps second.
+> ## ➡️ **Next session: CLOSE PHASE 9, then the last of Tier 5 — [SESSION-PROMPT-next.md](SESSION-PROMPT-next.md).**
+>
+> The bug-fix session ran 2026-08-22/23 and merged (`f0dbe21`), followed by a branch-cleanup and
+> Tier-5 session. **Phase 10 is still deferred**, and the reason is now sharper than "defer it":
+> **`PRD.md:35` reads `—` because seven of Phase 9's eleven criteria are unsubstantiated.** The phase
+> was merged and approved on a verbal report the project's own records do not corroborate — agent-owned
+> criteria that FAILED were fixed and never handed back to their owners. That is one gate round, and it
+> is what unblocks Phase 10.
+>
+> ⚠️ **The prompt has been rewritten to hold ONLY what is still open.** It is no longer the ~60-item
+> inventory; closed items live in [qa/session-bugfix-tiers.md](qa/session-bugfix-tiers.md) and
+> [qa/session-tier5-and-cleanup.md](qa/session-tier5-and-cleanup.md).
+>
+> **The owner playtested and accepts the game as it plays** (2026-08-23, twice). Prompt §4 records
+> exactly what that settles — including 2.2's judder, closed as not visible at play speed — and the
+> four `play`-owned items it cannot settle, because ordinary play cannot reach them.
 
 ## What is outstanding
 
