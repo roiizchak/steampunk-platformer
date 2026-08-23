@@ -176,8 +176,20 @@ test.describe('Phase 7 — 7.1 every cue plays at its event', () => {
     await page.keyboard.up('ArrowRight');
 
     // The positive half, and it is the half that matters: "no errors" is satisfied by a build that
-    // requested nothing at all. Eleven files, every one served.
-    expect(audioRequests, 'no audio was requested at all').toHaveLength(11);
+    // requested nothing at all. Every catalogued file, every one served.
+    //
+    // 🔴 Re-taken 2026-08-23: this was `toHaveLength(11)` and inventory 3.6 made it twelve
+    // (`sfx-complete`). Derived from the catalog now rather than re-pinned — a literal here restates
+    // the count instead of asserting the property, and would go stale again on the next cue.
+    // Read from the SHIPPED catalog the game itself fetched, not from a literal and not from a
+    // build-time import — Playwright runs under Node ESM, where a JSON import needs an attribute,
+    // and the number that matters is the one the running game was told about anyway.
+    const catalogued = await page.evaluate(async () => {
+      const res = await fetch('/assets/index.json');
+      return ((await res.json()) as { audio: unknown[] }).audio.length;
+    });
+    expect(catalogued, 'the catalog lists no audio at all').toBeGreaterThan(5);
+    expect(audioRequests, 'no audio was requested at all').toHaveLength(catalogued);
     expect(badAudioResponses, `audio failed to load: ${badAudioResponses.join(' | ')}`).toEqual([]);
     expect(audioErrors, `audio errors during play: ${audioErrors.join(' | ')}`).toEqual([]);
   });
