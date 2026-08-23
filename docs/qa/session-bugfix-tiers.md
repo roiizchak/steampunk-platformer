@@ -736,3 +736,48 @@ T13 says *six* modules. Two now have behavioural tests (`gameParallax`, and `goa
 They are **not reached this session** rather than judged safe. `gameAnimations.ts` is the one to do
 first: its own header records a Codex finding that a comment there had been *believed* while being
 false about where the fps comes from, which is the same failure this session keeps meeting.
+
+---
+
+## B4 / 1.4 — a body starting inside a solid, RE-AFFIRMED as a non-fix, with the coupling made executable
+
+**Status: NOT FIXED, deliberately** *(C11)*. **The reason is now enforced rather than written down.**
+
+Both resolvers refuse only a body that **was clear** on the previous frame:
+
+- `blockedAt` (`enemyGeometry.ts:154`) — `const wasClear = …; if (wasClear) return true;`
+- `resolveCollisions` (`player.ts:311-319`) — pushes out only under `wasLeft` / `wasRight`
+
+So a body that *starts* inside a solid is not pushed out and keeps moving deeper. Verified real.
+
+### Why it stays
+
+The obvious fix — *"if you are inside, refuse"* — **breaks the `EVERYWHERE` fixture and would have
+trapped a shipped enemy at boot.** `FOOT_TOLERANCE_PX`'s docstring carries the measurement: all
+**twenty** enemies across the five levels stand with *exactly zero* separation from their floor, and
+nudging a floor strip up by 1 px already made `describePlacementProblem` reject a level once. That
+rule has been rewritten twice for this.
+
+And the two resolvers share the rule. **Changing one without the other puts the player and the
+enemies on different physics** — worse than the latent bug, and much harder to see. The paired change
+touches the collision every Phase 2 assertion rests on; it is real work with real risk and is not
+attempted here.
+
+### What DID change: the coupling is no longer a sentence
+
+*"Treat as a paired change or not at all"* lived in a review nobody re-reads — and this session has
+now met three separate items (**1b.2**, **1b.6**, **2.3**) whose entire story is that a promise to
+remember was not kept.
+
+`tests/unit/overlap-escape-parity.test.ts` pins both behaviours **as a pair**, so a change to either
+resolver alone goes red with the reason in the message.
+
+**Watched red** *(C1)*: giving `blockedAt` an overlap rule and leaving the player untouched —
+`PASS (4) FAIL (2)`, the failure reading *"`blockedAt` now refuses an overlap. `resolveCollisions`
+must change WITH it, or the enemies and the player are on different physics."*
+
+Each half also carries its **positive** case (a newly-entering body IS stopped) so the pin cannot be
+satisfied by a resolver that does nothing at all — which is what a behaviour-pinning test degenerates
+to if nobody checks.
+
+**Revert confirmed** *(C12)*: suite **2248 / 0**.
