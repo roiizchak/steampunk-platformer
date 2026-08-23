@@ -119,4 +119,36 @@ describe('the decision has a consumer (CLAUDE.md §2 draw-path gate)', () => {
       'retireCurrent()',
     );
   });
+
+  /**
+   * ⚠️ **The S.2 gate owner's finding, and the mutation is recorded because it was RUN.**
+   *
+   * Deleting `sound.remove(bed)` from `startBeds`'s retirement loop left the whole suite at
+   * **`PASS (2260) FAIL (0)`** — measured 2026-08-23, not assumed. Nothing in the repository touched
+   * that line: `grep -rn "sound.remove" tests/` returned **zero** matches, `bedsToStart`'s pure tests
+   * never reach it, and the one e2e that counts `sound.sounds` (7.5, `phase-07-audio.spec.ts:257`)
+   * drives **Boot restarts**, which go through `destroyAudio` and empty `liveBeds` first — a
+   * different branch of the same file.
+   *
+   * So Codex's Y3 regression could have been reintroduced in full with every gate green, on a fix
+   * whose disposition this session had already written down as APPLIED.
+   *
+   * 🔴 **This is the weak shape and it does not close the gap.** Asserting the call *appears* is not
+   * asserting `sound.sounds` stays bounded across a level transition. The behavioural gate is an e2e
+   * that reaches `createAudio`'s **adopt** path — `retireCurrent()` then `startBeds()` with a
+   * predecessor's beds still live — and it is **owed, not written**. Recorded here so the next
+   * session finds the gap rather than the reassurance.
+   */
+  it('a stopped bed is REMOVED from the manager, not merely dropped from the array', () => {
+    // `splice` alone leaves the object in `sound.sounds`, which is vault 7.5's defect exactly: a
+    // stopped track is still in the list, and the list is what grows.
+    expect(source, 'the retirement loop no longer calls sound.remove — vault 7.5 is back').toContain(
+      'sound.remove(bed)',
+    );
+    // Two call sites: the retirement loop and `destroy()`. One means the loop lost its half.
+    expect(
+      source.split('sound.remove(bed)').length - 1,
+      'only one sound.remove(bed) survives — the retirement loop and destroy() need one each',
+    ).toBe(2);
+  });
 });

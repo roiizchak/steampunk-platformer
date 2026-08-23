@@ -336,9 +336,9 @@ describe('footstep — a cadence the sim did not have', () => {
  */
 describe('7.6 — the stride counter and the two states it could not tell apart', () => {
   it('does not fire while running INTO A WALL, where the state stays run and vx is zero', () => {
-    // `resolveState` takes `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into
-    // a solid keeps the state `run` after the collision has zeroed `vx`. The player has not moved a
-    // pixel, and the old guard — grounded, and state is walk or run — was satisfied on every tick.
+    // `resolveState` TOOK `movingHorizontally = dir !== 0 || vx !== 0` until 2026-08-23 (item 2.3),
+    // so holding a direction into a solid kept the state `run` after the collision zeroed `vx`. The
+    // player had not moved a pixel, and the old guard — grounded, walk or run — passed every tick.
     //
     // Measured before the fix: 13 footsteps in 200 ticks, one every 15 ticks, forever, at a
     // standstill. The existing "does not fire while standing still" test drives IDLE input, so it

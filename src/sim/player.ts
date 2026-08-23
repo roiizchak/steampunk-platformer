@@ -136,14 +136,18 @@ export function resolveState(
  *
  * ## 🔴 Two things `state` alone could not tell this function, both measured
  *
- * **A state of `run` does not mean the player is moving.** `resolveState` takes
- * `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into a wall keeps the state
- * at `run` after the collision has zeroed `vx`. The first version of this guard tested only
+ * **A state of `run` used not to mean the player was moving.** `resolveState` took
+ * `movingHorizontally = dir !== 0 || vx !== 0`, so holding a direction into a wall kept the state
+ * at `run` after the collision had zeroed `vx`. The first version of this guard tested only
  * grounded-and-locomoting, and so played a footstep every fifteen ticks, indefinitely, for a player
  * standing still against a wall — 13 of them in 200 ticks when the gate owner measured it. `vx` is
  * therefore tested directly. It is exactly zero after a collision resolves, so this needs no
- * epsilon; `resolveState` keeps its own `dir !== 0` term, which exists for animation reasons that
- * have nothing to do with cadence.
+ * epsilon.
+ *
+ * ⚠️ **The `dir !== 0` term is gone** — dropped at `tick.ts:334` on 2026-08-23 (inventory 2.3), so a
+ * pinned player now reads `idle` and the two readings agree at the source. **This guard stays
+ * anyway.** It is not redundant: `vx === 0` is the condition a cadence cares about, and re-deriving
+ * it from `state` would couple this function to whatever `resolveState` decides next.
  *
  * **`walk` and `run` are different cadences sharing one counter.** 24 ticks against 15, and the
  * counter used to carry across a change of gait — so releasing the walk modifier at a count of 20
@@ -154,20 +158,24 @@ export function resolveState(
  *
  * ## ⚠️ What the `vx` reset costs, and why it is still the right trade
  *
- * Codex implementation review C1. The cadence is **locked, not phase-locked**. While the player is
- * pinned against a wall the state stays `run`, so `playIfChanged` sees no key change and the run
- * animation keeps cycling — but this counter is now zeroed. Reversing away in the same gait
- * therefore restarts the count against an animation that is mid-cycle, and the cue no longer lands
- * on the drawn plant frame.
+ * Codex implementation review C1. The cadence is **locked, not phase-locked**. While the player was
+ * pinned against a wall the state stayed `run`, so `playIfChanged` saw no key change and the run
+ * animation kept cycling — but this counter is zeroed. Reversing away in the same gait therefore
+ * restarts the count against an animation that is mid-cycle, and the cue no longer lands on the
+ * drawn plant frame.
  *
  * Kept anyway: silence at a standstill is a smaller defect than a footstep every 250 ms at a
  * standstill, which is what the alternative shipped.
  *
- * 🔴 **The root cause is not here.** The character *animates a run cycle while motionless*, because
- * `resolveState` takes `movingHorizontally = dir !== 0 || vx !== 0`. Fix that and both readings
- * agree without this function knowing anything about it. It is deliberately not fixed in an audio
- * phase: that `dir !== 0` term exists for animation reasons predating Phase 7 and changing it moves
- * every locomotion assertion from Phase 2 onward.
+ * ✅ **The root cause was not here, and it is now fixed.** This paragraph used to read *"the
+ * character animates a run cycle while motionless … deliberately not fixed in an audio phase: that
+ * `dir !== 0` term exists for animation reasons predating Phase 7 and changing it moves every
+ * locomotion assertion from Phase 2 onward."* Inventory 2.3 fixed it on 2026-08-23.
+ *
+ * 🔴 **The deferral cost is the part worth keeping.** *"Moves every locomotion assertion from Phase 2
+ * onward"* was the reason given for not fixing it across three phases. It moved **none** — the whole
+ * suite stayed green. A scheduling estimate nobody re-tested became a standing reason to defer, and
+ * the estimate was wrong. Pinned by `tests/unit/wall-pin-locomotion.test.ts`.
  */
 export function advanceStride(player: PlayerSim): boolean {
   const gait = player.state === 'walk' || player.state === 'run' ? player.state : null;

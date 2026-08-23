@@ -37,15 +37,15 @@ Legend: **OPEN** · **FIXED** (already, with the line that fixed it) · **STALE*
 | item | class | evidence |
 |---|---|---|
 | 1.1 gear on a tile seam | **OPEN** | `src/game/tiledEntities.ts:95-101` — strict inequalities, one rect at a time, tested against the authored **point**. ⚠️ The inventory's *"`GEAR_BOX` 72 × 72 world px"* misleads: `GEAR_BOX` is **12 local units**; `tiledPlacement.ts:82-85` reaches world space by `× RENDER_SCALE`, and `describeGearProblem` has **no scale argument**. A fix written from the inventory's number is wrong by 6×. |
-| 1.2 sentry bolts pass through walls | **OPEN**, premise corrected | `src/sim/projectiles.ts:15-16` concedes it. ⚠️ The inventory's *"decide where it slots into the 14-step contract"* is **wrong**: projectile flight is **already step 4a** (`tick.ts:15`; `stepProjectiles` called at `enemyTurn.ts:65`). No tick insert is needed. The real problem is **time of impact along one segment**. |
+| 1.2 sentry bolts pass through walls | **FIXED** — § B2 / 1.2 | `src/sim/projectiles.ts:15-16` concedes it. ⚠️ The inventory's *"decide where it slots into the 14-step contract"* is **wrong**: projectile flight is **already step 4a** (`tick.ts:15`; `stepProjectiles` called at `enemyTurn.ts:65`). No tick insert is needed. The real problem is **time of impact along one segment**. |
 | 1.3 lifecycle spec contradicts its docstring | **OPEN** | `tests/e2e/phase-06-lifecycle.spec.ts:186` heads a *"🔴 `test.fixme` — it FAILS"* paragraph; `:200` is a plain `test(...)` and the suite passes it. Exactly one of "fixed and undeleted" / "decoration" is true. Settled by hand, not by reading the green. |
 | 1.4 body starting inside a solid | **OPEN** | `docs/reviews/session-bugfix-perf-gates-impl.md:75`. Paired change with `resolveCollisions` or none at all. |
-| 1b.1 hit-stop chain uncapped | **OPEN**, reclassified | `docs/qa/phase-09-polish.md:394`. ⚠️ Not what the inventory implies: `lastHitSwing` (`playerAttack.ts:21-24,71`) already dedups **per target per swing**. The chain is *distinct* enemies each arming a fresh freeze. **A balance change — the owner's decision.** |
+| 1b.1 hit-stop chain uncapped | **FIXED** — owner ruled a deadline; § B5 / 1b.1 | `docs/qa/phase-09-polish.md:394`. ⚠️ Not what the inventory implies: `lastHitSwing` (`playerAttack.ts:21-24,71`) already dedups **per target per swing**. The chain is *distinct* enemies each arming a fresh freeze. **A balance change — the owner's decision.** |
 | 1b.2 audio beds restart per level | **OPEN** | `src/game/audio.ts:103-114` — `startBeds` does `sound.add(key)` + `bed.play()` unconditionally, with no `sound.get` check. The recorded excuse (*"no level transition exists yet"*) expired when Phase 8 shipped five levels. |
 | 1b.3 the 9b ordering | **OPEN**, gate reclassified | Both stated facts are true. ⚠️ But the reach-only zone **cannot discriminate the ordering** — no enemy damage occurs there, so both orderings behave identically in it. The discriminating case is an **overlapping** scavenger whose claw goes live the same tick as a lethal swing. **A balance change — the owner's decision.** |
 | 1b.4 six extracted modules untested | **OPEN** | No file in `tests/unit/` matches `parallax`, `goalLayer`, `gameDev`, `gameInput` or `bootLevels`. |
 | 1b.5 nothing kills an enemy by swinging | **OPEN** | `tests/unit/player-attack.test.ts:214` sets `corpse.hp = 0` directly. ⚠️ A test driving real combat **starts green** — the red proof needs the hp transition suppressed inside `applyPlayerAttack`, not a convenient edit elsewhere. |
-| 1b.6 `resolveCollisions` tunnelling | **OPEN**, trigger wrong | ⚠️ Phase 8's spikes do **not** make this reachable — hazards are non-solid and already swept. The real question is the narrowest **solid** against the fastest reachable speed. |
+| 1b.6 `resolveCollisions` tunnelling | **FIXED as an invariant** — § B10 / 1b.6 | ⚠️ Phase 8's spikes do **not** make this reachable — hazards are non-solid and already swept. The real question is the narrowest **solid** against the fastest reachable speed. |
 
 ### Tier 2 · 2b
 
@@ -56,7 +56,7 @@ Legend: **OPEN** · **FIXED** (already, with the line that fixed it) · **STALE*
 | **2.4 chasing scavenger runs in place** | **FIXED** | `src/sim/enemyScavenger.ts:327` — `scavenger.moving = scavenger.x !== xBefore`, a readback recomputed every live tick; `src/render/enemyView.ts:85` `scavengerAnim` reads it and returns `idle`. **The descoped-pose blocker the inventory calls a STOP-and-ask is gone.** |
 | 2.5 help banner illegible | **OPEN** | `src/scenes/gameDev.ts:138` — `fontSize: '18px'`, plus `setScrollFactor(0)` on a `GameScene` object. |
 | 2.6 exit-gate pulse over an empty doorway | **OPEN** | `src/scenes/goalLayer.ts:136-140` states it itself: *"the completed-it flourish now, not the reached-it one, and it plays over an empty doorway."* |
-| 2.7 `SENTRY_MUZZLE` off the IDLE pose | **OPEN** | `src/sim/enemyPlacement.ts:121` — `{ x: 17.8, y: 22.6 }`. |
+| 2.7 `SENTRY_MUZZLE` off the IDLE pose | **RE-AFFIRMED non-fix, measured** — § C7 / 2.7 | `src/sim/enemyPlacement.ts:121` — `{ x: 17.8, y: 22.6 }`. |
 | 2.8 foot-slide during the gate run-in | **OPEN** | `src/sim/goal.ts:134-138`, the repo's only `ponytail:`. Likely closed by 2.3; the deceleration ramp is a separate feel change. |
 | 2b.1 aggro is permanent | **RULING** | `src/sim/enemyScavenger.ts:128`: *"Aggro is permanent by design."* `src/sim/enemyTurn.ts:51`: *"Death is the ONLY exit from a chase now that aggro is permanent."* **The 851 px stare is the design.** Hysteresis would reverse a ruling — STOP-and-ask, do not implement. |
 | **2b.2 `releaseAggro` leaves `attackCounter` live** | **FIXED** | `src/sim/enemyScavenger.ts:144-156` — R5, *"closed in Phase 6"*, with the reason written out. |
@@ -127,14 +127,19 @@ finding, and it is why it ran first.
 
 ---
 
-## Owner decisions this session is blocked on
+## Owner decisions — asked, answered, and where each landed
 
-| item | question |
-|---|---|
-| **0.2 vite cache** | Deleting `node_modules/.vite` is denied to the agent by security policy. Please clear it, or approve the deletion — criterion 1.4 fails 6/6 until it goes, and the whole e2e suite reads as broken. |
-| **2b.1 aggro** | Permanent aggro is written down as the design (`enemyScavenger.ts:128`), and the run-in-place symptom that made it look broken is already fixed. **Reopen it, or keep the ruling?** |
-| **1b.1 hit-stop cap** | A crowd walking into one swing can freeze the game for an unbounded chain. Capping it is a feel decision: a **deadline** (one swing freezes until tick T; later hits do not extend it) or a **budget**. And explicitly: does a later *heavier* hit extend the deadline? |
-| **1b.3 the 9b ordering** | Player-first (today) means a lethal swing kills an overlapping scavenger and takes no contact damage. Contact-first means you trade the hit. **Pin today's behaviour, or change it?** |
+⚠️ **Every row here was `blocked` when written and all four were resolved during the session.** The
+table was not updated as they came in, so it spent most of the day claiming the session was waiting on
+decisions that had already been made and shipped. Corrected at the S.1 gate — see *"Why those four
+were recorded late"* below, which is the same defect in the same document.
+
+| item | question put to the owner | ruling | where it landed |
+|---|---|---|---|
+| **0.2 vite cache** | Deleting `node_modules/.vite` is denied to the agent by security policy. Clear it, or approve the deletion? | **Approved**, deletion performed via `fs.rmSync` | § A1 / 0.2 — and the recorded *"stale dep cache"* diagnosis turned out to be **wrong**; the cause is Vite optimising on first page *request* |
+| **2b.1 aggro** | Permanent aggro is written down as the design (`enemyScavenger.ts:128`). Reopen it, or keep the ruling? | **Reopen** — a release radius | § C3 / 2b.1. `releaseRadius: 720` > `detectRadius`, enforced by a throw in `createScavenger`; death is no longer the only exit |
+| **1b.1 hit-stop cap** | A **deadline** (one swing freezes until tick T; later hits do not extend it) or a **budget**? And does a later *heavier* hit extend it? | **Deadline. Later hits do not extend it — including the lethal one** | § B5 / 1b.1 |
+| **1b.3 the 9b ordering** | Player-first (today) means a lethal swing kills an overlapping scavenger and takes no contact damage. Contact-first means you trade the hit. Pin, or change? | **Pin today's behaviour** | § B7 / 1b.3, with the choice stated in `tick.ts`'s 9b header |
 
 ---
 
@@ -1155,6 +1160,140 @@ being written down.
 **The real answer is another extraction**, and `GameScene.ts` has already been split six times
 (4.16, T16). That is a piece of work, not a line trim, and it is **not** attempted at the end of a
 session — recorded here as owed rather than done badly.
+
+---
+
+## B2 / 1.2 — the bolt stops at the wall *(recorded late — see the note below)*
+
+**FIXED**, commit `ec0e3c5`, gate `tests/unit/projectile-solids.test.ts` (243 lines).
+
+`projectiles.ts:15-16` conceded the defect in its own header and it was deferred every session since
+Phase 5. Two things the inventory said about it were **wrong**, and both are corrected in the gate's
+own header:
+
+1. **No tick insert is needed.** The inventory said to *"decide where it slots into the 14-step
+   contract"*. Projectile flight is **already step 4a** (`tick.ts:15`; `stepProjectiles` is called at
+   `enemyTurn.ts:65`). Nothing renumbered, no letter added.
+2. **The ordering decision is not where-in-the-tick**, it is **time of impact along one segment**. A
+   player *in front of* the wall must keep their hit; a player *behind* it must not get one. A boolean
+   sweep cannot express either — which is exactly Codex's X2: filtering every projectile that touched
+   any wall **erases a hit that already happened**.
+
+So the segment is **clipped** at the impact point and the bolt marked spent, letting step 9b read the
+shortened segment — rather than culled at 4a, which would have been the simpler code and the wrong
+game. Nearest solid **by time**, not by list order.
+
+`segmentHitTime` is the second swept test, and `segmentHitsRect` now wraps it, so there is **one** copy
+of the slab arithmetic rather than two. The solid list is an optional argument defaulting to none, so
+no existing caller moved.
+
+**Watched red *(C1)*: `PASS (4) FAIL (5)`.** The constant-`t` mutation — "the impact is always at the
+far end", the shape a boolean-only sweep degenerates to — reds four.
+
+⚠️ **The third mutation is the one that matters.** Dropping `world.solids` from the live call in
+`enemyTurn.ts` left all **2239 green with the feature disconnected**: nine passing tests, and the
+thing need never have been wired in at all. That is CLAUDE.md §2's defect verbatim. Three more tests
+now drive a bolt through the **real** `tick()`, and that mutation reds by name.
+
+## B5 / 1b.1 — twelve bodies made a four-tick freeze last fifteen *(recorded late)*
+
+**FIXED**, commit `2ab11b8`, owner ruling taken 2026-08-23: **a deadline, and later hits do not extend
+it.** Gate `tests/unit/hitstop-chain-cap.test.ts` (202 lines).
+
+Not the double-hit the inventory describes — `lastHitSwing` has deduped **per target per swing** since
+Phase 9. It is *distinct* enemies each arming a fresh `freezePair`, and nothing bounded that. A frozen
+swing keeps its hitbox live, because the attack is ungated by hit-stop and `combatCounter` does not
+advance while frozen.
+
+Phase 9 left it uncapped on the grounds that level layout bounds how many bodies can enter reach.
+**That is a fact about today's five levels, not about this code**, and the cost was measured before the
+cap was written:
+
+| bodies in reach | freeze length |
+|---|---|
+| 1 | 4 ticks |
+| 5 | 8 ticks |
+| 12 | **15 ticks** |
+
+A quarter of a second of stopped game from one swing.
+
+One swing now freezes the player **once**. Later hits freeze their own victim and leave the deadline
+where the first body put it — **including when the later hit is the lethal one**, because otherwise the
+worst case depends on the order a crowd arrives in, which is the unpredictability the cap exists to
+remove. A lethal mid-chain still reads heavier everywhere else; `impactOf` is untouched.
+
+`freezePair`'s `Math.max` stays. *"A light hit must not shorten a lethal freeze"* is a different
+question and both answers are needed.
+
+**Watched red *(C1)*: `PASS (3) FAIL (3)`**, each failure carrying the real number. **Two
+counter-fixtures**, because *"cap it"* has two wrong implementations that satisfy every direct
+assertion: dropping the later victim's own freeze, and a cap that leaks past its swing.
+
+## B10 / 1b.6 — the tunnelling margin is 5.58×, not 1.9× *(recorded late)*
+
+**FIXED as an invariant**, commit `4f62c48`, gate `tests/unit/solid-thickness-margin.test.ts`.
+
+Both halves of the record needed correcting:
+
+- **The trigger is wrong.** The inventory says Phase 8's spikes make it reachable. Hazards are
+  **non-solid and already swept** — only bodies resolving against **solids** can tunnel.
+- **The margin is wrong, in the safe direction.** *"~1.9× against a 32 px tile at `maxFallSpeed` 17"*
+  are **pre-rescale** figures, from before the grid went 32 → 96 and `RENDER_SCALE` 2 → 6. Re-measured
+  across all five levels: shortest solid height **288 px** against `maxFallSpeed` **51.6 px/tick** — a
+  **5.58×** margin.
+
+*"Revisit if a thin hazard is ever authored"* is a **promise to remember**, and Phase 8 authored new
+geometry and nobody revisited — which is why the item is in the inventory at all. So it is an
+invariant over the shipped `.tmj` files now rather than a note.
+
+**Watched red *(C1)* by authoring a 40 px ledge** — the exact case the note promised to catch. The
+failure names the solid, both numbers, and **forbids lowering the bound**. Reverted byte-identically,
+which `verify-dist` depends on.
+
+## C7 / 2.7 — the fire pose has no barrel to measure *(recorded late)*
+
+**RE-AFFIRMED as a non-fix, with the measurement** *(C11)*. Commit `f5b582b`, `src/sim/enemyPlacement.ts`.
+
+`SENTRY_MUZZLE` is measured off the **idle** pose and its comment said re-measuring against the firing
+one was open work. Attempted now, with the same method that produced the original: the outermost
+fourteen opaque columns per frame against the `(0.5, 1)` origin.
+
+| pose | reading | spread across frames |
+|---|---|---|
+| idle | reproduces the shipped **17.8 / 22.6** to within a rounding step | **3 × 9 px** |
+| fire | forward 116.5 / above 5.7 → forward 194.5 / above 145.4 | **78 × 191 px** |
+
+Idle reproducing the shipped constant is what says **the method is sound**. Fire does not reproduce
+anything: the heuristic is finding **the discharge and the debris**, not the barrel, and an average
+over that is a number, not a measurement.
+
+**That is item 3.10 arriving from another direction.** `clipAdoption.mjs` records the shipped fire clip
+as having a nearly-absent discharge *because the margin constraint was met by the model largely not
+firing* — adopted because it was the round the gates had to judge, not because it was agreed to be
+better art.
+
+So **the constant stays on idle.** Pinning a sim value to art that is expected to be regenerated would
+have to be undone twice. The numbers went into `enemyPlacement.ts` so whoever regenerates that clip
+has the comparison rather than re-deriving it. For scale, the most barrel-like fire frame reads
+**20.1 / 23.3** against **17.8 / 22.6** — about two local units forward, fourteen world pixels.
+
+## ⚠️ Why those four were recorded late, and what it cost
+
+All four shipped with a commit and (three of them) a watched-red gate. **None had a section here, and
+all four A0 rows still read `OPEN`** until the S.1 gate owner enumerated the inventory against this
+log and produced the difference as a list.
+
+That is **this session's own subject matter, in this session's own record.** The whole reason the
+inventory exists is that defects were recorded in one place and fixed — or not — in another, and the
+two drifted. The A0 table is the artefact the plan calls *"the session's most valuable single
+deliverable … what stops the next session re-chasing what is already closed"*, and it had gone stale
+about work done the same day. A reader would have re-chased three closed items and re-opened a
+settled owner ruling.
+
+**A commit message is not the record.** *C11* says the reason lives in `docs/qa/`, and for 2.7 it lived
+only in `f5b582b`'s body. The four A0 rows are corrected, and `1b.1` is removed from the **"Owner
+decisions this session is blocked on"** table — the ruling was taken and the code shipped hours before
+the branch tip, while the table still said the session was waiting on it.
 
 ---
 

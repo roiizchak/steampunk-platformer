@@ -48,9 +48,13 @@ export function stepEnemies(world: World): void {
       }
       continue;
     }
-    // 🔴 Death is the ONLY exit from a chase now that aggro is permanent, so it has to be written
-    // down somewhere — and this loop, which every cause of death routes through, is the one place
-    // that sees every corpse regardless of what killed it. Before this the loop just `continue`d,
+    // 🔴 Death is ONE of three exits from a chase — the other two are `releaseAggro` at the release
+    // radius and the same call on the attack window, both in `enemyScavenger.ts`. This line read
+    // "the ONLY exit … now that aggro is permanent" until 2026-08-23, when the owner reopened that
+    // ruling (inventory 2b.1) and the release radius came back. It is written down here because
+    // this loop, which every cause of death routes through, is the one place that sees every corpse
+    // regardless of what killed it — a role the other two exits do not share. Before this the loop
+    // just `continue`d,
     // which left a dead scavenger flagged `chasing` forever: `enemyView.ts` would pick the `chase`
     // sheet for a body, and any future "is anything hunting the player" question would answer yes
     // from a corpse. Harmless while a chase could lapse on its own; a permanent state with no exit

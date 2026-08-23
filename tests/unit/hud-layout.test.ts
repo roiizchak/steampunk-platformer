@@ -188,3 +188,45 @@ describe('counterText gives tabular figures a fixed width', () => {
     expect(counterText(3.7)).toBe('03');
   });
 });
+
+/**
+ * # The banner's font size reaches the banner (S.3 gate owner, brief 1)
+ *
+ * The code-review gate owner found item 2.5's fix had **no draw-path gate**: every assertion above
+ * is about the constant, and the session log's watched-red was *"`HELP_FONT_PX` back to 18"* — which
+ * mutates the constant, not the consumer.
+ *
+ * So reverting `gameDev.ts`'s `fontSize` to a hardcoded `'18px'` restored the shipped defect — an
+ * ~8 physical-pixel banner at the supported minimum — **with the whole suite green**. CLAUDE.md §2:
+ * *"every module here owes a draw-path gate."* This is that gate.
+ *
+ * Source text rather than behaviour, because `gameDev.ts` imports Phaser as a **value** and cannot
+ * be imported here. The weaker of the two shapes CLAUDE.md allows, and the only one reachable.
+ */
+describe('HELP_FONT_PX has a consumer (CLAUDE.md §2 draw-path gate)', () => {
+  // ⚠️ vitest caches `?raw` glob results — touch this file too when re-running after an edit.
+  const sources = import.meta.glob('../../src/scenes/gameDev.ts', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+  }) as Record<string, string>;
+  const source = Object.values(sources)[0] ?? '';
+
+  it('the source was actually read — an empty glob would make the rest vacuous', () => {
+    expect(source.length).toBeGreaterThan(1000);
+  });
+
+  it('the banner draws at HELP_FONT_PX, not at a literal', () => {
+    expect(source, 'gameDev.ts no longer imports the constant').toContain('HELP_FONT_PX');
+    expect(source, 'the banner does not use HELP_FONT_PX for its fontSize').toContain(
+      '`${HELP_FONT_PX}px`',
+    );
+  });
+
+  it('no hardcoded pixel fontSize survives in the banner', () => {
+    // The exact regression: `fontSize: '18px'` is what shipped, and 2.5 is the record of it.
+    expect(source, "a literal px fontSize is back — that is item 2.5's defect").not.toMatch(
+      /fontSize:\s*'\d+px'/,
+    );
+  });
+});
