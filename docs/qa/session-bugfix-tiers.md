@@ -650,3 +650,41 @@ That is the second measurement showing cache state was never the variable; the f
 costs ~33 s whatever the cache holds.
 
 Port 5173 confirmed clear afterwards *(C13)*.
+
+---
+
+## B3 / 1.3 / 4.4 — the spec that contradicted its own docstring
+
+**Status: RESOLVED. The bug was fixed; the paragraph saying otherwise was stale. Both halves proven
+by mutation, not by reading the green.**
+
+`phase-06-lifecycle.spec.ts:186` headed a paragraph *"🔴 `test.fixme` — it FAILS, and the failure is
+a real defect, not a flaky test"*, describing the HUD frozen over an error screen with
+`TypeError: … reading 'glTexture'` in the console, and saying *"Phase 7 owns it"*. Phases 7, 8 and 9
+all shipped. The test below it has been a plain `test(...)`, passing, the whole time.
+
+Exactly one of two things could be true. **It is the first.**
+
+The fix is in `BootScene.init()` — it stops `Game` and `UI` **before** the reload, unconditionally,
+instead of relying on `refuseToRoute`'s stops at the end of a boot attempt. Its own comment names
+this very test as how it was found: *"found by writing the restart-based refusal test Codex's second
+implementation review asked for."*
+
+| mutation on `BootScene.init()` | result |
+|---|---|
+| remove **both** pre-reload stops | **FAILS**, and only this test of the five — `bootError` never arrives, 20 s timeout. Nothing runs after the render loop throws, so the refusal never completes. The described bug, exactly |
+| remove **only** `stop('UI')` | **all 5 still pass** |
+
+So the gate is real and the docstring was three phases out of date. Replaced in place with the
+evidence rather than deleted, so a reader sees what was settled and how.
+
+⚠️ **The second row is a real, narrower gap, recorded rather than hidden.** This test depends on the
+**`Game`** stop: `GameScene` draws the world textures `preload` frees, and the HUD alone does not
+touch them. An edit dropping only the UI stop would go unnoticed here. It is harmless today — the
+HUD still stops via `refuseToRoute`, because nothing threw — so it is left as redundancy. Closing it
+would mean reaching into UIScene's display list, and no defect currently makes that worth doing
+*(C11)*.
+
+Also closes **4.4**, which was the same item seen from the Tier-4 side.
+
+Spec green after revert: **5 passed**. Port 5173 clear *(C13)*.
