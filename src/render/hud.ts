@@ -31,9 +31,16 @@ import type { GearSim } from '../sim/pickups';
 /**
  * The authored size of `hud-health.png`, in its own pixels.
  *
- * 🔴 **Measured from the shipped file, and it must be re-measured if the HUD is re-generated** —
- * the same warning `HUD_SLOT` carries in `playerHud.ts`, for the same reason: nothing can catch a
- * stale number here, because a wrong plate size draws a HUD that is merely slightly off.
+ * 🔴 **Measured from the shipped file, and it must be re-measured if the HUD is re-generated.**
+ *
+ * ✅ **And a gate DOES catch a stale number now** — `tests/unit/hud-plate-matches-art.test.ts`
+ * decodes the PNG and compares. This block used to end *"nothing can catch a stale number here,
+ * because a wrong plate size draws a HUD that is merely slightly off"* (inventory 3.4), and that was
+ * false: the authority for this number is a file in the repository, and `tools/gen/png.mjs` already
+ * exported `readPng`. Nothing had to be built; the gate just had to be written.
+ *
+ * The first half stands. A wrong plate size does not throw and does not look broken in a
+ * screenshot — it slides the icon, the counter and `hudFits`' whole bounding box by a few pixels.
  */
 export const HUD_PLATE = { w: 413, h: 128 } as const;
 
