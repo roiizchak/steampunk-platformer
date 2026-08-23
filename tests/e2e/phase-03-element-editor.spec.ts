@@ -74,23 +74,61 @@ test.describe('Phase 3 — Element Editor (criterion 3.7)', () => {
       const scene = (
         window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
       ).__phaserGame.scene.getScene('ElementEditor') as {
-        children: { list: { type?: string; width?: number; height?: number }[] };
+        children: {
+          list: {
+            type?: string;
+            width?: number;
+            height?: number;
+            x?: number;
+            y?: number;
+            originX?: number;
+            originY?: number;
+          }[];
+        };
       };
-      return scene.children.list.filter((o) => o.type === 'Rectangle').map((o) => ({
-        w: o.width,
-        h: o.height,
-      }));
+      return scene.children.list
+        .filter((o) => o.type === 'Rectangle')
+        .map((o) => ({
+          w: o.width ?? 0,
+          h: o.height ?? 0,
+          // Top-left, so the comparison below is against the level's own rect coordinates whatever
+          // origin the scene happens to draw with.
+          x: (o.x ?? 0) - (o.originX ?? 0) * (o.width ?? 0),
+          y: (o.y ?? 0) - (o.originY ?? 0) * (o.height ?? 0),
+        }));
     });
 
-    // One overlay per solid, plus the player rectangle and its facing marker. Matching each
-    // solid's exact size is what makes this "the strips are shown" rather than "some rectangles
-    // exist" — a hardcoded count would pass with every overlay drawn at the wrong size.
+    /**
+     * One overlay per solid, matched on **size AND position** — inventory 5.12.
+     *
+     * `phase-03-impl.md:97` recorded the hole: this matched on `w`/`h` alone, and **all three
+     * shipped platforms are `256x32`**, so a SINGLE correctly-sized rectangle satisfied every
+     * iteration of this loop. The test read as "one overlay per solid" and asserted "at least one
+     * overlay the size a solid happens to be" — draw one strip and skip the other two and it stayed
+     * green.
+     *
+     * Position is what makes the claim the loop's name already made. It also makes the assertion
+     * fail for the right reason: a strip at the wrong place is a different defect from a strip of
+     * the wrong size, and now they are distinguishable.
+     *
+     * ⚠️ Each match is CONSUMED, so two solids cannot both be satisfied by one overlay even when
+     * they coincide. Without that, identical stacked strips reopen exactly the hole being closed.
+     */
+    const unmatched = [...shown];
     for (const solid of level.solids) {
+      const at = unmatched.findIndex(
+        (r) => r.w === solid.w && r.h === solid.h && r.x === solid.x && r.y === solid.y,
+      );
       expect(
-        shown.some((r) => r.w === solid.w && r.h === solid.h),
-        `no overlay drawn for the ${solid.w}x${solid.h} strip at (${solid.x}, ${solid.y})`,
-      ).toBe(true);
+        at,
+        `no overlay drawn at (${solid.x}, ${solid.y}) for the ${solid.w}x${solid.h} strip. ` +
+          `Rectangles present: ${shown.map((r) => `${r.w}x${r.h}@(${r.x},${r.y})`).join(', ')}`,
+      ).toBeGreaterThanOrEqual(0);
+      unmatched.splice(at, 1);
     }
+
+    // Non-vacuity: a level with no solids would make the loop above assert nothing at all.
+    expect(level.solids.length, 'the level has no solids, so nothing was checked').toBeGreaterThan(2);
   });
 
   test('an edited strip is written back into a loadable .tmj', async ({ page }) => {

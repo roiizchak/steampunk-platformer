@@ -74,10 +74,21 @@ export interface Sentry {
    * start while the code re-derived `facing` every visible tick with no dead zone at all, so a
    * player oscillating around `sentry.x` — a jump apex over a turret — flipped it at 60 Hz.
    *
-   * ⚠️ **No gate could see that**, and none can now: `setFlipX` does not restart an animation, so a
-   * frame-index assertion is blind to it. It is prevented by construction and asserted as *"does not
-   * change across 40 ticks"* in `enemy-ai.test.ts` — a single-tick assertion cannot see a strobe,
-   * which is exactly how this survived from Phase 5's start to 2026-08-14 (finding B5, decision D5).
+   * ⚠️ **No RENDER gate could see that** — `setFlipX` does not restart an animation, so a frame-index
+   * assertion is blind to it, and that is how it survived from Phase 5's start to 2026-08-14
+   * (finding B5, decision D5).
+   *
+   * 🔴 This used to read *"no gate could see that, **and none can now**"*, one sentence before naming
+   * the gate that does *(inventory 5.6)*. The strobe is a **sim** fact — `facing` flipping tick to
+   * tick — and the sim is where it is caught: `enemy-ai.test.ts`'s *"does not strobe when the player
+   * oscillates across its centre"* drives a player straddling `sentry.x` for 40 ticks and asserts
+   * `facing` never moves. Verified red 2026-08-23 with `ENEMY_DEAD_ZONE = 0`:
+   * *"flipped on tick 0 — the strobe is back"*.
+   *
+   * The blind layer is the drawn one, and it is covered from the other side — *"the render descriptor
+   * flipX follows facing, not a hardcoded value"* in the same file. **Neither half is ungated.**
+   * A sentence saying a defect is uncheckable is how a checkable defect stays unchecked, and this
+   * project has now found three of them.
    */
   facing: 1 | -1;
   /** Per-instance override of `SENTRY.deadZone`, so a level can differ deliberately, not by drift. */
