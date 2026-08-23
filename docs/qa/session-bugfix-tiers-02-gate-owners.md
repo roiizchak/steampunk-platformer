@@ -60,10 +60,22 @@ nothing exits 0.
 | unit | 2154 passed / 0 failed (133 files) | **2260 passed / 0 failed (145 files)** | +106 tests, +12 files |
 | build | `verify-dist ok`, 5 levels + 11 audio byte-identical | **`verify-dist ok`, 5 levels + 11 audio byte-identical, no DEV-only scene key or debug surface in 1 bundle** | — |
 | `test:sim-isolated` | 2151 passed / 3 skipped | **2257 passed / 3 skipped (145 files)** | Phaser restored to 4.2.1 |
-| e2e | 118 passed / 1 failed (criterion 1.4) | **held until the ten owner agents finish** — one Playwright run at a time, and nothing heavy beside it | see below |
+| e2e | 118 passed / 1 failed (criterion 1.4) | **119 selected, 119 passed** (16.8 min, 1 worker) | criterion 1.4 fixed; **the count is read, not the exit code** |
 
-The e2e arm is deliberately **not** run concurrently with the gate owners. Recorded here rather than
-quietly deferred, because a green e2e taken on a loaded box is worth less than no e2e at all.
+The e2e arm was deliberately **not** run concurrently with the gate owners — a green e2e taken on a
+loaded box is worth less than no e2e at all.
+
+⚠️ **The first e2e run of this gate produced no usable evidence, and it is recorded rather than
+quietly re-run.** It was piped through `tail -30`, so the summary line never reached the log — leaving
+an `exit 0` and thirty lines of expected refusal-fixture output. That is **`tail`'s exit code, not the
+gate's**, and it is exactly the shape CLAUDE.md §5 warns about twice over: *"a zero exit through a
+pipe is `tail`'s exit"*, and *"a run that selected nothing reports `expected: 0, unexpected: 0` and
+exits 0 — indistinguishable from a clean pass unless you read the count."*
+
+Re-run with the full output captured to a file: **`Running 119 tests using 1 worker` → `119 passed`.**
+Both halves matter. **119 selected** rules out the run that quietly collects nothing — the failure
+mode `portGuard.ts` exists for. **119 passed** is the result. Neither number was visible in the first
+run, and an `exit 0` was the only thing on offer.
 
 ---
 
