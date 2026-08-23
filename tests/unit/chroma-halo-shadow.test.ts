@@ -139,6 +139,35 @@ describe('dropCastShadow removes a flat blob under the figure, and nothing else 
     expect(sizes(dropCastShadow(img)), 'a severed boot was deleted').toEqual([9600, 1440]);
   });
 
+  it('KEEPS a dropped BRASS tool below the figure — inventory 3.13', () => {
+    // 🔴 The fourth condition, and the gap the first three could not close.
+    //
+    // Item 3.13 asked for a POSITION test — but that was already condition one: the component must
+    // lie wholly below the main mass. What position cannot see is a component that genuinely IS
+    // below the figure and genuinely IS a flat smear: a dropped tool, a spark trail, a thrown
+    // wrench lying on the ground. Every original condition holds for it, and it was deleted
+    // silently, on every airborne cell, with no `assertComponentPolicy` on the stack.
+    //
+    // A shadow is DARK — that is what makes it a shadow. This blob is brass (the figure's own
+    // palette), the same shape and position as the shadow fixture above, and is kept.
+    const img = figure();
+    fill(img, 50, 160, 100, 4, [180, 140, 60, 255]); // 400 px, 25:1, entirely below — but BRIGHT
+    expect(sizes(img)).toEqual([9600, 400]);
+    expect(
+      sizes(dropCastShadow(img)),
+      'a brass tool lying below the figure was deleted as a cast shadow',
+    ).toEqual([9600, 400]);
+  });
+
+  it('and the SAME blob in shadow tones is still removed — the discriminator is luminance', () => {
+    // The pair that makes the previous test mean something. Identical geometry, identical position,
+    // identical aspect: only the colour differs. If this one survived too, the fourth condition
+    // would have disabled the function rather than sharpened it.
+    const img = figure();
+    fill(img, 50, 160, 100, 4, [20, 20, 20, 255]);
+    expect(sizes(dropCastShadow(img))).toEqual([9600]);
+  });
+
   it('KEEPS a detached boot below the figure — the thing vault 4.13 protects', () => {
     const img = figure();
     fill(img, 80, 150, 26, 24, [180, 140, 60, 255]); // 624 px, roughly square, also entirely below
