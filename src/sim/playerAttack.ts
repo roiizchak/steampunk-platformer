@@ -34,7 +34,7 @@
 import { ATTACK, hitWindowOpen } from './combat';
 import { SCAVENGER_BOX, SENTRY_BOX, type Scavenger, type Sentry } from './enemies';
 import { toWorld } from './player';
-import { freezePair, type Freezable } from './hitstop';
+import { freezeOne, freezePair, type Freezable } from './hitstop';
 import type { LocalBox, Rect, World } from './types';
 
 /**
@@ -118,14 +118,27 @@ export interface PlayerAttackResult {
  * It stops being masked the moment `IFRAME_TICKS` drops below `attackTotalTicks(ATTACK)`, which is
  * a plausible retune. If that happens, the case becomes reachable and needs a gate.
  *
- * ## A frozen swing's hitbox can CHAIN the freeze, and that is known and uncapped
+ * ## A frozen swing's hitbox CHAINS the freeze — capped 2026-08-23 *(inventory 1b.1)*
  *
- * This function is ungated by hit-stop, and `combatCounter` is frozen — so the hitbox stays live for
- * every frozen tick, and a *second* enemy that walks into reach during a freeze is struck and
- * re-arms `freezePair`. Each enemy is still hit exactly once per swing (`lastHitSwing`), and level
- * layout bounds how many bodies can enter reach inside 4-9 ticks, so the chain is short in practice.
- * Capping it is a design decision about how a crowd should feel, not a defect, and it is out of
- * Phase 9's scope: recorded in the QA log and deliberately left uncapped rather than missed.
+ * This function is ungated by hit-stop and `combatCounter` is frozen, so the hitbox stays live for
+ * every frozen tick and a *second* enemy walking into reach during a freeze is struck. Each enemy is
+ * still hit only once per swing (`lastHitSwing`) — that was never the problem. **Distinct** bodies
+ * each arming a fresh `freezePair` was, and nothing bounded it.
+ *
+ * Phase 9 left it uncapped, correctly, on the grounds that *"level layout bounds how many bodies can
+ * enter reach"*. ⚠️ That is a fact about today's five levels, not about this code, and the cost was
+ * measured before the cap was written: **twelve bodies turn a 4-tick freeze into 15** — a quarter of
+ * a second of stopped game, from one swing.
+ *
+ * The ruling: **one swing freezes the player once.** Later hits in the same swing freeze their own
+ * victim and leave the player's deadline where the first body put it, **including when the later hit
+ * is the heavier one** — otherwise the worst case depends on the order a crowd happens to arrive in,
+ * which is the unpredictability the cap exists to remove. `player.hitstopSwing` carries the
+ * identity; `freezePair`'s `Math.max` is untouched, because "a light hit must not shorten a lethal
+ * freeze" is a different question and both answers are needed.
+ *
+ * Gated by `tests/unit/hitstop-chain-cap.test.ts`, including the counter-fixture that fails if the
+ * later victim stops freezing at all.
  */
 export function applyPlayerAttack(world: World): PlayerAttackResult {
   const { player } = world;
@@ -176,13 +189,17 @@ export function applyPlayerAttack(world: World): PlayerAttackResult {
     // places to pass the class, and the day they disagree the attacker recovers before its victim.
     // Arming is a WRITE, not a gate — it does not disturb 9b's documented ordering guarantee that
     // the player's own swing resolves before anything can trade a hit back.
-    freezePair(
-      player,
-      enemy,
-      enemy.hp <= 0 ? 'lethal' : 'light',
-      world.tickCount,
-      world.hitstopScale,
-    );
+    const impact = enemy.hp <= 0 ? 'lethal' : 'light';
+    if (player.hitstopSwing === swing) {
+      // 🔴 **The chain's cap** *(inventory 1b.1, ruled 2026-08-23)*. This swing has already frozen
+      // the player, so the victim freezes for its own class and the player's deadline stays where
+      // the first body put it — including when THIS hit is the heavier one. See `player.hitstopSwing`
+      // for why a later `lethal` is not allowed to lengthen it either.
+      freezeOne(enemy, impact, world.tickCount, world.hitstopScale);
+    } else {
+      freezePair(player, enemy, impact, world.tickCount, world.hitstopScale);
+      player.hitstopSwing = swing;
+    }
     hits += 1;
     // The `hp > 0` guard at the top of this closure means a corpse is never struck twice, so this
     // counts the transition to zero rather than the state of being at zero.

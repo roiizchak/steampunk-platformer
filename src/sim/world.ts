@@ -171,6 +171,7 @@ export function createWorld({
       hitstopUntil: -1,
       lastHitTick: -1,
       swingStartTick: -1,
+      hitstopSwing: -1,
       strideCounter: 0,
       strideGait: null,
       // Phase 9 review round: never landed. `-1` is `lastHitTick`'s sentinel, used for the same

@@ -47,6 +47,7 @@ function playerAt(overrides: Partial<PlayerSim> = {}): PlayerSim {
     hitstopUntil: -1,
     lastHitTick: -1,
     swingStartTick: -1,
+    hitstopSwing: -1,
     strideCounter: 0,
     strideGait: null,
     landedTick: -1,
