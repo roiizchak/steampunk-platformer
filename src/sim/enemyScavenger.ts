@@ -51,13 +51,22 @@ export interface Scavenger {
   /** ONE counter (vault 5.1) — ticks spent in the current chase episode. */
   chaseCounter: number;
   /**
+   * How far the player must get for this chase to end, px. Strictly greater than `detectRadius`.
+   *
+   * Reintroduced 2026-08-23 *(inventory 2b.1)* after being deleted on 2026-08-14 when aggro became
+   * permanent. The gap between the two radii is the anti-flap guarantee; `createScavenger` refuses a
+   * configuration without one.
+   */
+  releaseRadius: number;
+  /**
    * Did `x` actually change on the last `stepScavenger`? **A readback, not a second state axis.**
    *
    * It exists because the animation was reading the INTENT and not the MOTION. A chasing scavenger
    * that cannot move — held inside `deadZone`, or vetoed by the ledge probe — still returned `chase`
    * from `scavengerAnim`, so the art ran a 17.5 px/frame gait over zero px of travel. That violates
-   * the foot-plant invariant by the whole stride, and because aggro is permanent it never ends: the
-   * old release radius used to end it by accident.
+   * the foot-plant invariant by the whole stride, and while aggro was permanent it never ended.
+   * (`releaseRadius` returned on 2026-08-23, so it *would* now end by accident again — but this
+   * readback is the actual fix and does not depend on that.)
    *
    * **Derived by comparing `x` across the step, deliberately, rather than written at each site that
    * declines to move.** Writing it at the commit site and both veto paths would mean *enumerating*
@@ -118,15 +127,20 @@ export function detects(scavenger: Scavenger, at: Sighting): boolean {
 /**
  * End a chase episode — the ONE way out, stated once *(vault 5.3)*.
  *
- * There are exactly two exits from permanent aggro and they must clear the same fields, or a
- * scavenger released by one route carries state the other route clears:
+ * There are exactly **three** exits from a chase and they must clear the same fields, or a scavenger
+ * released by one route carries state another route clears:
  *
  *   - **the scavenger's own death** (`stepEnemies`) — a corpse must not read as hunting;
- *   - **the player's death** (`tick`, step 4c) — decided by the user 2026-08-14 (D4).
+ *   - **the player's death** (`tick`, step 4c) — decided by the user 2026-08-14 (D4);
+ *   - **distance** (`stepScavenger`) — beyond `releaseRadius`, restored 2026-08-23 by the owner
+ *     reversing D4's permanence *(session inventory 2b.1)*. The newest, and the one most likely to
+ *     be forgotten by whoever adds a fourth: it is the only exit that fires while everything is
+ *     alive and nothing dramatic has happened.
  *
  * 🔴 **Why the player's death is an exit at all**, moved here from step 4c so it lives beside the
- * function it justifies rather than in two places *(vault 5.3)*. Aggro is permanent by design —
- * *"it should keep coming until I kill it"* — but nothing cleared it on death, so after dying every
+ * function it justifies rather than in two places *(vault 5.3)*. Aggro was permanent by design at the
+ * time — *"it should keep coming until I kill it"*, since reversed — but nothing cleared it on death,
+ * so after dying every
  * scavenger walked toward the NEW spawn and never patrolled again. Repeated deaths converge every
  * scavenger in a level onto the spawn point, and each death leaves the level harder than the last:
  * punishing rather than difficult. It does not weaken what was asked for — within ONE life the
@@ -234,10 +248,16 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
       scavenger.chasing = true;
       scavenger.chaseCounter = 0;
     }
+  } else if (!withinRadius(scavenger.x, scavenger.y, at, scavenger.releaseRadius)) {
+    // 🔴 **The chase ends** *(inventory 2b.1, owner reversal 2026-08-23)*. Through `releaseAggro`,
+    // never an inline `chasing = false`: vault 5.3 says the exits clear the same fields, and this is
+    // now a third one beside the scavenger's death and the player's. An inline clear would leave
+    // `chaseCounter` and a live `attackCounter` behind — R5's bug, arriving by a new route.
+    releaseAggro(scavenger);
   } else {
-    // Permanent: nothing here can clear the flag. `stepEnemies` clears it on death, and that is the
-    // only exit. The counter survives (vault 5.1's "one flag plus one counter") as the episode's
-    // age, which is what makes a chase observable in a test without a second boolean.
+    // Committed. Inside the band between `detectRadius` and `releaseRadius` nothing here clears the
+    // flag, which is what makes the hysteresis real rather than a second detection radius. The
+    // counter survives (vault 5.1's "one flag plus one counter") as the episode's age.
     scavenger.chaseCounter += 1;
   }
 

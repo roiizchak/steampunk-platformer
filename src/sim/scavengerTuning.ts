@@ -46,16 +46,31 @@ export const CHASE_FOOT_PX_PER_FRAME = 18;
  * Two thirds of the player's run, so the player can still gain ground by running. That matters more
  * now than it did, because a chase no longer ends (below).
  *
- * ## 🔴 `releaseRadius` is GONE. Aggro is permanent.
+ * ## 🔴 `releaseRadius` is BACK, at 720. Read both reversals before touching it.
  *
- * `chaseSpeed` used to be documented as *"deliberately escapable"* and the 720 px `releaseRadius`
- * was the escape. **The user reversed that decision on 2026-08-14: *"it should keep coming until I
- * kill it"*.** Only death clears `chasing` now (`stepEnemies`), so there is exactly one exit and it
- * is the one the player has to earn. Recorded in `docs/qa/phase-05-combat.md` as a reversal, not
- * applied as a silent knob edit.
+ * This knob has now been argued in both directions and neither argument was wrong, so both are kept:
  *
- * The anti-flap machinery both went with it and neither is missed, because **a state with no exit
- * cannot flap.** Hysteresis existed so a player straddling the boundary could not toggle
+ *  1. `chaseSpeed` was documented as *"deliberately escapable"* and a 720 px `releaseRadius` was the
+ *     escape.
+ *  2. **2026-08-14, user ruling D4** — *"it should keep coming until I kill it"*. `releaseRadius` and
+ *     `CHASE_COMMIT_TICKS` were deleted rather than re-tuned, leaving death as the only exit.
+ *  3. **2026-08-23, owner reversal** *(session inventory 2b.1)*. What (2) did not weigh is what
+ *     permanence looks like from the other side: a scavenger that saw you once **stares from 851 px
+ *     indefinitely and never patrols again**, found by playing rather than by reading
+ *     (`docs/qa/session-bugfix-perf-gates-03-hands-on.md:60-74`). 720 restored.
+ *
+ * Each was a recorded ruling, not a silent knob edit, and this block is the record.
+ *
+ * ⚠️ **`CHASE_COMMIT_TICKS` did NOT come back, and the guarantee it protected is genuinely weaker
+ * now.** Step (2)'s argument was that **a state with no exit cannot flap** — stronger than any
+ * hysteresis, because there is no gap to stand in the middle of. Re-introducing an exit
+ * re-introduces that risk, and the only thing standing in for it is the 240 px band between
+ * `detectRadius` and `releaseRadius`. `createScavenger` **throws** if that band is empty, and
+ * `tests/unit/aggro-release-radius.test.ts` walks a player across the whole of it counting
+ * transitions. Do not narrow the gap without reading that file.
+ *
+ * The paragraph below is the argument that used to justify deleting the machinery. It is kept
+ * because it is still the reason a single threshold would be wrong: Hysteresis existed so a player straddling the boundary could not toggle
  * patrol↔chase every tick; `CHASE_COMMIT_TICKS` was the floor under the same problem. With one
  * one-way transition the whole failure mode is unreachable by construction rather than by tuning,
  * which is the stronger version of the same guarantee. `enemy-ai.test.ts` still parks the player
@@ -78,6 +93,18 @@ export const SCAVENGER = {
   patrolSpeed: 2.5,
   chaseSpeed: CHASE_FOOT_PX_PER_FRAME / CHASE_TICKS_PER_FRAME,
   detectRadius: 480,
+  /**
+   * How far the player must get before a chase ends, px. **Strictly greater than `detectRadius`,
+   * and `createScavenger` throws otherwise** *(inventory 2b.1, owner reversal 2026-08-23)*.
+   *
+   * A `releaseRadius` equal to `detectRadius` is one threshold wearing two names, and it flaps on
+   * every tick a player stands on it. The 240 px gap IS the guarantee that replaced the old
+   * *"a flag that cannot be un-set cannot flap"* — see `enemies.ts` for what was traded away.
+   *
+   * 720 = 1.5x `detectRadius`. The reported symptom was a scavenger staring from **851 px**, so the
+   * gap is wide enough to be a real commitment and narrow enough to release well inside it.
+   */
+  releaseRadius: 720,
   deadZone: ENEMY_DEAD_ZONE,
   damage: 15,
   /**

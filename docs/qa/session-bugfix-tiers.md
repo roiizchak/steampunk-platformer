@@ -390,3 +390,56 @@ worker` → **14 passed**, criterion 1.4 among them. It had failed 6 runs of 6.
 Moot now — the warm-up absorbs a cold cache and a warm one alike, and the measurements above show
 cache state was never what decided this. No line added to `CLAUDE.md §1`, because the claim it would
 have recorded is not true.
+
+---
+
+## C3 / 2b.1 — the release radius, restored
+
+**Status: FIXED. Owner reversal 2026-08-23 of user ruling D4 (2026-08-14).**
+
+This knob has now been argued in both directions and **neither argument was wrong**:
+
+|  | ruling |
+|---|---|
+| originally | `chaseSpeed` was *"deliberately escapable"* and a 720 px `releaseRadius` was the escape |
+| **D4, 2026-08-14** | *"it should keep coming until I kill it."* `releaseRadius` **and** `CHASE_COMMIT_TICKS` deleted rather than re-tuned, on the argument that **a flag that cannot be un-set cannot flap** — genuinely stronger than hysteresis, since there is no gap to stand in the middle of |
+| **2026-08-23, owner** | reversed. What D4 did not weigh is what permanence looks like from the other side: a scavenger that saw you once **stares from 851 px indefinitely and never patrols again**, found by playing |
+
+`releaseRadius: 720` is back. **`CHASE_COMMIT_TICKS` is not**, and the guarantee it protected is
+genuinely weaker now — that is stated in `enemies.ts`, `scavengerTuning.ts` and `enemyScavenger.ts`
+rather than left for a reader to discover. The 240 px band between `detectRadius` 480 and
+`releaseRadius` 720 is the whole of the replacement, so **`createScavenger` throws** if that band is
+empty *(vault 2.11)* — equal radii is one threshold wearing two names, and a player standing on it
+would be detected and released on alternate ticks forever.
+
+The release goes through `releaseAggro`, never an inline `chasing = false`: it is now the **third**
+exit beside the two deaths, and vault 5.3 requires they clear the same fields. An inline clear would
+leave a live `attackCounter` behind — R5's bug arriving by a new route.
+
+### Watched red *(C1)*: `PASS (0) FAIL (6)`, all six
+
+Including `expected [Function] to throw` for the no-gap guard and `expected true to be false` for the
+release itself.
+
+### Twelve readings re-taken, none edited to match
+
+The reversal moved twelve assertions across six files. Every one was **re-taken as a reading**, and
+in each case the fixture's own stated intent decided the new number:
+
+| file | what it is really about | change |
+|---|---|---|
+| `enemy-ai-lifecycle` ×3 | where a chaser stops relative to a **drop** | flee 5000 → 2400, return 200 → 1400 |
+| `enemy-ai-scavenger` ×2 | leaving the **patrol zone**; bounding **chase** speed | 3000 → 1100, 99999 → 1100 |
+| `enemy-ai-scavenger` ×1 | *"never gives up"* | **INVERTED, not deleted** — same 1000-tick scenario, opposite expectation |
+| `enemy-view` ×3 | which **animation** a stalled chaser draws | 5000 → 500 |
+| `enemy-wall-collision` ×1 | walking away from a **wall** | 0 → 1400 |
+| `level-traversal` ×1 | **level geometry** — how far it can travel | `releaseRadius` disabled for the fixture |
+| `respawn` ×1 | **death** as an exit, not distance | re-taken *inside* the band |
+
+⚠️ Three of these were **quietly measuring the wrong thing** once the radius existed —
+`never teleports` read `2.5` (patrol speed) while claiming to bound chase speed, and the
+declared-key count fell 8 → 7 because a released subject can no longer ask for the `chase` key. All
+three would have stayed green if the distances had been left alone and only the failing expectations
+patched. That is the difference between re-taking a reading and editing a number.
+
+Suite **2193 / 0**, up 6 from 2187 — the new file's six tests, nothing else net.

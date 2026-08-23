@@ -31,11 +31,22 @@ describe('rust-scavenger — a chase stops at the edge of the floor', () => {
   /** A ledge ending at x = 2000, with the scavenger's feet on its top surface at y = 960. */
   const LEDGE = scavengerFooting([{ x: 0, y: 960, w: 2000, h: 500 }], 6);
 
-  /** Sight the player from inside `detectRadius`, then have them flee past the drop and stay there. */
+  /**
+   * Sight the player from inside `detectRadius`, then have them flee past the drop and stay there.
+   *
+   * ⚠️ **2400, not 5000** *(inventory 2b.1, 2026-08-23)*. This fixture is about the LEDGE probe —
+   * where a chaser stops relative to a drop — and the flee distance was only ever "somewhere past
+   * 2000". With aggro permanent, any number did. Now that a chase ends beyond `releaseRadius` 720,
+   * 5000 releases the scavenger before the ledge is ever reached, and all three tests below would
+   * fail for a reason that has nothing to do with the edge they are named for.
+   *
+   * 2400 is past the drop at 2000 (so the probe still vetoes) and ~460 px from where the body stops
+   * at 1940 (so the chase is still live). **The reading was re-taken, not the expectation edited.**
+   */
   function seeThenFlee(s: ReturnType<typeof createScavenger>): void {
     stepScavenger(s, { playerX: 1600, playerY: 960 }, LEDGE);
     for (let i = 0; i < 300; i += 1) {
-      stepScavenger(s, { playerX: 5000, playerY: 960 }, LEDGE);
+      stepScavenger(s, { playerX: 2400, playerY: 960 }, LEDGE);
     }
   }
 
@@ -63,8 +74,11 @@ describe('rust-scavenger — a chase stops at the edge of the floor', () => {
     const s = createScavenger({ x: 1500, y: 960, patrolMin: 0, patrolMax: 100000 });
     seeThenFlee(s);
     const stopped = s.x;
+    // 1400, not 200, and for the same reason `seeThenFlee` uses 2400: from a body stopped at ~1940 a
+    // player at 200 is 1740 px away and the chase now ends. The test is about walking BACK off the
+    // edge, so the player has to be somewhere the scavenger is still hunting.
     for (let i = 0; i < 100; i += 1) {
-      stepScavenger(s, { playerX: 200, playerY: 960 }, LEDGE);
+      stepScavenger(s, { playerX: 1400, playerY: 960 }, LEDGE);
     }
     expect(s.x).toBeLessThan(stopped);
     expect(s.facing).toBe(-1);
