@@ -61,6 +61,14 @@ npm run assets:audio              # build-audio.mjs    — Phase 7 cues and musi
 `npm run test:sim-isolated` mutates `node_modules` — if it is interrupted, Phaser is left
 uninstalled. Recover with `npm i phaser@4.2.1 --save-exact`.
 
+⚠️ **`git worktree remove --force` on an agent worktree can delete the REAL `node_modules`.** Agent
+worktrees get a **junction** to the root `node_modules` (they are created without one, and every
+agent that needed to run a test made one). `worktree remove` deletes through the junction, not the
+link — so removing 18 stale worktrees on 2026-08-23 emptied the root `node_modules` and `tsc` stopped
+existing. Nothing is lost and there is no clever recovery: `npm ci` restores it exactly, and the
+lockfile pins `phaser@4.2.1`. **Delete the junction first**, or just expect to reinstall after a
+worktree sweep.
+
 ## 2. Architecture
 
 Three layers, and the boundaries between them are the whole design. Read them in this order.
