@@ -64,6 +64,63 @@ export const HUD_MARGIN = 24;
  * *below* the plate is `HUD_MARGIN * 2`, deliberately double, so the banner reads as a separate
  * element instead of part of the plate.
  */
+
+/**
+ * The gear counter's colours, and **the contrast method that was never written down** — 2b.4.
+ *
+ * Item 2b.4 recorded **3.13:1 and 1.13:1**, both failing WCAG AA, across four levels never
+ * re-measured — *and flagged that the sampling method itself had never been recorded*, so the
+ * numbers might be optimistic. Two accessibility gate owners re-derived them and got the same
+ * failing figures. **All of them measured the FILL against the background and ignored the stroke.**
+ *
+ * ## The method, written down
+ *
+ * 1. The counter is drawn **over the level**, not over the HUD plate — `hudLayout` puts `counter.x`
+ *    beyond `plate.x + plate.w`. So the background is whatever the world draws there: the three
+ *    parallax layers and the two tilesets. Nothing else can be behind it.
+ * 2. Decode all five shipped PNGs and take the **brightest and darkest fully-opaque pixel** of each.
+ *    Not an average, and not one sampled frame — the counter is over a scrolling scene, so a figure
+ *    that holds at spawn and fails 40 m later has not passed.
+ * 3. The glyph has **two** inks: a `#f7e3b8` fill inside a 6 px `#1a1410` stroke. A reader
+ *    distinguishes the glyph from the background by whichever of the two contrasts with it, so the
+ *    ratio that matters is **`max(fill:bg, stroke:bg)`**, not `fill:bg` alone.
+ * 4. Compare against the bar the **effective size** earns at the smallest supported window.
+ *
+ * ## What it measured, 2026-08-23
+ *
+ * | background | brightest | `stroke:bg` | `fill:bg` |
+ * |---|---|---|---|
+ * | `far.png` | rgb(248,255,255) | **18.01:1** | 1.25:1 |
+ * | `mid.png` | rgb(226,255,255) | **17.35:1** | 1.20:1 |
+ * | `near.png` | rgb(214,251,255) | **16.59:1** | 1.15:1 |
+ * | `industrial.png` | rgb(244,248,249) | **17.06:1** | 1.18:1 |
+ * | `walkway.png` | rgb(251,228,118) | **14.30:1** | 1.01:1 |
+ *
+ * Against the *darkest* pixels the pair inverts: `fill:bg` reaches 15.95–16.63:1 while the stroke
+ * disappears. **So the recorded 1.13:1 is real and is not the whole glyph** — at every background in
+ * the game, one of the two inks is at 14:1 or better, and `fill:stroke` is **14.45:1**, so the glyph
+ * is self-defining even where the background is not helping.
+ *
+ * The genuine worst case is a **mid-luminance** background where neither ink is favoured. Solving
+ * `fill:L = stroke:L` gives L = 0.1689 and a ratio of **3.80:1** — the floor across every possible
+ * background, not merely every shipped one.
+ *
+ * ## The bar it has to clear
+ *
+ * 44 design px × 0.44375 (852/1920) = **19.5 physical px**, `fontStyle: 'bold'`. WCAG's large-text
+ * threshold is 18 pt (24 px) or **14 pt bold (≈18.7 px)**, so this is large text at the smallest
+ * supported window and the bar is **3:1**. 3.80 > 3.0 — **it passes, with 27 % of headroom.**
+ *
+ * ⚠️ **A backing plate was pre-authorised if this failed. It did not fail, so none was added** —
+ * the measurement decided it, not a preference.
+ *
+ * 🔴 **`COUNTER_STROKE` is load-bearing, not decoration.** Removing it or thinning it drops the
+ * worst case to 1.01:1. `contrast-floor.test.ts` holds the whole relationship.
+ */
+export const COUNTER_FILL = '#f7e3b8';
+export const COUNTER_STROKE = '#1a1410';
+export const COUNTER_STROKE_PX = 6;
+
 export const HELP_BANNER_Y = HUD_MARGIN * 3 + HUD_PLATE.h;
 
 /**
