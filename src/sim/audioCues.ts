@@ -84,6 +84,10 @@ export const SILENT_EDGES = [
   'leftGround',
   'hitActive',
   'respawned',
+  // No cue yet. Inventory 3.6 owes a level-complete sting and 2.6's arrival is the better moment
+  // for one — but a generated cue is fal spend, so both stay silent and are recorded rather than
+  // quietly given the wrong sound.
+  'goalReached',
   'levelCompleted',
 ] as const satisfies readonly (keyof TickEvents)[];
 

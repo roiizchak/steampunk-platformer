@@ -25,8 +25,7 @@ import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
 import { drawLevelLayer } from './gameLevelDraw';
 import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor } from './gameLevelPick';
-import { onLevelCompleted } from './gameComplete';
-import { shouldRunCompletion } from './completionGate';
+import { runGoalFlow } from './gameComplete';
 import { drawGoal } from './goalLayer';
 import { createParallax, renderParallax, type ParallaxImage } from './gameParallax';
 import { applyFeelVariant, registerAnimations, renderPlayerSprite } from './gamePlayerDraw';
@@ -118,6 +117,8 @@ export class GameScene extends Phaser.Scene {
 
   /** Has the flow already run for this level? Reset in `init()`. See `completionGate.ts`. */
   private completionHandled = false;
+  /** Latch for the arrival flourish (inventory 2.6). Owned here; decided by `runGoalFlow`. */
+  private goalPulseFired = false;
 
   constructor(key = 'Game') {
     super(key);
@@ -275,22 +276,21 @@ export class GameScene extends Phaser.Scene {
       this.prevPlayer = null;
     }
 
-    // Phase 8. The trigger — the edge, plus the terminal-world fallback — and every reason for its
-    // shape live in `completionGate.ts`, which is where a unit test can reach them. `gameComplete.ts`
-    // owns the flow; the input flag and the handled flag stay here because this scene owns both.
-    if (shouldRunCompletion(events.levelCompleted, this.world.completed, this.completionHandled)) {
-      // Set BEFORE the flow runs, so a handler that throws is not re-entered every frame.
-      this.completionHandled = true;
-      this.playerInputEnabled = false;
-      onLevelCompleted({
-        scene: this,
-        ui: this.ui,
-        goalObject: this.goalObject,
-        world: this.world,
-        levelId: this.levelKey,
-        catalog: assetCatalog(this),
-      });
-    }
+    // Arrival flourish + completion flow, both edge-driven and latched — `gameComplete.ts` (2.6).
+    ({ pulseFired: this.goalPulseFired, handled: this.completionHandled } = runGoalFlow({
+      scene: this,
+      ui: this.ui,
+      goalObject: this.goalObject,
+      world: this.world,
+      levelId: this.levelKey,
+      catalog: assetCatalog(this),
+      events,
+      pulseFired: this.goalPulseFired,
+      handled: this.completionHandled,
+      onCompleted: () => {
+        this.playerInputEnabled = false;
+      },
+    }));
 
     // Cues come from the batch's OR-accumulated edges, which is what makes them survive a frame
     // that drained five ticks — the whole reason `TickEvents` exists rather than a state diff

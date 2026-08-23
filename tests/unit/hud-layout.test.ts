@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
+import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
@@ -71,6 +71,26 @@ describe('hudLayout is derived from the live game size', () => {
     // ~11 physical px stops being readable digits on a low-DPI screen.
     const layout = hudLayout(852, 480, HUD_SLOT);
     expect(layout.counter.fontPx).toBeGreaterThanOrEqual(11);
+  });
+
+  it('the CONTROLS BANNER stays legible at the smallest supported size too', () => {
+    // 🔴 Session inventory 2.5. `addHelpBanner` hard-coded `'18px'`, which is 18 x 0.444 = **8
+    // physical px** at 852 x 480 — a third under the same floor the counter above is measured
+    // against, and confirmed illegible in a playtest screenshot rather than inferred.
+    //
+    // The banner SHIPS: `helpLine()` deliberately keeps the mute keys and `ESC levels` in the
+    // shipped half, because "a mute control the player cannot discover is a mute control they do
+    // not have". An illegible banner is those controls not existing.
+    //
+    // Asserted against the same 0.444 scale `hudLayout` derives, so the two cannot drift apart.
+    const scale = hudLayout(852, 480, HUD_SLOT).scale;
+    expect(
+      HELP_FONT_PX * scale,
+      'the controls banner is under the legibility floor',
+    ).toBeGreaterThanOrEqual(11);
+    // And it must not have been "fixed" by growing past what one wrapped banner can show: above
+    // ~40 design px the DEV line needs three rows and starts eating the play area.
+    expect(HELP_FONT_PX).toBeLessThanOrEqual(40);
   });
 
   it('refuses a nonsense game size instead of laying out into it', () => {

@@ -123,6 +123,18 @@ export interface TickEvents {
    * overlay is the feedback, and a completion sting is Phase 9 work that costs fal spend against a
    * declared ceiling. It is not silent because nobody decided — see `SILENT_EDGES`.
    */
+  /**
+   * The player ARRIVED at the exit — the tick step 9d arms the run-in on, not the tick it finishes.
+   *
+   * Added 2026-08-23 *(session inventory 2.6)*. `levelCompleted` is **twenty ticks later** and one
+   * tick after the courier has finished fading out, so the exit's flourish was playing over an empty
+   * doorway: the *completed-it* animation where the *reached-it* one belongs.
+   *
+   * A real edge rather than a scene-side comparison, because the alternative is re-deriving one from
+   * two samples of `goalEntryTicks` across frames — and a frame that drains several ticks would step
+   * straight over the arming tick, which is the exact failure `advanceSplit` exists to prevent.
+   */
+  goalReached: boolean;
   levelCompleted: boolean;
 }
 
@@ -161,6 +173,7 @@ export function noEvents(): TickEvents {
     playerDied: false,
     enemyKilled: false,
     footstep: false,
+    goalReached: false,
     levelCompleted: false,
   };
 }

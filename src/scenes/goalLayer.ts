@@ -134,9 +134,13 @@ export function drawGoal(scene: Phaser.Scene, goal: Rect): Phaser.GameObjects.Ga
 /**
  * How long the exit's flourish runs. Shorter than `hudFade`'s fade, so it reads first.
  *
- * ⚠️ It fires on `levelCompleted`, which since the gate-art session is **twenty ticks after** the
- * player reached the door and one tick after the courier finished fading out. So it is the
- * *completed-it* flourish now, not the *reached-it* one, and it plays over an empty doorway.
+ * ✅ **It fires on the ARRIVAL edge since 2026-08-23** *(session inventory 2.6)*.
+ *
+ * It used to fire on `levelCompleted` — **twenty ticks after** the player reached the door and one
+ * tick after the courier finished fading out — so the *completed-it* flourish played over an empty
+ * doorway. `tick.ts` step 9d now emits `goalReached` on the tick the run-in arms, and
+ * `GameScene.update()` latches on that instead. The 20 ticks are the run-in itself, so the pulse now
+ * plays under a courier who is still there to see it.
  */
 export const GOAL_PULSE_TICKS = 16;
 

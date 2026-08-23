@@ -68,6 +68,25 @@ const COUNTER_GAP = 24;
 const COUNTER_FONT_PX = 44;
 
 /**
+ * The controls banner's type size, in DESIGN pixels *(session inventory 2.5, fixed 2026-08-23)*.
+ *
+ * 🔴 **It was `'18px'`, hard-coded in `gameDev.ts`, which is ~8 physical pixels at 852 × 480** — a
+ * third under the ~11 px floor the counter above is sized against, and confirmed illegible in a
+ * playtest screenshot rather than inferred.
+ *
+ * That matters more than it sounds: the banner **ships**, and it is the only place the game tells
+ * anyone the controls at all — `helpLine()`'s own comment says the mute keys and `ESC levels` are in
+ * the shipped half deliberately, because *"a mute control the player cannot discover is a mute
+ * control they do not have."* An illegible banner is those controls not existing.
+ *
+ * **28**, by the same arithmetic the counter uses: 28 × 0.444 = **12.4 physical px** at the smallest
+ * supported size, over the floor with a little room. Not larger, because the line is ~110 characters
+ * and ~150 in a DEV build — see `addHelpBanner`, which wraps rather than letting it run off the
+ * edge, which is what any size above this would do.
+ */
+export const HELP_FONT_PX = 28;
+
+/**
  * The gear icon beside the counter, square, in DESIGN pixels.
  *
  * **72, because that is exactly the size the gear sprite is authored at** — `GEAR_BOX.w` ×

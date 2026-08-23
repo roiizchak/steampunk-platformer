@@ -781,3 +781,75 @@ satisfied by a resolver that does nothing at all — which is what a behaviour-p
 to if nobody checks.
 
 **Revert confirmed** *(C12)*: suite **2248 / 0**.
+
+---
+
+## C5 / 2.5 — the controls banner was illegible, and it ships
+
+**Status: FIXED.**
+
+`addHelpBanner` hard-coded `fontSize: '18px'`. At 852 × 480 — the smallest size this project supports,
+a 0.444 scale — that is **8 physical pixels**, a third under the ~11 px floor the gear counter is
+sized against, and it was confirmed illegible in a playtest screenshot rather than inferred.
+
+**The first question the plan asked was whether the banner is dev-only. It is not — it ships**, and
+`helpLine()` says why in its own comment: the mute keys and `ESC levels` are in the shipped half
+deliberately, because *"a mute control the player cannot discover is a mute control they do not
+have."* This banner is the only place the game states its controls at all. An illegible one is those
+controls not existing.
+
+**`HELP_FONT_PX = 28`**, in `hud.ts` beside the counter's own sizing and derived the same way:
+28 × 0.444 = **12.4 physical px**. Not larger, because the line runs ~110 characters shipped and ~150
+in a DEV build — so it also gained `wordWrap` at the view width. Without the wrap the fix would just
+push the right-hand controls off the edge, which is the same defect in a bigger font.
+
+**Watched red with the shipped value** *(C1)*: `HELP_FONT_PX` back to 18 gives `PASS (21) FAIL (1)` —
+*"the controls banner is under the legibility floor: expected 8 to be greater than or equal to 11"*.
+The gate reads the scale from `hudLayout`, so it cannot drift from the counter's own measurement.
+
+⚠️ **The `setScrollFactor(0)`-on-a-`GameScene`-object half is NOT fixed** *(C11)*. Moving the banner
+to `UIScene` is scene plumbing with no observed defect behind it: the banner is created in
+`create()` and dies with the scene, so it has none of the HUD lifecycle problem vault 6.1 is about.
+Recorded, not chased.
+
+---
+
+## C6 / 2.6 — the exit's flourish played over an empty doorway
+
+**Status: FIXED, and it needed a new tick edge.**
+
+`animateGoalReached` was called from `onLevelCompleted`, which runs on `levelCompleted` — **twenty
+ticks after** the player reached the door and one tick after the courier finished fading out. The
+*completed-it* animation was playing where the *reached-it* one belongs. `goalLayer.ts` recorded the
+defect against itself and nobody moved it.
+
+### There was no arrival edge, and deriving one was not allowed
+
+`TickEvents` had `levelCompleted` and nothing earlier. The scene could have watched
+`world.goalEntryTicks` go `null` → number, but that is **re-deriving an event edge from two samples
+across frames** — and a frame that drains several ticks steps straight over the arming tick, which is
+precisely what `advanceSplit` exists to prevent.
+
+So step 9d emits `goalReached`, from two samples taken **inside the tick that causes the transition**
+— straddling one step, not one frame. `mergeEvents` walks the record rather than a field list, so it
+merges the moment `noEvents()` declares it; `SILENT_EDGES` gains it, with a note that 3.6's
+level-complete sting is the cue that belongs here and is unspent fal budget.
+
+**Gated on the tick count, not on existence** — *"an existence assertion cannot verify a timing
+claim"*, and the whole defect was a timing one. `completedTick - reachedTick === GOAL_ENTRY_TICKS`,
+derived from the knob so a retune does not leave a stale literal the way 4.2's table did.
+
+**Watched red with the shipped defect** *(C1)*: `events.goalReached = events.levelCompleted` gives
+`PASS (2251) FAIL (4)` — both timing assertions, by name.
+
+### ⚠️ `GameScene.ts` was at EXACTLY 400 lines with zero headroom
+
+Adding the arrival branch put it at 421 and reddened the 400-line rule, correctly. It has **no active
+`lines=N` citation**, so it was sitting on the limit exactly.
+
+The dispatch moved to `runGoalFlow` in `gameComplete.ts` — whose own header already claims this flow —
+rather than being trimmed back under by deleting comments, which the rule's own failure message
+forbids. That is 4.16 and T16's recorded pressure arriving again, not something new: `GameScene.ts`
+has been split six times and is full again.
+
+Suite **2255 / 0**, build green.

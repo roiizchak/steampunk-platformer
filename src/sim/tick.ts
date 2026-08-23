@@ -277,10 +277,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
   //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
   //     tick's motion. `worldDamage.ts` carries the full reasoning and the price that buys.
-  //     🔴 **The player's swing resolves FIRST. Pinned 2026-08-23, owner ruling** (inventory 1b.3),
-  //     after three phases ungated — swapping these two calls failed no test. The gate is
-  //     `tests/unit/tick-9b-order.test.ts`; it names the swap and was watched red under it.
-  //     What discriminates the order is the FREEZE, not the kill — see that file and `playerAttack.ts`.
+  //     🔴 The swing resolves FIRST — owner ruling, `tests/unit/tick-9b-order.test.ts` (inventory 1b.3).
   const swing = applyPlayerAttack(world);
   events.hitLanded = swing.hits > 0;
   events.enemyKilled = swing.kills > 0;
@@ -303,10 +300,13 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   //     carries all the reasoning — why completion belongs in the sim, why the `World.spawn`
   //     argument for the respawn is NOT the argument for this, and why the cancel is load-bearing.
   //     🔴 `motionRan` (Phase 9): a counter must not spend ticks inside a freeze — hold in `goal.ts`.
+  // 9d's ARRIVAL edge (inventory 2.6): both samples straddle the arming step INSIDE its own tick.
+  const entryWas = world.goalEntryTicks;
   if (stepGoalEntry(world, motionRan)) {
     world.completed = true;
     events.levelCompleted = true;
   }
+  events.goalReached = entryWas === null && world.goalEntryTicks !== null;
 
   // 10. Window arming. Opening coyote requires having WALKED off — a jump closed the window at
   //     step 8 and must not reopen it here, or every jump would buy a second one in mid-air.
