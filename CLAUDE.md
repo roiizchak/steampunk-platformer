@@ -25,8 +25,9 @@ provisional and is the number to distrust"*. **`stridePxPerCycle` has been dead 
 nothing reads it for timing — so that sentence pointed a reader's suspicion at a number that cannot
 affect anything. The live locomotion figures are `FOOT_PX_PER_FRAME` and `LOCOMOTION_TICKS_PER_FRAME`
 in `src/sim/playerTuning.ts`, pinned against the prose beside them by
-`tests/unit/tuning-prose.test.ts`. **The number to distrust is the `brass-courier` jump/fall art**,
-which measures 69 % of idle height and is the open item.
+`tests/unit/tuning-prose.test.ts`. **The number to distrust is `brass-courier/fall`**, which still
+judders — a 74 px frame-to-frame height spread. `jump` was re-shot 2026-08-23 and now draws at 82.9 %
+of idle, the first jump take to pass G6.
 
 Windows. Default shell is PowerShell; the Bash tool takes POSIX syntax.
 

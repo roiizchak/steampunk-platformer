@@ -61,33 +61,55 @@ export function gateAdjacentDistinct(frames, floor = ADJACENT_FLOOR, accepted = 
   if (frames.length < 2) {
     return verdict(INDETERMINATE, null, 'fewer than two frames — no adjacent pair to compare');
   }
+  /**
+   * EVERY pair below the floor, not just the worst — Codex implementation review, HIGH.
+   *
+   * Keeping only the minimum meant a sheet with an ACCEPTED worst pair could hide a second,
+   * undeclared repeat behind it: the allowance excused the pair it named and the gate never looked
+   * at the other one. An exception table that launders its neighbours is the thing
+   * `ACCEPTED_EDGE_BLEED`'s shape exists to prevent.
+   */
+  const below = [];
   let worst = Number.POSITIVE_INFINITY;
   let worstPair = '';
   for (let i = 1; i < frames.length; i += 1) {
     const step = frameDifference(frames[i - 1], frames[i]);
+    const pair = `${i - 1}-${i}`;
+    if (step < floor) below.push({ pair, step });
     if (step < worst) {
       worst = step;
-      worstPair = `${i - 1}-${i}`;
+      worstPair = pair;
     }
+  }
+  // Anything below the floor that the declared exception does not name fails, whatever the worst is.
+  const undeclared = below.filter((b) => !(accepted && accepted.pair === b.pair));
+  if (undeclared.length > 0) {
+    const named = undeclared.map((b) => `${b.pair} (${b.step.toFixed(5)})`).join(', ');
+    return verdict(
+      FAIL,
+      worst,
+      `${undeclared.length} adjacent pair(s) below ${floor} with no declared exception: ${named} — ` +
+        'the sheet repeats a pose',
+    );
   }
   if (worst >= floor) {
     return verdict(PASS, worst, `closest adjacent pair ${worstPair} differs by ${worst.toFixed(5)} >= ${floor}`);
   }
-  // A declared repeat passes only for the pair it names, and only if it has not got worse. Both
-  // halves matter: without the pair check an accepted entry would excuse a repeat somewhere else in
-  // the same sheet, and without the value check it would excuse that pair degrading to a freeze.
-  if (accepted && accepted.pair === worstPair && worst >= accepted.measured * 0.5) {
+  // Everything below the floor is declared. It is still not a blank cheque: an accepted pair that
+  // degrades well past its recorded value is a freeze, not the repeat that was agreed to.
+  if (accepted && worst < accepted.measured * 0.5) {
     return verdict(
-      PASS,
+      FAIL,
       worst,
-      `frames ${worstPair} differ by only ${worst.toFixed(5)} — ACCEPTED repeat, see ` +
-        'ACCEPTED_POSE_REPEATS (the run retune bought this deliberately)',
+      `frames ${worstPair} differ by only ${worst.toFixed(5)}, far below the ` +
+        `${accepted.measured} recorded for this pair — an accepted repeat has become a freeze`,
     );
   }
   return verdict(
-    FAIL,
+    PASS,
     worst,
-    `frames ${worstPair} differ by only ${worst.toFixed(5)} < ${floor} — the sheet repeats a pose`,
+    `frames ${worstPair} differ by only ${worst.toFixed(5)} — ACCEPTED repeat, see ` +
+      'ACCEPTED_POSE_REPEATS (the run retune bought this deliberately)',
   );
 }
 

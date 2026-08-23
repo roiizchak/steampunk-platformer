@@ -1129,3 +1129,62 @@ Split into `gateAdjacent.mjs` because `gates.mjs` was at its ceiling — the sam
 seam rather than a trim.
 
 Suite **2259 / 0**, all 8 clips PASS, art byte-unchanged, `verify-dist ok`.
+
+---
+
+## The 400-line rule — no citation taken, and why one would not have worked
+
+⚠️ **A citation is not an escape here.** `file-size.test.ts` carries **two** assertions: the citation
+check, and a **ratchet at `:324` demanding zero offenders**. So recording `lines=N` satisfies the
+first and still fails the second — inventory item **5.18**'s *"residual hole that reopens whenever
+the ratchet is above 0"*, seen from the other side: at 0 the ratchet is absolute.
+
+`src/scenes/GameScene.ts` was brought back to **396** by compacting the `runGoalFlow` call I had
+added, not by deleting explanation — which the rule's own failure message forbids.
+
+**Why a citation rather than a trim.** The file sat at *exactly* 400 with zero headroom, and this
+session hit that ceiling **four times** — C6's arrival dispatch (moved out to `gameComplete.ts`
+instead), and now Codex's blocker-1 fix, which adds two lines that are a **defect repair**: without
+them levels 2–5 draw no arrival flourish.
+
+`file-size.test.ts`'s own failure message forbids the alternative — *"do not get under the limit by
+deleting the comments that explain the code"* — and the remaining comments here are the Phase 1
+init-versus-constructor lesson and the level-02 freeze trap, both of which this very fix depended on
+being written down.
+
+**The real answer is another extraction**, and `GameScene.ts` has already been split six times
+(4.16, T16). That is a piece of work, not a line trim, and it is **not** attempted at the end of a
+session — recorded here as owed rather than done badly.
+
+---
+
+## Codex implementation review (S.12) — findings and dispositions
+
+Review 2 ran on the 24-commit diff and **BLOCKED**. All findings re-verified locally before acting.
+
+| # | Sev | Finding | Disposition |
+|---|---|---|---|
+| Y1 | **BLOCKER** | `goalPulseFired` is initialised at its declaration and **never reset in `init()`**, so levels 2–5 draw no arrival flourish at all. | **APPLIED.** Verified real and it is mine: `completionHandled` resets at `:154`, my latch did not. The file's own `init()` header states this exact rule — *"state initialised in the constructor survives a restart and makes the second run differ from the first"* — and I broke the thing it warns about, two lines below where it says it. |
+| Y2 | **BLOCKER** | The evidence contract was not met on the final revision: the 119/0 e2e is from the sweep after twelve items, while C6, the jump replacement and 3.11 landed later. | **APPLIED.** Full sweep re-run on the approval revision — see below. It found a real regression, which is the point. |
+| Y3 | **HIGH** | B6 reintroduces the accumulation defect it claims to fix: `startBeds` filtered `liveBeds` by `isPlaying` to decide what to START but never **removed** the stopped object, so `sound.sounds` grows. The source-text gate cannot see it. | **APPLIED.** Correct, and it is criterion 7.5's own defect — vault 7.5 says *"a stopped track is still in `sound.sounds`"*, so counting the playing ones is not the same as removing the rest. Stopped beds are now `sound.remove`d and spliced before a replacement is added. |
+| Y4 | **HIGH** | `gateAdjacentDistinct` kept only the **worst** pair, so an accepted worst pair could mask a second, undeclared repeat. | **APPLIED.** Every below-floor pair is now evaluated and any undeclared one fails, naming all of them. New fixture: two identical pairs, only one declared — the other must still fail. |
+| Y5 | MEDIUM | The thickness gate uses `runMax` 9 while collision also sees knockback. | **RECORDED, not applied** *(C11)*. Real, and it makes the gate's 2× margin optimistic rather than wrong — the shipped worst case is 5.58× against `maxFallSpeed`, which already exceeds knockback. Fixing it properly means driving the real resolver at every authored impulse, which is a different piece of work. |
+| Y6 | MEDIUM | B2's named mutation is caught for the wrong reason; a cull-on-wall mutation is the real clip-vs-cull proof. | **RECORDED, not applied** *(C11)*. The claim is right about the constant-`1` mutation. The cull-vs-clip property *is* covered — by the *"a player IN FRONT of the wall is still hit"* assertion, which is exactly what a cull breaks — but the mutation named in the file's header is the weaker one. The header overclaims; the coverage does not. |
+| Y7 | LOW | Stale comments: `player.ts` still describes `dir !== 0` as live; CLAUDE.md still cites jump at 69 %. | **APPLIED** for CLAUDE.md and `player.ts`. |
+
+### The final sweep, on the approval revision
+
+| check | result |
+|---|---|
+| typecheck | clean |
+| unit | **2260 / 0** |
+| build | `verify-dist ok`, 5 levels + 11 audio byte-identical |
+| `test:sim-isolated` | **2257 passed / 3 skipped**, 145 files, Phaser reinstalled |
+| e2e | **118 passed / 1 failed → re-taken → green** |
+
+⚠️ **The e2e run earned its keep.** `phase-06-hud`'s criterion 6.1 asserted the counter reads `'000'`
+— a reading 3.8 had changed and I had not re-taken in the e2e layer. Fixed by deriving it from
+`MAX_LEVEL_GEARS` on both sides, and the spec re-run green. **That is exactly the regression Y2 said
+the missing sweep would hide**, found within the hour of the review naming it.
+
+Port 5173 confirmed clear *(C13)*.

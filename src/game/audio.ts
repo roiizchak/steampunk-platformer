@@ -153,7 +153,25 @@ export function createAudio(scene: Phaser.Scene, catalog: AssetCatalog): AudioMa
       // and the cache disagree — worth not crashing over, and worth not pretending about either.
       console.warn(`[audio] bed "${key}" is not in the cache; continuing without it`);
     }
-    const playing = liveBeds.filter((bed) => bed.isPlaying).map((bed) => bed.key);
+    /**
+     * 🔴 **Remove a stopped bed before replacing it** — Codex implementation review, HIGH.
+     *
+     * The first version filtered `liveBeds` by `isPlaying` to decide what to START and left the
+     * stopped object in both `liveBeds` and `sound.sounds`, then pushed a replacement beside it.
+     * That is criterion **7.5's** accumulation defect reintroduced by the fix meant to avoid it:
+     * vault 7.5 is explicit that *"a stopped track is still in `sound.sounds`"*, so counting only
+     * playing ones is not the same as removing the rest.
+     *
+     * `sound.remove`, not `stop` — for the same reason the teardown uses it.
+     */
+    for (let i = liveBeds.length - 1; i >= 0; i -= 1) {
+      const bed = liveBeds[i];
+      if (bed !== undefined && !bed.isPlaying) {
+        sound.remove(bed);
+        liveBeds.splice(i, 1);
+      }
+    }
+    const playing = liveBeds.map((bed) => bed.key);
     for (const key of bedsToStart((k) => scene.cache.audio.exists(k), playing)) {
       const bed = sound.add(key, { loop: true, volume: gains.get(key) ?? 1 });
       bed.play();

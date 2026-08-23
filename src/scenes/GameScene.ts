@@ -149,9 +149,11 @@ export class GameScene extends Phaser.Scene {
     // ⚠️ `ElementEditorScene` sets it back to `false` in `create()`, which runs AFTER `init()`, so
     // the dev tool is unaffected.
     this.playerInputEnabled = true;
-    // Same trap, same defence: a scene instance that already ran one completion flow would refuse
-    // to run the next, freezing level-02 permanently the moment it is reached.
+    // Same trap, same defence, and BOTH latches need it: a scene instance that already ran one
+    // completion flow would refuse the next, freezing level-02 the moment it is reached — and an
+    // unreset pulse latch draws no arrival flourish from level-02 on (Codex impl review, blocker 1).
     this.completionHandled = false;
+    this.goalPulseFired = false;
   }
 
   create(): void {
@@ -277,19 +279,13 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Arrival flourish + completion flow, both edge-driven and latched — `gameComplete.ts` (2.6).
+    const onCompleted = (): void => {
+      this.playerInputEnabled = false;
+    };
     ({ pulseFired: this.goalPulseFired, handled: this.completionHandled } = runGoalFlow({
-      scene: this,
-      ui: this.ui,
-      goalObject: this.goalObject,
-      world: this.world,
-      levelId: this.levelKey,
-      catalog: assetCatalog(this),
-      events,
-      pulseFired: this.goalPulseFired,
-      handled: this.completionHandled,
-      onCompleted: () => {
-        this.playerInputEnabled = false;
-      },
+      scene: this, ui: this.ui, goalObject: this.goalObject, world: this.world,
+      levelId: this.levelKey, catalog: assetCatalog(this), events, onCompleted,
+      pulseFired: this.goalPulseFired, handled: this.completionHandled,
     }));
 
     // Cues come from the batch's OR-accumulated edges, which is what makes them survive a frame

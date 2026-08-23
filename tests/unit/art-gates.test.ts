@@ -158,7 +158,7 @@ describe('motion floor and loop wrap are separate questions (vault 4.23, criteri
     const repeats = [frame(0), frame(80), frame(160), frame(160), frame(240)];
     expect(gateMotionFloor(repeats).status).toBe(PASS);
     expect(gateAdjacentDistinct(repeats).status).toBe(FAIL);
-    expect(gateAdjacentDistinct(repeats).reason).toMatch(/frames 2-3/);
+    expect(gateAdjacentDistinct(repeats).reason).toMatch(/2-3/);
   });
 
   it('a declared repeat passes, but only for ITS pair and only if it has not got worse', () => {
@@ -176,6 +176,23 @@ describe('motion floor and loop wrap are separate questions (vault 4.23, criteri
     expect(
       gateAdjacentDistinct(repeats, undefined, { pair: '2-3', measured: 0.00011 }).status,
     ).toBe(FAIL);
+  });
+
+  /**
+   * Codex implementation review, HIGH: the gate kept only the WORST pair, so a sheet with an
+   * accepted worst pair could hide a second, undeclared repeat behind it. An exception that
+   * launders its neighbours is what `ACCEPTED_EDGE_BLEED`'s shape exists to prevent.
+   */
+  it('an accepted pair does not launder a SECOND undeclared repeat in the same sheet', () => {
+    // Two repeats: 2-3 (identical, the worst) and 5-6 (identical too). Declaring only 2-3 must not
+    // excuse 5-6.
+    const twoRepeats = [
+      frame(0), frame(60), frame(120), frame(120), frame(180), frame(240), frame(240), frame(255),
+    ];
+    const accepted = { pair: '2-3', measured: 0 };
+    const v = gateAdjacentDistinct(twoRepeats, undefined, accepted);
+    expect(v.status, "the undeclared 5-6 repeat was excused by 2-3 allowance").toBe(FAIL);
+    expect(v.reason).toMatch(/5-6/);
   });
 
   it('the shipped acceptances name real pairs, so the table cannot rot into decoration', () => {
