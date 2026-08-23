@@ -131,11 +131,19 @@ export const GOAL_ENTRY_TICKS = 20;
  * **The dead zone is one tick's travel.** Without it a body moving `runMax` px/tick oscillates
  * around the centre forever, never settling, because `sign()` flips every time it crosses.
  *
- * ponytail: for the last few ticks of a fast entry the player then stands still while
- * `playerView` still says `run` — foot-slide, the thing this project hates. Accepted here and
- * recorded rather than hidden: alpha is <= 0.25 by that point and the character is inside a dark
- * opening. The upgrade path, if a playtest ever says it reads, is a deceleration ramp over the
- * last few ticks rather than a hard dead zone.
+ * ✅ **The foot-slide this used to accept is GONE, and the ramp was not needed** *(session
+ * inventory 2.8, 2026-08-23)*. The paragraph read: *"for the last few ticks of a fast entry the
+ * player then stands still while `playerView` still says `run` … the upgrade path, if a playtest
+ * ever says it reads, is a deceleration ramp over the last few ticks rather than a hard dead zone."*
+ *
+ * The dead zone is unchanged. What changed is item 2.3 — `resolveState` no longer takes
+ * `dir !== 0`, so a stationary body reads `idle` whatever key is held, exactly as `player.ts`
+ * predicted: *"fix that and both readings agree without this function knowing anything about it."*
+ *
+ * Measured in the worst case the old paragraph described — spawning ON the goal centre, so the dead
+ * zone holds for the whole 21-tick run-in: **zero** ticks of zero travel while the state says `run`.
+ * Gated by `tests/unit/goal-reached-edge.test.ts`, so neither the dead zone nor `movingHorizontally`
+ * can quietly bring it back.
  */
 export function goalEntryDir(world: World): -1 | 0 | 1 {
   const goal = world.goal;

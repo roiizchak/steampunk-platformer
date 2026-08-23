@@ -853,3 +853,33 @@ forbids. That is 4.16 and T16's recorded pressure arriving again, not something 
 has been split six times and is full again.
 
 Suite **2255 / 0**, build green.
+
+---
+
+## C8 / 2.8 — the gate run-in's foot-slide, closed by C2 without the ramp
+
+**Status: FIXED — by item 2.3, and the upgrade path the comment named was not needed.**
+
+`goal.ts` carried the repository's only `ponytail:` comment, accepting the slide and naming its own
+upgrade path: *"a deceleration ramp over the last few ticks rather than a hard dead zone."*
+
+**The dead zone is unchanged and the ramp was not built.** What changed is 2.3 — `resolveState` no
+longer takes `dir !== 0`, so a stationary body reads `idle` whatever key is held. `player.ts`
+predicted it exactly: *"fix that and both readings agree without this function knowing anything about
+it."*
+
+**Measured before deciding**, in the worst case the comment describes — spawning **on** the goal
+centre so the dead zone holds for the entire 21-tick run-in:
+
+| | before 2.3 | now |
+|---|---|---|
+| run-in ticks with **zero travel** | 13 of 21 | 13 of 21 |
+| …of those, published as `run` | **all of them** | **0** |
+
+The body still stands still; it simply no longer claims to be running while doing it — which was the
+whole complaint. Gated in `goal-reached-edge.test.ts` so neither the dead zone nor
+`movingHorizontally` can bring it back quietly.
+
+The `ponytail:` comment is closed in place with the measurement, rather than deleted.
+
+Suite **2256 / 0**.

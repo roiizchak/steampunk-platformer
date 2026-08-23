@@ -118,3 +118,61 @@ describe('the arrival edge (inventory 2.6)', () => {
     expect(fired, 'the arrival edge fired without an arrival').toBe(false);
   });
 });
+
+/**
+ * # The gate run-in no longer foot-slides (inventory 2.8)
+ *
+ * `goal.ts:134-138` carries the repository's only `ponytail:` comment:
+ *
+ * > *for the last few ticks of a fast entry the player then stands still while `playerView` still
+ * > says `run` — foot-slide, the thing this project hates. Accepted here and recorded rather than
+ * > hidden … the upgrade path, if a playtest ever says it reads, is a deceleration ramp over the
+ * > last few ticks rather than a hard dead zone.*
+ *
+ * **The ramp was not built, and does not need to be.** The dead zone is unchanged; what changed is
+ * item **2.3** — `resolveState` no longer takes `dir !== 0`, so a stationary body reads `idle`
+ * whatever key is held. `player.ts` predicted exactly this: *"fix that and both readings agree
+ * without this function knowing anything about it."*
+ *
+ * Measured before deciding, in the worst case the comment describes — spawning **on** the goal
+ * centre, so the dead zone holds for the entire 21-tick run-in: **zero** ticks of zero travel while
+ * the state says `run`, where before it would have been all of them.
+ *
+ * This is the gate for that, so a future change to either the dead zone or `movingHorizontally`
+ * cannot quietly bring the slide back.
+ */
+describe('the gate run-in does not foot-slide (inventory 2.8)', () => {
+  it('never publishes a locomotion state on a tick the body did not move', () => {
+    // Spawned ON the goal centre: `goalEntryDir` returns 0 from the first tick, so the whole run-in
+    // is stationary. The limit case, not a typical approach.
+    const world = createWorld({
+      seed: 1,
+      scale: SCALE,
+      solids: FLOOR,
+      bounds: BOUNDS,
+      spawn: { x: GOAL.x + GOAL.w / 2, y: 2000 },
+      goal: GOAL,
+    });
+    const input = createSnapshot();
+
+    let runIn = 0;
+    let slid = 0;
+    for (let i = 0; i < 200; i += 1) {
+      const before = world.player.x;
+      const events = advance(world, input, 1);
+      if (world.goalEntryTicks !== null) {
+        runIn += 1;
+        if (world.player.x === before && (world.player.state === 'run' || world.player.state === 'walk')) {
+          slid += 1;
+        }
+      }
+      if (events.levelCompleted) break;
+    }
+
+    // Non-vacuity first: a run-in that never armed would make the count trivially zero.
+    expect(runIn, 'the run-in never armed, so no foot-slide was possible either way').toBeGreaterThan(
+      10,
+    );
+    expect(slid, 'the player drew a locomotion cycle while standing still in the gate').toBe(0);
+  });
+});
