@@ -883,3 +883,101 @@ whole complaint. Gated in `goal-reached-edge.test.ts` so neither the dead zone n
 The `ponytail:` comment is closed in place with the measurement, rather than deleted.
 
 Suite **2256 / 0**.
+
+---
+
+## C1 / 2.1 + 2.2 — the courier's jump and fall: measured in full, and NOT re-shot
+
+**Status: MEASURED, root-caused, and STOPPED for an owner decision. No fal spend made — and the
+authorized ~$1.19 would very likely have been wasted.**
+
+### The owner's 69% is confirmed, and the cause is not where it looked
+
+Drawn figure height off the shipped sheets, in packed pixels:
+
+| clip | frames | drawn height | of idle | frame spread |
+|---|---|---|---|---|
+| idle | 12 | **288.1** | 100% | 2 px |
+| walk | 24 | 288.9 | 100% | 6 px |
+| run | 15 | 275.7 | 96% | 18 px |
+| **jump** | 6 | **199.7** | **69.3%** | 29 px |
+| **fall** | 9 | 230.6 | 80.0% | **74 px** |
+
+**It is not a packing error.** Both idle and jump come from the same *unpadded* anchor and pack at the
+same slug scale `0.23723229`. The project's own tool gives the source heights:
+
+```
+idle  mean 1214 source px  (spread  0.8%)
+jump  mean  842 source px  (spread 14.3%)
+```
+
+**The model drew the figure at 69% in the source video itself.**
+
+### `_actionScale` is the obvious fix and it is the WRONG one — measured, not guessed
+
+`HANDOFF.md:107` already says *"Jump has no `_actionScale` override and may need one"*; `fall` has one
+(0.6) and jump does not. `build-assets.mjs … --derive-scale` duly prints **0.34204276**.
+
+⚠️ **Pasting it would be a bug, for the reason `character-bounds.json` already documents at length**
+— a mean across a deforming action is not a standing-height measurement, and doing it for `fall`
+*"would have drawn the courier 25% LARGER in the air than on the ground, a pop the instant he leaves
+the floor."*
+
+The decisive check is a **pose-invariant** feature. A tuck bends legs; it does not resize a skull:
+
+| clip | head width (packed px) | per frame |
+|---|---|---|
+| idle | **39.9** | 40, 39, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40 |
+| jump | **125.8** | 66, 71, **166, 190, 189**, 73 |
+
+Two findings in one measurement:
+
+1. **The head is 1.65× too big** even in the frames where the top blob plausibly *is* the head
+   (66–73 against 40). So the courier is drawn **larger and curled**, not smaller — the opposite of
+   what the height alone suggests.
+2. **In frames 2–4 the topmost part of the figure is not the head at all** (166–190 px wide). Something
+   — an arm, a leg — is above it. That is the somersault tendency `motionAirborne.mjs` records
+   fighting, showing up in the *shipped* clip rather than only in the rejected regenerations.
+
+**So no packing scale can fix this.** Match the height and the head gets worse; match the head and the
+body shrinks. The clip is off-model in proportion, and that is a generation defect.
+
+### Why the re-shoot was NOT run
+
+`motionAirborne.mjs` carries the history in detail, and it is a warning:
+
+- a monotonicity clause was added → **the jump somersaulted**, frame 4 fully inverted, *"straight
+  through five explicit negations"*;
+- a *"motion has already begun"* clause was added → onset moved from frame 5 to frame **15**, later;
+- both reverted, with the conclusion stated: ***"the non-monotonic middle is a real defect and is
+  still open; the fix is NOT a stronger instruction in this paragraph."***
+
+And the prompt's most likely culprit is a line that is there **on purpose**: `UPRIGHT_IN_AIR` requires
+*"plain green above his head and plain green below his boots in every frame"* and *"no part of him is
+ever cut off by any edge"* — which idle does not require, and which forces the model to fit the
+figure inside two margins. Removing it re-opens cropped limbs; strengthening it is what backfired
+twice.
+
+⚠️ It also lives in the prompt template that `style-lock.test.ts` hashes, so changing it is an
+**approval checkpoint**, not a tweak.
+
+**Also relevant to the owner's instruction that the re-shot clips must use the same character as the
+rest:** the IDENTITY clause in `jump.prompt.txt` is *already identical* to `idle.prompt.txt`'s —
+same face, same goggles, same pauldron, same palette — and the clip still came back off-model in
+proportion. So identity wording alone will not buy consistency here; that is the measurement's
+warning about a naive re-shoot.
+
+### What is owed
+
+A decision, not more analysis:
+
+1. **Re-shoot with a corrected framing clause** — needs a STYLE.md §4 change (approval), and carries
+   the documented risk of a worse take.
+2. **Re-extract from `jump-r2.mp4` / `fall-r2.mp4`**, which are **already on disk** — no new spend.
+   Their extraction is what *"fails G6 on frames 0–4"*; the shipped sheets pass every gate today, so
+   this trades a clean gate for possibly better art.
+3. **Leave it**, with the measurement now on record.
+
+⚠️ **`assets:build` was re-run during this investigation and is byte-identical** — `git status` clean
+across `public/assets/`. That incidentally verifies 4.15's *"success is byte-identical PNGs"* claim,
+which nothing had checked.
