@@ -62,10 +62,15 @@ export function stepEnemies(world: World): void {
     releaseAggro(scavenger);
   }
 
+  // `world.solids` since 2026-08-23: a bolt now stops at a wall instead of flying through it
+  // (inventory 1.2). Passing them is the whole wiring — the clip lives in `stepProjectiles`, and a
+  // `solids` argument that never arrived would leave the feature a decision function with no
+  // consumer, which is this project's most expensive recurring defect.
   world.projectiles = stepProjectiles(
     world.projectiles,
     world.bounds.widthPx,
     world.bounds.heightPx,
+    world.solids,
   );
 
   for (const sentry of world.enemies.sentries) {

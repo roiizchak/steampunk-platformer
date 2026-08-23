@@ -118,6 +118,31 @@ export function segmentHitsRect(
   toY: number,
   box: Rect,
 ): boolean {
+  return segmentHitTime(fromX, fromY, toX, toY, box) !== null;
+}
+
+/**
+ * **When** along the segment the box is first touched — `0…1`, or `null` for no contact.
+ *
+ * The same slab clip as `segmentHitsRect`, which is now a thin wrapper over it: two copies of this
+ * arithmetic would be two definitions that agree until they do not *(vault 5.3)*, and this one is
+ * strictly more informative.
+ *
+ * Added 2026-08-23 for the bolt-versus-wall fix *(session inventory 1.2)*. A boolean cannot answer
+ * the question that fix turns on — a bolt and a player can BOTH be on this tick's segment, and which
+ * comes first decides whether the hit counts. Codex plan review X2 named it: filtering every
+ * projectile that touched any wall would erase a hit that had already happened.
+ *
+ * `tMin` is clamped at 0 by the loop below, so a segment starting inside the box reports `0` —
+ * "already touching" — rather than a negative time.
+ */
+export function segmentHitTime(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  box: Rect,
+): number | null {
   let tMin = 0;
   let tMax = 1;
 
@@ -134,12 +159,12 @@ export function segmentHitsRect(
   };
 
   if (!clip(fromX, toX - fromX, box.x, box.x + box.w)) {
-    return false;
+    return null;
   }
   if (!clip(fromY, toY - fromY, box.y, box.y + box.h)) {
-    return false;
+    return null;
   }
-  return tMin <= tMax;
+  return tMin <= tMax ? tMin : null;
 }
 
 /**

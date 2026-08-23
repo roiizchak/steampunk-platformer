@@ -12,9 +12,27 @@
  * ## Deliberately not a physics body
  *
  * It flies in a straight line at a constant speed, AIMED IN 2D at the player at the moment it is
- * fired. No gravity, no collision against solids. A shot that stops at a wall would be a better
- * game and a worse first version: it needs the solid list, an ordering decision against the
- * player's own motion, and a second swept test. Recorded as a knowing simplification.
+ * fired. **No gravity.**
+ *
+ * ✅ **It DOES stop at solids, since 2026-08-23** *(session inventory 1.2)*. This paragraph read
+ * *"no collision against solids… it needs the solid list, an ordering decision against the player's
+ * own motion, and a second swept test"* and was deferred every session from Phase 5 on.
+ *
+ * All three of those turned out to be smaller than they read:
+ *
+ *  - **the solid list** — one optional argument to `stepProjectiles`, defaulting to none, so every
+ *    existing caller and fixture is untouched;
+ *  - **the ordering decision** — *not* about the tick contract, which already runs projectile flight
+ *    at step 4a. It is **time of impact along one segment**: a player in front of the wall keeps
+ *    their hit, a player behind it does not get one. Resolved by **clipping** the segment at the
+ *    wall and marking the bolt spent, rather than culling it — culling at 4a would silently cancel a
+ *    hit the player had already earned, and step 9b still has to read the shortened segment;
+ *  - **the second swept test** — `segmentHitTime` in `hazards.ts`, which `segmentHitsRect` now wraps
+ *    so there is one copy of the slab arithmetic, not two *(vault 5.3)*.
+ *
+ * The nearest solid wins, by time rather than by list order. Gated by
+ * `tests/unit/projectile-solids.test.ts`, including a wiring test through the real `tick()` —
+ * without which dropping `world.solids` from the live call left all 2239 tests green.
  *
  * **The 2D aim is not polish — a horizontal-only shot made the turret decorative.** The sentry in
  * `level-01` stands on a ledge 384 px above the ground, so a shot travelling flat passes over a
@@ -24,7 +42,7 @@
  * Distances are pixels and speeds are px/tick, like everything else in `src/sim/` (vault 2.1).
  */
 
-import { segmentHitsRect } from './hazards';
+import { segmentHitTime, segmentHitsRect } from './hazards';
 import type { Rect } from './types';
 
 export interface Projectile {
@@ -43,6 +61,15 @@ export interface Projectile {
   vx: number;
   vy: number;
   damage: number;
+  /**
+   * Struck a solid on the tick just resolved, and must not fly again *(inventory 1.2)*.
+   *
+   * It is kept for the REMAINDER of that tick rather than deleted, because step 9b's swept damage
+   * test still has to read the shortened segment: a player standing between the sentry and the wall
+   * earned that hit before the bolt reached the wall, and culling here would silently cancel it.
+   * Dropped at the top of the next `stepProjectiles`.
+   */
+  spent?: boolean;
 }
 
 /**
@@ -88,16 +115,51 @@ export function stepProjectiles(
   projectiles: readonly Projectile[],
   widthPx: number,
   heightPx: number,
+  /**
+   * The world's solids. Optional and defaulting to none so every existing caller and fixture keeps
+   * working — a bolt with no walls to hit behaves exactly as it did before.
+   */
+  solids: readonly Rect[] = [],
 ): Projectile[] {
   const alive: Projectile[] = [];
   for (const projectile of projectiles) {
-    const moved = {
+    // A bolt that struck a wall last tick has already been read by step 9b. Its flight is over.
+    if (projectile.spent === true) {
+      continue;
+    }
+    const moved: Projectile = {
       ...projectile,
       prevX: projectile.x,
       prevY: projectile.y,
       x: projectile.x + projectile.vx,
       y: projectile.y + projectile.vy,
     };
+
+    /**
+     * 🔴 **Stop at the wall — CLIP the segment, do not delete the bolt** *(inventory 1.2)*.
+     *
+     * The NEAREST solid, by time of impact along this tick's segment, not the first one the level
+     * happens to declare. `segmentHitTime` exists for exactly this: a boolean cannot order two
+     * contacts on one segment, and the ordering is the whole feature — a player in front of the wall
+     * keeps their hit, a player behind it does not get one.
+     */
+    let earliest: number | null = null;
+    for (const solid of solids) {
+      const t = segmentHitTime(moved.prevX, moved.prevY, moved.x, moved.y, solid);
+      if (t !== null && (earliest === null || t < earliest)) {
+        earliest = t;
+      }
+    }
+    if (earliest !== null) {
+      moved.x = moved.prevX + (moved.x - moved.prevX) * earliest;
+      moved.y = moved.prevY + (moved.y - moved.prevY) * earliest;
+      moved.spent = true;
+      // Kept this tick on purpose — 9b still has to see the shortened segment. It is dropped by the
+      // guard at the top of the loop on the next call.
+      alive.push(moved);
+      continue;
+    }
+
     // Culled on BOTH axes. Culling on x alone leaks every shot fired downward off a ledge, and a
     // leak is invisible until the frame budget measurement in 5.11 asks why it moved.
     if (moved.x >= 0 && moved.x <= widthPx && moved.y >= 0 && moved.y <= heightPx) {
