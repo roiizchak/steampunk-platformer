@@ -118,8 +118,15 @@ Legend: **OPEN** · **FIXED** (already, with the line that fixed it) · **STALE*
 | **STALE premise** | 2 | 5.14 · 5.22 |
 | **CONTRADICTS A RULING** | 1 | 2b.1 — permanent aggro is by design |
 | **OPEN, but the inventory's stated cause or fix is wrong** | 4 | 1.1 (units wrong by 6×) · 1.2 (already in step 4a, no tick insert) · 1b.3 (its proposed gate cannot discriminate) · 1b.6 (spikes are not the trigger) |
-| **OPEN as described** | ~28 | |
-| **not yet reconciled** | ~12 | 2b.8 · 4.5 · 4.6 · most of Tier 5 |
+| **OPEN as described** | 38 | |
+| **not yet reconciled** | **24** | 2b.8 · 4.5 · 4.6 · 5.2–5.13 · 5.15–5.18 · 5.20 · 5.21 · 5.24–5.26 |
+
+⚠️ **That last row said `~12` and `most of Tier 5` until the S.0 gate owner counted it.** The true
+figure is **24 of 73 — a third of the inventory**, and *"most of Tier 5"* is exactly the summary the
+plan forbids: every unreached item is named individually, in
+[`session-bugfix-tiers-02-gate-owners.md` § S.13](session-bugfix-tiers-02-gate-owners.md). A remainder
+under-reported by 2× makes the next session plan against a number wrong in the direction that flatters
+this one.
 
 **Seven items would have been implemented as bugs that are not bugs**, and one of those would have
 reversed a design ruling. Four more would have been implemented from a wrong cause. That is A0's
