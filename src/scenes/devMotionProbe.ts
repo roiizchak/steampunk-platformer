@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import { MS_PER_TICK } from '../game/constants';
+import { DEFAULT_TUNING } from '../sim/playerTuning';
 
 /**
  * DEV-ONLY falsification probe for the "ghost / double image" report (`?probe=1`).
@@ -10,7 +11,7 @@ import { MS_PER_TICK } from '../game/constants';
  * cadence, movement speed, canvas nearest-neighbour resampling, a second sprite in the display
  * list, camera jitter, and pose-doubling via `anims.timeScale`. The current hypothesis is that a
  * 60 Hz fixed-timestep sim on a 240 Hz display holds each drawn POSITION for four refreshes and
- * then jumps `runMax` (12 px) — sample-and-hold judder.
+ * then jumps `runMax` — sample-and-hold judder.
  *
  * 🔴 **That hypothesis is not established, and the Codex plan review said so plainly:** repeating a
  * 60 Hz frame across four 240 Hz refreshes still holds each position for ~16.7 ms, which is exactly
@@ -42,11 +43,38 @@ import { MS_PER_TICK } from '../game/constants';
  * all *(HANDOFF §14: the headless harness is not the frame rate)*. The number has to come from the
  * machine that can see it.
  *
+ * ## ⚠️ The outcome is still UNRECORDED, and the probe could not have produced it
+ *
+ * Item 3.12's complaint is that this probe's diagnosis *"was never proven"* — no comment records a
+ * run. It could not have been run usefully: `PROBE_SPEED_PX_PER_TICK` was the literal `12` against a
+ * `runMax` of 9.0, so the stepped lane jumped a third further than the game ever does. That is fixed
+ * above.
+ *
+ * Running it needs a **240 Hz display and a pair of eyes** — the whole point is that the headless
+ * harness runs at 18–60 Hz and cannot exhibit the effect. So it is `play`-owned, it is on the S.9
+ * list, and the three outcomes above say what each one decides. **Write the result here.**
+ *
  * Guarded at the point of creation in `GameScene`, so it is tree-shaken out of `dist/`.
  */
 
-/** World px per tick the probe travels — `DEFAULT_TUNING.runMax`, the speed the report concerns. */
-const PROBE_SPEED_PX_PER_TICK = 12;
+/**
+ * World px per tick the probe travels: **`DEFAULT_TUNING.runMax`, read rather than restated.**
+ *
+ * 🔴 **This was the literal `12`, and it was wrong by a third** *(inventory 3.12)*. The comment said
+ * *"`DEFAULT_TUNING.runMax`, the speed the report concerns"* while hardcoding a number `runMax` has
+ * not held since Phase 4's rescale: it is `FOOT_PX_PER_FRAME.run / LOCOMOTION_TICKS_PER_FRAME` =
+ * 18.0 / 2 = **9.0**.
+ *
+ * That is not a cosmetic staleness. This probe exists to **falsify** a hypothesis by eye, and a
+ * stepped lane jumping 12 px where the game jumps 9 makes the judder **33 % more visible than it
+ * really is**. Anyone who had run it would have been falsifying a hypothesis about a speed the game
+ * never reaches — and the item's complaint is precisely that the diagnosis was never proven. It
+ * could not have been proven with this constant.
+ *
+ * Same defect class as this session's Tier 4, in the one place it does the most damage: an
+ * instrument that lies about its own calibration.
+ */
+const PROBE_SPEED_PX_PER_TICK = DEFAULT_TUNING.runMax;
 
 /** Where the two lanes sit on screen, and how far they travel before wrapping. */
 const LANE = { steppedY: 300, smoothY: 640, left: 120, right: 1800 };

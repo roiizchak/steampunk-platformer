@@ -121,3 +121,59 @@ describe('playerTuning.ts prose agrees with playerTuning.ts constants (inventory
     ).toContain('NOT the shipped figures');
   });
 });
+
+/**
+ * # The DEV motion probe is calibrated to the real speed — inventory 3.12
+ *
+ * `devMotionProbe.ts` exists to **falsify** the judder diagnosis by eye before any interpolation is
+ * trusted. Item 3.12's complaint is that the diagnosis *"was never proven"* and no comment records
+ * a run.
+ *
+ * It could not have been proven. `PROBE_SPEED_PX_PER_TICK` was the literal **12**, under a comment
+ * saying *"`DEFAULT_TUNING.runMax`, the speed the report concerns"* — and `runMax` has been **9.0**
+ * since Phase 4's rescale. The stepped lane jumped a third further than the game ever does, so the
+ * instrument exaggerated the very effect it was built to test.
+ *
+ * This is the same defect class as this session's Tier 4, in the place it does the most damage: an
+ * instrument that lies about its own calibration produces a *measurement*, and a wrong one is worse
+ * than none.
+ *
+ * ⚠️ The probe is DEV-only and needs a 240 Hz display, so **running it stays `play`-owned** and is
+ * on the S.9 list. This gate only guarantees that when someone does run it, they are looking at the
+ * speed the game actually moves at.
+ *
+ * **The mutation this names:** put a literal back in place of the `DEFAULT_TUNING.runMax` read.
+ */
+describe('the motion probe moves at the speed the game moves at (3.12)', () => {
+  // ⚠️ vitest caches `?raw` glob results — touch this file too when re-running after an edit.
+  const sources = import.meta.glob('../../src/scenes/devMotionProbe.ts', {
+    eager: true,
+    query: '?raw',
+    import: 'default',
+  }) as Record<string, string>;
+  const source = Object.values(sources)[0] ?? '';
+
+  it('the source was actually read — an empty glob would make the rest vacuous', () => {
+    expect(source.length).toBeGreaterThan(1000);
+  });
+
+  it('reads runMax rather than restating it', () => {
+    expect(source, 'the probe speed is not derived from the tuning').toContain(
+      'const PROBE_SPEED_PX_PER_TICK = DEFAULT_TUNING.runMax;',
+    );
+  });
+
+  it('carries no hardcoded probe speed', () => {
+    // The exact regression: `= 12` under a comment claiming it is `runMax`.
+    expect(source, 'a literal probe speed is back').not.toMatch(
+      /PROBE_SPEED_PX_PER_TICK\s*=\s*\d/,
+    );
+  });
+
+  it('and runMax is genuinely not 12, so this is not a distinction without a difference', () => {
+    // Non-vacuity for the whole block. If `runMax` happened to equal the old literal, none of the
+    // assertions above would be protecting anything.
+    expect(DEFAULT_TUNING.runMax).toBe(9);
+    expect(DEFAULT_TUNING.runMax).not.toBe(12);
+  });
+});
