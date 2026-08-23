@@ -25,7 +25,7 @@
  * two assertions that happen to agree on the happy path are not one gate.
  */
 
-import { GAME_HEIGHT } from '../game/constants';
+import { GAME_HEIGHT, MAX_LEVEL_GEARS } from '../game/constants';
 import type { GearSim } from '../sim/pickups';
 
 /**
@@ -218,7 +218,18 @@ export function gearsCollectedFrom(gears: readonly GearSim[], fromTick: number):
   return gears.filter((gear) => gear.collectedTick !== null && gear.collectedTick >= fromTick);
 }
 
-/** The counter's text. Zero-padded so its width never changes — see `UIScene` for why that matters. */
+/**
+ * The counter's text. Zero-padded so its width never changes — see `UIScene` for why that matters.
+ *
+ * 🔴 **The width is DERIVED from `MAX_LEVEL_GEARS`, and was a hard-coded `3`** *(session inventory
+ * 3.8, fixed 2026-08-23)*. The cap is **64**, so a third digit can never be reached: `000` was
+ * padding to a width the game cannot produce, and `docs/handoff/phase-06-owed.md` recorded that it
+ * *"reads as a placeholder"* — `level-01` ships **7** gears and drew `007`.
+ *
+ * Derived rather than re-typed as `2`: raise the cap past 99 and the counter widens with it, instead
+ * of silently truncating the way a literal would. One number, one definition *(vault 5.3)*.
+ */
 export function counterText(collected: number): string {
-  return String(Math.max(0, Math.trunc(collected))).padStart(3, '0');
+  const width = String(MAX_LEVEL_GEARS).length;
+  return String(Math.max(0, Math.trunc(collected))).padStart(width, '0');
 }

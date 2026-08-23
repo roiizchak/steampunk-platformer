@@ -1071,3 +1071,61 @@ non-regenerable input). Suite **2256 / 0**, all 8 courier clips PASS, `verify-di
 
 ⚠️ **2.2 (`fall` judders) is NOT closed.** `fall` already ran its r2 and packs at 80.0 %; its 74 px
 frame-to-frame height spread is untouched by this work and remains open.
+
+---
+
+## 3.8 — the gear counter padded to a width the game cannot reach
+
+**Status: FIXED.** `counterText` used `padStart(3, '0')` while `MAX_LEVEL_GEARS` is **64** — a third
+digit is unreachable. `level-01` ships 7 gears and drew `007`, which
+`docs/handoff/phase-06-owed.md` recorded as *"reads as a placeholder"*.
+
+The width is now **derived from the cap**, not retyped as `2`: raise the cap past 99 and the counter
+widens with it instead of silently truncating *(vault 5.3 — one number, one definition)*.
+
+Three readings re-taken rather than edited to fit: two padding assertions and the clamp case, all
+now derived from `MAX_LEVEL_GEARS` on both sides so the test and the counter cannot drift apart.
+
+---
+
+## 3.11 — the gate that could not see a repeated pose
+
+**Status: FIXED, and it found a real one on its first run.**
+
+`gateMotionFloor` compares every frame to **frame 0** and keeps the maximum, so a sheet whose middle
+repeats a pose sails through. `motion.mjs` names the blind spot against `run` and even lists the walk
+pairs by hand — and nothing had been checking them since.
+
+`gateAdjacentDistinct` measures the **closest adjacent pair**. First run, on the shipped sheets:
+
+| sheet | closest pair | difference |
+|---|---|---|
+| `walk` | **18-19** | **0.00011** |
+| `run` | **9-10** | **0.00006** |
+| idle / jump / fall / attack / hurt / death | — | 0.00058 – 0.01277 |
+
+⚠️ **`walk` 18-19 is one of the four pairs `motion.mjs` had already listed by hand.** The prediction
+was right, written down, and unverified for three phases.
+
+### Why it does not fail them
+
+Those repeats are a **recorded, paid-for trade**: 15 frames at 2 ticks/frame is the only run speed
+between two the user had already rejected, and fixing it *"needs a longer or higher-frame-rate clip,
+i.e. money."* A gate that failed them every build would be demanding a purchase nobody agreed to.
+
+So they are **declared** in `ACCEPTED_POSE_REPEATS`, the shape `ACCEPTED_EDGE_BLEED` already
+established — an exception written down with its number, so a **new** one fails instead of joining an
+invisible pile. Two guards on the allowance, both gated:
+
+- it excuses **only its own pair** — otherwise one entry launders a whole sheet;
+- it is **not a blank cheque** — a pair recorded at 0.00011 that degrades to a freeze still fails.
+
+**Watched red** *(C1)*: a fixture that ramps away from frame 0 while frames 2 and 3 are identical —
+`gateMotionFloor` **PASSES** it, `gateAdjacentDistinct` **FAILS** naming `frames 2-3`. That is the
+blind spot demonstrated rather than described.
+
+Split into `gateAdjacent.mjs` because `gates.mjs` was at its ceiling — the same reason
+`edgeExceptions.mjs` exists, and the third time this session that the 400-line rule has forced a
+seam rather than a trim.
+
+Suite **2259 / 0**, all 8 clips PASS, art byte-unchanged, `verify-dist ok`.

@@ -16,7 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
-import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
 
 /** The three sizes this project supports, per the Phase 6 decision. */
@@ -158,22 +158,33 @@ describe('gearsCollectedFrom drives the tween', () => {
 });
 
 describe('counterText gives tabular figures a fixed width', () => {
-  it('pads to three digits, so the string length never changes', () => {
-    expect(counterText(0)).toBe('000');
-    expect(counterText(9)).toBe('009');
-    expect(counterText(10)).toBe('010');
-    expect(counterText(123)).toBe('123');
-    for (const n of [0, 1, 9, 10, 99, 100, 999]) {
-      expect(counterText(n)).toHaveLength(3);
+  it('pads to the width MAX_LEVEL_GEARS needs, so the string length never changes', () => {
+    // 🔴 RE-TAKEN 2026-08-23 (inventory 3.8). This asserted a hard-coded three digits, which is a
+    // width the game cannot reach: MAX_LEVEL_GEARS is 64. `level-01` ships 7 gears and drew `007`,
+    // recorded in phase-06-owed.md as reading like a placeholder.
+    //
+    // Derived from the cap on both sides, so raising the cap past 99 widens the counter and this
+    // test together rather than leaving one to be found by eye.
+    const width = String(MAX_LEVEL_GEARS).length;
+    expect(width, 'the cap changed — check the counter still fits its slot').toBe(2);
+
+    expect(counterText(0)).toBe('00');
+    expect(counterText(9)).toBe('09');
+    expect(counterText(10)).toBe('10');
+    expect(counterText(MAX_LEVEL_GEARS)).toBe('64');
+    for (const n of [0, 1, 9, 10, 64]) {
+      expect(counterText(n)).toHaveLength(width);
     }
   });
 
-  it('does not truncate past three digits — a wrong count beats a lying one', () => {
+  it('does not truncate past its pad width — a wrong count beats a lying one', () => {
+    // Above the cap is unreachable from shipped data (`describeGearProblem` refuses it), but a
+    // truncating counter would lie rather than look wrong, so the overflow behaviour is pinned.
     expect(counterText(1234)).toBe('1234');
   });
 
   it('clamps nonsense rather than rendering it', () => {
-    expect(counterText(-5)).toBe('000');
-    expect(counterText(3.7)).toBe('003');
+    expect(counterText(-5)).toBe('00');
+    expect(counterText(3.7)).toBe('03');
   });
 });

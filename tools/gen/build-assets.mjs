@@ -38,6 +38,7 @@ import { decodePng, encodePng } from './png.mjs';
 import { dropCastShadow } from './chroma.mjs';
 import { packStrip } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
+import { ACCEPTED_POSE_REPEATS, gateAdjacentDistinct } from './gateAdjacent.mjs';
 import { configFor, workListFor, resolveActionScale } from './slugConfig.mjs';
 import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
 import { printDerivedScale } from './deriveScale.mjs';
@@ -269,7 +270,8 @@ function main() {
     // Gate the packed frames before writing them, not after — a sheet that fails its motion floor
     // should be visible at build time, not discovered in the Gym.
     const perFrame = frames.map((_, i) => sliceFrame(strip, i, frameWidth, frameHeight));
-    const verdicts = { motion: gateMotionFloor(perFrame) };
+    const repeat = ACCEPTED_POSE_REPEATS[`${SLUG}/${action}`] ?? null;
+    const verdicts = { motion: gateMotionFloor(perFrame), adjacent: gateAdjacentDistinct(perFrame, undefined, repeat) };
     if (LOOPING.has(action)) {
       verdicts.loop = gateLoopWrap(perFrame);
     }

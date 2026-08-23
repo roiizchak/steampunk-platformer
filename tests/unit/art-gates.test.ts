@@ -37,6 +37,11 @@ import {
   regionStats,
   summarise,
 } from '../../tools/gen/gates.mjs';
+import {
+  ACCEPTED_POSE_REPEATS,
+  ADJACENT_FLOOR,
+  gateAdjacentDistinct,
+} from '../../tools/gen/gateAdjacent.mjs';
 // `fill` and `selfTest` come from the self-test module directly. They used to be re-exported by
 // `gates.mjs`, which made the two files mutually dependent; that cycle was removed in session 7.
 import { selfTest } from '../../tools/gen/gatesSelfTest.mjs';
@@ -139,8 +144,53 @@ describe('motion floor and loop wrap are separate questions (vault 4.23, criteri
     expect(gateMotionFloor([frame(0), frame(0), frame(0)]).status).toBe(FAIL);
   });
 
+  /**
+   * Session inventory **3.11**. `gateMotionFloor` compares every frame to frame 0 and keeps the
+   * MAXIMUM, so a sheet whose middle repeats a pose sails through it — the blind spot `motion.mjs`
+   * names against `run` and `walk` and which nothing was checking.
+   *
+   * On its first run the new gate found `walk` **18-19** at 0.00011 — one of the four pairs that
+   * paragraph had already listed by hand — and `run` **9-10** at 0.00006.
+   */
+  it('a repeated pose in the MIDDLE passes the motion floor and fails the adjacent gate', () => {
+    // Ramps away from frame 0 the whole time, so the floor's max-versus-frame-0 is large — while
+    // frames 2 and 3 are the same image. That is the shape the floor cannot see.
+    const repeats = [frame(0), frame(80), frame(160), frame(160), frame(240)];
+    expect(gateMotionFloor(repeats).status).toBe(PASS);
+    expect(gateAdjacentDistinct(repeats).status).toBe(FAIL);
+    expect(gateAdjacentDistinct(repeats).reason).toMatch(/frames 2-3/);
+  });
+
+  it('a declared repeat passes, but only for ITS pair and only if it has not got worse', () => {
+    const repeats = [frame(0), frame(80), frame(160), frame(160), frame(240)];
+    const measured = gateAdjacentDistinct(repeats).value as number;
+    expect(measured, 'frames 2 and 3 are identical, so the closest step is zero').toBe(0);
+
+    // Accepted: same pair, recorded at the value it actually measures.
+    expect(gateAdjacentDistinct(repeats, undefined, { pair: '2-3', measured }).status).toBe(PASS);
+    // A different pair's allowance must not excuse this one — otherwise one entry launders a whole
+    // sheet, which is exactly what ACCEPTED_EDGE_BLEED's shape exists to prevent.
+    expect(gateAdjacentDistinct(repeats, undefined, { pair: '0-1', measured }).status).toBe(FAIL);
+    // And an accepted pair is not a blank cheque. A pair recorded at a shipped-scale value that then
+    // degrades to a true freeze still fails — this is the `walk` 18-19 case going bad.
+    expect(
+      gateAdjacentDistinct(repeats, undefined, { pair: '2-3', measured: 0.00011 }).status,
+    ).toBe(FAIL);
+  });
+
+  it('the shipped acceptances name real pairs, so the table cannot rot into decoration', () => {
+    for (const [key, entry] of Object.entries(ACCEPTED_POSE_REPEATS)) {
+      expect(entry.pair, `${key} has no pair`).toMatch(/^\d+-\d+$/);
+      expect(entry.measured, `${key} has no measurement`).toBeGreaterThan(0);
+      expect(entry.measured, `${key}'s measurement is above the floor — it needs no exception`).toBeLessThan(
+        ADJACENT_FLOOR,
+      );
+    }
+  });
+
   it('too few frames is INDETERMINATE, not a pass', () => {
     expect(gateMotionFloor([frame(0)]).status).toBe(INDETERMINATE);
+    expect(gateAdjacentDistinct([frame(0)]).status).toBe(INDETERMINATE);
     expect(gateLoopWrap([frame(0), frame(9)]).status).toBe(INDETERMINATE);
   });
 

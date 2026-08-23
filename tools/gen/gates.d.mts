@@ -27,6 +27,7 @@ export declare function gateAlpha(
 
 export declare function frameDifference(a: RgbaImage, b: RgbaImage): number;
 export declare function gateMotionFloor(frames: RgbaImage[], floor?: number): Verdict<number | null>;
+
 export declare function gateLoopWrap(
   frames: RgbaImage[],
   slack?: number,
