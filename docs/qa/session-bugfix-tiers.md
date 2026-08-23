@@ -1580,3 +1580,38 @@ nobody reads.
 
 Recorded, not fixed: `idle` is the sheet the whole slug's `scale` is derived from, so re-shooting it
 moves every sentry number in the file — a piece of work, not a line change. **Owed.**
+
+---
+
+## 5.2 — the GPU-ratio gate flaked once in four, and here is the data
+
+**Still OPEN and still unreconciled.** Not fixed here — but the final sweep produced the first
+recorded observation of it failing, which is more than the item has ever had.
+
+`phase-08-perf.spec.ts` → *"level-05 costs 4.47x level-01 on the GPU … Expected: <= 2"*.
+
+| run | context | result |
+|---|---|---|
+| 1 | inside the full 128-test sweep (18.2 min, box busy) | **FAILED at 4.47×** |
+| 2 | spec alone | passed |
+| 3 | spec alone | passed |
+| 4 | spec alone | passed |
+
+**One in four, and the one was the loaded run.** That matches 5.2's recorded shape — *"~1 window in
+10 reads 0.7–1.2 ms against a 0.14 ms baseline, on both arms"* — and sharpens it: the flake is
+**load-sensitive**, so it is far likelier inside a full sweep than in the isolated re-runs anyone
+reaches for when checking.
+
+⚠️ **Not attributed to this session's changes, and the reason is structural rather than statistical.**
+The only art this session touched is `brass-sentry/fire`'s sheet. This gate compares **level-05
+against level-01 tile rasterisation**; a sentry's fire frames are neither, and the ratio is between
+two levels whose tile counts did not move.
+
+**It is not fixed because fixing it is 5.2's actual content**: the recorded repair shape is a
+**paired** per-round delta with the arms kept separate until the effect clears the timer grid, which
+is a rewrite of the measurement rather than a bound change. *(vault: a statistic that does not order
+its own mutation cannot be fixed by moving the bound — and this is the second time this session that
+sentence decided an outcome.)*
+
+**Do not "fix" this by raising the 2× bound.** The bound is not the problem; an unpaired median per
+arm is.
