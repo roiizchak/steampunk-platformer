@@ -537,3 +537,51 @@ maintains and a reader trusts. *(C2 inverted: a gate that cannot go red is decor
 whose red is always somebody else's.)*
 
 The honest outcome of this item is the reconciliation itself, and a QA-log claim corrected.
+
+---
+
+## B6 / 1b.2 — the music restarting at every level boundary
+
+**Status: FIXED.**
+
+`GameScene.create()` calls `createAudio`, which destroyed its predecessor and started both beds from
+zero — so **music and ambience cut back to bar 1 at every level transition**. Recorded in Phase 7 as
+LOW/RECORDED because *"no level transition exists yet; it becomes real in Phase 8"*. **Phase 8
+shipped five levels and transitions.** The reason expired by its own terms and nobody re-read it —
+the second item this session where that is the whole story.
+
+### The constraint that shaped the fix
+
+Criterion **7.5** counts `sound.sounds`, and vault 7.5 names the failure exactly: *"a stopped track is
+still in `sound.sounds`, so a scene round-trip that stops and re-adds grows the list every time."*
+**Beds accumulating is a worse bug than beds restarting**, so *"stop tearing them down"* is not the
+fix. *"Start only what is not already playing"* is: `createAudio` now **retires** its predecessor —
+unsubscribing the exact unlock handler, per vault 7.5 — and adopts the still-looping beds. The live
+set stays at one of each. `destroyAudio`, which `BootScene.init()` calls on every boot, restart and
+refusal, is still the real teardown.
+
+### `createAudio` had NO unit test, and the reason is structural
+
+The only file in `tests/` that named it was `file-size.test.ts`, counting its lines. `audio.ts`
+imports `Phaser` as a **value** (`Phaser.Sound.Events.UNLOCKED`), so nothing in the unit suite can
+import it without breaking `npm run test:sim-isolated`, which runs with Phaser uninstalled.
+
+So the decision moved to `src/game/audioBeds.ts`, pure — `src/render/`'s pattern one layer over — and
+`audio.ts` only applies it. That is what made a gate possible at all.
+
+⚠️ Its **draw-path gate** is source-text, not behavioural. CLAUDE.md prefers behavioural and says so;
+here it is unreachable for the same reason the module exists. Recorded rather than glossed. It pins
+three things a refactor could quietly undo: the `bedsToStart`/`bedsMissing` call sites, the absence of
+a second `BED_KEYS` list, and `liveBeds` being module-scope rather than per-manager.
+
+### Watched red *(C1)*
+
+Mutation: make `bedsToStart` ignore what is already playing — the restart behaviour restored.
+`PASS (7) FAIL (2)`, and the two are exactly *"starts NOTHING when both are already looping"* and
+*"starts only the one that stopped"*. **Revert confirmed** *(C12)*: `PASS (10) FAIL (0)`.
+
+A counter-fixture earns its place here too: *"starts only the one that stopped, not both"* fails an
+implementation that returns `[]` whenever **any** bed is playing — which would pass the
+level-boundary assertion and leave ambience silent for the rest of the session.
+
+Suite **2207 / 0**, build green. `docs/qa/phase-07-audio-02-gate-owners.md:78` corrected in place.
