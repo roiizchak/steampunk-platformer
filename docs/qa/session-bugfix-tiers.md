@@ -1420,3 +1420,78 @@ superseded but never deleted, so the next attempt can compare against it rather 
 ### Spend
 
 $1.19. Running total **$51.48 of $55**, **$3.52 remaining**.
+
+---
+
+## 3.10 — `brass-sentry/fire`'s absent discharge: **NOT SHOT. Blocked on an owner ruling.**
+
+**Status: OPEN, and deliberately unspent.** $1.19 was authorised and **not used**. Running total
+stays **$51.48 of $55**.
+
+### Why the money stopped
+
+`fire` is already the most re-shot clip in the project — four superseded rounds. The recorded
+diagnosis of 3.10 is that *"the margin constraint was met by the model largely not firing"*: the
+discharge is nearly absent because the prompt told it to be.
+
+That constraint is `DISCHARGE_MARGIN` (`motionClauses.mjs:107`):
+
+> *The muzzle flash and the smoke are SMALL and CONTAINED: the flash reaches no further from the
+> muzzle than the length of the barrel itself, and the smoke stays a thin wisp close to the muzzle.
+> Neither the flash nor the smoke ever reaches any edge of the frame…*
+
+It is the **only lever left**. `-r5` already tested the other one — a 4024² anchor at `--fill 0.35`,
+single-variable against `-r4`'s 3130² — and **refuted it**: more padding did not move the discharge.
+So a sixth take that changes neither variable is a repeat of a round already paid for, and the
+project's own rule is *"budget from the invoice, not the estimate"*.
+
+### And relaxing it reverses a recorded owner decision
+
+`motionClauses.mjs:101` states it plainly:
+
+> 🔴 **The user's decision was to constrain the effect rather than teach the gate** — so no threshold
+> in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255.
+
+Changing `DISCHARGE_MARGIN` is exactly the thing that ruling forbids, and CLAUDE.md makes reversing a
+design ruling a STOP-and-ask. **So it was not done, and the shot was not taken.**
+
+### ⚠️ But the ruling's premise has already expired, and that is the finding
+
+`edgeExceptions.mjs:61` now carries:
+
+```js
+'brass-sentry/fire': { file: 'brass-sentry-fire-r4.mp4', edges: ['right'],
+  reason: 'the muzzle discharge leaves the frame. The turret is complete … Confirmed by eye at full
+           resolution, and re-shot once from a larger padded anchor (-r5) which did not move it.' }
+```
+
+**That is teaching the gate.** A later session added an `ACCEPTED_EDGE_BLEED` entry permitting the
+discharge to cross the right edge — the exact outcome *"constrain the effect rather than teach the
+gate"* was chosen to avoid. The two decisions now sit in the tree contradicting each other:
+
+| | says |
+|---|---|
+| `motionClauses.ts` `DISCHARGE_MARGIN` | the flash must **never** reach any edge |
+| `edgeExceptions.mjs` `ACCEPTED_EDGE_BLEED` | the flash reaching the right edge is **accepted, by eye** |
+
+So the constraint is suppressing the discharge **and buying nothing**: the gate it was written to
+satisfy no longer objects. That is a Tier-4-class contradiction — prose against code — living in the
+one place it costs real money.
+
+### The options, for the owner
+
+1. **Relax `DISCHARGE_MARGIN` and re-shoot once (~$1.19, leaves $2.33).** The gate already accepts
+   the bleed, so the clause's original purpose is served. Highest chance of actually fixing 3.10,
+   and it needs the ruling reopened. *Recommended.*
+2. **Delete the `ACCEPTED_EDGE_BLEED` entry instead**, restoring the original ruling, and accept that
+   `fire` has a small discharge by design. Costs nothing; closes 3.10 as WONTFIX rather than open.
+3. **Leave both.** Cheapest, and leaves a contradiction in the tree that the next art session will
+   pay for again.
+
+⚠️ **Either 1 or 2 removes the contradiction. Option 3 is the only one that does not**, which is why
+it is listed last despite being the status quo.
+
+### What was done without spending
+
+Nothing in the tree changed for 3.10. The contradiction is recorded here and cross-referenced from
+`motionClauses.mjs`, so the next reader finds a decision rather than a puzzle.

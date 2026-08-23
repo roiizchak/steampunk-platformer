@@ -99,7 +99,22 @@ void HOLD_CENTRED_REJECTED;
  * of blind spot already recorded for G1, which *"cannot tell a boot from a hand"*.
  *
  * **The user's decision was to constrain the effect rather than teach the gate** — so no threshold
- * in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255. `FRAME_MARGIN` alone does not cover
+ * in `edgeGate.mjs` moved and `DEFAULT_MIN_ALPHA` stays 255.
+ *
+ * ⚠️ **That premise has since expired, and this clause has not caught up** *(inventory 3.10,
+ * recorded 2026-08-23)*. `edgeExceptions.mjs` now carries an `ACCEPTED_EDGE_BLEED` entry for
+ * `brass-sentry/fire` permitting the discharge to cross the right edge — which **is** teaching the
+ * gate, the outcome this ruling was chosen to avoid. So the two now contradict each other: this
+ * clause forbids the flash from reaching any edge, while the gate accepts it doing exactly that.
+ *
+ * The cost is item 3.10: the discharge is *"nearly absent … the margin constraint was met by the
+ * model largely not firing."* This clause is suppressing it and, since the gate no longer objects,
+ * buying nothing.
+ *
+ * **Relaxing it reverses an owner ruling, so it was NOT done and the authorised re-shoot was NOT
+ * taken.** The options are laid out in `docs/qa/session-bugfix-tiers.md` § 3.10 — read that before
+ * spending on a sixth `fire` round, because `-r5` already refuted the only other lever (more
+ * padding, single-variable, did not move the discharge). `FRAME_MARGIN` alone does not cover
  * this: it binds "the subject and anything it holds", and a turret does not *hold* its own muzzle
  * flash. The flash needed its own ruler, and it is measured against the barrel — the one part of
  * the machine whose length the model has already committed to in the identity clause.
