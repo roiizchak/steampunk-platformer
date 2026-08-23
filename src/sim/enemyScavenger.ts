@@ -319,7 +319,31 @@ export function stepScavenger(scavenger: Scavenger, at: Sighting, footing: Scave
      * That is precisely the disagreement `tiledPlacement.ts`'s header promises does not exist
      * *(vault 5.3)*. Clamping first makes the sim ask about the same span the gate validated.
      */
-    const nextX = Math.min(scavenger.patrolMax, Math.max(scavenger.patrolMin, proposed));
+    /**
+     * 🔴 **Outside the beat, WALK back — do not clamp.**
+     *
+     * `Math.min(patrolMax, …)` is a step of `patrolSpeed` only while the body is already inside the
+     * beat. A chase leaves it unclamped on purpose, so the tick after `releaseAggro` this clamp was
+     * not a step at all: it was **a jump of however far the chase travelled**, measured at 480 px
+     * against a `patrolSpeed` of 2.5.
+     *
+     * And `blockedAt` tests the two **endpoints**, not the swept span, so a jump whose start and end
+     * are both clear passes with a wall in the middle. Measured: a scavenger 480 px past its beat
+     * ended up at 1102.5 with a wall standing at 1400.
+     *
+     * Latent while death was the only exit from a chase; the owner reopened that on 2026-08-23
+     * (inventory 2b.1) and `releaseRadius` made it the ordinary outcome of outrunning one —
+     * `chaseSpeed` 6 against a player `runMax` of 9.
+     *
+     * Inside the beat this is byte-identical to the clamp it replaces, which is what keeps the
+     * clamp-before-the-wall-test property below intact.
+     */
+    const nextX =
+      scavenger.x > scavenger.patrolMax
+        ? Math.max(scavenger.patrolMax, scavenger.x - scavenger.patrolSpeed)
+        : scavenger.x < scavenger.patrolMin
+          ? Math.min(scavenger.patrolMin, scavenger.x + scavenger.patrolSpeed)
+          : Math.min(scavenger.patrolMax, Math.max(scavenger.patrolMin, proposed));
     if (blocked(scavenger.x, nextX, scavenger, footing)) {
       // 🔴 A wall is a bound the level did not declare, so it behaves like one: turn, do not
       // advance. The patrol path used to consult `solids` not at all, on the argument that a beat

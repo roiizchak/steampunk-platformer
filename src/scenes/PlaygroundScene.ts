@@ -153,8 +153,10 @@ export class PlaygroundScene extends GameScene {
     if (enemyIndex >= 0) {
       const target = this.enemyKnobList[enemyIndex]!;
       target.set(Math.round((target.get() + target.step * direction) * 1000) / 1000);
-      // No cross-knob invariant to re-assert any more: `releaseRadius` is gone with permanent
-      // aggro, and one radius cannot be dragged past itself. See `enemyTuning.ts`.
+      // No separate invariant pass is needed: `detectRadius` and `deadZone` each carry their own
+      // `max`, read off the live scavenger, so `target.set` clamps them. This comment used to say
+      // the invariant was gone with permanent aggro — `releaseRadius` came back on 2026-08-23
+      // (inventory 2b.1) and the cap moved onto the knob. See `enemyTuning.ts`.
       this.refreshReadout();
       return;
     }

@@ -31,7 +31,7 @@ import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
-import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE } from '../render/hud';
+import { HELP_BANNER_Y, HELP_FONT_PX, HUD_MARGIN } from '../render/hud';
 import { GAME_WIDTH } from '../game/constants';
 import type { World } from '../sim/types';
 
@@ -134,9 +134,8 @@ export function helpLine(): string {
  * height — which, this phase having just watched the plate change size, is not hypothetical.
  */
 export function addHelpBanner(scene: Phaser.Scene, text: string): void {
-  const y = HUD_MARGIN + HUD_PLATE.h + HUD_MARGIN * 2;
   scene.add
-    .text(HUD_MARGIN, y, text, {
+    .text(HUD_MARGIN, HELP_BANNER_Y, text, {
       fontFamily: 'monospace',
       // 🔴 Was a hard-coded `'18px'` — ~8 physical px at 852 x 480, a third under the legibility
       // floor the gear counter is sized against, and confirmed illegible in a playtest screenshot

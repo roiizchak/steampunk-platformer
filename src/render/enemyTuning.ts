@@ -110,7 +110,12 @@ export function enemyKnobs(world: World): Knob[] {
     knobs.push(
       knob(`${name}.patrolSpeed`, target, 'patrolSpeed', STEP.speed, STEP.speed),
       knob(`${name}.chaseSpeed`, target, 'chaseSpeed', STEP.speed, STEP.speed),
-      knob(`${name}.detectRadius`, target, 'detectRadius', STEP.distance, 0),
+      // 🔴 Capped one px below this scavenger's OWN `releaseRadius`. `createScavenger` throws on
+      // the same relationship, but a **constructor** throw cannot see a knob dragged after the
+      // object exists — which is exactly the live-edit half this file's header used to claim had
+      // nothing left to guard. Same shape as `deadZone` below, and same reason it reads the
+      // instance rather than the shared default.
+      knob(`${name}.detectRadius`, target, 'detectRadius', STEP.distance, 0, scavenger.releaseRadius - 1),
       // Capped one px below this scavenger's OWN `attackRange`, not below the shared default — a
       // per-instance `attackRange` is a legal option, so reading it off the constant would let a
       // fixture-tuned scavenger walk past its own limit. `createScavenger` throws on the same
@@ -135,14 +140,22 @@ export function knobLine(k: Knob, selected: boolean): string {
 }
 
 /**
- * 🔴 **`enforceHysteresis` is deleted, and its absence is the point.**
+ * 🔴 **`enforceHysteresis` is deleted, and the invariant it held now lives on the knob itself.**
  *
  * It existed to hold `releaseRadius > detectRadius`, because a panel that let you drag one past the
- * other handed you a scavenger stuttering between patrol and chase every tick. Aggro is permanent
- * as of 2026-08-14 (`enemyScavenger.ts`), so `releaseRadius` no longer exists and there is no pair
- * of knobs left to hold in order.
+ * other handed you a scavenger stuttering between patrol and chase every tick.
  *
- * Criterion 5.9 is why this is a deletion rather than a no-op left in place: a knob that no longer
- * moves a number, and an invariant with nothing to enforce, both read as working machinery in a
- * panel. `PlaygroundScene` no longer calls it.
+ * ⚠️ **This block used to end *"`releaseRadius` no longer exists and there is no pair of knobs left
+ * to hold in order"*, and that stopped being true on 2026-08-23** when the owner reopened the
+ * permanent-aggro ruling (inventory 2b.1) and `releaseRadius` came back at 720. The comment survived
+ * the reversal by three files, and the S.3 gate owner found it — one of four places still describing
+ * a design that had been changed.
+ *
+ * The flap was **reachable again in the one tool built to tune these numbers**: `createScavenger`
+ * throws on an empty band, but a constructor throw cannot see a knob dragged after the object
+ * exists. So the cap moved onto `detectRadius`'s own `max` above, which is the `deadZone` pattern
+ * and needs no separate enforcement pass.
+ *
+ * Criterion 5.9 is still why this is not a no-op left in place: a knob that no longer moves a number,
+ * and an invariant with nothing to enforce, both read as working machinery in a panel.
  */

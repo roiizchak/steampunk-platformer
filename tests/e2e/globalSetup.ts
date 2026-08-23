@@ -1,4 +1,5 @@
 import { chromium } from '@playwright/test';
+import type { FullConfig } from '@playwright/test';
 
 /**
  * # Warm the dev server before the first spec, and never by loosening a bound
@@ -59,17 +60,39 @@ import { chromium } from '@playwright/test';
  * The work would simply move, not disappear.
  */
 
-const PORT = 5173;
-
 /** Generous, and deliberately unrelated to any test's budget — this is the cost being absorbed. */
 const WARMUP_TIMEOUT_MS = 180_000;
 
-export default async function globalSetup(): Promise<void> {
+/**
+ * The server's address, read from the config that started it — **never re-declared here**.
+ *
+ * ⚠️ This file used to carry its own `const PORT = 5173`, a second definition of a number
+ * `playwright.config.ts` already owns *(vault 5.3)*. The failure mode is specific and silent: if the
+ * port ever moves, the warm-up points at nothing, `page.goto` throws inside `globalSetup`, and
+ * Playwright aborts the run having collected **zero tests** — which reports `0 passed` and exits 0.
+ * That is the false-green shape CLAUDE.md §5 names twice, arriving through the one file whose whole
+ * job is to run before the tests do. Found by the S.3 gate owner.
+ *
+ * Throws rather than falling back to a literal: a default here would re-create the bug quietly.
+ */
+function baseUrlFrom(config: FullConfig): string {
+  const url = config.projects[0]?.use?.baseURL;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error(
+      'globalSetup: no baseURL on the first Playwright project. The warm-up reads the server ' +
+        'address from the config that starts it — set `use.baseURL` rather than hardcoding a port.',
+    );
+  }
+  return url;
+}
+
+export default async function globalSetup(config: FullConfig): Promise<void> {
   const started = Date.now();
+  const baseUrl = baseUrlFrom(config);
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
-    await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'commit' });
+    await page.goto(`${baseUrl}/`, { waitUntil: 'commit' });
     await page.waitForFunction(
       () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
       undefined,

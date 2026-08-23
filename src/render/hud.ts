@@ -41,6 +41,25 @@ export const HUD_PLATE = { w: 413, h: 128 } as const;
 export const HUD_MARGIN = 24;
 
 /**
+ * Where the controls banner sits: one clear margin below the HUD plate, in DESIGN space.
+ *
+ * ⚠️ **This is here so there is ONE definition, not two that agree** *(vault 5.3)*. `gameDev.ts`
+ * computed `HUD_MARGIN + HUD_PLATE.h + HUD_MARGIN * 2` by hand — a second derivation of the plate's
+ * bottom edge, in a different module from the one that owns HUD geometry.
+ *
+ * The S.7 gate owner found it and named the inconsistency rather than the arithmetic: this same
+ * session routed the banner's **font size** through a shared constant (`HELP_FONT_PX`) while leaving
+ * its **position** as a hand-summed copy. Both numbers describe the same object; only one of them
+ * had one owner. It is numerically correct today and would drift silently the day `hudLayout`'s
+ * margin or gap formula changes — and no gate checks spacing between HUD elements *(item 5.20)*.
+ *
+ * `HUD_MARGIN * 3` rather than `* 2` because the plate itself starts one margin down: the gap
+ * *below* the plate is `HUD_MARGIN * 2`, deliberately double, so the banner reads as a separate
+ * element instead of part of the plate.
+ */
+export const HELP_BANNER_Y = HUD_MARGIN * 3 + HUD_PLATE.h;
+
+/**
  * The catalog key the generated gear sprite lands under. One string, three consumers.
  *
  * 🔴 It lived in `src/scenes/gearLayer.ts` until a unit test tried to import it — and importing
@@ -66,6 +85,25 @@ const COUNTER_GAP = 24;
  * that by looking; this is the number it is looking at.
  */
 const COUNTER_FONT_PX = 44;
+
+/**
+ * How far down to nudge a digit string so its ink centres, as a fraction of the font size.
+ *
+ * A typical font's descent is ~20–22% of its em box, and digits use none of it — so a glyph box
+ * centred on `ascent + descent` puts the ink about **half the descent** too high. Half of ~0.21 is
+ * ~0.105, which at the shipped 44 px is **4.6 design px** — the top of the 2–4 px range item 3.8
+ * reported, measured at 1920 × 1080 where the report was made.
+ *
+ * ⚠️ **A fraction, not a literal.** The correction has to move with `COUNTER_FONT_PX`; a hardcoded
+ * 4 px would be silently wrong the next time the font changes, which is the shape of half this
+ * session's Tier 4.
+ *
+ * ⚠️ **This is a by-eye number and the by-eye read is still owed** *(S.9)*. The browser is the only
+ * thing that knows the real metrics of the fallback font it picks, and at 852 × 480 the whole
+ * correction is under 2 physical px — possibly imperceptible even though it is real at the design
+ * resolution. Recorded rather than presented as measured.
+ */
+const DIGIT_DESCENT_FRACTION = 0.105;
 
 /**
  * The controls banner's type size, in DESIGN pixels *(session inventory 2.5, fixed 2026-08-23)*.
@@ -164,7 +202,15 @@ export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
     gearIcon,
     counter: {
       x: gearIcon.x + iconSize + COUNTER_GAP * 0.5 * scale,
-      y: plate.y + plate.h / 2 - fontPx / 2,
+      // 🔴 The descender correction — inventory 3.8's second clause, and the one that was silently
+      // left out when 3.8's padding half was fixed. Phaser `Text` lays out on the font's full
+      // ascent + descent box, so `y = middle - fontPx / 2` centres THAT box. Digits have no
+      // descenders, so the ink sits in the upper part of it and reads **2–4 px high** against the
+      // gear icon beside it, which is centred on its own bounds.
+      //
+      // `DIGIT_DESCENT_FRACTION` is scaled with the font rather than added as a literal, so the
+      // correction survives a font-size change instead of becoming wrong at the next one.
+      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * DIGIT_DESCENT_FRACTION,
       fontPx,
     },
   };
