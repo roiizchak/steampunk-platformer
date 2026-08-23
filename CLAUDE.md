@@ -20,8 +20,13 @@ a sentence in this file. Resuming mid-phase starts at [HANDOFF.md](docs/HANDOFF.
 before Phase 4's 3× rescale, and three documents went on saying so.
 
 Animation timings are settled for `idle`, `walk`, `run`, `jump` and `fall` — see
-`public/assets/index.json` and `character-bounds.json`. **`run`'s stride is still provisional** and
-is the number to distrust.
+`public/assets/index.json` and `character-bounds.json`. ⚠️ This used to end *"`run`'s stride is still
+provisional and is the number to distrust"*. **`stridePxPerCycle` has been dead since session 9** —
+nothing reads it for timing — so that sentence pointed a reader's suspicion at a number that cannot
+affect anything. The live locomotion figures are `FOOT_PX_PER_FRAME` and `LOCOMOTION_TICKS_PER_FRAME`
+in `src/sim/playerTuning.ts`, pinned against the prose beside them by
+`tests/unit/tuning-prose.test.ts`. **The number to distrust is the `brass-courier` jump/fall art**,
+which measures 69 % of idle height and is the open item.
 
 Windows. Default shell is PowerShell; the Bash tool takes POSIX syntax.
 

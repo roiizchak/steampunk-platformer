@@ -402,9 +402,18 @@ this.load.spritesheet(entry.key, entry.path, {
 
 From a fresh clone with `_generated/` absent:
 
-1. `npm run assets:fetch` — re-fetch job records by request id. **Completed job records are free to
-   re-fetch; failed jobs cost nothing.** *(4.9)*
+> ⚠️ **Corrected 2026-08-23** *(session inventory 4.5)*. This list promised `assets:fetch` and
+> `assets:verify`. **Neither exists in `package.json`, and neither ever has** — and
+> `tools/gen/assetSources.mjs` printed an error telling the reader to run the first one. It was
+> recorded in `docs/reviews/phase-04-impl.md:26-28` as *"a real, unfixed defect"* and left standing.
+> The steps below are what the repository can actually do; the missing scripts are **not** written,
+> because nothing has needed them badly enough to ask.
+
+1. **Re-fetch the raw model output** with `genmedia`, from the request ids in `docs/generations/`
+   (indexed by [GENERATION-LOG.md](GENERATION-LOG.md)). **Completed job records are free to
+   re-fetch; failed jobs cost nothing.** *(4.9)* There is no wrapper script.
 2. `npm run assets:build` — key, trim, pack, derive fps, emit `index.json`.
-3. `npm run assets:verify` — gates self-test on fixtures, then judge.
+3. **The gates run inside step 2** and refuse the build on a failure — there is no separate verify
+   step. `npm test` then re-runs the shipped-sheet assertions over what step 2 produced.
 
 **Success is byte-identical PNGs.** Anything less is not reproducibility. *(4.15)*

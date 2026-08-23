@@ -75,7 +75,7 @@ import type { LocalBox, TuningKnobs } from './types';
  * choice and what the Playground is for. The settled values belong in `docs/qa/phase-04-art.md`.
  */
 /**
- * Ticks each drawn locomotion frame is held. **Three**, and it must stay a whole number.
+ * Ticks each drawn locomotion frame is held. **Two**, and it must stay a whole number.
  *
  * `cadenceTicks` (`src/render/animTiming.ts`) rounds `TICK_HZ / authoredFps` to an integer so every
  * drawn frame is held for the same number of 60 Hz refreshes — that integer IS session 9's judder
@@ -141,11 +141,26 @@ export const FOOTSTEP_TICKS = { walk: 24, run: 15 } as const;
  * by things a preference cannot move — the art's measured foot travel, and the whole-refresh dwell
  * rule. So only a few speeds plant the feet at all, and a 20 % cut is not one of them:
  *
+ * ⚠️ **The table below is the SESSION-10 reading and the numbers in it are no longer live**
+ * *(session inventory 4.2, corrected 2026-08-23)*. It was written before the 12-frame sheets were
+ * re-shot, and it was presented as current for three phases:
+ *
  * ```
+ *   AS MEASURED IN SESSION 10, pre-re-shoot — NOT the shipped figures
  *            art foot travel   ticks/frame   speed   was     slide before   slide after
  *   run      22.5 px           3             7.5     12.0    +6.7 %         0
  *   walk      9.0 px           3             3.0      5.54   +23 %          0
  * ```
+ *
+ * **Live, and derived from the constants in this file rather than retyped:**
+ * `FOOT_PX_PER_FRAME` is `{run: 18.0, walk: 9.0}`, `LOCOMOTION_TICKS_PER_FRAME` is **2**, so the
+ * planted speeds are `18.0 / 2 = 9.0` and `9.0 / 2 = 4.5`. The re-shoot changed run's foot travel
+ * (22.5 → 18.0) and the dwell (3 → 2); walk's travel is unchanged and its dwell is not.
+ *
+ * The reading is kept rather than deleted because it is the evidence for the paragraph above — but
+ * it is labelled now, and `tests/unit/tuning-prose.test.ts` pins the live numbers so this cannot
+ * silently rot again. Phase 7's plan reached for a retired figure and the Codex plan review (F8)
+ * caught it; this is that failure's other half.
  *
  * The shipped tune was NOT planted — walk slid 23 %, which is worse than the 17 % that was reported
  * as *"moves like a ghost"* and chased for most of session 9. Deriving both speeds from their own

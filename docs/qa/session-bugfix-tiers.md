@@ -585,3 +585,45 @@ implementation that returns `[]` whenever **any** bed is playing — which would
 level-boundary assertion and leave ambience silent for the rest of the session.
 
 Suite **2207 / 0**, build green. `docs/qa/phase-07-audio-02-gate-owners.md:78` corrected in place.
+
+---
+
+## Batch E / Tier 4 — the prose that contradicted the code
+
+**Status: 4.1, 4.2, 4.3, 4.5 FIXED with a gate. 4.4 closed by B3 (owed). 4.6 not reached.**
+
+| item | was | now |
+|---|---|---|
+| **4.1** | `playerTuning.ts:78` — *"Ticks each drawn locomotion frame is held. **Three**"* | **Two**, matching `LOCOMOTION_TICKS_PER_FRAME` nine lines below it |
+| **4.2** | a table presented as current: `run 22.5 px / 3 ticks / speed 7.5` | **labelled** as the session-10 pre-re-shoot reading, with the live figures stated beside it and derived: `18.0 / 2 = 9.0`, `9.0 / 2 = 4.5` |
+| **4.3** | `CLAUDE.md:23` — *"`run`'s stride is still provisional and is the number to distrust"* | `stridePxPerCycle` has been **dead since session 9**; distrust repointed at the live constants, and at the courier jump/fall art that actually is open |
+| **4.5** | `ASSET-PIPELINE.md` §10 promised `assets:fetch` / `assets:verify`, and `assetSources.mjs` **printed an error telling the reader to run the first** | both corrected to what the repo can actually do. The scripts are **not** written — nothing has needed them badly enough to ask |
+
+### The gate that stops it recurring
+
+`tests/unit/foot-plant.test.ts` passed throughout, correctly: it asserts the **relation**
+`ticksPerFrame × topSpeed === footPxPerFrame`, which held the whole time. The prose was unguarded.
+
+`tests/unit/tuning-prose.test.ts` parses the numbers back out of the docstrings and asserts them
+against the constants. **Watched red with the shipped defect itself** — restoring *"**Three**"* gives
+`PASS (4) FAIL (1)`, naming the frame-dwell sentence. Revert → `PASS (5) FAIL (0)`.
+
+⚠️ Its own limit is stated in its header: it makes these four numbers executable, not prose in
+general. A stale rationale or a citation to a moved file is still invisible to it.
+
+### Dead exports: two removed, one restored within the minute
+
+`MeasuredStrides` and `EnemyStrides` were dead — no importer anywhere — and are gone.
+
+🔴 **`strideTicks` was deleted with them, and put straight back.** The grep that "confirmed" it was
+dead had been truncated by a `head -5`, hiding the two files that import it
+(`anim-timing.test.ts`, `catalog-timings.test.ts` — the second checking that
+`tools/gen/catalogTimings.mjs`'s mirror agrees). `MeasuredStrides`'s claim that it was *"still
+exported and tested"* was **correct**, and I had written a comment calling that claim false.
+
+`tsc` and four red tests caught it inside a minute, which is the system working. Recorded because the
+near-miss is the lesson and it is this session's own subject inverted: **a deletion justified by a
+grep is only as good as the grep, and `head` is not a filter.** Both the restoration and the reason
+are written into `animTiming.ts` rather than quietly undone.
+
+Suite **2212 / 0**, build green.
