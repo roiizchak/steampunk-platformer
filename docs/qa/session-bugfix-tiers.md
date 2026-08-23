@@ -177,3 +177,54 @@ changed (guard lines 2 -> 3) **and** the failure count dropped by exactly one ->
 
 Suite after: typecheck clean, **2172 passed / 0 failed**, up 18 from the 2154 baseline — the census's
 own 18 tests, no other movement.
+
+---
+
+## A3 — the Phase 9 gate table, reconciled
+
+**Status: RECONCILED. The answer is that Phase 9 is still not done.**
+
+Full write-up in [phase-09-polish.md](phase-09-polish.md) §*"The reconciliation, and why Phase 9 is
+still not done"*. Summary:
+
+| verdict | criteria |
+|---|---|
+| ✅ **PASS**, substantiated with its evidence section cited | 9.6 · 9.8 · 9.10 · 9.11 |
+| **OWED** — ran ×2, **failed**, fixed, and never handed back to its owner | 9.3 · 9.4 · 9.5 · 9.7 · 9.9 |
+| **OWED** — the round ran but recorded no verdict either way | 9.1 · 9.2 |
+
+The standard is the log's own: 9.5's row already said *"still UNRUN in the sense that matters:
+neither owner brief has re-run it against this fix."* Nothing distinguishes its four siblings from
+it, and applying that standard to one criterion and not the rest would be picking the answer first.
+
+**`docs/PRD.md:36` therefore stays `—`.** The plan said *"mark anything you cannot substantiate as
+still owed rather than passing"*, and seven cannot be substantiated. This is not a judgement on the
+work — the mutation proofs, the integrator's own re-mutations and the Codex round are as thorough as
+anything in this repository. It is that the **last step of the protocol was skipped**: criteria that
+FAILED were fixed and never returned to their owners.
+
+### The gate that should have caught this reds for the wrong reason
+
+*(C1)* — the mutation the plan names: mark Phase 9 `✅ done` in `PRD.md`, expect
+`docs-contract.test.ts` to demand a QA-LOG row per criterion.
+
+It **did** go red — `PASS (91) FAIL (1)` — but the failure is:
+
+```
+Error: start marker not found: ## Phase 9
+    at between (tests/unit/docs-contract.test.ts:61:24)
+```
+
+The check (`:260`) reads the section between `## Phase 9 ` and `## Vault-out — Phase 9` in
+`docs/qa/phase-09-polish.md` and looks for a `| 9.N |` row per criterion. **This log has no
+`## Phase 9 ` heading** — it opens at `## Task 0` — so the check throws on the start marker and
+**never evaluates a single criterion row.**
+
+That is loud rather than silent, so it is not a false green. But the failure names a missing heading,
+not a missing verdict, and the obvious way to "fix" it is to add the heading — after which the check
+would find the gate table at `:224` and pass on rows that say **OWED**, because it tests only that a
+row *exists*. Recorded as a Tier-4-class defect for whoever closes Phase 9: the citation check needs
+to read the row's verdict, not merely its presence.
+
+**Revert confirmed** *(C12)*: content restored to `—`, and the failure count dropped by exactly one
+→ `PASS (92) FAIL (0)`.
