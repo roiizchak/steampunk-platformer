@@ -254,8 +254,18 @@ export function coveredLanding(series: Sample[], span: number): number {
   // index `L` yet, so no shake is armed and it draws a legitimate zero. The offset for tick `L`
   // itself is therefore never rendered — see the note beside `running` in the test.
   const inWindow = (L: number): number => series.filter((s) => s.tick > L && s.tick < L + span).length;
+  // 🔴 `L+span+1`, NOT `L+span`, and the `+ 1` is the whole of a latent flake found by the close
+  // round's adversarial brief. `applyShake` reads `tick - 1`, so the frame REPORTING `L+span` is
+  // still drawing index `L+span-1` — the last LIVE tick — and the spec's settled-tail assertion
+  // starts at `L+span+1` for exactly that reason. Counting from `L+span` here promised a tail the
+  // assertion would not accept: a landing with three tail samples, one of them on `L+span`, was
+  // SELECTED and then FAILED "the tail after the shake must have been sampled". Unreachable at the
+  // steady 3-4 tick frame gap this harness measured, reachable as soon as gaps jitter — i.e. on a
+  // loaded box, which is this suite's documented failure mode. Pinned by
+  // `tests/unit/covered-landing.test.ts`, which asserts the RELATION rather than the constant, so
+  // the two cannot drift apart again.
   const inTail = (L: number): number =>
-    series.filter((s) => s.tick >= L + span && s.tick <= L + TAIL_TICKS).length;
+    series.filter((s) => s.tick >= L + span + 1 && s.tick <= L + TAIL_TICKS).length;
   const alone = (L: number): boolean => !stamps.some((o) => o > L && o <= L + TAIL_TICKS);
   const hit = stamps.find((L) => inWindow(L) > 0 && inTail(L) > 2 && alone(L));
   if (hit !== undefined) {
