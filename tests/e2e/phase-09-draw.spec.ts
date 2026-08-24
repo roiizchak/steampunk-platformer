@@ -291,9 +291,9 @@ test.describe('Phase 9 — the game’s OWN trigger path emits particles', () =>
     });
 
     await installRecorder(page);
-    // Positive terminal conditions only, never a sleep: the harness's own resolution first, then a
-    // real touchdown recorded in the tick series, then a tail long enough to hold the burst.
-    await waitFor(page, { kind: 'run', n: 12 });
+    // Positive conditions only. 🔴 Was `{ kind: 'run', n: 12 }`; Jump needs a player who CAN jump —
+    // spawn is `grounded: false` — or `land` selects the SPAWN touchdown, with no jump and no burst.
+    await waitFor(page, { kind: 'grounded', n: 0 });
     await page.keyboard.down('Space');
     await waitFor(page, { kind: 'land', n: TAIL_TICKS });
     await page.keyboard.up('Space');

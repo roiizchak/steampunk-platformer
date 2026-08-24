@@ -351,3 +351,101 @@ D1 note; the original keeps the sequencing rule and 9.2c at 285. Parser in
 ⚠️ `test:sim-isolated` is the check that mattered here: a new dependency could have broken the
 "suite runs with Phaser uninstalled" criterion. It does not — `@babel/parser` is unrelated to Phaser
 and the run came back clean with the pin restored.
+
+---
+
+## Batch 2 — §1c, the `run:` waits. **D9's stated cause was wrong, and the real one was elsewhere.**
+
+### The measurement that changed the diagnosis
+
+§1c says the three `run:` waits are D9, citing *"No usable hit in 61 ticks"* from a loaded sweep.
+**That message cannot come from a `run` wait.** A `waitFor` that never resolves produces a 60 s
+Playwright `TimeoutError`. The message comes from `firstAirborneHit`, and what it demands is
+`contiguous(t0, t0 + 7)` — **the same eight-tick contiguity requirement, buried in the SELECTOR**,
+where no finding had looked.
+
+Removing the waits alone would have been *the convenient fix, not the one the claim names*.
+
+### The harness profile, re-measured — the documented one describes neither project idle
+
+`polishSeries.ts` states: *"1 tick per frame for about the first second, then 3-4 ticks per frame
+indefinitely … the longest gap-free run available after that first second is 1"*. Probed on this
+machine, 2026-08-24, per-frame over 301 samples:
+
+| project | opening burst | longest gap-free run after it | gap histogram after burst |
+|---|---|---|---|
+| `chromium` — idle | **90 frames** | 2 | `{1:1, 2:7, 3:170, 4:32}` |
+| `chromium` — CPU saturated (n−1 cores) | **61 frames** | 2 | `{1:1, 2:5, 3:163, 4:70}` |
+| `chromium-gpu` — idle | **300+ frames** — no steady phase reached | — | `{}` |
+
+⚠️ **Two corrections fall out of this.** The burst is ~90 frames (~1.5 s), not "about the first
+second"; and under SwiftShader the sim ran 1 tick/frame for the *entire* window, so the documented
+steady phase is a **loaded-box** profile, not this harness's resting state. Load shortens the
+burst — 90 → 61 — which is the mechanism, confirmed.
+
+⚠️ **The two files run under different projects**, which no finding had noted:
+`phase-09-polish.spec.ts` → `chromium`; `phase-09-draw.spec.ts` → `chromium-gpu`. The documented
+profile could only ever have described one of them.
+
+### What shipped
+
+| site | change | why |
+|---|---|---|
+| `brawlOnce` (was `:113`) | **deleted** | `startBrawl` tests `p.vy === 0` itself every frame; `airborneDrop` is the real terminal condition. A latent 60 s hang, establishing nothing. |
+| hazard test (was `:180`) | **deleted** | same construct, same reasoning. Holding one key needs no warm-up. |
+| `phase-09-draw.spec.ts` (was `:296`) | **`{ kind: 'grounded' }`** | The player spawns `grounded: false, state: 'fall'`. Twelve samples do not mean the player can jump — and without the condition the `land` that follows can select the **spawn** touchdown: a landing with no jump and none of the burst under test. |
+| `firstAirborneHit` | **bounded retry** | The real D9 fix. |
+
+⚠️ **The contiguity was NOT relaxed, because it is load-bearing.** Arm A asserts *exactly six*
+frozen ticks as a COUNT; with a gap that count is not wrong but **unmeasurable** — the identical
+point `polishSeries.ts` makes about `run`. "At least six sampled" would pass a game frozen forever.
+So the fix makes the event land where the resolution is: per-tick sampling exists only in the
+opening burst, and **a re-boot buys a fresh one**. Three attempts.
+
+### A branch written, mutation-tested, and DELETED as unreachable
+
+The first draft classified two failures — `no-drops` (the product) and `no-window` (the harness) —
+and skipped the retry for the product case. Both product mutations were run:
+
+| mutation | expected | actual |
+|---|---|---|
+| scavenger spawn disabled | `THE PRODUCT` | **`airborneDrop` times out at 60 s**, 0 retries logged |
+| bunny-hop disabled — every hit grounded | `THE PRODUCT` | **`airborneDrop` times out at 60 s**, 0 retries logged |
+
+The wait guarantees an airborne drop is in the series before the selector ever runs, so
+`airborne.length === 0` is impossible there. **A gate that cannot fire is worse than none** — the
+branch was deleted and the reasoning kept as a comment. The surviving message says
+*"THE HARNESS, NOT THE GAME"*, which the old shared text could not.
+
+### Watched failing *(C1)*, reverted *(C12)*
+
+`contiguous(t0, t0 + 700)` — a window unsamplable by construction — gave **1 failed**, three
+retries logged, and *"THE HARNESS, NOT THE GAME … 1 drop(s): [52]"*. Reverted; both specs green:
+`phase-09-polish` **4 passed**, `phase-09-draw` **3 passed**.
+
+### The claim pinned where it cannot flake — `tests/unit/wait-spec.test.ts`
+
+Reproducing the failure *as an e2e run* needs a loaded box, which is a flaky proof — it passed in
+isolation minutes after failing in a sweep, three times. So seven tests drive the measured gap
+profile directly: `run: 8` and `run: 12` satisfiable only from the burst, **unsatisfiable at any
+length once it is short**, `grounded` satisfiable on the same failing input, and — committed as
+evidence — that a **sample-count** wait would have resolved on an airborne series where the player
+cannot jump. ⚠️ Its header records the one narrowing: the predicate is a **copy**, because
+`page.waitForFunction` serialises its argument and cannot close over an import.
+
+### The 400-line rule, twice
+
+`phase-09-draw.spec.ts` was at **exactly 400** before this session — zero headroom — and
+`phase-09-polish.spec.ts` at 376. Both went over. Split per CLAUDE.md §3, in the `polishSeries.ts`
+idiom: **`tests/e2e/brawlArm.ts`** (159) holds the driver, the arm and the selector, no assertions;
+the spec is back to 281 and draw trimmed to 400.
+
+### Baseline e2e before this batch — 5.2 fired, and it is not ours
+
+Full suite, loaded: **127 passed, 1 failed**. The failure is `phase-08-perf.spec.ts` criterion 8.7 —
+Tier-5 item **5.2**, explicitly out of scope:
+
+> `level-05 costs 2.36x level-01 on the GPU … Expected: <= 2`
+
+**A fourth data point, and the spread is now 2.36 / 4.47 / 5.61 against a bound of 2.** Recorded
+for whoever repairs it; not touched here.

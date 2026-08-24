@@ -21,7 +21,7 @@
  * build, back to back *(vault C2)*. Without arm B it is a description, not a gate.
  */
 
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { bootToGame } from './gameHarness';
 import { EFFECT_DEPTH, type EffectKind } from '../../src/render/effects';
 import { SHAKE, shakeOffset, shakeWithinEnvelope, type ShakeState } from '../../src/render/screenShake';
@@ -39,105 +39,8 @@ import {
   startHopping,
   stopDriving,
   waitFor,
-  type Sample,
 } from './polishSeries';
-
-/**
- * Spawn scavengers next to the player and bunny-hop, from INSIDE the page.
- * Round trips are not an option — `levelDriver.ts` records 200 of them costing ~40 s of latency.
- * Genuine `KeyboardEvent`s on `window`, with `keyCode` forced on: Phaser's keyboard plugin dispatches
- * on that deprecated field, which `KeyboardEventInit` refuses to set, and a driver without it looks
- * correct and never moves the game.
- *
- * 🔴 **The hops are CUT on purpose.** A full-height jump reaches ~437 px against a 240 px scavenger,
- * so across most of an arc the boxes do not overlap in `y` and the claw — 18 ticks of startup — goes
- * live at an altitude it cannot reach. A ~50 ms hold cuts the jump to a third of that, keeping the
- * player in reach for the whole cycle **and** airborne ~97 % of it: an airborne hit becomes ordinary
- * rather than lucky, and it is the only kind that can prove anything about `vy`.
- */
-async function startBrawl(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    type G = { __phaserGame: { scene: { getScene(k: string): unknown } }; __drive?: number };
-    const w = window as unknown as G;
-    const CODES: Record<string, number> = { Space: 32, KeyK: 75 };
-    const key = (type: 'keydown' | 'keyup', code: string): void => {
-      const e = new KeyboardEvent(type, { code, key: code === 'Space' ? ' ' : 'k', bubbles: true });
-      Object.defineProperty(e, 'keyCode', { get: () => CODES[code] });
-      window.dispatchEvent(e);
-    };
-    const scene = w.__phaserGame.scene.getScene('Game') as { simWorld?: { player: { vy: number } } };
-    /** ~3 ticks. Long enough to leave the ground, short enough that the jump cut applies. */
-    const HOLD_MS = 50;
-    let frame = 0;
-    let holdUntil = 0;
-    const step = (t: number): void => {
-      frame += 1;
-      // `K` is the DEV low-hp scavenger fixture (`gameDev.spawnLowHpFixture`). One press per PAIR of
-      // frames, three times: Phaser drains its raw key queue once per frame, so two `keydown`s in a
-      // single frame collapse into one spawn.
-      if (frame <= 6) {
-        key(frame % 2 === 1 ? 'keydown' : 'keyup', 'KeyK');
-      } else {
-        const p = scene.simWorld?.player;
-        // `vy === 0` is the honest "feet are down" test — `levelDriver.ts`'s, evaluated every frame
-        // rather than gated behind the hold's own deadline.
-        if (p) {
-          if (holdUntil !== 0 && t >= holdUntil) { key('keyup', 'Space'); holdUntil = 0; }
-          if (holdUntil === 0 && p.vy === 0) { key('keydown', 'Space'); holdUntil = t + HOLD_MS; }
-        }
-      }
-      w.__drive = requestAnimationFrame(step);
-    };
-    w.__drive = requestAnimationFrame(step);
-  });
-}
-
-/** Every recorded tick from `from` to `to` inclusive, or `null` if the harness missed one. */
-function contiguous(byTick: Map<number, Sample>, from: number, to: number): Sample[] | null {
-  const out: Sample[] = [];
-  for (let t = from; t <= to; t++) {
-    const s = byTick.get(t);
-    if (s === undefined) return null;
-    out.push(s);
-  }
-  return out;
-}
-
-/** The bodily state a freeze holds identical. Bit for bit, never within a tolerance. */
-const still = (a: Sample, b: Sample): boolean => a.x === b.x && a.y === b.y && a.vx === b.vx && a.vy === b.vy;
-
-/** Drive one brawl arm and return its series. Same page, same build — only `search` differs. */
-async function brawlArm(page: Page, search: string): Promise<Sample[]> {
-  await bootToGame(page, search);
-  await installRecorder(page);
-  await waitFor(page, { kind: 'run', n: 8 });
-  await startBrawl(page);
-  await waitFor(page, { kind: 'airborneDrop', n: TAIL_TICKS });
-  const series = await readSeries(page);
-  await stopDriving(page);
-  return series;
-}
-
-/**
- * The first airborne hit with a full window of ticks recorded either side of it. 🔴 **Its two guards
- * live HERE and are deliberately NOT restated as assertions in the tests** — an `expect` repeating
- * the predicate its own input was selected by cannot fail; it looks like a gate and is not one
- * *(C2)*. This throw is the enforcement, so it says what a maintainer will need to hear.
- */
-function firstAirborneHit(series: Sample[]): { t0: number; byTick: Map<number, Sample> } {
-  const byTick = new Map(series.map((s) => [s.tick, s]));
-  const drops = series.filter((s, i) => i > 0 && s.hp < series[i - 1].hp);
-  for (const s of drops) {
-    if (!s.grounded && s.vy !== 0 && contiguous(byTick, s.tick, s.tick + 7)) return { t0: s.tick, byTick };
-  }
-  throw new Error(
-    `No usable hit in ${series.length} ticks. Usable = AIRBORNE with vy !== 0 (a grounded hit holds ` +
-      `vy === 0 for six ticks frozen or not, so the freeze check would pass VACUOUSLY) AND T0..T0+7 ` +
-      `all recorded (an unobserved tick cannot be asserted about). ${drops.length} drop(s): ` +
-      `[${drops.map((s) => `${s.tick}${s.grounded ? ' gnd' : ''}${s.vy === 0 ? ' vy=0' : ''}`).join(', ')}]. ` +
-      `All grounded = the bunny-hop driver stopped working; all airborne = dropped ticks (WaitSpec.run).`,
-  );
-}
+import { brawlArm, contiguous, firstAirborneHit, still } from './brawlArm';
 
 test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick it claims', () => {
   test.setTimeout(RUN_TIMEOUT * 3);
@@ -177,7 +80,9 @@ test.describe('9.1 hit-stop freezes the body, in the shipped game, at the tick i
   test('a HAZARD hit costs health and freezes nothing — the other side of "impact"', async ({ page }) => {
     await bootToGame(page);
     await installRecorder(page);
-    await waitFor(page, { kind: 'run', n: 8 });
+    // 🔴 The second prewarm, and the one no finding ever named — same construct, same file. Removed
+    // for the same reason: holding one key needs no warm-up, and `drop` below is the condition this
+    // test reduces. See `brawlArm`.
     // The spike strips in `level-01` sit at x 2304 and 2592 on flat ground; the spawn is at 624.
     // Holding one key is the whole driver — no jumps, no enemies, nothing else that can hurt.
     await page.keyboard.down('ArrowRight');
