@@ -33,7 +33,7 @@ the index — `docs-contract.test.ts` addresses it by that name.
 | — Exit gate art + the enter-the-gate run-in (not a phase) | [qa/phase-08-gate-entry.md](qa/phase-08-gate-entry.md) | [handoff](HANDOFF.md) | [plan](reviews/session-gate-art-and-entry-plan.md) · impl 🔴 **blocked, Codex usage limit** |
 | — Tiers 0-5 defect sweep (not a phase) | [qa/session-bugfix-tiers.md](qa/session-bugfix-tiers.md) + [gate owners](qa/session-bugfix-tiers-02-gate-owners.md) | [handoff](HANDOFF.md) | [plan](reviews/session-bugfix-tiers-plan.md) · [impl](reviews/session-bugfix-tiers-impl.md) |
 | — Branch cleanup, a recovered QA brief + the Tier-5 tranche (not a phase) | [qa/session-tier5-and-cleanup.md](qa/session-tier5-and-cleanup.md) + [the recovered brief](qa/phase-09-polish-qa-expert-brief-a.md) | [handoff](HANDOFF.md) | — (no Codex review; a post-merge cleanup, not a planned session) |
-| — Phase 9's six recorded debts, 1a–1f (not a phase) | [qa/session-phase-09-debts.md](qa/session-phase-09-debts.md) | [prompt](SESSION-PROMPT-next.md) | plan ✅ **ran before approval — BLOCK, 8 findings applied** · impl pending |
+| — Phase 9's six recorded debts, 1a–1f (not a phase) | [qa/session-phase-09-debts.md](qa/session-phase-09-debts.md) + [-02-perf](qa/session-phase-09-debts-02-perf.md) | [prompt](SESSION-PROMPT-next.md) | plan ✅ **ran before approval — BLOCK, 8 findings applied** · impl pending |
 
 > Phase 4's row was missing entirely until Phase 5 added it: the log was written and the index was
 > not updated. Nothing enforces the index, which is why it drifted — `docs-contract.test.ts` reads

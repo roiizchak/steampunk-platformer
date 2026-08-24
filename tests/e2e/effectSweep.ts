@@ -262,3 +262,62 @@ export function assertSweepDrew(reading: SweepReading): void {
 
 /** The two fit points, exported so the spec's message and this file's derivation cannot drift apart. */
 export const FIT_POINTS = { low: HALF_ALIVE, high: STORM_ALIVE } as const;
+
+/**
+ * The **burst fixture**: `PERF_MUTATION=p95spike`, the only mutation in this file's set that moves a
+ * bound *without* moving any other.
+ *
+ * 🔴 **Why it had to be authored rather than picked from the existing seven.** The four upper bounds
+ * are algebraically coupled — `delta = onWork - offWork`, and `perParticle` divides `delta` — so any
+ * mutation that raises real per-frame cost moves three of them at once and proves nothing about which
+ * one it reddened. `workP95Ms` is the exception: it is the only one of the four that is not a median,
+ * so a cost paid on a *minority* of frames is visible to it and invisible to the other three. That is
+ * the property this fixture is built on, and it is why bound 4 is the one bound in this file with a
+ * genuinely independent red proof. The other three are recorded as coupled in
+ * `docs/qa/session-phase-09-debts-02-perf.md` §Batch 6 rather than given a mutation that would overstate what
+ * it isolates.
+ *
+ * `SPIKE_EVERY` is 10 — a tenth of the window's frames, so the spikes sit above the 95th percentile
+ * (the top 5 %) while the 50th is still an ordinary frame. At 1-in-20 they would land ON the
+ * percentile boundary and the proof would turn on rounding.
+ *
+ * `SPIKE_COST_MS` is 20: above `MAX_EFFECT_FRAME_P95_MS` (16) with real headroom, and a total of
+ * ~240 ms across a 120-tick window — three orders of magnitude inside `WINDOW_STALL_MS`, so the
+ * window-close premise this fixture must preserve is never in question.
+ *
+ * ⚠️ **Gated on `alive > 0`, like the cost-law fixture — the OFF arm is left alone.** A spike charged
+ * to both arms would raise `arms.off.p95` too, and while nothing asserts that today, a fixture that
+ * quietly loads the control is the shape this project keeps paying for.
+ */
+export async function installBurstFixture(page: Page): Promise<void> {
+  await page.evaluate(
+    ({ costMs, every }: { costMs: number; every: number }) => {
+      const w = window as unknown as { __fxStorm?: { caps: Record<string, number> } };
+      if (w.__fxStorm === undefined) {
+        throw new Error('installBurstFixture before installStorm — there are no caps to read');
+      }
+      const storm = w.__fxStorm;
+      let frame = 0;
+      const step = (): void => {
+        let alive = 0;
+        for (const cap of Object.values(storm.caps)) {
+          alive += cap;
+        }
+        frame += 1;
+        if (alive > 0 && frame % every === 0) {
+          const until = performance.now() + costMs;
+          while (performance.now() < until) {
+            /* one expensive frame, where a real burst's cost would land */
+          }
+        }
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    },
+    { costMs: SPIKE_COST_MS, every: SPIKE_EVERY },
+  );
+}
+
+/** See `installBurstFixture` for why these two numbers are what they are. */
+const SPIKE_COST_MS = 20;
+const SPIKE_EVERY = 10;

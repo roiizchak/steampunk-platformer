@@ -370,7 +370,7 @@ export function stormCount(mutation: string): number {
  * while `phase-09-perf.spec.ts` applied it nowhere, so it ran that spec clean and reported
  * `1 passed` — `namedMutation`'s own failure mode, reached through a name it recognises.
  */
-export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'halfoffscreen', 'fleetscale0', 'noshake', 'flatcost', 'stall'] as const;
+export const NAMED_MUTATIONS = ['scale0', 'particlescale0', 'halfoffscreen', 'fleetscale0', 'noshake', 'flatcost', 'stall', 'p95spike'] as const;
 
 export type NamedMutation = (typeof NAMED_MUTATIONS)[number];
 

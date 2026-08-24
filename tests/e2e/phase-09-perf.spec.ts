@@ -91,29 +91,15 @@ import {
   SWEEP_ALIVE,
 } from './effectBudget';
 import { spawnWorstCaseFleet, walkPairs } from './effectCounts';
-import {
-  installStorm,
-  namedMutation,
-  setEmitterScale,
-  setEnemyScale,
-  setParticleScale,
-  setStorm,
-  stormCount,
-} from './effectMutation';
-import {
-  MIN_COST_EXPONENT,
-  assertSweepDrew,
-  costExponent,
-  installCostLawFixture,
-  walkSweep,
-} from './effectSweep';
+import { installStorm, namedMutation, setEnemyScale, setStorm, stormCount } from './effectMutation';
+import { MIN_COST_EXPONENT, assertSweepDrew, costExponent, walkSweep } from './effectSweep';
 import { DRIVEN_SHAKE, MIN_SHAKEN_FRAME_FRACTION, installShakeDrive } from './effectShake';
 import { bootToGame } from './gameHarness';
 import { median } from './levelPerf';
 import { DEV_FLEET_COUNT } from './perfBudget';
 import { counts } from './perfSampler';
 import { assertRealGpu } from './realGpu';
-import { stallSimulation } from './windowStall';
+import { applyPerfMutation } from './perfMutationSetup';
 
 declare const process: { env: Record<string, string | undefined> };
 
@@ -147,6 +133,25 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
    * each of those three choices, and `SWEEP_ALIVE`'s docstring has the six runs that ordered 1/6 the
    * other way.
    */
+  // 🔴 **Premises are `expect`, the four upper bounds are `expect.soft`** (2026-08-24, debt §1b).
+  //
+  // Playwright stops a test at the first hard failure, so before this change the four bounds were
+  // evaluated in *write order*: `onWork` red meant `delta`, `perParticle` and every pair's `p95` were
+  // never reached, and a run reported one bound when three were out. Soft-failing them makes each
+  // reachable — you now hear about all four in one run instead of the first one written down.
+  //
+  // ⚠️ **That buys REACHABILITY, not independence.** The four are algebraically coupled:
+  // `delta = onWork - offWork`, and `perParticle` divides `delta`. One real cost increase moves
+  // three of them, and no mutation can isolate `delta` or `perParticle` from `onWork` — recorded as
+  // a finding in `docs/qa/session-phase-09-debts-02-perf.md` §Batch 6 rather than papered over. The `p95`
+  // bound is the exception, because it is the only one of the four that is not a median:
+  // `PERF_MUTATION=p95spike` reddens it and leaves all three medians where they were.
+  //
+  // 🔴 **Everything above the budget block stays HARD, and Guard 2 most of all.** `MIN_STORM_WORK_
+  // DELTA_MS` is the amplifier premise: soft-fail it and execution runs on into the `exponent` and
+  // `perParticle` assertions whose meaning it licenses — a delta of noise over 1024, reported as a
+  // measurement. Same for Guards 0/0b/0c, Guard 1's monotonicity, Guard 3's cost law, the real-GPU
+  // check and the window-close guard. A premise that does not stop the test is not a premise.
   test('the worst case stays inside the frame budget, and the cost rises with the particle count', async ({
     page,
   }) => {
@@ -159,32 +164,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // the shake out of every window this gate ever took. `noshake` is Guard 0c's red proof.
     await installShakeDrive(page, MUTATION !== 'noshake');
     await spawnWorstCaseFleet(page);
-    if (MUTATION === 'stall') {
-      await stallSimulation(page);
-    }
-    // 🔴 Both drawing mutations are applied HERE too, not only in the 9.6 test. Guard 0 below is
-    // 9.6's statistic standing in front of this file's milliseconds, and a guard never run against
-    // the mutation it exists for is decoration. Under `scale0` every window still holds its full
-    // population, still reports it alive, and draws none of it — which makes each arm CHEAPER and
-    // every bound below easier. Under `fleetscale0` the twenty enemies this test's headline
-    // assertion NAMES go undrawn, which is the same defect one layer out.
-    if (MUTATION === 'scale0') {
-      await setEmitterScale(page, 0);
-    }
-    // 🔴 BEFORE any `setStorm` builds a population, and that ordering is the mutation working at all:
-    // a constant scale op is emit-only, so it governs particles emitted after it and never the ones
-    // already flying. `setParticleScale`'s docstring has the two wrong levers that went green first.
-    if (MUTATION === 'particlescale0') {
-      await setParticleScale(page, 0);
-    }
-    if (MUTATION === 'fleetscale0') {
-      await setEnemyScale(page, 0);
-    }
-    // Guard 3's red proof: a per-frame cost independent of the particle count, with every particle
-    // still emitted, alive and drawn. `installCostLawFixture` argues why that is the named mutation.
-    if (MUTATION === 'flatcost') {
-      await installCostLawFixture(page, 0);
-    }
+    await applyPerfMutation(page, MUTATION);
 
     // The enemy load, read once before sampling so the per-arm reads below have something to be
     // identical TO. `opaque` is `willRender`, not the creation-time `isSprite` flag.
@@ -357,15 +337,15 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // The absolute bound goes FIRST because it is criterion 9.5's own sentence — *the frame budget
     // holds under the worst case* — and Playwright reports the first failure. The two below refine
     // it: what the feature cost, and what one particle of it cost.
-    expect(
+    expect.soft(
       onWork,
       `the worst case — ${DEV_FLEET_COUNT} enemies and ${peak} particles — left the frame ` +
         `budget${detail}`,
     ).toBeLessThanOrEqual(MAX_EFFECT_FRAME_WORK_MS);
-    expect(delta, `the shipped particle peak costs more than it should${detail}`).toBeLessThanOrEqual(
+    expect.soft(delta, `the shipped particle peak costs more than it should${detail}`).toBeLessThanOrEqual(
       MAX_EFFECT_WORK_DELTA_MS,
     );
-    expect(perParticle, `one particle costs more per frame than it should${detail}`).toBeLessThanOrEqual(
+    expect.soft(perParticle, `one particle costs more per frame than it should${detail}`).toBeLessThanOrEqual(
       MAX_PER_PARTICLE_WORK_MS,
     );
 
@@ -388,7 +368,7 @@ test.describe('Phase 9 — criterion 9.5, the effect frame budget', () => {
     // machine reads today. Every arm is asserted, not just the median of them — a percentile that
     // is medianed across pairs is a median again.
     for (let pair = 0; pair < PAIRS; pair += 1) {
-      expect(
+      expect.soft(
         arms.on.p95[pair],
         `pair ${pair}: the 95th-percentile frame of the effects-on window took ` +
           `${arms.on.p95[pair]!.toFixed(3)} ms — a whole 60 Hz frame. The medians above cannot see ` +

@@ -449,3 +449,12 @@ Tier-5 item **5.2**, explicitly out of scope:
 
 **A fourth data point, and the spread is now 2.36 / 4.47 / 5.61 against a bound of 2.** Recorded
 for whoever repairs it; not touched here.
+
+---
+
+## Continued in a flat sibling
+
+At 451 lines this log reached CLAUDE.md §6's split point. **Batches 6 and 7 — the two measurement
+batches, §1b and §1a — are in
+[`session-phase-09-debts-02-perf.md`](session-phase-09-debts-02-perf.md)**, a flat sibling rather than
+a subdirectory, because `tests/unit/file-size.test.ts` globs `docs/qa/*.md` non-recursively.
