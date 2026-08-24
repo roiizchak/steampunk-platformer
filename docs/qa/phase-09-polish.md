@@ -240,19 +240,25 @@ The markers are written above in split form for exactly that reason. *(Watched, 
 
 | # | Criterion | Owner | Status |
 |---|---|---|---|
-| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | **OWED.** The gate round ran and its mutation proofs are at `:448`; T1's re-mutations by the integrator are at `:108`. But the four blind briefs' write-up at `:529` names 9.3, 9.4, 9.7 and 9.9 as what they failed and does not record a verdict on this one either way. **A round with no recorded verdict is not a pass.** |
-| 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | **OWED.** Same as 9.1 — no verdict recorded by either brief. And its landing-shake gate was afterwards found **flaky ~1 run in 3** and repaired (`:1600`), with the repair's own red watched at `:1663`. The criterion has therefore changed since any brief looked at it. |
-| 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | **RAN ×2 → FAILED.** `:529` — four blind briefs failed it. Findings closed in the fix round with their reds recorded. **No owner brief has re-run it against the fix**, which is the standard 9.5's row already applies to itself. |
-| 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | **STILL OWED — half re-run.** RAN ×2 → FAILED (`:529`), findings closed in the fix round; **brief A alone** was then re-run against the fix and passed — recovered 2026-08-23 from a dead worktree, see [`phase-09-polish-qa-expert-brief-a.md`](phase-09-polish-qa-expert-brief-a.md), red proof executed both directions. ⚠️ **That is ONE of the two briefs *(A7)* requires, and it verified the GEAR POP** — the substituted subject — not the fade the criterion names. The owner failed 9.4 on precisely that split. `hud-fade.test.ts` closes the fade half now, but **no owner brief has looked at it.** |
-| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | **RAN ×2 → FAIL twice.** Brief B (adversarial) FAILED it again on H1: the guard licensing the divide-back could not fire below `k = 3`. **All 11 findings applied or recorded 2026-08-22** — see §*"The 9.5 fix round #2"*. **Still UNRUN in the sense that matters: neither owner brief has re-run it against this fix.** |
+| 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | ✅ **PASS.** Closed by the close round, 2026-08-24. Brief A: PASS — one integer deadline in `src/sim/hitstop.ts` with six real consumers, no clock reachable from the sim. Brief B CONSTRUCTED a scene-side re-implementation that would keep every gate green — **recorded as D1**, since it describes code that does not exist and gating it is a new architectural rule, not this criterion. See §*"The close round — 2026-08-24"*. |
+| 9.2 | No game logic sequenced off a tween completion | `code-reviewer` ×2 | ✅ **PASS — and this is the row that earned the round.** Brief B found the criterion **had no gate at all**: the `describe` block carrying its number tests the shake envelope and the emitter depth band, and neither involves a tween. `tests/unit/tween-callback-boundary.test.ts` now closes it, watched red on the real tree (**D2**). A second construction — a shake armed one tick early — was **refuted by execution** (E5, **D7**). A latent selector flake was found and fixed (**D3**). See §*"The close round — 2026-08-24"*. |
+| 9.3 | Tweens tracked individually; no kill-by-target | `code-reviewer` ×2 | ✅ **PASS.** Re-run against the fix, 2026-08-24. Brief A: PASS — `tween-boundary.test.ts` 9/9 with both-direction literal fixtures; all four tween owners hold and stop a handle. Brief B named five ways the regex scan can be bypassed — **none present on this tree**, recorded as **D4** so the scan's reach is known rather than assumed total. See §*"The close round — 2026-08-24"*. |
+| 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | ✅ **PASS — on the FADE this time.** Both briefs of two, 2026-08-24, both pointed at `src/scenes/hudFade.ts` / `hud-fade.test.ts` and explicitly warned off the gear pop that caused the original failure. Brief A mutation-proved **both** settle paths (`onStop` and `onComplete` deleted separately, each reding its own named test). Brief B tried three further mutations and cross-checked the test's fake against real vendored Phaser: **NONE FOUND**. See §*"The close round — 2026-08-24"*. |
+| 9.5 | Frame budget holds under worst case | `performance-engineer` ×2 | ✅ **PASS, qualified — and the qualification is not new.** Both briefs re-ran against fix round #2/#3, 2026-08-24. Brief A: every defect the two prior FAILs named is fixed on disk; its one open concern — that the mutation evidence predated `8c9d0fc` — was discharged by **E6**, which deleted the shipped `applyShake` call and red *"0.0 per cent of this window's frames had the camera off its base"* on the current tree. Brief B CONSTRUCTED the combat-free measurement gap, which **9.8 entries 43 and 44 already disclose in full**, including that the defence is *"an argument and not a measurement"* (**D5**). This is the worst **steady-state** frame, not the worst frame the game can produce. See §*"The close round — 2026-08-24"*. |
 | 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN ×2 → PASS ×2**, checklist verified item by item by both briefs; brief B's one finding (L1, `inView` was an existence check) applied |
-| 9.7 | Thresholds pinned as literals, fixtures both sides | `qa-expert` ×2 | **STILL OWED — half re-run.** RAN ×2 → FAILED (`:529`), findings closed in the fix round; **brief A alone** was then re-run against the fix and passed, tabulating all 24 thresholds against vault 9.2's four parts — recovered 2026-08-23, see [`phase-09-polish-qa-expert-brief-a.md`](phase-09-polish-qa-expert-brief-a.md). ⚠️ **One of two briefs *(A7)***, and it states plainly what it could not do: no Playwright ran, so the e2e bounds' CONSTRUCTION is verified and their REDNESS is not. |
+| 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | `qa-expert` ×2 | ✅ **PASS — construction by the briefs, REDNESS by the integrator.** Brief A tabulated all 24 thresholds and stated plainly that no Playwright ran, so their redness was unproven; that sentence stands as written and is **not** rewritten into an agent-executed proof. **Six e2e mutations (E1-E6) were executed serially by the integrator**, each reding a named test with a read count. Brief B: NONE FOUND for the 8 it examined at depth — narrower than *"9.7 holds"*, and it said so. See §*"The close round — 2026-08-24"*. |
 | 9.8 | What the gates do NOT cover is stated here | — | ✅ **PASS.** Drafted below and extended through every round (entries 25, 36, 37, 43–45, and the two written at `:1363`). Item 32 was closed by hands-on judgement and then **re-judged on the fixed build** because the first approval did not count (`:1485`, `:1562`). |
-| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | **RAN ×2 → FAILED** (`:529`), findings closed in the fix round, **not re-run against the fix**. The line-count half is separately green and mechanical (`:1550`); the adversarial-pass half is what is owed. |
+| 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | ✅ **PASS.** Re-run against the fix, 2026-08-24. Line count: the largest file in `src`/`tests`/`tools` is exactly **400**, `file-size.test.ts` green, no active exemption. Clauses two and three are human acts with no mechanism (**D6**) — and the adversarial pass is the clause discharging itself, this round being it. Six files at exactly 400 with no headroom is **9.8 entry 48**, unchanged (**D11**); two tracked files outside the gate's glob are recorded as **D12**. See §*"The close round — 2026-08-24"*. |
 | 9.10 | Codex plan review ran; every finding applied or recorded | — | ✅ **PASS** — [phase-09-plan.md](../reviews/phase-09-plan.md), 4 blockers + 2 highs applied, 3 lows recorded |
 | 9.11 | Codex implementation review ran on the diff | codex | ✅ **PASS** — `:1518`. Triage with a verdict per finding in [phase-09-impl.md](../reviews/phase-09-impl.md); five gates watched failing with the mutation each assertion names, reverted and confirmed per *(C1, C12)*; four verification runs green on the same tree (unit 2151|3, sim-isolated 2151|3, e2e 119, build `verify-dist ok`). |
 
-### The reconciliation, and why Phase 9 is still not done
+### The reconciliation of 2026-08-23, and why Phase 9 was still not done then
+
+⚠️ **Kept as written, and superseded.** This subsection records the state on 2026-08-23 — seven
+criteria owed. All seven were closed by the owner round of 2026-08-24; the table above carries the
+verdicts and §*"The close round — 2026-08-24"* carries the evidence. It is preserved rather than
+edited because the reasoning that refused to call seven criteria closed is the reason they are
+honestly closed now. Deleting the refusal would leave only the answer.
 
 **Inventory item 0.1 asked for the table to be brought in line with what ran. It now is, and the
 answer is not the comfortable one.** Four rows are substantiated; seven are owed.
@@ -270,9 +276,20 @@ brief has re-run it against this fix**"* — and nothing distinguishes 9.3, 9.4,
 Applying the standard to one criterion and not to its four siblings would be picking the answer
 first.
 
-**So `PRD.md:36` stays `—`.** Phase 9 is not marked done, and `docs-contract.test.ts` stays green for
-the reason it always did rather than because the phase earned it. *(Global Constraints: a phase with
-a failing or unrun criterion is reported failing, never as done.)*
+**So the PRD's Phase 9 row stayed `—`** through 2026-08-23: the phase was not marked done, and
+`docs-contract.test.ts` stayed green for the reason it always had rather than because the phase
+earned it. *(Global Constraints: a phase with a failing or unrun criterion is reported failing,
+never as done.)*
+
+✅ **Closed 2026-08-24.** All seven were re-run by their owners, two briefs each, brief A's findings
+withheld from brief B. Two real defects were found and fixed, one adversarial construction was
+refuted by execution, and 9.7's unproven e2e redness was discharged by six integrator-run mutations.
+
+⚠️ **And `docs-contract` could not reach Phase 9 at all until that morning.** This log carried no
+`##`+`Phase 9`+space marker, so the contract would have thrown `start marker not found` rather than
+naming a missing criterion — the gate meant to make "done" mean something was, for this phase,
+decoration. Found by the close session's Codex plan review, confirmed locally, and fixed before any
+verdict was written. The note under this file's gate heading has the detail.
 
 **What this means about the merge.** The phase was merged to `main` and approved on a verbal report,
 and the project's own authority does not corroborate it. That is item 0.1's finding stated plainly.
@@ -1750,6 +1767,169 @@ This is the contention mode `playwright.config.ts` already documents, and the sa
 a genuine boot hang *(vault 1.4)*.
 
 ---
+
+## The close round — 2026-08-24, the six owner briefs Phase 9 was owed
+
+**This is the step that was skipped.** Phase 9 was merged and approved on a verbal report; seven of
+eleven criteria had been FAILED (or left with *no recorded verdict*), fixed, and never handed back to
+their owners. This log priced closing it at *"one gate round: `code-reviewer` ×2 over 9.1, 9.2, 9.3,
+9.9 and `qa-expert` ×2 over 9.4, 9.7, plus `performance-engineer` ×2 over 9.5"*. That is what ran.
+
+**Six briefs, dispatched A-then-B, not in pairs.** The three verifying briefs ran in parallel; each
+adversarial brief was launched only after its own partner returned, with the first brief's findings
+**withheld** *(A7)* — PRD § The QA agent protocol says *"the second brief is run after the first
+returns"*, and launching a pair together is a different mechanism wearing the same name. All six ran
+under `isolation: "worktree"`.
+
+⚠️ **Every deliverable was written to a path OUTSIDE the agent's worktree.** Last session recovered a
+209-line brief from a dead worktree that nobody had copied out. Telling the next dispatcher to
+remember is not a fix; giving the agent a path that survives its worktree is. Six briefs, six files,
+zero recoveries needed.
+
+### Verdicts
+
+⚠️ **The `#` column here is deliberately bolded, and that is load-bearing.**
+`docs-contract.test.ts` satisfies its "a QA-LOG row per criterion" check with a regex anchored on
+`^| 9.x |`. The first draft of this table used the bare form — and it **weakened the contract**:
+deleting the entire 9.5 row from the gate table above left the suite green, because this table
+supplied a matching row. Watched, 2026-08-24. Bolding takes this table out of the regex's reach so
+the gate table stays the single source, which is the second time in one session that prose about a
+gate degraded the gate. Do not un-bold them.
+
+| # | brief A (verify) | brief B (adversarial) | verdict |
+|---|---|---|---|
+| **9.1** | PASS | CONSTRUCTED (hypothetical — D1) | **PASS** |
+| **9.2** | PASS on the criterion, HIGH finding on its gate | CONSTRUCTED ×2 — **one confirmed, one refuted by execution** | **PASS**, after a gate was built and a defect fixed |
+| **9.3** | PASS | CONSTRUCTED (five scan bypasses — D4) | **PASS** |
+| **9.4** | **PASS — on the FADE**, both settle paths mutation-proved | NONE FOUND | **PASS** |
+| **9.5** | UNDETERMINED-PENDING-EXECUTION, lean PASS | CONSTRUCTED — **already disclosed** (D5) | **PASS, qualified by entries 43 and 44** |
+| **9.7** | Construction PASS; redness explicitly NOT verified | NONE FOUND for the 8 examined | **PASS — redness now executed, six proofs below** |
+| **9.9** | PASS on the line count; adversarial pass performed | CONSTRUCTED (clauses 2 and 3 have no mechanism — D6) | **PASS** |
+
+**9.4 is the one to read twice.** It was open because an earlier brief verified the **gear pop** — a
+substituted subject — and the owner failed it on precisely that split. This round's brief was told in
+its dispatch that the subject is the fade, and that assessing the gear pop would repeat the error the
+re-run exists to correct. It verified `src/scenes/hudFade.ts` / `tests/unit/hud-fade.test.ts` and
+mutation-proved **both** settle paths: deleting `onStop: settleFade` reds *"a fade stopped a third of
+the way through still ends at FADE_ALPHA"*; deleting `onComplete: settleFade` reds *"and on natural
+completion too."* The adversarial brief then tried three further mutations and checked the test's fake
+against real vendored Phaser (`BaseTween`, `Tween`, `TweenData`, `TweenBuilder`) to see whether the
+fake's `stop()`/`onComplete` model diverges from the engine in a way that could hide a defect. It does
+not, and nothing was found.
+
+### What the round actually changed
+
+**Two real defects, both from the adversarial half, both fixed and gated.**
+
+**D2 — criterion 9.2 had no gate for what it says.** The `test.describe` block carrying its number
+holds two tests — the landing shake's envelope and the emitters' depth band — and **neither involves
+a tween**. Five `tweens.add` sites live in `src/`; none was covered. This is the same hole 9.3 had one
+round earlier, and `tween-boundary.test.ts`'s header records the lesson verbatim: *"here there was no
+gate at all."* 9.3 got a scan. 9.2 did not, and its verdict rested on a reviewer tabulating five
+callbacks by hand — which is what both criteria already proved insufficient, because the criterion is
+a property of the TREE and the next callback to be written is in nobody's diff.
+
+`tests/unit/tween-callback-boundary.test.ts` closes it. It forbids **sequencing**, not callbacks:
+criterion **9.4 positively requires** `onStop` + `onComplete`, so a gate banning them would contradict
+a sibling criterion and would be edited rather than obeyed. It reads each tween config **and the
+bodies of the named callbacks it points at** — four of the five live sites pass `settleFade`,
+`settleLines` and `settle` by name, so an inline-only scan would report a clean sweep of files it
+never opened. Watched red on the **real tree, through that named-reference path**:
+
+| step | `tween-callback-boundary.test.ts` |
+|---|---|
+| pre | `PASS (6) FAIL (0)` |
+| `scene.scene.start('GameScene')` planted inside `settleFade` | `PASS (5) FAIL (1)` — *"../../src/scenes/hudFade.ts: a scene transition"* |
+| reverted | `PASS (6) FAIL (0)`, `git diff --stat` empty |
+
+**D3 — `coveredLanding` selected landings its own assertion rejects.** The selector guaranteed more
+than two samples in `[L+span, L+TAIL]`; the spec asserts more than two over `[L+span+1, L+TAIL]`,
+because `applyShake` reads `tick - 1` so the frame reporting `L+span` is still drawing the last LIVE
+tick. A landing with exactly three tail samples, one of them on `L+span`, was **selected and then
+failed** *"the tail after the shake must have been sampled"* — a red naming a sampling shortfall while
+the game is fine. Unreachable at the steady 3-4 tick frame gap measured 2026-08-22; reachable as soon
+as gaps jitter, i.e. on a loaded box — this suite's documented failure mode, and the same class of
+flake 9.2 has already been repaired for twice.
+
+Pinned by `tests/unit/covered-landing.test.ts` as a **unit** test over the pure selector, because
+reproducing it through Playwright means waiting on a frame-gap distribution nobody controls. It
+asserts the **relation** between selector and spec, not the constant — asserting the constant would
+have passed happily before the fix. Watched red against the real unfixed selector: `PASS (2) FAIL (1)`
+— *"coveredLanding selected landing 100, whose settled tail holds only 2 sample(s)"* — then
+`PASS (3) FAIL (0)` after the one-character fix.
+
+### The Playwright proofs — 9.7's open half, executed
+
+Brief A on 9.7 passed the **construction** of all 24 thresholds and said plainly that **no Playwright
+ran**, so their **redness** was unproven. No agent in this round ran Playwright either: the suite
+shares port 5173 and `test-results/`, only one run may exist at a time, and seven specs once failed
+for no reason but three concurrent jobs. So every brief was required to write its requests as exact,
+mechanically applicable edits, and **the integrator executed them serially**. That is the project's
+standing rule — *re-verify locally what an agent could not run* — and it is what closes this half.
+
+⚠️ **The verdict says who did what.** Brief A's *"I did not execute Playwright"* stands as written.
+The owner briefs assessed construction and named their blind spots; **the integrator ran the
+mutations.** This is a combined verdict, not an agent-executed one.
+
+| # | mutation (shipped source, or a shipped fixture) | result | named failure |
+|---|---|---|---|
+| E1 | `src/sim/world.ts` — `hitstopScale: hitstopScale ?? 1` → `: 1` | **1 failed, 3 passed** | *"arm B (?hitstop=0): no tick after T0=62 may hold the body still"* — the query-string arm really does reach the sim end to end |
+| E2 | `src/scenes/gameEffects.ts` — `applyShake(camera, tick - 1)` → `tick` | **1 failed, 3 passed** | *"t=90: drawn (0.6116…, -3.4119…) != shakeOffset(SHAKE.land, …)"* — the exact-offset loop reads the LIVE camera and catches a one-tick phase error against `ULP_PX = 1e-9` |
+| E3 | `src/scenes/gameEmitters.ts` — `.setDepth(spec.depth)` → `.setDepth(13)` | **1 failed, 3 passed** | *"emitter fx-particle-sparks depth"* at `toBeLessThan(11)` — the drawn-depth read observes what the scene set, not the constant |
+| E4 | `PERF_MUTATION=scale0` on `phase-09-draw.spec.ts` | **1 failed, 2 passed** | *"the effects-on arm submitted 0 particles to the batch while holding 96 alive"* — `alive 96 / drawn 0`, exactly the failure 9.6 exists for |
+| E5 | `src/scenes/gameEffects.ts` — `arm('land', player.landedTick - 1, tick)` | **1 failed, 3 passed** | *"t=91: drawn (0, 0) != shakeOffset(SHAKE.land, …)"* — **this refutes brief B's 9.2 construction**, see D7 |
+| E6 | `src/scenes/gameEffects.ts` — the shipped `applyShake` call deleted | **1 failed** | *"sweep N=0, round 0: 0.0 % of this window's frames had the camera off its base … under 90 % this is a frame budget measured with the third load missing from most of it"* — 9.5's shake-load guard fires on the CURRENT tree |
+
+Every mutation reverted with `git diff --stat` empty; `phase-09-polish.spec.ts` was re-confirmed at
+**4 selected, 4 passed** afterwards. Redness was read positively in every case — the named failing
+test plus the count — never from an exit code, and every run went through `npm run test:e2e` so
+`portGuard` could clear the dev server Windows leaves behind.
+
+**E6 is the one that discharges brief A on 9.5.** Its top-ranked concern was that this log's mutation
+evidence dates from 2026-08-22 while `gameEffects.ts` — the exact file the sharpest proof edits —
+changed again on 2026-08-23 (`8c9d0fc`, the shake tick-alignment fix), *after* the write-up. The proof
+was re-run against the post-`8c9d0fc` tree and holds.
+
+### Findings, and what was done with each *(C11)*
+
+| id | finding | disposition |
+|---|---|---|
+| **D1** | 9.1's *negative* half (*"not a tween"*) is carried only by `sim-boundary.test.ts`, which forbids a tween inside `src/sim/`. A freeze re-implemented scene-side as an `addCounter` writing `world.player.{x,y,vx,vy}` would keep every gate green | **RECORDED, not fixed.** The construction requires writing code that does not exist; the criterion is a property of the current tree, which satisfies it — one integer deadline in `src/sim/hitstop.ts` with six real consumers. Gating *"no scene-side write into the sim world"* is a **new architectural rule**, not a Phase 9 criterion, and this phase's own e2e harness does exactly that deliberately (`tests/e2e/effectShake.ts`). Raising it needs the owner |
+| **D2** | 9.2 had no gate for the criterion as written | **FIXED** — `tween-callback-boundary.test.ts`, watched red on the real tree |
+| **D3** | `coveredLanding`'s tail bound was one tick wider than the assertion consuming it | **FIXED** — `covered-landing.test.ts`, watched red before the fix |
+| **D4** | 9.3's scan has five bypasses: `getTweensOf` + destroy inlined (literally how Phaser defines `killTweensOf`), `tweens['killTweensOf']`, `tweens.destroy()`, the four other tween entry points, and `noop(this.tweens.add({…}))` classified as held | **RECORDED, not fixed.** Real limits of a regex scan, and each closure widens the false-RED surface on a rule this vault says gets weakened rather than obeyed when it fires wrongly. **None is present on this tree** — verified. A brittle gate is worse than none; recorded so the next reader knows the scan's reach rather than assuming it total |
+| **D5** | 9.5's measured frame carries **no combat**: `installStorm` holds the player invulnerable in every arm, and the shake armed is `SHAKE.land`, smallest of the four commands. `light`, `lethal` and `playerHurt` are never in a sampled window | **ALREADY RECORDED — 9.8 entries 43 and 44**, which state it directly, give the mechanism (`atLimit()` drops rather than evicts, so real bursts invert the sweep), and concede the defence is *"an argument and not a measurement"*. The adversarial brief rediscovered a deliberate, disclosed limitation. **9.5's verdict is qualified by it**, not silently green |
+| **D6** | 9.9's clauses two and three — *"diff reviewed; adversarial pass"* — have no mechanism at all | **RECORDED, inherent.** Both are human acts; the line-count clause is the mechanisable one and is green (`file-size.test.ts`). The adversarial pass was performed **by this round** — the clause discharging itself |
+| **D7** | 9.2 could pass with a landing shake armed one tick early, because `shakeOffset` is keyed on the absolute tick, so shifting the start leaves the waveform unmoved | **REFUTED BY EXECUTION (E5).** The construction missed that shifting the start shifts *which ticks are live*: the window's tail then draws `(0, 0)` where the oracle expects motion, and the same 1e-9 loop catches it. Recorded because a refuted construction is a result — this gate is now known not to be phase-blind |
+| **D8** | Shake **arbitration** reads index `tick` (`gameEffects.ts:182`) while shake **drawing** reads `tick - 1` (`:298`). Inventory 3.1 aligned `applyShake` and `landSquash` and left `shouldPreempt` behind, so arbitration judges a running shake one tick more decayed than it is drawn | ⚠️ **RECORDED, NOT FIXED — owner decision owed.** Confirmed by reading both lines. Correcting it changes which shakes preempt which at the window boundary, which is **a balance change**, and balance changes are a STOP-and-ask. No criterion fails on it |
+| **D9** | `phase-09-polish.spec.ts`'s `brawlArm` still carries `waitFor({kind:'run', n: 8})`, the construct `polishSeries.ts` names as 9.2's flake cause with *"Do not add a `run` wait to a new test"* | **RECORDED, not fixed.** It is not a new test, and it waits inside the post-boot burst where a run of 8 is satisfiable — unlike 9.2's, which waited after driving began. It has not flaked across the full-suite runs on record, including this session's two. Replacing it carries its own flake risk on a green suite; recorded as fragile rather than churned |
+| **D10** | `MAX_LINEARITY_SPREAD` appears in the recovered brief A's 24-threshold table but no longer exists as a live declaration | **RECORDED as a stale citation** in that brief. The threshold was replaced by the cost-exponent statistic in the second 9.5 fix round; the table predates the replacement. No gate reads it |
+| **D11** | Six files sit at **exactly** 400 lines with zero headroom, and `gameEffects.ts` cites *"GameScene.ts sits at exactly 400 lines"* as a reason for where a shutdown handler lives — the rule bending the design | **ALREADY RECORDED — 9.8 entry 48**, *"the 400-line rule distorted ownership and APIs in four places, and three of them stand"*. No new action |
+| **D12** | Two tracked files exceed 400 lines outside the gate's glob: `.agents/skills/fal-redesign/runtime/src/upgrade.mjs` (597) and `bin/fal-site.mjs` (413) | **RECORDED, not fixed.** Vendored skill runtime and a site helper, neither shipped by this game nor under `src/`, `tests/` or `tools/`. Widening the glob to vendored third-party code would red on arrival. Named here so the glob's boundary is a decision on record rather than an oversight |
+| **D13** | `src/scenes/goalLayer.ts` has an alpha pulse with no settle, relevant only if 9.4 is read as covering every alpha tween rather than the named fade | **RECORDED, not fixed.** 9.4 names *"a fade"*; the goal pulse is a yoyo whose end state is its start state, so there is no end value to force-settle. Noted because the reading is not self-evident |
+| **D14** | ⚠️ **Self-inflicted, found and fixed within the hour.** Two pieces of prose written for this very round each degraded the gate they described: the A0 note quoted `docs-contract`'s END marker verbatim, so `indexOf` sliced the section down to that sentence and reported all eleven criteria missing while all eleven sat six lines below; and the close round's own Verdicts table used bare `| 9.x |` rows, which **satisfied the contract's per-criterion check** — deleting the entire 9.5 row from the gate table above left the suite green | **BOTH FIXED and both watched.** The markers are now written in split form; the Verdicts table's `#` column is bolded out of the regex's reach. Recorded rather than quietly corrected because the pattern is the point: *documentation about a gate is inside that gate's blast radius*. The mutation was re-run after the fix and reds correctly — *"phase 9 criterion 9.5 has no QA-LOG row"* |
+
+### What this round could NOT check — the blind spots, kept
+
+*(Vault 9.3: a gate's blind spots are part of its result. These are the briefs' own, preserved rather
+than resolved.)*
+
+- **No agent ran Playwright, by dispatch.** Six proofs were executed by the integrator instead; every
+  e2e claim in this section is the integrator's, not an agent's.
+- **No agent ran a mutation of any kind** — so every agent falsifiability claim is *read*, not
+  *watched*. The mutations recorded above are the integrator's.
+- **The worktrees had no `node_modules`**, so agent unit runs resolved through the shared checkout,
+  and worktree isolation then prevented those agents from confirming that checkout's cleanliness
+  themselves. Confirmed here instead: the shared tree stayed clean throughout — `git status --short`
+  showing only the unrelated `CLAUDE.md` edit, HEAD unmoved between dispatches.
+- **The Phase 9 diff was reviewed targetedly, not line by line.** 9.9's *"diff reviewed"* clause is
+  discharged by judgement, as it always has been.
+- **Brief B on 9.7 examined 8 thresholds at depth, not all 24** — narrower than *"9.7 holds"*, and it
+  said so.
+- **Nobody has measured a shake's cost directly** — it sits below the 0.1 ms grid and nothing
+  amplifies it. Unchanged from entry 44.
+- **9.5 remains measured on the worst STEADY-STATE frame, not the worst frame the game can produce**
+  (entries 43, 44). E6 proves the shake load is present and guarded; it does not widen what is loaded.
 
 ## Vault-out — Phase 9
 
