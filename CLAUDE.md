@@ -145,8 +145,20 @@ Full rationale: [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowga
 ## 3. Non-negotiables
 
 - **Dependencies are frozen** at runtime `phaser@4.2.1` (exact, no caret); dev `vite`, `typescript`,
-  `vitest`, `@playwright/test`. **Anything else: STOP and ask.** Phase 1 needed `@types/node` twice
-  and solved it without adding it — prefer that.
+  `vitest`, `@playwright/test`, and **`@babel/parser`** (exact, added 2026-08-24 by owner decision —
+  test-only; see `tests/unit/tweenCallbacks.ts`). **Anything else: STOP and ask.** Phase 1 needed
+  `@types/node` twice and solved it without adding it — prefer that.
+  ⚠️ **`typescript` is NOT a usable parser.** TS 7 is the Go port: `require('typescript')` exports
+  only `version` and `versionMajorMinor`, `unstable/ast` is a scanner with no parser entry point,
+  and `unstable/sync` drives the native `tsgo` binary. That is why the parser is a dependency and
+  not an import — checked, not assumed.
+- **A tween callback may not write sim-owned state, persisted progression, or a next-tick control
+  flag** *(criterion 9.2, extended 2026-08-24 by owner decision)*. A tween is wall-clock;
+  `BaseTween.destroy()` runs **neither** callback, so a sim write inside one can simply never happen
+  and the tick loop reads the stale value forever. The test is **ownership, not the mutation verb**:
+  anything reached from a `World` handle (`world`, `simWorld`) is sim-owned — through an alias too —
+  while `flyers.delete(flyer)` is idempotent view bookkeeping and stays legal. Gated by
+  `tests/unit/tween-sim-writes.test.ts`.
 - **`src/sim/` imports nothing from Phaser**, and reaches no clock, no `Math.random`, no DOM.
   That includes **Arcade Physics: never** — collision is our own sim.
 - **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of

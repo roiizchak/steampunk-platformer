@@ -53,6 +53,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
+import { callbackText } from './tweenCallbacks';
 
 /**
  * The operations that MOVE THE GAME ON, and so may not hang off a tween finishing.
@@ -130,6 +131,21 @@ const NAMED_CALLBACK =
  * not a body, and would report a clean sweep of a file it had not looked inside.
  *
  * ### What it still does NOT reach — stated, not implied
+ *
+ * 🔴 **2026-08-24: the four holes below are now COVERED, by a second rule rather than by editing
+ * this one.** `9.2c` in this file runs the same `SEQUENCING` patterns over a real parser's
+ * extraction (`tweenCallbacks.ts`), and `tween-sim-writes.test.ts` uses it for the sim-write half.
+ * This extractor is left exactly as it was: it has committed fixtures, it has never been wrong on
+ * this tree, and replacing a proven rule with a new one is how a gate that worked becomes a gate
+ * nobody has watched fail. The list below is therefore what THIS function reaches, not what the
+ * criterion is gated by.
+ *
+ * ⚠️ **"…means a real parser, and the project's dependency set is frozen" was RIGHT**, and this
+ * session checked it instead of assuming either way. TypeScript 7.0.2 is the Go port:
+ * `require('typescript')` exports exactly `version` and `versionMajorMinor` — there is no
+ * `createSourceFile`. `typescript/unstable/ast` is a **scanner** with no parser entry point, and
+ * `typescript/unstable/sync` is a Program/Checker API that drives the native `tsgo` binary. So the
+ * parser is a dependency, and it took an owner decision (2026-08-24) rather than a clever import.
  *
  * A member-expression callback (`onComplete: this.foo`), an imported one, a config built elsewhere
  * and passed as a variable, or a name that shadows another declaration in the same file (the first
@@ -237,5 +253,48 @@ describe('9.2 — no game logic is sequenced off a tween completion', () => {
       "// Each flyer removes its own entry in onComplete, and scene.scene.start() would be wrong here.\nconst a = 1;",
     );
     expect(callbackCode(prose).trim()).toBe('');
+  });
+});
+
+/**
+ * 9.2c — the SEQUENCING rule, re-asked of the parser.
+ *
+ * `callbackCode()` is a regex extractor with four honestly-documented holes: a member-expression
+ * callback (`onComplete: this.foo`), an imported one, a config built elsewhere and passed as a
+ * variable, and a shadowed name. §1f of the next-session prompt carries them as open debt.
+ *
+ * 🔴 **They are not closed by deleting that extractor.** It has committed fixtures, it has never
+ * been wrong on this tree, and swapping a proven rule for a new one mid-session is how a gate that
+ * worked becomes a gate nobody has watched fail. Instead the same SEQUENCING patterns are run over
+ * the PARSER's extraction as well. Both must be clean. Where the two disagree the parser reaches
+ * further, so a violation hiding in one of those four shapes is now a red rather than a paragraph.
+ */
+describe('9.2c — the sequencing rule, asked of the parser as well as the regex', () => {
+  it('finds no scene transition, event emission or completion callback — via the AST extractor', () => {
+    const hits: string[] = [];
+    for (const [file, src] of Object.entries(ALL_SOURCES)) {
+      const inside = callbackText(src);
+      for (const { re, what } of SEQUENCING) if (re.test(inside)) hits.push(`${file}: ${what}`);
+    }
+    expect(hits, 'the parser sees a sequencing call the regex extractor missed').toEqual([]);
+  });
+
+  it('REJECTS the member-expression callback the regex extractor cannot reach (vault C2)', () => {
+    // `onComplete: this.foo` — hole one of four, now a red. Driven through the same production
+    // helper the check above uses, not against a pattern in isolation.
+    const src = `class S {
+  foo(): void { this.scene.start('GameScene'); }
+  bar(): void { this.tweens.add({ targets: o, onComplete: this.foo }); }
+}`;
+    const viaAst = SEQUENCING.filter(({ re }) => re.test(callbackText(src))).map((r) => r.what);
+    expect(viaAst, 'the parser must see through this.foo').toContain('a scene transition');
+    // And the honest comparison: the regex extractor does NOT, which is the debt being closed.
+    const viaRegex = SEQUENCING.filter(({ re }) => re.test(callbackCode(blankFor('code', src)))).map((r) => r.what);
+    expect(viaRegex, 'recorded, not asserted as acceptable: this is the hole').toEqual([]);
+  });
+
+  it('ACCEPTS the live sites through the AST extractor too — the other direction', () => {
+    const ok = 'scene.tweens.add({ onComplete: () => { flyers.delete(flyer); flyer.destroy(); } });';
+    expect(SEQUENCING.filter(({ re }) => re.test(callbackText(ok)))).toEqual([]);
   });
 });

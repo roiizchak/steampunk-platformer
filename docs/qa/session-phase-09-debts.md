@@ -240,3 +240,114 @@ Mutation D was re-run **after the split** to confirm the wired path, not just th
 Every revert confirmed by `git diff --stat` on the mutated file plus the restored count.
 
 **Suite:** 161 files, **2428 passed / 0 failed** — 2420 + the eight tests added here. Typecheck clean.
+
+---
+
+## Batch 5 — §1e, the sim-write rule. **Owner-authorised twice: the rule, then a dependency.**
+
+### The plan's recommended route did not exist, and that was checked rather than assumed
+
+The plan preferred the TypeScript compiler API on the grounds that `typescript` is already a frozen
+dev dependency, so "this adds nothing". **True of the dependency, false of the API.**
+
+TypeScript 7.0.2 is the Go port. Verified on this tree:
+
+| probe | result |
+|---|---|
+| `Object.keys(require('typescript'))` | `['version', 'versionMajorMinor']` — **no `createSourceFile`** |
+| `typescript/unstable/ast` | 409 exports, `createScanner` among them; **no parser entry point** |
+| `typescript/unstable/sync` | `API`, `Program`, `Checker` — but drives the native `tsgo` binary |
+
+⚠️ **So the sentence in `tween-callback-boundary.test.ts` — *"closing them means a real parser, and
+the project's dependency set is frozen"* — was RIGHT, and this session's plan was wrong to call it
+out of date.** The docstring now carries the three probes so the next reader does not re-litigate it.
+
+The owner was asked, with the three options and their costs, and **authorised adding a real parser**.
+
+**`@babel/parser` 8.0.4, pinned exact, devDependency.** Pure JS, no native binary, one transitive
+package (`@babel/types`). ⚠️ `npm audit` reports one high-severity advisory (`nanoid <3.3.18`) —
+**pre-existing**, confirmed by re-running the audit against the stashed tree. Not introduced here
+and not fixed here.
+
+### The rule, as authorised
+
+> **A tween callback may not write sim-owned state, persisted progression, or a next-tick control
+> flag.**
+
+⚠️ **Ownership, not the mutation verb.** `flyers.delete(flyer)` is idempotent view bookkeeping the
+criterion has no quarrel with; `world.projectiles.push(p)` is a sim entity. What separates them is
+who owns the object, and this project already declares that boundary: `src/sim/` is the simulation
+and `World` is its root, held in scenes as `this.world` or `scene.simWorld`.
+
+🔴 **Rooted at the HANDLE, never at `player`.** `player` and `playerSprite` are common view names; a
+bare `player` root would report a sprite write as a sim write, and a false red on a blocker rule is
+how a gate gets edited instead of obeyed. There is a committed accept-fixture for exactly that.
+
+**Real names, checked against the tree** — Codex's PR-03 was right on all three:
+
+- Persistence is **`writeProgress`** (`src/game/save.ts:264`) and `recordCompletion`.
+  **`saveProgress` does not exist anywhere in `src/`** and is not gated.
+- **`playerInputEnabled`** (`gameInput.ts:114`) is the concrete next-tick control flag.
+- **Registry writes are NOT gated**: `grep` finds no `registry.set` or `.data.set` in `src/` at all.
+  A rule whose every mutation is already impossible is worse than none — recorded, not written.
+
+### What the parser bought — and it closes §1f's first bullet too
+
+Every *inline* callback form falls out of the AST for free. The two *indirect* forms are resolved:
+a bare identifier and **a member expression** (`onComplete: this.foo`) — one of the four holes the
+regex extractor named and could not close.
+
+⚠️ **The old extractor was NOT deleted.** It has committed fixtures and has never been wrong on this
+tree, and replacing a proven rule with a new one is how a gate that worked becomes a gate nobody has
+watched fail. Instead **9.2c** runs the same `SEQUENCING` patterns over the parser's extraction as
+well. Both must be clean, and a committed test shows the parser catching `this.foo` where the regex
+returns `[]` — the debt made visible rather than described.
+
+**One remaining narrowing, stated:** `declarations()` is file-wide, not lexically scoped, so two
+declarations of one name collapse. No shadowed callback name occurs on this tree.
+
+### A measured fact the vacuity check nearly hid
+
+The first vacuity assertion was `simWriteViolations(src) !== undefined` — **always true for an
+array**. Replaced with a count of extracted callback BODIES, which then failed at `>= 4` and
+exposed something worth knowing:
+
+**Three files, not four.** The five live `tweens.add` sites sit in four files, but
+`goalLayer.ts`'s goal pulse registers **no callback at all** — it is a yoyo whose end state is its
+start state, which is finding **D13** arriving from the other direction. Bodies: `hudFade` 4,
+`hudGearPop` 2, `hudGearFlyers` 1 = **seven**, now pinned.
+
+### Watched failing *(C1)*, in a REAL callback, each reverted *(C12)*
+
+Injected into `settleFade` in `src/scenes/hudFade.ts` — a live `onStop`/`onComplete`, not a literal:
+
+| mutation | reported |
+|---|---|
+| `scene.simWorld.player.hp = 0` | `hudFade.ts: a sim-state write` |
+| `const p2 = scene.simWorld.player; p2.hp = 0` | `hudFade.ts: a sim-state write` |
+| `scene.simWorld.projectiles.push(…)` | `hudFade.ts: a sim entity spawn or removal` |
+
+⚠️ **The alias case is the one that justifies the dependency.** `p2` appears in no rule anywhere; a
+regex cannot reach it at all. Counted: **PASS (11) FAIL (1)**, named test
+`9.2b … finds no sim-state write in any tween callback in src/`, back to **PASS (12) FAIL (0)** with
+`git diff --stat` empty on revert.
+
+### The 400-line rule again
+
+`tween-callback-boundary.test.ts` reached 397 — three lines under, and the docstring correction the
+owner asked for would have broken it. Split: **`tween-sim-writes.test.ts`** (111) holds 9.2b and the
+D1 note; the original keeps the sequencing rule and 9.2c at 285. Parser in
+**`tweenCallbacks.ts`** (250), no assertions.
+
+### Verified with the new dependency in place
+
+| check | result |
+|---|---|
+| typecheck | clean |
+| unit | **162 files, 2437 passed / 0 failed** (2417 + 20: batches 3, 4, 5) |
+| build | `verify-dist ok: 5 level(s) and 12 audio file(s)` byte-identical |
+| **`test:sim-isolated`** *(criterion 1.3)* | **2434 passed / 3 skipped**, phaser restored to **4.2.1** |
+
+⚠️ `test:sim-isolated` is the check that mattered here: a new dependency could have broken the
+"suite runs with Phaser uninstalled" criterion. It does not — `@babel/parser` is unrelated to Phaser
+and the run came back clean with the pin restored.
