@@ -246,7 +246,7 @@ The markers are written above in split form for exactly that reason. *(Watched, 
 | 9.4 | A fade force-settles its end value on stop as well as complete | `qa-expert` ×2 | ✅ **PASS — on the FADE this time.** Both briefs of two, 2026-08-24, both pointed at `src/scenes/hudFade.ts` / `hud-fade.test.ts` and explicitly warned off the gear pop that caused the original failure. Brief A mutation-proved **both** settle paths (`onStop` and `onComplete` deleted separately, each reding its own named test). Brief B tried three further mutations and cross-checked the test's fake against real vendored Phaser: **NONE FOUND**. See §*"The close round — 2026-08-24"*. |
 | 9.5 | Frame budget holds under the worst STEADY-STATE frame (**owner-amended 2026-08-24**) | `performance-engineer` ×2 | ✅ **PASS against the amended criterion.** It read *"max enemies + max particles + shake"* and could not honestly pass as written: `installStorm` suppresses combat in every arm and the shake in the window is `SHAKE.land`, smallest of four. I recorded that as *"PASS, qualified"* and the **Codex implementation review blocked it** — *a caveat cannot reverse a criterion's wording* — correctly. The owner then **amended the criterion** to name the worst steady-state frame, which is what is measured and defensible; the amendment, its alternatives and what it does **not** close are recorded in `docs/prd/phase-09-polish.md`. Against the amended wording both briefs pass: every defect the two prior FAILs named is fixed on disk, and **E6** re-proved the shake-load guard on the current post-`8c9d0fc` tree. ⚠️ **The combat path stays unmeasured and stays open work** — entries 43, 44 and D5. |
 | 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN ×2 → PASS ×2**, checklist verified item by item by both briefs; brief B's one finding (L1, `inView` was an existence check) applied |
-| 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | `qa-expert` ×2 | ⚠️ **PARTIAL — construction verified, redness proven for SIX threshold families, not all 24.** Brief A tabulated the thresholds and said plainly that no Playwright ran, so their redness was unproven; that sentence stands as written and is **not** rewritten into an agent-executed proof. **Six e2e mutations (E1-E6) were executed serially by the integrator**, each reding a named test with a read count — covering the hit-stop arm, shake phase, emitter depth, the scale-zero draw guard, start-tick phase and shake presence. They do **not** cover the dust thresholds, particle caps, i-frame and squash thresholds, the frame-work/P95/delta bounds or `MIN_COST_EXPONENT`. Brief B examined 8 at depth. The Codex implementation review blocked the earlier bare PASS here and it was right: **the honest reading is partial.** Closing it needs a current threshold → fixture → red-proof table, which is owed work, not a formality. |
+| 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | `qa-expert` ×2 | ✅ **PASS, with one limit stated.** Brief A verified construction for all 24 and said plainly that no Playwright ran, so redness was unproven — that sentence stands as written. I first recorded six mutations as discharging it; the **Codex implementation review refused that**, correctly, and it was downgraded to PARTIAL. It is now closed by a full table: **14 unit-side threshold families each watched red, every one naming its own constant in the failure text**, plus **nine e2e executions** including `MIN_COST_EXPONENT` (E7, the bound the review said nothing covered) and `MAX_EFFECT_FRAME_WORK_MS` (E9, red on a real 3 ms cost injection rather than a harness flag). ⚠️ **Four upper perf bounds** — P95, work-delta, per-particle, storm-delta — have no mutation of their own: `phase-09-perf.spec.ts` is one sequential test and an earlier guard always fires first. Construction verified, redness **inferred**, recorded as weaker, and splitting that spec is owed work. See §*"9.7's threshold → fixture → red-proof table"*. |
 | 9.8 | What the gates do NOT cover is stated here | — | ✅ **PASS.** Drafted below and extended through every round (entries 25, 36, 37, 43–45, and the two written at `:1363`). Item 32 was closed by hands-on judgement and then **re-judged on the fixed build** because the first approval did not count (`:1485`, `:1562`). |
 | 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | ✅ **PASS.** Re-run against the fix, 2026-08-24. Line count: the largest file in `src`/`tests`/`tools` is exactly **400**, `file-size.test.ts` green, no active exemption. Clauses two and three are human acts with no mechanism (**D6**) — and the adversarial pass is the clause discharging itself, this round being it. Six files at exactly 400 with no headroom is **9.8 entry 48**, unchanged (**D11**); two tracked files outside the gate's glob are recorded as **D12**. See §*"The close round — 2026-08-24"*. |
 | 9.10 | Codex plan review ran; every finding applied or recorded | — | ✅ **PASS** — [phase-09-plan.md](../reviews/phase-09-plan.md), 4 blockers + 2 highs applied, 3 lows recorded |
@@ -1911,27 +1911,31 @@ was re-run against the post-`8c9d0fc` tree and holds.
 
 ### The V4 sweep, read rather than assumed
 
-| check | result |
-|---|---|
-| typecheck | clean |
-| unit | **2413 passed / 0 failed**, 159 files (from 2404 / 157 — counts rose, none fell) |
-| build | `verify-dist ok: 5 level(s) and 12 audio file(s)` byte-identical |
-| `test:sim-isolated` | 2410 passed + 3 skipped, phaser restored to `4.2.1` |
-| e2e | ⚠️ **128 selected, 126 passed, 2 FAILED** — against a 128/128 baseline |
+**Run twice: once at the mid-session block, and again after the owner's decisions landed.**
 
-⚠️ **The e2e sweep is worse than the baseline and that is stated, not smoothed.** Both failures were
-identified, and **both passed in isolation immediately afterwards (7 selected, 7 passed)**, which is the
-observation that separates load-sensitivity from breakage:
+| check | mid-session (blocked) | final |
+|---|---|---|
+| typecheck | clean | clean |
+| unit | 2413 / 0, 159 files | **2417 passed / 0 failed, 160 files** |
+| build | `verify-dist ok` | `verify-dist ok: 5 level(s) and 12 audio file(s)` byte-identical |
+| `test:sim-isolated` | 2410 + 3 skipped | **2414 passed + 3 skipped**, phaser restored to `4.2.1` |
+| e2e | ⚠️ 128 selected, **126** passed | ✅ **128 selected, 128 passed** |
 
-- **`phase-08-perf`** — *"level-05 costs 5.61x level-01 on the GPU … Expected: ≤ 2"*. This is the **known
-  open Tier-5 item 5.2**, whose own record reads *"observed 1 in 4, and the one was the loaded run inside
-  the full 128-test sweep; three isolated re-runs passed."* Reproduced here verbatim. Not this session's
-  scope and not caused by it.
-- **`phase-09-polish` 9.1** — *"No usable hit in 61 ticks"*. This is **D9**, upgraded above from a
-  recorded fragility to an observed failure by this very run.
+Counts rose at every step and none fell. The final e2e run carries **D8's balance change**, so the
+128/128 is on the tree that ships, not on the tree before it.
 
-Neither is a regression from this session's changes — the V0 baseline on the same tree passed 128/128 and
-nothing in either path was touched — but **the suite is 126/128 today and the phase is blocked anyway.**
+⚠️ **The mid-session run was 126/128 and that is left on the record rather than deleted.** Both
+failures were identified and both passed in isolation immediately afterwards (7 selected, 7 passed),
+which is the observation that separates load-sensitivity from breakage:
+
+- **`phase-08-perf`** — *"level-05 costs 5.61x level-01 on the GPU … Expected: ≤ 2"*. The **known open
+  Tier-5 item 5.2**, whose own record reads *"observed 1 in 4, and the one was the loaded run inside
+  the full 128-test sweep."* Reproduced verbatim. Not this session's scope.
+- **`phase-09-polish` 9.1** — *"No usable hit in 61 ticks"*. **D9**, upgraded by that very run from a
+  recorded fragility to an observed failure.
+
+**Neither recurred in the final sweep**, which is what a load-sensitive flake does and is exactly why
+neither is reported as fixed.
 
 ### What this round could NOT check — the blind spots, kept
 
