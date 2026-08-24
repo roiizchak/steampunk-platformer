@@ -1902,12 +1902,36 @@ was re-run against the post-`8c9d0fc` tree and holds.
 | **D6** | 9.9's clauses two and three — *"diff reviewed; adversarial pass"* — have no mechanism at all | **RECORDED, inherent.** Both are human acts; the line-count clause is the mechanisable one and is green (`file-size.test.ts`). The adversarial pass was performed **by this round** — the clause discharging itself |
 | **D7** | 9.2 could pass with a landing shake armed one tick early, because `shakeOffset` is keyed on the absolute tick, so shifting the start leaves the waveform unmoved | **REFUTED BY EXECUTION (E5).** The construction missed that shifting the start shifts *which ticks are live*: the window's tail then draws `(0, 0)` where the oracle expects motion, and the same 1e-9 loop catches it. Recorded because a refuted construction is a result — this gate is now known not to be phase-blind |
 | **D8** | Shake **arbitration** reads index `tick` (`gameEffects.ts:182`) while shake **drawing** reads `tick - 1` (`:298`). Inventory 3.1 aligned `applyShake` and `landSquash` and left `shouldPreempt` behind, so arbitration judges a running shake one tick more decayed than it is drawn | ⚠️ **RECORDED, NOT FIXED — owner decision owed.** Confirmed by reading both lines. Correcting it changes which shakes preempt which at the window boundary, which is **a balance change**, and balance changes are a STOP-and-ask. No criterion fails on it |
-| **D9** | `phase-09-polish.spec.ts`'s `brawlArm` still carries `waitFor({kind:'run', n: 8})`, the construct `polishSeries.ts` names as 9.2's flake cause with *"Do not add a `run` wait to a new test"* | **RECORDED, not fixed.** It is not a new test, and it waits inside the post-boot burst where a run of 8 is satisfiable — unlike 9.2's, which waited after driving began. It has not flaked across the full-suite runs on record, including this session's two. Replacing it carries its own flake risk on a green suite; recorded as fragile rather than churned |
+| **D9** | `phase-09-polish.spec.ts`'s `brawlArm` carries `waitFor({kind:'run', n: 8})`, the construct `polishSeries.ts` names as 9.2's flake cause with *"Do not add a `run` wait to a new test"* | ❌ **UPGRADED MID-SESSION: recorded as fragile, then OBSERVED FAILING.** I recorded this as *"it has not flaked across the full-suite runs on record"* — and the very next full sweep failed it: *"No usable hit in 61 ticks … 1 drop(s): [62]"*, a **sampling** shortfall, not a behaviour failure. It passed in isolation minutes later (7 selected, 7 passed), so it is load-sensitive exactly as `polishSeries.ts` predicts: after the first second this harness runs 3-4 ticks per frame, so a run of 8 is satisfiable only out of the opening burst, and a loaded box shortens that burst. **Owed work, no longer a recorded non-fix.** The repair is the one 9.2 already had: ask for the condition the reduction needs, not for contiguity. Not taken this session because 9.5 already blocks the phase and replacing a wait on a green-in-isolation spec is how the last flake was introduced. |
 | **D10** | `MAX_LINEARITY_SPREAD` appears in the recovered brief A's 24-threshold table but no longer exists as a live declaration | **RECORDED as a stale citation** in that brief. The threshold was replaced by the cost-exponent statistic in the second 9.5 fix round; the table predates the replacement. No gate reads it |
 | **D11** | Six files sit at **exactly** 400 lines with zero headroom, and `gameEffects.ts` cites *"GameScene.ts sits at exactly 400 lines"* as a reason for where a shutdown handler lives — the rule bending the design | **ALREADY RECORDED — 9.8 entry 48**, *"the 400-line rule distorted ownership and APIs in four places, and three of them stand"*. No new action |
 | **D12** | Two tracked files exceed 400 lines outside the gate's glob: `.agents/skills/fal-redesign/runtime/src/upgrade.mjs` (597) and `.agents/skills/fal-redesign/runtime/bin/fal-site.mjs` (413) | **RECORDED, not fixed.** Vendored skill runtime and a site helper, neither shipped by this game nor under `src/`, `tests/` or `tools/`. Widening the glob to vendored third-party code would red on arrival. Named here so the glob's boundary is a decision on record rather than an oversight |
 | **D13** | `src/scenes/goalLayer.ts` has an alpha pulse with no settle, relevant only if 9.4 is read as covering every alpha tween rather than the named fade | **RECORDED, not fixed.** 9.4 names *"a fade"*; the goal pulse is a yoyo whose end state is its start state, so there is no end value to force-settle. Noted because the reading is not self-evident |
 | **D14** | ⚠️ **Self-inflicted, found and fixed within the hour.** Two pieces of prose written for this very round each degraded the gate they described: the A0 note quoted `docs-contract`'s END marker verbatim, so `indexOf` sliced the section down to that sentence and reported all eleven criteria missing while all eleven sat six lines below; and the close round's own Verdicts table used bare `| 9.x |` rows, which **satisfied the contract's per-criterion check** — deleting the entire 9.5 row from the gate table above left the suite green | **BOTH FIXED and both watched.** The markers are now written in split form; the Verdicts table's `#` column is bolded out of the regex's reach. Recorded rather than quietly corrected because the pattern is the point: *documentation about a gate is inside that gate's blast radius*. The mutation was re-run after the fix and reds correctly — *"phase 9 criterion 9.5 has no QA-LOG row"* |
+
+### The V4 sweep, read rather than assumed
+
+| check | result |
+|---|---|
+| typecheck | clean |
+| unit | **2413 passed / 0 failed**, 159 files (from 2404 / 157 — counts rose, none fell) |
+| build | `verify-dist ok: 5 level(s) and 12 audio file(s)` byte-identical |
+| `test:sim-isolated` | 2410 passed + 3 skipped, phaser restored to `4.2.1` |
+| e2e | ⚠️ **128 selected, 126 passed, 2 FAILED** — against a 128/128 baseline |
+
+⚠️ **The e2e sweep is worse than the baseline and that is stated, not smoothed.** Both failures were
+identified, and **both passed in isolation immediately afterwards (7 selected, 7 passed)**, which is the
+observation that separates load-sensitivity from breakage:
+
+- **`phase-08-perf`** — *"level-05 costs 5.61x level-01 on the GPU … Expected: ≤ 2"*. This is the **known
+  open Tier-5 item 5.2**, whose own record reads *"observed 1 in 4, and the one was the loaded run inside
+  the full 128-test sweep; three isolated re-runs passed."* Reproduced here verbatim. Not this session's
+  scope and not caused by it.
+- **`phase-09-polish` 9.1** — *"No usable hit in 61 ticks"*. This is **D9**, upgraded above from a
+  recorded fragility to an observed failure by this very run.
+
+Neither is a regression from this session's changes — the V0 baseline on the same tree passed 128/128 and
+nothing in either path was touched — but **the suite is 126/128 today and the phase is blocked anyway.**
 
 ### What this round could NOT check — the blind spots, kept
 
