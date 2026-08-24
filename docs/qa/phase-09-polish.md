@@ -221,16 +221,22 @@ that only one Playwright run may exist at a time.
 
 ---
 
-## QA gate — status
+## Phase 9 — the gate
 
-**Every row below is UNRUN until its owner agent has run it, twice, per (A7).**
+⚠️ **This heading is load-bearing and is not free to rename.**
+`docs-contract.test.ts`'s *"every phase marked done in the PRD is evidenced criterion-by-criterion
+in its QA log"* slices this file between a start marker of `##`+`Phase 9`+space and an end marker of
+`##`+`Vault-out`+em-dash+`Phase 9`, then looks for a `| 9.x |` row per criterion. `between()` **throws
+`start marker not found`** when the start marker is absent — a red naming a parse failure rather than
+a missing criterion. This section read `## QA gate — status` until 2026-08-24, which is why the
+contract could not reach Phase 9 at all: the rows below sat outside any slice it could take. Every
+other done phase carries the same `## Phase N — …` marker. Found by the Codex plan review for the
+close session, confirmed locally.
 
-**Reconciled 2026-08-23** by the bug-fix session (inventory item 0.1), criterion by criterion against
-the evidence sections in this file. The table had never been updated after the rounds ran, so it read
-UNRUN for seven criteria whose rounds are written up below at `:448`, `:494`, `:529`, `:1063`,
-`:1132`, `:1320` and `:1518`. **That was the easy half.** The hard half is that reconciling it
-honestly does **not** turn most of those rows green — see §*"The reconciliation, and why Phase 9 is
-still not done"* below the table.
+⚠️ **And do not quote either marker verbatim in prose above the table.** The first draft of this very
+note spelled the end marker out; `indexOf` found *that* occurrence first, sliced from the heading to
+the sentence, and reported all eleven criteria missing while all eleven were present six lines below.
+The markers are written above in split form for exactly that reason. *(Watched, 2026-08-24.)*
 
 | # | Criterion | Owner | Status |
 |---|---|---|---|
