@@ -283,6 +283,8 @@ spec does not rediscover it.
 
 ### QA gate results
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Result |
 |---|---|---|
 | 2.1 | Hold Right → x increases monotonically | **PASS** — e2e, with a floor and ceiling from the live knob, plus a separate test that the DRAWN rectangle tracks the sim |

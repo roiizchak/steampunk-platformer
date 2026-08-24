@@ -42,6 +42,8 @@ None had a gate. All three are fixed, each with a watched red run.
 
 ### Criterion-by-criterion
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Owner | Verdict |
 |---|---|---|---|
 | 6.1 | Pickup increments the counter; tabular figures | e2e | **PASS** — trajectory now asserted, §Session 2 item 2 |

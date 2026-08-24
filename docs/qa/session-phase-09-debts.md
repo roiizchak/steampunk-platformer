@@ -169,3 +169,74 @@ positively rather than inferred from an exit code. Typecheck clean.
 
 Inlining `getTweensOf` + destroy (literally how Phaser defines `killTweensOf`), `tweens.destroy()`,
 and the other tween entry points. All ambiguous, all documented, **none present on this tree.**
+
+---
+
+## Batch 4 — §1f, docs-contract's fragile repair. **The obvious one-liner was the wrong repair.**
+
+`docs-contract.test.ts`'s per-criterion check was `/^\| 9\.2 \|/m.test(section)` — satisfied by
+**any** such row anywhere in the phase's slice. Phase 9's own close-round verdict table would have
+discharged it, and the only thing preventing that is that its rows are **bolded** (`| **9.1** |`)
+and so missed by the regex. A gate protected by Markdown emphasis.
+
+### Why "exactly one row in the slice" was rejected
+
+That is the obvious durable fix and **it is wrong.** `docs/qa/phase-04-art.md` carries a
+criterion-verdict table **and** a later summary table, giving 4.2b, 4.16 and 4.27 two unbolded rows
+each. A slice-wide count calls that an error. Phase 4 escapes only because the PRD's `✅` filter
+excludes it — its row reads `⚠️ merged with known debt` — which is **luck, not design**.
+
+Codex flagged this (PR-01) and it was confirmed locally: the rows exist, and the filter's own output
+is **eight** done phases, not the nine this session's plan first claimed.
+
+⚠️ **Phase 4's log is therefore never checked by this lint at all.** That is a standing blind spot,
+recorded here rather than fixed: making Phase 4 checkable is a question about Phase 4's status, not
+about this gate.
+
+### What shipped — an explicit designation
+
+A `<!-- gate-verdicts -->` marker on the line above each log's criterion-verdict table. Invisible
+when rendered, cannot drift the way a line number did (Batch 1), and a missing one is a red with its
+own message rather than a silent pass. Added to all eight done phases **and** Phase 4.
+
+A marker rather than a table header because **the logs share none** — they run from
+`| # | Criterion | Result |` through `| # | Verdict | Evidence |` to
+`| # | verdict | the evidence that decides it |`. "The first table with a criterion row" would work
+today and is exactly the heuristic that silently picks the wrong table later.
+
+The check now takes the contiguous run of `|`-leading lines after the marker and requires **exactly
+one** row per criterion **in that table**. Zero is the missing row it always caught; two is a
+duplicate verdict, which it previously could not tell apart from one.
+
+### The 400-line rule bit, and the file was SPLIT rather than justified
+
+`docs-contract.test.ts` went 325 → 466 lines and `file-size.test.ts` went red — **found by the full
+suite, not by the targeted run**, which is the argument for running the whole thing per batch.
+
+Split per CLAUDE.md §3's *"Prefer splitting"*, in the `sourceScan.ts` idiom the repo already uses:
+
+- `tests/unit/gateVerdicts.ts` (79) — the parser. No assertions.
+- `tests/unit/gate-verdicts.test.ts` (73) — its red-proofs, driven against literals.
+- `tests/unit/docs-contract.test.ts` (369) — back under the limit; keeps the cross-document check and
+  the Phase 4 regression test, which needs its document glob.
+
+⚠️ **`criterionRowGaps` is a function, not a loop inlined in the test, so the red-proofs drive the
+PRODUCTION path.** That is Batch 3's lesson applied one file over.
+
+### Watched failing *(C1)*, four mutations on the REAL log, each reverted *(C12)*
+
+| # | mutation, `docs/qa/phase-09-polish.md` | result |
+|---|---|---|
+| A | marker deleted | **PASS (98) FAIL (1)** — *"has no `<!-- gate-verdicts -->` marker"* |
+| B | 9.1's row duplicated **inside** the designated table | **PASS (98) FAIL (1)** — `…criterion-by-criterion in its QA log` |
+| C | close-round verdict table **un-bolded** (8 rows) | **PASS (99) FAIL (0)** — emphasis is no longer load-bearing |
+| D | **the decisive one**: 9.1's designated row deleted *while* the un-bolded duplicate remained | **PASS (98) FAIL (1)** |
+
+⚠️ **D is the proof the whole batch rests on.** With one un-bolded `| 9.1 |` row still in the slice,
+the OLD rule reported the criterion evidenced — the bypass, live. The new rule reports it missing.
+Mutation D was re-run **after the split** to confirm the wired path, not just the pre-split code:
+**PASS (92) FAIL (1)**, back to **PASS (93) FAIL (0)** on revert.
+
+Every revert confirmed by `git diff --stat` on the mutated file plus the restored count.
+
+**Suite:** 161 files, **2428 passed / 0 failed** — 2420 + the eight tests added here. Typecheck clean.

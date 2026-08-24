@@ -313,6 +313,8 @@ done, and it named **34 missing rows** when the flip was tried.
 **3 FAIL · 13 UNRUN · 17 PASS · 1 moved.** A phase with a failing or unrun criterion is reported
 failing *(CLAUDE.md §3)*, so PRD.md keeps `⚠️ merged with known debt` rather than ✅.
 
+<!-- gate-verdicts -->
+
 | # | Verdict | Evidence |
 |---|---|---|
 | 4.0 | **UNRUN** | No gate-0 re-probe against `nano-banana-pro` is recorded in this log. The Phase 0 probe in `docs/generations/phase-00-style-probe.md` is a different model and a different gate. |

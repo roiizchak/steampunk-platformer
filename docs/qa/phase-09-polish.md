@@ -238,6 +238,8 @@ note spelled the end marker out; `indexOf` found *that* occurrence first, sliced
 the sentence, and reported all eleven criteria missing while all eleven were present six lines below.
 The markers are written above in split form for exactly that reason. *(Watched, 2026-08-24.)*
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Owner | Status |
 |---|---|---|---|
 | 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | ✅ **PASS.** Closed by the close round, 2026-08-24. Brief A: PASS — one integer deadline in `src/sim/hitstop.ts` with six real consumers, no clock reachable from the sim. Brief B CONSTRUCTED a scene-side re-implementation that would keep every gate green — **recorded as D1**, since it describes code that does not exist and gating it is a new architectural rule, not this criterion. See §*"The close round — 2026-08-24"*. |

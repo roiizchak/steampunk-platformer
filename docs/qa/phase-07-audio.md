@@ -15,6 +15,8 @@ Every measurement below was taken on `chromium-gpu`, headed, renderer
 `angle (nvidia, nvidia geforce rtx 4080 (0x00002704) direct3d11 vs_5_0 ps_5_0, d3d11)`. No Phase 7
 number comes from headless SwiftShader.
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Owner | State | Evidence |
 |---|---|---|---|---|
 | 7.1 | Every cue plays at its event; no unloaded-sound errors, including death by kill plane | `e2e` | ✅ | `phase-07-audio.spec.ts`, 6 tests. Cues sampled from Phaser's own `sounds` list, not from a `play()` return. 11 audio files requested and served; zero audio console errors. |
