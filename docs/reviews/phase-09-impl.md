@@ -50,3 +50,43 @@ was `(cursor, tickCount]` against stamps taken from the pre-increment count, so 
 death plume or hurt vent had ever fired in the shipped game** at one tick per frame. Every unit
 fixture had bumped the count before stamping — the one ordering the game never performs — and 9.5/9.6
 drive `explode()` on the emitter handles directly, bypassing `render()` entirely. Entry 49.
+
+---
+
+## The close round's review — 2026-08-24. Verdict: **BLOCK**
+
+**Ran through `codex:rescue` on the three close-round commits** (`1a58142`, `bb75bda`, `ad31b89`), with
+the prompt instructing `node_repl` + `fs.readFileSync` because Codex's sandboxed shell cannot spawn
+processes on this machine. Its findings are therefore **file-evidence only**, and every one below was
+re-verified locally before being acted on — as the protocol requires and as this round's results
+justify: four of the plan review's findings were confirmed by local check, and every implementation
+finding acted on below was confirmed too.
+
+> **BLOCK. Phase 9 should not be reported done: 9.5 is explicitly unmet, and the new 9.2 gate has
+> substantial false-green paths.**
+
+**It was right, and it caught the session doing the exact thing the session existed to stop.** The
+close round marked 9.5 *"PASS, qualified"*. Codex's answer: *"A caveat cannot reverse the criterion's
+wording; this is exactly the 'bare PASS wearing a caveat' case. D5 is a dodge, not an acceptable
+non-fix."* Phase 9's done status was reverted within the hour.
+
+| # | severity | finding | disposition |
+|---|---|---|---|
+| 1 | **blocker** | 9.5 is a failing criterion presented as a qualified PASS. The criterion says *max enemies + max particles + shake*; the frame carries no combat and the smallest shake, and the log calls its own defence *"an argument and not a measurement"* | **ACCEPTED IN FULL.** 9.5 marked **FAILING**; the PRD's Phase 9 row reverted to **NOT done** with the reason on it. Three ways out named, all the owner's: measure the stated worst case, amend 9.5 by explicit owner amendment, or leave it failing |
+| 2 | **blocker** | The 9.2 token list does not mechanise the criterion. Seven scene methods only — `transition`, `run`, `sleep`, `wake`, `setActive` and `remove` are real ScenePlugin progression operations and all passed | **PARTIALLY APPLIED, and verified.** All six added; `scene.scene.wake()` planted in `settleFade` now reds the gate naming `hudFade.ts`, watched. The wider half — `world.completed = true`, `player.hp = 0`, `finishLevel()`, registry writes — is **NOT closed**: classifying game-state APIs is a new architectural rule, and 9.2 is not the criterion that authorises inventing one. Recorded as owed rather than waved through |
+| 3 | high | `callbackCode()` materially overstates its reach — misses `onComplete() {}`, `function () {}`, `this.foo`, quoted keys, `{ onComplete }`, `async () =>`, multiline expression bodies, `cfg.onComplete = done` | **APPLIED.** The extractor was **rewritten**: it now scans the whole balanced `tweens.*(…)` call rather than trying to recognise each callback shape, which picks up every *inline* form for free, and follows bare-identifier callbacks to their declarations. The docstring now **names what it still cannot reach** (member-expression and imported callbacks, configs built elsewhere, shadowed names) instead of claiming totality |
+| 4 | high | The selector fixed the tail endpoint and left its twin. The spec's live set is `tick > L && tick <= L + span`; `inWindow` still used `< L + span`, rejecting a landing whose only live sample is exactly `L + span` | **APPLIED.** `inWindow` now uses `<= L + span`, and the stale interval text in the thrown message was corrected. The first fix corrected one endpoint and left the other — the same defect class, opposite direction |
+| 5 | high | Six mutations do not establish 9.7 for all 24 thresholds; dust, particle caps, i-frame/squash, frame-work/P95/delta and `MIN_COST_EXPONENT` are uncovered | **ACCEPTED.** 9.7 downgraded from PASS to ⚠️ **PARTIAL**, naming exactly which six families the mutations cover and which they do not. Closing it needs a current threshold → fixture → red-proof table — owed work |
+| 6 | medium | 9.4 credits Brief A with mutations while the blind-spot section says *"no agent ran a mutation of any kind"* | **APPLIED — the blind spot was the wrong half.** The `qa-expert` brief **did** mutate, in an isolated scratchpad harness, never touching a repository file. The blanket sentence was corrected to say which briefs mutated and which did not |
+| 7 | medium | D4 waves through two demonstrated bypasses in the 9.3 scan (bracket access, discarded wrapper) | **RECORDED, still not fixed — and now with a sharper reason.** Codex is right that *"a brittle gate is worse than none"* does not justify leaving two *unambiguous* bypasses. It is owed work on 9.3's gate, listed with 9.7's table. Not taken this session because 9.5 already blocks the phase and a rushed widening of a scan is how false reds arrive |
+| 8 | medium | The docs-contract discoveries are correct, but bolding is not a durable repair — removing emphasis silently restores the bypass | **RECORDED.** Codex independently confirmed both discoveries and found no other contract-shaped rows in any done phase's slice. The durable fix — parse only the designated gate table and require exactly one row per criterion — is a change to a shared contract test and belongs with the owed work, not bolted on at the end of a blocked close |
+| 9 | low | Documentation drift: *"four of five"* sites should be three; D12's path `bin/fal-site.mjs` does not exist; four stale `:line` self-citations; `coveredLanding`'s error text still names the old interval | **APPLIED** — count corrected, path corrected to `.agents/skills/fal-redesign/runtime/bin/fal-site.mjs`, interval text corrected. The four stale self-citations are pre-existing and are folded into the standing citation-drift problem the close round already recorded |
+
+**Confirmed fine on file evidence:** 9.1's current-tree verdict · 9.3's live owners · 9.4's actual fade
+behaviour · 9.9's scoped line count · the A0 marker analysis · D3's tail reasoning · every quoted
+E1-E6 failure string. D1, D6, D8, D9, D10, D11 and D13 were judged defensible recorded reasons.
+**D8 specifically**: Codex confirmed the one-tick arbitration/drawing mismatch and agreed that
+deferring a behaviour-changing arbitration decision to the owner is legitimate — *"it is not what
+blocks this close."*
+
+**What blocks the close is 9.5, and it is the owner's call.**

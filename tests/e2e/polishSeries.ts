@@ -253,7 +253,13 @@ export function coveredLanding(series: Sample[], span: number): number {
   // and that frame reports `tickCount >= L + 1`; the frame reporting `tickCount === L` has not run
   // index `L` yet, so no shake is armed and it draws a legitimate zero. The offset for tick `L`
   // itself is therefore never rendered — see the note beside `running` in the test.
-  const inWindow = (L: number): number => series.filter((s) => s.tick > L && s.tick < L + span).length;
+  // 🔴 `<= L + span`, not `< L + span`, and this endpoint was fixed one review LATER than the tail
+  // below. A frame REPORTING `L+span` draws index `L+span-1` — the last LIVE tick — so the spec's own
+  // live set is `tick > L && tick <= L + span` (see `running` in the test). Requiring `< L + span`
+  // here rejected a landing whose only sampled live frame is exactly `L+span`, which the exact-offset
+  // loop accepts and can verify. Same class of defect as the tail, opposite direction: the first fix
+  // corrected one endpoint and left its twin. Caught by the Codex implementation review.
+  const inWindow = (L: number): number => series.filter((s) => s.tick > L && s.tick <= L + span).length;
   // 🔴 `L+span+1`, NOT `L+span`, and the `+ 1` is the whole of a latent flake found by the close
   // round's adversarial brief. `applyShake` reads `tick - 1`, so the frame REPORTING `L+span` is
   // still drawing index `L+span-1` — the last LIVE tick — and the spec's settled-tail assertion
@@ -273,8 +279,8 @@ export function coveredLanding(series: Sample[], span: number): number {
   }
   throw new Error(
     `No usable touchdown among ${stamps.length} in ${series.length} ticks. Usable = at least one ` +
-      `sample inside [L, L+${span}) (an unobserved tick cannot be asserted about), more than two in ` +
-      `[L+${span}, L+${TAIL_TICKS}] for the settled-to-zero tail, and no second touchdown inside ` +
+      `sample inside (L, L+${span}] (an unobserved tick cannot be asserted about), more than two in ` +
+      `[L+${span}+1, L+${TAIL_TICKS}] for the settled-to-zero tail, and no second touchdown inside ` +
       `that tail. Coverage: ${stamps.map((L) => `${L}:win=${inWindow(L)},tail=${inTail(L)}${alone(L) ? '' : ',crowded'}`).join(' ')}. ` +
       `All win=0 = this harness is draining more than ${span} ticks per frame throughout; raise HOPS.`,
   );

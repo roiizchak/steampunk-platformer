@@ -54,9 +54,6 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
 
-/** Tween callback keys. `onStart` is included: it sequences off the tween too, just at the far end. */
-const CALLBACK_KEYS = ['onComplete', 'onStop', 'onStart', 'onYoyo', 'onRepeat'] as const;
-
 /**
  * The operations that MOVE THE GAME ON, and so may not hang off a tween finishing.
  *
@@ -65,7 +62,14 @@ const CALLBACK_KEYS = ['onComplete', 'onStop', 'onStart', 'onYoyo', 'onRepeat'] 
  * gate with false reds is a gate that gets edited instead of obeyed.
  */
 const SEQUENCING = [
-  { re: /\bscene\s*\.\s*(?:start|launch|stop|restart|pause|resume|switch)\s*\(/, what: 'a scene transition' },
+  // Every ScenePlugin method that moves the game between scenes. The first draft named seven; the
+  // Codex implementation review pointed out that `transition`, `run`, `sleep`, `wake`, `setActive`
+  // and `remove` are real progression operations too — a gate that lists most of an API is a gate
+  // with a documented way round it.
+  {
+    re: /\bscene\s*\.\s*(?:start|launch|stop|restart|pause|resume|switch|transition|run|sleep|wake|setActive|remove)\s*\(/,
+    what: 'a scene transition',
+  },
   { re: /\.\s*emit\s*\(/, what: 'an event emission' },
   { re: /\bonCompleted\s*\(/, what: "the level-completion callback" },
 ] as const;
@@ -92,31 +96,60 @@ function balanced(code: string, open: number): string {
   return code.slice(open + 1);
 }
 
+/** Every way this codebase can open a tween. `chain` and `addCounter` are Phaser APIs too. */
+const TWEEN_CALLS = /\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
+
 /**
- * The text every tween callback in `code` can execute: each callback's inline body, plus — when the
- * callback is passed by name — the body of that name's declaration in the same file.
+ * A bare identifier used as a callback value: `onComplete: settleFade`.
  *
- * The named-reference half is not optional. Four of the five live sites pass `settleFade`,
- * `settleLines` and `settle` by name; a scan that only read inline arrow bodies would see nothing
- * at any of them and would report a clean sweep of a file it had not looked inside.
+ * Written as a literal rather than built from `CALLBACK_KEYS` on purpose. Composing it through a
+ * template string put a `\b` and four `\s` one editing pass away from silently becoming a backspace
+ * character and a bare `s` — which is not a red, it is a rule that quietly matches nothing. Keep the
+ * two lists in step by hand; a scan that cannot fire is the failure mode this whole file exists for.
+ */
+const NAMED_CALLBACK =
+  /\b(?:onComplete|onStop|onStart|onYoyo|onRepeat)\s*:\s*([A-Za-z_$][\w$]*)\s*[,}]/g;
+
+/**
+ * The text a tween's callbacks can execute.
+ *
+ * **Two halves, and the docstring is deliberately narrow about both** — an earlier draft of this
+ * function claimed to read "every config and named callback" and the Codex implementation review
+ * showed that false in eight ways at once (`onComplete() {}` shorthand, `function () {}`, `this.foo`,
+ * quoted keys, `{ onComplete }` shorthand, `async () =>`, a multiline expression body truncated at
+ * the first newline, and `cfg.onComplete = done` assigned after construction). A gate whose docstring
+ * overstates its reach is worse than a narrow one, because the next reader stops looking.
+ *
+ * **(a) The whole balanced `tweens.*(…)` call.** Not each callback body picked out by shape — the
+ * entire argument text. That is what makes every *inline* form fall in automatically: arrow, block,
+ * expression, `function`, `async`, shorthand method, quoted key. It also means a sequencing call
+ * sitting in the config but outside a callback counts, which is the safe direction.
+ *
+ * **(b) The declaration body of any bare identifier used as a callback value.** Three of the five
+ * live sites pass `settleFade`, `settleLines` and `settle` by name, so (a) alone would see a name and
+ * not a body, and would report a clean sweep of a file it had not looked inside.
+ *
+ * ### What it still does NOT reach — stated, not implied
+ *
+ * A member-expression callback (`onComplete: this.foo`), an imported one, a config built elsewhere
+ * and passed as a variable, or a name that shadows another declaration in the same file (the first
+ * textual declaration wins; there is no lexical scoping here). Each is recorded rather than closed:
+ * closing them means a real parser, and the project's dependency set is frozen. **None occurs on
+ * this tree** — checked.
  */
 export function callbackCode(code: string): string {
   const out: string[] = [];
-  for (const key of CALLBACK_KEYS) {
-    for (const m of code.matchAll(new RegExp(`\\b${key}\\s*:\\s*`, 'g'))) {
-      const at = m.index! + m[0].length;
-      const rest = code.slice(at);
-      const arrow = /^(?:\([^)]*\)|\w+)\s*=>\s*/.exec(rest);
-      if (arrow) {
-        const after = at + arrow[0].length;
-        // `=> { … }` takes the block; `=> expr` runs to the end of the argument.
-        out.push(code[after] === '{' ? balanced(code, after) : rest.slice(arrow[0].length).split('\n')[0]!);
-        continue;
-      }
-      const named = /^([A-Za-z_$][\w$]*)/.exec(rest);
-      if (!named) continue;
+  for (const call of code.matchAll(TWEEN_CALLS)) {
+    const open = call.index! + call[0].length - 1;
+    const args = balanced(code, open);
+    out.push(args);
+    // (b) — follow every bare-identifier callback to its declaration.
+    for (const ref of args.matchAll(NAMED_CALLBACK)) {
+      const name = ref[1]!;
+      // `String.raw` for the same reason as NAMED_CALLBACK: this needs `${name}` interpolated, so it
+      // cannot be a literal, and a plain template would eat every backslash in it.
       const decl = new RegExp(
-        `(?:const|let|var)\\s+${named[1]}\\s*(?::[^=]*)?=|function\\s+${named[1]}\\s*\\(`,
+        String.raw`(?:const|let|var)\s+${name}\s*(?::[^=]*)?=|function\s+${name}\s*\(`,
       ).exec(code);
       if (!decl) continue;
       const brace = code.indexOf('{', decl.index + decl[0].length);
