@@ -40,22 +40,76 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
 
-/** Kill-by-target, in every form Phaser offers it. */
-const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(/;
+/**
+ * Kill-by-target, in every form Phaser offers it.
+ *
+ * **Two alternatives, and the second one is the whole point of the `code+strings` view below.**
+ * The first is the direct member call — and because `\b` matches after a `.`, it already covers
+ * optional chaining (`tweens?.killTweensOf(`) with no extra alternative. The second is COMPUTED
+ * access, `tweens['killTweensOf'](x)`, in either quote and with any interior whitespace.
+ *
+ * 🔴 The bracket half is invisible under the `'code'` view no matter how the pattern is written —
+ * see `killBodies()`. The Codex plan review caught this as a would-be false green: the first draft
+ * of this repair extended the regex and left the view alone, which would have produced a rule that
+ * passes its own fixture and misses the violation in a real file. **The view was the defect, not
+ * the pattern.**
+ */
+const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweensOf|killAll)\1\s*\]/;
 
 /**
  * A `tweens.add(...)` whose result is NOT bound to a name.
  *
- * Matched by what comes immediately BEFORE the call: an assignment (`= `), a `return`, or an
- * argument position. Anything else — a bare statement — is fire-and-forget. Deliberately narrow in
+ * Matched by what comes immediately BEFORE the call: an assignment (`= `) or a `return`. Anything
+ * else — a bare statement, or an ARGUMENT POSITION — is fire-and-forget. Deliberately narrow in
  * the direction that errs toward a false RED: this rule blocks a blocker, and a false red costs a
  * minute while a missed violation is what the vault says shipped.
+ *
+ * 🔴 **Argument position used to count as HELD, and that was a documented way round the rule.**
+ * `noop(scene.tweens.add({…}))` satisfied it because the preceding character is `(`, though nobody
+ * retains the handle. The counter-argument — `live.add(scene.tweens.add({…}))` really does retain
+ * it — is true and does not save the classification: a static scan cannot tell a collector from a
+ * discarder, and the criterion is about whether the handle is REACHABLE later. Every live site
+ * binds to a name (checked: all five are `= ` assignments), so requiring that costs nothing and
+ * closes the dodge. A site that genuinely wants to pass a tween onward can name it first.
  */
 const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*add\s*\(/g;
 
+/**
+ * The view for rules whose evidence is a bare identifier: comments AND string literals blanked, so
+ * a message containing `tweens.add` cannot false-red.
+ */
 function bodies(): [file: string, code: string][] {
   return Object.entries(ALL_SOURCES).map(([file, src]) => [file, blankFor('code', src)]);
 }
+
+/**
+ * The view for the kill rule: comments blanked, **strings KEPT**.
+ *
+ * 🔴 Under `'code'` the string contents are blanked too (`sourceScan.ts`'s own docstring says so),
+ * so `tweens['killTweensOf'](x)` reaches a rule as `tweens['            '](x)` and **no regex can
+ * see it**. That is the bypass the Codex review named, and the view is where it is closed —
+ * `sourceScan.ts` already nominates `'code+strings'` for exactly this, citing `Date['now']`.
+ *
+ * The cost of keeping strings is a literal `"killTweensOf"` in a message, which would report. That
+ * cost is not paid on this tree: all six mentions of `killTweensOf`/`killAll` in `src/` sit in doc
+ * COMMENTS (`hudFade.ts`, `hudGearFlyers.ts`, `hudGearPop.ts`), and comments are blanked in both
+ * views — which is why the "does not fire on a comment recording its removal" test below still
+ * passes unchanged. If one ever lands in a string, that is a finding to look at, **not** a reason
+ * to revert the view: a false red is cheap and a missed violation is what the vault says shipped.
+ */
+function killBodies(): [file: string, code: string][] {
+  return Object.entries(ALL_SOURCES).map(([file, src]) => [file, blankFor('code+strings', src)]);
+}
+
+/**
+ * Put a fixture through the SAME blanking the real files take.
+ *
+ * 🔴 Not decoration. The C2 fixtures used to be handed straight to `KILL_BY_TARGET.test(...)`, and
+ * a fixture tested against the bare pattern **passes while the production scan misses the
+ * violation** — which is precisely how the bracket bypass survived a committed red-proof. A
+ * red-proof that skips the pipeline proves the pattern, not the gate.
+ */
+const killView = (src: string): string => blankFor('code+strings', src);
 
 describe('9.3a — no kill-by-target anywhere in src/', () => {
   it('the scan is not vacuous: it reads real files and they mention tweens', () => {
@@ -69,7 +123,8 @@ describe('9.3a — no kill-by-target anywhere in src/', () => {
   });
 
   it('finds no killTweensOf or killAll call in any source file', () => {
-    const hits = bodies()
+    // `killBodies()`, not `bodies()` — the computed-access form is unreachable from the other view.
+    const hits = killBodies()
       .filter(([, code]) => KILL_BY_TARGET.test(code))
       .map(([file]) => file);
     expect(
@@ -80,14 +135,36 @@ describe('9.3a — no kill-by-target anywhere in src/', () => {
   });
 
   it('REJECTS a planted call — this rule can go red (vault C2)', () => {
-    expect(KILL_BY_TARGET.test('this.tweens.killTweensOf(this.gearIcon);')).toBe(true);
-    expect(KILL_BY_TARGET.test('scene.tweens.killAll();')).toBe(true);
+    // 🔴 Every fixture goes through `killView`, the production path. See its docstring.
+    expect(KILL_BY_TARGET.test(killView('this.tweens.killTweensOf(this.gearIcon);'))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView('scene.tweens.killAll();'))).toBe(true);
+    // Optional chaining on the member — already covered by `\b` matching after the dot.
+    expect(KILL_BY_TARGET.test(killView('scene.tweens?.killTweensOf(o);'))).toBe(true);
+  });
+
+  it('REJECTS COMPUTED access — the bypass the plan review named (vault C2)', () => {
+    // The whole reason `killBodies()` exists. Under the `'code'` view every one of these arrives
+    // with its quoted key blanked to spaces, and the rule reports a clean file.
+    expect(KILL_BY_TARGET.test(killView("scene.tweens['killTweensOf'](o);"))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView('scene.tweens["killTweensOf"](o);'))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView("scene.tweens[ 'killAll' ]();"))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView("scene.tweens?.['killTweensOf'](o);"))).toBe(true);
+  });
+
+  it('proves the OLD view could not have caught computed access — the bypass, demonstrated', () => {
+    // 🔴 This is the finding as a committed assertion rather than a paragraph. If someone later
+    // "simplifies" `killBodies()` back to the `'code'` view, the scan silently stops seeing bracket
+    // access and this test is the thing that says so.
+    const src = "scene.tweens['killTweensOf'](o);";
+    expect(KILL_BY_TARGET.test(blankFor('code', src)), 'the code view still blanks the key').toBe(false);
+    expect(KILL_BY_TARGET.test(blankFor('code+strings', src))).toBe(true);
   });
 
   it('does NOT fire on a comment recording its removal — those exist and are deliberate', () => {
     // `hudFade.ts` and `hudGearPop.ts` both name `killTweensOf` in prose. A gate that is red on
-    // arrival gets weakened rather than obeyed, so the blanking is load-bearing.
-    const prose = blankFor('code', '// This read scene.tweens.killTweensOf(targets), which is\nconst a = 1;');
+    // arrival gets weakened rather than obeyed, so the blanking is load-bearing. Comments are
+    // blanked in BOTH views, which is why moving to `code+strings` did not disturb this.
+    const prose = killView('// This read scene.tweens.killTweensOf(targets), which is\nconst a = 1;');
     expect(KILL_BY_TARGET.test(prose)).toBe(false);
   });
 });
@@ -97,8 +174,9 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
     let count = 0;
     for (const match of code.matchAll(TWEENS_ADD)) {
       const before = (match[1] ?? '').trimEnd();
-      // `= x.tweens.add(`, `return this.tweens.add(`, `f(scene.tweens.add(` are all held.
-      if (!/[=(,]$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
+      // `= x.tweens.add(` and `return this.tweens.add(` are held. 🔴 `f(scene.tweens.add(` is NOT,
+      // any more — see TWEENS_ADD's docstring for why argument position was demoted.
+      if (!/=$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
         count += 1;
       }
     }
@@ -115,6 +193,16 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
     expect(unbound('  tween = scene.tweens.add({ targets: o });')).toBe(0);
     expect(unbound('  return scene.tweens.add({ targets: o });')).toBe(0);
     expect(unbound('  const t: Phaser.Tweens.Tween = this.tweens.add({ targets: o });')).toBe(0);
+  });
+
+  it('REJECTS an ARGUMENT-POSITION call — the second bypass the plan review named (vault C2)', () => {
+    // 🔴 These used to return 0. `noop(...)` retains nothing, and no static scan can tell it from
+    // a collector — so the rule asks for a NAME, which every live site already gives it.
+    expect(unbound('  noop(scene.tweens.add({ targets: o, alpha: 0 }));')).toBe(1);
+    expect(unbound('  live.add(scene.tweens.add({ targets: o }));')).toBe(1);
+    expect(unbound('  register(a, scene.tweens.add({ targets: o }));')).toBe(1);
+    // And the sanctioned way to do the same thing still passes: name it, then pass the name.
+    expect(unbound('  const t = scene.tweens.add({ targets: o });\n  live.add(t);')).toBe(0);
   });
 
   it('no source file starts a tween it does not hold', () => {

@@ -99,3 +99,73 @@ session's `PASS (0) FAIL (0)` parse-error precedent.
 
 **No gate.** A citation repair has nothing to assert; the mechanical protection against it recurring
 is that headings do not drift.
+
+---
+
+## Batch 3 — §1d, the two tween-scan bypasses. **The view was the defect, not the pattern.**
+
+`tests/unit/tween-boundary.test.ts`. Both bypasses named in §1d are closed, and the first one was
+not the change the prompt described.
+
+### (a) Computed access — the plan review caught a would-be false green
+
+The prompt asked for `tweens['killTweensOf'](x)` to be recognised, and the obvious repair is to
+extend `KILL_BY_TARGET`. **That repair would have shipped a rule that passes its own fixture and
+misses the violation in a real file.**
+
+`bodies()` fed `blankFor('code', src)` to the rule, and that view blanks **string contents** as well
+as comments — `sourceScan.ts:43` says so in as many words. So `tweens['killTweensOf'](x)` reaches
+the pattern as `tweens['            '](x)`, and **no regex written can see it**. Codex flagged it
+(PR-02); confirmed locally from `sourceScan.ts`'s own docstring.
+
+**The fix is the view.** A new `killBodies()` uses `'code+strings'` — which `sourceScan.ts` already
+nominates for exactly this, citing `Date['now']` as its example. Comments stay blanked in both
+views, so the deliberate prose about `killTweensOf` in `hudFade.ts`, `hudGearFlyers.ts` and
+`hudGearPop.ts` still cannot false-red; **checked — all six mentions in `src/` are in doc comments,
+none in a string.**
+
+The pattern gained the computed-access alternative on top:
+`/\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweensOf|killAll)\1\s*\]/` — both quote forms,
+interior whitespace, and `?.['killTweensOf']`. Optional chaining on the *member*
+(`tweens?.killTweensOf(`) needed no alternative: `\b` already matches after the dot.
+
+⚠️ **A committed test now asserts the bypass itself** — that the `'code'` view returns `false` on
+computed access and `'code+strings'` returns `true`. If someone later "simplifies" `killBodies()`
+back, the scan silently stops seeing bracket access and that test is what says so.
+
+### (b) Argument position is no longer "held"
+
+`unbound()` treated a preceding `(` or `,` as held, so `noop(scene.tweens.add({…}))` passed. Both
+dropped; `=` and `return` kept.
+
+The counter-argument is real and does not save the classification: `live.add(scene.tweens.add({…}))`
+genuinely does retain the handle, and **a static scan cannot tell a collector from a discarder**. The
+criterion is about whether the handle is REACHABLE later, so the rule asks for a NAME. That costs
+nothing here — **all five live sites are `= ` assignments** (`goalLayer.ts:185`, `hudFade.ts:185`
+and `:195`, `hudGearFlyers.ts:103`, `hudGearPop.ts:119`) — and a site that wants to pass a tween
+onward can name it first, which the accept fixture demonstrates.
+
+### Watched failing *(C1)*, against the PRODUCTION scan, then reverted *(C12)*
+
+⚠️ **Both mutations were planted in a real `src/` file, not handed to the regex.** A fixture driven
+straight at the pattern is what let the bracket bypass survive a committed red-proof in the first
+place; every C2 fixture in this file now goes through `killView()`, the same blanking the real files
+take.
+
+| # | mutation, in `src/scenes/hudGearPop.ts` | result | named failing test |
+|---|---|---|---|
+| 1 | `scene.tweens['killTweensOf'](o)` | **PASS (11) FAIL (1)** | `9.3a … finds no killTweensOf or killAll call in any source file` — offender reported as `hudGearPop.ts` |
+| 2 | `sink.add(scene.tweens.add({ targets: o, alpha: 0 }))` | **PASS (11) FAIL (1)** | `9.3b … no source file starts a tween it does not hold` |
+
+Each revert confirmed by **content changed AND the count dropped by one** *(C12)*: `git diff --stat`
+empty on the mutated file, and `PASS (12) FAIL (0)` restored both times. ⚠️ The test file was
+`touch`ed before every re-run — vitest caches `?raw` glob fixtures, and a landed mutation has
+reported green in this repo before.
+
+**Suite:** 160 files, **2420 passed / 0 failed** — 2417 + the three tests added here, read
+positively rather than inferred from an exit code. Typecheck clean.
+
+### What stays narrowed — **D4**, unchanged
+
+Inlining `getTweensOf` + destroy (literally how Phaser defines `killTweensOf`), `tweens.destroy()`,
+and the other tween entry points. All ambiguous, all documented, **none present on this tree.**
