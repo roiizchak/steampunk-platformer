@@ -40,23 +40,13 @@ npm run typecheck                 # tsc --noEmit alone — fastest full check
 npm test                          # vitest run (unit; sim + docs/style locks)
 npm run test:e2e                  # Playwright
 npm run test:sim-isolated         # uninstall Phaser, run the unit suite, reinstall — QA criterion 1.3
-
-npx vitest run tests/unit/coyote-time.test.ts        # one unit file
-npx vitest run -t "buffered jump"                    # one test by name
-npx playwright test tests/e2e/phase-02-movement.spec.ts
-npx playwright test -g "jump apex"                   # one e2e test by name
-npx playwright test --headed --workers=1             # watch it, no parallel interference
 ```
 
-Asset pipeline (Phase 4 onward — see [ASSET-PIPELINE.md](docs/ASSET-PIPELINE.md)):
+`npx vitest run <file>` / `-t <name>` and `npx playwright test <file>` / `-g <name>` narrow a run.
+Add `--headed --workers=1` to watch an e2e spec with no parallel interference.
 
-```bash
-npm run assets:prompts            # write-prompts.mjs  — prompts from STYLE.md's template
-npm run assets:build              # build-assets.mjs   — generations → sheets → public/assets/index.json
-npm run assets:clips              # build-clips.mjs    — animation clips
-npm run assets:world              # build-world.mjs    — tiles and parallax layers
-npm run assets:audio              # build-audio.mjs    — Phase 7 cues and music beds
-```
+Asset pipeline (Phase 4 onward): the `assets:*` scripts in `package.json` — `prompts`, `build`,
+`clips`, `world`, `audio`. See [ASSET-PIPELINE.md](docs/ASSET-PIPELINE.md).
 
 `npm run test:sim-isolated` mutates `node_modules` — if it is interrupted, Phaser is left
 uninstalled. Recover with `npm i phaser@4.2.1 --save-exact`.
