@@ -179,7 +179,15 @@ export function attachEffects(
     // The arbitration is the feature: bigger events always win, smaller ones never truncate a bigger
     // one, and a shake most of the way through has little left to protect. `screenShake.ts`'s header
     // has the argument, and both of Phaser's own `camera.shake()` defaults are wrong for it.
-    if (!shouldPreempt(shake, cmd, tick)) {
+    // 🔴 `tick - 1`, the index the shake is DRAWN at, not the index the world is on. `applyShake`
+    // below reads `tick - 1` because the frame reporting `tick` draws the offset for `tick - 1`;
+    // inventory 3.1 aligned `applyShake` and `landSquash` to that and left THIS reader behind, so
+    // arbitration judged a running shake one tick MORE decayed than it was on screen — and a more
+    // decayed shake is easier to preempt. Found by the Phase 9 close round (D8), confirmed by the
+    // Codex implementation review, and fixed as an owner-approved balance change on 2026-08-24.
+    // The direction is the safe one: a smaller shake now finds a running bigger one HARDER to
+    // truncate, which is the preemption rule this file's header argues for.
+    if (!shouldPreempt(shake, cmd, tick - 1)) {
       return;
     }
     shake = { startedTick: shakeStartTick(impact, hitTick), cmd };
