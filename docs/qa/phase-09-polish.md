@@ -1963,6 +1963,22 @@ than resolved.)*
 - **9.5 remains measured on the worst STEADY-STATE frame, not the worst frame the game can produce**
   (entries 43, 44). E6 proves the shake load is present and guarded; it does not widen what is loaded.
 
+## The playtest after D8 — 2026-08-24
+
+**D8 shipped a balance change**, and the acceptance on record before it (2026-08-23) could not cover
+it: arbitration now judges the shake it draws, so a small event finds a running big one **harder** to
+truncate at the window boundary.
+
+**The owner played the shipped game again after the merge and accepts it** — 2026-08-24. That is the
+`play`-owned sign-off for the change, recorded as a hands-on result and not as an automated one
+*(C4: a playtest finds what gates cannot)*. Two numeric gates cover the change's mechanics
+(`shake-arbitration-index.test.ts`) and neither can tell whether the result feels right; this is the
+only thing that can.
+
+**Still not settled by it**, because ordinary play cannot reach them: the UI at 852×480, DPR 2, the
+240 Hz judder diagnosis, and the sentry-coverage question. Those four are carried in
+`docs/SESSION-PROMPT-next.md` §4.
+
 ## Vault-out — Phase 9
 
 **Status: written 2026-08-22, at the close of the phase. All eleven Phase 9 criteria are green;
