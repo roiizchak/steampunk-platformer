@@ -26,8 +26,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NAMED_MUTATIONS } from '../e2e/mutationRegistry';
-import { MUTATION_TARGETS } from '../e2e/mutationTargets';
+import { NAMED_MUTATIONS, namedMutation, stormCount } from '../e2e/mutationRegistry';
+import { MUTATION_TARGETS, PARAMETRIC_MUTATION_TARGETS } from '../e2e/mutationTargets';
 
 const SPECS = import.meta.glob('../e2e/*.ts', {
   query: '?raw',
@@ -132,5 +132,67 @@ describe('every PERF_MUTATION is wired to a spec that applies it', () => {
 
   it('REJECTS a routing entry pointing at a spec that does not exist', () => {
     expect(specSource('phase-99-does-not-exist.spec.ts')).toBeNull();
+  });
+});
+
+/**
+ * The PARAMETRIC families — `storm<N>` and anything later that is generated from a number.
+ *
+ * 🔴 **These were outside every check above until 2026-08-25**, because `namedMutation()` returns
+ * `''` for a storm and `MUTATION_TARGETS` is keyed by `NamedMutation`. `storm8192` is the recorded
+ * red proof for two of the four upper bounds in `phase-09-perf.spec.ts`, so **the mutation doing the
+ * most work in that gate was the one nothing checked was wired** — the `particlescale0` failure one
+ * level up.
+ *
+ * The mention check differs from the named one and has to: a parametric member never appears
+ * literally in the spec, so this asks whether the spec mentions the SYMBOL the family is applied
+ * through. See `ParametricTarget`'s header.
+ */
+describe('every PARAMETRIC PERF_MUTATION family is wired to a spec that applies it', () => {
+  it('the table is not empty — an empty list would pass every assertion below', () => {
+    expect(
+      PARAMETRIC_MUTATION_TARGETS.length,
+      'no parametric families declared; if storm<N> was removed, remove these tests too',
+    ).toBeGreaterThan(0);
+  });
+
+  it('every family names a spec that EXISTS and mentions the symbol it is applied through', () => {
+    const broken: string[] = [];
+    for (const t of PARAMETRIC_MUTATION_TARGETS) {
+      const src = reachableFrom(t.spec);
+      if (src === null) {
+        broken.push(`${t.family}: ${t.spec} does not exist`);
+      } else if (!src.includes(t.applies)) {
+        broken.push(`${t.family}: ${t.spec} never mentions '${t.applies}', so it cannot apply it`);
+      }
+    }
+    expect(
+      broken,
+      'a parametric family named but never applied runs the spec CLEAN and reports a pass — and ' +
+        'unlike a named mutation, no typo guard catches it, because stormCount() accepts any number.',
+    ).toEqual([]);
+  });
+
+  it("every family's example is accepted by the parser and is NOT a named mutation", () => {
+    for (const t of PARAMETRIC_MUTATION_TARGETS) {
+      expect(t.pattern.test(t.example), `${t.family}: its own pattern rejects its example`).toBe(true);
+      // The two registries must not overlap: a value both parsers claim would route twice and mean
+      // different things in each, which is the ambiguity `namedMutation` throws to prevent.
+      expect(
+        (NAMED_MUTATIONS as readonly string[]).includes(t.example),
+        `${t.family}: '${t.example}' is ALSO a named mutation — the two registries overlap`,
+      ).toBe(false);
+      // And the live parser really recognises it, so the example cannot rot into a value that
+      // `namedMutation` would throw on.
+      expect(stormCount(t.example), `${t.family}: stormCount() does not parse '${t.example}'`).toBeGreaterThan(0);
+      expect(namedMutation(t.example), `${t.family}: namedMutation() should defer to the parametric parser`).toBe('');
+    }
+  });
+
+  it('REJECTS a family whose symbol the spec does not mention — this rule can go red (vault C2)', () => {
+    // Driven against the production predicate, against a source that genuinely lacks the symbol.
+    const src = reachableFrom('phase-09-perf.spec.ts')!;
+    expect(src.includes('STORM_MUTATION'), 'the wired family').toBe(true);
+    expect(src.includes('__NEVER_APPLIED_FAMILY'), 'an unwired one').toBe(false);
   });
 });

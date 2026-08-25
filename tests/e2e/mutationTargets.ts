@@ -37,18 +37,55 @@ export const MUTATION_TARGETS: Record<NamedMutation, { spec: string; assertion: 
 };
 
 /**
- * ⚠️ **`storm<N>` is NOT here, and that is a recorded gap, not an oversight.**
+ * A **parametric** mutation family — one whose members are generated from a number rather than
+ * enumerated, so a `Record<NamedMutation, …>` cannot hold them.
+ *
+ * 🔴 **Why this shape rather than a second string table.** A parametric family has **no literal name
+ * to grep for.** `storm8192` never appears in `phase-09-perf.spec.ts`; the spec reads
+ * `stormCount(process.env.PERF_MUTATION ?? '')` into `STORM_MUTATION` and scales the emitters from
+ * the number. So the "is it actually wired?" question, which for a named mutation is *"does the spec
+ * mention `'flatcost'`?"*, has to become *"does the spec mention the SYMBOL it applies the family
+ * through?"* — hence `applies` rather than a name match. Getting this wrong would produce a routing
+ * entry that could never match and a gate that reds forever, or one that matches the import line and
+ * proves nothing.
+ */
+export interface ParametricTarget {
+  /** The family, for failure messages. */
+  family: string;
+  /** Matches every member. */
+  pattern: RegExp;
+  /** A real member — the one actually used as a red proof — so the parser can be shown to accept it. */
+  example: string;
+  spec: string;
+  /** The symbol in `spec` that APPLIES the family. Not the family's name: see the header above. */
+  applies: string;
+  assertion: string;
+}
+
+/**
+ * ⚠️ **`storm<N>` was unrouted until 2026-08-25, and it was the worst possible omission to have.**
  *
  * `namedMutation()` returns `''` for any `storm<N>` value — `stormCount()` parses it instead — so the
- * parametric mutation is outside `NAMED_MUTATIONS`, outside this table, and outside
+ * family sat outside `NAMED_MUTATIONS`, outside `MUTATION_TARGETS` and outside
  * `tests/unit/perf-mutation-routing.test.ts` entirely. That matters more than it looks: `storm8192`
  * is the recorded red proof for **two of the four upper bounds** in `phase-09-perf.spec.ts`
- * (`docs/qa/session-phase-09-debts-02-perf.md` §Batch 6), so the two mutations doing the most work in
- * that gate are the two nothing checks are still wired.
+ * (`docs/qa/session-phase-09-debts-02-perf.md` §Batch 6). **The two mutations doing the most work in
+ * that gate were the two nothing checked were wired** — precisely the `particlescale0` failure the
+ * table above exists to prevent, one level up.
  *
- * Raised by the 2026-08-25 gate brief. **Not closed here**: routing an unbounded family of names
- * needs a different key than a `Record<NamedMutation, …>`, and inventing one to hold a single
- * documented entry is more machine than the criterion has earned. It is written down so the next
- * reader sees a gap rather than a complete-looking table.
+ * The previous entry here was `export const STORM_MUTATION_IS_UNROUTED = true`, an honest marker for
+ * a gap. Closing the gap means deleting the marker, which is why it was a real exported symbol rather
+ * than a comment: a comment can be removed without anything noticing.
  */
-export const STORM_MUTATION_IS_UNROUTED = true;
+export const PARAMETRIC_MUTATION_TARGETS: ParametricTarget[] = [
+  {
+    family: 'storm<N>',
+    pattern: /^storm(\d+)$/,
+    example: 'storm8192',
+    spec: 'phase-09-perf.spec.ts',
+    applies: 'STORM_MUTATION',
+    assertion:
+      'MAX_EFFECT_FRAME_WORK_MS and MAX_EFFECT_WORK_DELTA_MS — the recorded red proof for two of ' +
+      'the four upper bounds. Also licenses Guard 2 (MIN_STORM_WORK_DELTA_MS), the amplifier premise.',
+  },
+];

@@ -191,3 +191,82 @@ stronger of the two the architecture section names.
 Recon said `:198-209` gated the former idle branch; Codex said it covers callback-free teardown
 instead. Codex was right, and following the disagreement to the source turned up a *fifth* stale claim
 neither of them had been asked about.
+
+---
+
+## Batch 3 — §2c, routing the `storm<N>` parametric family
+
+**The worst omission on the list, and it was hiding behind the exact defect its neighbour was built to
+prevent.** `MUTATION_TARGETS` exists because *"a name in `NAMED_MUTATIONS` is not a wired proof"* —
+`particlescale0` sat in that array for a whole gate round while nothing applied it, running the spec
+clean and reporting `1 passed`. `storm<N>` sat one level further out: outside `NAMED_MUTATIONS`,
+outside `MUTATION_TARGETS`, outside the routing test entirely — **and it is the recorded red proof for
+two of the four upper bounds in `phase-09-perf.spec.ts`.** The mutation doing the most work in that
+gate was the one nothing checked was wired.
+
+### Why a second string table would not have worked
+
+A parametric family **has no literal name to grep for.** `storm8192` never appears in the spec; the
+spec reads `stormCount(process.env.PERF_MUTATION ?? '')` into `STORM_MUTATION` and scales the emitters
+from the number. So the named table's question — *"does the spec mention `'flatcost'`?"* — has no
+analogue. The entry has to name the **symbol the family is applied through** instead, which is why
+`ParametricTarget` carries `applies` rather than relying on a name match.
+
+Getting that wrong in either direction is a live hazard and the interface comment says so: matching the
+family name would red forever, matching the import line would prove nothing.
+
+### What shipped
+
+`PARAMETRIC_MUTATION_TARGETS: ParametricTarget[]` in `mutationTargets.ts`, one entry, and
+**`STORM_MUTATION_IS_UNROUTED` deleted.** That marker was a real exported symbol rather than a comment
+precisely so closing the gap would require deleting something — verified no other file consumed it.
+
+Four new tests in `perf-mutation-routing.test.ts` (5 → 9): the table is non-empty; every family's spec
+exists and mentions its `applies` symbol; every example is accepted by the live parser, matches its own
+pattern, and is **not** also a named mutation; and the C2 rule-can-go-red proof.
+
+### The red proofs *(C1)*, one per rule *(C2)*
+
+**Mutation 1 — the family stops being applied under the recorded name.** `STORM_MUTATION` →
+`STORM_SIZE` throughout `phase-09-perf.spec.ts` (count 2 → 0).
+
+```
+PASS (7) FAIL (2)
+  every family names a spec that EXISTS and mentions the symbol it is applied through
+  REJECTS a family whose symbol the spec does not mention
+```
+
+Reverted: `STORM_MUTATION` back to 2, `STORM_SIZE` 0, `git diff` empty *(C12)*.
+
+**Mutation 2 — the two registries overlap.** Added `'storm8192'` to `NAMED_MUTATIONS`.
+
+```
+PASS (6) FAIL (3)
+  storm<N>: 'storm8192' is ALSO a named mutation — the two registries overlap
+```
+
+This one matters beyond its own assertion: a value both parsers claim would route twice and mean
+different things in each, and `namedMutation()` would silently return `''` for it rather than throwing.
+Reverted.
+
+**Mutation 3 — the empty-table guard.** `PARAMETRIC_MUTATION_TARGETS` emptied.
+
+```
+PASS (8) FAIL (1)
+  no parametric families declared: expected 0 to be greater than 0
+```
+
+Without it, every assertion in the new block passes by having no input — the silent-zero shape this
+repository has paid for three times. Reverted.
+
+### Verification
+
+typecheck clean. Unit **165 files / 2473 tests**, against 2469 at the end of Batch 1: **+4, asserted.**
+`mutationTargets.ts` 91 lines, `perf-mutation-routing.test.ts` 198 — both well inside the 400-line rule.
+
+### What this does NOT do — carried forward unchanged
+
+⚠️ The mention check is still a **raw string search** and cannot tell a live
+`if (mutation === '…')` from a stray comment. That narrowing is disclosed in the test's own header and
+is not improved here; the parametric arm inherits it. **The new arm is not stronger than the named one
+— it is the same strength, extended to a family that had none.**
