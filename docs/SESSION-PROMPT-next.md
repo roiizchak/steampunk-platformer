@@ -27,7 +27,18 @@ byte-identical, `test:sim-isolated` 2462 + 3 skipped.
 
 ## 1. What the debts session left open
 
-### 1a — the combat-path cost bound. **The one real debt, and it may not be closable.**
+### 1a — the combat-path cost bound. 🔴 **CLOSED 2026-08-25 AS UNWRITABLE, and finding 3 below is REFUTED.**
+
+The owner authorised bounding the post-hit-stop catch-up spike; the plan made it a measurement-design
+step with *"no orderable statistic"* a permitted outcome. It reached a stronger answer than that:
+**the phenomenon does not occur.** Three runs, 12 625 frames — `maxTicks` 1 always, `catchUpFrames` 0
+always. A deliberate 40 ms main-thread block landed visibly (frames from ~5 ms to ~41 ms) and still
+produced zero multi-tick frames, because Phaser smooths and caps `delta` over a 10-frame moving
+average before `GameScene.update()` sees it. **Finding 3's attribution is refuted**: every one of the
+worst frames (55.5 / 46.0 / 37.3 / 31.5 / 28.3 / 26.1 ms) drained `ticks=1` or `ticks=0`. What those
+frames are remains **unidentified** — 0.15 % of frames, both phases, the worst one in REST. Full
+evidence in `qa/session-tier5-gate-holes-02-tweens.md` §Batch 6; `ENGINE-NOTES.md` gained a measured
+*TimeStep and `delta`* section. Everything below is kept as the record it corrects.
 
 Reported **NOT CLOSED** with measurements, not with an argument. Read
 [`session-phase-09-debts-02-perf.md`](qa/session-phase-09-debts-02-perf.md) §Batch 7 and the header of
@@ -62,20 +73,34 @@ that reason** — several are deliberate and the bound IS the deliverable.
 
 **Worth fixing if a session has room:**
 
-- **D14 — `this.add.tween(config)`** is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` factory,
-  `:28201` creator) that bypasses **9.3b, 9.3d, 9.2, 9.2b and 9.2c at once**. Nothing on the tree uses
-  it and the **absence is pinned** by a committed test, so it is latent, not live. Closing it means
-  resolving what `add` is bound to.
-- **`storm<N>` is unrouted.** It is parametric, so it sits outside `NAMED_MUTATIONS`,
-  `MUTATION_TARGETS` and `perf-mutation-routing.test.ts` — and it is the recorded red proof for **two
-  of the four upper bounds** in `phase-09-perf.spec.ts`. Routing an unbounded family needs a different
-  key than `Record<NamedMutation, …>`.
-- **`SIM_MUTATORS` is a name list.** A new mutating export in `src/sim/` is invisible to the 9.2b
-  argument rule until someone adds it by hand. ⚠️ **The self-maintaining version was considered and
-  rejected for scope, not for correctness**: derive the set by parsing `src/sim/` for functions that
-  write to their own parameters. That is the right fix and it is a real piece of work.
+- ~~**D14 — `this.add.tween(config)`**~~ ✅ **CLOSED 2026-08-25.** It bypassed **six** rules, not five
+  — 9.3c belongs in the list too. `tween` is unique to the factory/creator, so recognition is a name
+  test like the manager's; `namesSceneFactory` requires a **member** access and refuses a bare `add`,
+  because the scanner is name-based and a bare match would false-red any unrelated object called
+  `add`. The absence pin is deleted; `tests/unit/tween-add-factory.test.ts` replaces it and carries
+  that acceptance fixture. §Batch 4.
+- ~~**`storm<N>` is unrouted.**~~ ✅ **CLOSED 2026-08-25.** `PARAMETRIC_MUTATION_TARGETS` keys the
+  family by pattern rather than by name and carries the **symbol** it applies (a parametric family has
+  no literal name to grep for); `STORM_MUTATION_IS_UNROUTED` is deleted. §Batch 3. ⚠️ The routing
+  test's mention check is still a raw string search and cannot tell a live `if (mutation === '…')`
+  from a comment — disclosed in its own header, and the new arm is no stronger than that.
+- ~~**`SIM_MUTATORS` is a name list.**~~ ✅ **CLOSED 2026-08-25 — and the item understated it badly.**
+  It was not *"a future export will be invisible"*: measured, `src/sim/` exports **86** functions, **26**
+  write to their own parameters and **32** are in the transitive closure. The list held **six**, and
+  `tick(world, input)` was not one of them — **~81 % incomplete on the day it was described as merely
+  missing future additions.** Fixed in the ordered way the owner ruled: `simImports()` resolves the
+  callee to a real `src/sim/` import **first**, then the set grew 6 → 32. Without that order, 32
+  ordinary verbs (`tick`, `advance`, `enterState`) would make any same-named local helper illegal by
+  collision — a silent widening of an owner-approved rule. Shipped as a reviewed **manifest with a
+  completeness tripwire**, not a derivation: a missing name is a gap the gate reports, an over-inferred
+  one is a false red on legal code. §Batch 5.
 - **`blank()` has no regex-literal mode** — a lone apostrophe inside a regex blanks the rest of the
   file in the `'code'` view. Shared infrastructure used by many gates; needs its own red proofs.
+  ⚠️ **Deliberately NOT attempted 2026-08-25** (Codex plan review, finding 14): a correct JS
+  slash-vs-regex classifier is far more than the "previous-significant-token tracker" it was scoped
+  as, it moves four gate consumers, and `src/` contains **zero** regex literals so the defect cannot
+  currently bite. Reopen when a real source regex, or a parser-backed replacement, gives it a live
+  failure mode.
 
 **Recorded as narrowings — read the reason before reopening:**
 
@@ -108,9 +133,18 @@ that reason** — several are deliberate and the bound IS the deliverable.
 
 ### Documentation that is now false
 
-- ⚠️ **`docs/PRD.md` row 9 is stale.** It still says *"Owed forward: split `phase-09-perf.spec.ts` so
-  four upper bounds are independently reachable · D9's `run: 8` wait · 9.3's two scan bypasses"* —
-  **all three landed in `7c04a63`.** No lint checks that prose. One-line fix.
+- ~~⚠️ **`docs/PRD.md` row 9 is stale.**~~ ✅ **REPAIRED 2026-08-25 — and this item was itself half
+  wrong.** It claimed *"all three landed in `7c04a63`"*; checked one at a time, **the perf-spec split
+  did NOT happen** (`phase-09-perf.spec.ts` is still one `test()`; `expect.soft` landed instead, and
+  the spec records full independence as unachievable at `:144-147`). D9's wait did land. The scan
+  bypasses are now **D14 closed**, D4/S3-1/S5-6 still stated narrowings. The same cell's *"the combat
+  path stays unmeasured and open"* was stale in the other direction and is also repaired. Not a
+  one-line fix — four separate claims, each verified before it was written.
+  🔴 **The lesson, since this is the second document in two sessions to be wrong about its own staleness
+  report:** a "documentation is stale" item is a claim like any other and gets checked before it gets
+  acted on. Deleting the sentence on this item's say-so would have replaced one false record with no
+  record. No lint reads that prose, and adding one would be a third copy of a hand-duplicated table —
+  **do not.**
 
 ### What the gate round could NOT cover, and still cannot
 
@@ -128,7 +162,15 @@ examined were wrong about themselves**. **Run the mutation before believing the 
 
 ### Measurement gates that can go false
 
-- **5.2 — the GPU-ratio flake, and the data now cuts BOTH ways.** `phase-08-perf.spec.ts`. Previously
+- ~~**5.2 — the GPU-ratio flake**~~ — 🔴 **CLOSED 2026-08-25 by DELETING the gate.** The repair shape
+  below was tried and the statistic failed the precondition for it: `skipCull` on level-05 — *the
+  mutation the bound names* — moved the paired GPU delta +0.029, −0.019 and **−0.209** ms across three
+  same-page runs, the mutant reading *cheaper* than clean in two of them, while a 60-scrim control
+  ordered it every time. The clean ratio itself read **1.073x, 0.097x, 1.304x** on one commit, the
+  0.097 coming from windows at `gpuTimer`'s 0.036 ms floor — **the same pathology already recorded for
+  6.9, sitting undetected in 8.7**. And 8.7's shipped red proof only ever asserted on the **work**
+  ratio, so this bound was never red-proved at all. Evidence in `qa/phase-08-levels.md`. Original text
+  kept below because the repair shape it names is still right for other gates: `phase-08-perf.spec.ts`. Previously
   *"level-05 costs 4.47× level-01 … Expected: ≤ 2"*, then 5.61× on 2026-08-24 — three failures, all in
   loaded full-suite sweeps, all passing in isolation minutes later. ⚠️ **It then PASSED in both full
   loaded sweeps of 2026-08-25** (130/130 twice). So it is **intermittent under load, not reliably
@@ -136,11 +178,21 @@ examined were wrong about themselves**. **Run the mutation before believing the 
   shape still applies: pair the observations, median the per-round **deltas**, keep the arms separate
   until the effect clears the timer grid.
   ⚠️ *A statistic that does not order its own mutation cannot be fixed by moving the bound.*
-- **5.3 — Codex's algebra was accepted and never applied.** `phase-09-impl.md`: `k = 0.9001`, reported
-  `1.034b` against a true `3.914b` — **3.79×**. The docstring was corrected; **the cost model and the
-  `k = 0.9` floor were not.** Finish applying it.
-- **5.9 — the knob sweep loses sensitivity when physics moves and blames the knob.** Happened three
-  times in one session. Make it assert its **own** sensitivity.
+- **5.3 — ⚠️ RESTATED 2026-08-25: *refused, with reasons and data* — not *"accepted and never
+  applied."*** The letter of the old item is right: `MIN_COST_EXPONENT = 0.9` (`effectSweep.ts:121`) and
+  the two-point power fit (`:131-133`) are unchanged, and the `k = 0.9001` / `1.034b`-against-`3.914b`
+  arithmetic stands. But `effectSweep.ts:97-108` is a **written, data-backed refusal**, not an
+  oversight — an affine law with `a >= 0` caps `k` at 1, **all seven recorded sweeps measured
+  k = 1.086–1.286**, outside the affine family, and fitting `a + bN` returns a **negative** intercept.
+  **Do not move the floor.** Calling a documented refusal an omission is how a correct decision gets
+  quietly reversed by a later reader tidying up an open item.
+- ~~**5.9 — the knob sweep loses sensitivity when physics moves and blames the knob.**~~ ✅ **DONE
+  2026-08-25.** The floor and world height are derived from one fixed worst case over the whole
+  perturbation envelope (`knobSweepGeometry.ts`), and two regime preconditions were added — `longFall`
+  saturating the clamp with nothing landing or dying, `coyote` leaving the ledge with the
+  perturbations straddling the press. Five red proofs; the fifth reds the regime gate while **all
+  twelve knob sweeps stay green**, which is the case the sweep structurally cannot see. See
+  `qa/session-tier5-gate-holes-03-sweep.md` §Batch 8.
 - **5.21 — GPU cost is unmeasurable without `EXT_disjoint_timer_query`.** ⚠️ *"Recorded as unreachable
   twice and reachable both times."* **DO NOT soften into a skip.**
 
@@ -164,8 +216,13 @@ examined were wrong about themselves**. **Run the mutation before believing the 
   `distinctFrames > 1` is weaker than its title — a walk pinned to frames 0 and 1 passes on a 12-frame
   sheet.* The fix is to strengthen that assertion toward the sheet's real frame count, and to correct
   the now-stale docstring at `tests/unit/enemy-layer-catalog.test.ts:18-20`.
-- **5.20** — **no gate checks spacing BETWEEN HUD elements.** Found once, by a human reading an
-  evidence screenshot. Pairs with §4's 852×480 reading.
+- ~~**5.20** — **no gate checks spacing BETWEEN HUD elements.**~~ ✅ **DONE 2026-08-25** at unit level.
+  `COUNTER_GAP` stays **private** — an assertion derived from the same implementation constant can
+  never disagree with the code. Three independent geometric claims at all three sizes: no rect
+  overlaps, a scaled 8 px refusal floor on both seams, and both companions inside the plate's vertical
+  span. Three red proofs, each a real `src/render/hud.ts` mutation. See
+  `qa/session-tier5-gate-holes-03-sweep.md` §Batch 9. ⚠️ **The 852×480 human reading in §4 is still
+  owed** — a unit gate on `hudLayout()`'s numbers is not somebody looking at the screen.
 - ~~**5.26, remaining half**~~ — ⚠️ **STRUCK 2026-08-25. The item was STALE on both halves.**
   It said `hudGearPop.destroy()`'s **idle branch** has no fixture and is the common one (every resize),
   *"plus the wrong test file cited (C9)."*
