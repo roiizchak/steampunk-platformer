@@ -42,6 +42,7 @@
 
 import { parse } from '@babel/parser';
 import { isTweenCall } from './tweenIdentity';
+import { SIM_MUTATORS } from './simMutators';
 export { isTweenCall } from './tweenIdentity';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the Babel AST is walked structurally. */
@@ -73,20 +74,15 @@ const PERSISTENCE = new Set(['writeProgress', 'recordCompletion']);
 const CONTROL_FLAGS = new Set(['playerInputEnabled']);
 
 /**
- * Exported `src/sim/` functions that MUTATE a sim object handed to them. Read off the tree
- * 2026-08-25; the readers beside them (`invulnerable`, `canAct`, `deathWindowClosed`,
- * `isCombatState`, `combatStateTicks`) are deliberately absent, because the authorised rule forbids
- * WRITES and a read-only call is not one.
+ * Exported `src/sim/` functions that MUTATE a sim object handed to them.
+ *
+ * Moved to `simMutators.ts` on 2026-08-25 and **grown from 6 names to 32**, where it is checked
+ * against a derivation from `src/sim/` so it cannot silently fall behind again. It was 6 against 86
+ * exported functions — `tick(world, input)` itself was missing.
+ *
+ * ⚠️ Growing it is only safe because `simImports()` below resolves identity first: matched on a bare
+ * name, 32 common verbs would make any local helper sharing one illegal.
  */
-const SIM_MUTATORS = new Set([
-  'damagePlayer',
-  'killPlayer',
-  'respawnPlayer',
-  'enterCombatState',
-  'stepCombat',
-  'stepEnemies',
-]);
-
 export function parseFile(code: string): Node {
   // ⚠️ **`errorRecovery` does NOT mean "a bad file yields a partial tree" here — it still THROWS**
   // on anything it cannot recover from, measured 2026-08-25. Any sibling docstring that justified a
@@ -238,7 +234,7 @@ export interface Violation {
  * a write through a sim handle, an entity added to or removed from a sim collection, a persisted
  * progression write, and a control flag a later tick consumes.
  */
-export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Violation[] {
+export function simWrites(body: Node, decls: Map<string, Node>, imported: Set<string>, depth = 0): Violation[] {
   const out: Violation[] = [];
   const say = (what: string, n: Node): void => {
     out.push({ what, code: n.type });
@@ -276,7 +272,7 @@ export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Viol
       // `combatStateTicks`) are deliberately absent. A local helper that writes is caught by the
       // one-hop resolution below and needs no entry.
       const direct = n.callee?.type === 'Identifier' ? n.callee.name : undefined;
-      if (direct !== undefined && SIM_MUTATORS.has(direct)) {
+      if (direct !== undefined && SIM_MUTATORS.has(direct) && imported.has(direct)) {
         for (const arg of n.arguments ?? []) {
           if (reachesSim(arg, decls)) {
             say('a sim object passed to a sim mutator', n);
@@ -292,9 +288,39 @@ export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Viol
       if (depth < 2 && callee2?.type === 'Identifier') {
         const decl = decls.get(callee2.name);
         if (decl !== undefined) {
-          for (const v of simWrites(decl, decls, depth + 1)) out.push(v);
+          for (const v of simWrites(decl, decls, imported, depth + 1)) out.push(v);
         }
       }
+    }
+  });
+  return out;
+}
+
+/**
+ * Local names this file imported from `src/sim/`.
+ *
+ * 🔴 **This is the identity half of the sim-mutator rule, and without it the rule is enforced by NAME
+ * COLLISION.** `SIM_MUTATORS` is a set of bare identifiers; matching a callee against it alone means
+ * a file's own local helper called `tick` or `resolveState`, taking anything sim-rooted, becomes
+ * illegal **because of what it is called**. That is structurally broader than the authorised rule —
+ * *"a sim object passed to a `src/sim/` mutator"* — and the owner ruled that identity must be
+ * resolved **before** the set grows, precisely so growing it cannot widen what the rule reaches.
+ *
+ * Aliases resolve to the LOCAL name, which is the one appearing at the call site:
+ * `import { damagePlayer as hurt }` records `hurt`.
+ */
+export function simImports(ast: Node): Set<string> {
+  const out = new Set<string>();
+  walk(ast, (n) => {
+    if (n.type !== 'ImportDeclaration') return;
+    const from = n.source?.value;
+    // `../sim/combat`, `../../src/sim/player` — the segment, not a substring of some other word.
+    if (typeof from !== 'string' || !/(^|\/)sim\//.test(from)) return;
+    // A type-only import cannot be a call at runtime and is not a mutator.
+    if (n.importKind === 'type') return;
+    for (const spec of n.specifiers ?? []) {
+      if (spec.importKind === 'type') continue;
+      if (typeof spec.local?.name === 'string') out.add(spec.local.name);
     }
   });
   return out;
@@ -304,7 +330,8 @@ export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Viol
 export function simWriteViolations(code: string): Violation[] {
   const ast = parseFile(code);
   const decls = declarations(ast);
-  return callbackNodes(ast).flatMap((body) => simWrites(body, decls));
+  const imported = simImports(ast);
+  return callbackNodes(ast).flatMap((body) => simWrites(body, decls, imported));
 }
 
 /**

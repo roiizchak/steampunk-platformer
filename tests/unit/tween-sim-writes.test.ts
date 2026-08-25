@@ -28,6 +28,9 @@ import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES } from './sourceScan';
 import { callbackNodes, parseFile, simWriteViolations } from './tweenCallbacks';
 
+/** A newline inside a fixture literal, named so the shell that writes this file cannot eat it. */
+const NL = '\n';
+
 describe('9.2b — no sim-owned state is written from a tween callback', () => {
   it('the scan is not vacuous: it parses real files and EXTRACTS real callback bodies', () => {
     // 🔴 The check that matters is how many callback BODIES came out, not whether the call threw.
@@ -135,15 +138,43 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     // 🔴 `src/sim/` is mutating functions that take sim objects as ARGUMENTS, and every one was
     // invisible: the rule looked only at assignment targets and mutator receivers. Passing sim state
     // out of a wall-clock callback IS the ownership violation whatever the callee does with it.
-    expect(scan('scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'))
+    // ⚠️ **The fixtures carry the IMPORT now, and that is the point of the 2026-08-25 identity
+    // change.** The rule is *"a sim object passed to a `src/sim/` mutator"*, so the callee has to be
+    // shown to BE one. Without the import line these read as calls to some local `damagePlayer`,
+    // which the rule deliberately no longer claims. Every real violation has this import.
+    const IMP = "import { damagePlayer, killPlayer, stepEnemies } from '../sim/combat';" + NL;
+    expect(scan(IMP + 'scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'))
       .toContain('a sim object passed to a sim mutator');
-    expect(scan('scene.tweens.add({ onStop: () => { stepEnemies(this.simWorld, 1); } });'))
+    expect(scan(IMP + 'scene.tweens.add({ onStop: () => { stepEnemies(this.simWorld, 1); } });'))
       .toContain('a sim object passed to a sim mutator');
     // Through an alias, so the argument rule uses the same reachability as the write rule.
-    expect(scan('const p = scene.simWorld.player;\nscene.tweens.add({ onStop: () => { killPlayer(p); } });'))
+    expect(scan(IMP + 'const p = scene.simWorld.player;' + NL + 'scene.tweens.add({ onStop: () => { killPlayer(p); } });'))
       .toContain('a sim object passed to a sim mutator');
     // A VIEW object handed to a function is still fine — the rule is ownership, not arity.
     expect(scan('scene.tweens.add({ onComplete: () => { fadeOut(sprite, 0); } });')).toEqual([]);
+  });
+
+  it('ACCEPTS a LOCAL helper that merely SHARES a name with a sim mutator (identity, not collision)', () => {
+    // 🔴 **The acceptance case the owner's ruling required before `SIM_MUTATORS` could grow.**
+    // The set is bare identifiers, so matching a callee against it alone enforces the rule by NAME
+    // COLLISION: a file's own `stepEnemies` — a renderer, a debug helper — would become illegal
+    // because of what it is called. That is broader than the authorised rule, and growing the set
+    // from 6 names to ~26 would have multiplied the surface. `simImports()` resolves identity first.
+    const local = [
+      'function stepEnemies(w) { return w.enemies.length; }',
+      'scene.tweens.add({ onComplete: () => { stepEnemies(world); } });',
+    ].join(NL);
+    expect(
+      scan(local),
+      'a local helper was reported as a sim mutator purely because of its NAME',
+    ).toEqual([]);
+
+    // And a TYPE-only import does not make it one either — it cannot be called at runtime.
+    const typeOnly = [
+      "import type { damagePlayer } from '../sim/combat';",
+      'scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });',
+    ].join(NL);
+    expect(scan(typeOnly), 'a type-only import was treated as a runtime mutator').toEqual([]);
   });
 
   it('ACCEPTS a READ-ONLY sim call — the rule forbids writes, not reads (Codex impl review)', () => {
