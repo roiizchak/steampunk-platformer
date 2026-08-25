@@ -344,3 +344,7 @@ stable on these readings, but it is a *different claim* from 8.7's and therefore
 
 **Verified:** `phase-08-perf.spec.ts` re-run after the surgery — **3 passed** (work ratio 1.17x,
 create 1.32x, red proof 183.40x). Typecheck clean; `file-size` and `docs-contract` green.
+
+---
+
+**Continues in [session-tier5-gate-holes-03-sweep.md](session-tier5-gate-holes-03-sweep.md)** — Batch 8 onward.

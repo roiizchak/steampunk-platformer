@@ -23,261 +23,12 @@
  * REPRODUCTION (red -> green) for the roster pin; GUARD for the sweep itself *(vault C3)*.
  */
 
+
 import { describe, expect, it } from 'vitest';
-import { createSnapshot, latchJumpPress } from '../../src/sim/input';
 import { DEFAULT_TUNING } from '../../src/sim/player';
-import { advance, createWorld } from '../../src/sim/tick';
-import type { Rect, TuningKnobs, World } from '../../src/sim/types';
-
-/**
- * The knob roster, written out by hand (Codex F7a).
- *
- * If this list and `DEFAULT_TUNING` disagree, one of them was changed without the other and the
- * sweep below is no longer covering what it claims to cover.
- */
-const EXPECTED_KNOBS = [
-  'airAccel',
-  'airFriction',
-  'coyoteTicks',
-  'groundFriction',
-  'gravity',
-  'jumpBufferTicks',
-  'jumpCutDivisor',
-  'jumpVelocity',
-  'maxFallSpeed',
-  'runAccel',
-  'runMax',
-  'walkMax',
-];
-
-/**
- * A floor far enough down that the `longFall` scenario is still airborne when it stops.
- *
- * It was at y=960 — the same 180px drop as the real level — which meant `vy` only reached ~15.3
- * before the scenario ended, so the `maxFallSpeed * 2` perturbation never saturated the clamp and
- * contributed nothing. The knob passed on its halved case alone. Review brief 1 found this: the
- * sweep was non-vacuous but weaker than it read.
- *
- * 🔴 **y 2400 → 6000 on 2026-08-15, and it is the SAME lesson a third time.** Doubling the airborne
- * window dropped `gravity` to 0.675, so reaching the 51.6 clamp now takes **77 ticks and ~2027 px**
- * rather than 19 ticks and a few hundred. The old floor gave ~1440 px of drop, so the clamp became
- * unreachable in every perturbation and the sweep reported `maxFallSpeed` as a DEAD KNOB — while it
- * was demonstrably live.
- *
- * That is the third time this session a physics change silently cost a sweep its sensitivity and
- * the sweep blamed the knob rather than itself (`deadZone` was the other two). **The floor and the
- * window are properties of the tuning, not constants** — anything that lowers gravity has to move
- * them or this gate quietly stops measuring. 6000 leaves headroom for the doubled-clamp
- * perturbation, which falls furthest (~3409 px in the window) precisely because it never saturates.
- */
-const FLOOR_ONLY: Rect[] = [{ x: 0, y: 6000, w: 1920, h: 120 }];
-
-/**
- * 🔴 **The real reason `maxFallSpeed` went dead, and it was not the floor.**
- *
- * `createWorld` defaults to 1920x1080 and `belowKillPlane` is `feetY > bounds.heightPx` — so the
- * player CROSSES THE KILL PLANE at 1080 px of fall, dies, and respawns. Every perturbation then
- * converges to the same resting fingerprint and the knob reads dead.
- *
- * That was survivable at `gravity` 2.7: 26 ticks fell ~900 px and stayed inside the box. At 0.675
- * the clamp needs **77 ticks and ~2027 px**, which is nearly twice the whole default world. **No
- * floor position could have fixed it** — the world itself had to get taller. Worth stating because
- * the first fix moved the floor and changed nothing, which is how a wrong diagnosis looks.
- */
-const TALL_WORLD = { widthPx: 1920, heightPx: 8000 };
-
-/** A reproducible fingerprint of a trajectory. Any change in behaviour changes this string. */
-function signature(world: World, jumps: number): string {
-  const p = world.player;
-  return [p.x, p.y, p.vx, p.vy, p.state, p.grounded, jumps]
-    .map((v) => (typeof v === 'number' ? v.toFixed(4) : String(v)))
-    .join('|');
-}
-
-type Scenario = (tuning: TuningKnobs) => string;
-
-function withTuning(
-  tuning: TuningKnobs,
-  solids: Rect[] | undefined,
-  run: (world: World, input: ReturnType<typeof createSnapshot>) => number,
-  /**
-   * 🔴 Optional TALLER world, added 2026-08-15. The default is 1920x1080 and `belowKillPlane` fires
-   * at `feetY > heightPx`, so a scenario that wants a long fall must say so or the player DIES
-   * mid-measurement and respawns — converging every perturbation to one fingerprint and reporting a
-   * live knob as dead. See `longFall`.
-   */
-  bounds?: { widthPx: number; heightPx: number },
-): string {
-  const world = createWorld({ seed: 11, scale: 1, solids, bounds });
-  Object.assign(world.tuning, tuning);
-  const input = createSnapshot();
-  const jumps = run(world, input);
-  return signature(world, jumps);
-}
-
-function countJumps(world: World, input: ReturnType<typeof createSnapshot>, ticks: number): number {
-  let jumps = 0;
-  for (let i = 0; i < ticks; i += 1) {
-    if (advance(world, input, 1).jumped) {
-      jumps += 1;
-    }
-  }
-  return jumps;
-}
-
-const SCENARIOS: Record<string, Scenario> = {
-  /** Ground acceleration and the speed cap. */
-  runHeld: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.right = true;
-      return countJumps(world, input, 40);
-    }),
-
-  /**
-   * The walk modifier: the only scenario in which `walkMax` is the ACTIVE cap.
-   *
-   * Without this, `walkMax` moves no observable output in any scenario and the sweep goes red —
-   * correctly. That redness is the proof the knob is real rather than decorative (vault A6), and
-   * it is why the scenario was added alongside the knob rather than after it.
-   *
-   * It ends mid-approach on purpose: run past convergence and every walkMax under the distance
-   * covered produces the same resting fingerprint, so the scenario stops discriminating.
-   */
-  walkHeld: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.right = true;
-      input.walkHeld = true;
-      return countJumps(world, input, 12);
-    }),
-
-  /**
-   * The cap SHRINKING under a moving player — reach `runMax` first, then hold the modifier.
-   *
-   * This is the bleed path in `stepHorizontal`, which the steady-state `walkHeld` scenario never
-   * touches: there the player is under the cap the whole way up. Codex plan review finding 8.
-   */
-  walkFromRun: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.right = true;
-      const jumps = countJumps(world, input, 20);
-      input.walkHeld = true;
-      return jumps + countJumps(world, input, 4);
-    }),
-
-  /** Ground friction: accelerate, then release and coast. */
-  runReleased: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.right = true;
-      countJumps(world, input, 30);
-      input.right = false;
-      return countJumps(world, input, 30);
-    }),
-
-  /** Gravity, jump impulse, and the whole arc while held. */
-  jumpHeld: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.jumpHeld = true;
-      latchJumpPress(input);
-      // Stopped MID-ARC on purpose. Run past the landing and the player settles back to its
-      // spawn at rest, so two different gravities produce an identical fingerprint and the
-      // scenario silently stops discriminating anything.
-      return countJumps(world, input, 25);
-    }),
-
-  /** The early-release cut. */
-  jumpCut: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.jumpHeld = true;
-      latchJumpPress(input);
-      const early = countJumps(world, input, 3);
-      input.jumpHeld = false;
-      return early + countJumps(world, input, 9);
-    }),
-
-  /** Air acceleration: steer while airborne. */
-  airSteer: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.jumpHeld = true;
-      latchJumpPress(input);
-      const jumps = countJumps(world, input, 2);
-      input.right = true;
-      return jumps + countJumps(world, input, 20);
-    }),
-
-  /** Air friction: build air speed, then release with the player still airborne. */
-  airCoast: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.jumpHeld = true;
-      latchJumpPress(input);
-      let jumps = countJumps(world, input, 2);
-      input.right = true;
-      jumps += countJumps(world, input, 10);
-      input.right = false;
-      return jumps + countJumps(world, input, 18);
-    }),
-
-  /**
-   * A long unobstructed drop — the only scenario that saturates maxFallSpeed.
-   *
-   * **100 ticks**, measured against the shipped tuning rather than guessed: the 51.6 px/tick clamp
-   * is reached at tick **77** at `gravity` 0.675, so both perturbations are observable — halving it
-   * saturates at tick 39, doubling it never saturates inside the window at all. Still stopped in
-   * mid-air, because landing converges every tuning to the same resting fingerprint.
-   *
-   * ⚠️ Was **26 ticks against a clamp the docstring called "17 px/tick"** — a number that had not
-   * been true since the Phase 4 rescale, describing a saturation point that moved twice under it.
-   * Re-derive both numbers whenever `gravity` or `maxFallSpeed` moves; neither is a constant.
-   */
-  longFall: (tuning) =>
-    withTuning(tuning, FLOOR_ONLY, (world, input) => countJumps(world, input, 100), TALL_WORLD),
-
-  /** Coyote time: walk off the ledge, wait, then press. */
-  coyote: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.right = true;
-      for (let i = 0; i < 400; i += 1) {
-        if (advance(world, input, 1).leftGround) {
-          break;
-        }
-      }
-      input.right = false;
-      const waited = countJumps(world, input, 5);
-      latchJumpPress(input);
-      return waited + countJumps(world, input, 10);
-    }),
-
-  /** Jump buffering: press well before touchdown and see whether it survives. */
-  buffer: (tuning) =>
-    withTuning(tuning, undefined, (world, input) => {
-      advance(world, input, 5);
-      input.jumpHeld = true;
-      latchJumpPress(input);
-      let jumps = countJumps(world, input, 26);
-      latchJumpPress(input);
-      return jumps + countJumps(world, input, 20);
-    }),
-};
-
-/** Values a knob is nudged to. Integer knobs stay integers so a tick count is never a fraction. */
-function perturbations(key: string, value: number): number[] {
-  const isTickCount = key === 'coyoteTicks' || key === 'jumpBufferTicks';
-  if (isTickCount) {
-    return [Math.max(1, Math.floor(value / 2)), value * 2];
-  }
-  if (key === 'jumpCutDivisor') {
-    return [1, value * 3];
-  }
-  return [value / 2, value * 2];
-}
+import type { TuningKnobs } from '../../src/sim/types';
+import { LONG_FALL_TICKS, tuningEnvelope } from './knobSweepGeometry';
+import { EXPECTED_KNOBS, LONG_FALL, SCENARIOS, perturbations, probe } from './knobSweepScenarios';
 
 describe('every Playground knob moves an observable output (criterion 2.6, vault A6)', () => {
   it('the knob roster matches the hand-written list — deleting a knob goes RED (Codex F7a)', () => {
@@ -317,6 +68,72 @@ describe('every Playground knob moves an observable output (criterion 2.6, vault
     // The whole point of A6: the number has to actually move. A knob that changes nothing is
     // either dead or wired to the wrong thing, and both look identical in the Playground.
     expect(moved, `knob "${key}" changed no observable output in any scenario`).not.toHaveLength(0);
+  });
+
+  /**
+   * 🔴 **The regime preconditions — §3c, and the hole this file already documented about itself.**
+   *
+   * The sweep asserts a knob MOVED something. Nothing asserted the scenario was in the regime where
+   * that knob is observable, and the failure mode is not hypothetical: three times in one session a
+   * physics change moved the regime out from under a scenario, and the sweep reported a live knob as
+   * dead. Every one of those was caught by a human reading a suspicious green, not by a gate.
+   *
+   * These are the two scenarios whose regime is a *position*, not a fact about the code — the fall
+   * has to be long enough, and the ledge has to actually be left.
+   */
+  it('longFall stays in the regime that makes maxFallSpeed observable, for EVERY perturbation', () => {
+    SCENARIOS.longFall({ ...DEFAULT_TUNING });
+    const base = probe.world;
+    expect(base, 'the probe was never written — withTuning stopped recording').not.toBeNull();
+
+    // 1. The clamp SATURATED inside the window. If it did not, `maxFallSpeed` is not being exercised
+    //    at all and the knob would pass, if it passed, on something else entirely.
+    expect(
+      base!.player.vy,
+      `after ${LONG_FALL_TICKS} ticks the fall reached ${base!.player.vy.toFixed(2)} px/tick, not the ` +
+        `${DEFAULT_TUNING.maxFallSpeed} clamp. The window is too short for the shipped gravity, so ` +
+        'the scenario is measuring acceleration and calling it a clamp.',
+    ).toBe(DEFAULT_TUNING.maxFallSpeed);
+
+    // 2. And it is still AIRBORNE — for every tuning the sweep runs, not just this one. Landing
+    //    converges every perturbation on the same resting fingerprint, which is exactly how this
+    //    scenario once reported a live knob dead. This is what the derived floor buys.
+    for (const tuning of tuningEnvelope(EXPECTED_KNOBS, perturbations)) {
+      SCENARIOS.longFall(tuning);
+      expect(
+        probe.world!.player.grounded,
+        `a perturbation LANDED inside longFall (floor y ${LONG_FALL.floorY}, world ` +
+          `${LONG_FALL.bounds.heightPx} px). Every tuning that lands converges on one resting ` +
+          'fingerprint, so the scenario stops discriminating.',
+      ).toBe(false);
+      expect(probe.world!.player.state, 'a perturbation crossed the kill plane and DIED').not.toBe('death');
+    }
+  });
+
+  it('coyote actually leaves the ledge, and the window straddles the press', () => {
+    const jumpsOf = (sig: string): number => Number(sig.split('|').at(-1));
+
+    const baseline = SCENARIOS.coyote({ ...DEFAULT_TUNING });
+    expect(
+      probe.leftGroundAtTick,
+      'the player never left the ledge inside 400 ticks, so every coyoteTicks produces the same run ' +
+        'and the scenario measures nothing',
+    ).toBeGreaterThanOrEqual(0);
+    expect(probe.leftGroundAtTick, 'the ledge was left on the very first tick — that is a spawn, not a walk-off').toBeGreaterThan(0);
+
+    // 🔴 The regime, stated as a discrimination rather than a position: the scenario waits 5 ticks
+    // before pressing, so a coyote window WIDER than that grants the jump and a narrower one refuses
+    // it. If both ends of the perturbation landed on the same side of 5, the scenario would be inside
+    // the window (or outside it) for every tuning and `coyoteTicks` would read dead.
+    const [halved, doubled] = perturbations('coyoteTicks', DEFAULT_TUNING.coyoteTicks);
+    const narrow = SCENARIOS.coyote({ ...DEFAULT_TUNING, coyoteTicks: halved! });
+    const wide = SCENARIOS.coyote({ ...DEFAULT_TUNING, coyoteTicks: doubled! });
+    expect(
+      [jumpsOf(narrow), jumpsOf(baseline), jumpsOf(wide)],
+      `coyoteTicks ${halved} / ${DEFAULT_TUNING.coyoteTicks} / ${doubled} all produced the same jump ` +
+        'count. The press lands on one side of the coyote window for every perturbation, so the ' +
+        'scenario cannot tell them apart.',
+    ).not.toEqual([jumpsOf(baseline), jumpsOf(baseline), jumpsOf(baseline)]);
   });
 
   it('the sweep can fail: an unused knob added to the roster is not silently swept', () => {
