@@ -264,8 +264,11 @@ out of date.** The docstring now carries the three probes so the next reader doe
 
 The owner was asked, with the three options and their costs, and **authorised adding a real parser**.
 
-**`@babel/parser` 8.0.4, pinned exact, devDependency.** Pure JS, no native binary, one transitive
-package (`@babel/types`). ⚠️ `npm audit` reports one high-severity advisory (`nanoid <3.3.18`) —
+**`@babel/parser` 8.0.4, pinned exact, devDependency.** Pure JS, no native binary. ⚠️ **THREE
+transitive packages, not one** — corrected 2026-08-25 from the lockfile after a gate-round finding:
+`@babel/types`, `@babel/helper-string-parser`, `@babel/helper-validator-identifier`. The owner's
+decision is unaffected; the number put to them was wrong, and it is corrected rather than quietly
+restated. ⚠️ `npm audit` reports one high-severity advisory (`nanoid <3.3.18`) —
 **pre-existing**, confirmed by re-running the audit against the stashed tree. Not introduced here
 and not fixed here.
 
@@ -456,5 +459,6 @@ for whoever repairs it; not touched here.
 
 At 451 lines this log reached CLAUDE.md §6's split point. **Batches 6 and 7 — the two measurement
 batches, §1b and §1a — are in
-[`session-phase-09-debts-02-perf.md`](session-phase-09-debts-02-perf.md)**, a flat sibling rather than
+[`session-phase-09-debts-02-perf.md`](session-phase-09-debts-02-perf.md), and the six-brief QA gate
+round is in [`session-phase-09-debts-03-gate.md`](session-phase-09-debts-03-gate.md)**, a flat sibling rather than
 a subdirectory, because `tests/unit/file-size.test.ts` globs `docs/qa/*.md` non-recursively.

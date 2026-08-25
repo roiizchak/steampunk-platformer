@@ -89,12 +89,31 @@ export async function startPhasedCombat(page: Page, fight: number, rest: number)
       const HOLD_MS = 50;
       /** One swing per this many frames. The claw has 18 ticks of startup; spamming re-queues it. */
       const SWING_FRAMES = 24;
-      /** Enough that nothing can expire mid-REST. Restored to 0 the instant FIGHT begins. */
-      const REST_IFRAMES = 9999;
+      /**
+       * 🔴 **`0` IS the invulnerable value, and the first version of this file had it backwards.**
+       *
+       * `invulnerable(player)` is `windowOpen(iFrameCounter, IFRAME_TICKS)` = `counter < 45`
+       * (`src/sim/combat.ts:76`, `src/sim/windows.ts:61`), so a SMALL counter is protected and a large
+       * one is not. This pinned `9999` "so nothing can expire mid-REST" — which left the player fully
+       * vulnerable through every REST phase and made three docstrings' *"no event can occur, by
+       * construction"* simply false. `installStorm` has the correct value, `0`, twelve files away.
+       *
+       * Caught by the 2026-08-25 adversarial gate brief. The aggregate readings survived it only
+       * because `reduceCombat` filters control frames by DISTANCE FROM AN EVENT rather than by phase
+       * label — an accident, not a design, and the invariant is repaired rather than the accident
+       * relied on.
+       */
+      const REST_IFRAMES = 0;
+      /** Saturated: `45 < 45` is false, so the player is vulnerable again the instant FIGHT begins. */
+      const FIGHT_IFRAMES = 45;
       const cycle = fightTicks + restTicks;
       let frame = 0;
       let holdUntil = 0;
       let swingOpen = false;
+      // The phase EDGE, so FIGHT restores vulnerability once rather than clobbering the sim's own
+      // i-frame countdown on every frame of the fight — which would make the player unhittable in a
+      // second, subtler way.
+      let wasFighting = true;
       const step = (t: number): void => {
         frame += 1;
         const phaseTick = game.__game.tick % cycle;
@@ -106,6 +125,7 @@ export async function startPhasedCombat(page: Page, fight: number, rest: number)
           if (swingOpen) { key('keyup', 'KeyL'); swingOpen = false; }
           if (holdUntil !== 0) { key('keyup', 'Space'); holdUntil = 0; }
           if (p) p.iFrameCounter = REST_IFRAMES;
+          wasFighting = false;
           // The fixture spawn lives here, flagged, so its tens of milliseconds land in neither side.
           // 🔴 Relative to the REST phase's own start, not to the cycle's. The first draft compared
           // `phaseTick` (which is 40..99 during rest) against 2..5 and therefore never fired at all —
@@ -117,7 +137,8 @@ export async function startPhasedCombat(page: Page, fight: number, rest: number)
           if (spawnWindow && frame % 2 === 1) key('keyup', 'KeyK');
         } else {
           w.__spawning = false;
-          if (p && p.iFrameCounter === REST_IFRAMES) p.iFrameCounter = 0;
+          if (p && !wasFighting) p.iFrameCounter = FIGHT_IFRAMES;
+          wasFighting = true;
           const swing = frame % SWING_FRAMES;
           if (swing === 0) { key('keydown', 'KeyL'); swingOpen = true; }
           if (swing === 2) { key('keyup', 'KeyL'); swingOpen = false; }

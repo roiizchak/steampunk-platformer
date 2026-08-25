@@ -71,8 +71,22 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
  * discarder, and the criterion is about whether the handle is REACHABLE later. Every live site
  * binds to a name (checked: all five are `= ` assignments), so requiring that costs nothing and
  * closes the dodge. A site that genuinely wants to pass a tween onward can name it first.
+ *
+ * 🔴 **All FIVE tween-opening methods, not just `add` — a gate-round finding, 2026-08-25.**
+ * The first version matched `add` alone while `tweenCallbacks.ts`'s `TWEEN_METHODS` (the sibling
+ * rule added in the same branch) already enumerated `add`, `addCounter`, `addMultiple`, `chain` and
+ * `create`. `scene.tweens.addCounter({})` therefore yielded zero sites and this rule ran clean over
+ * it. The two lists now agree because they are the same question asked twice.
+ *
+ * ⚠️ **`this.add.tween(config)` is a REAL Phaser 4.2.1 entry point and NOTHING here reaches it**
+ * (`phaser.d.ts:26869` on the factory, `:28201` on the creator). Every rule in this file and in
+ * `tween-callback-boundary.test.ts` keys on the object being literally named `tweens`, so a tween
+ * opened through the GameObject factory bypasses 9.3b, 9.2, 9.2b and 9.2c at once. It occurs nowhere
+ * on this tree — checked — and is recorded as **D14** rather than closed, because closing it means
+ * resolving what `add` is bound to, which is a different machine from a pattern. The absence is
+ * PINNED below so the day someone writes one, a fast test says so instead of a silent hole.
  */
-const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*add\s*\(/g;
+const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
 
 /**
  * The view for rules whose evidence is a bare identifier: comments AND string literals blanked, so
@@ -203,6 +217,45 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
     expect(unbound('  register(a, scene.tweens.add({ targets: o }));')).toBe(1);
     // And the sanctioned way to do the same thing still passes: name it, then pass the name.
     expect(unbound('  const t = scene.tweens.add({ targets: o });\n  live.add(t);')).toBe(0);
+  });
+
+  it('REJECTS the other FOUR tween-opening methods — not just add (vault C2)', () => {
+    // 🔴 A gate-round finding, 2026-08-25: this rule matched `add` alone while the sibling
+    // `TWEEN_METHODS` in `tweenCallbacks.ts` already listed five. `addCounter` returned 0 and the
+    // scan ran clean over it. Every one of the five opens a tween that owns a handle.
+    expect(unbound('  scene.tweens.addCounter({ from: 0, to: 1 });')).toBe(1);
+    expect(unbound('  this.tweens.addMultiple([{ targets: o }]);')).toBe(1);
+    expect(unbound('  scene.tweens.chain({ tweens: [] });')).toBe(1);
+    expect(unbound('  this.tweens.create({ targets: o });')).toBe(1);
+    // And held forms of the same four still pass — the rule did not become a blanket.
+    expect(unbound('  const c = scene.tweens.addCounter({ from: 0, to: 1 });')).toBe(0);
+    expect(unbound('  return this.tweens.chain({ tweens: [] });')).toBe(0);
+    // A method that is NOT a tween opener stays out of it.
+    expect(unbound('  scene.tweens.killAll();')).toBe(0);
+    expect(unbound('  scene.tweens.getTweensOf(o);')).toBe(0);
+  });
+
+  it('D14: NOTHING here reaches `this.add.tween(config)`, and the absence is PINNED', () => {
+    // ⚠️ `add.tween(config)` is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` on the
+    // factory, `:28201` on the creator) and every rule in this file keys on the object being
+    // literally named `tweens`, so it bypasses 9.3b, 9.2, 9.2b and 9.2c at once. Recorded as D14
+    // rather than closed: closing it means resolving what `add` is bound to, a different machine
+    // from a pattern.
+    //
+    // 🔴 So this test does the honest thing instead — it states the hole and PINS THE ABSENCE.
+    // The rule cannot see it:
+    expect(unbound('  this.add.tween({ targets: o, alpha: 0 });')).toBe(0);
+    // … and no file uses it, which is what makes the hole latent rather than live. The day someone
+    // writes one, this goes red and points at D14 instead of the scan quietly passing.
+    const users = Object.entries(ALL_SOURCES)
+      .filter(([, src]) => /\badd\s*\.\s*tween\s*\(/.test(blankFor('code+strings', src)))
+      .map(([f]) => f);
+    expect(
+      users,
+      'a tween was opened through the GameObject factory (`add.tween`). Every rule in this file ' +
+        'keys on `tweens.` and NONE of them can see it — finding D14. Open it through ' +
+        '`this.tweens.add` instead, or close D14 first.',
+    ).toEqual([]);
   });
 
   it('no source file starts a tween it does not hold', () => {

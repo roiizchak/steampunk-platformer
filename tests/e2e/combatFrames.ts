@@ -307,12 +307,22 @@ export function reduceCombat(frames: CombatFrame[], events: CombatEvent[]): Comb
   const pairs: CombatPair[] = [];
   let peakAliveNear = 0;
   let peakSparksNear = 0;
+  let dropped = 0;
   for (const event of events) {
+    // 🔴 The upper edge is EXCLUSIVE. With `<=`, two clustered events exactly `NEAR_TICKS` apart
+    // share one tick, and the second hit's burst — which is what makes that tick expensive — is
+    // counted as the FIRST hit's reading too. Caught by the 2026-08-25 adversarial gate brief;
+    // clustering guarantees events are at least `NEAR_TICKS` apart, so `<` makes the windows a
+    // partition rather than an overlapping cover.
     const near = frames.filter(
-      (f) => !f.spawning && f.tick >= event.tick && f.tick <= event.tick + NEAR_TICKS,
+      (f) => !f.spawning && f.tick >= event.tick && f.tick < event.tick + NEAR_TICKS,
     );
     if (near.length === 0) {
-      continue; // the hit landed on a tick no frame observed — the harness's resolution, not a defect
+      // The hit landed on a tick no frame observed — the harness's resolution, not a defect. 🔴 But
+      // it is COUNTED and printed: a silent drop is how a reduction quietly narrows to the events
+      // that happen to be cheap. The adversarial brief asked for the counter by name.
+      dropped += 1;
+      continue;
     }
     const nearMaxWork = Math.max(...near.map((f) => f.work));
     const nearMedianWork = median(near.map((f) => f.work));
@@ -348,6 +358,7 @@ export function reduceCombat(frames: CombatFrame[], events: CombatEvent[]): Comb
       .map((p) => p.delta.toFixed(3))
       .join('/')}${pairs.length > 12 ? ` (+${pairs.length - 12} more)` : ''}`,
     `      peak live particles inside a near window ${peakAliveNear} (sparks ${peakSparksNear})`,
+    `      ${pairs.length} of ${events.length} events yielded a window; ${dropped} landed on a tick no frame observed`,
   ];
 
   return {

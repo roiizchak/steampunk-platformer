@@ -35,3 +35,20 @@ export const MUTATION_TARGETS: Record<NamedMutation, { spec: string; assertion: 
   stall: { spec: 'phase-09-perf.spec.ts', assertion: 'the window-close guard (a PREMISE, not a bound)' },
   p95spike: { spec: 'phase-09-perf.spec.ts', assertion: 'MAX_EFFECT_FRAME_P95_MS — and ONLY it; see installBurstFixture' },
 };
+
+/**
+ * ⚠️ **`storm<N>` is NOT here, and that is a recorded gap, not an oversight.**
+ *
+ * `namedMutation()` returns `''` for any `storm<N>` value — `stormCount()` parses it instead — so the
+ * parametric mutation is outside `NAMED_MUTATIONS`, outside this table, and outside
+ * `tests/unit/perf-mutation-routing.test.ts` entirely. That matters more than it looks: `storm8192`
+ * is the recorded red proof for **two of the four upper bounds** in `phase-09-perf.spec.ts`
+ * (`docs/qa/session-phase-09-debts-02-perf.md` §Batch 6), so the two mutations doing the most work in
+ * that gate are the two nothing checks are still wired.
+ *
+ * Raised by the 2026-08-25 gate brief. **Not closed here**: routing an unbounded family of names
+ * needs a different key than a `Record<NamedMutation, …>`, and inventing one to hold a single
+ * documented entry is more machine than the criterion has earned. It is written down so the next
+ * reader sees a gap rather than a complete-looking table.
+ */
+export const STORM_MUTATION_IS_UNROUTED = true;

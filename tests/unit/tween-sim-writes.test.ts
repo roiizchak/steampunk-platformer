@@ -87,6 +87,24 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     // Two hops, and through `this.world` rather than a parameter.
     expect(scan('const w = this.world;\nconst e = w.enemies;\nscene.tweens.add({ onStop: () => { e.sentries.pop(); } });'))
       .toContain('a sim entity spawn or removal');
+    // 🔴 **DESTRUCTURED, which the first version of this extractor missed.** A gate-round
+    // finding on 2026-08-25: `declarations()` recorded only `Identifier` ids, so the line below ran
+    // clean while the `const p = scene.simWorld.player` above — the same alias, one syntax apart —
+    // went red. Codex PR-03 named destructuring explicitly and the session log had marked it applied.
+    expect(scan('const { player } = scene.simWorld;\nscene.tweens.add({ onComplete: () => { player.hp = 0; } });'))
+      .toContain('a sim-state write');
+    // Renamed on the way out, and one level deeper — the two shapes a one-name-only fix still misses.
+    expect(scan('const { player: hero } = this.world;\nscene.tweens.add({ onStop: () => { hero.x = 0; } });'))
+      .toContain('a sim-state write');
+    expect(scan('const { enemies } = scene.simWorld;\nscene.tweens.add({ onComplete: () => { enemies.sentries.push(s); } });'))
+      .toContain('a sim entity spawn or removal');
+  });
+
+  it('a DESTRUCTURED VIEW binding is still ACCEPTED — the fix did not become a blanket', () => {
+    // The other direction, on the same syntax. Destructuring off something that is not a sim handle
+    // must stay legal, or the repair above trades a false green for a false red on the live sites.
+    expect(scan('const { alpha } = style;\nscene.tweens.add({ onComplete: () => { alpha.value = 1; } });')).toEqual([]);
+    expect(scan('const { sprite } = view;\nscene.tweens.add({ onStop: () => { sprite.setAlpha(1); } });')).toEqual([]);
   });
 
   it('REJECTS it through a callback passed by NAME and by MEMBER expression', () => {
@@ -107,5 +125,53 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     expect(scan('scene.tweens.add({ onComplete: () => { playerSprite.alpha = 1; player.setAlpha(1); } });')).toEqual([]);
     // A sim write OUTSIDE any tween is none of 9.2's business.
     expect(scan('function onTick(): void { world.player.hp = 0; }')).toEqual([]);
+  });
+
+  it('REJECTS a sim object HANDED to a function — the argument shape (2026-08-25 brief)', () => {
+    // 🔴 `src/sim/` is mutating functions that take sim objects as ARGUMENTS, and every one was
+    // invisible: the rule looked only at assignment targets and mutator receivers. Passing sim state
+    // out of a wall-clock callback IS the ownership violation whatever the callee does with it.
+    expect(scan('scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'))
+      .toContain('a sim object passed out of a tween callback');
+    expect(scan('scene.tweens.add({ onStop: () => { stepEnemies(this.simWorld, 1); } });'))
+      .toContain('a sim object passed out of a tween callback');
+    // Through an alias, so the argument rule uses the same reachability as the write rule.
+    expect(scan('const p = scene.simWorld.player;\nscene.tweens.add({ onStop: () => { killPlayer(p); } });'))
+      .toContain('a sim object passed out of a tween callback');
+    // A VIEW object handed to a function is still fine — the rule is ownership, not arity.
+    expect(scan('scene.tweens.add({ onComplete: () => { fadeOut(sprite, 0); } });')).toEqual([]);
+  });
+
+  it('REJECTS a write ONE HOP through a local helper — `() => finish()` (2026-08-25 brief)', () => {
+    // `onComplete: finish` was caught while `onComplete: () => finish()` was not: the same helper,
+    // the same write, six characters apart. The walk now follows a call to a local declaration.
+    expect(scan('const finish = (): void => { world.completed = true; };\nscene.tweens.add({ onComplete: () => { finish(); } });'))
+      .toContain('a sim-state write');
+    expect(scan('function done(): void { this.world.player.hp = 0; }\nscene.tweens.add({ onStop: () => { done(); } });'))
+      .toContain('a sim-state write');
+    // A local helper that touches only the view stays legal.
+    expect(scan('const settle = (): void => { line.setAlpha(1); };\nscene.tweens.add({ onStop: () => { settle(); } });')).toEqual([]);
+  });
+
+  it('REJECTS a write through onUpdate — the key an addCounter freeze uses (2026-08-25 brief)', () => {
+    // 🔴 `CALLBACK_KEYS` omitted `onUpdate`, which falsified this file's own sibling claim that an
+    // `addCounter` freeze is caught here: a counter tween writes through `onUpdate` and nothing else,
+    // so the one shape the rule most exists for was the one key it never looked at.
+    expect(scan('scene.tweens.addCounter({ from: 0, to: 1, onUpdate: (t) => { world.player.x = t.getValue(); } });'))
+      .toContain('a sim-state write');
+    // And an onUpdate that only drives the view is still accepted.
+    expect(scan('scene.tweens.addCounter({ from: 0, to: 1, onUpdate: (t) => { sprite.alpha = t.getValue(); } });')).toEqual([]);
+  });
+
+  it('REJECTS a write through an ALIASED tween manager — `const tm = scene.tweens` (2026-08-25)', () => {
+    // 🔴 One `const` used to silence every tween rule in the project at once: 9.3b could not see
+    // the `add`, 9.3c's `includes('tweens.add')` filter skipped the file, and this extractor returned
+    // ZERO callback bodies — which reads as a clean file rather than an unscanned one.
+    expect(scan('const tm = scene.tweens;\ntm.add({ onComplete: () => { world.completed = true; } });'))
+      .toContain('a sim-state write');
+    expect(scan('const tm = this.tweens;\nconst t = tm;\nt.addCounter({ onUpdate: () => { world.player.x = 1; } });'))
+      .toContain('a sim-state write');
+    // An alias of something that is NOT the tween manager stays out of it — no blanket.
+    expect(scan('const tm = scene.anims;\ntm.add({ onComplete: () => { world.completed = true; } });')).toEqual([]);
   });
 });

@@ -271,7 +271,12 @@ describe('phase documents are executable instructions', () => {
       const table = between(PRD, '## The phases', '### Phase dependency notes');
       const done = table
         .split('\n')
-        .filter((line) => line.includes('✅') && /^\|\s*\d+\s*\|/.test(line))
+        // 🔴 The verdict is the STATUS CELL's, not any ✅ anywhere in the row. An unanchored
+        // `includes` over the whole line is the same fragility this file just repaired twice, and it
+        // is safe today only because no non-done row happens to carry a stray ✅ (a criterion name, a
+        // note). Scoped to the STATUS cell's LEADING verdict, which is where the PRD puts it, so a
+        // ✅ buried in a non-done phase's prose cannot promote it either. 2026-08-25 brief.
+        .filter((line) => /^\|\s*\d+\s*\|/.test(line) && (cells(line).at(-1) ?? '').trimStart().startsWith('✅'))
         .map((line) => Number(cells(line)[0]));
       expect(done.length, 'no completed phases found — did the PRD table format change?').toBeGreaterThan(0);
 

@@ -15,13 +15,15 @@
  * Full evidence in `docs/qa/session-phase-09-debts-02-perf.md` §Batch 7. Three findings, each
  * measured rather than argued:
  *
- * 1. 🔴 **The shipped emitter caps bound a combat burst at ~85 live particles.** An 8x spark-burst
- *    mutation planted in `src/scenes/gameEffects.ts` left the peak at **85 — unchanged** — because
- *    `atLimit()` drops the surplus. The combat path cannot be made to cost more from inside the game.
- * 2. 🔴 **At 85 particles the cost is under the clock grid.** 8192 particles cost 4.1 ms on this GPU
- *    (`phase-09-perf.spec.ts`), so 85 cost ~0.04 ms — below `performance.now()`'s 0.1 ms step. The
- *    per-event median delta measured **-0.0000 ms** clean and **-0.1000 ms** under the 8x mutation:
- *    **the statistic does not order its own mutation, and it moved the wrong way.**
+ * 1. 🔴 **The shipped emitter caps bound a combat burst at 32 sparks / ~85 particles.** An 8x
+ *    spark-burst mutation planted in `src/scenes/gameEffects.ts` left the spark peak at **32 and the
+ *    total at 85 — both unchanged** — because `atLimit()` drops the surplus. The combat path cannot
+ *    be made to cost more from inside the game.
+ * 2. 🔴 **At that population the cost is under the clock grid.** 8192 particles cost 4.1 ms on this
+ *    GPU (`phase-09-perf.spec.ts`), so 85 cost ~0.04 ms — below `performance.now()`'s 0.1 ms step.
+ *    The per-event median delta measured **-0.0000 / 0.0000 / 0.2000 ms** across three clean runs and
+ *    **0.0000 ms** under the 8x mutation: **the statistic does not move at all.** It cannot order its
+ *    own mutation, so under this project's rules it would have to be replaced rather than re-bounded.
  * 3. 🔴 **The worst combat frame is 22-39 ms and is NOT the burst.** Those spikes are the sim's
  *    post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME`, two to three
  *    orders of magnitude above anything 85 particles can cost. A bound on them would be a bound on
@@ -52,9 +54,12 @@ const RECORD_TICKS = 1200;
 /**
  * The fewest landed hits a run may produce and still be a measurement.
  *
- * Five probes on this machine returned 16 to 23 clustered events (44 to 55 raw) over 1200 ticks. Ten
- * is well under half the lowest of those — a floor against *"the driver stopped connecting"*, not a
- * bound fitted to an observation.
+ * Three runs after the i-frame polarity repair (see `combatDrive.ts`) returned **15, 18, 20 and 22
+ * raw** events over 1200 ticks — lower than the 44-55 the pre-repair probes saw, which is the repair
+ * working: REST is genuinely quiet now, so hits only land during FIGHT. Ten is under two thirds of
+ * the lowest of those — a floor against *"the driver stopped connecting"*, not a bound fitted to an
+ * observation. ⚠️ It is deliberately not tightened toward 15: this gate must not go red because a
+ * loaded box drained fewer ticks.
  */
 const MIN_EVENTS = 10;
 
@@ -141,6 +146,18 @@ test.describe('Phase 9 — debt 1a, the combat path fires and is drawn', () => {
     await startPhasedCombat(page, FIGHT_TICKS, REST_TICKS);
     await recordCombat(page, 240);
 
+    // 🔴 **Retry until the sample lands in a FIGHT phase — this test was INTERMITTENT without it.**
+    // `combatDrive` alternates 40 fight / 60 rest ticks, and a snapshot taken after a fixed tick count
+    // can land anywhere in that cycle. Observed 2026-08-25: one run read `alive 0` mid-REST and went
+    // red while the identical next run read 60. A gate that fails on the phase of the moon gets
+    // deleted, so the wait is on the CONDITION (particles are up) rather than on a duration — and it
+    // is bounded, so "the fight stopped producing particles" is still loud.
+    let counts = await particleCounts(page);
+    for (let attempt = 0; counts.alive === 0 && attempt < 12; attempt += 1) {
+      await recordCombat(page, 20);
+      counts = await particleCounts(page);
+    }
+
     // ⚠️ **This one is AGGREGATE, and it passed the impact-burst mutation.** `particleCounts` returns
     // one total across the three emitters, so the landing dust `combatDrive` produces continuously
     // satisfies it even with every combat burst dropped — verified 2026-08-24, this test stayed green
@@ -151,7 +168,6 @@ test.describe('Phase 9 — debt 1a, the combat path fires and is drawn', () => {
     // Read through `EffectAttachment.emitters()` — the handle the scene publishes — never a duplicate
     // built by the test. A fixture that re-implements the thing it measures proves nothing about the
     // shipped code.
-    const counts = await particleCounts(page);
     console.log(`[1a] drawn ${counts.drawn} of ${counts.alive} alive, in camera list ${counts.inCameraList}`);
     expect(typeof counts.alive, 'particleCounts returned a non-number').toBe('number');
     expect(counts.alive, 'the fight produced no live particles').toBeGreaterThan(0);

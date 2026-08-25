@@ -132,7 +132,16 @@ const NAMED_CALLBACK =
  *
  * ### What it still does NOT reach — stated, not implied
  *
- * 🔴 **2026-08-24: the four holes below are now COVERED, by a second rule rather than by editing
+ * ⚠️ **2026-08-25 correction: "the four holes below are now COVERED" was WRONG, and the adversarial
+ * gate brief measured it.** Of the four, ONE is covered by the parser rule; two are not — an imported
+ * callback and a config passed as a variable both yield **zero** callback bodies from
+ * `tweenCallbacks.ts`, which reads as a clean file rather than an unscanned one — and shadowing still
+ * hides a violation, because `declarations()` is file-wide and last-wins, as its own docstring says in
+ * the same commit. The sentence below is left standing with this correction above it rather than
+ * quietly rewritten, because a claim that was published and believed is worth more as a corrected
+ * record than as a tidy one.
+ *
+ * 🔴 **2026-08-24: the four holes below are partly covered, by a second rule rather than by editing
  * this one.** `9.2c` in this file runs the same `SEQUENCING` patterns over a real parser's
  * extraction (`tweenCallbacks.ts`), and `tween-sim-writes.test.ts` uses it for the sim-write half.
  * This extractor is left exactly as it was: it has committed fixtures, it has never been wrong on

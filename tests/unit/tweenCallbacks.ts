@@ -47,7 +47,11 @@ type Node = any;
 const TWEEN_METHODS = new Set(['add', 'addCounter', 'addMultiple', 'chain', 'create']);
 
 /** The config keys whose values run when the tween reaches a boundary. */
-const CALLBACK_KEYS = new Set(['onComplete', 'onStop', 'onStart', 'onYoyo', 'onRepeat']);
+// 🔴 `onUpdate` added 2026-08-25 after a gate-round finding. Its absence falsified this
+// module's own sibling claim that an `addCounter` freeze is caught here: a counter tween writes
+// through `onUpdate` and through nothing else, so the one shape the rule most exists for was the
+// one key it did not look at.
+const CALLBACK_KEYS = new Set(['onComplete', 'onStop', 'onStart', 'onYoyo', 'onRepeat', 'onUpdate']);
 
 /**
  * The names a `World` is held under in `src/scenes/`.
@@ -68,6 +72,15 @@ const PERSISTENCE = new Set(['writeProgress', 'recordCompletion']);
 const CONTROL_FLAGS = new Set(['playerInputEnabled']);
 
 export function parseFile(code: string): Node {
+  // ⚠️ **`errorRecovery` does NOT mean "a bad file yields a partial tree" here — it still THROWS**
+  // on anything it cannot recover from, measured 2026-08-25. Any sibling docstring that justified a
+  // vacuity check by "a file the parser chokes on yields a partial tree" had the mechanism wrong; the
+  // vacuity check is still worth having, for the different reason that a file yielding zero callback
+  // bodies is indistinguishable from a file with none.
+  //
+  // ⚠️ `plugins` has no `jsx`, so a `.tsx` under `src/` would throw on arrival. None exists — checked
+  // — and this is recorded rather than pre-solved, because a `jsx` plugin changes how `<T>` parses in
+  // ordinary `.ts` and that trade is not worth making for a file that does not exist.
   return parse(code, {
     sourceType: 'module',
     plugins: ['typescript'],
@@ -103,22 +116,62 @@ function declarations(ast: Node): Map<string, Node> {
   const out = new Map<string, Node>();
   walk(ast, (n) => {
     if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init) out.set(n.id.name, n.init);
+    // 🔴 **Destructuring, added 2026-08-25 after a gate-round finding.** The first version recorded
+    // only `Identifier` ids, so `let p = scene.simWorld.player; p.hp = 0` was CAUGHT while the
+    // identical `const { player } = scene.simWorld; player.hp = 0` was MISSED — and the session log
+    // marked Codex PR-03, which names destructuring explicitly, as applied. Each binding is mapped to
+    // a SYNTHETIC member expression (`<init>.<key>`), which `reachesSim` already knows how to walk, so
+    // the alias resolves through exactly the same path a plain assignment does rather than a second
+    // rule that can drift from it.
+    else if (n.type === 'VariableDeclarator' && n.id?.type === 'ObjectPattern' && n.init) {
+      for (const prop of n.id.properties ?? []) {
+        const key = prop?.key?.type === 'Identifier' ? prop.key.name : prop?.key?.value;
+        const bound = prop?.value?.type === 'Identifier' ? prop.value.name : undefined;
+        if (typeof key === 'string' && bound !== undefined) {
+          out.set(bound, {
+            type: 'MemberExpression',
+            object: n.init,
+            property: { type: 'Identifier', name: key },
+            computed: false,
+          } as Node);
+        }
+      }
+    }
     else if (n.type === 'FunctionDeclaration' && n.id?.type === 'Identifier') out.set(n.id.name, n);
     else if (n.type === 'ClassMethod' && n.key?.type === 'Identifier') out.set(n.key.name, n);
   });
   return out;
 }
 
-/** Is this call one that opens a tween? `scene.tweens.add(…)`, `this.tweens.chain(…)`. */
-function isTweenCall(n: Node): boolean {
+/**
+ * Is this call one that opens a tween? `scene.tweens.add(…)`, `this.tweens.chain(…)`.
+ *
+ * 🔴 **Aliases of the MANAGER resolve too, added 2026-08-25 after a gate-round finding.** `const tm =
+ * scene.tweens; tm.add({ onComplete })` was invisible to this, to 9.3b and to 9.3c at once — one
+ * `const` and every tween rule in the project went quiet. `decls` is threaded in so the same
+ * declaration map that already resolves `onStop: settle` answers this question as well.
+ *
+ * ⚠️ Still a NAME test at the root — `tweens`, or a local bound to something named `tweens`. A
+ * manager reached by a route with no `tweens` identifier anywhere (a constructor parameter, an
+ * import) is out of reach and is recorded rather than claimed.
+ */
+function isTweenCall(n: Node, decls: Map<string, Node>): boolean {
   if (n.type !== 'CallExpression' && n.type !== 'OptionalCallExpression') return false;
   const callee = n.callee;
   if (callee?.type !== 'MemberExpression' && callee?.type !== 'OptionalMemberExpression') return false;
   const method = callee.computed ? callee.property?.value : callee.property?.name;
   if (typeof method !== 'string' || !TWEEN_METHODS.has(method)) return false;
-  const obj = callee.object;
-  const objName = obj?.type === 'Identifier' ? obj.name : obj?.property?.name ?? obj?.property?.value;
-  return objName === 'tweens';
+  return namesTweenManager(callee.object, decls);
+}
+
+/** `tweens`, `scene.tweens`, or a local whose initialiser is one of those. Depth-limited like `reachesSim`. */
+function namesTweenManager(obj: Node, decls: Map<string, Node>, depth = 0): boolean {
+  if (!obj || depth > 4) return false;
+  const name = obj.type === 'Identifier' ? obj.name : (obj.property?.name ?? obj.property?.value);
+  if (name === 'tweens') return true;
+  if (obj.type !== 'Identifier') return false;
+  const init = decls.get(obj.name);
+  return init === undefined ? false : namesTweenManager(init, decls, depth + 1);
 }
 
 /**
@@ -147,7 +200,7 @@ export function callbackNodes(ast: Node): Node[] {
     }
   };
   walk(ast, (n) => {
-    if (!isTweenCall(n)) return;
+    if (!isTweenCall(n, decls)) return;
     walk(n.arguments, (a) => {
       if (a.type === 'ObjectProperty' || a.type === 'ObjectMethod') {
         const key = a.computed && a.key?.type !== 'StringLiteral' ? null : a.key?.name ?? a.key?.value;
@@ -200,7 +253,7 @@ export interface Violation {
  * a write through a sim handle, an entity added to or removed from a sim collection, a persisted
  * progression write, and a control flag a later tick consumes.
  */
-export function simWrites(body: Node, decls: Map<string, Node>): Violation[] {
+export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Violation[] {
   const out: Violation[] = [];
   const say = (what: string, n: Node): void => {
     out.push({ what, code: n.type });
@@ -219,6 +272,29 @@ export function simWrites(body: Node, decls: Map<string, Node>): Violation[] {
         if (typeof method === 'string' && PERSISTENCE.has(method)) say('a persisted progression write', n);
         else if (typeof method === 'string' && MUTATORS.has(method) && reachesSim(callee.object, decls)) {
           say('a sim entity spawn or removal', n);
+        }
+      }
+      // 🔴 **A sim object HANDED to a function, added 2026-08-25 after a gate-round finding.**
+      // `src/sim/` is mutating functions that take sim objects as arguments — `damagePlayer(player, 1)`,
+      // `killPlayer`, `stepEnemies`, `advance` — and every one of them was invisible, because the rule
+      // looked only at assignment targets and mutator receivers. Passing sim state out of a wall-clock
+      // callback IS the ownership violation whatever the callee then does with it, so the argument is
+      // the evidence and the callee's body does not have to be resolved.
+      for (const arg of n.arguments ?? []) {
+        if (reachesSim(arg, decls)) {
+          say('a sim object passed out of a tween callback', n);
+          break;
+        }
+      }
+      // 🔴 **And ONE hop through a local helper.** `onComplete: finish` was caught while
+      // `onComplete: () => finish()` — the same helper, the same write, six characters apart — was
+      // not, because the walk never followed a call. Depth-limited to 2 hops: deeper than that and
+      // the resolution is guessing, and the narrowing is stated rather than silently unbounded.
+      const callee2 = n.callee;
+      if (depth < 2 && callee2?.type === 'Identifier') {
+        const decl = decls.get(callee2.name);
+        if (decl !== undefined) {
+          for (const v of simWrites(decl, decls, depth + 1)) out.push(v);
         }
       }
     }
