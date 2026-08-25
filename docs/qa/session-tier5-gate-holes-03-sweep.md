@@ -254,3 +254,72 @@ alternating the two versions of `index.html`:
 it, now with two orders of magnitude of separation instead of a factor of four. Appended there, since
 that is where 6.9's instability record lives. **Not attributable to this session, and not fixed by
 it.**
+
+---
+
+## Batch 11 — §5, the `brass-sentry/idle` re-shoot: **generated, rejected, restored**
+
+Owner-approved after the mandatory pre-spend STOP, which showed the rendered command, the prompt and
+the price. **$1.19 spent. Nothing adopted.**
+
+### The seven-step transaction, as executed
+
+**1. Schema re-run — no drift.** `genmedia schema bytedance/seedance-2.0/image-to-video` returns
+`duration`, `resolution`, `aspect_ratio`, `generate_audio` and `end_image_url` with the enums
+FAL-MODELS.md documents. `genmedia pricing` still returns **$0.014 / "unit"** with "unit" undefined,
+so the price put to the owner was the `3.10` precedent — same endpoint, resolution and duration —
+not the CLI's number.
+
+**2. The dependency inventory, and it is bigger than the item said.** *"Budget a rebuild, not a
+swap"* understates it: `idle` sources **three** scales.
+
+| number | value | dependency on `idle` |
+|---|---|---|
+| slug `scale` | `0.28915663` | `192 / 664`, derived from `brass-sentry-idle-r2.mp4` itself |
+| `fire.scale` | `0.57558748` | derived against **idle's tripod span of 205 px** |
+| `death.scale` | `0.44081578` | the same 205 px landmark |
+
+A new idle moves the tripod span, so both per-action scales must be re-derived against it or `fire`
+and `death` silently resize — the exact 23.4 % defect the `3.10` re-shoot produced.
+
+**3. Generated under a versioned candidate name.** `01a039b1-c187-7e73-a1e7-26a9c44d406b`, seed
+882334275, 996 394 bytes, landed at `_generated/phase05/video/brass-sentry-idle-r3.mp4`. No shipped
+artifact touched.
+
+**4–5. It never reached the scale derive.** `assets:clips brass-sentry idle` **threw at G6**:
+
+> `"brass-sentry/idle" frame 5 of 8 fails G6 edge bleed — subject mask comes within 3px of the frame
+> on the top edge(s) (margins: left 70px, right 120px, top 0px, bottom 120px) — this reads as
+> cropped, not merely packed. This clip must be re-shot, not packed.`
+
+⚠️ **A `--derive-scale` run BEFORE the extraction printed the old numbers and looked like a pass** —
+664 px, `0.28915663`, identical to the record. `printDerivedScale` reads `findSource(generated, …)`,
+the *extracted strip*, not the clip; the strip was still `-r2`'s. Deriving before extracting reports
+the previous take's measurement with the new take's name on it. **Extract first, always.**
+
+**6. Adopted as one batch or not at all — so, not at all.** `clipJobs.mjs` and `clipAdoption.mjs`
+reverted, `-r2` still the adopted clip, tree clean. The waiver was re-confirmed green:
+`every-slug-loop-gate.test.ts` **11 passed**, `ceiling: 0.0138` untouched.
+
+**7. Spend logged either way.** `docs/GENERATION-LOG.md` — **$53.86 of $55, $1.14 remains.**
+
+### 🔴 What the $1.19 bought, which is worth more than the clip
+
+**The prompt does not constrain the vertical axis at all.** `FRAME_MARGIN`
+(`tools/gen/motionClauses.mjs:37`) reads *"stays entirely inside the middle 70 % of the **frame
+width**, with clear green margin visible at both the **left and right** edges."* Top and bottom are
+unconstrained. `-r2` passed G6 on the same words; `-r3` failed on the top edge. **This is variance on
+an axis nothing asks about**, not a regression and not a prompt that got worse.
+
+And the obvious repair is already recorded as tried and failed: the withdrawn centring clause in the
+same file cost **$4.76** across four clips and came back *"a coin flip"* — added wording did not move
+framing. So a `-r4` shot on re-worded prompt has a poor prior.
+
+**Recommendation for whoever attempts it next: change the geometry, not the words.** The `-r3`
+params record `"anchorPadded": false`. `tools/gen/padAnchor.mjs` exists, and this project's own
+history says the padded round is the one that worked — `brass-courier/attack`'s `-r3` is logged as
+*"the PADDED round: passed G6 cleanly."* Padding the anchor puts guaranteed green above the subject
+in the start frame, which is a geometric guarantee rather than a linguistic request.
+
+⚠️ **$1.14 remains and one generation costs ~$1.19.** The next re-shoot is a **ceiling decision**, not
+a budget one, and needs the owner.

@@ -272,4 +272,7 @@ footstep and a landing are live on that tick, and a worst case should over-state
 
 | [qa/session-bugfix-tiers.md § 3.10](qa/session-bugfix-tiers.md) | **`brass-sentry/fire` re-shoot — ADOPTED.** `01a02eb2-9ec0-7b93-982f-f060bbcbffb1`. `DISCHARGE_MARGIN` reversed on the owner's ruling: the flash now reaches about **twice** the barrel instead of no further than it. Discharge visible in **5 of 6 frames**, up from 1 — and it **passes G6 outright**, so the `ACCEPTED_EDGE_BLEED` waiver was deleted. Forced a tripod re-derive (0.44081578 → 0.57558748); the turret had gone 23.4 % small | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
 
-**Running total: $52.67 of the $55 ceiling. $2.33 remains.**
+| [qa/session-tier5-gate-holes-03-sweep.md § Batch 11](qa/session-tier5-gate-holes-03-sweep.md) | 🔴 **`brass-sentry/idle` re-shoot — DISCARDED, not adopted.** `01a039b1-c187-7e73-a1e7-26a9c44d406b`, seed 882334275. Owner-approved spend; the take **fails G6** — frame 5 of 8, **top margin 0 px** (left 70, right 120, bottom 120). Prompt was byte-identical to `-r2`, which passed, so this is variance on an axis **no clause constrains**: `FRAME_MARGIN` (`motionClauses.mjs:37`) governs *frame WIDTH* only. Every shipped artifact restored, the `0.0138` waiver re-confirmed green, nothing adopted | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Running total: $53.86 of the $55 ceiling. $1.14 remains — less than one generation on this endpoint,
+so the next re-shoot is a CEILING decision, not a budget one.**
