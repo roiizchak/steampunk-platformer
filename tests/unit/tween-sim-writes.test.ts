@@ -154,6 +154,50 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     expect(scan('scene.tweens.add({ onComplete: () => { fadeOut(sprite, 0); } });')).toEqual([]);
   });
 
+  it('REJECTS through the BARREL import and through an ALIAS — the two holes identity resolution opened', () => {
+    // 🔴 **Found in this session's own §10a owner round, in the change made three commits earlier.**
+    // Resolving callee identity closed a name-collision widening and opened two narrowings in the
+    // same stroke. Both were measured against this predicate before and after the repair:
+    //
+    //   | fixture                                                  | before | after |
+    //   |----------------------------------------------------------|--------|-------|
+    //   | `from '../sim/worldDamage'`                                |   1    |   1   |
+    //   | `from '../sim'` — **the barrel**                           | **0**  |   1   |
+    //   | `import { damagePlayer as hurt }`                           | **0**  |   1   |
+    //
+    // The barrel miss is the serious one: **`src/scenes/` imports from the barrel.** Seven files do,
+    // and `src/sim/index.ts` re-exports the mutators — so the trailing slash in `/(^|\/)sim\//`
+    // excluded the exact import style the code under this rule actually uses. Before identity
+    // resolution existed the bare-name match would have caught it, which makes this a coverage
+    // REGRESSION introduced by a repair, the shape this project keeps paying for.
+    const barrel = "import { damagePlayer } from '../sim';" + NL;
+    expect(
+      scan(barrel + 'scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'),
+      'a barrel import of a sim mutator was invisible to the rule',
+    ).toContain('a sim object passed to a sim mutator');
+
+    // The alias miss is the same shape one level down: the map recorded the LOCAL name while
+    // `SIM_MUTATORS` is keyed by the EXPORTED one, so the two could never meet.
+    const aliased = "import { damagePlayer as hurt } from '../sim/worldDamage';" + NL;
+    expect(
+      scan(aliased + 'scene.tweens.add({ onComplete: () => { hurt(world.player, 1); } });'),
+      'an aliased import of a sim mutator was invisible to the rule',
+    ).toContain('a sim object passed to a sim mutator');
+
+    // Both at once, since the scenes' idiom is the barrel and an alias would ride on it.
+    expect(scan("import { damagePlayer as hurt } from '../sim';" + NL +
+      'scene.tweens.add({ onComplete: () => { hurt(world.player, 1); } });'))
+      .toContain('a sim object passed to a sim mutator');
+
+    // ⚠️ And the segment match must stay a SEGMENT. A directory whose name merely starts with
+    // `sim` is not `src/sim/`, and widening the pattern to a substring would make it one.
+    expect(
+      scan("import { damagePlayer } from '../simulacrum';" + NL +
+        'scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'),
+      "'../simulacrum' was treated as the sim barrel",
+    ).toEqual([]);
+  });
+
   it('ACCEPTS a LOCAL helper that merely SHARES a name with a sim mutator (identity, not collision)', () => {
     // 🔴 **The acceptance case the owner's ruling required before `SIM_MUTATORS` could grow.**
     // The set is bare identifiers, so matching a callee against it alone enforces the rule by NAME

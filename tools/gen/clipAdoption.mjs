@@ -72,7 +72,21 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * Round 1 everywhere below: shot `9:16` from a `1:1` anchor — session 1's parameter error, and the
    * reframe defect that cut 7 of 7 reframed clips. Superseded by the `1:1` round, kept on disk.
    */
-  'brass-sentry/idle': Object.freeze(['brass-sentry-idle.mp4']),
+  /**
+   * 🔴 `-r3` is a **DISCARD**, not a supersession by a better round — `-r2` is still the winner.
+   *
+   * Shot 2026-08-25 to close the `0.0138` wrap waiver, on a prompt **byte-identical** to `-r2`'s. It
+   * **fails G6**: frame 5 of 8, top margin **0 px** (left 70, right 120, bottom 120). `-r2` passed
+   * the same words, so this is variance on an axis nothing constrains — `FRAME_MARGIN`
+   * (`motionClauses.mjs:37`) governs the middle 70 % of the frame **WIDTH** and says nothing about
+   * top or bottom. $1.19 spent, nothing adopted; `docs/GENERATION-LOG.md` carries the entry.
+   *
+   * It is listed here rather than deleted from disk because a discarded round is evidence: the next
+   * attempt should change the **geometry** (a padded anchor — `-r3`'s params record
+   * `"anchorPadded": false`) rather than the wording, since the wording experiment already cost
+   * $4.76 and came back a coin flip.
+   */
+  'brass-sentry/idle': Object.freeze(['brass-sentry-idle.mp4', 'brass-sentry-idle-r3.mp4']),
   'brass-sentry/death': Object.freeze([
     'brass-sentry-death.mp4',
     'brass-sentry-death-r2.mp4',

@@ -323,3 +323,73 @@ in the start frame, which is a geometric guarantee rather than a linguistic requ
 
 ⚠️ **$1.14 remains and one generation costs ~$1.19.** The next re-shoot is a **ceiling decision**, not
 a budget one, and needs the owner.
+
+---
+
+## Batch 12 — §10a, the owner round: **two narrowings my own §2a repair introduced**
+
+Six briefs were dispatched — `voltagent-qa-sec:code-reviewer` ×2 and
+`voltagent-qa-sec:performance-engineer` ×2 for **8.7**, `code-reviewer` ×2 for **9.2/9.3** — each pair
+a checklist brief and an adversarial *"how could this be wrong?"* brief, launched together so brief 1's
+findings could not reach brief 2 *(A7)*. ⚠️ **Stated as the log requires:** they are read-only, cannot
+run Playwright, cannot plant a mutation in a real `src/` file, and every C1/C12 confirmation below is
+this session's own work.
+
+### 🔴 Found while preparing the round, in this session's own commit `c7800f0`
+
+§2a resolved callee identity so the sim-mutator rule could grow 6 → 32 names without becoming
+enforcement-by-name-collision. **It closed that widening and opened two narrowings in the same
+stroke.** Measured against the production predicate, before and after the repair:
+
+| fixture | before | after |
+|---|---|---|
+| `import { damagePlayer } from '../sim/worldDamage'` | 1 violation | 1 |
+| `import { damagePlayer } from '../sim'` — **the barrel** | **0** | 1 |
+| `import { damagePlayer as hurt } from '../sim/worldDamage'` | **0** | 1 |
+| both at once | **0** | 1 |
+| a local `damagePlayer` with no sim import | 0 | **0** ← no widening |
+| `from '../simulacrum'` | 0 | **0** ← still a segment match |
+
+**The barrel miss is the serious one.** `/(^|\/)sim\//` requires a trailing slash — and **`src/scenes/`
+imports from the barrel**: `gameEmitters.ts`, `gamePlayerDraw.ts`, `goalLayer.ts`, `hudFade.ts`,
+`hudGearFlyers.ts`, `hudGearPop.ts` and `PlaygroundScene.ts` all do `from '../sim'`, with
+`src/sim/index.ts` re-exporting the mutators. So the pattern excluded the exact import style the code
+under this rule actually uses. **Before identity resolution existed, the bare-name match would have
+caught it** — which makes this a coverage regression introduced by a repair, the shape this project
+keeps paying for.
+
+The alias miss is the same shape one level down: the set recorded the **local** name (`hurt`) while
+`SIM_MUTATORS` is keyed by the **exported** one (`damagePlayer`), so the two could never meet. The
+docstring even described the mechanism — *"aliases resolve to the LOCAL name"* — and stopped short of
+its consequence.
+
+**Fixed:** `/(^|\/)sim(\/|$)/`, and `simImports` now returns a **Map** of local → exported name that
+the call site resolves through. A namespace import (`import * as sim`) is still unreached — the callee
+becomes a member expression, a different machine, and `src/` has no `import * as` today. **Recorded as
+a narrowing, not silently absent.**
+
+**Red proofs, both halves, each reverted with the count confirmed *(C1, C12)*:**
+
+| mutation | result |
+|---|---|
+| pattern back to `/(^|\/)sim\//` | **1 failed / 13 passed** — *"a barrel import of a sim mutator was invisible to the rule"* |
+| map back to `local → local` | **1 failed / 13 passed** — *"an aliased import of a sim mutator was invisible to the rule"* |
+
+Both return to **14 passed** on revert. The fixtures are permanent, in `tween-sim-writes.test.ts`.
+
+### 🔴 And a second catch, from a gate rather than from me
+
+The full suite went red on `clip-adoption.test.ts`:
+
+> *`brass-sentry-idle-r3.mp4` is on disk but neither declared nor knowingly superseded.*
+
+§5's restore reverted `clipAdoption.mjs` **one step too far**. Step 6 of the transaction says restore
+every shipped artifact *and log the discard* — and listing the rejected round in `SUPERSEDED_CLIPS`
+**is** the log. Reverting the file erased that record while leaving the clip on disk. Now recorded,
+with the G6 failure and the padded-anchor recommendation at the entry.
+
+⚠️ Worth naming: this is the second time in one session that *restoring* was done less carefully than
+*changing*. A revert is a change and gets the same verification.
+
+**Verified:** typecheck clean · full unit suite **167 files / 2491 tests** (2490 + 1) ·
+`tweenCallbacks.ts` at **383/400**, `tween-sim-writes.test.ts` at **269/400**.

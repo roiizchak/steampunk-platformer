@@ -234,7 +234,7 @@ export interface Violation {
  * a write through a sim handle, an entity added to or removed from a sim collection, a persisted
  * progression write, and a control flag a later tick consumes.
  */
-export function simWrites(body: Node, decls: Map<string, Node>, imported: Set<string>, depth = 0): Violation[] {
+export function simWrites(body: Node, decls: Map<string, Node>, imported: Map<string, string>, depth = 0): Violation[] {
   const out: Violation[] = [];
   const say = (what: string, n: Node): void => {
     out.push({ what, code: n.type });
@@ -272,7 +272,10 @@ export function simWrites(body: Node, decls: Map<string, Node>, imported: Set<st
       // `combatStateTicks`) are deliberately absent. A local helper that writes is caught by the
       // one-hop resolution below and needs no entry.
       const direct = n.callee?.type === 'Identifier' ? n.callee.name : undefined;
-      if (direct !== undefined && SIM_MUTATORS.has(direct) && imported.has(direct)) {
+      // 🔴 The MANIFEST is keyed by the EXPORTED name; the call site uses the LOCAL one. Resolving
+      // local -> exported here is what makes `import { damagePlayer as hurt }` reachable.
+      const exported = direct === undefined ? undefined : imported.get(direct);
+      if (exported !== undefined && SIM_MUTATORS.has(exported)) {
         for (const arg of n.arguments ?? []) {
           if (reachesSim(arg, decls)) {
             say('a sim object passed to a sim mutator', n);
@@ -297,7 +300,7 @@ export function simWrites(body: Node, decls: Map<string, Node>, imported: Set<st
 }
 
 /**
- * Local names this file imported from `src/sim/`.
+ * Local name -> **exported** name, for every value this file imported from `src/sim/`.
  *
  * 🔴 **This is the identity half of the sim-mutator rule, and without it the rule is enforced by NAME
  * COLLISION.** `SIM_MUTATORS` is a set of bare identifiers; matching a callee against it alone means
@@ -306,21 +309,50 @@ export function simWrites(body: Node, decls: Map<string, Node>, imported: Set<st
  * *"a sim object passed to a `src/sim/` mutator"* — and the owner ruled that identity must be
  * resolved **before** the set grows, precisely so growing it cannot widen what the rule reaches.
  *
- * Aliases resolve to the LOCAL name, which is the one appearing at the call site:
- * `import { damagePlayer as hurt }` records `hurt`.
+ * 🔴 **A MAP, not a set, and the path pattern matches the BARREL — both were bugs, both found
+ * during this session's own §10a owner round, both of them NARROWINGS this identity check itself
+ * introduced.**
+ *
+ * The first draft returned a `Set` of local names and matched `/(^|\/)sim\//`. Measured against the
+ * production predicate:
+ *
+ * | fixture | before | after |
+ * |---|---|---|
+ * | `import { damagePlayer } from '../sim/worldDamage'` | 1 violation | 1 |
+ * | `import { damagePlayer } from '../sim'` — **the barrel** | **0** | 1 |
+ * | `import { damagePlayer as hurt } from '../sim/worldDamage'` | **0** | 1 |
+ *
+ * Both misses matter for the same reason: **`src/scenes/` imports from the barrel.** Seven files do
+ * (`gameEmitters.ts`, `gamePlayerDraw.ts`, `goalLayer.ts`, `hudFade.ts`, `hudGearFlyers.ts`,
+ * `hudGearPop.ts`, `PlaygroundScene.ts`), and `src/sim/index.ts` re-exports the mutators. So the
+ * trailing slash excluded the exact import style the code under this rule actually uses — and before
+ * identity resolution existed, the bare-name match would have caught it.
+ *
+ * The alias miss is the same shape one level down: the set recorded `hurt` while `SIM_MUTATORS`
+ * holds `damagePlayer`, so the two could never meet. The map resolves the call-site name to the
+ * **exported** name, which is what the manifest is keyed by. A default or namespace import
+ * (`import * as sim`) is still not reached — the callee is then a member expression rather than an
+ * identifier, which is a different machine, and `src/` contains no `import * as` today. **Recorded
+ * as a narrowing, not silently absent.**
  */
-export function simImports(ast: Node): Set<string> {
-  const out = new Set<string>();
+export function simImports(ast: Node): Map<string, string> {
+  const out = new Map<string, string>();
   walk(ast, (n) => {
     if (n.type !== 'ImportDeclaration') return;
     const from = n.source?.value;
-    // `../sim/combat`, `../../src/sim/player` — the segment, not a substring of some other word.
-    if (typeof from !== 'string' || !/(^|\/)sim\//.test(from)) return;
+    // `../sim`, `../sim/combat`, `../../src/sim/player` — `sim` as a whole final segment OR a
+    // directory. The `(\/|$)` half is the barrel, and leaving it out cost the rule seven files.
+    if (typeof from !== 'string' || !/(^|\/)sim(\/|$)/.test(from)) return;
     // A type-only import cannot be a call at runtime and is not a mutator.
     if (n.importKind === 'type') return;
     for (const spec of n.specifiers ?? []) {
       if (spec.importKind === 'type') continue;
-      if (typeof spec.local?.name === 'string') out.add(spec.local.name);
+      const local = spec.local?.name;
+      if (typeof local !== 'string') continue;
+      // `imported.name` for a named import; a default/namespace specifier has none, and its local
+      // name is not an exported mutator's name, so it is deliberately left out.
+      const exported = spec.imported?.name;
+      if (typeof exported === 'string') out.set(local, exported);
     }
   });
   return out;
