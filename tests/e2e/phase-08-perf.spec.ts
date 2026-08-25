@@ -20,6 +20,34 @@
  * above. A Phaser `TilemapLayer` culls to the camera, so a longer level should cost the same per frame
  * as a short one — that is the claim, and the ratio is what can falsify it.
  *
+ * ## 🔴 There is NO GPU bound here, and its deletion is the recorded outcome of §3a
+ *
+ * `MAX_LEVEL_GPU_RATIO` shipped in Phase 8 as `median(largeGpu) / median(smallGpu)` against 2x, and
+ * `docs/qa/phase-08-levels.md:40` claimed *"every bound red-proved."* It was not: the red proof below
+ * asserts on the **work** ratio only, and nothing ever showed the GPU ratio could fail.
+ *
+ * Measured 2026-08-25, three same-page interleaved runs on an RTX 4080 (full readings in
+ * `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 7):
+ *
+ * - **The mutation the bound NAMES does not move it.** `skipCull = true` on level-05 submits ~1425
+ *   quads a frame instead of ~70 and moved the **main-thread** median 0.50 → 1.20 ms, so it plainly
+ *   landed — while the GPU paired delta went 0.028 → 0.029, −0.243 → −0.019 and +0.045 → −0.209 ms
+ *   across the three runs. In two of three the mutant measured *cheaper* than the clean arm.
+ * - **The instrument is not dead** — 60 full-screen alpha scrims ordered it every time, per-pair
+ *   [0.860, 0.865, 0.807], [1.109, 1.027, 1.021], never overlapping clean. So the flat result is the
+ *   claim being unmeasurable here, not the timer.
+ * - **The clean statistic itself is unstable by an order of magnitude.** The clean level-05/level-01
+ *   GPU ratio read **1.073, 0.097, 1.304** on three runs of the same commit — and the 0.097 came from
+ *   two windows reading **0.036 ms**, which is `gpuTimer`'s floor rather than a measurement. That is
+ *   the *exact* pathology this same QA log diagnosed for criterion 6.9 at `phase-08-levels.md:186`;
+ *   8.7 had it too and was recorded sound because its runs happened to land well.
+ *
+ * A bound that cannot fail on its own claim, whose clean reading swings 13x, is decoration *(vault
+ * C2)*. §3a's owner-approved branch was **rewrite to a paired absolute delta, or DELETE if no GPU
+ * mutation orders it**; none did, so it is deleted rather than re-bounded. An RTX 4080 rasterises
+ * 1425 off-screen quads for free — the cull's cost on this box is main-thread iteration, which
+ * `MAX_LEVEL_WORK_RATIO` and `MAX_LEVEL_WORK_MS` already bound.
+ *
  * ## ⚠️ Where criterion 7.7 failed, and what is different here
  *
  * 7.7's frame-loss half went red on correct code because `frames` and `ticks` described different
@@ -32,15 +60,13 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { bootToGame } from './gameHarness';
-import { installGpuTimer } from './gpuTimer';
-import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
+import { MIN_SAMPLES } from './perfBudget';
 import type { Sample } from './perfSampler';
 import { assertRealGpu } from './realGpu';
 import {
   BLOAT_COPIES,
   MAX_LEVEL_CREATE_MS,
   MAX_LEVEL_CREATE_RATIO,
-  MAX_LEVEL_GPU_RATIO,
   MAX_LEVEL_WORK_MS,
   MAX_LEVEL_WORK_P95_MS,
   MAX_LEVEL_WORK_RATIO,
@@ -63,9 +89,6 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     );
     await bootToGame(page);
     const renderer = await assertRealGpu(page, '8.7');
-    // 🔴 Turns on the GPU half of `Sample`. Without it `gpuSupported` is false and every GPU figure
-    // below is zero — which would read as "the GPU costs nothing" rather than "nothing was measured".
-    await installGpuTimer(page);
 
     const small: Sample[] = [];
     const large: Sample[] = [];
@@ -89,9 +112,6 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     const smallWork = median(small.map((s) => s.workMedianMs));
     const largeWork = median(large.map((s) => s.workMedianMs));
     const ratio = largeWork / smallWork;
-    const smallGpu = median(small.map((s) => s.gpuMedianMs));
-    const largeGpu = median(large.map((s) => s.gpuMedianMs));
-    const gpuRatio = largeGpu / smallGpu;
     const largeP95 = median(large.map((s) => s.workP95Ms));
 
     // eslint-disable-next-line no-console
@@ -104,8 +124,6 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
           .map((s) => s.workMedianMs.toFixed(2))
           .join(', ')} -> ${largeWork.toFixed(2)} ms\n` +
         `      ratio ${ratio.toFixed(2)}x against a bound of ${MAX_LEVEL_WORK_RATIO}x\n` +
-        `      GPU median  level-01 ${smallGpu.toFixed(3)} ms · level-05 ${largeGpu.toFixed(3)} ms -> ` +
-        `${gpuRatio.toFixed(2)}x against ${MAX_LEVEL_GPU_RATIO}x\n` +
         `      work p95    level-05 ${large.map((s) => s.workP95Ms.toFixed(2)).join(', ')} -> ` +
         `${largeP95.toFixed(2)} ms against ${MAX_LEVEL_WORK_P95_MS} ms\n`,
     );
@@ -127,30 +145,6 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
         'level equally divides out of it and leaves it at 1.00x.',
     ).toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
     expect(smallWork, 'level-01 alone exceeded the absolute budget').toBeLessThanOrEqual(MAX_LEVEL_WORK_MS);
-
-    /**
-     * 🔴 The GPU half, which `workMedianMs` structurally cannot see. Non-vacuity FIRST: a window with
-     * no timer, or with too few non-disjoint results, has a beautiful median of zero.
-     */
-    for (const [label, arm] of [
-      ['level-01', small],
-      ['level-05', large],
-    ] as const) {
-      for (const [i, s] of arm.entries()) {
-        expect(s.gpuSupported, `${label} window ${i + 1} had no GPU timer`).toBe(true);
-        expect(
-          s.gpuSamples,
-          `${label} window ${i + 1} produced only ${s.gpuSamples} non-disjoint GPU samples`,
-        ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
-        expect(s.gpuMedianMs, `${label} window ${i + 1} measured zero GPU time`).toBeGreaterThan(0);
-      }
-    }
-    expect(
-      gpuRatio,
-      `level-05 costs ${gpuRatio.toFixed(2)}x level-01 on the GPU. It paints 3.7x the tiles, so a ` +
-        'ratio near that number means the camera cull is not reaching the rasteriser — a cost the ' +
-        'main-thread bound above is blind to by construction.',
-    ).toBeLessThanOrEqual(MAX_LEVEL_GPU_RATIO);
 
     /**
      * 🔴 And the tail, not just the middle. `SAMPLE_TICKS` is two sentry cooldowns precisely so every

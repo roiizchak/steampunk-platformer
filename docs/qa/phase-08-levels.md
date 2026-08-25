@@ -37,7 +37,7 @@ green on the strength of one run — see
 | 8.4 | Save schema tolerates a missing/corrupt file without data loss | `voltagent-qa-sec:qa-expert` ×2 | ✅ | A corrupt entry is **dropped, not repaired**, so it fails LOCKED and costs only its own unlock: asserted in the unit suite and again in the browser with `levels['level-03'] = "banana"` beside two valid entries. Reading a corrupt save does not rewrite it. A write that cannot land is held in memory for the session. |
 | 8.5 | Difficulty ramp measured, spread reported — not a single headline number | `voltagent-qa-sec:qa-expert` ×2 | ✅ | The per-metric table below, plus four property assertions. **No composite score** *(vault 8.3, 5.7)*. |
 | 8.6 | Level-complete flow: align, animate, fade, overlay, continue | play | ✅ | `phase-08-complete.spec.ts` plays level-01 to the exit with real key events and asserts all five steps against the DRAWN objects via `willRender(camera)` — never `visible && alpha`, which `setScale(0)` leaves truthy. Plus the hands-on pass. |
-| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` ×2 | ✅ | Ratchet at **zero exemptions** and watched failing. Frame budget is **seven** bounds, not one: work ratio **1.00–1.20x** against 2x, level-05 work median **0.40–0.70 ms** against an 8 ms absolute ceiling, **GPU** median ratio **0.51–1.06x** against 2x, work p95 **0.60–1.20 ms** against 16 ms, and creation cost **1.04–1.53x** against 4x. Every bound red-proved — see below. |
+| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` ×2 | ✅ | Ratchet at **zero exemptions** and watched failing. Frame budget is **seven** bounds, not one: work ratio **1.00–1.20x** against 2x, level-05 work median **0.40–0.70 ms** against an 8 ms absolute ceiling, ~~**GPU** median ratio **0.51–1.06x** against 2x~~ (**DELETED 2026-08-25** — see *The GPU ratio was never red-proved* below), work p95 **0.60–1.20 ms** against 16 ms, and creation cost **1.04–1.53x** against 4x. ⚠️ *"Every bound red-proved"* was **false for the GPU ratio** and is corrected below; it holds for the other six. |
 | 8.8 | Codex plan review ran; every finding applied or recorded | — | ✅ | [`../reviews/phase-08-plan.md`](../reviews/phase-08-plan.md), 11 findings, each with a disposition. |
 | 8.9 | Codex implementation review ran on the diff; every finding applied or recorded | codex | ✅ | [`../reviews/phase-08-impl.md`](../reviews/phase-08-impl.md) — the report verbatim, then the triage. **Six findings, all six applied**, two of them (save-version laundering, `__proto__` loss) re-verified by seeding the state and reading storage back before either was called real. Ran **after** the six gate-owner briefs, per CLAUDE.md §4. |
 
@@ -108,7 +108,7 @@ Three interleaved pairs, order alternating, median of medians. Same page, second
 |---|---|---|---|---|
 | work median ratio | the dense level costing more CPU per frame | **1.00–1.20x** | **1.00x** | 2x |
 | work median, absolute | a cost present in **both** arms, which a ratio divides out | **0.40–0.70 ms** | **0.40 ms** | 8 ms |
-| **GPU** median ratio | the cost a denser level actually incurs — 3.7x the painted tiles | **0.51–1.06x** | **1.06x** | 2x |
+| ~~**GPU** median ratio~~ | ~~the cost a denser level actually incurs~~ | ~~**0.51–1.06x**~~ | ~~**1.06x**~~ | **DELETED 2026-08-25** |
 | work **p95** | the synchronised sentry volley a median cannot see (level-05 fires three at once) | **0.60–1.20 ms** | **0.60 ms** | 16 ms |
 | **creation** ratio | the O(area) tile walk, which finishes before the sampling window opens | **1.04–1.53x** | **1.53x** | 4x |
 | **creation** absolute | a level slow enough to read as a load screen | **1.7–3.4 ms** (01) · **2.1–3.2 ms** (05) | **1.7 / 2.6 ms** | 400 ms |
@@ -128,10 +128,9 @@ were added by the performance-engineer's adversarial brief; the plan shipped wit
   6.9 and 7.7 in turn. Red-proved with a **uniform 10 ms burn**, which left the ratio at exactly
   **1.00x** while the ms bound caught **12.60 ms** — the clearest demonstration in the phase that a
   ratio is not a budget.
-- The **GPU ratio** is the camera cull proved at the rasteriser rather than assumed. Between
-  **0.51x and 1.06x** against **3.7x** the painted tiles is what "the camera only draws what is on
-  screen" looks like when it is measured instead of stated — the drawn cost tracks the *viewport*,
-  not the map.
+- ~~The **GPU ratio** is the camera cull proved at the rasteriser rather than assumed.~~ 🔴
+  **DELETED 2026-08-25.** The struck sentence is the mistake worth keeping: it reads a *clean*
+  measurement as a *proof*, which it never was. Evidence below.
 - The **p95** is bounded at one whole 60 Hz frame rather than half of one, because it is a tail
   figure, not a budget.
 - **Creation cost** was measured wrongly first, and the wrong measurement is recorded because it is
@@ -170,6 +169,57 @@ the explanation to hit the number is the named worst failure mode of the rule:
 | `tests/e2e/phase-08-perf.spec.ts` | over | `tests/e2e/levelPerf.ts` |
 
 ## Deviations and defects recorded
+
+### 🔴 The GPU ratio was never red-proved, and it is DELETED *(2026-08-25)*
+
+`MAX_LEVEL_GPU_RATIO` shipped here as `median(largeGpu) / median(smallGpu)` against 2x, and the row
+above claimed *"every bound red-proved."* **That claim was false for this one bound.** The red-proof
+test in `phase-08-perf.spec.ts` asserts on the **work** ratio only — nothing in the phase ever showed
+the GPU ratio could fail. Found in recon for the post-debts session, measured under §3a of that
+session's plan, and the owner had pre-approved the branch taken: *rewrite to a paired absolute delta,
+or DELETE if no GPU mutation orders it.*
+
+Three same-page interleaved runs on `angle (nvidia, rtx 4080 ... d3d11)`, three pairs each, clean and
+mutant sampled in the same page seconds apart:
+
+| run | clean ratio | clean pairedDelta | skipCull ratio | skipCull pairedDelta | 60 scrims pairedDelta |
+|---|---|---|---|---|---|
+| 1 | 1.073x | +0.028 ms | 1.075x | +0.029 ms | *(not run)* |
+| 2 | 0.097x | −0.243 ms | 0.845x | −0.019 ms | **+0.860 ms** |
+| 3 | 1.304x | +0.045 ms | 0.598x | **−0.209 ms** | **+1.027 ms** |
+
+**1. The mutation the bound NAMES does not move it.** `groundLayer.skipCull = true` on level-05 is
+the literal failure the bound is about — the tilemap submits ~1425 quads a frame instead of the ~70
+painted cells inside the view. It plainly landed: the **main-thread** median went 0.50 → 1.20 ms and
+0.50 → 0.90 ms. The GPU statistic did not follow, and in runs 2 and 3 the mutant measured **cheaper
+than clean**. Per-pair deltas overlap completely — clean `[0.045, −0.002, 0.126]` against mutant
+`[−0.258, −0.209, 0.137]` in run 3.
+
+**2. The instrument is fine.** 60 full-screen alpha scrims ordered it every time and by a wide
+margin — per-pair `[0.860, 0.865, 0.807]` and `[1.109, 1.027, 1.021]`, never overlapping clean.
+Without this control a flat result could not be told from a dead timer, which is why it was run.
+
+**3. The clean statistic swings by an order of magnitude on one commit.** 1.073x, 0.097x, 1.304x. The
+0.097 came from two level-05 windows reading **0.036 ms** — `gpuTimer`'s floor, not a measurement.
+🔴 **That is the exact pathology recorded for criterion 6.9 immediately below**, whose denominator
+intermittently reads 0.035 ms. 8.7 had the same defect; it was recorded sound because its Phase 8
+runs happened to land well. *A ratio whose numerator intermittently stops being measurable is not a
+bound, whichever side of 2x it lands on that day.*
+
+**Why deleted rather than re-bounded.** A bound that cannot fail on its own claim is decoration
+*(vault C2)*, and *a statistic that does not order its own mutation is replaced, not re-bounded*.
+There is nothing to replace it with **for this claim**: on an RTX 4080 the off-screen quads are free,
+so the cull's cost on this box is main-thread iteration — which `MAX_LEVEL_WORK_RATIO` and
+`MAX_LEVEL_WORK_MS` already bound, and which the surviving red proof drives to 183x.
+
+⚠️ **What is NOT claimed.** This does not say the camera cull is unimportant or that GPU cost cannot
+be gated here. The scrim readings show a paired **absolute** GPU bound on level-05 would be
+red-provable and stable (clean 0.26–0.42 ms across all three runs). That would be a **different
+claim** than 8.7's — "the GPU frame cost is bounded" rather than "level size is free on the GPU" — so
+it is a new criterion and therefore a STOP-and-ask. Recorded as an option, deliberately not taken.
+
+Six bounds remain, all of them red-proved. `MIN_GPU_SAMPLES`, `installGpuTimer` and `Sample`'s GPU
+fields are untouched — Phases 6 and 9 still consume them.
 
 ### 🔴 Criterion 6.9 is UNSTABLE, and it is not Phase 8's
 
@@ -280,7 +330,8 @@ answer the question.
 **A ratio is not a budget, and a percentile is not a ratio, and neither can see construction.** Four
 of 8.7's five bounds exist because the bound before it was blind: the ratio divides out anything both
 arms pay, the absolute ceiling cannot see a tail, the p95 cannot see the GPU, and the sampling window
-opens *after* the O(area) work is done. Ask of every performance bound: **what cost does this
+opens *after* the O(area) work is done. ⚠️ The GPU half of that list has since been **deleted**
+rather than trusted — the reasoning shape is still right, this instance of it was not. Ask of every performance bound: **what cost does this
 arithmetic make invisible?**
 
 **A red proof that cannot reliably go red is the same defect as a gate that cannot.** 8.7's read

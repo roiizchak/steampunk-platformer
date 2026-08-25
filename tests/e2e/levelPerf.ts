@@ -54,21 +54,6 @@ export const MAX_LEVEL_WORK_MS = 8;
 export const BLOAT_COPIES = 30000;
 
 /**
- * The ceiling on level-05's **GPU** time per frame as a multiple of level-01's.
- *
- * 🔴 `workMedianMs` is main-thread only and is structurally blind to a change that pushes far more
- * PIXELS through the same number of draw calls — and that is exactly what a denser level is. Level-05
- * paints 31.8 % of 4480 cells against level-01's 16.9 % of 2208: **3.7x the painted tiles**. The
- * camera cull is supposed to make that free per frame, and until this bound existed nothing in the
- * criterion asked. `Sample` has carried `gpuMedianMs` since Phase 5; 8.7 simply never read it.
- *
- * 2. It used to say "matching `MAX_HUD_GPU_RATIO`"; that constant was DELETED on 2026-08-18 for
- * failing to order its own mutation, and this 2 is now a bound in its own right rather than a
- * borrowed one. The claim is "nearly free", not "measurably cheaper".
- */
-export const MAX_LEVEL_GPU_RATIO = 2;
-
-/**
  * The ceiling on the largest level's **p95** frame work, in milliseconds.
  *
  * 🔴 A median is blind to a minority of expensive frames by construction, which is the defect that

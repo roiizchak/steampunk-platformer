@@ -289,3 +289,58 @@ the corrections below are the deliverable.**
 ⚠️ The criterion stays **session-local** exactly as the plan required — no row was added to Phase 9's
 gate table, and `docs/qa/phase-09-polish.md` is untouched. Placement was deferred until an orderable
 statistic existed, and none does.
+
+---
+
+## Batch 7 — §3a, criterion 8.7's GPU ratio: **DELETED**, and it was never red-proved
+
+Full evidence, tables and the not-claimed section live in **`docs/qa/phase-08-levels.md` § *The GPU
+ratio was never red-proved*** — it belongs beside the phase whose record it corrects, not here. This
+entry is the session's side of it.
+
+**The plan's hard condition**, verbatim: *"A GPU-specific mutation must demonstrably order the paired
+statistic before any bound is fixed. If none does, DELETE the gate rather than re-bound it."*
+
+**What was run.** A throwaway `phase-08-gpuprobe.spec.ts` computing *both* statistics — the shipped
+`median(largeGpu)/median(smallGpu)` ratio and `medianPairedDelta(smallGpu, largeGpu)` — from the same
+readings, in one page, interleaved with the order alternating. Three runs; the third is a held-out
+set that had no say in the conclusion.
+
+| | ordered the paired delta? |
+|---|---|
+| `skipCull = true` on level-05 — **the mutation the bound names** | ❌ +0.029, −0.019, **−0.209** ms; mutant cheaper than clean in 2 of 3 runs |
+| 60 full-screen alpha scrims — **the sensitivity control** | ✅ per-pair `[0.860, 0.865, 0.807]`, `[1.109, 1.027, 1.021]`, never overlapping clean |
+
+The control is why the flat result is a finding rather than a broken timer. And skipCull demonstrably
+*landed* — it moved the **main-thread** median 0.50 → 1.20 ms — so this is not a mutation that failed
+to apply.
+
+🔴 **The finding that decided it.** The *clean* ratio read **1.073x, 0.097x, 1.304x** on the same
+commit. The 0.097 came from two windows reading **0.036 ms**, `gpuTimer`'s floor. That is the same
+pathology `phase-08-levels.md` had already diagnosed for criterion **6.9** — and 8.7 was carrying it
+undetected, recorded as sound because its Phase 8 runs landed well. **One gate's recorded defect was
+sitting unrecognised in another gate two sections down its own log.**
+
+### What landed
+
+- `MAX_LEVEL_GPU_RATIO`, the GPU non-vacuity loop, the GPU medians and the GPU log line — **deleted**
+  from `levelPerf.ts` (269 → 254) and `phase-08-perf.spec.ts` (321 → 315, header note added).
+- The malformed docstring the plan flagged at `levelPerf.ts:56-68` (*prose, then item `2.` with no
+  `1.`*) was that bound's — resolved by the deletion.
+- `phase-08-gpuprobe.spec.ts`, `costGpuCull` and `costGpuFill` **reverted**, same rule §1 followed:
+  instrumentation with no consumer is the same defect as a burst of zero particles. The measurements
+  and the conclusion are what land.
+- `docs/qa/phase-08-levels.md` corrected in five places — the 8.7 gate row's *"every bound
+  red-proved"*, the bounds table row, the "five bounds" bullet, the closing lesson, and the new
+  evidence section. Struck through rather than erased: the sentence that read a **clean** measurement
+  as a **proof** is the instructive part.
+
+**Six bounds remain and all six are red-proved.** `installGpuTimer`, `MIN_GPU_SAMPLES` and `Sample`'s
+GPU fields are untouched — Phases 6 and 9 still consume them.
+
+⚠️ **Not done, deliberately:** a paired **absolute** GPU bound on level-05 would be red-provable and
+stable on these readings, but it is a *different claim* from 8.7's and therefore a new criterion —
+**STOP-and-ask**. Recorded in the phase log as an option, not taken.
+
+**Verified:** `phase-08-perf.spec.ts` re-run after the surgery — **3 passed** (work ratio 1.17x,
+create 1.32x, red proof 183.40x). Typecheck clean; `file-size` and `docs-contract` green.
