@@ -40,13 +40,13 @@
  * that is idempotent survives that. Sim state does not.
  */
 
-import { parse } from '@babel/parser';
+import { ARRAY_MUTATOR_METHODS, parseFile, walk, type Node } from './astWalk';
 import { isTweenCall } from './tweenIdentity';
 import { SIM_MUTATORS } from './simMutators';
 export { isTweenCall } from './tweenIdentity';
-
-/* eslint-disable @typescript-eslint/no-explicit-any -- the Babel AST is walked structurally. */
-export type Node = any;
+// Re-exported so every existing consumer keeps its import path. `astWalk.ts` is the leaf that broke
+// the tweenCallbacks <-> simMutators runtime cycle; its header is the record.
+export { parseFile, walk, type Node } from './astWalk';
 
 /** The config keys whose values run when the tween reaches a boundary. */
 // 🔴 `onUpdate` added 2026-08-25 after a gate-round finding. Its absence falsified this
@@ -65,55 +65,13 @@ const CALLBACK_KEYS = new Set(['onComplete', 'onStop', 'onStart', 'onYoyo', 'onR
 const SIM_HANDLES = new Set(['world', 'simWorld']);
 
 /** Array mutators. Reached through a sim handle, these are entity spawn and removal. */
-const MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill']);
+const MUTATORS = ARRAY_MUTATOR_METHODS;
 
 /** Progression that outlives the scene. Checked against the tree: the API is `writeProgress`. */
 const PERSISTENCE = new Set(['writeProgress', 'recordCompletion']);
 
 /** Flags a later TICK reads. A tween that never fires leaves one stuck at its old value. */
 const CONTROL_FLAGS = new Set(['playerInputEnabled']);
-
-/**
- * Exported `src/sim/` functions that MUTATE a sim object handed to them.
- *
- * Moved to `simMutators.ts` on 2026-08-25 and **grown from 6 names to 32**, where it is checked
- * against a derivation from `src/sim/` so it cannot silently fall behind again. It was 6 against 86
- * exported functions — `tick(world, input)` itself was missing.
- *
- * ⚠️ Growing it is only safe because `simImports()` below resolves identity first: matched on a bare
- * name, 32 common verbs would make any local helper sharing one illegal.
- */
-export function parseFile(code: string): Node {
-  // ⚠️ **`errorRecovery` does NOT mean "a bad file yields a partial tree" here — it still THROWS**
-  // on anything it cannot recover from, measured 2026-08-25. Any sibling docstring that justified a
-  // vacuity check by "a file the parser chokes on yields a partial tree" had the mechanism wrong; the
-  // vacuity check is still worth having, for the different reason that a file yielding zero callback
-  // bodies is indistinguishable from a file with none.
-  //
-  // ⚠️ `plugins` has no `jsx`, so a `.tsx` under `src/` would throw on arrival. None exists — checked
-  // — and this is recorded rather than pre-solved, because a `jsx` plugin changes how `<T>` parses in
-  // ordinary `.ts` and that trade is not worth making for a file that does not exist.
-  return parse(code, {
-    sourceType: 'module',
-    plugins: ['typescript'],
-    errorRecovery: true,
-  });
-}
-
-/** Every child node, depth-first. */
-export function walk(node: Node, visit: (n: Node, parent: Node | null) => void, parent: Node | null = null): void {
-  if (node === null || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    for (const child of node) walk(child, visit, parent);
-    return;
-  }
-  if (typeof node.type !== 'string') return;
-  visit(node, parent);
-  for (const key of Object.keys(node)) {
-    if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments') continue;
-    walk(node[key], visit, node);
-  }
-}
 
 /**
  * Every `const x = <init>` and `function x()` in the file, by name.
@@ -192,11 +150,24 @@ export function callbackNodes(ast: Node): Node[] {
   return out;
 }
 
-/** The base of a member chain: `a.b.c[d]` → the `a` node. */
+/**
+ * The base of a member chain: `a.b.c[d]` -> the `a` node.
+ *
+ * 🔴 **TypeScript wrapper nodes are unwrapped, and their absence was a real hole.** Babel represents
+ * `world!.player.hp = 0` as `TSNonNullExpression > MemberExpression`, and `(world as W).player.hp = 0`
+ * as `TSAsExpression`. The loop below used to stop at the wrapper and return a node with no `.name`,
+ * so the write was **silently not a sim write** — the failure direction that lets a violation through
+ * rather than the one that false-reds. Named by the 9.2/9.3 adversarial brief. No such expression is
+ * in `src/scenes/` today, which is exactly why it would have gone unnoticed if one appeared.
+ */
 function rootOf(node: Node): Node {
   let cur = node;
-  while (cur?.type === 'MemberExpression' || cur?.type === 'OptionalMemberExpression') cur = cur.object;
-  return cur;
+  for (;;) {
+    if (cur?.type === 'MemberExpression' || cur?.type === 'OptionalMemberExpression') cur = cur.object;
+    else if (cur?.type === 'TSNonNullExpression' || cur?.type === 'TSAsExpression') cur = cur.expression;
+    else if (cur?.type === 'TSSatisfiesExpression' || cur?.type === 'ParenthesizedExpression') cur = cur.expression;
+    else return cur;
+  }
 }
 
 /**

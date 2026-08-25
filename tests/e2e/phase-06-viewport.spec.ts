@@ -42,6 +42,8 @@ test.describe('the page does not scroll and the canvas is fully visible', () => 
           top: c.top,
           right: d.clientWidth - c.right,
           bottom: d.clientHeight - c.bottom,
+          fillX: c.width / d.clientWidth,
+          fillY: c.height / d.clientHeight,
         };
       });
       // 🔴 Type before value: a selector that found nothing would satisfy a numeric comparison by
@@ -49,6 +51,18 @@ test.describe('the page does not scroll and the canvas is fully visible', () => 
       expect(typeof m.overflowX, 'the measurement returned a non-number').toBe('number');
       expect(m.overflowX, `the page scrolls ${m.overflowX} px horizontally at ${w}x${h}`).toBeLessThanOrEqual(0);
       expect(m.overflowY, `the page scrolls ${m.overflowY} px vertically at ${w}x${h}`).toBeLessThanOrEqual(0);
+      // 🔴 **The canvas is really there, checked BEFORE the edge gaps.** A 0x0 canvas parked at the
+      // origin satisfies all four gaps and both overflow assertions — every claim below is true of a
+      // game that draws nothing. Named by the 8.7 adversarial brief. Phaser fits the 16:9 canvas to
+      // the window, so exactly one axis is filled and the other letterboxes; the max of the two
+      // ratios is therefore ~1 whenever the canvas is sized at all, at every viewport in this list.
+      const fill = Math.max(m.fillX, m.fillY);
+      expect(
+        fill,
+        `the canvas covers ${(fill * 100).toFixed(1)} % of the ${w}x${h} client area on its filled ` +
+          'axis — it is collapsed or absent, and the geometry below is vacuously satisfied',
+      ).toBeGreaterThan(0.99);
+
       for (const [edge, gap] of Object.entries({ left: m.left, top: m.top, right: m.right, bottom: m.bottom })) {
         expect(gap, `${gap.toFixed(1)} px of the canvas is off the ${edge} edge at ${w}x${h}`).toBeGreaterThanOrEqual(0);
       }

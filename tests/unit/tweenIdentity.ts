@@ -12,7 +12,7 @@
  * and that is recorded rather than claimed.
  */
 
-import type { Node } from './tweenCallbacks';
+import type { Node } from './astWalk';
 
 /** Every way this codebase can open a tween. `chain` and `addCounter` are Phaser APIs too. */
 const TWEEN_METHODS = new Set(['add', 'addCounter', 'addMultiple', 'chain', 'create']);

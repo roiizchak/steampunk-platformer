@@ -266,4 +266,32 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     // An alias of something that is NOT the tween manager stays out of it — no blanket.
     expect(scan('const tm = scene.anims;\ntm.add({ onComplete: () => { world.completed = true; } });')).toEqual([]);
   });
+  it('REJECTS a write behind a TS wrapper — `world!.x` and `(world as W).x` (2026-08-25 brief)', () => {
+    // 🔴 `rootOf` walked `MemberExpression` only, so Babel wrapping the base in `TSNonNullExpression`
+    // or `TSAsExpression` left it returning a node with no `.name` — and the write was silently NOT a
+    // sim write. That is the dangerous failure direction: a violation admitted, not a false red.
+    // Neither form is in `src/scenes/` today, which is precisely why nothing would have said so.
+    expect(scan('scene.tweens.add({ onComplete: () => { world!.completed = true; } });'))
+      .toContain('a sim-state write');
+    expect(scan('scene.tweens.add({ onComplete: () => { (world as World).player.hp = 0; } });'))
+      .toContain('a sim-state write');
+    // The wrapper does not become a blanket: a wrapped VIEW write is still legal.
+    expect(scan('scene.tweens.add({ onComplete: () => { sprite!.alpha = 1; } });')).toEqual([]);
+  });
+
+  /*
+   * ⚠️ **Two narrowings recorded rather than closed, both from the 9.2/9.3 adversarial brief.**
+   *
+   * 1. **A class field is not an alias source.** `declarations()` collects `const`/`function` only, so
+   *    `private world = scene.simWorld;` then `this.world.player.hp = 0` inside a callback resolves
+   *    through the `this.world` member path (which IS matched, by handle name) but a field aliased to
+   *    a DIFFERENT name — `private w = scene.simWorld` — does not. No such field exists in
+   *    `src/scenes/`; every scene holds its world as `world` or `simWorld`, which is what
+   *    `SIM_HANDLES` is for.
+   * 2. **A mutator called through a member expression is not matched.** The rule fires on a bare
+   *    identifier callee resolved through `simImports()`; `sim.damagePlayer(world.player, 1)` after a
+   *    namespace import would pass. `src/` has no namespace import of `src/sim/` — checked — and
+   *    widening the callee match without the same identity resolution is how this rule was
+   *    over-broadened once already, so it waits for a real occurrence.
+   */
 });

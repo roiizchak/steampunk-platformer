@@ -74,7 +74,7 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
  * closes the dodge. A site that genuinely wants to pass a tween onward can name it first.
  *
  * 🔴 **All FIVE tween-opening methods, not just `add` — a gate-round finding, 2026-08-25.**
- * The first version matched `add` alone while `tweenCallbacks.ts`'s `TWEEN_METHODS` (the sibling
+ * The first version matched `add` alone while `tweenIdentity.ts`'s `TWEEN_METHODS` (the sibling
  * rule added in the same branch) already enumerated `add`, `addCounter`, `addMultiple`, `chain` and
  * `create`. `scene.tweens.addCounter({})` therefore yielded zero sites and this rule ran clean over
  * it. The two lists now agree because they are the same question asked twice.
@@ -89,7 +89,7 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
  */
 // 🔴 **The `.add.tween(` alternative closes D14 (2026-08-25).** It requires a MEMBER access before
 // `add` — `this.add.tween`, `scene.add.tween` — and not a bare `add.tween`, mirroring
-// `namesSceneFactory` in `tweenCallbacks.ts`. `tweens` is a distinctive identifier and can be matched
+// `namesSceneFactory` in `tweenIdentity.ts`. `tweens` is a distinctive identifier and can be matched
 // bare; `add` is an ordinary word, and matching it bare would red an unrelated object that happens to
 // have a `tween` method. The acceptance fixture for that case is in `tween-add-factory.test.ts`.
 const TWEENS_ADD =
@@ -251,7 +251,7 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
 
   it('REJECTS the other FOUR tween-opening methods — not just add (vault C2)', () => {
     // 🔴 A gate-round finding, 2026-08-25: this rule matched `add` alone while the sibling
-    // `TWEEN_METHODS` in `tweenCallbacks.ts` already listed five. `addCounter` returned 0 and the
+    // `TWEEN_METHODS` in `tweenIdentity.ts` already listed five. `addCounter` returned 0 and the
     // scan ran clean over it. Every one of the five opens a tween that owns a handle.
     expect(unbound('  scene.tweens.addCounter({ from: 0, to: 1 });')).toBe(1);
     expect(unbound('  this.tweens.addMultiple([{ targets: o }]);')).toBe(1);

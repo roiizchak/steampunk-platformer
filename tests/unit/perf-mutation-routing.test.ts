@@ -65,6 +65,35 @@ function specSource(name: string): string | null {
 // silence: it names every mutation because it declares them, so the walk answers its own question.
 const DECLARERS = ['effectMutation.ts', 'mutationTargets.ts', 'mutationRegistry.ts'];
 
+/**
+ * **Does `src` APPLY `symbol`, as opposed to merely declaring it?**
+ *
+ * 🔴 **The hole this closes, named by both 9.2/9.3 briefs.** The rule below used a bare
+ * `src.includes(t.applies)`, and `phase-09-perf.spec.ts:109` is
+ * `const STORM_MUTATION = stormCount(process.env.PERF_MUTATION ?? '')`. The declaration satisfies
+ * the check **on its own**: delete the one line at `:183` that actually reads `STORM_MUTATION` and
+ * the family goes back to being declared-but-unapplied, the spec runs CLEAN, and this gate reports a
+ * pass. That is the `particlescale0` defect — the exact thing this file exists to catch — reproduced
+ * inside the catcher. `DECLARERS` closed the cross-file form of it; this closes the same-file form.
+ *
+ * The fix is to ignore the declaration and ask whether anything ELSE names the symbol. Lines that
+ * bind it are dropped, then the search runs over what is left.
+ *
+ * ⚠️ **Still a text search, and still weaker than its title** — it cannot tell a live read from a
+ * commented-out one, which the file header already discloses. It is strictly stronger than
+ * `includes` and nothing more than that is claimed.
+ */
+export function appliesSymbol(src: string, symbol: string): boolean {
+  const binds = new RegExp(`^\\s*(?:export\\s+)?(?:const|let|var|function)\\s+${symbol}\\b`);
+  return src
+    .split(NEWLINE)
+    .filter((line) => !binds.test(line))
+    .join(NEWLINE)
+    .includes(symbol);
+}
+
+/** Built from a char code so the shell that writes these fixtures cannot eat the escape. */
+const NEWLINE = String.fromCharCode(10);
 function reachableFrom(name: string): string | null {
   const src = specSource(name);
   if (src === null) return null;
@@ -162,7 +191,7 @@ describe('every PARAMETRIC PERF_MUTATION family is wired to a spec that applies 
       const src = reachableFrom(t.spec);
       if (src === null) {
         broken.push(`${t.family}: ${t.spec} does not exist`);
-      } else if (!src.includes(t.applies)) {
+      } else if (!appliesSymbol(src, t.applies)) {
         broken.push(`${t.family}: ${t.spec} never mentions '${t.applies}', so it cannot apply it`);
       }
     }
@@ -189,10 +218,27 @@ describe('every PARAMETRIC PERF_MUTATION family is wired to a spec that applies 
     }
   });
 
-  it('REJECTS a family whose symbol the spec does not mention — this rule can go red (vault C2)', () => {
-    // Driven against the production predicate, against a source that genuinely lacks the symbol.
+  it('REJECTS a family whose symbol the spec does not APPLY — this rule can go red (vault C2)', () => {
+    // 🔴 **Driven through `appliesSymbol`, the production predicate.** The previous version of this
+    // proof asserted `src.includes('STORM_MUTATION')` directly — it re-implemented the check instead
+    // of exercising it, so it would have stayed green through any change to the rule, including the
+    // declaration-only hole the predicate was just repaired for. A C2 proof that hard-codes the
+    // comparison it is proving is decoration.
     const src = reachableFrom('phase-09-perf.spec.ts')!;
-    expect(src.includes('STORM_MUTATION'), 'the wired family').toBe(true);
-    expect(src.includes('__NEVER_APPLIED_FAMILY'), 'an unwired one').toBe(false);
+    expect(appliesSymbol(src, 'STORM_MUTATION'), 'the wired family').toBe(true);
+    expect(appliesSymbol(src, '__NEVER_APPLIED_FAMILY'), 'an unwired one').toBe(false);
+
+    // 🔴 And the case the bare `includes` could not tell apart: a symbol that is DECLARED and never
+    // read. This is the shape `phase-09-perf.spec.ts:109` would have if `:183` were deleted.
+    const declaredOnly = [
+      'const GHOST_MUTATION = stormCount(process.env.PERF_MUTATION);',
+      'test("a spec that never reads it", () => {});',
+    ].join(NEWLINE);
+    expect(
+      appliesSymbol(declaredOnly, 'GHOST_MUTATION'),
+      'a declared-but-never-read symbol counted as APPLIED — this is the particlescale0 defect',
+    ).toBe(false);
+    expect(appliesSymbol(declaredOnly + NEWLINE + 'const peak = GHOST_MUTATION || 1;', 'GHOST_MUTATION'),
+      'one real read was not enough to count as applied').toBe(true);
   });
 });

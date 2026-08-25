@@ -49,6 +49,25 @@ describe('SIM_MUTATORS is complete against src/sim/', () => {
     );
   });
 
+  it('SIM_MUTATORS itself is not empty — the guard above does NOT cover this', () => {
+    // 🔴 **The hole this closes, named by the 9.2/9.3 adversarial brief.** Every other test in this
+    // file is satisfied by an EMPTY manifest: move all 32 names into `EXCLUDED` with a sentence
+    // each and `manifestGaps()` returns [], the dead-name check returns [], the reason check
+    // passes — six tests green while criterion 9.2b's argument rule matches nothing at all. The
+    // vacuity guard above proves the PARSE ran; it says nothing about the set the parse exists to
+    // keep honest.
+    //
+    // The floor is a fraction of the derivation rather than a fixed count, so growing `src/sim/`
+    // cannot leave it behind, and it is deliberately loose: this asserts the manifest is doing its
+    // job at all, not that any particular name is in it.
+    expect(SIM_MUTATORS.size, 'the manifest is EMPTY — the rule it feeds matches nothing').toBeGreaterThan(0);
+    expect(
+      SIM_MUTATORS.size,
+      `the manifest holds ${SIM_MUTATORS.size} of ${derivation.closure.length} derived mutators. ` +
+        'Under half means the exclusions have become the rule — read EXCLUDED before touching this.',
+    ).toBeGreaterThan(derivation.closure.length / 2);
+  });
+
   it('the transitive clause does real work — it finds callers that write nothing themselves', () => {
     // `advance` calls `tick(world, input)` and writes only to a local. A direct-writes-only rule
     // misses it, and it is the entry point the whole simulation runs through.
@@ -100,11 +119,34 @@ describe('SIM_MUTATORS is complete against src/sim/', () => {
 
   it('ACCEPTS a function that mutates only its own locals — the derivation is not a blanket', () => {
     // `derivedFeel()` in src/sim/derived.ts is the real case this models: it calls `advance()` on a
-    // scratch world it builds itself, so it is pure from the caller's view. An earlier draft of the
+    // scratch world it builds itself, so it is pure from the callers view. An earlier draft of the
     // closure reported it, which would have put a pure function into a name-matched rule.
-    const fake = {
-      '/src/sim/fabricated.ts': 'export function pure(t) { const w = build(t); advance(w, 1); return w.player.y; }',
+    //
+    // 🔴 **The mutator it calls is DEFINED in the fixture, and that is the repair.** The first draft
+    // of this test passed a source set containing only the pure function, so `advance` was not in the
+    // closure and the transitive clause could not have fired **whatever it did** — the test asserted
+    // its own input, not the rule. Named by the 9.2/9.3 adversarial brief. With `advance` present the
+    // clause is live, and the paired case below proves it: same call, same callee, argument changed
+    // from a local to a parameter, and the verdict flips.
+    const mutator = 'export function advance(w) { w.tick += 1; }';
+    const pure = {
+      '/src/sim/a.ts': mutator,
+      '/src/sim/b.ts': 'export function pure(t) { const w = build(t); advance(w, 1); return w.player.y; }',
     };
-    expect(deriveSimMutators(fake).closure, 'a function mutating only a local was reported').toEqual([]);
+    const pureClosure = deriveSimMutators(pure).closure;
+    expect(pureClosure, "the fixture's own mutator is missing — the clause could not have fired").toContain(
+      'advance',
+    );
+    expect(pureClosure, 'a function mutating only a local was reported as a mutator').not.toContain('pure');
+
+    // The paired positive. One token differs: `w` is now the parameter.
+    const impure = {
+      '/src/sim/a.ts': mutator,
+      '/src/sim/b.ts': 'export function notPure(w) { advance(w, 1); return w.player.y; }',
+    };
+    expect(
+      deriveSimMutators(impure).closure,
+      'handing an OWN PARAMETER to a known mutator was not reported — the transitive clause is inert',
+    ).toContain('notPure');
   });
 });

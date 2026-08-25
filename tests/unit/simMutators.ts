@@ -39,7 +39,7 @@
  * argument to be the caller's own parameter drops it, and drops nothing that is really a mutator.
  */
 
-import { parseFile, walk, type Node } from './tweenCallbacks';
+import { ARRAY_MUTATOR_METHODS, parseFile, walk, type Node } from './astWalk';
 
 /**
  * The reviewed set. **32 names**, read off `src/sim/` on 2026-08-25 and agreed against the
@@ -100,13 +100,16 @@ export const SIM_MUTATORS = new Set([
  */
 export const EXCLUDED: Record<string, string> = {};
 
-/** Array methods that mutate the receiver. Reached through a parameter, these are sim writes. */
-const ARRAY_MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill']);
-
 const rootOf = (n: Node): Node => {
   let cur = n;
-  while (cur && (cur.type === 'MemberExpression' || cur.type === 'OptionalMemberExpression')) cur = cur.object;
-  return cur;
+  // TS wrapper nodes unwrapped for the same reason as `tweenCallbacks.ts`s `rootOf`: `w!.x = 1`
+  // otherwise roots at a node with no `.name` and the parameter write goes unseen.
+  for (;;) {
+    if (cur?.type === 'MemberExpression' || cur?.type === 'OptionalMemberExpression') cur = cur.object;
+    else if (cur?.type === 'TSNonNullExpression' || cur?.type === 'TSAsExpression') cur = cur.expression;
+    else if (cur?.type === 'TSSatisfiesExpression' || cur?.type === 'ParenthesizedExpression') cur = cur.expression;
+    else return cur;
+  }
 };
 
 interface Fn {
@@ -151,7 +154,7 @@ function exportedFunctions(sources: Record<string, string>): Map<string, Fn> {
         } else if (callee?.type === 'MemberExpression') {
           const method = callee.property?.name;
           const root = rootOf(callee.object);
-          if (typeof method === 'string' && ARRAY_MUTATORS.has(method) && root?.type === 'Identifier' && params.has(root.name)) {
+          if (typeof method === 'string' && ARRAY_MUTATOR_METHODS.has(method) && root?.type === 'Identifier' && params.has(root.name)) {
             fn.writesOwnParam = true;
           }
         }
@@ -191,5 +194,9 @@ export function deriveSimMutators(sources: Record<string, string>): Derivation {
 
 /** Names the derivation found that the manifest neither lists nor excludes. */
 export function manifestGaps(d: Derivation): string[] {
-  return d.closure.filter((n) => !SIM_MUTATORS.has(n) && EXCLUDED[n] === undefined);
+  // 🔴 `Object.hasOwn`, not `EXCLUDED[n] === undefined`. `EXCLUDED` is a plain object literal, so
+  // an export named `toString`, `valueOf` or `constructor` resolves on Object.prototype and reads as
+  // ALREADY EXCLUDED — a gap silently swallowed by the prototype chain. No such export exists in
+  // `src/sim/` today; the lookup is corrected rather than the absence relied on.
+  return d.closure.filter((n) => !SIM_MUTATORS.has(n) && !Object.hasOwn(EXCLUDED, n));
 }
