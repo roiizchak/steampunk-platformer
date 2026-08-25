@@ -148,11 +148,33 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
     proved the *tick histogram can print `2:`*, because that condition was never created. A histogram
     that has never reported ≥2 under any condition is indistinguishable from one that cannot
     *(vault C2)*.
-- 🔴 **The true form:** `src/game/frameClock.ts:48-50`'s over-the-cap branch is unreachable **for
-  isolated single-frame spikes at the default `fps` config on a box holding 170–240 fps.** Multi-tick
-  frames are the *normal* case below 60 fps sustained — which is the hardware a frame budget exists
-  for. **Keep the branch**: correct, cheap, and the guarantee should not depend on an engine default
-  someone can flip in `GameConfig`.
+- ✅ **RE-MEASURED 2026-08-25 with a correctly-sized block, and the briefs were right.** 3000 frames
+  per arm, sampling the delta `GameScene` actually receives (`loop.delta`) and draining a 1/60
+  accumulator exactly as `frameClock` does:
+
+  | arm | max smoothed delta | tick histogram |
+  |---|---|---|
+  | clean | 7.9 ms | `0:1964  1:1036` — **never 2** |
+  | 150 ms block, 1 frame in 20 | 20.5 ms | `0:998  1:1706  **2:296**` |
+  | 150 ms block, 1 frame in 4 | 49.6 ms | `0:5  1:5  **2:1554  3:1436**` |
+  | 150 ms block, `smoothStep: false` | 151.4 ms | `0:1770  1:931  2:1  **4:114  5:184**` |
+
+  `maxRawDelta` was ~151 ms in every blocked arm — under the 200 ms substitution clamp, so the
+  smoothing is the whole mechanism. **The 40 ms block was simply too small**: at 150 ms the same
+  1-in-20 duty cycle produces 296 two-tick frames out of 3000, and the cap branch is reached with
+  smoothing off. *"The phenomenon does not occur"* is therefore **withdrawn** — what occurs is that it
+  does not occur under a spike this box can produce in ordinary play.
+- 🔴 **The true form:** `frameClock.ts:48-50`'s over-the-cap branch is unreachable **for isolated
+  single-frame spikes under ~150 ms on a box holding 170–240 fps.** Multi-tick frames are ordinary
+  below 60 fps sustained — the hardware a frame budget exists for — and they are one 150 ms hitch
+  away here. **Keep the branch**: correct, cheap, and the guarantee should not depend on an engine
+  default someone can flip in `GameConfig`.
+- ⚠️ **And still no criterion, for a DIFFERENT reason than the one first recorded.** The catch-up
+  spike is now known to be producible, so "unorderable" is no longer the objection. The objection is
+  attribution: the only thing that produces it here is a main-thread block, a block is not a property
+  of the game, and a bound reddened by the amplifier rather than by the code under test is not a gate.
+  The 12 625 production frames measured across three runs — `ticks` never above 1, including on every
+  one of the worst frames — stand as the observation that ordinary play does not reach it.
 - **What still stands, and it is the part worth having:** *do not attribute a slow frame to tick
   catch-up without measuring the tick delta.* A Phase 9 record did exactly that and was wrong — every
   one of the worst frames drained `ticks=1` or `0`, measured per frame. That refutation is direct
