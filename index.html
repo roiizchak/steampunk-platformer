@@ -29,9 +29,32 @@
         enforcement (vault C9). `tests/e2e/phase-06-hud.spec.ts` measures the canvas bounding
         box against the viewport instead, because only a measurement can.
       */
+      /*
+        🔴 `100vw` / `100vh` was a SCROLLBAR TRAP, and it clipped the game at every 16:9 viewport.
+        Measured 2026-08-25 on the shipped page: at 1920x1080 the document scrolled 1920x1084 in a
+        1905x1065 client area — both scrollbars, always — so the bottom and right 15 px of the canvas
+        sat behind them until the player scrolled. At 2000x900 it also broke the CENTRING criterion
+        6.7 asserts: 200 px of gap on the left against 185 on the right, because the canvas is
+        centred inside a box that is itself 15 px wider than the visible area.
+
+        Two causes, one rule:
+          - `100vw` is the viewport INCLUDING the scrollbar gutter, so any vertical scrollbar makes
+            the div wider than the client area, which creates a horizontal scrollbar, which shortens
+            the client area. `100%` resolves against the parent's content box and cannot loop.
+          - A `<canvas>` is `display: inline`, so its line box adds ~4 px of descender room below it.
+            That is what produced the first scrollbar whenever FIT filled the height exactly — which
+            is why the non-16:9 viewports in criterion 6.7 never saw it and 1400x900 measured clean.
+
+        `overflow: hidden` absorbs that descender WITHOUT a `canvas` rule. The comment above is not
+        being violated: the ScaleManager still owns every canvas property.
+
+        Found by the play-owned capture round, by looking at a screenshot — not by a gate. Gated
+        afterwards in `tests/e2e/phase-06-chrome.spec.ts`.
+      */
       #game {
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
       }
     </style>
   </head>

@@ -238,6 +238,17 @@ final run's own trace, which passed: the HUD-**off** arm's three medians were
 whose denominator intermittently stops being measurable is not a bound, whichever side of 2x it
 lands on that day.
 
+🔴 **Re-observed 2026-08-25, and the new evidence is far stronger than the four runs above.** In a
+loaded `phase-06` sweep (34 tests back to back) 6.9's `MAX_HUD_GPU_DELTA_MS` failed at **0.853 ms**
+against a 0.2 bound. Run alone, in the same session, minutes later: **0.0051, 0.0051, 0.0041,
+0.0036 ms** — four consecutive isolated runs, all passing, spanning a **200x** gap from the loaded
+reading. Those four were the arms of an interleaved A/B of an unrelated `index.html` change, so they
+also establish the failure is **not attributable to that change**: both arms read the same.
+
+A statistic that reads 0.004 ms alone and 0.853 ms in company is measuring the machine, not the HUD.
+That is the same conclusion as below, now with a two-order-of-magnitude separation instead of a
+factor of four.
+
 Nothing in the Phase 8 diff touches the HUD draw path, and every spec that precedes it in the run is
 unchanged, so it is not attributable to this phase. It is contention between specs, and it is exactly
 the class of question the standing rule says only a **same-session interleaved A/B** can settle. It

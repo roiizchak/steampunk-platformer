@@ -146,3 +146,111 @@ Each reverted with `git checkout --`, the original count confirmed back at 1, an
 
 **Verified:** typecheck clean · `hud-layout.test.ts` **33 passed** (29 + 4: three sizes plus the C2
 red proof) · full unit suite **167 files / 2490 tests** · `hud-layout.test.ts` at 381/400.
+
+---
+
+## Batch 10 — §4, the `play`-owned capture round: **one real defect, shipped and gated**
+
+Driven with the `playwright-cli` skill against the dev server on the real GPU. Images and readings in
+[`docs/evidence/session-tier5/`](../evidence/session-tier5/README.md), which is the scannable index the
+plan asked for.
+
+### 🔴 The finding: the page scrolled at every viewport, and the game lost 15 px
+
+Found by **looking at a screenshot** — the lane's entire justification. Both scrollbars were present
+in every capture, so I measured instead of guessing:
+
+| viewport | client | document | canvas gaps (L/T/R/B) |
+|---|---|---|---|
+| 1920×1080 | 1905 × 1065 | 1920 × 1084 | 0 / 0 / **−15** / **−15** |
+| 1280×720 | 1265 × 705 | 1280 × 724 | overflow both axes |
+| 852×480 | 837 × 465 | 852 × 483 | overflow both axes |
+| 2000×900 | 1985 × 885 | 2000 × 904 | 200 / 0 / **185** / **−15** |
+
+**Two causes, one rule.** `index.html` sized `#game` at `100vw × 100vh`. `100vw` is the viewport
+*including* the scrollbar gutter, so any vertical scrollbar makes the div wider than the client area,
+which creates a horizontal scrollbar, which shortens the client area. And a `<canvas>` is
+`display: inline`, so its line box adds ~4 px of descender room — which is what produced the *first*
+scrollbar whenever FIT filled the height exactly.
+
+Fixed with `width: 100%; height: 100%; overflow: hidden`. ⚠️ **No `canvas` rule** — `index.html`'s own
+comment forbids a second writer of `canvas.style`, and `overflow: hidden` on the parent absorbs the
+descender without one. After: 1920×1080 reads 0/0/0/0 and 2000×900 reads **200/200**.
+
+### 🔴 Why five phases of gates missed it
+
+- **Criterion 6.7** measures canvas centring at **1400×900** and **2000×900**, chosen *"deliberately
+  NOT 16:9: at the game's own aspect ratio the canvas fills the viewport and any centring bug is
+  invisible."* That choice is right for centring and is exactly what hid this: at 1400×900 the canvas
+  is 787 px tall inside a 900 px div, which absorbs the descender. **The one aspect ratio the game is
+  authored for was the ratio nothing looked at.**
+- And 6.7 measured centring **inside the overflowing box**. Its own pillarboxed case read **200 px of
+  gap on the left against 185 on the right** — visibly off-centre — and passed.
+
+### The gate
+
+`tests/e2e/phase-06-viewport.spec.ts` (new, 58 lines): at 1920×1080, 1280×720, 852×480 and 2000×900,
+the document must not scroll and all four canvas edges must be inside the **client** area rather than
+inside `#game`. Type asserted before value. Extracted to its own spec because
+`phase-06-chrome.spec.ts` would have gone to 413/400; it matches exactly one project, re-verified by
+`playwright-projects.test.ts`.
+
+**Red proof:** restoring `100vw`/`100vh` → **4 failed**, all four viewports named. Re-applying the fix
+→ **4 passed**. Counts read positively in both directions *(C1, C12)*.
+
+### The other three readings
+
+**852×480 — read, and it moved the question.** ⚠️ **`hudLayout`'s scaling path never runs in the
+shipped game.** `UIScene` lays out from `this.scale.gameSize`, and under `FIT` with a fixed game size
+that is **always 1920×1080**: measured live at 852×480 and at DPR 2, `layout.scale` is **1** and every
+rect is identical to the design size. So the HUD is a 1920×1080 layout the browser downsamples to
+44 %, not a layout computed for 852×480.
+
+That is not a defect — but it means the multi-size unit tests (including `hud-layout.test.ts`'s
+*"the counter stays legible at the smallest supported size"*, and §3d's three new size cases) describe
+a configuration the game cannot currently enter. They are a **specification for a mode not in use**,
+which is worth having and worth not mistaking for a live reading. 🔴 **Recorded, not acted on** —
+changing the scale mode is a design decision and the owner's. Looking at the image: the HUD plate,
+bar and gear counter are clean at 44 %; the controls banner is the marginal element, running edge to
+edge over busy art at roughly 7 CSS px.
+
+**DPR 2 — read, and it is fine.** The canvas backing store stays **1920×1080** at every DPR, so DPR 2
+is a 2× upscale of the same buffer. With `pixelArt: true` deriving `antialias: false`, that is
+*nearest-neighbour doubling of pixel art* — the one case where upscaling is crisp rather than soft.
+`phase-06-dpr2.spec.ts` passed all along; now a human has looked.
+
+**240 Hz judder — STILL OWED, and honestly so.** The harness measured **173–174 Hz**, so this box is
+the right substrate, and `probe-240hz-readout.png` shows `?probe=1` running. But the probe's three
+outcomes are decided by **a pair of eyes** comparing the STEPPED and SMOOTH lanes, and no automated
+reading can substitute. **Not closed.**
+
+**Sentry coverage — recommendation: NOT a defect.** Measured per sentry: 3 of 9 lose shots, 13 of 96
+standable spots, and **every lost spot has `dy` 616 or 712** with `dx` inside ±421 — the player six to
+seven tiles below a sentry standing on a raised block, with several tiles of solid brick between them.
+`sentry-level-05-x14304.png` shows it plainly. Those bolts used to pass through rock; the levels read
+as authored for each sentry to cover its own ledge, which is the coverage that survived. The open
+question in `sentry-coverage.test.ts` — *"whether the levels were authored assuming those shots
+landed"* — is answered **no**, with pictures. ⚠️ It is a recommendation, not a unilateral close: the
+final call is the owner's.
+
+**Verified:** typecheck clean · `phase-06-viewport` **4 passed**, and **4 failed** on the mutation ·
+port 5173 killed *(C13)*.
+
+### ⚠️ Criterion 6.9 failed during this batch, and it is NOT this session's change
+
+Running the whole `phase-06` project after the `index.html` fix, **1 of 34 failed**: 6.9's
+`MAX_HUD_GPU_DELTA_MS` read **0.853 ms** against a 0.2 bound.
+
+Settled the only way this project allows — a **same-session interleaved A/B**, `phase-06-perf` alone,
+alternating the two versions of `index.html`:
+
+| round | `100vw`/`100vh` | `100%` + `overflow:hidden` |
+|---|---|---|
+| 1 | 0.0051 ms · pass | 0.0051 ms · pass |
+| 2 | 0.0041 ms · pass | 0.0036 ms · pass |
+
+**Both arms identical, both passing, four runs.** The loaded reading is **200×** the isolated one, so
+6.9 is measuring spec contention, not the HUD — the same diagnosis `phase-08-levels.md` recorded for
+it, now with two orders of magnitude of separation instead of a factor of four. Appended there, since
+that is where 6.9's instability record lives. **Not attributable to this session, and not fixed by
+it.**
