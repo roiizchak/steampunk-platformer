@@ -27,6 +27,8 @@ at **1.059x** and failed two earlier full runs at **2.97x** and **3.53x**. It is
 green on the strength of one run — see
 [Deviations and defects recorded](#deviations-and-defects-recorded).
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Owner | State | Evidence |
 |---|---|---|---|---|
 | 8.1 | Every shipped `.tmj` loads, validates, and is completable | `voltagent-qa-sec:qa-expert` ×2 | ✅ | Proved **twice, differently**. `level-reach.test.ts` builds a segment graph and requires BFS from the spawn to reach the goal segment, every edge proved by running the real `tick()` from an achievable position on the source segment. `level-completable.test.ts` then plays each level to `world.completed` in the **exact shipped world** — goal, hazards, enemies, gears, `DEFAULT_TUNING` — under every `GATE_SEED`. `tilemap-data.test.ts` runs the real validator over the shipped bytes; `level-goal.test.ts` pins 9 goal-rule fixtures. |

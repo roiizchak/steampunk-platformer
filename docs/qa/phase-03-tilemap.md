@@ -127,6 +127,8 @@ left applied, but a *fix* removed by the restore.
 
 ### QA gate results
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Result |
 |---|---|---|
 | 3.1 | Player lands on the collision layer and does not fall through | **PASS** — settles at the strip top, `vy` 0, and the deepest sampled y across a full jump arc is the surface; plus the drawn tile's top edge asserted equal to it |

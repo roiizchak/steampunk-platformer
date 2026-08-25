@@ -238,6 +238,8 @@ note spelled the end marker out; `indexOf` found *that* occurrence first, sliced
 the sentence, and reported all eleven criteria missing while all eleven were present six lines below.
 The markers are written above in split form for exactly that reason. *(Watched, 2026-08-24.)*
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Owner | Status |
 |---|---|---|---|
 | 9.1 | Hit-stop lives in the sim as integer ticks, not a tween | `code-reviewer` ×2 | ✅ **PASS.** Closed by the close round, 2026-08-24. Brief A: PASS — one integer deadline in `src/sim/hitstop.ts` with six real consumers, no clock reachable from the sim. Brief B CONSTRUCTED a scene-side re-implementation that would keep every gate green — **recorded as D1**, since it describes code that does not exist and gating it is a new architectural rule, not this criterion. See §*"The close round — 2026-08-24"*. |
@@ -247,10 +249,10 @@ The markers are written above in split form for exactly that reason. *(Watched, 
 | 9.5 | Frame budget holds under the worst STEADY-STATE frame (**owner-amended 2026-08-24**) | `performance-engineer` ×2 | ✅ **PASS against the amended criterion.** It read *"max enemies + max particles + shake"* and could not honestly pass as written: `installStorm` suppresses combat in every arm and the shake in the window is `SHAKE.land`, smallest of four. I recorded that as *"PASS, qualified"* and the **Codex implementation review blocked it** — *a caveat cannot reverse a criterion's wording* — correctly. The owner then **amended the criterion** to name the worst steady-state frame, which is what is measured and defensible; the amendment, its alternatives and what it does **not** close are recorded in `docs/prd/phase-09-polish.md`. Against the amended wording both briefs pass: every defect the two prior FAILs named is fixed on disk, and **E6** re-proved the shake-load guard on the current post-`8c9d0fc` tree. ⚠️ **The combat path stays unmeasured and stays open work** — entries 43, 44 and D5. |
 | 9.6 | Measurement distinguishes "fast" from "not drawing" | `performance-engineer` ×2 | **RAN ×2 → PASS ×2**, checklist verified item by item by both briefs; brief B's one finding (L1, `inView` was an existence check) applied |
 | 9.7 | Every gate's threshold pinned as a literal, with fixtures both sides | `qa-expert` ×2 | ✅ **PASS, with one limit stated.** Brief A verified construction for all 24 and said plainly that no Playwright ran, so redness was unproven — that sentence stands as written. I first recorded six mutations as discharging it; the **Codex implementation review refused that**, correctly, and it was downgraded to PARTIAL. It is now closed by a full table: **14 unit-side threshold families each watched red, every one naming its own constant in the failure text**, plus **nine e2e executions** including `MIN_COST_EXPONENT` (E7, the bound the review said nothing covered) and `MAX_EFFECT_FRAME_WORK_MS` (E9, red on a real 3 ms cost injection rather than a harness flag). ⚠️ **Four upper perf bounds** — P95, work-delta, per-particle, storm-delta — have no mutation of their own: `phase-09-perf.spec.ts` is one sequential test and an earlier guard always fires first. Construction verified, redness **inferred**, recorded as weaker, and splitting that spec is owed work. See §*"9.7's threshold → fixture → red-proof table"*. |
-| 9.8 | What the gates do NOT cover is stated here | — | ✅ **PASS.** Drafted below and extended through every round (entries 25, 36, 37, 43–45, and the two written at `:1363`). Item 32 was closed by hands-on judgement and then **re-judged on the fixed build** because the first approval did not count (`:1485`, `:1562`). |
+| 9.8 | What the gates do NOT cover is stated here | — | ✅ **PASS.** Drafted below and extended through every round (entries 25, 36, 37, 43–45, and the two written in §*"The two §9.8 entries this round wrote"*). Item 32 was closed by hands-on judgement and then **re-judged on the fixed build** because the first approval did not count — §*"9.8 item 32 — CLOSED by hands-on judgement, 2026-08-22"* and §*"9.8 item 32 — re-judged on the fixed build, and why the first approval did not count"*. |
 | 9.9 | No file > 400 lines; diff reviewed; adversarial pass | `code-reviewer` ×2 | ✅ **PASS.** Re-run against the fix, 2026-08-24. Line count: the largest file in `src`/`tests`/`tools` is exactly **400**, `file-size.test.ts` green, no active exemption. Clauses two and three are human acts with no mechanism (**D6**) — and the adversarial pass is the clause discharging itself, this round being it. Six files at exactly 400 with no headroom is **9.8 entry 48**, unchanged (**D11**); two tracked files outside the gate's glob are recorded as **D12**. See §*"The close round — 2026-08-24"*. |
 | 9.10 | Codex plan review ran; every finding applied or recorded | — | ✅ **PASS** — [phase-09-plan.md](../reviews/phase-09-plan.md), 4 blockers + 2 highs applied, 3 lows recorded |
-| 9.11 | Codex implementation review ran on the diff | codex | ✅ **PASS** — `:1518`. Triage with a verdict per finding in [phase-09-impl.md](../reviews/phase-09-impl.md); five gates watched failing with the mutation each assertion names, reverted and confirmed per *(C1, C12)*; four verification runs green on the same tree (unit 2151|3, sim-isolated 2151|3, e2e 119, build `verify-dist ok`). |
+| 9.11 | Codex implementation review ran on the diff | codex | ✅ **PASS** — §*"Criterion 9.11 — the Codex implementation round, and what it cost to close"*. Triage with a verdict per finding in [phase-09-impl.md](../reviews/phase-09-impl.md); five gates watched failing with the mutation each assertion names, reverted and confirmed per *(C1, C12)*; four verification runs green on the same tree (unit 2151|3, sim-isolated 2151|3, e2e 119, build `verify-dist ok`). |
 
 ### The reconciliation of 2026-08-23, and why Phase 9 was still not done then
 
@@ -293,8 +295,10 @@ verdict was written. The note under this file's gate heading has the detail.
 
 **What this means about the merge.** The phase was merged to `main` and approved on a verbal report,
 and the project's own authority does not corroborate it. That is item 0.1's finding stated plainly.
-It is **not** a claim that the work is bad — the mutation proofs at `:448` and `:1320`, the
-integrator's own re-mutations at `:104`, and the Codex round at `:1518` are as thorough as anything
+It is **not** a claim that the work is bad — the mutation proofs at `:448` and in §*"Every gate
+watched failing — the mutation each assertion NAMES"*, the integrator's own re-mutations in §*"The
+build — what landed, and what I verified myself"*, and the Codex round in §*"Criterion 9.11 — the
+Codex implementation round, and what it cost to close"* are as thorough as anything
 in this repository. It is a claim that **the last step of the protocol was skipped**: agent-owned
 criteria that FAILED were fixed and never handed back to their owners.
 

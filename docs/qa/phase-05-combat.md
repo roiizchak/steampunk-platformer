@@ -16,6 +16,8 @@ section in this log, a test file, or a Codex review. Where a verdict changed acr
 carries the **last** one and says so. A row here is still a claim a human wrote *(C11)*; the
 adversarial briefs and the Codex implementation review are what test that.
 
+<!-- gate-verdicts -->
+
 | # | Verdict | Where it was decided |
 |---|---|---|
 | 5.1 | **PASS** | `qa-expert` brief 1; re-verified in § *§6 gate — run 2026-08-12 (session 7)*. Negative + positive control through the real `tick()`; radius tunability measured as shots fired, not a readout. |

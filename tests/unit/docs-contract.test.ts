@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { criterionRowGaps } from './gateVerdicts';
 
 /**
  * The phase documents are executable instructions, not prose. This file gates that claim.
@@ -243,12 +244,39 @@ describe('phase documents are executable instructions', () => {
      * criterion is reported failing" — it cannot tell whether the row is true, only whether it was
      * written at all. A log that is missing — or named anything other than its phase document —
      * throws out of `doc`, which is the same red.
+     *
+     * ## Why it reads a DESIGNATED table and not the whole section
+     *
+     * It used to ask `/^\| 9\.2 \|/m.test(section)` — satisfied by **any** such row anywhere in the
+     * slice. A long log accumulates later tables that also key on criterion numbers, and any one of
+     * them silently discharged the requirement. Phase 9's own close-round verdict table was one, and
+     * the only thing preventing it from doing so was that its rows are **bolded** (`| **9.1** |`)
+     * and therefore missed by the regex. That is a gate protected by Markdown emphasis: remove the
+     * asterisks and the bypass is back, with nothing to say so.
+     *
+     * 🔴 **"Exactly one row in the slice" is NOT the repair, and the Codex plan review is why.** A
+     * second table keyed on criterion numbers is a legitimate shape, not a defect:
+     * `docs/qa/phase-04-art.md` carries a criterion-verdict table AND a later summary table, giving
+     * 4.2b, 4.16 and 4.27 two unbolded rows each. Counting across the whole slice would call that
+     * an error. Phase 4 escapes only because the PRD's `✅` filter excludes it — it is
+     * `⚠️ merged with known debt` — which is luck, not design.
+     *
+     * So the table is **designated explicitly**, by a `<!-- gate-verdicts -->` marker on the line
+     * above it. The logs share no table header to key on — they run from `| # | Criterion | Result |`
+     * to `| # | verdict | the evidence that decides it |` — so a marker was added rather than a
+     * heuristic guessed. It is invisible in rendered Markdown, it cannot drift the way a line number
+     * did, and a missing one is a red with its own message rather than a silent pass.
      */
     it('every phase marked done in the PRD is evidenced criterion-by-criterion in its QA log', () => {
       const table = between(PRD, '## The phases', '### Phase dependency notes');
       const done = table
         .split('\n')
-        .filter((line) => line.includes('✅') && /^\|\s*\d+\s*\|/.test(line))
+        // 🔴 The verdict is the STATUS CELL's, not any ✅ anywhere in the row. An unanchored
+        // `includes` over the whole line is the same fragility this file just repaired twice, and it
+        // is safe today only because no non-done row happens to carry a stray ✅ (a criterion name, a
+        // note). Scoped to the STATUS cell's LEADING verdict, which is where the PRD puts it, so a
+        // ✅ buried in a non-done phase's prose cannot promote it either. 2026-08-25 brief.
+        .filter((line) => /^\|\s*\d+\s*\|/.test(line) && (cells(line).at(-1) ?? '').trimStart().startsWith('✅'))
         .map((line) => Number(cells(line)[0]));
       expect(done.length, 'no completed phases found — did the PRD table format change?').toBeGreaterThan(0);
 
@@ -258,15 +286,36 @@ describe('phase documents are executable instructions', () => {
         // The log is addressed by its phase document's own filename, so `docs/qa/` and `docs/prd/`
         // are forced to line up file-for-file: a drifted slug is a missing log, and `doc` throws.
         const section = between(doc(`/docs/qa/${name}`), `## Phase ${n} `, `## Vault-out — Phase ${n}`);
-        for (const row of gateRows(phase)) {
-          const cited = new RegExp(`^\\|\\s*${row.id.replace('.', '\\.')}\\s*\\|`, 'm').test(section);
-          if (!cited) gaps.push(`phase ${n} criterion ${row.id} has no QA-LOG row`);
-        }
+        gaps.push(...criterionRowGaps(section, gateRows(phase).map((r) => r.id), `phase ${n}`));
       }
       expect(gaps).toEqual([]);
     });
-  });
 
+    /**
+     * Phase 4 as a REGRESSION case — the shape the designated-table rule must tolerate.
+     *
+     * Phase 4 is NOT covered by the check above: the PRD's ✅ filter excludes it, because its row
+     * reads ⚠️ merged with known debt. Its log is nevertheless the only one on the tree carrying a
+     * criterion-verdict table AND a later summary table, so it is the only place the tolerated
+     * shape actually exists. Without this test the rule would be exercised only against logs that
+     * happen to have one table each, and "counts across the whole slice" would look correct.
+     */
+    it('PHASE 4 is the regression case: two legitimate tables, and it passes', () => {
+      // 🔴 Why "exactly one row in the whole slice" was the wrong repair. Phase 4's log carries a
+      // criterion-verdict table AND a later summary table, so 4.2b, 4.16 and 4.27 each have two
+      // unbolded rows in the section. That is a normal shape for a long log. Phase 4 is NOT
+      // checked by the test above — the PRD's `✅` filter excludes it, since it reads
+      // `⚠️ merged with known debt` — so this is the only place the shape is exercised at all.
+      const section = between(doc('/docs/qa/phase-04-art.md'), '## Phase 4 ', '## Vault-out — Phase 4');
+      const duped = ['4.2b', '4.16', '4.27'];
+      for (const id of duped) {
+        const inSection = section.match(new RegExp(`^\\|\\s*${id.replace('.', '\\.')}\\s*\\|`, 'gm'))?.length ?? 0;
+        expect(inSection, `${id} should appear twice in the SECTION`).toBeGreaterThan(1);
+      }
+      expect(criterionRowGaps(section, duped, 'phase 4'), 'once in the DESIGNATED table').toEqual([]);
+    });
+
+  });
   /**
    * Vault C2: a gate that cannot go red is decoration. Each fixture is a real phase document
    * with exactly one thing broken, committed, and asserted to be CAUGHT.

@@ -152,6 +152,8 @@ false-green C12 warns about.
 
 ### QA gate results
 
+<!-- gate-verdicts -->
+
 | # | Criterion | Result |
 |---|---|---|
 | 1.1 | `npm run build` succeeds; `tsc --noEmit` clean | ✅ `TypeScript: No errors found`; `✓ built in 652ms` |

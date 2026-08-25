@@ -39,23 +39,109 @@
 
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
+import { openingsIn } from './tweenOpenings';
 
-/** Kill-by-target, in every form Phaser offers it. */
-const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(/;
+/**
+ * Kill-by-target, in every form Phaser offers it.
+ *
+ * **Two alternatives, and the second one is the whole point of the `code+strings` view below.**
+ * The first is the direct member call — and because `\b` matches after a `.`, it already covers
+ * optional chaining (`tweens?.killTweensOf(`) with no extra alternative. The second is COMPUTED
+ * access, `tweens['killTweensOf'](x)`, in either quote and with any interior whitespace.
+ *
+ * 🔴 The bracket half is invisible under the `'code'` view no matter how the pattern is written —
+ * see `killBodies()`. The Codex plan review caught this as a would-be false green: the first draft
+ * of this repair extended the regex and left the view alone, which would have produced a rule that
+ * passes its own fixture and misses the violation in a real file. **The view was the defect, not
+ * the pattern.**
+ */
+const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweensOf|killAll)\1\s*\]/;
 
 /**
  * A `tweens.add(...)` whose result is NOT bound to a name.
  *
- * Matched by what comes immediately BEFORE the call: an assignment (`= `), a `return`, or an
- * argument position. Anything else — a bare statement — is fire-and-forget. Deliberately narrow in
+ * Matched by what comes immediately BEFORE the call: an assignment (`= `) or a `return`. Anything
+ * else — a bare statement, or an ARGUMENT POSITION — is fire-and-forget. Deliberately narrow in
  * the direction that errs toward a false RED: this rule blocks a blocker, and a false red costs a
  * minute while a missed violation is what the vault says shipped.
+ *
+ * 🔴 **Argument position used to count as HELD, and that was a documented way round the rule.**
+ * `noop(scene.tweens.add({…}))` satisfied it because the preceding character is `(`, though nobody
+ * retains the handle. The counter-argument — `live.add(scene.tweens.add({…}))` really does retain
+ * it — is true and does not save the classification: a static scan cannot tell a collector from a
+ * discarder, and the criterion is about whether the handle is REACHABLE later. Every live site
+ * binds to a name (checked: all five are `= ` assignments), so requiring that costs nothing and
+ * closes the dodge. A site that genuinely wants to pass a tween onward can name it first.
+ *
+ * 🔴 **All FIVE tween-opening methods, not just `add` — a gate-round finding, 2026-08-25.**
+ * The first version matched `add` alone while `tweenCallbacks.ts`'s `TWEEN_METHODS` (the sibling
+ * rule added in the same branch) already enumerated `add`, `addCounter`, `addMultiple`, `chain` and
+ * `create`. `scene.tweens.addCounter({})` therefore yielded zero sites and this rule ran clean over
+ * it. The two lists now agree because they are the same question asked twice.
+ *
+ * ⚠️ **`this.add.tween(config)` is a REAL Phaser 4.2.1 entry point and NOTHING here reaches it**
+ * (`phaser.d.ts:26869` on the factory, `:28201` on the creator). Every rule in this file and in
+ * `tween-callback-boundary.test.ts` keys on the object being literally named `tweens`, so a tween
+ * opened through the GameObject factory bypasses 9.3b, 9.2, 9.2b and 9.2c at once. It occurs nowhere
+ * on this tree — checked — and is recorded as **D14** rather than closed, because closing it means
+ * resolving what `add` is bound to, which is a different machine from a pattern. The absence is
+ * PINNED below so the day someone writes one, a fast test says so instead of a silent hole.
  */
-const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*add\s*\(/g;
+const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
+/** A newline inside a fixture literal, named so the shell that writes this file cannot eat it. */
+const NL = '\n';
 
+
+const unbound = (code: string): number => {
+  let count = 0;
+  for (const match of code.matchAll(TWEENS_ADD)) {
+    const before = (match[1] ?? '').trimEnd();
+    // `= x.tweens.add(` and `return this.tweens.add(` are held. 🔴 `f(scene.tweens.add(` is NOT,
+    // any more — see TWEENS_ADD's docstring for why argument position was demoted.
+    if (!/=$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
+      count += 1;
+    }
+  }
+  return count;
+};
+
+
+/**
+ * The view for rules whose evidence is a bare identifier: comments AND string literals blanked, so
+ * a message containing `tweens.add` cannot false-red.
+ */
 function bodies(): [file: string, code: string][] {
   return Object.entries(ALL_SOURCES).map(([file, src]) => [file, blankFor('code', src)]);
 }
+
+/**
+ * The view for the kill rule: comments blanked, **strings KEPT**.
+ *
+ * 🔴 Under `'code'` the string contents are blanked too (`sourceScan.ts`'s own docstring says so),
+ * so `tweens['killTweensOf'](x)` reaches a rule as `tweens['            '](x)` and **no regex can
+ * see it**. That is the bypass the Codex review named, and the view is where it is closed —
+ * `sourceScan.ts` already nominates `'code+strings'` for exactly this, citing `Date['now']`.
+ *
+ * The cost of keeping strings is a literal `"killTweensOf"` in a message, which would report. That
+ * cost is not paid on this tree: all six mentions of `killTweensOf`/`killAll` in `src/` sit in doc
+ * COMMENTS (`hudFade.ts`, `hudGearFlyers.ts`, `hudGearPop.ts`), and comments are blanked in both
+ * views — which is why the "does not fire on a comment recording its removal" test below still
+ * passes unchanged. If one ever lands in a string, that is a finding to look at, **not** a reason
+ * to revert the view: a false red is cheap and a missed violation is what the vault says shipped.
+ */
+function killBodies(): [file: string, code: string][] {
+  return Object.entries(ALL_SOURCES).map(([file, src]) => [file, blankFor('code+strings', src)]);
+}
+
+/**
+ * Put a fixture through the SAME blanking the real files take.
+ *
+ * 🔴 Not decoration. The C2 fixtures used to be handed straight to `KILL_BY_TARGET.test(...)`, and
+ * a fixture tested against the bare pattern **passes while the production scan misses the
+ * violation** — which is precisely how the bracket bypass survived a committed red-proof. A
+ * red-proof that skips the pipeline proves the pattern, not the gate.
+ */
+const killView = (src: string): string => blankFor('code+strings', src);
 
 describe('9.3a — no kill-by-target anywhere in src/', () => {
   it('the scan is not vacuous: it reads real files and they mention tweens', () => {
@@ -69,7 +155,8 @@ describe('9.3a — no kill-by-target anywhere in src/', () => {
   });
 
   it('finds no killTweensOf or killAll call in any source file', () => {
-    const hits = bodies()
+    // `killBodies()`, not `bodies()` — the computed-access form is unreachable from the other view.
+    const hits = killBodies()
       .filter(([, code]) => KILL_BY_TARGET.test(code))
       .map(([file]) => file);
     expect(
@@ -80,30 +167,41 @@ describe('9.3a — no kill-by-target anywhere in src/', () => {
   });
 
   it('REJECTS a planted call — this rule can go red (vault C2)', () => {
-    expect(KILL_BY_TARGET.test('this.tweens.killTweensOf(this.gearIcon);')).toBe(true);
-    expect(KILL_BY_TARGET.test('scene.tweens.killAll();')).toBe(true);
+    // 🔴 Every fixture goes through `killView`, the production path. See its docstring.
+    expect(KILL_BY_TARGET.test(killView('this.tweens.killTweensOf(this.gearIcon);'))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView('scene.tweens.killAll();'))).toBe(true);
+    // Optional chaining on the member — already covered by `\b` matching after the dot.
+    expect(KILL_BY_TARGET.test(killView('scene.tweens?.killTweensOf(o);'))).toBe(true);
+  });
+
+  it('REJECTS COMPUTED access — the bypass the plan review named (vault C2)', () => {
+    // The whole reason `killBodies()` exists. Under the `'code'` view every one of these arrives
+    // with its quoted key blanked to spaces, and the rule reports a clean file.
+    expect(KILL_BY_TARGET.test(killView("scene.tweens['killTweensOf'](o);"))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView('scene.tweens["killTweensOf"](o);'))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView("scene.tweens[ 'killAll' ]();"))).toBe(true);
+    expect(KILL_BY_TARGET.test(killView("scene.tweens?.['killTweensOf'](o);"))).toBe(true);
+  });
+
+  it('proves the OLD view could not have caught computed access — the bypass, demonstrated', () => {
+    // 🔴 This is the finding as a committed assertion rather than a paragraph. If someone later
+    // "simplifies" `killBodies()` back to the `'code'` view, the scan silently stops seeing bracket
+    // access and this test is the thing that says so.
+    const src = "scene.tweens['killTweensOf'](o);";
+    expect(KILL_BY_TARGET.test(blankFor('code', src)), 'the code view still blanks the key').toBe(false);
+    expect(KILL_BY_TARGET.test(blankFor('code+strings', src))).toBe(true);
   });
 
   it('does NOT fire on a comment recording its removal — those exist and are deliberate', () => {
     // `hudFade.ts` and `hudGearPop.ts` both name `killTweensOf` in prose. A gate that is red on
-    // arrival gets weakened rather than obeyed, so the blanking is load-bearing.
-    const prose = blankFor('code', '// This read scene.tweens.killTweensOf(targets), which is\nconst a = 1;');
+    // arrival gets weakened rather than obeyed, so the blanking is load-bearing. Comments are
+    // blanked in BOTH views, which is why moving to `code+strings` did not disturb this.
+    const prose = killView('// This read scene.tweens.killTweensOf(targets), which is\nconst a = 1;');
     expect(KILL_BY_TARGET.test(prose)).toBe(false);
   });
 });
 
 describe('9.3b — every tweens.add result is bound to a name', () => {
-  const unbound = (code: string): number => {
-    let count = 0;
-    for (const match of code.matchAll(TWEENS_ADD)) {
-      const before = (match[1] ?? '').trimEnd();
-      // `= x.tweens.add(`, `return this.tweens.add(`, `f(scene.tweens.add(` are all held.
-      if (!/[=(,]$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
-        count += 1;
-      }
-    }
-    return count;
-  };
 
   it('REJECTS a fire-and-forget call and ACCEPTS a held one — both directions (vault C2)', () => {
     // 🔴 Both directions, in one test, against literals. A rule that only ever demonstrates its
@@ -115,6 +213,55 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
     expect(unbound('  tween = scene.tweens.add({ targets: o });')).toBe(0);
     expect(unbound('  return scene.tweens.add({ targets: o });')).toBe(0);
     expect(unbound('  const t: Phaser.Tweens.Tween = this.tweens.add({ targets: o });')).toBe(0);
+  });
+
+  it('REJECTS an ARGUMENT-POSITION call — the second bypass the plan review named (vault C2)', () => {
+    // 🔴 These used to return 0. `noop(...)` retains nothing, and no static scan can tell it from
+    // a collector — so the rule asks for a NAME, which every live site already gives it.
+    expect(unbound('  noop(scene.tweens.add({ targets: o, alpha: 0 }));')).toBe(1);
+    expect(unbound('  live.add(scene.tweens.add({ targets: o }));')).toBe(1);
+    expect(unbound('  register(a, scene.tweens.add({ targets: o }));')).toBe(1);
+    // And the sanctioned way to do the same thing still passes: name it, then pass the name.
+    expect(unbound('  const t = scene.tweens.add({ targets: o });\n  live.add(t);')).toBe(0);
+  });
+
+  it('REJECTS the other FOUR tween-opening methods — not just add (vault C2)', () => {
+    // 🔴 A gate-round finding, 2026-08-25: this rule matched `add` alone while the sibling
+    // `TWEEN_METHODS` in `tweenCallbacks.ts` already listed five. `addCounter` returned 0 and the
+    // scan ran clean over it. Every one of the five opens a tween that owns a handle.
+    expect(unbound('  scene.tweens.addCounter({ from: 0, to: 1 });')).toBe(1);
+    expect(unbound('  this.tweens.addMultiple([{ targets: o }]);')).toBe(1);
+    expect(unbound('  scene.tweens.chain({ tweens: [] });')).toBe(1);
+    expect(unbound('  this.tweens.create({ targets: o });')).toBe(1);
+    // And held forms of the same four still pass — the rule did not become a blanket.
+    expect(unbound('  const c = scene.tweens.addCounter({ from: 0, to: 1 });')).toBe(0);
+    expect(unbound('  return this.tweens.chain({ tweens: [] });')).toBe(0);
+    // A method that is NOT a tween opener stays out of it.
+    expect(unbound('  scene.tweens.killAll();')).toBe(0);
+    expect(unbound('  scene.tweens.getTweensOf(o);')).toBe(0);
+  });
+
+  it('D14: NOTHING here reaches `this.add.tween(config)`, and the absence is PINNED', () => {
+    // ⚠️ `add.tween(config)` is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` on the
+    // factory, `:28201` on the creator) and every rule in this file keys on the object being
+    // literally named `tweens`, so it bypasses 9.3b, 9.2, 9.2b and 9.2c at once. Recorded as D14
+    // rather than closed: closing it means resolving what `add` is bound to, a different machine
+    // from a pattern.
+    //
+    // 🔴 So this test does the honest thing instead — it states the hole and PINS THE ABSENCE.
+    // The rule cannot see it:
+    expect(unbound('  this.add.tween({ targets: o, alpha: 0 });')).toBe(0);
+    // … and no file uses it, which is what makes the hole latent rather than live. The day someone
+    // writes one, this goes red and points at D14 instead of the scan quietly passing.
+    const users = Object.entries(ALL_SOURCES)
+      .filter(([, src]) => /\badd\s*\.\s*tween\s*\(/.test(blankFor('code+strings', src)))
+      .map(([f]) => f);
+    expect(
+      users,
+      'a tween was opened through the GameObject factory (`add.tween`). Every rule in this file ' +
+        'keys on `tweens.` and NONE of them can see it — finding D14. Open it through ' +
+        '`this.tweens.add` instead, or close D14 first.',
+    ).toEqual([]);
   });
 
   it('no source file starts a tween it does not hold', () => {
@@ -163,5 +310,71 @@ describe('9.3c — every tween owner is torn down where its targets die', () => 
     expect(code).toContain('live.add(tween)');
     expect(code).toMatch(/for \(const tween of live\)/);
     expect(code).toContain('tween.stop()');
+  });
+});
+
+describe('9.3d — the ALIAS-AWARE handle rule, driven by the parser (Codex impl review, 2026-08-25)', () => {
+  // 🔴 **The alias repair was only half applied, and the gate log claimed the whole of it.**
+  // `isTweenCall` learned `const tm = scene.tweens` on 2026-08-25, which closed the CALLBACK rules.
+  // 9.3b and 9.3c were untouched: `TWEENS_ADD` needs the literal word `tweens`, and the 9.3c scan
+  // filters files by `code.includes('tweens.add')`, so an aliased opener was not merely unmatched —
+  // its whole FILE was excluded from the scan. This rule is alias-aware by construction.
+  //
+  // It runs BESIDE the patterns, not instead of them (the shape 9.2c already takes).
+
+  it('REJECTS an ALIASED fire-and-forget opener — the shape that passed both handle gates', () => {
+    const aliased = 'const tm = scene.tweens;' + NL + 'tm.add({ targets: o, alpha: 0 });';
+    // First, the two shipped rules really are blind to it — committed evidence, not an assertion
+    // about an assertion. This is the FAILING FIXTURE the claim needed and did not have.
+    expect(unbound(blankFor('code+strings', aliased)), 'TWEENS_ADD sees nothing').toBe(0);
+    expect(aliased.includes('tweens.add'), "the 9.3c filter excludes the file").toBe(false);
+    // And the parser rule catches it.
+    const open = openingsIn(aliased);
+    expect(open.length, 'the AST found no opener').toBe(1);
+    expect(open[0]!.aliased).toBe(true);
+    expect(open[0]!.held, 'an aliased fire-and-forget opener must NOT read as held').toBe(false);
+  });
+
+  it('ACCEPTS an aliased opener that IS held — the other direction (vault C2)', () => {
+    const held = 'const tm = scene.tweens;' + NL + 'const t = tm.add({ targets: o });';
+    expect(openingsIn(held).map((o) => o.held)).toEqual([true]);
+    expect(openingsIn('const tm = this.tweens;' + NL + 'return tm.chain({ tweens: [] });').map((o) => o.held)).toEqual([true]);
+    expect(openingsIn('const tm = scene.tweens;' + NL + 'this.t = tm.addCounter({ from: 0 });').map((o) => o.held)).toEqual([true]);
+  });
+
+  it('agrees with the pattern rule on every UNALIASED shape the patterns already pin', () => {
+    // 🔴 Two rules that disagree on the ordinary case are worse than one. Each literal below is
+    // already pinned by 9.3b's own fixtures; this asserts the parser reaches the same verdict, so a
+    // future edit to either cannot silently split them.
+    const cases: [string, boolean][] = [
+      ['scene.tweens.add({ targets: o });', false],
+      ['const t = scene.tweens.add({ targets: o });', true],
+      ['return this.tweens.add({ targets: o });', true],
+      ['tween = scene.tweens.add({ targets: o });', true],
+      ['noop(scene.tweens.add({ targets: o }));', false],
+      ['live.add(scene.tweens.add({ targets: o }));', false],
+    ];
+    for (const [src, wantHeld] of cases) {
+      expect(openingsIn(src).map((o) => o.held), src).toEqual([wantHeld]);
+      expect(unbound(blankFor('code+strings', src)) === 0, `pattern rule disagrees on: ${src}`).toBe(wantHeld);
+    }
+  });
+
+  it('no source file opens a tween it does not hold — INCLUDING through an alias', () => {
+    const offenders = Object.entries(ALL_SOURCES)
+      .flatMap(([file, src]) => openingsIn(src).map((o) => [file, o] as const))
+      .filter(([, o]) => !o.held)
+      .map(([file, o]) => `${file}: ${o.method}${o.aliased ? ' (through an alias)' : ''}`);
+    expect(
+      offenders,
+      'criterion 9.3, alias-aware: a tween whose handle is discarded cannot be stopped before its ' +
+        'target is destroyed. Bind the result and stop it on SHUTDOWN. An `(through an alias)` note ' +
+        'means the two PATTERN rules cannot see this one at all.',
+    ).toEqual([]);
+  });
+
+  it('the parser scan is not vacuous: it found the five live openers', () => {
+    const total = Object.values(ALL_SOURCES).reduce((n, src) => n + openingsIn(src).length, 0);
+    expect(total, 'the AST reached fewer openers than the tree has').toBeGreaterThanOrEqual(5);
   });
 });

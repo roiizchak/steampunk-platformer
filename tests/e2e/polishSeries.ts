@@ -50,12 +50,22 @@ export interface Sample {
  * burst — on a loaded box, not at all, and it then spends its whole 60 s timeout. That was one of
  * criterion 9.2's two failure modes. **Do not add a `run` wait to a new test**: ask for the
  * condition the reduction actually needs. 9.2 asks `landings` + `coveredLanding` instead.
+ *
+ * 🔴 **2026-08-24: `run` now has NO live call site.** The three that remained were removed — two as
+ * pure redundancy, one replaced by `grounded`. It is kept in the union rather than deleted because
+ * it is still the honest name for a contiguity requirement, and deleting it would take this
+ * paragraph — the reason nobody should ask for one — with it. `tests/unit/wait-spec.test.ts` pins both
+ * halves: `run` unsatisfiable off the measured gap profile, `grounded` satisfiable on it.
+ *
+ * ⚠️ **A sample COUNT is not the replacement.** "Wait for eight samples" is a sleep wearing a
+ * positive condition's clothes: it establishes nothing any reduction needs. Each site was given the
+ * condition it actually depends on, and two sites turned out to depend on nothing at all.
  */
 export interface WaitSpec {
-  kind: 'run' | 'drop' | 'airborneDrop' | 'land' | 'landings';
+  kind: 'run' | 'grounded' | 'drop' | 'airborneDrop' | 'land' | 'landings';
   /**
    * For `run`, the gap-free series length required; for `landings`, how many distinct touchdown
-   * STAMPS must have been recorded; otherwise ticks recorded after the event.
+   * STAMPS must have been recorded; otherwise ticks recorded after the event. Ignored by `grounded`.
    */
   n: number;
   /** `landings` only: ticks that must also be recorded after the LAST of them. */
@@ -135,6 +145,11 @@ export async function waitFor(page: Page, spec: WaitSpec): Promise<void> {
         const last = stamps[stamps.length - 1];
         return stamps.length >= s.n && rec[rec.length - 1].tick >= last + (s.tail ?? 0);
       }
+      // 🔴 The player spawns `grounded: false, state: 'fall'` (`src/sim/world.ts`), so "the game is
+      // running" and "the player can jump" are different facts. Any test that presses Jump needs
+      // the second one, and a sample COUNT gives neither. Gaps are irrelevant here by construction:
+      // once the spawn touchdown is recorded on any frame, it stays recorded.
+      if (s.kind === 'grounded') return rec.some((r) => r.grounded);
       let at = -1;
       let run = 1;
       for (let i = 1; i < rec.length; i++) {
