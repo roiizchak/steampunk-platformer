@@ -96,3 +96,53 @@ establishes the sweep's blind spot more directly than a second sensitivity check
 **Verified:** typecheck clean · `knob-sweep.test.ts` **17 passed** · full unit suite **167 files /
 2486 tests** (2484 baseline **+2**, the two regime tests; the two new modules are helpers, not spec
 files, so the file count is unchanged) · `file-size` green with the three files at 148 / 284 / 110.
+
+---
+
+## Batch 9 — §3d, item 5.20: the HUD's inter-element spacing is gated
+
+`hudFits` checks two things: everything is on **screen**, and the bar is inside its own **plate**.
+Nothing checked the space *between* elements — and `src/render/hud.ts:61` says so in as many words:
+*"no gate checks spacing between HUD elements (item 5.20)."* `COUNTER_GAP`, the constant that
+produces that spacing, had **zero test references repo-wide**.
+
+### 🔴 `COUNTER_GAP` stays private — the Codex plan review's correction, and it is the point
+
+The obvious fix is to export it and assert `gap === COUNTER_GAP * scale`. **That proves nothing.** An
+assertion derived from the same implementation constant moves whenever the constant moves, so it can
+never disagree with the code: the shape of a gate with the substance of a restatement. `src/` is
+untouched by this batch.
+
+The three claims are independent and geometric, and all run at **every supported size** because what
+breaks is the scaling, not one viewport:
+
+1. **Nothing overlaps anything** — a rectangle intersection test. No tolerance, no constant.
+2. **A readable gap survives** — `MIN_ELEMENT_GAP_PX = 8`, a *refusal* bound in the sense
+   `MAX_LEVEL_CREATE_MS` is: chosen to say what is unacceptable, not fitted to what is measured. The
+   shipped design gaps are **24** and **12** px, so 8 sits below both with headroom and forbids
+   "touching, overlapping or crowded" without forbidding a future tightening. Scaled with the layout,
+   so at 852×480 the floor is 3.56 px against a 10.7 px actual.
+3. **The assembly holds together vertically** — the icon and the counter's ink both sit *within* the
+   plate's vertical span. A containment claim, not a copy of the centring formula.
+
+⚠️ The counter's **width** is not asserted and cannot be: only the engine can measure rendered text,
+which is why `hudFits` takes `counterW` as a parameter. Its width extends rightward, away from every
+other element, so the inter-element claim is about its **origin** — the right edge is already
+`hudFits`'s job. The plan flagged the same limitation from the e2e side: `hudHelpers.ts:129` returns
+full rects for the plate and counter but gives `gearIcon` only `x`, `y`, `willRender`, so a live
+spacing assertion would need icon dimensions added first. **Not done — this stays a unit check**,
+which is where the layout function lives anyway.
+
+### Red proofs — three, all against real `src/render/hud.ts` mutations *(C1, C12)*
+
+| # | mutation in `src/` | result |
+|---|---|---|
+| 1 | `COUNTER_GAP` 24 → **0** | **3 failed / 30 passed** — *"only 0.0 px between the plate and the gear icon"*, at all three sizes with three different scaled floors |
+| 2 | `COUNTER_GAP` 24 → **−40** | **3 failed / 30 passed** — *"the gear icon is drawn ON TOP of the health plate"* |
+| 3 | gear icon un-centred (`plate.y + plate.h/2 − iconSize/2` → `plate.y − iconSize`) | **3 failed / 30 passed** — *"the gear icon rides above the plate"*, −48 against a floor of 24 |
+
+Each reverted with `git checkout --`, the original count confirmed back at 1, and the file returns to
+**33 passed** after every one. `git status src/` clean.
+
+**Verified:** typecheck clean · `hud-layout.test.ts` **33 passed** (29 + 4: three sizes plus the C2
+red proof) · full unit suite **167 files / 2490 tests** · `hud-layout.test.ts` at 381/400.

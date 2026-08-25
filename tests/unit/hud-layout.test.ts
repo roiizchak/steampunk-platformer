@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { Rect } from '../../src/render/hud';
 import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
@@ -117,6 +118,97 @@ describe('hudFits can actually fail', () => {
     // drawn outside the bezel while sitting comfortably on screen the whole time.
     const strayed = hudLayout(GAME_WIDTH, GAME_HEIGHT, { ...HUD_SLOT, x: HUD_PLATE.w + 40 });
     expect(hudFits(strayed, GAME_WIDTH, GAME_HEIGHT, 120)).toBe(false);
+  });
+});
+
+/**
+ * # Inter-element spacing — item 5.20, and the hole `hud.ts` documents about itself
+ *
+ * `hudFits` checks two things: everything is on SCREEN, and the bar is inside its own PLATE. Nothing
+ * checks the space *between* elements. `src/render/hud.ts:61` says so in as many words — *"no gate
+ * checks spacing between HUD elements (item 5.20)"* — and the constant that produces that spacing,
+ * `COUNTER_GAP`, has **zero test references repo-wide**.
+ *
+ * ## 🔴 `COUNTER_GAP` stays PRIVATE, on purpose
+ *
+ * The obvious fix is to export it and assert `gap === COUNTER_GAP * scale`. That proves nothing: an
+ * assertion derived from the same implementation constant moves whenever the constant moves, so it
+ * can never disagree with the code. It is the shape of a gate with the substance of a restatement.
+ * Named by the Codex plan review; `src/` is untouched by this file.
+ *
+ * So the claims below are **independent and geometric**:
+ *
+ * 1. **Nothing overlaps anything.** A rectangle intersection test, no tolerance, no constant.
+ * 2. **A readable gap survives.** `MIN_ELEMENT_GAP_PX` is a *refusal* bound in the sense
+ *    `MAX_LEVEL_CREATE_MS` is — chosen to say what is unacceptable, not fitted to what is measured.
+ *    The shipped design gaps are 24 and 12 design px; 8 sits below both with real headroom, so this
+ *    forbids "touching, overlapping, or crowded" without forbidding a future tightening.
+ * 3. **The assembly holds together vertically.** The icon and the counter's ink both sit within the
+ *    plate's vertical span — a containment claim, not a copy of the centring formula.
+ *
+ * All three run at **every supported size**, because the thing that can break is the scaling, not
+ * one viewport.
+ *
+ * ⚠️ The counter's WIDTH is not asserted here and cannot be: only the engine can measure rendered
+ * text, which is why `hudFits` takes `counterW` as a parameter. Its width extends rightward, away
+ * from every other element, so the inter-element claim is about its ORIGIN — and its right edge is
+ * already `hudFits`'s job.
+ */
+describe('the HUD elements do not crowd each other, at any supported size (item 5.20)', () => {
+  /** Scaled with the layout: at 852x480 every gap is 44 % of its design size. */
+  const MIN_ELEMENT_GAP_PX = 8;
+
+  const overlaps = (a: Rect, b: Rect): boolean =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+  it.each(SIZES)('%s: the plate, the icon and the counter stay clear of each other', (_label, w, h) => {
+    const layout = hudLayout(w, h, HUD_SLOT);
+    const floor = MIN_ELEMENT_GAP_PX * layout.scale;
+    const { plate, gearIcon, counter } = layout;
+    // The counter's ink box, using only what the layout knows: it starts at the origin and is one
+    // font-height tall. Width is deliberately absent — see the block comment.
+    const counterInk: Rect = { x: counter.x, y: counter.y, w: 0, h: counter.fontPx };
+
+    // 1. No overlap. `gearIcon` is given a hair of width in the counter test so a zero-width rect
+    //    cannot make the intersection vacuously false.
+    expect(overlaps(plate, gearIcon), 'the gear icon is drawn ON TOP of the health plate').toBe(false);
+    expect(
+      overlaps(plate, { ...counterInk, w: 1 }),
+      'the gear counter is drawn ON TOP of the health plate',
+    ).toBe(false);
+
+    // 2. A readable gap, in both horizontal seams.
+    const plateToIcon = gearIcon.x - (plate.x + plate.w);
+    const iconToCounter = counter.x - (gearIcon.x + gearIcon.w);
+    expect(
+      plateToIcon,
+      `only ${plateToIcon.toFixed(1)} px between the plate and the gear icon at ${w}x${h}`,
+    ).toBeGreaterThanOrEqual(floor);
+    expect(
+      iconToCounter,
+      `only ${iconToCounter.toFixed(1)} px between the gear icon and the counter at ${w}x${h}`,
+    ).toBeGreaterThanOrEqual(floor);
+
+    // 3. The assembly reads as one row: both companions sit within the plate's vertical span.
+    for (const [name, box] of [
+      ['gear icon', gearIcon],
+      ['counter', counterInk],
+    ] as const) {
+      expect(box.y, `the ${name} rides above the plate at ${w}x${h}`).toBeGreaterThanOrEqual(plate.y);
+      expect(
+        box.y + box.h,
+        `the ${name} hangs below the plate at ${w}x${h}`,
+      ).toBeLessThanOrEqual(plate.y + plate.h);
+    }
+  });
+
+  it('the check can go RED: an icon slid left lands on the plate (vault C2)', () => {
+    // Driven through the same predicate over a moved rect, so the proof cannot rot into "it fired on
+    // something" and needs no fixture file someone later tidies away.
+    const { plate, gearIcon } = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
+    const slid: Rect = { ...gearIcon, x: plate.x + plate.w - gearIcon.w / 2 };
+    expect(overlaps(plate, slid), 'the overlap predicate cannot detect an overlap').toBe(true);
+    expect(slid.x - (plate.x + plate.w), 'a negative gap was not negative').toBeLessThan(0);
   });
 });
 
