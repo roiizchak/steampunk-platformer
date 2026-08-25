@@ -154,12 +154,31 @@ examined were wrong about themselves**. **Run the mutation before believing the 
   on the window's **last two ticks** — inside, and still the wrong frame to freeze.
 - **5.16** — the hazard-width ceiling has **two conflicting figures**, and the two shipped 480 px runs
   are not flat crossings, so 480 is confirmed by nothing shipped.
-- **5.17** — the frame-0 guard's real failure mode, *a looping clip visibly frozen on screen*, was
-  nominated as "Playwright's job" and **no e2e took it**.
+- **5.17** — ⚠️ **RESTATED 2026-08-25; the item as written was FALSE.** It said the frame-0 guard's real
+  failure mode, *a looping clip visibly frozen on screen*, *"was nominated as 'Playwright's job' and
+  **no e2e took it**."* An e2e **did** take it: `tests/e2e/phase-05-combat.spec.ts:204` samples
+  `sprite.anims.currentFrame` once per animation frame across a 90-frame window and asserts
+  `distinctFrames > 1`. It runs live on the `chromium` project.
+  **What is actually open is the weaker claim, R4** (`qa/phase-05-combat-09-session-11.md:173`,
+  reconfirmed at `qa/phase-06-hud.md:475`): *the gate samples a patroller that cannot flap, and
+  `distinctFrames > 1` is weaker than its title — a walk pinned to frames 0 and 1 passes on a 12-frame
+  sheet.* The fix is to strengthen that assertion toward the sheet's real frame count, and to correct
+  the now-stale docstring at `tests/unit/enemy-layer-catalog.test.ts:18-20`.
 - **5.20** — **no gate checks spacing BETWEEN HUD elements.** Found once, by a human reading an
   evidence screenshot. Pairs with §4's 852×480 reading.
-- **5.26, remaining half** — `hudGearPop.destroy()`'s **idle branch**, which has no fixture and is the
-  **common** one (every resize), plus the wrong test file cited *(C9)*.
+- ~~**5.26, remaining half**~~ — ⚠️ **STRUCK 2026-08-25. The item was STALE on both halves.**
+  It said `hudGearPop.destroy()`'s **idle branch** has no fixture and is the common one (every resize),
+  *"plus the wrong test file cited (C9)."*
+  1. **There is no idle branch.** `src/scenes/hudGearPop.ts:130-136` is one unconditional path —
+     `stopAndSettle()` — and its comment records the two-branch version being replaced precisely
+     because the old one *"settled only when nothing was running and otherwise trusted `onStop`."*
+  2. **The idle case has a fixture, and the fixture names this item.**
+     `tests/unit/hud-gear-pop.test.ts:237-247`: *"destroy() with NOTHING running still settles — the
+     common case on every resize … the branch is gone now and this is what says so."*
+  3. **The "wrong test file cited" half resolves to nothing** — no such citation exists on the tree.
+  ⚠️ It also **fused two numbering spaces**: `qa/session-bugfix-tiers-02-gate-owners.md:359` defines
+  **5.26** as `IMPACT_BY_FREEZE` collisions, while mutation **row 26** in `qa/phase-09-polish.md:563`
+  is the `hudGearPop` one. Those are different items; neither is the other's remaining half.
 
 ### Art blind spots — 5.7, all four open
 
@@ -173,8 +192,12 @@ table, not a new metric pretending to.**
 
 - `ENGINE-NOTES.md:125-131` — at `SHUTDOWN`, `scene.cameras.main` is `undefined`; an unguarded
   `setPosition` throws **inside `Systems.shutdown`**. Convention only; no source-text gate.
-- `:174-178` — `BaseTween.destroy()` runs **neither** callback. The fake's contract was fixed; the
-  **production** destroy path is still ungated. Overlaps 5.26.
+- `:174-178` — `BaseTween.destroy()` runs **neither** callback. ⚠️ **CORRECTED 2026-08-25: the
+  production destroy path is NOT ungated.** `tests/unit/hud-gear-pop.test.ts:198-209` —
+  *"settles even when Phaser destroys the tween without dispatching anything"* — destroys the tween
+  handle directly and asserts the icon still returns to `baseScale`, which is this hazard exactly.
+  It is a behavioural gate against a fake scene, the stronger of the two shapes. The stale "Overlaps
+  5.26" pointer is dropped: 5.26 is struck above.
 - `:78-85`, `:158-160`, `:52-56`, `:100-104` — `TilemapGPULayer`'s no-op Canvas renderer · WebGL-only
   tint under a live `Phaser.AUTO` Canvas fallback · `Rectangle` has no `setFlipX` · solidity read from
   a **name** cannot be caught by a rename test.

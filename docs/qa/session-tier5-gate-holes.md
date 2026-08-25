@@ -120,3 +120,74 @@ source-text gate. Reverted: name count 0 → 1, `chromium-webgl` 0, `git diff` e
   is a maintenance cost on `playwright.config.ts`'s *shape*, not only its values.
 - It cannot see a spec excluded by a mechanism other than these three patterns — a `grep`-level
   `test.skip`, or a `testDir` change.
+
+---
+
+## Batch 2 — §6a, the documentation repairs whose facts were already settled
+
+Docs only. Unit **165 / 2469 unchanged**, typecheck clean — which is the expected result for this
+batch and is asserted rather than assumed.
+
+⚠️ **A plan adjustment, made here and worth stating.** The plan split the doc repairs into §6a
+(settled) and §6b (decided by this session's own outcomes), and filed PRD row 9's *"Owed forward"*
+sentence partly in each. **All of it moved to §6b instead.** Two of its three clauses are settled, but
+the third names 9.3's scan bypasses, and Batch §2b changes D14's status — which is a bypass of 9.3b and
+9.3d. Correcting the sentence now and again later is editing one sentence twice, which is the churn the
+Codex review's ordering finding exists to prevent. It is rewritten once, at the end, with D14's outcome
+known.
+
+### PRD row 4 — the reason was false, the item is still open
+
+`docs/PRD.md:30` read *"Open: **4.27** only (needs a pre-generation anchor gate; next generating
+phase)."*
+
+**The gate exists.** `tools/gen/anchorGate.mjs` — *"**G1 — anchor contact geometry.** The gate criterion
+4.27 needed and never had"* — was written in Phase 5 and caught a real anchor defect on the first new
+art it saw (`qa/phase-05-combat-01-timings.md:145` records G1 running against the round-1 scavenger).
+
+**What is missing is the wiring.** Verified: no `assets:*` script invokes it, and `sheetGates.mjs`
+mentions it only in a comment about the `import.meta.url` main shape. Its three sibling gates cite its
+reasoning; none of them runs it. 4.27's last verdict is still *"Deferred"* (`qa/phase-06-hud.md:472`).
+
+So the row is corrected to say **4.27 is open on the pipeline, not on the gate.** The criterion stays
+open — this narrows *why*, it does not close anything.
+
+⚠️ Recon reported this row at `PRD.md:31`; it is at **`:30`**. One-line drift, caught by reading the
+file rather than the summary.
+
+### 5.17 — the item was FALSE and is restated as R4
+
+It claimed *"no e2e took it."* One did: `tests/e2e/phase-05-combat.spec.ts:204` samples
+`sprite.anims.currentFrame` once per animation frame across 90 frames and asserts `distinctFrames > 1`,
+live on the `chromium` project.
+
+Restated to the thing that **is** open — **R4**, from
+`qa/phase-05-combat-09-session-11.md:173` and reconfirmed at `qa/phase-06-hud.md:475`: the gate samples
+a patroller that cannot flap, and `distinctFrames > 1` is weaker than its title, since a walk pinned to
+frames 0 and 1 passes on a 12-frame sheet.
+
+### 5.26 — struck; stale on both halves, and it fused two numbering spaces
+
+1. **No idle branch exists.** `src/scenes/hudGearPop.ts:130-136` is one unconditional `stopAndSettle()`,
+   and its comment records replacing the two-branch version for exactly the reason 5.26 describes.
+2. **The idle case has a fixture that names the item** — `tests/unit/hud-gear-pop.test.ts:237-247`,
+   *"destroy() with NOTHING running still settles — the common case on every resize."*
+3. **The "wrong test file cited" half resolves to nothing** on the tree.
+
+Plus the numbering collision: `qa/session-bugfix-tiers-02-gate-owners.md:359` defines **5.26** as
+`IMPACT_BY_FREEZE` collisions, while mutation **row 26** in `qa/phase-09-polish.md:563` is the
+`hudGearPop` one. Recorded rather than silently resolved in one direction.
+
+### A fourth correction, found while making the third
+
+The engine-hazard bullet for `ENGINE-NOTES.md:174-178` said `BaseTween.destroy()` runs neither callback
+and *"the **production** destroy path is still ungated."* **It is gated.**
+`tests/unit/hud-gear-pop.test.ts:198-209` — *"settles even when Phaser destroys the tween without
+dispatching anything"* — destroys the tween handle directly and asserts the icon returns to
+`baseScale`. That is the hazard exactly, and it is the behavioural-against-a-fake-scene shape, the
+stronger of the two the architecture section names.
+
+🔴 **This one was found because Codex's round-1 finding 15 disputed a citation I had taken from recon.**
+Recon said `:198-209` gated the former idle branch; Codex said it covers callback-free teardown
+instead. Codex was right, and following the disagreement to the source turned up a *fifth* stale claim
+neither of them had been asked about.
