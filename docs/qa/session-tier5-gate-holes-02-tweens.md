@@ -197,3 +197,95 @@ identity work existed to remove, and it is measured rather than assumed.
   `export const f = (w) => …` would be invisible to the tripwire. Recorded, not closed.
 - **`readonly`-typed parameters are not distinguished**; a write through one is a type error caught by
   `tsc`, not here.
+
+---
+
+## Batch 6 — §1, the catch-up criterion: **NOT WRITTEN, and the reason refutes a recorded finding**
+
+The owner authorised bounding the post-hit-stop catch-up spike, then — on the Codex review's evidence
+— ruled that the session must **measure first**, with *"no orderable statistic"* a permitted outcome.
+
+**The outcome is stronger than that, and it is not the one anyone expected: the phenomenon does not
+occur at all, and the record that motivated the criterion is wrong.**
+
+### What was measured
+
+`catchUpProbe.ts` split every recorded animation frame by how many sim ticks it drained
+(`tick[n] - tick[n-1]`, from `__game.tick` read at the top of each rAF callback) over the same
+1200-tick phased fight `phase-09-combat.spec.ts` drives.
+
+| run | frames | histogram (ticks→frames) | maxTicks | catch-up frames |
+|---|---|---|---|---|
+| clean 1 | 4596 | — | **1** | **0** |
+| clean 2 | 4630 | `0:3429  1:1200` | **1** | **0** |
+| **40 ms main-thread block every 20th frame** | 3399 | `0:2199  1:1199` | **1** | **0** |
+
+Over 1200 sim ticks, exactly **1200 frames drained one tick each**. Not one frame in **12 625
+observed frames across three runs** drained two.
+
+### The instrument was proved able to see the thing it reports as absent
+
+🔴 **A reduction reporting "no catch-up frames" is indistinguishable from one that cannot see them**,
+and the conclusion here is consequential enough to demand the difference. `CATCHUP_BLOCK=1` installed
+a rAF loop burning the main thread for ~40 ms every 20th frame. The block plainly landed — the worst
+frames go from ~5 ms to a wall of ~41 ms — and the tick histogram **did not move**.
+
+That is the finding, not a failure of the probe: a 41 ms frame *should* drain 2 ticks at 16.67 ms each.
+
+### Why it never happens — the mechanism
+
+**Phaser clamps `delta` before `GameScene.update()` ever sees it.** `phaser.d.ts:6840-6845`
+documents `rawDelta` as the value to which *"no smoothing, capping, or averaging is applied"* — which
+is what `delta` is not. `smoothStep` defaults to **true** (`:6866`), smoothing over a 10-frame moving
+average (`deltaSmoothingMax`, default 10, `:6829`), with a `panicMax` cooldown of 120 frames
+(`:6837`).
+
+So a single expensive frame is averaged away before `drainTicks(accumulatorMs, delta)` is called, and
+the accumulator never reaches two ticks' worth.
+
+🔴 **Consequence for the codebase, worth recording on its own:** `frameClock.ts:48-50`'s
+over-the-cap branch — the anti-spiral-of-death code that returns `MAX_TICKS_PER_FRAME` and a non-zero
+`dropped` — is **unreachable in production**. It is reachable only from `frame-clock.test.ts`, which
+calls `drainTicks` directly. The branch is not wrong and should stay; but the guard it provides is
+provided upstream by Phaser, and nothing in the game can currently reach it.
+
+### 🔴 What this refutes
+
+`session-phase-09-debts-02-perf.md` §Batch 7, finding 3, and the header of
+`phase-09-combat.spec.ts` state:
+
+> *"The worst combat frame is 22-39 ms and it is not the burst. Those spikes are the sim's
+> post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME`."*
+
+**The second sentence is false.** Every one of the worst frames drained one tick or zero:
+
+```
+55.500 ms  ticks=1  rest      31.500 ms  ticks=1  rest
+46.000 ms  ticks=1  fight     28.300 ms  ticks=1  rest
+37.300 ms  ticks=1  fight     26.100 ms  ticks=1  rest
+                              23.600 ms  ticks=0  rest
+```
+
+They ran exactly the same amount of simulation as the 1200 frames whose median cost is a fraction of a
+millisecond. The first sentence — *"it is not the burst"* — still stands.
+
+⚠️ **What those frames ARE is still unidentified, and this session does not claim to know.** Seven
+outliers in 4630 frames (**0.15 %**), spread across *both* phases, and **the worst one is in REST** —
+i.e. the most expensive frame of the run happened while nothing was fighting. GC, a compositor hitch
+and a driver stall are all candidates and none is measured. **Refuting an attribution is not the same
+as supplying one**, and the difference is recorded rather than papered over.
+
+### The disposition
+
+**No criterion is written, and no bound is asserted.** The phenomenon a bound would be about does not
+occur, cannot be induced from inside the page, and is prevented upstream by the engine rather than by
+anything this project controls.
+
+Per the plan's no-statistic branch, **the experimental code is reverted** — `catchUpProbe.ts` and
+`phase-09-catchup.spec.ts` are deleted. Leaving them would ship an instrument with no consumer, which
+this project holds to be the same defect as a burst of zero particles. **The measurements above and
+the corrections below are the deliverable.**
+
+⚠️ The criterion stays **session-local** exactly as the plan required — no row was added to Phase 9's
+gate table, and `docs/qa/phase-09-polish.md` is untouched. Placement was deferred until an orderable
+statistic existed, and none does.

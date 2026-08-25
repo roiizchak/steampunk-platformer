@@ -120,6 +120,26 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   fails on a correct camera. Assert instead that the target stays inside `worldView` inset by a
   margin — that fails for a camera which stopped following without failing at the boundaries.
 
+## TimeStep and `delta` *(2026-08-25, measured)*
+
+- 🔴 **The `delta` your `update(time, delta)` receives is SMOOTHED AND CAPPED, and one expensive
+  frame is averaged away before you see it.** `phaser.d.ts:6840-6845` documents `rawDelta` as the
+  value to which *"no smoothing, capping, or averaging is applied"* — `delta` is the one that gets all
+  three. `smoothStep` defaults to **`true`** (`:6866`), the moving average runs over
+  `deltaSmoothingMax` frames (default **10**, `:6829`), and `panicMax` (default **120**, `:6837`) is a
+  post-tab-switch cooldown.
+- 🔴 **Consequence, measured rather than reasoned:** a deliberate **40 ms main-thread block every 20th
+  frame** — which plainly landed, worst frames going from ~5 ms to a wall of ~41 ms — produced
+  **zero** frames draining more than one sim tick. A 41 ms frame *should* drain two at 16.67 ms each.
+  Across three runs and **12 625 frames the tick histogram never left `0:…  1:…`**.
+- 🔴 **So `src/game/frameClock.ts:48-50`'s over-the-cap branch is UNREACHABLE IN PRODUCTION.** The
+  anti-spiral-of-death path that returns `MAX_TICKS_PER_FRAME` with a non-zero `dropped` is reachable
+  only from `tests/unit/frame-clock.test.ts`, which calls `drainTicks` directly. **Keep the branch** —
+  it is correct, cheap, and the guarantee it encodes should not depend on an engine default someone
+  can flip in `GameConfig`. But do not build a gate on the backlog occurring, and do not attribute a
+  slow frame to tick catch-up without measuring the tick delta: a Phase 9 record did exactly that and
+  was wrong. Evidence: `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 6.
+
 ## Scene teardown *(Phase 9)*
 
 - 🔴 **By the time YOUR `SHUTDOWN` listener runs, `scene.cameras.main` is `undefined`.**

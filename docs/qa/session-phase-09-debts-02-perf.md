@@ -190,10 +190,21 @@ own disqualifying condition: *a statistic that does not order its own mutation c
 moving the bound — replace the statistic.* **There is nothing to replace it with.** The only
 amplifier available is a storm, and entry 43 is the record of a storm destroying admission ordering.
 
-**3. 🔴 The worst combat frame is 22-39 ms and it is not the burst.** Those spikes are the sim's
-post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME` — two to three
-orders of magnitude above anything 85 particles can cost. A bound on them would be a bound on the
-catch-up wearing a burst's name, and it is exactly the shape 6.9's GPU-ratio gate was withdrawn for.
+**3. 🔴 The worst combat frame is 22-39 ms and it is not the burst.** Two to three orders of magnitude
+above anything 85 particles can cost. A bound on them would be a bound on something else wearing a
+burst's name, and it is exactly the shape 6.9's GPU-ratio gate was withdrawn for.
+
+> ⚠️ **CORRECTED 2026-08-25 — the attribution in this entry was WRONG.** It read *"Those spikes are
+> the sim's post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME`."*
+> Measured directly in
+> [`session-tier5-gate-holes-02-tweens.md` §Batch 6](session-tier5-gate-holes-02-tweens.md): across
+> three runs and **12 625 frames, no frame ever drained more than one sim tick**, and every one of the
+> worst frames (55.5 / 46.0 / 37.3 / 31.5 / 28.3 / 26.1 ms) drained `ticks=1` or `ticks=0` — the same
+> simulation work as frames costing a fraction of a millisecond. Even a deliberate 40 ms main-thread
+> block failed to produce a two-tick frame, because Phaser smooths and caps `delta` over a 10-frame
+> moving average before `GameScene.update()` receives it (`phaser.d.ts:6840-6845`, `:6866`).
+> **The claim that survives is only the first sentence — it is not the burst. What it IS remains
+> unidentified**, and this correction does not supply an answer.
 
 ### What DID ship: `tests/e2e/phase-09-combat.spec.ts`
 

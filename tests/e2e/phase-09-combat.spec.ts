@@ -24,10 +24,19 @@
  *    The per-event median delta measured **-0.0000 / 0.0000 / 0.2000 ms** across three clean runs and
  *    **0.0000 ms** under the 8x mutation: **the statistic does not move at all.** It cannot order its
  *    own mutation, so under this project's rules it would have to be replaced rather than re-bounded.
- * 3. 🔴 **The worst combat frame is 22-39 ms and is NOT the burst.** Those spikes are the sim's
- *    post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME`, two to three
- *    orders of magnitude above anything 85 particles can cost. A bound on them would be a bound on
- *    the catch-up wearing a burst's name.
+ * 3. 🔴 **The worst combat frame is 22-39 ms and is NOT the burst.** Two to three orders of magnitude
+ *    above anything 85 particles can cost, so a bound on them would be a bound on something else
+ *    wearing a burst's name.
+ *    ⚠️ **This entry used to attribute those spikes to "the sim's post-hit-stop tick catch-up
+ *    draining through `frameClock`'s `MAX_TICKS_PER_FRAME`". That attribution was REFUTED by
+ *    measurement on 2026-08-25** — see `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 6.
+ *    Across three runs and 12 625 frames, **no frame ever drained more than one sim tick**, and every
+ *    one of the worst frames (55.5 / 46.0 / 37.3 / 31.5 / 28.3 / 26.1 ms) drained `ticks=1` or
+ *    `ticks=0` — the same simulation work as the frames costing a fraction of a millisecond. Phaser
+ *    smooths and caps `delta` over a 10-frame moving average before `GameScene.update()` sees it
+ *    (`phaser.d.ts:6840-6845`, `:6866`), so the backlog `MAX_TICKS_PER_FRAME` guards against cannot
+ *    build. **What those frames actually are is still unidentified** — 0.15 % of frames, in both
+ *    phases, the worst one in REST.
  *
  * The project's own rule is that *a statistic which cannot order its own mutation is REPLACED, not
  * re-bounded*. There is nothing to replace it with: the only amplifier available is a storm, and a
