@@ -95,8 +95,23 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
 const TWEENS_ADD =
   /(\S[^\n]{0,40})?(?:\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)|\.\s*add\s*\.\s*tween)\s*\(/g;
 
-/** Both ways this codebase can open a tween, for the coarse "does this file open one at all?" filter. */
-export const OPENS_A_TWEEN = /\btweens\s*\.\s*add|\.\s*add\s*\.\s*tween\s*\(/;
+/**
+ * Every way this codebase can open a tween, for the coarse *"does this file open one at all?"* filter
+ * that 9.3c's teardown scan uses to skip files.
+ *
+ * \U0001f534 **It said "both ways" and reached THREE of six — found by the §10a adversarial brief.** It
+ * matched `tweens.add` (so `add`, `addCounter`, `addMultiple` by prefix) and `.add.tween(`, and missed
+ * **`tweens.chain(`** and **`tweens.create(`** entirely — while `TWEENS_ADD` twelve lines above and
+ * `TWEEN_METHODS` in `tweenIdentity.ts` both list all five manager methods. A file whose only tween is
+ * a `chain` was `continue`d past the teardown requirement and never asked whether it stops anything.
+ *
+ * \u26a0\ufe0f That is **the S3-3 defect repeating in the same branch**: *"9.3b knew only `add` while the
+ * sibling `TWEEN_METHODS` listed five — two files, one branch, disagreeing on what a tween is."*
+ * Three constants now, and this was the new arm shipped without a fixture while `TWEENS_ADD` got six.
+ * Enumerated explicitly rather than by `add` prefix, so the next method cannot ride in silently.
+ */
+export const OPENS_A_TWEEN =
+  /\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)|\.\s*add\s*\.\s*tween\s*\(/;
 /** A newline inside a fixture literal, named so the shell that writes this file cannot eat it. */
 const NL = '\n';
 

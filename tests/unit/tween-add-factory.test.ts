@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
 import { callbackNodes, parseFile } from './tweenCallbacks';
+import { OPENS_A_TWEEN } from './tween-boundary.test';
 
 /**
  * # D14 — `this.add.tween(config)`, the entry point six rules could not see
@@ -105,5 +106,24 @@ describe('D14 — tweens opened through the GameObject factory', () => {
       'a tween is opened through the GameObject factory. That is now VISIBLE to 9.3b/9.3c/9.3d and ' +
         'the 9.2 family, so this is informational rather than a bypass — but prefer `this.tweens.add`.',
     ).toEqual([]);
+  });
+
+  it('OPENS_A_TWEEN recognises ALL five manager methods — the filter 9.3c skips files with', () => {
+    // 🔴 **The fixture this constant shipped WITHOUT.** `TWEENS_ADD` above got six assertions; the
+    // coarse filter beside it got none, and it was missing `chain` and `create` — a file whose only
+    // tween is a `chain` was skipped past the teardown requirement entirely. Found by the §10a
+    // adversarial brief, and it is S3-3 repeating: three constants in one branch disagreeing on what
+    // a tween is.
+    for (const method of ['add', 'addCounter', 'addMultiple', 'chain', 'create']) {
+      expect(
+        OPENS_A_TWEEN.test(`  this.tweens.${method}({ targets: o });`),
+        `a file whose only tween is tweens.${method}() is skipped by 9.3c's teardown scan`,
+      ).toBe(true);
+    }
+    // The D14 factory form, and the bare-`add` acceptance case the rule deliberately refuses.
+    expect(OPENS_A_TWEEN.test('  this.add.tween({ targets: o });')).toBe(true);
+    expect(OPENS_A_TWEEN.test('  add.tween({ targets: o });'), 'a bare `add` was matched').toBe(false);
+    // And a file with no tween at all is still skipped — otherwise the filter does no filtering.
+    expect(OPENS_A_TWEEN.test('  this.anims.play("walk");'), 'the filter matches everything').toBe(false);
   });
 });

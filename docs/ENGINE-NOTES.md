@@ -128,17 +128,36 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   three. `smoothStep` defaults to **`true`** (`:6866`), the moving average runs over
   `deltaSmoothingMax` frames (default **10**, `:6829`), and `panicMax` (default **120**, `:6837`) is a
   post-tab-switch cooldown.
-- 🔴 **Consequence, measured rather than reasoned:** a deliberate **40 ms main-thread block every 20th
-  frame** — which plainly landed, worst frames going from ~5 ms to a wall of ~41 ms — produced
-  **zero** frames draining more than one sim tick. A 41 ms frame *should* drain two at 16.67 ms each.
-  Across three runs and **12 625 frames the tick histogram never left `0:…  1:…`**.
-- 🔴 **So `src/game/frameClock.ts:48-50`'s over-the-cap branch is UNREACHABLE IN PRODUCTION.** The
-  anti-spiral-of-death path that returns `MAX_TICKS_PER_FRAME` with a non-zero `dropped` is reachable
-  only from `tests/unit/frame-clock.test.ts`, which calls `drainTicks` directly. **Keep the branch** —
-  it is correct, cheap, and the guarantee it encodes should not depend on an engine default someone
-  can flip in `GameConfig`. But do not build a gate on the backlog occurring, and do not attribute a
-  slow frame to tick catch-up without measuring the tick delta: a Phase 9 record did exactly that and
-  was wrong. Evidence: `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 6.
+- 🔴 **Consequence, measured:** a deliberate **40 ms main-thread block every 20th frame** — which
+  plainly landed, worst frames going from ~5 ms to a wall of ~41 ms — produced **zero** frames draining
+  more than one sim tick. Across three runs and **12 625 frames the tick histogram never left
+  `0:…  1:…`**.
+- ⚠️ **CORRECTED 2026-08-25 by both §10a perf briefs, independently, and the correction matters more
+  than the measurement.** This entry said the over-the-cap branch is *"UNREACHABLE IN PRODUCTION"* and
+  told the reader *"do not build a gate on the backlog occurring."* **Both were over-claimed, and the
+  experiment could not have shown otherwise — the arithmetic was derivable in advance:**
+  - `smoothDelta` is a **10-frame MEAN**, so a 2-tick frame needs the *mean* delta above ~16.67 ms,
+    i.e. **sustained sub-60 fps**. The clean run served 231 fps and the blocked run 170 fps; the worst
+    possible 10-frame window in the blocked run is one 41 ms frame plus nine ~4.3 ms ones = **7.97 ms
+    mean**, about **2.1x short** of the threshold. One spike on one frame in twenty is the duty cycle a
+    10-frame mean suppresses hardest.
+  - The only clamp is a substitution: a raw delta above `_min = 1000 / fps.min` (**200 ms**) is
+    replaced from history. So an isolated spike cannot reach the branch — but **four consecutive
+    frames at the 200 ms clamp give a 90 ms mean and six ticks, which does.**
+  - And the positive control was run on the wrong thing. It proved the *block landed*; it never
+    proved the *tick histogram can print `2:`*, because that condition was never created. A histogram
+    that has never reported ≥2 under any condition is indistinguishable from one that cannot
+    *(vault C2)*.
+- 🔴 **The true form:** `src/game/frameClock.ts:48-50`'s over-the-cap branch is unreachable **for
+  isolated single-frame spikes at the default `fps` config on a box holding 170–240 fps.** Multi-tick
+  frames are the *normal* case below 60 fps sustained — which is the hardware a frame budget exists
+  for. **Keep the branch**: correct, cheap, and the guarantee should not depend on an engine default
+  someone can flip in `GameConfig`.
+- **What still stands, and it is the part worth having:** *do not attribute a slow frame to tick
+  catch-up without measuring the tick delta.* A Phase 9 record did exactly that and was wrong — every
+  one of the worst frames drained `ticks=1` or `0`, measured per frame. That refutation is direct
+  evidence and is unaffected by everything above. Evidence:
+  `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 6 and §Batch 13.
 
 ## Scene teardown *(Phase 9)*
 
