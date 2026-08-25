@@ -12,7 +12,7 @@
 
 import type { Page } from '@playwright/test';
 import { setEmitterScale, setEnemyScale, setParticleScale } from './effectMutation';
-import type { NamedMutation } from './effectMutation';
+import type { NamedMutation } from './mutationRegistry';
 import { installBurstFixture, installCostLawFixture } from './effectSweep';
 import { stallSimulation } from './windowStall';
 

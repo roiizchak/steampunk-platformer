@@ -118,6 +118,10 @@ export async function startPhasedCombat(page: Page, fight: number, rest: number)
         frame += 1;
         const phaseTick = game.__game.tick % cycle;
         const fighting = phaseTick < fightTicks;
+        // 🔴 **Published, so the recorder reads the phase rather than re-deriving it** — and so
+        // `reduceCombat` can filter controls by the phase that actually ran instead of by a distance
+        // rule it then LABELS "rest frames". The Codex implementation review caught that mislabel.
+        (window as unknown as { __phase?: string }).__phase = fighting ? 'fight' : 'rest';
         const p = scene.simWorld?.player;
 
         if (!fighting) {

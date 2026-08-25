@@ -162,6 +162,12 @@ Full rationale: [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowga
   anything reached from a `World` handle (`world`, `simWorld`) is sim-owned — through an alias too —
   while `flyers.delete(flyer)` is idempotent view bookkeeping and stays legal. Gated by
   `tests/unit/tween-sim-writes.test.ts`.
+  ⚠️ **The rule forbids WRITES, not passing sim state around.** A 2026-08-25 repair briefly widened
+  the gate to reject any sim-rooted argument to any call, which false-reds `invulnerable(world.player)`
+  and would have strengthened this owner-authorised rule without asking. Caught by the Codex
+  implementation review and narrowed back: the gate fires on a call to a **named** `src/sim/` mutator,
+  or on a write it can resolve. **Widening an approved architectural rule is a STOP-and-ask**, and a
+  test quietly enforcing more than the rule says is one form of that.
 - **`src/sim/` imports nothing from Phaser**, and reaches no clock, no `Math.random`, no DOM.
   That includes **Arcade Physics: never** — collision is our own sim.
 - **Every duration is an integer count of 60 Hz ticks. Every distance is pixels.** Never a float of

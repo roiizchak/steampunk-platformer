@@ -73,6 +73,18 @@ export interface CombatFrame {
   dead: number;
   /** True on frames the driver is spawning the fixture. Excluded from BOTH sides — see `combatDrive.ts`. */
   spawning: boolean;
+  /**
+   * The driver's phase on this frame, as the driver itself published it.
+   *
+   * ⚠️ **Read, never inferred, and the difference was a real defect.** The reduction used to select
+   * controls by *distance from an observed event* and then print them as "rest frames" — a claim
+   * nothing checked. Worse, `startPhasedCombat` runs from a `requestAnimationFrame` callback, AFTER
+   * the game loop has already drained this frame's sim ticks, and this harness drains up to 4 ticks
+   * per frame: at a FIGHT→REST edge, one or more REST ticks can execute with fight inputs and
+   * vulnerability still live. So REST is quiet *in practice and by a wide margin*, but **not "by
+   * construction"** — and `restClean` below measures which it was on this run instead of asserting it.
+   */
+  phase: 'fight' | 'rest' | 'unknown';
   /** Total enemy hp. A DIAGNOSTIC: if it never falls, the player's claw never connected. */
   enemyHp: number;
 }
@@ -144,6 +156,10 @@ export async function recordCombat(page: Page, ticks: number): Promise<CombatFra
             enemyHitTick,
             dead,
             spawning: (window as unknown as { __spawning?: boolean }).__spawning === true,
+            phase: ((window as unknown as { __phase?: string }).__phase ?? 'unknown') as
+              | 'fight'
+              | 'rest'
+              | 'unknown',
             enemyHp,
           });
           if (game.__game.tick - firstTick < wantTicks) {
@@ -175,6 +191,20 @@ export async function recordCombat(page: Page, ticks: number): Promise<CombatFra
  * kind: `playerHurt` over `lethal` over `light`. ⚠️ A genuine simultaneous land-and-take collapses
  * too; that is a narrowing, it is stated here rather than implied, and the honest reading of a tick
  * is *"one combat moment"*.
+ *
+ * ⚠️ **These are OBSERVED STAMP CHANGES, not landed hits, and the difference is a real undercount.**
+ * The recorder samples once per animation frame and keeps only the `lastHitTick` visible in that
+ * snapshot. This harness drains up to 4 sim ticks per frame, so when several hits land inside one
+ * frame the intermediate stamps are overwritten and **vanish** — and `dropped` cannot count them,
+ * because it only sees events already discovered. A `lethal` can likewise attach a death observed
+ * over an interval to that interval's latest hit tick. Raised by the Codex implementation review
+ * (2026-08-25).
+ *
+ * **Renamed rather than fixed**, deliberately: counting every hit exactly needs a tick-level event
+ * queue on `window.__game`, and that surface is **closed at eight fields** by a Phase 1 Codex ruling —
+ * a ninth is a STOP-and-ask, which is more than a floor assertion is worth. So the gate asserts
+ * *"at least N combat moments were observed"*, which is true of an undercount, and no caller claims
+ * an exact count.
  *
  * 🔴 A hit is detected by its **stamp changing**, never by a boolean being true on consecutive
  * frames. `gameEffects.ts`'s header records the version of this bug that shipped: a burst keyed on a
@@ -226,150 +256,3 @@ export function combatEvents(frames: CombatFrame[], raw = false): CombatEvent[] 
  * steam tail, where the cost has already decayed into the baseline.
  */
 export const NEAR_TICKS = 18;
-
-/**
- * How far a REST frame must be from the last event to be a control.
- *
- * 🔴 **The control is the REST phase, not "frames far from every hit".** Probe 2 (2026-08-24) used
- * the distance rule alone and watched the control collapse from 2294 frames to 56 as the event rate
- * rose, with its median climbing 0.6 → 1.3 ms — a statistic that gets quieter the more combat there
- * is. `combatDrive.ts` pins `iFrameCounter` through REST so no event can occur there at all, and this
- * margin only has to clear the longest effect lifespan (steam, 45 ticks) so no decaying particle from
- * the fight is still on screen.
- */
-export const REST_MARGIN_TICKS = 50;
-
-/** One event's paired reading. `near` is the worst frame it carries; `far` is the run's control. */
-export interface CombatPair {
-  event: CombatEvent;
-  nearFrames: number;
-  nearMaxWork: number;
-  nearMedianWork: number;
-  delta: number;
-  medianDeltaOne: number;
-}
-
-/** The whole reduction: the pairs, the control, and the printable table. */
-export interface CombatReading {
-  pairs: CombatPair[];
-  /** Median work over every frame FAR from all events. The control the deltas are taken against. */
-  farMedian: number;
-  farFrames: number;
-  /** Median of the per-event MAX deltas. */
-  medianDelta: number;
-  /** Median of the per-event MEDIAN deltas — the statistic that survived probe 5. */
-  medianOfMedianDeltas: number;
-  /** The worst frame in the whole run that carried a combat event. §1a's secondary, absolute guard. */
-  worstCombatFrame: number;
-  /** Peak live particles seen inside any near window. */
-  peakAliveNear: number;
-  /** Peak live SPARK particles inside any near window — the admission premise's real input. */
-  peakSparksNear: number;
-  table: string[];
-}
-
-function median(xs: number[]): number {
-  const s = [...xs].sort((a, b) => a - b);
-  const m = s.length >> 1;
-  return s.length % 2 === 1 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
-}
-
-/**
- * Reduce a recording to event-aligned pairs.
- *
- * 🔴 **It throws rather than returning an empty reduction.** A run that landed no hit, or landed so
- * many that no control frame survives, is a *harness* failure and not a green measurement — and the
- * silent-zero shape (`PASS (0) FAIL (0)`) is one this project has now paid for three times. The
- * message names which of the two happened, because the fixes are opposite: drive longer, or drive
- * less.
- */
-export function reduceCombat(frames: CombatFrame[], events: CombatEvent[]): CombatReading {
-  if (events.length === 0) {
-    throw new Error(
-      `THE HARNESS: ${frames.length} frames recorded and NOT ONE landed hit, so there is nothing to ` +
-        'align on. The brawl driver did not connect — drive longer, or check that the low-hp ' +
-        'scavenger fixture spawned. This is not a passing measurement.',
-    );
-  }
-  const eventTicks = events.map((e) => e.tick);
-  const far = frames.filter(
-    (f) => !f.spawning && eventTicks.every((t) => f.tick - t < 0 || f.tick - t >= REST_MARGIN_TICKS),
-  );
-  if (far.length < 20) {
-    throw new Error(
-      `THE HARNESS: ${events.length} events over ${frames.length} frames left only ${far.length} ` +
-        `control frames at least ${REST_MARGIN_TICKS} ticks past every hit. The deltas would be ` +
-        'taken against a baseline that still contains the effect. Lengthen REST, or record longer.',
-    );
-  }
-  const farMedian = median(far.map((f) => f.work));
-
-  const pairs: CombatPair[] = [];
-  let peakAliveNear = 0;
-  let peakSparksNear = 0;
-  let dropped = 0;
-  for (const event of events) {
-    // 🔴 The upper edge is EXCLUSIVE. With `<=`, two clustered events exactly `NEAR_TICKS` apart
-    // share one tick, and the second hit's burst — which is what makes that tick expensive — is
-    // counted as the FIRST hit's reading too. Caught by the 2026-08-25 adversarial gate brief;
-    // clustering guarantees events are at least `NEAR_TICKS` apart, so `<` makes the windows a
-    // partition rather than an overlapping cover.
-    const near = frames.filter(
-      (f) => !f.spawning && f.tick >= event.tick && f.tick < event.tick + NEAR_TICKS,
-    );
-    if (near.length === 0) {
-      // The hit landed on a tick no frame observed — the harness's resolution, not a defect. 🔴 But
-      // it is COUNTED and printed: a silent drop is how a reduction quietly narrows to the events
-      // that happen to be cheap. The adversarial brief asked for the counter by name.
-      dropped += 1;
-      continue;
-    }
-    const nearMaxWork = Math.max(...near.map((f) => f.work));
-    const nearMedianWork = median(near.map((f) => f.work));
-    peakAliveNear = Math.max(peakAliveNear, ...near.map((f) => f.alive));
-    peakSparksNear = Math.max(peakSparksNear, ...near.map((f) => f.sparks));
-    pairs.push({
-      event,
-      nearFrames: near.length,
-      nearMaxWork,
-      nearMedianWork,
-      delta: nearMaxWork - farMedian,
-      medianDeltaOne: nearMedianWork - farMedian,
-    });
-  }
-  if (pairs.length === 0) {
-    throw new Error(
-      `THE HARNESS: ${events.length} hits landed but no recorded frame fell inside any of their ` +
-        `${NEAR_TICKS}-tick windows. That is the harness's tick resolution, not the game's cost.`,
-    );
-  }
-
-  const byKind = (k: CombatEvent['kind']): number => events.filter((e) => e.kind === k).length;
-  const table = [
-    `      combat events ${events.length} (light ${byKind('light')}, lethal ${byKind('lethal')}, ` +
-      `playerHurt ${byKind('playerHurt')}) over ${frames.length} frames`,
-    `      control ${far.length} rest frames >= ${REST_MARGIN_TICKS} ticks past every hit, median ${farMedian.toFixed(3)} ms`,
-    `      per-event MEDIAN deltas ${pairs
-      .slice(0, 12)
-      .map((p) => p.medianDeltaOne.toFixed(3))
-      .join('/')}${pairs.length > 12 ? ` (+${pairs.length - 12} more)` : ''}`,
-    `      per-event MAX deltas ${pairs
-      .slice(0, 12)
-      .map((p) => p.delta.toFixed(3))
-      .join('/')}${pairs.length > 12 ? ` (+${pairs.length - 12} more)` : ''}`,
-    `      peak live particles inside a near window ${peakAliveNear} (sparks ${peakSparksNear})`,
-    `      ${pairs.length} of ${events.length} events yielded a window; ${dropped} landed on a tick no frame observed`,
-  ];
-
-  return {
-    pairs,
-    farMedian,
-    farFrames: far.length,
-    medianDelta: median(pairs.map((p) => p.delta)),
-    medianOfMedianDeltas: median(pairs.map((p) => p.medianDeltaOne)),
-    worstCombatFrame: Math.max(...pairs.map((p) => p.nearMaxWork)),
-    peakAliveNear,
-    peakSparksNear,
-    table,
-  };
-}

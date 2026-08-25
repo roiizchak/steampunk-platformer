@@ -39,6 +39,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { ALL_SOURCES, blankFor } from './sourceScan';
+import { openingsIn } from './tweenOpenings';
 
 /**
  * Kill-by-target, in every form Phaser offers it.
@@ -87,6 +88,23 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
  * PINNED below so the day someone writes one, a fast test says so instead of a silent hole.
  */
 const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
+/** A newline inside a fixture literal, named so the shell that writes this file cannot eat it. */
+const NL = '\n';
+
+
+const unbound = (code: string): number => {
+  let count = 0;
+  for (const match of code.matchAll(TWEENS_ADD)) {
+    const before = (match[1] ?? '').trimEnd();
+    // `= x.tweens.add(` and `return this.tweens.add(` are held. 🔴 `f(scene.tweens.add(` is NOT,
+    // any more — see TWEENS_ADD's docstring for why argument position was demoted.
+    if (!/=$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
+      count += 1;
+    }
+  }
+  return count;
+};
+
 
 /**
  * The view for rules whose evidence is a bare identifier: comments AND string literals blanked, so
@@ -184,18 +202,6 @@ describe('9.3a — no kill-by-target anywhere in src/', () => {
 });
 
 describe('9.3b — every tweens.add result is bound to a name', () => {
-  const unbound = (code: string): number => {
-    let count = 0;
-    for (const match of code.matchAll(TWEENS_ADD)) {
-      const before = (match[1] ?? '').trimEnd();
-      // `= x.tweens.add(` and `return this.tweens.add(` are held. 🔴 `f(scene.tweens.add(` is NOT,
-      // any more — see TWEENS_ADD's docstring for why argument position was demoted.
-      if (!/=$|\breturn$/.test(before.replace(/(this|scene|\w+)\s*\.?\s*$/, '').trimEnd())) {
-        count += 1;
-      }
-    }
-    return count;
-  };
 
   it('REJECTS a fire-and-forget call and ACCEPTS a held one — both directions (vault C2)', () => {
     // 🔴 Both directions, in one test, against literals. A rule that only ever demonstrates its
@@ -304,5 +310,71 @@ describe('9.3c — every tween owner is torn down where its targets die', () => 
     expect(code).toContain('live.add(tween)');
     expect(code).toMatch(/for \(const tween of live\)/);
     expect(code).toContain('tween.stop()');
+  });
+});
+
+describe('9.3d — the ALIAS-AWARE handle rule, driven by the parser (Codex impl review, 2026-08-25)', () => {
+  // 🔴 **The alias repair was only half applied, and the gate log claimed the whole of it.**
+  // `isTweenCall` learned `const tm = scene.tweens` on 2026-08-25, which closed the CALLBACK rules.
+  // 9.3b and 9.3c were untouched: `TWEENS_ADD` needs the literal word `tweens`, and the 9.3c scan
+  // filters files by `code.includes('tweens.add')`, so an aliased opener was not merely unmatched —
+  // its whole FILE was excluded from the scan. This rule is alias-aware by construction.
+  //
+  // It runs BESIDE the patterns, not instead of them (the shape 9.2c already takes).
+
+  it('REJECTS an ALIASED fire-and-forget opener — the shape that passed both handle gates', () => {
+    const aliased = 'const tm = scene.tweens;' + NL + 'tm.add({ targets: o, alpha: 0 });';
+    // First, the two shipped rules really are blind to it — committed evidence, not an assertion
+    // about an assertion. This is the FAILING FIXTURE the claim needed and did not have.
+    expect(unbound(blankFor('code+strings', aliased)), 'TWEENS_ADD sees nothing').toBe(0);
+    expect(aliased.includes('tweens.add'), "the 9.3c filter excludes the file").toBe(false);
+    // And the parser rule catches it.
+    const open = openingsIn(aliased);
+    expect(open.length, 'the AST found no opener').toBe(1);
+    expect(open[0]!.aliased).toBe(true);
+    expect(open[0]!.held, 'an aliased fire-and-forget opener must NOT read as held').toBe(false);
+  });
+
+  it('ACCEPTS an aliased opener that IS held — the other direction (vault C2)', () => {
+    const held = 'const tm = scene.tweens;' + NL + 'const t = tm.add({ targets: o });';
+    expect(openingsIn(held).map((o) => o.held)).toEqual([true]);
+    expect(openingsIn('const tm = this.tweens;' + NL + 'return tm.chain({ tweens: [] });').map((o) => o.held)).toEqual([true]);
+    expect(openingsIn('const tm = scene.tweens;' + NL + 'this.t = tm.addCounter({ from: 0 });').map((o) => o.held)).toEqual([true]);
+  });
+
+  it('agrees with the pattern rule on every UNALIASED shape the patterns already pin', () => {
+    // 🔴 Two rules that disagree on the ordinary case are worse than one. Each literal below is
+    // already pinned by 9.3b's own fixtures; this asserts the parser reaches the same verdict, so a
+    // future edit to either cannot silently split them.
+    const cases: [string, boolean][] = [
+      ['scene.tweens.add({ targets: o });', false],
+      ['const t = scene.tweens.add({ targets: o });', true],
+      ['return this.tweens.add({ targets: o });', true],
+      ['tween = scene.tweens.add({ targets: o });', true],
+      ['noop(scene.tweens.add({ targets: o }));', false],
+      ['live.add(scene.tweens.add({ targets: o }));', false],
+    ];
+    for (const [src, wantHeld] of cases) {
+      expect(openingsIn(src).map((o) => o.held), src).toEqual([wantHeld]);
+      expect(unbound(blankFor('code+strings', src)) === 0, `pattern rule disagrees on: ${src}`).toBe(wantHeld);
+    }
+  });
+
+  it('no source file opens a tween it does not hold — INCLUDING through an alias', () => {
+    const offenders = Object.entries(ALL_SOURCES)
+      .flatMap(([file, src]) => openingsIn(src).map((o) => [file, o] as const))
+      .filter(([, o]) => !o.held)
+      .map(([file, o]) => `${file}: ${o.method}${o.aliased ? ' (through an alias)' : ''}`);
+    expect(
+      offenders,
+      'criterion 9.3, alias-aware: a tween whose handle is discarded cannot be stopped before its ' +
+        'target is destroyed. Bind the result and stop it on SHUTDOWN. An `(through an alias)` note ' +
+        'means the two PATTERN rules cannot see this one at all.',
+    ).toEqual([]);
+  });
+
+  it('the parser scan is not vacuous: it found the five live openers', () => {
+    const total = Object.values(ALL_SOURCES).reduce((n, src) => n + openingsIn(src).length, 0);
+    expect(total, 'the AST reached fewer openers than the tree has').toBeGreaterThanOrEqual(5);
   });
 });

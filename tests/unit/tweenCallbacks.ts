@@ -22,7 +22,9 @@
  *
  * So the parser is a **dependency the owner authorised on 2026-08-24**, recorded in
  * `docs/qa/session-phase-09-debts.md`: `@babel/parser`, pinned exact, pure JS, no native binary,
- * one transitive package (`@babel/types`). It is a **devDependency** — nothing it does reaches
+ * and **three** transitive packages (`@babel/types`, `@babel/helper-string-parser`,
+ * `@babel/helper-validator-identifier`) — corrected 2026-08-25 from the lockfile; the first record
+ * said one. It is a **devDependency** — nothing it does reaches
  * `dist/`, and `verify-dist.mjs` is unaffected.
  *
  * ## What ownership means here, and why the rule is stated that way
@@ -41,7 +43,7 @@
 import { parse } from '@babel/parser';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the Babel AST is walked structurally. */
-type Node = any;
+export type Node = any;
 
 /** Every way this codebase can open a tween. `chain` and `addCounter` are Phaser APIs too. */
 const TWEEN_METHODS = new Set(['add', 'addCounter', 'addMultiple', 'chain', 'create']);
@@ -71,6 +73,21 @@ const PERSISTENCE = new Set(['writeProgress', 'recordCompletion']);
 /** Flags a later TICK reads. A tween that never fires leaves one stuck at its old value. */
 const CONTROL_FLAGS = new Set(['playerInputEnabled']);
 
+/**
+ * Exported `src/sim/` functions that MUTATE a sim object handed to them. Read off the tree
+ * 2026-08-25; the readers beside them (`invulnerable`, `canAct`, `deathWindowClosed`,
+ * `isCombatState`, `combatStateTicks`) are deliberately absent, because the authorised rule forbids
+ * WRITES and a read-only call is not one.
+ */
+const SIM_MUTATORS = new Set([
+  'damagePlayer',
+  'killPlayer',
+  'respawnPlayer',
+  'enterCombatState',
+  'stepCombat',
+  'stepEnemies',
+]);
+
 export function parseFile(code: string): Node {
   // ⚠️ **`errorRecovery` does NOT mean "a bad file yields a partial tree" here — it still THROWS**
   // on anything it cannot recover from, measured 2026-08-25. Any sibling docstring that justified a
@@ -89,7 +106,7 @@ export function parseFile(code: string): Node {
 }
 
 /** Every child node, depth-first. */
-function walk(node: Node, visit: (n: Node, parent: Node | null) => void, parent: Node | null = null): void {
+export function walk(node: Node, visit: (n: Node, parent: Node | null) => void, parent: Node | null = null): void {
   if (node === null || typeof node !== 'object') return;
   if (Array.isArray(node)) {
     for (const child of node) walk(child, visit, parent);
@@ -112,7 +129,7 @@ function walk(node: Node, visit: (n: Node, parent: Node | null) => void, parent:
  * recorded rather than closed because no shadowed callback name occurs on this tree — checked —
  * and a scope-chain resolver is materially more machine than the criterion has earned.
  */
-function declarations(ast: Node): Map<string, Node> {
+export function declarations(ast: Node): Map<string, Node> {
   const out = new Map<string, Node>();
   walk(ast, (n) => {
     if (n.type === 'VariableDeclarator' && n.id?.type === 'Identifier' && n.init) out.set(n.id.name, n.init);
@@ -155,7 +172,7 @@ function declarations(ast: Node): Map<string, Node> {
  * manager reached by a route with no `tweens` identifier anywhere (a constructor parameter, an
  * import) is out of reach and is recorded rather than claimed.
  */
-function isTweenCall(n: Node, decls: Map<string, Node>): boolean {
+export function isTweenCall(n: Node, decls: Map<string, Node>): boolean {
   if (n.type !== 'CallExpression' && n.type !== 'OptionalCallExpression') return false;
   const callee = n.callee;
   if (callee?.type !== 'MemberExpression' && callee?.type !== 'OptionalMemberExpression') return false;
@@ -274,16 +291,29 @@ export function simWrites(body: Node, decls: Map<string, Node>, depth = 0): Viol
           say('a sim entity spawn or removal', n);
         }
       }
-      // 🔴 **A sim object HANDED to a function, added 2026-08-25 after a gate-round finding.**
-      // `src/sim/` is mutating functions that take sim objects as arguments — `damagePlayer(player, 1)`,
-      // `killPlayer`, `stepEnemies`, `advance` — and every one of them was invisible, because the rule
-      // looked only at assignment targets and mutator receivers. Passing sim state out of a wall-clock
-      // callback IS the ownership violation whatever the callee then does with it, so the argument is
-      // the evidence and the callee's body does not have to be resolved.
-      for (const arg of n.arguments ?? []) {
-        if (reachesSim(arg, decls)) {
-          say('a sim object passed out of a tween callback', n);
-          break;
+      // 🔴 **A sim object handed to a KNOWN SIM MUTATOR** — `src/sim/` is mutating functions taking
+      // sim objects as arguments, and every one was invisible because the rule looked only at
+      // assignment targets and mutator receivers.
+      //
+      // ⚠️ **Narrowed on 2026-08-25 by the Codex implementation review, and the reason matters more
+      // than the rule.** The first version fired on ANY sim-rooted argument to ANY function, which
+      // false-reds `renderPlayer(world.player)` and `invulnerable(world.player)` — and, worse,
+      // silently strengthened an OWNER-AUTHORISED rule from *"may not write sim-owned state"* to
+      // *"may not pass sim state"*. Widening an approved architectural rule is a STOP-and-ask
+      // (CLAUDE.md §3), not a detail. Restated to what the owner actually authorised.
+      //
+      // ⚠️ `SIM_MUTATORS` is a NAME LIST and therefore a narrowing: a new mutating export in
+      // `src/sim/` is invisible until it is added here. Read off `src/sim/` on 2026-08-25 —
+      // `combat.ts`'s readers (`invulnerable`, `canAct`, `deathWindowClosed`, `isCombatState`,
+      // `combatStateTicks`) are deliberately absent. A local helper that writes is caught by the
+      // one-hop resolution below and needs no entry.
+      const direct = n.callee?.type === 'Identifier' ? n.callee.name : undefined;
+      if (direct !== undefined && SIM_MUTATORS.has(direct)) {
+        for (const arg of n.arguments ?? []) {
+          if (reachesSim(arg, decls)) {
+            say('a sim object passed to a sim mutator', n);
+            break;
+          }
         }
       }
       // 🔴 **And ONE hop through a local helper.** `onComplete: finish` was caught while

@@ -91,7 +91,8 @@ import {
   SWEEP_ALIVE,
 } from './effectBudget';
 import { spawnWorstCaseFleet, walkPairs } from './effectCounts';
-import { installStorm, namedMutation, setEnemyScale, setStorm, stormCount } from './effectMutation';
+import { installStorm, setEnemyScale, setStorm } from './effectMutation';
+import { namedMutation, stormCount } from './mutationRegistry';
 import { MIN_COST_EXPONENT, assertSweepDrew, costExponent, walkSweep } from './effectSweep';
 import { DRIVEN_SHAKE, MIN_SHAKEN_FRAME_FRACTION, installShakeDrive } from './effectShake';
 import { bootToGame } from './gameHarness';

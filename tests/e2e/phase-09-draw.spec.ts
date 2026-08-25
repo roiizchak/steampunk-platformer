@@ -57,14 +57,8 @@ import {
 } from './effectBudget';
 import { particleCounts } from './effectCounts';
 import { OFFSCREEN_KINDS, setStormOffscreen } from './effectOffscreen';
-import {
-  installStorm,
-  namedMutation,
-  setEmitterScale,
-  setParticleScale,
-  setStorm,
-  stormCaps,
-} from './effectMutation';
+import { installStorm, setEmitterScale, setParticleScale, setStorm, stormCaps } from './effectMutation';
+import { namedMutation } from './mutationRegistry';
 import { bootToGame } from './gameHarness';
 import { particlePixels, tintChannels } from './particlePixels';
 import { counts } from './perfSampler';

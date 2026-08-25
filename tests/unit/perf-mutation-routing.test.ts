@@ -26,7 +26,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { NAMED_MUTATIONS } from '../e2e/effectMutation';
+import { NAMED_MUTATIONS } from '../e2e/mutationRegistry';
 import { MUTATION_TARGETS } from '../e2e/mutationTargets';
 
 const SPECS = import.meta.glob('../e2e/*.ts', {
@@ -60,7 +60,10 @@ function specSource(name: string): string | null {
  * that NAME it. Caught by re-running the red proof after changing the predicate, which is the whole
  * reason C1 says to watch a gate fail *again* when its definition moves.
  */
-const DECLARERS = ['effectMutation.ts', 'mutationTargets.ts'];
+// ⚠️ `mutationRegistry.ts` joined this list on 2026-08-25 when `NAMED_MUTATIONS` moved there under
+// the 400-line rule. A registry file added WITHOUT being listed here re-opens the vacuity hole in
+// silence: it names every mutation because it declares them, so the walk answers its own question.
+const DECLARERS = ['effectMutation.ts', 'mutationTargets.ts', 'mutationRegistry.ts'];
 
 function reachableFrom(name: string): string | null {
   const src = specSource(name);

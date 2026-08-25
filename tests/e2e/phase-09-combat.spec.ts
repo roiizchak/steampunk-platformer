@@ -43,7 +43,8 @@
 
 import { expect, test } from '@playwright/test';
 import { FIGHT_TICKS, REST_TICKS, startPhasedCombat } from './combatDrive';
-import { combatEvents, recordCombat, reduceCombat } from './combatFrames';
+import { combatEvents, recordCombat } from './combatFrames';
+import { reduceCombat } from './combatReduce';
 import { particleCounts, spawnWorstCaseFleet } from './effectCounts';
 import { bootToGame } from './gameHarness';
 import { assertRealGpu } from './realGpu';
@@ -52,7 +53,11 @@ import { assertRealGpu } from './realGpu';
 const RECORD_TICKS = 1200;
 
 /**
- * The fewest landed hits a run may produce and still be a measurement.
+ * The fewest OBSERVED combat moments a run may produce and still be a measurement.
+ *
+ * ⚠️ Observed, not landed: several hits inside one animation frame collapse into one observation, so
+ * this is a floor under an undercount. That is what makes it safe as a floor and useless as a count —
+ * see `combatEvents` in `combatFrames.ts`.
  *
  * Three runs after the i-frame polarity repair (see `combatDrive.ts`) returned **15, 18, 20 and 22
  * raw** events over 1200 ticks — lower than the 44-55 the pre-repair probes saw, which is the repair
@@ -81,7 +86,7 @@ test.describe('Phase 9 — debt 1a, the combat path fires and is drawn', () => {
 
     for (const line of reading.table) console.log(line);
     console.log(
-      `[1a] raw events ${raw.length} (light ${kinds('light')}, lethal ${kinds('lethal')}, ` +
+      `[1a] observed combat moments ${raw.length} (light ${kinds('light')}, lethal ${kinds('lethal')}, ` +
         `playerHurt ${kinds('playerHurt')}) clustered to ${events.length}`,
     );
     console.log(
@@ -101,7 +106,9 @@ test.describe('Phase 9 — debt 1a, the combat path fires and is drawn', () => {
     // The fight happened. Not "a hit was possible" — hits LANDED, counted from the sim's own stamps.
     expect(
       raw.length,
-      `${frames.length} frames of driven combat produced only ${raw.length} landed hits. The driver ` +
+      `${frames.length} frames of driven combat produced only ${raw.length} OBSERVED combat moments ` +
+        '(a floor, not a count — see `combatEvents`: several hits inside one animation frame collapse ' +
+        'into one observation). The driver ' +
         'stopped connecting, or the fixture stopped spawning — either way nothing below measures ' +
         'the combat path.',
     ).toBeGreaterThanOrEqual(MIN_EVENTS);

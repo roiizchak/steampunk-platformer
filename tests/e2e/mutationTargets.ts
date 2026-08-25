@@ -4,7 +4,7 @@
  * of the mutation machinery, so the seam is a real one rather than a convenience.
  */
 
-import type { NamedMutation } from './effectMutation';
+import type { NamedMutation } from './mutationRegistry';
 
 /**
  * What each mutation is a proof OF — the spec that applies it, and the assertion it must redden.

@@ -31,8 +31,12 @@ import { callbackNodes, parseFile, simWriteViolations } from './tweenCallbacks';
 describe('9.2b — no sim-owned state is written from a tween callback', () => {
   it('the scan is not vacuous: it parses real files and EXTRACTS real callback bodies', () => {
     // 🔴 The check that matters is how many callback BODIES came out, not whether the call threw.
-    // `errorRecovery` means a file the parser chokes on yields a partial tree rather than an
-    // exception, so every rule below would report it clean — the silent-zero failure mode this
+    //
+    // ⚠️ The reason first given here was WRONG and is corrected rather than deleted: `errorRecovery`
+    // does NOT hand back a partial tree on a file the parser chokes on — it still throws (measured
+    // 2026-08-25). The check is worth having for a different reason, and the real one is stronger: a
+    // file that yields ZERO callback bodies is indistinguishable from a file that legitimately has
+    // none, so every rule below would report it clean. That is the silent-zero failure mode this
     // project has already paid for twice (a burst of zero particles; a run that selected no tests).
     const extracted = Object.entries(ALL_SOURCES).map(
       ([file, src]) => [file, callbackNodes(parseFile(src)).length] as const,
@@ -127,19 +131,32 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
     expect(scan('function onTick(): void { world.player.hp = 0; }')).toEqual([]);
   });
 
-  it('REJECTS a sim object HANDED to a function — the argument shape (2026-08-25 brief)', () => {
+  it('REJECTS a sim object handed to a KNOWN SIM MUTATOR — the argument shape', () => {
     // 🔴 `src/sim/` is mutating functions that take sim objects as ARGUMENTS, and every one was
     // invisible: the rule looked only at assignment targets and mutator receivers. Passing sim state
     // out of a wall-clock callback IS the ownership violation whatever the callee does with it.
     expect(scan('scene.tweens.add({ onComplete: () => { damagePlayer(world.player, 1); } });'))
-      .toContain('a sim object passed out of a tween callback');
+      .toContain('a sim object passed to a sim mutator');
     expect(scan('scene.tweens.add({ onStop: () => { stepEnemies(this.simWorld, 1); } });'))
-      .toContain('a sim object passed out of a tween callback');
+      .toContain('a sim object passed to a sim mutator');
     // Through an alias, so the argument rule uses the same reachability as the write rule.
     expect(scan('const p = scene.simWorld.player;\nscene.tweens.add({ onStop: () => { killPlayer(p); } });'))
-      .toContain('a sim object passed out of a tween callback');
+      .toContain('a sim object passed to a sim mutator');
     // A VIEW object handed to a function is still fine — the rule is ownership, not arity.
     expect(scan('scene.tweens.add({ onComplete: () => { fadeOut(sprite, 0); } });')).toEqual([]);
+  });
+
+  it('ACCEPTS a READ-ONLY sim call — the rule forbids writes, not reads (Codex impl review)', () => {
+    // ⚠️ The first version of the rule above fired on ANY sim-rooted argument to ANY function,
+    // which false-reds every one of these — and, worse, silently strengthened an OWNER-AUTHORISED
+    // rule from *"may not write sim-owned state"* to *"may not pass sim state"*. Widening an approved
+    // architectural rule is a STOP-and-ask, not a detail. These are the accept cases that boundary
+    // needed and did not have.
+    expect(scan('scene.tweens.add({ onComplete: () => { if (invulnerable(world.player)) hud.flash(); } });')).toEqual([]);
+    expect(scan('scene.tweens.add({ onStop: () => { renderPlayer(world.player); } });')).toEqual([]);
+    expect(scan('scene.tweens.add({ onComplete: () => { const n = canAct(this.simWorld.player); } });')).toEqual([]);
+    // And a read-only helper does not become a violation by being aliased on the way in.
+    expect(scan('const p = scene.simWorld.player;\nscene.tweens.add({ onStop: () => { readHp(p); } });')).toEqual([]);
   });
 
   it('REJECTS a write ONE HOP through a local helper — `() => finish()` (2026-08-25 brief)', () => {
