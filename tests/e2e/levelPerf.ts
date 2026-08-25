@@ -252,3 +252,95 @@ export async function timeLevelCreation(page: Page, levelId: string): Promise<nu
     levelId,
   );
 }
+
+/**
+ * **Criterion 8.7's GPU bound: the PAIRED absolute delta between the two levels, in milliseconds.**
+ *
+ * ## Why this replaced a ratio, and why the ratio's deletion was the wrong call
+ *
+ * Phase 8 shipped `MAX_LEVEL_GPU_RATIO = 2` as `median(largeGpu) / median(smallGpu)` — a ratio of two
+ * **unpaired** medians-of-medians, over samples that are index-aligned pairs from an AB/BA loop and
+ * are simply never subtracted pairwise. Its clean reading swung **1.073 / 0.097 / 1.304** across
+ * three runs of one commit, and the 0.097 came from two windows sitting on `gpuTimer`'s reporting
+ * floor. `docs/qa/phase-08-levels.md` recorded it as red-proved; it never was.
+ *
+ * On 2026-08-25 I deleted it, on the grounds that no GPU mutation ordered the statistic. 🔴 **That
+ * conclusion was WRONG, and both perf briefs of the §10a round caught it.** The mutation I tested it
+ * with was `skipCull`, and `skipCull` cannot produce fragment work: `CullTiles.js:41-47` widens the
+ * cull bounds to the whole layer and `RunCull.js:47` drops only tiles with `index === -1`, so the
+ * extra ~1355 quads are submitted **entirely off-screen**. A rasteriser-time statistic *should* read
+ * them as free — the flat result measured the mutation, not the instrument. The same runs showed 60
+ * full-screen alpha scrims ordering the paired delta every single time, per-pair and never
+ * overlapping clean, which is the class of cost this bound is actually about.
+ *
+ * The owner's pre-approved branch was **rewrite to a paired absolute delta, or delete if no GPU
+ * mutation orders it**. One does. So: rewrite.
+ *
+ * ## The bound
+ *
+ * `medianPairedDelta(smallGpu, largeGpu)` — level-05's rasteriser time minus level-01's, per pair,
+ * then the median of those differences. Pairing is what kills the drift that made the ratio swing:
+ * the two arms of a pair are seconds apart, the medians-of-medians are a whole run apart.
+ *
+ * ⚠️ **This changes criterion 8.7's unit from a ratio to milliseconds**, on a box whose own spec
+ * header says absolute figures are not trustworthy. That objection is answered by the delta being a
+ * DIFFERENCE taken inside a pair rather than a level: whatever the machine was doing during that pair
+ * is in both terms and subtracts out. It is the same argument `medianPairedDelta`'s own docstring
+ * makes, and the same one G.7b shipped on.
+ *
+ * Chosen on one set of runs and confirmed on a HELD-OUT set — readings in
+ * `docs/qa/phase-08-levels.md`. level-05 paints 3.7x the tiles of level-01, so a positive delta is
+ * EXPECTED; what is bounded is how large it may be before the extra geometry has stopped being
+ * culled to the camera and started costing fill rate.
+ */
+export const MAX_LEVEL_GPU_DELTA_MS = 0.5;
+
+/**
+ * The amplifier that red-proves the bound above: N full-viewport alpha-blended rectangles, drawn on
+ * the **Game** scene of whichever arm this is applied to.
+ *
+ * 🔴 **On the Game scene, not the UI scene, and that is the whole point.** `scrimMutation.ts`'s
+ * `addScrims` draws on `UI`, which is a parallel scene that survives every `scene.start` — so it
+ * would sit in BOTH arms of the pair and cancel in the delta exactly as criterion 7.7's first audio
+ * toggle did. The Game scene is rebuilt per `sampleLevel`, so cost added here belongs to one arm.
+ *
+ * Alpha forces the blend, full-viewport makes the cost fill-rate rather than geometry count. This is
+ * a real GPU cost with a real on-screen consequence — which is what `skipCull` was not.
+ */
+export async function addGameScrims(page: Page, count: number): Promise<number> {
+  return page.evaluate((n) => {
+    const game = (
+      window as unknown as {
+        __phaserGame: {
+          scene: { getScene(k: string): unknown };
+          scale: { gameSize: { width: number; height: number } };
+        };
+      }
+    ).__phaserGame;
+    const scene = game.scene.getScene('Game') as {
+      children: { length: number };
+      add: {
+        rectangle(
+          x: number,
+          y: number,
+          w: number,
+          h: number,
+          colour: number,
+          alpha: number,
+        ): { setScrollFactor(v: number): { setDepth(d: number): void } };
+      };
+    };
+    const { width, height } = game.scale.gameSize;
+    const before = scene.children.length;
+    for (let i = 0; i < n; i += 1) {
+      scene.add
+        .rectangle(width / 2, height / 2, width, height, 0x2255ff, 0.5)
+        .setScrollFactor(0)
+        .setDepth(9000 + i);
+    }
+    // Returned, not assumed. A `getScene` that handed back a stale or wrong scene would add nothing
+    // and the caller would read a flat delta as "the mutation did not cost anything" rather than as
+    // "the mutation never happened" — a burst of zero particles, one level up.
+    return scene.children.length - before;
+  }, count);
+}

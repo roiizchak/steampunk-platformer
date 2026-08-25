@@ -49,7 +49,10 @@
         being violated: the ScaleManager still owns every canvas property.
 
         Found by the play-owned capture round, by looking at a screenshot — not by a gate. Gated
-        afterwards in `tests/e2e/phase-06-chrome.spec.ts`.
+        afterwards in `tests/e2e/phase-06-viewport.spec.ts` (a NEW spec, written for this).
+        The first version of this comment named `phase-06-chrome.spec.ts`, which is the spec that
+        MISSED the defect — both its viewports are deliberately non-16:9 and it measured centring
+        inside the overflowing box. Two review briefs caught the wrong pointer.
       */
       #game {
         width: 100%;

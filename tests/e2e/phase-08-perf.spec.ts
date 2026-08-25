@@ -20,33 +20,28 @@
  * above. A Phaser `TilemapLayer` culls to the camera, so a longer level should cost the same per frame
  * as a short one — that is the claim, and the ratio is what can falsify it.
  *
- * ## 🔴 There is NO GPU bound here, and its deletion is the recorded outcome of §3a
+ * ## The GPU bound: a PAIRED delta, and the record of getting it wrong twice
  *
- * `MAX_LEVEL_GPU_RATIO` shipped in Phase 8 as `median(largeGpu) / median(smallGpu)` against 2x, and
- * `docs/qa/phase-08-levels.md:40` claimed *"every bound red-proved."* It was not: the red proof below
- * asserts on the **work** ratio only, and nothing ever showed the GPU ratio could fail.
+ * `MAX_LEVEL_GPU_DELTA_MS` bounds `median(largeGpu[i] - smallGpu[i])` — level-05 minus level-01,
+ * inside each pair. Full argument at the constant in `levelPerf.ts`. The short version is two
+ * corrections, both of which this spec once carried as settled prose:
  *
- * Measured 2026-08-25, three same-page interleaved runs on an RTX 4080 (full readings in
- * `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 7):
+ * 1. **Phase 8 shipped it as a RATIO of two unpaired medians-of-medians**, over samples that are
+ *    already index-aligned pairs. Its clean reading swung **1.073 / 0.097 / 1.304** on three runs of
+ *    one commit, the 0.097 coming from windows sitting on `gpuTimer`'s reporting floor, and
+ *    `docs/qa/phase-08-levels.md` recorded it as red-proved when nothing had ever reddened it.
+ * 2. 🔴 **On 2026-08-25 I DELETED it, and that was wrong.** The deletion rested on `skipCull` not
+ *    moving the statistic — but `skipCull` cannot move a rasteriser-time statistic at all.
+ *    `CullTiles.js:41-47` widens the cull bounds to the whole layer and `RunCull.js:47` drops only
+ *    `index === -1`, so the extra ~1355 quads are submitted **entirely off-screen** and generate
+ *    zero fragment work. The flat reading measured the mutation, not the instrument. Caught by both
+ *    perf briefs of the §10a agent round and verified against the Phaser source before acting.
  *
- * - **The mutation the bound NAMES does not move it.** `skipCull = true` on level-05 submits ~1425
- *   quads a frame instead of ~70 and moved the **main-thread** median 0.50 → 1.20 ms, so it plainly
- *   landed — while the GPU paired delta went 0.028 → 0.029, −0.243 → −0.019 and +0.045 → −0.209 ms
- *   across the three runs. In two of three the mutant measured *cheaper* than the clean arm.
- * - **The instrument is not dead** — 60 full-screen alpha scrims ordered it every time, per-pair
- *   [0.860, 0.865, 0.807], [1.109, 1.027, 1.021], never overlapping clean. So the flat result is the
- *   claim being unmeasurable here, not the timer.
- * - **The clean statistic itself is unstable by an order of magnitude.** The clean level-05/level-01
- *   GPU ratio read **1.073, 0.097, 1.304** on three runs of the same commit — and the 0.097 came from
- *   two windows reading **0.036 ms**, which is `gpuTimer`'s floor rather than a measurement. That is
- *   the *exact* pathology this same QA log diagnosed for criterion 6.9 at `phase-08-levels.md:186`;
- *   8.7 had it too and was recorded sound because its runs happened to land well.
- *
- * A bound that cannot fail on its own claim, whose clean reading swings 13x, is decoration *(vault
- * C2)*. §3a's owner-approved branch was **rewrite to a paired absolute delta, or DELETE if no GPU
- * mutation orders it**; none did, so it is deleted rather than re-bounded. An RTX 4080 rasterises
- * 1425 off-screen quads for free — the cull's cost on this box is main-thread iteration, which
- * `MAX_LEVEL_WORK_RATIO` and `MAX_LEVEL_WORK_MS` already bound.
+ * The same runs had already shown the instrument is live: 60 full-screen alpha scrims ordered the
+ * paired delta every time, per-pair, never overlapping clean. So the statistic works on the class of
+ * cost the bound is about, the owner's pre-approved branch was rewrite-or-delete, and this is the
+ * rewrite. The red proof below uses that amplifier — on the **Game** scene, so it lands in one arm
+ * of the pair instead of cancelling in both — rather than a mutation whose cost the GPU never sees.
  *
  * ## ⚠️ Where criterion 7.7 failed, and what is different here
  *
@@ -62,11 +57,13 @@ import { expect, test, type Page } from '@playwright/test';
 import { bootToGame } from './gameHarness';
 import { MIN_SAMPLES } from './perfBudget';
 import type { Sample } from './perfSampler';
+import { installGpuTimer } from './gpuTimer';
 import { assertRealGpu } from './realGpu';
 import {
   BLOAT_COPIES,
   MAX_LEVEL_CREATE_MS,
   MAX_LEVEL_CREATE_RATIO,
+  MAX_LEVEL_GPU_DELTA_MS,
   MAX_LEVEL_WORK_MS,
   MAX_LEVEL_WORK_P95_MS,
   MAX_LEVEL_WORK_RATIO,
@@ -75,6 +72,7 @@ import {
   costLevelSize,
   installCreateTimer,
   median,
+  medianPairedDelta,
   timeLevelCreation,
   sampleLevel,
   unlockAll,
@@ -89,6 +87,7 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     );
     await bootToGame(page);
     const renderer = await assertRealGpu(page, '8.7');
+    await installGpuTimer(page);
 
     const small: Sample[] = [];
     const large: Sample[] = [];
@@ -113,6 +112,10 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     const largeWork = median(large.map((s) => s.workMedianMs));
     const ratio = largeWork / smallWork;
     const largeP95 = median(large.map((s) => s.workP95Ms));
+    const gpuDelta = medianPairedDelta(
+      small.map((s) => s.gpuMedianMs),
+      large.map((s) => s.gpuMedianMs),
+    );
 
     // eslint-disable-next-line no-console
     console.log(
@@ -125,8 +128,25 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
           .join(', ')} -> ${largeWork.toFixed(2)} ms\n` +
         `      ratio ${ratio.toFixed(2)}x against a bound of ${MAX_LEVEL_WORK_RATIO}x\n` +
         `      work p95    level-05 ${large.map((s) => s.workP95Ms.toFixed(2)).join(', ')} -> ` +
-        `${largeP95.toFixed(2)} ms against ${MAX_LEVEL_WORK_P95_MS} ms\n`,
+        `${largeP95.toFixed(2)} ms against ${MAX_LEVEL_WORK_P95_MS} ms\n` +
+        `      gpu per pair  ${small
+          .map((s, i) => (large[i]!.gpuMedianMs - s.gpuMedianMs).toFixed(4))
+          .join(', ')} -> paired delta ${gpuDelta.toFixed(4)} ms against ${MAX_LEVEL_GPU_DELTA_MS} ms\n`,
     );
+
+    // 🔴 The GPU timer is PRESENT and produced samples, asserted before the delta is read. Without the
+    // extension `perfSampler` returns zeros, and zero minus zero is a delta of 0 — a bound satisfied
+    // by having no measurement at all, which is this project's own most-repeated failure shape.
+    for (const s of [...small, ...large]) {
+      expect(s.gpuSupported, 'EXT_disjoint_timer_query_webgl2 is absent — nothing below is measured').toBe(true);
+      expect(s.gpuSamples, 'the GPU timer produced no samples').toBeGreaterThan(0);
+    }
+    expect(
+      gpuDelta,
+      `level-05 costs ${gpuDelta.toFixed(4)} ms more rasteriser time per frame than level-01 ` +
+        `(bound ${MAX_LEVEL_GPU_DELTA_MS} ms). The extra painted geometry has stopped being culled to ` +
+        'the camera and started costing fill rate.',
+    ).toBeLessThanOrEqual(MAX_LEVEL_GPU_DELTA_MS);
 
     expect(
       ratio,

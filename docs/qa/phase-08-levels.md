@@ -37,7 +37,7 @@ green on the strength of one run — see
 | 8.4 | Save schema tolerates a missing/corrupt file without data loss | `voltagent-qa-sec:qa-expert` ×2 | ✅ | A corrupt entry is **dropped, not repaired**, so it fails LOCKED and costs only its own unlock: asserted in the unit suite and again in the browser with `levels['level-03'] = "banana"` beside two valid entries. Reading a corrupt save does not rewrite it. A write that cannot land is held in memory for the session. |
 | 8.5 | Difficulty ramp measured, spread reported — not a single headline number | `voltagent-qa-sec:qa-expert` ×2 | ✅ | The per-metric table below, plus four property assertions. **No composite score** *(vault 8.3, 5.7)*. |
 | 8.6 | Level-complete flow: align, animate, fade, overlay, continue | play | ✅ | `phase-08-complete.spec.ts` plays level-01 to the exit with real key events and asserts all five steps against the DRAWN objects via `willRender(camera)` — never `visible && alpha`, which `setScale(0)` leaves truthy. Plus the hands-on pass. |
-| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` ×2 | ✅ | Ratchet at **zero exemptions** and watched failing. Frame budget is **seven** bounds, not one: work ratio **1.00–1.20x** against 2x, level-05 work median **0.40–0.70 ms** against an 8 ms absolute ceiling, ~~**GPU** median ratio **0.51–1.06x** against 2x~~ (**DELETED 2026-08-25** — see *The GPU ratio was never red-proved* below), work p95 **0.60–1.20 ms** against 16 ms, and creation cost **1.04–1.53x** against 4x. ⚠️ *"Every bound red-proved"* was **false for the GPU ratio** and is corrected below; it holds for the other six. |
+| 8.7 | No file > 400 lines; diff reviewed; adversarial pass; frame budget | `voltagent-qa-sec:code-reviewer` ×2 + `voltagent-qa-sec:performance-engineer` ×2 | ✅ | Ratchet at **zero exemptions** and watched failing. Frame budget is **seven** bounds, not one: work ratio **1.00–1.20x** against 2x, level-05 work median **0.40–0.70 ms** against an 8 ms absolute ceiling, ~~**GPU** median *ratio* **0.51–1.06x** against 2x~~ → **GPU paired DELTA 0.027–0.030 ms against 0.5 ms** (rewritten 2026-08-25; see the GPU sibling log), work p95 **0.60–1.20 ms** against 16 ms, and creation cost **1.04–1.53x** against 4x. ⚠️ *"Every bound red-proved"* was **false**, twice over: the GPU ratio never had one (it has one now), and `MAX_LEVEL_WORK_P95_MS` still does not. **Six of seven** carry a committed red proof — see the GPU sibling log. |
 | 8.8 | Codex plan review ran; every finding applied or recorded | — | ✅ | [`../reviews/phase-08-plan.md`](../reviews/phase-08-plan.md), 11 findings, each with a disposition. |
 | 8.9 | Codex implementation review ran on the diff; every finding applied or recorded | codex | ✅ | [`../reviews/phase-08-impl.md`](../reviews/phase-08-impl.md) — the report verbatim, then the triage. **Six findings, all six applied**, two of them (save-version laundering, `__proto__` loss) re-verified by seeding the state and reading storage back before either was called real. Ran **after** the six gate-owner briefs, per CLAUDE.md §4. |
 
@@ -170,57 +170,16 @@ the explanation to hit the number is the named worst failure mode of the rule:
 
 ## Deviations and defects recorded
 
-### 🔴 The GPU ratio was never red-proved, and it is DELETED *(2026-08-25)*
+### The GPU bound — moved to a flat sibling
 
-`MAX_LEVEL_GPU_RATIO` shipped here as `median(largeGpu) / median(smallGpu)` against 2x, and the row
-above claimed *"every bound red-proved."* **That claim was false for this one bound.** The red-proof
-test in `phase-08-perf.spec.ts` asserts on the **work** ratio only — nothing in the phase ever showed
-the GPU ratio could fail. Found in recon for the post-debts session, measured under §3a of that
-session's plan, and the owner had pre-approved the branch taken: *rewrite to a paired absolute delta,
-or DELETE if no GPU mutation orders it.*
+🔴 **`MAX_LEVEL_GPU_RATIO` was never red-proved. It was deleted on 2026-08-25, and that deletion was
+then REVERSED the same day** — the mutation it rested on (`skipCull`) submits off-screen quads that
+generate zero fragment work, so a rasteriser-time statistic could never have seen it. What ships is
+`MAX_LEVEL_GPU_DELTA_MS = 0.5`, a paired absolute delta, chosen on three runs and confirmed on three
+held-out ones, with a committed red proof at `tests/e2e/phase-08-gpu-delta.spec.ts`.
 
-Three same-page interleaved runs on `angle (nvidia, rtx 4080 ... d3d11)`, three pairs each, clean and
-mutant sampled in the same page seconds apart:
-
-| run | clean ratio | clean pairedDelta | skipCull ratio | skipCull pairedDelta | 60 scrims pairedDelta |
-|---|---|---|---|---|---|
-| 1 | 1.073x | +0.028 ms | 1.075x | +0.029 ms | *(not run)* |
-| 2 | 0.097x | −0.243 ms | 0.845x | −0.019 ms | **+0.860 ms** |
-| 3 | 1.304x | +0.045 ms | 0.598x | **−0.209 ms** | **+1.027 ms** |
-
-**1. The mutation the bound NAMES does not move it.** `groundLayer.skipCull = true` on level-05 is
-the literal failure the bound is about — the tilemap submits ~1425 quads a frame instead of the ~70
-painted cells inside the view. It plainly landed: the **main-thread** median went 0.50 → 1.20 ms and
-0.50 → 0.90 ms. The GPU statistic did not follow, and in runs 2 and 3 the mutant measured **cheaper
-than clean**. Per-pair deltas overlap completely — clean `[0.045, −0.002, 0.126]` against mutant
-`[−0.258, −0.209, 0.137]` in run 3.
-
-**2. The instrument is fine.** 60 full-screen alpha scrims ordered it every time and by a wide
-margin — per-pair `[0.860, 0.865, 0.807]` and `[1.109, 1.027, 1.021]`, never overlapping clean.
-Without this control a flat result could not be told from a dead timer, which is why it was run.
-
-**3. The clean statistic swings by an order of magnitude on one commit.** 1.073x, 0.097x, 1.304x. The
-0.097 came from two level-05 windows reading **0.036 ms** — `gpuTimer`'s floor, not a measurement.
-🔴 **That is the exact pathology recorded for criterion 6.9 immediately below**, whose denominator
-intermittently reads 0.035 ms. 8.7 had the same defect; it was recorded sound because its Phase 8
-runs happened to land well. *A ratio whose numerator intermittently stops being measurable is not a
-bound, whichever side of 2x it lands on that day.*
-
-**Why deleted rather than re-bounded.** A bound that cannot fail on its own claim is decoration
-*(vault C2)*, and *a statistic that does not order its own mutation is replaced, not re-bounded*.
-There is nothing to replace it with **for this claim**: on an RTX 4080 the off-screen quads are free,
-so the cull's cost on this box is main-thread iteration — which `MAX_LEVEL_WORK_RATIO` and
-`MAX_LEVEL_WORK_MS` already bound, and which the surviving red proof drives to 183x.
-
-⚠️ **What is NOT claimed.** This does not say the camera cull is unimportant or that GPU cost cannot
-be gated here. The scrim readings show a paired **absolute** GPU bound on level-05 would be
-red-provable and stable (clean 0.26–0.42 ms across all three runs). That would be a **different
-claim** than 8.7's — "the GPU frame cost is bounded" rather than "level size is free on the GPU" — so
-it is a new criterion and therefore a STOP-and-ask. Recorded as an option, deliberately not taken.
-
-Six bounds remain, all of them red-proved. `MIN_GPU_SAMPLES`, `installGpuTimer` and `Sample`'s GPU
-fields are untouched — Phases 6 and 9 still consume them.
-
+Full record, including the readings and the two rejected amplifiers:
+[`phase-08-levels-03-gpu-bound.md`](phase-08-levels-03-gpu-bound.md).
 ### 🔴 Criterion 6.9 is UNSTABLE, and it is not Phase 8's
 
 Phase 6's HUD GPU ratio, measured across four full `chromium-gpu` runs this session:
@@ -245,9 +204,21 @@ against a 0.2 bound. Run alone, in the same session, minutes later: **0.0051, 0.
 reading. Those four were the arms of an interleaved A/B of an unrelated `index.html` change, so they
 also establish the failure is **not attributable to that change**: both arms read the same.
 
-A statistic that reads 0.004 ms alone and 0.853 ms in company is measuring the machine, not the HUD.
-That is the same conclusion as below, now with a two-order-of-magnitude separation instead of a
-factor of four.
+A statistic that reads 0.004 ms alone and 0.853 ms in company looks like it is measuring the machine
+rather than the HUD.
+
+⚠️ **CORRECTED 2026-08-25 by the §10a perf briefs: the loaded arm is n = 1, and the paragraph above
+over-stated it.** "Far stronger than the four runs above" is not supportable from **one** loaded
+observation against four isolated ones — the four isolated runs establish the isolated reading is
+stable; nothing establishes the loaded reading is. The honest statement is that 6.9 produced a
+0.853 ms reading under load and 0.004 ms alone, once each way, and **the loaded-versus-isolated
+explanation remains a hypothesis with a single supporting observation.** Settling it needs a
+same-session interleaved A/B of loaded against isolated, which has never been run.
+
+⚠️ **And `MAX_HUD_GPU_DELTA_MS = 0.2` is still ARMED and still known to false-red under load.** It is
+not disabled, not soft, and not carrying a recorded exemption — so the next loaded `phase-06` sweep
+can red on it for a reason that has nothing to do with the HUD. Recorded here rather than fixed:
+it is Phase 6's criterion, and re-bounding another phase's armed gate is not this session's call.
 
 Nothing in the Phase 8 diff touches the HUD draw path, and every spec that precedes it in the run is
 unchanged, so it is not attributable to this phase. It is contention between specs, and it is exactly
@@ -256,7 +227,8 @@ belongs to the perf-gate session already scheduled between Phase 8 and Phase 9, 
 frame-loss half.
 
 **It is not being reported green on the strength of the run that happened to pass.** Phase 8's own
-frame budget is 8.7, and it holds on all seven of its bounds; 6.9 is Phase 6's, it is unstable, and
+frame budget is 8.7, and it holds on all seven of its bounds (six of which are red-proved — the p95
+is not); 6.9 is Phase 6's, it is unstable, and
 it is carried openly into the session that owns it rather than quietly counted as 54/54.
 
 ### The deliverable-list deviations, as planned
