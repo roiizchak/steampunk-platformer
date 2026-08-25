@@ -54,7 +54,7 @@ export interface Sample {
  * 🔴 **2026-08-24: `run` now has NO live call site.** The three that remained were removed — two as
  * pure redundancy, one replaced by `grounded`. It is kept in the union rather than deleted because
  * it is still the honest name for a contiguity requirement, and deleting it would take this
- * paragraph — the reason nobody should ask for one — with it. `tests/e2e/waitFor.spec.ts` pins both
+ * paragraph — the reason nobody should ask for one — with it. `tests/unit/wait-spec.test.ts` pins both
  * halves: `run` unsatisfiable off the measured gap profile, `grounded` satisfiable on it.
  *
  * ⚠️ **A sample COUNT is not the replacement.** "Wait for eight samples" is a sleep wearing a

@@ -148,3 +148,111 @@ establishes its own storm arm therefore costs on the order of another 60–90 s,
 
 `phase-09-perf.spec.ts` clean, 2026-08-24: **1 passed (1.5m)**, p95 on ~0.7 ms, absolute 0.400,
 delta 0.0500, per-particle 0.00044, k 0.949. Unchanged from before the batch.
+
+---
+
+## Batch 7 — §1a, the combat path: **the cost bound is RECORDED AS NOT CLOSED**
+
+**Verdict: §1a's headline claim cannot be made on this tree, and the reason was measured rather than
+argued.** What shipped instead is the instrument, five probe runs of evidence, and a narrower gate
+that asserts only what the measurement supports. *A combat measurement that cannot go red is worse
+than the recorded non-closure it replaces* — the plan said so before any of this ran.
+
+### The five probes
+
+| # | change | what came out |
+|---|---|---|
+| 1 | `brawlArm.startBrawl` (hop only), fleet adjacent, distance-based control | 3 events / 900 ticks, **all `playerHurt`** — no `light`, no `lethal`. A third of the combat path wearing the name of all of it. `startBrawl` never presses attack. |
+| 2 | + swing (`L`) + low-hp respawn | 23 events, but the control **collapsed from 2294 frames to 56** and its median rose 0.6 → 1.3 ms. Per-event deltas of 33.5 and 43.2 ms turned out to be the `K` fixture spawning 22 bodies. |
+| 3 | phased FIGHT/REST drive, `iFrameCounter` pinned through REST | control restored to 2222 frames. **`spawn frames 0`** — the spawn window was compared against the cycle tick, not the rest-phase tick, and never fired. Seven consecutive `playerHurt` ticks (262-268) shared one 41.9 ms frame as the max of all seven near windows. |
+| 4 | spawn window fixed; events clustered at `NEAR_TICKS` | 16 clustered events, control 1980 frames. **`enemyHp 1300 → 364`** — the claw *is* connecting. Max deltas still 22-32 ms. |
+| 5 | + per-event MEDIAN delta reported beside the MAX | **`medianOfMedianDeltas` = -0.0000 ms.** |
+
+### The three findings, each measured
+
+**1. 🔴 The shipped emitter caps bound a combat burst at ~85 live particles.** An 8× spark-burst
+mutation planted in `src/scenes/gameEffects.ts` (`for (let mut = 0; mut < 8; mut += 1)` around the
+`impactSparks` loop) left `alive peak` at **85 — unchanged**. `atLimit()` drops the surplus. **The
+combat path cannot be made to cost more from inside the game**, which means no mutation confined to
+the arm sites can drive a cost bound red.
+
+**2. 🔴 At 85 particles the cost is below the clock grid, and the statistic moved the WRONG WAY.**
+8192 particles cost 4.1 ms on this GPU (`phase-09-perf.spec.ts`, same session), so 85 cost ~0.04 ms —
+under `performance.now()`'s 0.1 ms step.
+
+| statistic | clean | under the 8× mutation |
+|---|---|---|
+| per-event MEDIAN delta | **-0.0000 ms** | **-0.1000 ms** |
+| per-event MAX delta (median of) | 3.05 ms | 2.70 ms |
+
+Both went **down** under a mutation that makes the effect eight times larger. That is the project's
+own disqualifying condition: *a statistic that does not order its own mutation cannot be fixed by
+moving the bound — replace the statistic.* **There is nothing to replace it with.** The only
+amplifier available is a storm, and entry 43 is the record of a storm destroying admission ordering.
+
+**3. 🔴 The worst combat frame is 22-39 ms and it is not the burst.** Those spikes are the sim's
+post-hit-stop tick catch-up draining through `frameClock`'s `MAX_TICKS_PER_FRAME` — two to three
+orders of magnitude above anything 85 particles can cost. A bound on them would be a bound on the
+catch-up wearing a burst's name, and it is exactly the shape 6.9's GPU-ratio gate was withdrawn for.
+
+### What DID ship: `tests/e2e/phase-09-combat.spec.ts`
+
+Two tests, **no millisecond bound**, and the header says why in the open. What they assert:
+
+| premise | why it is assertable |
+|---|---|
+| the recorder returned an array, > 100 frames | type before value |
+| ≥ `MIN_EVENTS` (10) landed hits | five probes returned 31-55 raw; 10 is a floor against *"the driver stopped connecting"*, not a fitted bound |
+| `lethal` > 0 and `playerHurt` > 0 | both reliably produced across every probe |
+| an emitter keyed `'sparks'` exists (`>= 0`) | a rename would otherwise turn the next line into a permanent red that reads like the defect |
+| **peak SPARK particles inside a hit's window > 0** | the admission premise |
+| control > 100 rest frames | the control did not collapse into the effect |
+| aggregate alive > 0 **and drawn > 0** through `willRender` | the drawn half |
+
+⚠️ **Three narrowings, stated rather than implied:**
+
+1. **Two event classes, not three.** `light` — an enemy hit that neither kills nor coincides with the
+   player being clawed — measured 0, 0, 0, 2 and 3 across the probes, because a scavenger's claw calls
+   `freezePair(player, scavenger, 'playerHurt', …)` and moves BOTH stamps on the same tick.
+   Requiring three classes would make the gate flaky for a reason that has nothing to do with the
+   game. §1a asked for all three; this delivers two and says so.
+2. **The second test is AGGREGATE and it passed the mutation.** It stayed green while test 1 went red,
+   because landing dust keeps the three-emitter total above zero. Correct for its own title, recorded
+   so nobody reads it as a second combat guard.
+3. **One tick is one combat moment.** Simultaneous land-and-take collapses to `playerHurt`.
+
+### The red proof *(C1)*, and why the first draft of it was decoration
+
+Mutation: replace `emit(burst, SPARK_CONE_DEG[impact])` with `void burst` in `gameEffects.ts` — the
+impact bursts constructed and then dropped, confined to one of the three arm sites.
+
+```
+      peak live particles inside a near window 53 (sparks 0)     <- the SPARK premise FAILED
+[1a] raw events 43 (light 0, lethal 14, playerHurt 29)           <- hits still landing
+    Expected: > 0   Received: 0
+  1 failed, 1 passed
+```
+
+🔴 **`peak live particles` was still 53.** The first draft asserted the *three-emitter total*, and
+this mutation would have run it **clean** — `combatDrive` hops the player continuously, so landing
+dust holds the total above zero with every combat burst dropped. The gate was decoration until the
+premise was narrowed to the spark emitter, which only `impactSparks` fills. Found by building the
+mutation the claim names rather than the convenient one.
+
+Reverted: `grep -c "void burst"` 1 → 0, `git diff --stat` empty, typecheck clean, **2 passed (38.5s)**.
+
+### Files
+
+| file | what it is |
+|---|---|
+| `tests/e2e/combatDrive.ts` | **new** — the phased FIGHT/REST driver, 137 lines |
+| `tests/e2e/combatFrames.ts` | **new** — the recorder, the event classifier and the reduction, 364 lines |
+| `tests/e2e/phase-09-combat.spec.ts` | **new** — the gate, 160 lines, no millisecond bound |
+| `tests/e2e/polishSeries.ts` | one stale citation: `tests/e2e/waitFor.spec.ts` → `tests/unit/wait-spec.test.ts` |
+
+### What is still open
+
+**§1a's cost claim.** Closing it needs one of: an amplifier for the combat path that does not go
+through the emitter caps; a clock finer than 0.1 ms (`performance.now()` is what the browser gives);
+or a decision that the post-hit-stop catch-up spike is the thing worth bounding, which is a different
+criterion and would need its own approval. **None of those is a re-bounding of what is here.**
