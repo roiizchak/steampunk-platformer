@@ -177,8 +177,42 @@ export function isTweenCall(n: Node, decls: Map<string, Node>): boolean {
   const callee = n.callee;
   if (callee?.type !== 'MemberExpression' && callee?.type !== 'OptionalMemberExpression') return false;
   const method = callee.computed ? callee.property?.value : callee.property?.name;
-  if (typeof method !== 'string' || !TWEEN_METHODS.has(method)) return false;
+  if (typeof method !== 'string') return false;
+  // 🔴 **D14, closed 2026-08-25.** `add.tween(config)` is a real Phaser 4.2.1 entry point — the
+  // factory at `phaser.d.ts:26869` and the creator at `:28201` — and it opens a tween without the
+  // identifier `tweens` appearing anywhere, so it bypassed this function entirely and with it 9.3d,
+  // 9.2b and 9.2c. The recorded blocker was *"resolving what `add` is bound to, a different machine
+  // from a pattern"*; it is the same machine. `tween` is unique to the factory and creator (the
+  // manager has no `.tween()`), so the method name alone selects the entry point, and the object
+  // test below is the same alias-resolving name test `namesTweenManager` already was.
+  if (method === 'tween') return namesSceneFactory(callee.object, decls);
+  if (!TWEEN_METHODS.has(method)) return false;
   return namesTweenManager(callee.object, decls);
+}
+
+/**
+ * `this.add`, `scene.add`, or a local bound to one of those — the Phaser GameObject factory.
+ *
+ * ⚠️ **Deliberately STRICTER than `namesTweenManager`, and the asymmetry is the point.** That
+ * function accepts a bare `tweens` identifier because `tweens` is a distinctive name that means one
+ * thing in this codebase. **`add` is not** — it is an ordinary English verb, and a bare
+ * `add.tween(...)` on some unrelated object would be a false red on legal code. So this requires the
+ * factory to be reached through a MEMBER expression (`<something>.add`), which is what a Phaser
+ * scene always does, and refuses a bare `add` identifier that resolves to nothing.
+ *
+ * An alias still resolves: `const add = this.add; add.tween({…})` is caught, because `decls` maps
+ * `add` back to the member expression. Raised by the Codex plan review, which was right that
+ * treating the name `add` as sufficient Phaser identity would red an unrelated object.
+ */
+function namesSceneFactory(obj: Node, decls: Map<string, Node>, depth = 0): boolean {
+  if (!obj || depth > 4) return false;
+  if (obj.type === 'MemberExpression' || obj.type === 'OptionalMemberExpression') {
+    const prop = obj.computed ? obj.property?.value : obj.property?.name;
+    return prop === 'add';
+  }
+  if (obj.type !== 'Identifier') return false;
+  const init = decls.get(obj.name);
+  return init === undefined ? false : namesSceneFactory(init, decls, depth + 1);
 }
 
 /** `tweens`, `scene.tweens`, or a local whose initialiser is one of those. Depth-limited like `reachesSim`. */

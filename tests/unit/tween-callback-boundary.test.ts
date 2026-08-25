@@ -97,8 +97,15 @@ function balanced(code: string, open: number): string {
   return code.slice(open + 1);
 }
 
-/** Every way this codebase can open a tween. `chain` and `addCounter` are Phaser APIs too. */
-const TWEEN_CALLS = /\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
+/**
+ * Every way this codebase can open a tween. `chain` and `addCounter` are Phaser APIs too.
+ *
+ * 🔴 **`.add.tween(` joined 2026-08-25, closing D14's share of 9.2/9.2b/9.2c.** It requires a member
+ * access before `add` rather than matching the bare word — see `namesSceneFactory` in
+ * `tweenCallbacks.ts` for why the two halves of this alternation are deliberately asymmetric.
+ */
+const TWEEN_CALLS =
+  /(?:\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)|\.\s*add\s*\.\s*tween)\s*\(/g;
 
 /**
  * A bare identifier used as a callback value: `onComplete: settleFade`.

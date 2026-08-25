@@ -79,15 +79,24 @@ const KILL_BY_TARGET = /\b(?:killTweensOf|killAll)\s*\(|\[\s*(['"])(?:killTweens
  * `create`. `scene.tweens.addCounter({})` therefore yielded zero sites and this rule ran clean over
  * it. The two lists now agree because they are the same question asked twice.
  *
- * ⚠️ **`this.add.tween(config)` is a REAL Phaser 4.2.1 entry point and NOTHING here reaches it**
- * (`phaser.d.ts:26869` on the factory, `:28201` on the creator). Every rule in this file and in
- * `tween-callback-boundary.test.ts` keys on the object being literally named `tweens`, so a tween
- * opened through the GameObject factory bypasses 9.3b, 9.2, 9.2b and 9.2c at once. It occurs nowhere
- * on this tree — checked — and is recorded as **D14** rather than closed, because closing it means
- * resolving what `add` is bound to, which is a different machine from a pattern. The absence is
- * PINNED below so the day someone writes one, a fast test says so instead of a silent hole.
+ * 🔴 **`this.add.tween(config)` — D14 — is CLOSED as of 2026-08-25, and this rule now reaches it.**
+ * It is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` on the factory, `:28201` on the creator)
+ * that opens a tween with the identifier `tweens` appearing nowhere, so it bypassed 9.3b, 9.3c, 9.3d,
+ * 9.2, 9.2b and 9.2c at once — **six rules, one of which (9.3d) the gate log's own list omitted.**
+ * The recorded blocker was *"resolving what `add` is bound to, a different machine from a pattern"*.
+ * It is the same machine: `tween` is unique to the factory and creator, so the method name selects
+ * the entry point on its own. See `tween-add-factory.test.ts` for the gate and its red proofs.
  */
-const TWEENS_ADD = /(\S[^\n]{0,40})?\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)\s*\(/g;
+// 🔴 **The `.add.tween(` alternative closes D14 (2026-08-25).** It requires a MEMBER access before
+// `add` — `this.add.tween`, `scene.add.tween` — and not a bare `add.tween`, mirroring
+// `namesSceneFactory` in `tweenCallbacks.ts`. `tweens` is a distinctive identifier and can be matched
+// bare; `add` is an ordinary word, and matching it bare would red an unrelated object that happens to
+// have a `tween` method. The acceptance fixture for that case is in `tween-add-factory.test.ts`.
+const TWEENS_ADD =
+  /(\S[^\n]{0,40})?(?:\btweens\s*\.\s*(?:add|addCounter|addMultiple|chain|create)|\.\s*add\s*\.\s*tween)\s*\(/g;
+
+/** Both ways this codebase can open a tween, for the coarse "does this file open one at all?" filter. */
+export const OPENS_A_TWEEN = /\btweens\s*\.\s*add|\.\s*add\s*\.\s*tween\s*\(/;
 /** A newline inside a fixture literal, named so the shell that writes this file cannot eat it. */
 const NL = '\n';
 
@@ -239,29 +248,17 @@ describe('9.3b — every tweens.add result is bound to a name', () => {
     // A method that is NOT a tween opener stays out of it.
     expect(unbound('  scene.tweens.killAll();')).toBe(0);
     expect(unbound('  scene.tweens.getTweensOf(o);')).toBe(0);
-  });
 
-  it('D14: NOTHING here reaches `this.add.tween(config)`, and the absence is PINNED', () => {
-    // ⚠️ `add.tween(config)` is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` on the
-    // factory, `:28201` on the creator) and every rule in this file keys on the object being
-    // literally named `tweens`, so it bypasses 9.3b, 9.2, 9.2b and 9.2c at once. Recorded as D14
-    // rather than closed: closing it means resolving what `add` is bound to, a different machine
-    // from a pattern.
-    //
-    // 🔴 So this test does the honest thing instead — it states the hole and PINS THE ABSENCE.
-    // The rule cannot see it:
-    expect(unbound('  this.add.tween({ targets: o, alpha: 0 });')).toBe(0);
-    // … and no file uses it, which is what makes the hole latent rather than live. The day someone
-    // writes one, this goes red and points at D14 instead of the scan quietly passing.
-    const users = Object.entries(ALL_SOURCES)
-      .filter(([, src]) => /\badd\s*\.\s*tween\s*\(/.test(blankFor('code+strings', src)))
-      .map(([f]) => f);
-    expect(
-      users,
-      'a tween was opened through the GameObject factory (`add.tween`). Every rule in this file ' +
-        'keys on `tweens.` and NONE of them can see it — finding D14. Open it through ' +
-        '`this.tweens.add` instead, or close D14 first.',
-    ).toEqual([]);
+    // 🔴 **D14, closed 2026-08-25.** The GameObject factory opens a tween with `tweens` appearing
+    // nowhere, so this rule could not see it at all. Both forms, unbound and held:
+    expect(unbound('  this.add.tween({ targets: o, alpha: 0 });')).toBe(1);
+    expect(unbound('  scene.add.tween({ targets: o });')).toBe(1);
+    expect(unbound('  const t = this.add.tween({ targets: o });')).toBe(0);
+    expect(unbound('  return scene.add.tween({ targets: o });')).toBe(0);
+    // ⚠️ And a BARE `add.tween(` on an unrelated object is NOT matched — `add` is an ordinary word,
+    // and reddening it would widen the rule past what it is about. `tween-add-factory.test.ts`
+    // carries the same acceptance case against the parser arm. Raised by the Codex plan review.
+    expect(unbound('  add.tween({ targets: o });')).toBe(0);
   });
 
   it('no source file starts a tween it does not hold', () => {
@@ -288,7 +285,9 @@ describe('9.3c — every tween owner is torn down where its targets die', () => 
     // A handle held and never stopped is bookkeeping, not a teardown. This is the claim that turns
     // "bound to a name" into the property the criterion is actually about.
     for (const [file, code] of bodies()) {
-      if (!code.includes('tweens.add')) continue;
+      // 🔴 Was `code.includes('tweens.add')`, which skipped the whole file for a tween opened
+      // through the GameObject factory — 9.3c's half of D14.
+      if (!OPENS_A_TWEEN.test(code)) continue;
       expect(
         /\.stop\(\)|\.destroy\(\)/.test(code),
         `${file} starts a tween and never stops one — see hudFade.ts's destroy() for the shape`,
