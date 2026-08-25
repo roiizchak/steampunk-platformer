@@ -1,136 +1,123 @@
-# Next session — the debts Phase 9's close left, then the last of Tier 5
+# Next session — §1a's cost bound, the narrowings this session recorded, then Tier 5
 
-**Written 2026-08-24, at the end of the Phase-9 close session.** Everything is merged to `main` at
-`a8e4fa1`, pushed, and green: typecheck clean · unit **2417 / 0** (160 files) · `verify-dist ok` ·
-`test:sim-isolated` 2414 + 3 skipped · e2e **128 selected, 128 passed** · port 5173 clear.
-
-**Phase 9 is DONE.** All eleven criteria carry a recorded owner verdict. **This file holds only what
-is still open**, and nothing has been summarised away — every item below is named with the evidence
-that makes it real.
-
-**The owner has playtested and accepts the game as it plays** — 2026-08-23, and again 2026-08-24
-**after D8's balance change shipped**. That second acceptance is the one that matters now.
-
----
+**Written 2026-08-25, at the end of the debts session.** `main` is at `7c04a63`, pushed.
+**Not Phase 10.**
 
 ## 0. Read first
 
-| document | why, for this session |
-|---|---|
-| `CLAUDE.md` | §3 non-negotiables, §5 testing rules. |
-| `docs/qa/phase-09-polish.md` § *"The close round — 2026-08-24"* | **The whole brief for §1.** Findings D1–D14 with dispositions, the E1–E9 execution record, and 9.7's threshold table. |
-| `docs/reviews/phase-09-impl.md` § *"The close round's review"* | Codex's BLOCK and the nine findings. Three of them are §1's items. |
-| `docs/prd/phase-09-polish.md` § *"Owner amendment, 2026-08-24"* | What 9.5 now says, and **what the amendment deliberately did not close**. |
-| `docs/qa/session-tier5-and-cleanup.md` | The Tier-5 items still open. |
+- [CLAUDE.md](../CLAUDE.md) §3 and §5 — the non-negotiables and the testing rules.
+- [docs/TESTING-RULES.md](TESTING-RULES.md) — the evidence behind every §5 rule.
+- [docs/qa/session-phase-09-debts-03-gate.md](qa/session-phase-09-debts-03-gate.md) — **the eleven
+  recorded narrowings §1 below draws from, each with the reason it was not fixed.**
+- [docs/reviews/session-phase-09-debts-impl.md](reviews/session-phase-09-debts-impl.md) — the Codex
+  implementation review, and what the plan review missed.
 
-⚠️ **Every `:line` citation written before 2026-08-24 in `phase-09-polish.md` has drifted 50–70 lines**,
-and four inside its own gate table are still stale (`:1363`, `:1485`, `:1518`, `:1562`). **Locate by
-heading, never by a copied line number.** Fixing those four is a one-minute job nobody has done.
+**State:** five of Phase 9's six debts closed. Unit **2465 / 164 files**, e2e **130**, build
+byte-identical, `test:sim-isolated` 2462 + 3 skipped.
+
+> ⚠️ **The lesson that cost the most last session, and it is a process one.** It produced **two false
+> "applied" dispositions**: Codex's PR-03 named destructuring explicitly and the log recorded it
+> applied when it was not, and the tween-alias fix was applied to one of two rule families and logged
+> as complete. Both were found by *later* reviewers, not by the person who wrote them.
+> **A disposition of "applied" is a claim like any other — re-verify it against the code, not against
+> the commit message.** When you read a table below saying RECORDED, that is trustworthy. When you
+> read one saying APPLIED anywhere in `docs/`, check it.
 
 ---
 
-## 1. The debts Phase 9's close created or recorded
+## 1. What the debts session left open
 
-**None of these blocks anything.** They are the honest remainder of a gate round that was run
-properly, written down at the time rather than discovered later. That is the difference between this
-list and the one this file used to hold.
+### 1a — the combat-path cost bound. **The one real debt, and it may not be closable.**
 
-### 1a. 9.5's combat path is unmeasured — the amendment's stated non-closure
+Reported **NOT CLOSED** with measurements, not with an argument. Read
+[`session-phase-09-debts-02-perf.md`](qa/session-phase-09-debts-02-perf.md) §Batch 7 and the header of
+`tests/e2e/phase-09-combat.spec.ts` before touching it. The three findings:
 
-The owner amended 9.5 to name the worst **steady-state** frame, because that is what the gate
-measures. **The amendment does not claim the combat-triggered path is cheap, and does not close it.**
+1. **The shipped emitter caps pin a combat burst at 32 sparks / ~85 particles.** An 8× spark-burst
+   mutation planted in `src/scenes/gameEffects.ts` left **both unchanged** — `atLimit()` drops the
+   surplus. The combat path cannot be made to cost more from inside the game.
+2. **At that population the cost is under the clock grid.** 8192 particles cost 4.1 ms on this GPU, so
+   85 cost ~0.04 ms — below `performance.now()`'s 0.1 ms step. Per-event median delta: **-0.0000 /
+   0.0000 / 0.2000 ms** clean, **0.0000 ms** mutated. *The statistic does not move at all.*
+3. **The 22-39 ms worst combat frames are post-hit-stop tick catch-up**, not the burst — two to three
+   orders of magnitude above anything 85 particles can cost.
 
-`installStorm` holds the player invulnerable on every frame of every arm — it has to, because without
-it the shipped effects path fires bursts that `atLimit()` **accepts** in cheap arms and **drops** in
-expensive ones, an inversion that stops the sweep ordering at all. So no `hurt`/`death` state, no
-hit-stop, no knockback, no i-frame flicker, and the shake in the window is `SHAKE.land`, **smallest of
-the four commands**.
+**Closing it needs ONE of these, and each is a decision, not a repair:**
 
-⚠️ **A regression confined to `gameEffects.ts`'s `light` / `lethal` / `playerHurt` arm sites would
-leave 9.5 green** — the same shape as the already-fixed multi-enemy hit-stop-chain defect
-(`hitstop-chain-cap.test.ts`).
+- an amplifier for the combat path that does **not** go through the emitter caps *(the only one that
+  exists is a storm, and entry 43 is the record of a storm destroying admission ordering)*;
+- a clock finer than 0.1 ms *(`performance.now()` is what the browser gives)*;
+- **or the owner's decision that the post-hit-stop catch-up spike is the thing worth bounding** —
+  which is a **different criterion** and needs its own approval. ⚠️ **STOP and ask; do not adopt it
+  as a reinterpretation of 9.5.**
 
-**Needs no owner decision, only the work.** The concrete design for a combat-enabled `installStorm`
-variant is in the close round's `voltagent-qa-sec:performance-engineer` adversarial brief. ⚠️ **Read
-9.8 entries 43, 44 and 45 first** — they explain why closing it is *actively risky to the statistic*,
-which is why it was suppressed rather than overlooked. **Do not assume it is a small change.**
+⚠️ *A statistic that does not order its own mutation cannot be fixed by moving the bound.* Re-bounding
+what is there is not an option. **If none of the three is available, the honest outcome is to leave it
+recorded** — it already is, with evidence, and that is worth more than a bound that cannot go red.
 
-### 1b. Four upper perf bounds cannot go red on their own
+### The eleven narrowings recorded, not fixed
 
-`MAX_EFFECT_FRAME_P95_MS` (16) · `MAX_EFFECT_WORK_DELTA_MS` (0.3) · `MAX_PER_PARTICLE_WORK_MS`
-(0.003) · `MIN_STORM_WORK_DELTA_MS` (0.2).
+Each has a stated reason in `session-phase-09-debts-03-gate.md`. **Do not re-open one without reading
+that reason** — several are deliberate and the bound IS the deliverable.
 
-**`tests/e2e/phase-09-perf.spec.ts` is one sequential `test()`, and an earlier guard always fires
-first.** Proven twice in the close round rather than assumed: `PERF_MUTATION=stall` was aimed at the
-P95 bound and red the **window-close guard three checks earlier**; a real 3 ms burn injected into the
-shipped render path reached `MAX_EFFECT_FRAME_WORK_MS` and **stopped there**.
+**Worth fixing if a session has room:**
 
-Their construction is verified; their redness is **inferred from the guard ahead of them**, which is
-weaker and is recorded as weaker. **The repair is to split that spec so each bound is independently
-reachable.** ⚠️ Splitting it means each arm re-establishing its own storm — check what that costs in
-wall-clock before committing to the shape.
+- **D14 — `this.add.tween(config)`** is a real Phaser 4.2.1 entry point (`phaser.d.ts:26869` factory,
+  `:28201` creator) that bypasses **9.3b, 9.3d, 9.2, 9.2b and 9.2c at once**. Nothing on the tree uses
+  it and the **absence is pinned** by a committed test, so it is latent, not live. Closing it means
+  resolving what `add` is bound to.
+- **`storm<N>` is unrouted.** It is parametric, so it sits outside `NAMED_MUTATIONS`,
+  `MUTATION_TARGETS` and `perf-mutation-routing.test.ts` — and it is the recorded red proof for **two
+  of the four upper bounds** in `phase-09-perf.spec.ts`. Routing an unbounded family needs a different
+  key than `Record<NamedMutation, …>`.
+- **`SIM_MUTATORS` is a name list.** A new mutating export in `src/sim/` is invisible to the 9.2b
+  argument rule until someone adds it by hand. ⚠️ **The self-maintaining version was considered and
+  rejected for scope, not for correctness**: derive the set by parsing `src/sim/` for functions that
+  write to their own parameters. That is the right fix and it is a real piece of work.
+- **`blank()` has no regex-literal mode** — a lone apostrophe inside a regex blanks the rest of the
+  file in the `'code'` view. Shared infrastructure used by many gates; needs its own red proofs.
 
-### 1c. D9 — the `run:` waits, and there are THREE, not one
+**Recorded as narrowings — read the reason before reopening:**
 
-`polishSeries.ts` measured it on 2026-08-22: this harness runs **1 tick per frame for about the first
-second, then 3–4 ticks per frame indefinitely**, so the longest gap-free run available after that is
-**1**. Its header says plainly: ***"Do not add a `run` wait to a new test."***
+- **D4** — `getTweensOf(o).forEach(t => t.destroy())`, `tweens.destroy()`, template-literal keys,
+  `Reflect.get` all reach kill-by-target semantics under other names.
+- **"Held" is satisfied by a dead local**, and 9.3c's teardown check matches any `.destroy()` on
+  anything. An honest fix needs liveness analysis.
+- **Sim handles are matched BY NAME, not by type** — a `World` parameter named `w` is invisible. By
+  type needs a type checker, and TS 7 does not expose one to a test.
+- **`MAX_PER_PARTICLE_WORK_MS` has no isolating mutation** and cannot have one; its red is never
+  attributable to it alone. Reddening it needs the 8192-particle delta at ~24.6 ms, which also reddens
+  the two bounds above it.
+- **`light` combat events barely occur** (measured 0/0/0/1/2/3), because a scavenger's claw moves both
+  hit stamps on one tick. The 1a gate asserts **two** of three classes and says so.
+- **`raw.length` is observed stamp changes, not landed hits** — several hits inside one animation
+  frame collapse into one observation. An exact count needs a tick-level queue on `window.__game`, and
+  **that surface is closed at eight fields** by a Phase 1 Codex ruling. A ninth is a STOP-and-ask.
+- **The REST phase-edge leak is measured, not eliminated.** `combatDrive` writes from a rAF callback
+  that runs after the frame's sim ticks have drained. `restEventFrames` counts the leak per run.
+- **The premise/bound classification table is hand-duplicated** between the perf spec's comment and
+  the QA log with nothing syncing them. A lint would be a third copy.
+- **`perf-mutation-routing`'s mention check is a raw string search** and cannot tell a live
+  `if (mutation === '…')` from a stray comment. Disclosed in that test's own header.
+- **The 9.2c `callbackCode()` holes** — an imported callback and a config passed as a variable both
+  yield **zero** callback bodies; shadowing still hides a violation (file-wide, last-wins).
+- **D1's remainder** — 9.1's *"not a tween"* half is carried only by `sim-boundary.test.ts`, so a
+  freeze re-implemented scene-side as an `addCounter` writing `world.player.{x,y,vx,vy}` passes
+  everything. `tests/e2e/effectShake.ts` does exactly that deliberately, as a test helper, which is
+  why the scan reads `src/` only.
 
-Three live sites still do:
+### Documentation that is now false
 
-| site | wait | note |
-|---|---|---|
-| `phase-09-polish.spec.ts:113` | `run: 8` | `brawlArm`. **Observed failing** in the close session's loaded sweep — *"No usable hit in 61 ticks"* — and green in isolation minutes later |
-| `phase-09-polish.spec.ts:180` | `run: 8` | **The one nobody has mentioned.** Same construct, same file, never named in any finding |
-| `phase-09-draw.spec.ts:296` | `run: 12` | ⚠️ **`run: 12` is the exact value `polishSeries.ts` names as satisfiable only out of the opening burst** |
+- ⚠️ **`docs/PRD.md` row 9 is stale.** It still says *"Owed forward: split `phase-09-perf.spec.ts` so
+  four upper bounds are independently reachable · D9's `run: 8` wait · 9.3's two scan bypasses"* —
+  **all three landed in `7c04a63`.** No lint checks that prose. One-line fix.
 
-**The repair is the one 9.2 already had**: ask for the condition the reduction actually needs
-(`landings` + `coveredLanding`), not for contiguity. ⚠️ These specs are green in isolation — replacing
-a wait on a green spec is how the last flake was introduced. **Watch each one fail first**, on a
-loaded box, before trusting the fix.
+### What the gate round could NOT cover, and still cannot
 
-### 1d. 9.3's scan has two unambiguous bypasses that should be closed
-
-`tests/unit/tween-boundary.test.ts` says *"kill-by-target, in every form Phaser offers it"* and its
-regex recognises only direct identifier calls. Two bypasses are **unambiguous** and were called out by
-the Codex review as a dodge to leave open:
-
-- **`tweens['killTweensOf'](x)`** — bracket access, invisible to the scan.
-- **`noop(scene.tweens.add({…}))`** — classified **held** because the preceding character is `(`, though nobody retains the handle.
-
-**Close these two with literal red fixtures.** The more ambiguous ones (inlining `getTweensOf` +
-destroy, which is literally how Phaser defines `killTweensOf`; `tweens.destroy()`; the other tween
-entry points) stay documented narrowings — **D4** in the phase log. **None is present on this tree.**
-
-### 1e. 9.2's new gate does not reach game-state writes
-
-`tests/unit/tween-callback-boundary.test.ts` forbids **sequencing**: scene transitions (all thirteen
-ScenePlugin methods), event emission, the level-completion callback. Codex's second blocker was that
-this is not the whole criterion, and it is right:
-
-> `world.completed = true` · `player.hp = 0` · `finishLevel()` · `saveProgress()` · spawning or
-> removing entities · registry writes · a flag consumed next tick — **all pass.**
-
-⚠️ **This is a STOP-and-ask, not a coding task.** Closing it means classifying game-state APIs, which
-is a **new architectural rule**, and 9.2 is not the criterion that authorises inventing one. It also
-overlaps **D1**: 9.1's *"not a tween"* half is carried only by `sim-boundary.test.ts`, so a freeze
-re-implemented scene-side as an `addCounter` writing `world.player.{x,y,vx,vy}` keeps every gate
-green — and this phase's own e2e harness does exactly that deliberately (`effectShake.ts`).
-**Put the rule to the owner before writing it.**
-
-### 1f. The extractor's remaining holes, and the contract's fragile repair
-
-- `callbackCode()` still cannot reach: a member-expression callback (`onComplete: this.foo`), an
-  imported one, a config built elsewhere and passed as a variable, or a **shadowed name** (first
-  textual declaration wins; there is no lexical scoping). **All four are named in its docstring** —
-  the docstring is honest, the reach is narrow. **None occurs on this tree.**
-- `docs-contract.test.ts`'s per-criterion check is satisfied by any `^| 9.x |` row in the slice. It
-  is currently protected by **bolding the close round's verdict table out of the regex's reach**,
-  which works and is fragile: removing Markdown emphasis silently restores the bypass. **The durable
-  fix is to parse only the designated gate table and require exactly one row per criterion.**
-
-⚠️ **Two pieces of prose written during the close round each degraded the gate they described** —
-finding **D14**. Documentation about a gate is inside that gate's blast radius. Expect it.
+**No agent ran Playwright** (one run at a time on this machine) and **no agent could plant a mutation
+in a real `src/` file** (they shared a worktree lineage with the primary checkout). Every C1/C12
+confirmation in that session is the primary session's own work. If you want independent reproduction
+of a mutation proof, that is still owed and needs a different isolation strategy.
 
 ---
 
@@ -141,16 +128,17 @@ examined were wrong about themselves**. **Run the mutation before believing the 
 
 ### Measurement gates that can go false
 
-- **5.2 — the GPU-ratio flake, and there is now MORE data.** `phase-08-perf.spec.ts`. Previously
-  *"level-05 costs 4.47× level-01 … Expected: ≤ 2"*, observed 1 in 4. **It fired again on
-  2026-08-24 at 5.61×**, in the loaded full-suite sweep, and passed in isolation minutes later —
-  the third time the loaded/isolated split has held. **It is load-sensitive, which is why isolated
-  re-runs never catch it.** The G.7b repair shape applies: pair the observations, median the
-  per-round **deltas**, keep the arms separate until the effect clears the timer grid.
+- **5.2 — the GPU-ratio flake, and the data now cuts BOTH ways.** `phase-08-perf.spec.ts`. Previously
+  *"level-05 costs 4.47× level-01 … Expected: ≤ 2"*, then 5.61× on 2026-08-24 — three failures, all in
+  loaded full-suite sweeps, all passing in isolation minutes later. ⚠️ **It then PASSED in both full
+  loaded sweeps of 2026-08-25** (130/130 twice). So it is **intermittent under load, not reliably
+  load-triggered**, and a repair session now has five observations rather than three. The G.7b repair
+  shape still applies: pair the observations, median the per-round **deltas**, keep the arms separate
+  until the effect clears the timer grid.
   ⚠️ *A statistic that does not order its own mutation cannot be fixed by moving the bound.*
-- **5.3 — Codex's algebra was accepted and never applied.** `phase-09-impl.md`: `k = 0.9001`,
-  reported `1.034b` against a true `3.914b` — **3.79×**. The docstring was corrected; **the cost model
-  and the `k = 0.9` floor were not.** Finish applying it.
+- **5.3 — Codex's algebra was accepted and never applied.** `phase-09-impl.md`: `k = 0.9001`, reported
+  `1.034b` against a true `3.914b` — **3.79×**. The docstring was corrected; **the cost model and the
+  `k = 0.9` floor were not.** Finish applying it.
 - **5.9 — the knob sweep loses sensitivity when physics moves and blames the knob.** Happened three
   times in one session. Make it assert its **own** sensitivity.
 - **5.21 — GPU cost is unmeasurable without `EXT_disjoint_timer_query`.** ⚠️ *"Recorded as unreachable
@@ -158,12 +146,10 @@ examined were wrong about themselves**. **Run the mutation before believing the 
 
 ### Gates satisfiable by the wrong thing
 
-- **5.4** — ✅ **the verification this item was waiting on is DONE (2026-08-24).**
-  `docs/qa/phase-05-combat-08-gate-10.md:121` confirms it as recorded finding **S5**:
-  *"`DEV_FLEET_COUNT = 20` is a chosen multiple, **not a bound** — nothing in `src/sim/` or the level
-  format caps concurrent enemies … Capping it is a design decision."* So 9.5's *"max enemies"* rests
-  on a dev constant, not on anything the game enforces. ⚠️ **What remains is the design decision, and
-  it is the owner's** — do not cap it unilaterally.
+- **5.4** — the verification is **done**; what remains is a **design decision and it is the owner's**.
+  `DEV_FLEET_COUNT = 20` is a chosen multiple, **not a bound** — nothing in `src/sim/` or the level
+  format caps concurrent enemies, so 9.5's *"max enemies"* rests on a dev constant. **Do not cap it
+  unilaterally.**
 - **5.5** — `sheetGates.mjs`'s G5 asks only whether contact falls *inside* the active window; it lands
   on the window's **last two ticks** — inside, and still the wrong frame to freeze.
 - **5.16** — the hazard-width ceiling has **two conflicting figures**, and the two shipped 480 px runs
@@ -259,48 +245,43 @@ new metric asserting the layout is fine.** A defect it surfaces becomes a findin
 
 - **Not Phase 10.** It is unblocked and the owner has deferred it deliberately. Do not start it.
 - **Not a new inventory sweep.** The three read-only sweeps that built the original list are spent.
-- **Not a re-run of Phase 9's gate.** It closed on 2026-08-24 with a recorded verdict per criterion.
-  §1 is its *remainder*, not a re-litigation.
+- **Not a re-litigation of §1a.** It is recorded with evidence. Either bring one of the three closing
+  conditions, or leave it.
+- **Not a re-run of the debts session's gate.** It closed 2026-08-25 with every finding applied or
+  recorded, and both Codex reviews ran.
 
 ---
 
 ## 6. Working rules
 
-1. **Every fix ships with a gate, watched failing first** *(C1)*, on the mutation the fix's own claim
-   names — **never the convenient one**.
-2. **Confirm each revert by "content changed AND the original count dropped by one"** *(C12)*.
-3. **Detect greenness positively, including the COUNT.** ⚠️ In the close session a rewritten gate
-   reported `PASS (0) FAIL (0)` — a parse error collecting zero tests — and only reading the count
-   caught it. A bare exit code would have read as green.
-4. ⚠️ **This shell collapses backslashes in heredocs.** Three regex escapes were silently destroyed in
-   one session, once producing a literal `0x08` **backspace byte inside a regex** — a rule that
-   matched nothing and looked green. **Use regex literals or `String.raw`, and read the bytes back
-   (`od -c`) when a regex is built through a shell.** A terminal will happily render the corruption
-   as correct.
-5. **A redundant gate is worse than none.** If every mutation a new gate names is already caught,
-   delete it and fix the citation instead.
-6. `npm run test:e2e` — **never** `npx playwright test`. One Playwright run at a time, nothing heavy
-   beside it. Kill port 5173 before reporting done *(C13)*.
-7. **Agents: `isolation: "worktree"`, and give each one a deliverable path OUTSIDE its worktree.**
-   That is what made the close round lose nothing; a reminder to copy files out is not a mechanism.
+1. Every fix ships with a gate, **watched failing first** *(C1)*, on the mutation the fix's own claim
+   names — never the convenient one. ⚠️ **And re-watch it when the gate's own definition or inputs
+   move** — last session a predicate change made a green red proof vacuous, and a file split made
+   another one answer its own question.
+2. Confirm each revert by **"content changed AND the original count dropped by one"** *(C12)*.
+3. **Detect greenness positively, including the COUNT.** A run that selected nothing exits 0 and
+   reports `PASS (0) FAIL (0)` — seen three times last session.
+4. ⚠️ **This shell eats backslashes and backticks.** `\n` in a heredoc becomes a real newline and a
+   backtick becomes command substitution — both produced broken files and one mangled commit message
+   last session. **Build fixture strings from a named constant** (`const NL = '\n'`) and write
+   multi-line content with the Write tool, not a heredoc.
+5. **A redundant gate is worse than none.** Prefer deleting a check to reshaping one.
+6. `npm run test:e2e`, **never** `npx playwright test`. One Playwright run at a time, nothing heavy
+   beside it. Kill port 5173 before reporting done *(C13)*. The full sweep is ~17 minutes.
+7. Agents: `isolation: "worktree"`, each with a deliverable path **outside** its worktree.
+   ⚠️ Delete the `node_modules` junction before any `git worktree remove --force`.
+   ⚠️ **They cannot run Playwright or mutate `src/`** — plan their briefs around source review.
 8. **STOP and ask** before: a new dependency · deleting a file · any fal generation · a ninth
-   `__game` field · renumbering the tick contract · **any new architectural rule (§1e)** ·
-   contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md · merging to `main` · any balance change.
+   `__game` field · renumbering the tick contract · **any new architectural rule, and any WIDENING of
+   an existing one** · contradicting STYLE.md / PRD.md / LESSONS-APPLIED.md · merging to `main` · any
+   balance change.
+   ⚠️ *Rule 8's widening clause is new: last session a repair quietly strengthened an owner-authorised
+   rule from "may not write sim-owned state" to "may not pass sim state", and only the Codex review
+   caught it. **A test enforcing more than the rule says is a rule change.***
 
-**Session log:** `docs/qa/session-<slug>.md`, splitting to **flat siblings** near 400 lines —
-`file-size.test.ts` globs `docs/qa/*.md` non-recursively, never a subdirectory. **Branch:** off
-`main`, commit per batch, no merge without asking.
-
-**Baseline — anything worse is a regression this session caused:**
-
-| check | baseline 2026-08-24 (`a8e4fa1`) |
-|---|---|
-| typecheck | clean |
-| unit | **2417 passed / 0 failed** (160 files) |
-| build | `verify-dist ok: 5 level(s) and 12 audio file(s)` byte-identical |
-| `test:sim-isolated` | 2414 passed / 3 skipped, phaser restored to 4.2.1 |
-| e2e | **128 selected, 128 passed** |
-
-⚠️ **The e2e figure is the LOADED full-suite number and it is genuinely 128/128 today** — but 5.2 and
-D9 both fired in a loaded sweep earlier the same day and both passed in isolation. **A 126/128 with
-those two named is not automatically your regression.** Identify the failures before assuming.
+**Session log:** `docs/qa/session-<slug>.md`, splitting to **flat siblings** near 400 lines.
+**Branch:** off `main`, commit per batch, **no merge without asking**.
+**Both Codex reviews are mandatory** — plan before approval, implementation before reporting done.
+Each lands as a pair in `docs/reviews/`. ⚠️ Codex's shell cannot spawn processes; **every review prompt
+must tell it to use the `node_repl` MCP tool with `fs.readFileSync`**, and every finding it returns is
+file evidence that **must be re-verified locally**.
