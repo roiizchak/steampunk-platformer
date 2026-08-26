@@ -85,8 +85,37 @@ export const SUPERSEDED_CLIPS = Object.freeze({
    * attempt should change the **geometry** (a padded anchor — `-r3`'s params record
    * `"anchorPadded": false`) rather than the wording, since the wording experiment already cost
    * $4.76 and came back a coin flip.
+   *
+   * ✅ **THAT ADVICE WAS TAKEN AND IT WORKED — `-r4` is declared as of 2026-08-26.** Same prompt
+   * again, byte-identical to `-r3` and therefore to `-r2`; the ONLY change was the anchor, padded
+   * with `padAnchor --fill 0.55` to a 2560² canvas that lifts the top margin 18.8 % → 25.0 %.
+   * `request_id 01a03c8d-72ac-7cc1-8287-5a2b36ae1241`, seed 321260100.
+   *
+   * **It passes G6, and it passes `gateLoopWrap` OUTRIGHT** — wrap 0.02068 within a budget of
+   * 0.02273, where `-r2` failed at 0.01371 against 0.01143. The `0.0138` waiver in
+   * `every-slug-loop-gate.test.ts` is deleted, which is what its own `owed` line asked for.
+   *
+   * ⚠️ **`-r2` moves to this list, and it is a real supersession this time** — unlike `-r3`,
+   * which sits here as a discard. Three takes, one axis each, and the table is the record:
+   *
+   * | take | anchor | verdict |
+   * |---|---|---|
+   * | `brass-sentry-idle.mp4` | unpadded, wrong ratio | superseded in session 5 |
+   * | `brass-sentry-idle-r2.mp4` | unpadded 2048² | passed G6, **FAILED the loop gate** at 0.01371/0.01143 — shipped under a waiver for three days |
+   * | `brass-sentry-idle-r3.mp4` | unpadded 2048², same words | **failed G6**, top 0 px — a discard |
+   * | **`brass-sentry-idle-r4.mp4`** | **padded 2560², same words** | **passes both** |
+   *
+   * 🔴 The slug `scale` moved with it — 0.28915663 → 0.36022514 — because a padded anchor
+   * makes the machine fewer source pixels tall. **`fire` and `death` did NOT need re-deriving**:
+   * measured after repacking, the tripod base spans 205 px in all three sheets, exactly as before.
+   * See `character-bounds-brass-sentry.json`'s `_scale` for why a ratio change leaves the rendered
+   * size alone, and why that is not the `3.10` situation repeating.
    */
-  'brass-sentry/idle': Object.freeze(['brass-sentry-idle.mp4', 'brass-sentry-idle-r3.mp4']),
+  'brass-sentry/idle': Object.freeze([
+    'brass-sentry-idle.mp4',
+    'brass-sentry-idle-r2.mp4',
+    'brass-sentry-idle-r3.mp4',
+  ]),
   'brass-sentry/death': Object.freeze([
     'brass-sentry-death.mp4',
     'brass-sentry-death-r2.mp4',

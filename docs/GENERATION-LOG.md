@@ -276,3 +276,10 @@ footstep and a landing are live on that tick, and a worst case should over-state
 
 **Running total: $53.86 of the $55 ceiling. $1.14 remains — less than one generation on this endpoint,
 so the next re-shoot is a CEILING decision, not a budget one.**
+
+| [qa/session-tier5-gate-holes-05-reshoot.md](qa/session-tier5-gate-holes-05-reshoot.md) | ✅ **`brass-sentry/idle` re-shoot — ADOPTED, and it closed the last waiver.** `01a03c8d-72ac-7cc1-8287-5a2b36ae1241`, seed 321260100. Prompt **byte-identical** to `-r3` and `-r2`; the only change was the anchor, padded with `padAnchor --fill 0.55` to 2560² (top margin 18.8 % → 25.0 %). `-r3` had failed G6 at **top 0 px** on an axis no clause constrains, and the wording lever was already recorded as spent ($4.76, "a coin flip"). **Passes G6 and passes `gateLoopWrap` OUTRIGHT** — wrap 0.02068 within 0.02273, where `-r2` failed at 0.01371 against 0.01143 — so the `0.0138` waiver in `every-slug-loop-gate.test.ts` was **deleted**, as its own `owed` line required. Slug `scale` re-derived 0.28915663 → **0.36022514**; `fire`/`death` needed **no** re-derive, tripod measured at **205 px in all three sheets** | `bytedance/seedance-2.0/image-to-video` | 1 · $1.19 |
+
+**Running total: $55.05 of the $55 ceiling — ⚠️ $0.05 OVER, on the owner's explicit decision of
+2026-08-26, taken with the overrun quoted before the spend.** The ceiling has not been raised; it has
+been knowingly exceeded by one generation, and the amount is recorded here rather than absorbed. **The
+next generation on this endpoint needs a ceiling raise, not a decision.**

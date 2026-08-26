@@ -226,12 +226,25 @@ describe('CLIP_JOBS — fal submission parameters checked into version control',
       expect(CLIP_JOBS['brass-sentry/fire'].anchorSource).toContain('anchors-padded');
     });
 
-    it('leaves every other sentry action on the unpadded slug anchor', () => {
-      // Padding is per-generation. A slug-wide override would silently re-shoot `idle`, which
-      // already packs, from a canvas it was never measured against.
-      expect(CLIP_JOBS['brass-sentry/idle'].anchorUrl).toBe(SENTRY_UNPADDED);
-      expect(CLIP_JOBS['brass-sentry/idle'].anchorPadded).toBe(false);
-      expect(CLIP_JOBS['brass-sentry/idle'].anchorSha256).toBeNull();
+    it('pads `idle` from its OWN canvas, not fire/death’s — padding is per KEY, never per slug', () => {
+      // 🔴 **This assertion INVERTED on 2026-08-26 and the property it defends did not.** It read
+      // *"leaves every other sentry action on the unpadded slug anchor"*, because at the time `idle`
+      // packed fine and a slug-wide override would have re-shot it from a canvas it was never
+      // measured against. `idle` has since been re-shot deliberately (`-r4`), from a canvas chosen
+      // for IT: `--fill 0.55` → 2560², where `fire` and `death` share a `--fill 0.35` → 4024² one
+      // sized for a muzzle flash and a steam plume that leave the frame. An idle turret has neither.
+      //
+      // So the real invariant was never "only fire is padded" — it is **one padded record per KEY,
+      // never inferred across a slug**, which is what `clipAnchors.mjs` keys and what this now says.
+      const idle = CLIP_JOBS['brass-sentry/idle'];
+      expect(idle.anchorPadded).toBe(true);
+      expect(idle.anchorUrl).not.toBe(SENTRY_UNPADDED);
+      expect(idle.anchorSha256).toMatch(/^[0-9a-f]{64}$/);
+      // The decisive half: `idle` did NOT inherit fire/death's canvas. Same slug, different framing,
+      // deliberately — and `sprite-size-consistency.test.ts` is what proves that is safe (the tripod
+      // base measures 205 px in all three packed sheets).
+      expect(idle.anchorUrl, 'idle inherited fire/death’s canvas — padding was inferred, not declared')
+        .not.toBe(CLIP_JOBS['brass-sentry/fire'].anchorUrl);
     });
 
     it('rejects a padded record whose digest is missing or malformed', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readBytes, readPng } from '../../tools/gen/png.mjs';
-import { FAIL, gateAlpha, gateDimensions, gateLoopWrap, gateMotionFloor, PASS } from '../../tools/gen/gates.mjs';
+import { gateAlpha, gateDimensions, gateLoopWrap, gateMotionFloor, PASS } from '../../tools/gen/gates.mjs';
 import type { RgbaImage } from '../../tools/gen/png.d.mts';
 import catalog from '../../public/assets/index.json';
 
@@ -12,7 +12,18 @@ import catalog from '../../public/assets/index.json';
  * failure stays a named, asserted, permanently-red-if-fixed fact instead of a silently skipped one.
  * See docs/qa/phase-05-combat.md.
  */
-const KNOWN_LOOP_WRAP_FAILURES = new Set(['brass-sentry-idle']);
+/**
+ * ✅ **EMPTY as of 2026-08-26, and that is the `-r4` re-shoot landing.** It held
+ * `'brass-sentry-idle'`, whose sheet failed 4.9 at wrap 0.02437 against 0.02032. The padded re-shoot
+ * packs at **0.02068 within 0.02273 — PASS**, so the key is REMOVED rather than the assertion below
+ * being left red, which is exactly what the recorded-defect block used to instruct.
+ *
+ * ⚠️ **Kept as a live, empty Set rather than deleted.** The `if` at the bottom of this file reads
+ * it to decide which looping sheets get the 4.9 assertion, and an empty set means EVERY looping sheet
+ * gets it — which is the state this project wants to be in and to notice leaving. Removing the
+ * mechanism would make the next recorded defect a silent edit to the loop condition instead.
+ */
+const KNOWN_LOOP_WRAP_FAILURES = new Set<string>([]);
 
 /**
  * Criteria 4.3, 4.4 and 4.9, run against the **shipped bytes** — which is where they were not.
@@ -201,21 +212,19 @@ describe('the shipped character sheets, read from the files the player loads', (
   }
 
   describe('recorded art defects — kept visible, never silenced (docs/qa/phase-05-combat.md)', () => {
-    it('brass-sentry-idle STILL FAILS 4.9 loop-wrap: the wrap snaps past the clip\'s own largest step', () => {
-      const sheet = catalog.sheets.find((s) => s.key === 'brass-sentry-idle');
-      expect(sheet, 'brass-sentry-idle must stay in the catalog for this defect to stay observable').toBeDefined();
-      const strip = stripFor(sheet!.url);
-      const frames = Array.from({ length: sheet!.frameCount }, (_u, i) =>
-        sliceFrame(strip, i, sheet!.frameWidth, sheet!.frameHeight),
-      );
-      const verdict = gateLoopWrap(frames);
-      // Confirmed independently by `node tools/gen/build-assets.mjs brass-sentry idle`, which
-      // printed `loop: FAIL — wrap 0.02437 exceeds 0.02032 — it snaps`. If this ever turns PASS,
-      // the art was fixed — remove the key from KNOWN_LOOP_WRAP_FAILURES above rather than leaving
-      // this assertion red.
-      expect(verdict.status, `expected this known defect to still FAIL; it PASSED: ${verdict.reason}`).toBe(
-        FAIL,
-      );
+    it('has no entries left: brass-sentry-idle was FIXED by the -r4 re-shoot, not silenced', () => {
+      // 🔴 This block used to assert `brass-sentry-idle` STILL FAILS 4.9, so a recorded defect
+      // could not quietly disappear by someone deleting its key. The defect is now genuinely gone
+      // — wrap 0.02068 within 0.02273 on the padded `-r4` sheet — so the assertion INVERTS rather
+      // than being removed: the set must stay empty until a real new defect is recorded here with
+      // its own measurement, and `brass-sentry-idle` is judged by the ordinary 4.9 loop above like
+      // every other looping sheet.
+      expect(
+        [...KNOWN_LOOP_WRAP_FAILURES],
+        'a key was added to KNOWN_LOOP_WRAP_FAILURES, which EXEMPTS that sheet from criterion 4.9. ' +
+          'That is an owner decision with a measurement behind it, not a way to make a red run ' +
+          'green — record the defect in docs/qa/ first.',
+      ).toEqual([]);
     });
   });
 });

@@ -139,6 +139,35 @@ export const PADDED_ANCHORS = Object.freeze({
   }),
 
   /**
+   * 🔴 **`idle` is padded to a DIFFERENT canvas than `fire` and `death`, and that is deliberate.**
+   * Added 2026-08-26 for the `-r4` re-shoot. `--fill 0.55` → **2560²**, figure 68.8 % → 55.0 % of
+   * height, margins **T18.8→25.0 B12.5→20.0 L10.7→18.6 R12.1→19.7**. Uploaded and digested from
+   * `_generated/anchors-padded/brass-sentry-padded.png`.
+   *
+   * **Why not the 4024² canvas the other two share.** That one exists at `--fill 0.35` to give the
+   * muzzle flash and the steam plume room — EFFECTS that leave the frame, not the machine. `idle`
+   * has no effect beyond a wisp of steam; what it needed was enough top margin that a barrel
+   * swinging *"very slightly up"* cannot reach the edge, which `-r3` did at **0 px**. 0.55 buys that
+   * (18.8 % → 25.0 %) at a quarter of 0.35's resolution cost, and the machine is the thing a
+   * stationary sprite is judged on.
+   *
+   * ⚠️ **"One framing per slug" is therefore NOT true of this slug any more**, and the thing that
+   * makes that safe is measured rather than assumed: `scale` resolves per `(slug, action)`, and the
+   * **tripod base spans 205 px in all three packed sheets** — verified after repacking, the same
+   * figure as before the re-shoot. `sprite-size-consistency.test.ts` is the gate. If a future sentry
+   * action is shot, derive its scale from the tripod, never from the silhouette, and never assume it
+   * inherits either canvas.
+   */
+  'brass-sentry/idle': Object.freeze({
+    url: 'https://v3b.fal.media/files/b/0aa7d8fc/VkOG4IOvZkP9Ygs_hQyzf_brass-sentry-padded.png',
+    sha256: 'f823d7f5ff84a77e8264b8d5d189d54a766228bc6d811f522513b910870d0f99',
+    // ⚠️ A DISTINCT filename, because `padAnchor.mjs` writes every fill to the same
+    // `<slug>-padded.png` and `fire`/`death` above name that path for their 4024² canvas. Two
+    // records pointing at one regenerable path would each describe bytes the other overwrote.
+    source: '_generated/anchors-padded/brass-sentry-padded-fill055.png',
+  }),
+
+  /**
    * The same 4024² sentry canvas as `fire` above — one padded PNG serves every sentry action.
    * `death`'s original failure was a genuine wreckage spread (G6 f1/8, left 0), which the first
    * padding step fixed; what remains at `-r4` is the steam plume leaving the TOP edge, measured in

@@ -71,10 +71,19 @@ const catalog = indexJson as unknown as { sheets: CatalogSheet[] };
  * `owed` states what closes it. **Delete the entry when the re-shoot lands; never raise it.**
  */
 const WAIVED: Record<string, { ceiling: number; owed: string }> = {
-  'brass-sentry/idle': {
-    ceiling: 0.0138,
-    owed: 're-shoot; idle is the slug scale source, so it moves every brass-sentry bound',
-  },
+  // 🔴 **EMPTY, and that is the re-shoot landing.** `brass-sentry/idle` was the one entry:
+  // waived 2026-08-23 at `ceiling: 0.0138` against a measured 0.01371, with 0.00009 of headroom and
+  // `owed: 're-shoot'`. The `-r4` padded re-shoot landed 2026-08-26 and the sheet now **PASSES
+  // outright** — wrap 0.02068 within a budget of 0.02273, where `-r2` failed at 0.01371 against
+  // 0.01143. The entry is DELETED rather than re-pointed, exactly as its own text said: *"Delete the
+  // entry when the re-shoot lands; never raise it."*
+  //
+  // ⚠️ The raw wrap went UP (0.01371 → 0.02068) while the verdict went from FAIL to PASS, and
+  // that is not a contradiction — `gateLoopWrap`'s budget is derived from the sheet's own median
+  // frame-to-frame step, so a livelier clip earns a larger budget. **This is why the waiver could not
+  // simply be re-pointed at the new number**: an absolute ceiling on `wrap` compares two figures
+  // measured against different budgets. The gate below judges the verdict; the waiver judged a raw
+  // value, which is the narrower thing.
 };
 
 /**

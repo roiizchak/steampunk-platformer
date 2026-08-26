@@ -135,7 +135,7 @@ const CLIP_FILES = Object.freeze({
    * ratio equals output ratio and no reframing happens. G6: **0 of 6 fail**, margins 84-180px on
    * all four edges. See `docs/generations/phase-05-ratio-match.md`.
    */
-  'brass-sentry/idle': 'brass-sentry-idle-r2.mp4',
+  'brass-sentry/idle': 'brass-sentry-idle-r4.mp4',
 
   /**
    * The rest of the `1:1` re-shoot round (session 4). Each names the **best candidate measured so
