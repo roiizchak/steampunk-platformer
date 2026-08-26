@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import {
   CATALOG_KEY,
   describeCatalogProblem,
@@ -104,6 +105,7 @@ function applyBreakAsset(entry: CatalogEntry, index: number): string {
   if (!import.meta.env.DEV || index !== 0) {
     return entry.url;
   }
+  devSeam('__DEVSEAM_bootAssets_breakAssetCorrupt__');
 
   return new URLSearchParams(window.location.search).get('breakAsset') === 'corrupt'
     ? 'assets/corrupt-fixture.png'

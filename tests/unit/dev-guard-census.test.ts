@@ -132,15 +132,26 @@ const NEGATED_CENSUS: ReadonlyArray<readonly [string, number]> = [
 ];
 
 /**
- * The measured total of guarded dev-only body lines, 2026-08-23.
+ * The measured total of guarded dev-only body lines.
  *
- * Per-file, for the record: `gameDev.ts` 15 · `gamePlayerDraw.ts` 10 · `BootScene.ts` 5 ·
+ * Per-file as measured 2026-08-23: `gameDev.ts` 15 · `gamePlayerDraw.ts` 10 · `BootScene.ts` 5 ·
  * `gameInput.ts` 5 · `globals.ts` 2 · `audio.ts` 1 · `main.ts` 1 · `bootAssets.ts` 1 ·
- * `gameLevelPick.ts` 1. Note `config.ts`, `feelVariants.ts`, `hitstop.ts` and `types.ts` contribute
- * **zero**: their guards are ternaries and type positions, not blocks, which the brace scan does not
- * and should not count.
+ * `gameLevelPick.ts` 1 = **41**. Note `config.ts`, `feelVariants.ts`, `hitstop.ts` and `types.ts`
+ * contribute **zero**: their guards are ternaries and type positions, not blocks, which the brace
+ * scan does not and should not count.
+ *
+ * 🔴 **RE-TAKEN 41 -> 49 on 2026-08-26, and the delta is fully accounted for.** Phase 10 added a
+ * `devSeam('__DEVSEAM_*__')` sentinel as the first statement of every guarded body, for criterion
+ * 10.2's bundle gate. Exactly **8** of the 17 landed inside a POSITIVE `if (DEV) {` block, which is
+ * the only shape this brace scan counts: `main.ts` +1 · `BootScene.ts` +1 · `gameDev.ts` +3 ·
+ * `gameInput.ts` +1 · `gamePlayerDraw.ts` +2. The other 9 sit after a negated guard's early-return
+ * block — inside the function, outside the braces this scan walks — so they do not move the number.
+ *
+ * 41 + 8 = 49. **This is a re-take with a derived cause, not a bound moved to clear a red.** If you
+ * cannot account for a delta line-by-line the way this note does, do not update the number: an
+ * unexplained change here is the emptied-block or hoisted-statement mutation the check exists for.
  */
-const GUARDED_BODY_LINES = 41;
+const GUARDED_BODY_LINES = 49;
 
 function guardedBodyLines(source: string): number {
   const lines = source.split('\n');

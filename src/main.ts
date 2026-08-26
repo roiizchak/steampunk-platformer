@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from './debug/devSeam';
 import { gameConfig } from './game/config';
 import { installDebugGlobals } from './debug/globals';
 
@@ -14,5 +15,6 @@ const game = new Phaser.Game(gameConfig);
 // the entire refuse-to-route gate a no-op. Without a handle, that regression cannot be tested
 // from the outside at all.
 if (import.meta.env.DEV) {
+  devSeam('__DEVSEAM_main_phaserGameHandle__');
   (window as unknown as { __phaserGame: Phaser.Game }).__phaserGame = game;
 }

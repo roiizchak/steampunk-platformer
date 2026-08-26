@@ -13,6 +13,7 @@
  */
 
 import type { World } from '../sim/types';
+import { devSeam } from './devSeam';
 
 export interface PlayerView {
   x: number;
@@ -70,6 +71,7 @@ export function updateDebugState(patch: Partial<GameDebugView>): void {
   if (!import.meta.env.DEV) {
     return;
   }
+  devSeam('__DEVSEAM_globals_updateDebugState__');
   Object.assign(state, patch);
 }
 
@@ -114,6 +116,7 @@ export function installDebugGlobals(): void {
   if (!import.meta.env.DEV) {
     return;
   }
+  devSeam('__DEVSEAM_globals_installDebugGlobals__');
 
   Object.defineProperty(window, '__game', {
     // Not configurable: with `configurable: true` the whole QA oracle can be replaced via

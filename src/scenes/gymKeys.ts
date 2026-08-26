@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 
 /**
  * The Gym's key bindings. **DEV ONLY** — `GymScene` is guarded at every point that names it.
@@ -36,6 +37,7 @@ export function bindGymKeys(
   keyboard: Phaser.Input.Keyboard.KeyboardPlugin | null | undefined,
   actions: GymActions,
 ): void {
+  devSeam('__DEVSEAM_gymKeys_bindGymKeys__');
   if (!keyboard) {
     return;
   }

@@ -27,6 +27,7 @@
  */
 
 import type Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
@@ -79,6 +80,7 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
   if (!import.meta.env.DEV) {
     return {};
   }
+  devSeam('__DEVSEAM_gameDev_attachDevOverlays__');
   const params = new URLSearchParams(globalThis.location?.search ?? '');
   const overlays: DevOverlays = {};
 
@@ -195,6 +197,7 @@ export function startDevScene(
   levelId?: string,
 ): void {
   if (import.meta.env.DEV) {
+    devSeam('__DEVSEAM_gameDev_startDevScene__');
     scene.scene.start(key, { levelId });
   }
 }
@@ -202,6 +205,7 @@ export function startDevScene(
 /** DEV ONLY (5.11 fixture). Guard repeated inside the body — see `startDevScene`. */
 export function spawnFleetFixture(world: World): void {
   if (import.meta.env.DEV) {
+    devSeam('__DEVSEAM_gameDev_spawnFleetKeyN__');
     spawnDevFleet(world, {
       count: DEV_FLEET_COUNT,
       hp: DEV_FLEET_HP,
@@ -215,6 +219,7 @@ export function spawnFleetFixture(world: World): void {
 /** DEV ONLY (5.7 fixture). Guard repeated inside the body — see `startDevScene`. */
 export function spawnLowHpFixture(world: World): void {
   if (import.meta.env.DEV) {
+    devSeam('__DEVSEAM_gameDev_spawnLowHpKeyK__');
     spawnDevEnemies(world, {
       count: 1,
       hp: DEV_LOW_HP,

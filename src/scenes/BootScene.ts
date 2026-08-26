@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, describeCatalogProblem, type AssetCatalog } from '../game/assetCatalog';
 import { destroyAudio } from '../game/audio';
@@ -217,6 +218,7 @@ export class BootScene extends Phaser.Scene {
     // ElementEditor here for the same reason Playground is here: a refused boot that leaves a play
     // scene ticking behind the error screen is a cosmetic refusal, not a refusal.
     if (import.meta.env.DEV) {
+      devSeam('__DEVSEAM_BootScene_stopDevScenes__');
       this.scene.stop('Playground');
       this.scene.stop('ElementEditor');
       this.scene.stop('Gym');
@@ -240,6 +242,7 @@ export class BootScene extends Phaser.Scene {
     if (!import.meta.env.DEV) {
       return url;
     }
+  devSeam('__DEVSEAM_BootScene_breakAssetCatalog__');
 
     return new URLSearchParams(window.location.search).get('breakAsset') === 'catalog'
       ? 'assets/this-catalog-does-not-exist.json'
@@ -256,6 +259,7 @@ export class BootScene extends Phaser.Scene {
     if (!import.meta.env.DEV) {
       return;
     }
+  devSeam('__DEVSEAM_BootScene_breakFilter__');
 
     if (new URLSearchParams(window.location.search).get('breakFilter') === '1') {
       this.game.canvas.style.setProperty('image-rendering', 'auto');

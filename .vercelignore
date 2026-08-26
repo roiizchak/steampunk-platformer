@@ -1,0 +1,37 @@
+# What Vercel does NOT need as build input.
+#
+# `buildCommand` is `npm run build` — `tsc --noEmit && vite build && verify-dist.mjs` — so the
+# upload has to carry everything those three read, and nothing else. Measured 2026-08-26:
+# excluding the four entries below drops ~169 MB from every deploy.
+#
+# 🔴 WHAT MUST NOT BE ADDED HERE, and why each would break the build rather than slow it:
+#
+#   tests/                 `tsconfig.json`'s include list names it. 3.8 MB.
+#   playwright.config.ts   named individually in that same include list — tsc errors
+#                          "File not found" on a missing named include, not on an empty glob.
+#   public/                53 MB, and it IS the game: `vite build` copies it verbatim into
+#                          dist/, and `verify-dist.mjs` asserts every .tmj and audio file
+#                          arrived byte for byte.
+#   tools/                 `verify-dist.mjs` and the dev-seam gate live there.
+#
+# Adding any of those would produce a build failure on Vercel and a green build locally,
+# which is the worst shape a config error can take.
+
+# 73 MB — prose and captured evidence. No build step reads docs/.
+docs/
+
+# 96 MB — Phase 0 style probes and reference art. Superseded by public/assets/; kept in the
+# repo for provenance, never read by the build.
+assets/
+
+# Local Playwright output. Regenerated per run, meaningless on a build box.
+test-results/
+playwright-report/
+
+# The build's own output. Uploading it would ship a stale bundle as the input to building a
+# fresh one.
+dist/
+
+# Raw model output. Already gitignored, so it is absent from a clone anyway — listed so the
+# intent survives if that ever changes.
+_generated/

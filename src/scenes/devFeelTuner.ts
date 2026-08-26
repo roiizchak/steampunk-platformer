@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import type { World } from '../sim/types';
 
 /**
@@ -79,6 +80,7 @@ export function createFeelTuner(
   world: World,
   base: { runFps: number; walkFps: number },
 ): (sprite: Phaser.GameObjects.Sprite) => void {
+  devSeam('__DEVSEAM_devFeelTuner_createFeelTuner__');
   const shippedRunMax = world.tuning.runMax;
   const shippedWalkMax = world.tuning.walkMax;
   const state: TunerState = {

@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
 import type { AudioManager } from '../game/audio';
@@ -148,6 +149,7 @@ export function bindPlayerKeys(
   // guard the key would still be bound in production and would call `scene.start('Playground')`
   // on a scene that is not registered there — a silent no-op at best. Codex review 2, finding I2.
   if (import.meta.env.DEV && dev) {
+    devSeam('__DEVSEAM_gameInput_devKeyBindings__');
     addKey(P).on('down', () => dev.togglePlayground());
     addKey(O).on('down', () => dev.toggleElementEditor());
     addKey(G).on('down', () => dev.toggleGym());

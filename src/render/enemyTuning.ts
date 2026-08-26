@@ -24,6 +24,7 @@
  */
 
 import { SENTRY_FIRE_TICKS } from './enemyView';
+import { devSeam } from '../debug/devSeam';
 import type { Scavenger, Sentry } from '../sim/enemies';
 import type { World } from '../sim/types';
 
@@ -77,6 +78,7 @@ function knob(
  * anything.
  */
 export function enemyKnobs(world: World): Knob[] {
+  devSeam('__DEVSEAM_enemyTuning_enemyKnobs__');
   const knobs: Knob[] = [];
 
   world.enemies.sentries.forEach((sentry: Sentry, index) => {

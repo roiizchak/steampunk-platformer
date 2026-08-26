@@ -1,4 +1,5 @@
 import { createScavenger } from '../sim/enemies';
+import { devSeam } from '../debug/devSeam';
 import { createSentry } from '../sim/enemySentry';
 import type { World } from '../sim/types';
 
@@ -20,6 +21,7 @@ export function spawnDevEnemies(
   world: World,
   opts: { count: number; hp: number; x: number; y: number },
 ): void {
+  devSeam('__DEVSEAM_devSpawn_spawnDevEnemies__');
   for (let i = 0; i < opts.count; i++) {
     const scavenger = createScavenger({
       x: opts.x + i * 40,
@@ -65,6 +67,7 @@ export function spawnDevFleet(
   world: World,
   opts: { count: number; hp: number; x: number; y: number; spreadSimPx: number },
 ): void {
+  devSeam('__DEVSEAM_devSpawn_spawnDevFleet__');
   const { count, hp, x, y, spreadSimPx } = opts;
   // `count - 1` intervals across the span, so the first and last body land exactly on the edges of
   // the spread rather than the last one falling short by one step.
