@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readPng } from '../../tools/gen/png.mjs';
+import { HELP_FONT_PX, HELP_FONT_STYLE, HELP_STROKE_PX } from '../../src/render/helpBanner';
 import { COUNTER_FILL, COUNTER_STROKE, COUNTER_STROKE_PX } from '../../src/render/hud';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 
@@ -150,6 +151,50 @@ describe('the gear counter stays legible over the shipped world (2b.4)', () => {
         `${worst.toFixed(2)}:1. Do NOT lower MIN_RATIO — change the colours, the stroke, or add a ` +
         `backing plate.`,
     ).toBeGreaterThanOrEqual(MIN_RATIO);
+  });
+
+  it('the CONTROLS BANNER is LARGE text, which is what makes 3:1 the formal bar for it too', () => {
+    // 🔴 The banner is the element this method was never pointed at. It shipped as bare
+    // `#8f8776` with no stroke and no plate, over the busiest band of the backdrop, measured at
+    // **8 CSS px of ink** in a 852x480 production capture — worst-case contrast **2.27:1**, under
+    // even the large-text bar, on text a third the counter's size.
+    //
+    // Both halves were fixed, and the SIZE half is what makes the number formal rather than argued.
+    const physicalPx = HELP_FONT_PX * (852 / GAME_WIDTH);
+    expect(
+      physicalPx,
+      `the banner draws at ${physicalPx.toFixed(1)}px — under WCAG's 14pt bold large-text ` +
+        'threshold, so MIN_RATIO = 3 does not apply to it and the bar is 4.5:1',
+    ).toBeGreaterThanOrEqual(18.66);
+    expect(HELP_FONT_STYLE, 'the 18.66px threshold is the BOLD one — unbold, the bar is 24px').toBe('bold');
+    expect(HELP_STROKE_PX, 'a thin stroke is an anti-aliasing artefact, not a contrast mechanism')
+      .toBeGreaterThanOrEqual(4);
+    // It reuses the counter's ink pair, so the sweep above already covers its worst case — this
+    // pins that it is still the SAME pair, which is the only reason that coverage transfers.
+    expect([COUNTER_FILL, COUNTER_STROKE]).toEqual(['#f7e3b8', '#1a1410']);
+  });
+
+  it('🔴 and the SMALL-text bar would have forced white-on-black — the road not taken', () => {
+    // Why the size moved instead of the colours, kept as an executable record rather than a claim.
+    //
+    // For two inks over an ARBITRARY background the worst case has a closed form: the crossover
+    // where neither ink is favoured sits at `sqrt((Lfill + 0.05) / (Lstroke + 0.05))`. Clearing
+    // 4.5:1 therefore needs those terms 20.25x apart — which pins the fill within a hair of pure
+    // white and the stroke at #060606 or darker. That is a STYLE.md change, and it would have left
+    // the banner 8 px tall: high-contrast and still unreadable.
+    const worstOver = (fill: string, stroke: string): number =>
+      Math.sqrt((hexLuminance(fill) + 0.05) / (hexLuminance(stroke) + 0.05));
+    // The closed form agrees with the numeric sweep the counter's test above runs. If these ever
+    // disagree, one of the two models is wrong and no number in this file can be trusted.
+    expect(worstOver(COUNTER_FILL, COUNTER_STROKE)).toBeCloseTo(glyphContrast(0.169), 1);
+
+    expect(worstOver(COUNTER_FILL, COUNTER_STROKE), 'the shipped pair').toBeGreaterThanOrEqual(MIN_RATIO);
+    expect(worstOver(COUNTER_FILL, COUNTER_STROKE), 'and it does NOT clear the small-text bar').toBeLessThan(4.5);
+    // The frontier itself, so nobody re-derives it: these are the pairs that WOULD have worked.
+    expect(worstOver('#ffffff', '#000000')).toBeGreaterThanOrEqual(4.5);
+    expect(worstOver('#fffdf8', '#000000'), 'the warmest fill that clears 4.5').toBeGreaterThanOrEqual(4.5);
+    expect(worstOver('#fffaf0', '#000000'), 'one step warmer and it fails').toBeLessThan(4.5);
+    expect(worstOver('#ffffff', '#070707'), 'one step lighter on the stroke and it fails').toBeLessThan(4.5);
   });
 
   it('and the floor is a real floor — the sweep found a genuine minimum', () => {

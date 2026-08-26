@@ -31,7 +31,8 @@ import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
-import { HELP_BANNER_Y, HELP_FONT_PX, HUD_MARGIN } from '../render/hud';
+import { HELP_BANNER_Y, HELP_FONT_PX, HELP_FONT_STYLE, HELP_STROKE_PX } from '../render/helpBanner';
+import { COUNTER_FILL, COUNTER_STROKE, HUD_MARGIN } from '../render/hud';
 import { GAME_WIDTH } from '../game/constants';
 import type { World } from '../sim/types';
 
@@ -116,8 +117,14 @@ export function helpLine(): string {
   // behind a key rather than in front of the game, so this banner is the only thing that says so.
   const base =
     'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume  ·  ESC levels';
+  // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
+  // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the
+  // long DEV form onto a THIRD wrapped row, which `hud-layout.test.ts` caps against for eating the
+  // play area. Measured: at 44 px the shipped line is 2 rows and the old DEV line was 3; no size is
+  // both large text (≥42 px) and two DEV rows (≤41 px). Shortening the dev suffix removes the
+  // conflict instead of trading the shipped banner against it, and costs nothing a player sees.
   return import.meta.env.DEV
-    ? `${base}  ·  P playground  ·  O element editor  ·  G gym`
+    ? `${base}  ·  P play  ·  O editor  ·  G gym`
     : base;
 }
 
@@ -142,7 +149,15 @@ export function addHelpBanner(scene: Phaser.Scene, text: string): void {
       // *(inventory 2.5)*. `HELP_FONT_PX` carries the derivation; `hud-layout.test.ts` fails if it
       // ever drops back under the floor.
       fontSize: `${HELP_FONT_PX}px`,
-      color: '#8f8776',
+      fontStyle: HELP_FONT_STYLE,
+      // 🔴 Was bare `#8f8776` with no stroke — 2.27:1 at worst, failing even the large-text
+      // bar the counter is held to, on text a third the counter's size. The counter's own note calls
+      // its stroke *"load-bearing, not decoration"*; the banner never had one. Both inks move
+      // together, because a stroke under the old mid-luminance fill still failed — see
+      // `HELP_STROKE_PX` in `hud.ts` for the sweep and for the 4.5:1 ceiling no fill can reach.
+      color: COUNTER_FILL,
+      stroke: COUNTER_STROKE,
+      strokeThickness: HELP_STROKE_PX,
       // At 28 px the line is wider than the view — ~110 characters shipped and ~150 in a DEV build.
       // Wrapping is what makes the legible size affordable; without it the fix would simply push the
       // right-hand controls off the edge, which is the same defect wearing a bigger font.

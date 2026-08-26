@@ -145,7 +145,14 @@ for (const [label, path] of scanned) {
   // case-insensitive "playground" matches them and cries wolf. It did, on the first run.
   // ' gym' carries its leading space for the same reason the other two do: it is what keeps the
   // sweep off the identifier `toggleGym`, which legitimately survives as an empty method stub.
-  for (const phrase of [' playground', 'element editor', ' gym']) {
+  //
+  // 🔴 `'p play'` and `'o editor'` were ADDED 2026-08-26 with the dev suffix's abbreviation
+  // (`P playground · O element editor` -> `P play · O editor`, so the banner could grow to 44 px
+  // without a third wrapped row). Without them this sweep would still name the OLD wording and only
+  // ` gym` would catch a leak of the new one — a guard quietly narrowed by a change somewhere else,
+  // which is the shape this file exists to prevent. The superseded phrases stay: a leak of either
+  // wording is a leak.
+  for (const phrase of [' playground', 'element editor', 'p play', 'o editor', ' gym']) {
     if (src.toLowerCase().includes(phrase)) {
       problems.push(`${label} mentions the DEV-only scene "${phrase.trim()}" in shipped text`);
     }

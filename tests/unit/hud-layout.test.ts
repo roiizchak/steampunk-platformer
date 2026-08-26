@@ -15,7 +15,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { HELP_FONT_PX, HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
+import { HELP_FONT_PX } from '../../src/render/helpBanner';
+import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
@@ -83,15 +84,43 @@ describe('hudLayout is derived from the live game size', () => {
     // shipped half, because "a mute control the player cannot discover is a mute control they do
     // not have". An illegible banner is those controls not existing.
     //
+    // ✅ **RAISED 28 -> 44 on 2026-08-26, and the floor below moved with it.** 28 cleared the 11 px
+    // floor at 12.4 px, but 12.4 px is SMALL text, so WCAG AA asks 4.5:1 of it — which no fill in
+    // this palette reaches over an arbitrary background (`contrast-floor.test.ts` holds the closed
+    // form and the frontier). 44 x 0.44375 = 19.5 px BOLD clears the 14 pt bold large-text
+    // threshold, which is what makes the shipped pair's 3.80:1 a formal figure rather than an
+    // argued one. The bar here is now that threshold, not the old hand-set 11.
+    //
     // Asserted against the same 0.444 scale `hudLayout` derives, so the two cannot drift apart.
     const scale = hudLayout(852, 480, HUD_SLOT).scale;
     expect(
       HELP_FONT_PX * scale,
-      'the controls banner is under the legibility floor',
-    ).toBeGreaterThanOrEqual(11);
-    // And it must not have been "fixed" by growing past what one wrapped banner can show: above
-    // ~40 design px the DEV line needs three rows and starts eating the play area.
-    expect(HELP_FONT_PX).toBeLessThanOrEqual(40);
+      'the controls banner is under WCAG’s 14pt-bold large-text threshold, so contrast-floor’s ' +
+        '3:1 bar stops applying to it and the bar becomes 4.5:1 — which the palette cannot meet',
+    ).toBeGreaterThanOrEqual(18.66);
+
+    // 🔴 **The upper cap survives, and it moved for a MEASURED reason, not to clear this red.**
+    // It was 40, with the note *"above ~40 design px the DEV line needs three rows and starts eating
+    // the play area."* That note was correct. Measured live at 852x480, wrapped at 1872 px:
+    //
+    // | design px | physical px | shipped rows | DEV rows |
+    // |---|---|---|---|
+    // | 41 | 18.19 | 2 | 2 |
+    // | 42 | 18.64 | 2 | 3 |
+    // | 44 | 19.52 | 2 | 3 (with the OLD dev suffix) |
+    //
+    // **No size is both large text (>=42) and two DEV rows (<=41).** The conflict was removed rather
+    // than traded: `helpLine`'s DEV suffix was abbreviated to `P play · O editor · G gym`, which is
+    // dev-only text no player sees, and both forms are two rows at 44.
+    //
+    // ⚠️ **The cap is 45, and the first number written here (54) was a GUESS that measurement
+    // refuted.** Swept live at 852x480 with the new suffix: the shipped line holds two rows all the
+    // way to 58 and needs a third at **59**; the DEV line needs a third at **46**. So 54 would have
+    // silently re-allowed the three-row DEV banner this cap exists to prevent — the cap has to be
+    // the DEV threshold, not the shipped one. 44-45 is the whole window where the banner is large
+    // text AND both forms are two rows.
+    expect(HELP_FONT_PX, 'above 45 the DEV banner needs a third row and eats the play area')
+      .toBeLessThanOrEqual(45);
   });
 
   it('refuses a nonsense game size instead of laying out into it', () => {
