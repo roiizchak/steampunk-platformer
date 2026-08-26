@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "assets:audio": "node tools/gen/build-audio.mjs",
-    "assets:build": "node tools/gen/build-assets.mjs",
+    "assets:build": "node tools/gen/anchorAudit.mjs && node tools/gen/build-assets.mjs",
     "assets:build:all": "node tools/gen/build-assets-all.mjs",
     "assets:clips": "node tools/gen/build-clips.mjs",
     "assets:levels": "node tools/gen/make-levels.mjs",
@@ -18,7 +18,8 @@
     "test:e2e": "npm run build && node tools/dev/free-port.mjs 5173 && node tools/dev/free-port.mjs 4173 && playwright test",
     "test:sim-isolated": "npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact && node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\"",
     "typecheck": "tsc --noEmit",
-    "typecheck:build": "tsc --noEmit -p tsconfig.build.json"
+    "typecheck:build": "tsc --noEmit -p tsconfig.build.json",
+    "assets:anchors": "node tools/gen/anchorAudit.mjs"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",
