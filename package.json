@@ -11,13 +11,14 @@
     "assets:levels": "node tools/gen/make-levels.mjs",
     "assets:prompts": "node tools/gen/write-prompts.mjs",
     "assets:world": "node tools/gen/build-world.mjs",
-    "build": "tsc --noEmit && vite build && node tools/gen/verify-dist.mjs",
+    "build": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json && vite build && node tools/gen/verify-dist.mjs",
     "dev": "vite",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "node tools/dev/free-port.mjs 5173 && playwright test",
+    "test:e2e": "npm run build && node tools/dev/free-port.mjs 5173 && node tools/dev/free-port.mjs 4173 && playwright test",
     "test:sim-isolated": "npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact && node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\"",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "typecheck:build": "tsc --noEmit -p tsconfig.build.json"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",

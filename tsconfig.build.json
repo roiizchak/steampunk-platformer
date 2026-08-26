@@ -1,0 +1,63 @@
+{
+  // Criterion 10.5 / vault 10.3 — **the build configuration typechecked as its own program.**
+  //
+  // ## Why a SECOND program, when tsconfig.json already includes vite.config.ts
+  //
+  // The vault item is blunt about the failure it comes from: *"Config files typechecked by nothing
+  // became a decision nothing could check"* — a build config drifted until it owned an
+  // authorization decision that no program checked. Vault A4 cites the same note for this repo's
+  // Gym save path.
+  //
+  // `tsconfig.json` does include `vite.config.ts`, but it includes it *alongside* `src` and `tests`,
+  // under the settings those need. That makes the config's typecheck a side effect of the app's,
+  // and couples it to the app's options: loosen `strict` for a test helper and the build config
+  // quietly gets loosened too. The vault's own phrasing is the rule —
+  //
+  //   > "The rigour applied to a file should follow what the file DECIDES, not where it sits in
+  //   >  the tree."
+  //
+  // — and `vite.config.ts` decides the browser contract, the minifier, and (via `vercel.json`) the
+  // production CSP. That is a lot of deciding for a file checked as an afterthought.
+  //
+  // So this program checks exactly the build surface, under its own settings, and
+  // `npm run typecheck:build` runs it. Both programs run in the full regression; neither replaces
+  // the other.
+  //
+  // ## What is deliberately NOT here, and why
+  //
+  // ⚠️ Vault 10.3 also asks for **Node types** and for the **plugin directory** in the include list.
+  // This program has neither, and that is a recorded shortfall rather than an oversight:
+  //
+  //   * `@types/node` is a **frozen-dependency STOP-and-ask** (CLAUDE.md §3). Phase 1 needed it
+  //     twice and solved it without adding it; this phase does the same.
+  //   * It is not needed, because `vite.config.ts` reads the CSP by **importing `vercel.json`**
+  //     (`resolveJsonModule`) rather than through `fs`. Removing the need for a dependency is a
+  //     better outcome than adding one.
+  //   * `tools/gen/devSeamGate.mjs` is plain `.mjs` with a hand-written `.d.mts` beside it — the
+  //     convention every other `tools/gen/*` module already uses — so the plugin IS typechecked
+  //     here, through its declaration, without pulling the whole tools directory (and its Node
+  //     built-ins) into the program.
+  //
+  // The separate-program half of vault 10.3 is satisfied. The Node-types half is not, for the
+  // reason above. Recorded in docs/qa/phase-10-ship.md under 10.5 rather than left silent (C11).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    // Load-bearing: it is what lets the CSP be imported from vercel.json instead of read with fs,
+    // which is what keeps @types/node off the dependency list. See the note above.
+    "resolveJsonModule": true,
+    "types": ["vite/client"]
+  },
+  "include": ["vite.config.ts", "vercel.json", "tools/gen/devSeamGate.d.mts"]
+}

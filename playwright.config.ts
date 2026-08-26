@@ -2,6 +2,24 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 5173;
 
+/** `tools/dev/prod-server.mjs` — `dist/` with the real `vercel.json` headers. Phase 10. */
+const PROD_PORT = 4173;
+
+/**
+ * The specs that need a real GPU, as ONE value.
+ *
+ * 🔴 This used to be the same regex literal written out twice — once as `chromium`'s `testIgnore`
+ * and once as `chromium-gpu`'s `testMatch` — under a comment saying the two "must stay identical".
+ * A file matching neither runs nowhere and reports `0 passed`; a file matching both runs twice, once
+ * on a rasteriser its assertions are meaningless on. Phase 10 needed to add a third project, which
+ * meant editing one of the two copies — so the invariant is now structural instead of a promise.
+ * The pattern itself is unchanged; every reason it has the shape it has is on the projects below.
+ */
+const GPU_SPECS = /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/;
+
+/** The spec that runs against `dist/` rather than the dev server. Phase 10. */
+const PROD_SPECS = /phase-10-production\.spec\.ts/;
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
@@ -127,7 +145,12 @@ export default defineConfig({
       // needing it — because the two failure modes are not symmetric. Getting it wrong this way
       // costs a headed window and some seconds; getting it wrong the other way ships a measurement
       // of a software rasteriser with a green tick beside it.
-      testIgnore: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/,
+      //
+      // 🔴 **Phase 10 joins for a third reason: it does not run against this server at all.**
+      // `phase-10-production.spec.ts` drives `dist/` on port 4173 and asserts that `window.__game`
+      // is absent — against the dev server on 5173 it would fail on its first assertion, correctly
+      // and uselessly. It runs in `chromium-prod` below.
+      testIgnore: [GPU_SPECS, PROD_SPECS],
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -162,7 +185,7 @@ export default defineConfig({
       // name rather than by prefix — see the `testIgnore` above. This pattern and that one are the
       // SAME pattern and must stay identical: a file matching neither runs nowhere, and a file
       // matching both runs twice, once on a rasteriser its assertions are meaningless on.
-      testMatch: /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/,
+      testMatch: GPU_SPECS,
       // 🔴 ONE named exclusion, the shape Phase 9 established above. `phase-06-dpr2` matches the
       // pattern by prefix but must NOT run here: this project is DPR 1, and a DPR-2 spec running at
       // DPR 1 would pass while measuring the exact case inventory 2b.6 says is untested. It runs in
@@ -208,6 +231,29 @@ export default defineConfig({
         },
       },
     },
+    /**
+     * 🔴 **The only project that does not test the dev server.** Phase 10.
+     *
+     * It points at `tools/dev/prod-server.mjs` on port 4173 — the built `dist/`, served with the
+     * headers `vercel.json` declares — because criteria 10.2, 10.6 and 10.12 are claims about the
+     * SHIPPED artifact, and every other project measures a build that carries `window.__game`,
+     * `window.__phaserGame`, three dev scenes and seven dev query flags that `dist/` must not have.
+     *
+     * ⚠️ **It must never be `projects[0]`.** `tests/e2e/globalSetup.ts` reads the FIRST project's
+     * `baseURL` and warms that origin up by waiting on `window.__game` — which is absent here by
+     * design, so the warm-up would hang for its full 180 s and then abort the run having collected
+     * zero tests. That file asserts the ordering rather than trusting this comment.
+     *
+     * `testMatch` is explicit and narrow. Adding `phase-10-` to `chromium`'s `testIgnore` does NOT
+     * constrain this project — without a `testMatch` of its own it would run every spec in the
+     * directory against production, and most of them would fail for the right reason in the wrong
+     * place.
+     */
+    {
+      name: 'chromium-prod',
+      testMatch: PROD_SPECS,
+      use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PROD_PORT}` },
+    },
   ],
   /**
    * Absorbs Vite's one-time cold transform (~33 s, measured) BEFORE the first spec, so no test
@@ -218,7 +264,21 @@ export default defineConfig({
    * ordering a warm-up wants.
    */
   globalSetup: './tests/e2e/globalSetup.ts',
-  webServer: {
+  webServer: [
+    {
+      // The production substrate for `chromium-prod`. Same in-process shape as the dev server
+      // below, for the same measured reason — read `tools/dev/prod-server.mjs`'s header.
+      //
+      // ⚠️ It **throws** if `dist/index.html` is missing rather than serving nothing, and
+      // `npm run test:e2e` builds before it runs. Serving a stale `dist/` would be vault C13's
+      // original failure with a production label on it: the suite would report on an artifact
+      // nobody built, and a green would mean nothing at all.
+      command: `node ./tools/dev/prod-server.mjs ${PROD_PORT}`,
+      url: `http://localhost:${PROD_PORT}/index.html`,
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+    {
     // Vault C13: launch the dev server's REAL entry point, never `npm run dev`. On Windows the
     // package script is a shell wrapper; killing the wrapper orphans the real process, which
     // then keeps serving stale content after an asset rebuild.
@@ -237,7 +297,8 @@ export default defineConfig({
     // false, deliberately. Reusing whatever already answers on this port is how vault C13's
     // stale-server failure happens — "serves stale art after an asset rebuild", presenting as
     // "the sprite didn't update". Costs a few seconds per run; buys knowing what was tested.
-    reuseExistingServer: false,
-    timeout: 60_000,
-  },
+      reuseExistingServer: false,
+      timeout: 60_000,
+    },
+  ],
 });

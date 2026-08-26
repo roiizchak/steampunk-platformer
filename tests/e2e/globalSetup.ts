@@ -76,6 +76,19 @@ const WARMUP_TIMEOUT_MS = 180_000;
  * Throws rather than falling back to a literal: a default here would re-create the bug quietly.
  */
 function baseUrlFrom(config: FullConfig): string {
+  /**
+   * 🔴 Phase 10 added `chromium-prod`, which serves `dist/` — a build with **no `window.__game`**.
+   * If it ever became `projects[0]`, the wait below would hang for its full 180 s and then abort the
+   * run having collected zero tests: `0 passed`, exit 0, the false green this file already exists to
+   * prevent. An ordering constraint that lives only in a comment is one reorder away from silence.
+   */
+  const first = config.projects[0]?.name;
+  if (first === 'chromium-prod') {
+    throw new Error(
+      'globalSetup: `chromium-prod` is projects[0]. This warm-up waits on `window.__game`, which ' +
+        'the production build does not install — move it back after the dev-server projects.',
+    );
+  }
   const url = config.projects[0]?.use?.baseURL;
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error(

@@ -1,0 +1,31 @@
+The DEAD-SIM mutation — the red proof for criterion 10.12's completion predicate.
+
+`advance()`'s loop is neutered so no tick ever runs. The function keeps its signature and its
+return type, so `tsc` is happy and `vite build` succeeds: the RED has to come from the spec, which
+is the whole point. The game still boots, still draws, and the courier's idle sheet still loops at
+7.5 fps with `repeat: -1` — so "pixels changed" stays TRUE under this mutation and only the
+completion transition can see it.
+
+It is a committed fixture rather than a throwaway edit, matching `bad-docs/`, `bad-levels/`,
+`bad-sim/` and `bad-style/`: a red proof nobody can re-run is a claim, not evidence *(vault C2)*.
+It is deliberately NOT a runtime flag — a production mutation selector would itself be a new dev
+seam in the very bundle this phase exists to prove clean.
+
+    git apply --ignore-whitespace tests/fixtures/dead-sim.patch && npm run build
+    npx playwright test --project=chromium-prod -g "boots, draws"   # must FAIL
+    git apply -R --ignore-whitespace tests/fixtures/dead-sim.patch && npm run build
+
+Git ignores everything above the first `diff --git` line.
+diff --git a/src/sim/advanceSplit.ts b/src/sim/advanceSplit.ts
+index b4e5c51..d4aa7f7 100644
+--- a/src/sim/advanceSplit.ts
++++ b/src/sim/advanceSplit.ts
+@@ -83,7 +83,7 @@ export function advanceSplit(
+  */
+ export function advance(world: World, input: InputSnapshot, ticks: number): AdvanceEvents {
+   const total = noEvents();
+-  for (let i = 0; i < ticks; i += 1) {
++  for (let i = 0; i < ticks * 0; i += 1) {
+     const events = tick(world, input);
+     // 🔴 Every field, walked from the record itself — NOT named assignments. This function is where
+     // that lesson was paid for (four edges silently dropped, `respawned` permanently false in the only
