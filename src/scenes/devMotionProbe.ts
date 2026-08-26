@@ -54,6 +54,23 @@ import { DEFAULT_TUNING } from '../sim/playerTuning';
  * harness runs at 18–60 Hz and cannot exhibit the effect. So it is `play`-owned, it is on the S.9
  * list, and the three outcomes above say what each one decides. **Write the result here.**
  *
+ * ## ⚠️ 2026-08-26 — an owner PLAY observation, which is NOT this probe's outcome
+ *
+ * The owner played the shipped game on this machine (measured **173–174 Hz**, the right substrate)
+ * and reported it looked good — **no judder visible in ordinary play.** Recorded because it is real
+ * evidence from the only hardware that could show the effect, and because it is the first time
+ * anyone has looked at this question on a high-refresh display at all.
+ *
+ * 🔴 **It does not settle the probe, and must not be written into the three outcomes above.**
+ * *"Nothing looked wrong while playing"* is consistent with **NEITHER ghosts** and with a
+ * **STEPPED-only** ghost that is simply hard to catch without the side-by-side lanes — which is the
+ * entire reason those lanes exist. The probe holds one frozen pose so that pose cadence is excluded
+ * by construction; ordinary play excludes nothing, so it cannot distinguish "position hold is fine"
+ * from "position hold is bad but the animation masks it".
+ *
+ * **The item stays OPEN.** What closes it is `?probe=1` on this display and a reading of which of
+ * the three outcomes above occurred.
+ *
  * Guarded at the point of creation in `GameScene`, so it is tree-shaken out of `dist/`.
  */
 

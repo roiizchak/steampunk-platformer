@@ -219,6 +219,16 @@ is a 2× upscale of the same buffer. With `pixelArt: true` deriving `antialias: 
 *nearest-neighbour doubling of pixel art* — the one case where upscaling is crisp rather than soft.
 `phase-06-dpr2.spec.ts` passed all along; now a human has looked.
 
+⚠️ **2026-08-26 — an owner PLAY observation was added, and the item is STILL OPEN.** The owner
+played the shipped game on this machine (173–174 Hz) and reported it looked good, with no judder
+visible in ordinary play. That is real evidence from the only hardware that can show the effect, and
+it is recorded in `devMotionProbe.ts`. **It is not the probe's outcome and does not close the item:**
+*"nothing looked wrong while playing"* is consistent with NEITHER-ghosts AND with a STEPPED-only
+ghost too subtle to catch without the side-by-side lanes — which is exactly why the lanes exist. The
+probe freezes one pose so that pose cadence is excluded by construction; ordinary play excludes
+nothing. What closes it is `?probe=1` on this display and a reading of which of the three outcomes
+occurred.
+
 **240 Hz judder — STILL OWED, and honestly so.** The harness measured **173–174 Hz**, so this box is
 the right substrate, and `probe-240hz-readout.png` shows `?probe=1` running. But the probe's three
 outcomes are decided by **a pair of eyes** comparing the STEPPED and SMOOTH lanes, and no automated
