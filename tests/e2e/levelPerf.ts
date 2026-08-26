@@ -68,8 +68,21 @@ export const BLOAT_COPIES = 30000;
  */
 export const MAX_LEVEL_WORK_P95_MS = 16;
 
-/** Three pairs, interleaved, so drift in the machine hits both arms alike. */
-export const PAIRS = 3;
+/**
+ * Interleaved pairs, so drift in the machine hits both arms alike.
+ *
+ * 🔴 **FOUR, not three, and the arithmetic is the Codex implementation review's.** At `PAIRS = 3`
+ * the AB/BA alternation runs **AB, BA, AB** — an odd number of blocks, so one order occurs twice.
+ * Under steady linear drift the three pair deltas are `+d, −d, +d` and their **median is `+d`**: the
+ * order bias survives the pairing completely, which is the one thing the pairing exists to remove.
+ * An even count gives `+d, −d, +d, −d`, whose median is 0.
+ *
+ * ⚠️ `exitCostBudget.ts:84` cites this constant *"for the same reason: three is enough to median
+ * over"*. Three is enough to median over and is **not** enough to balance the order, and those are
+ * different properties. `perfBudgetRepaired.ts:162-169` records the same lesson being learned on
+ * criterion 7.7: `PAIRS` went 3 → 6 → 10 there, and the **held-out** run is what proved 6 too few.
+ */
+export const PAIRS = 4;
 
 export const median = (xs: number[]): number => {
   const s = [...xs].sort((a, b) => a - b);
@@ -294,53 +307,3 @@ export async function timeLevelCreation(page: Page, levelId: string): Promise<nu
  * culled to the camera and started costing fill rate.
  */
 export const MAX_LEVEL_GPU_DELTA_MS = 0.5;
-
-/**
- * The amplifier that red-proves the bound above: N full-viewport alpha-blended rectangles, drawn on
- * the **Game** scene of whichever arm this is applied to.
- *
- * 🔴 **On the Game scene, not the UI scene, and that is the whole point.** `scrimMutation.ts`'s
- * `addScrims` draws on `UI`, which is a parallel scene that survives every `scene.start` — so it
- * would sit in BOTH arms of the pair and cancel in the delta exactly as criterion 7.7's first audio
- * toggle did. The Game scene is rebuilt per `sampleLevel`, so cost added here belongs to one arm.
- *
- * Alpha forces the blend, full-viewport makes the cost fill-rate rather than geometry count. This is
- * a real GPU cost with a real on-screen consequence — which is what `skipCull` was not.
- */
-export async function addGameScrims(page: Page, count: number): Promise<number> {
-  return page.evaluate((n) => {
-    const game = (
-      window as unknown as {
-        __phaserGame: {
-          scene: { getScene(k: string): unknown };
-          scale: { gameSize: { width: number; height: number } };
-        };
-      }
-    ).__phaserGame;
-    const scene = game.scene.getScene('Game') as {
-      children: { length: number };
-      add: {
-        rectangle(
-          x: number,
-          y: number,
-          w: number,
-          h: number,
-          colour: number,
-          alpha: number,
-        ): { setScrollFactor(v: number): { setDepth(d: number): void } };
-      };
-    };
-    const { width, height } = game.scale.gameSize;
-    const before = scene.children.length;
-    for (let i = 0; i < n; i += 1) {
-      scene.add
-        .rectangle(width / 2, height / 2, width, height, 0x2255ff, 0.5)
-        .setScrollFactor(0)
-        .setDepth(9000 + i);
-    }
-    // Returned, not assumed. A `getScene` that handed back a stale or wrong scene would add nothing
-    // and the caller would read a flat delta as "the mutation did not cost anything" rather than as
-    // "the mutation never happened" — a burst of zero particles, one level up.
-    return scene.children.length - before;
-  }, count);
-}

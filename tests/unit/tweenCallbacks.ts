@@ -138,9 +138,35 @@ export function callbackNodes(ast: Node): Node[] {
       resolve(decls.get(value.property.name), depth + 1);
     }
   };
+  /**
+   * The argument nodes to scan for callback keys.
+   *
+   * 🔴 **An IDENTIFIER argument is resolved to its declaration, and its absence was a real hole.**
+   * `const cfg = { onComplete: () => { world.completed = true; } }; scene.tweens.add(cfg);` walked
+   * only the literal arguments, found no `ObjectProperty`, and returned **zero callback bodies** —
+   * which reads as a file with no tween callbacks rather than one this scanner could not open. Both
+   * 9.2 and 9.2b were blind to it. Named by the Codex implementation review; the test file already
+   * recorded the gap as a known narrowing, and disclosure is not what C2 asks for.
+   *
+   * ⚠️ One hop, through the same `decls` map the rest of the module uses. A config assembled across
+   * several statements (`const cfg = {}; cfg.onComplete = …`) is still not seen — that needs
+   * property-assignment tracking, no such shape exists in `src/scenes/`, and it is recorded rather
+   * than built.
+   */
+  const argsToScan = (n: Node): Node[] => {
+    const scan: Node[] = [n.arguments];
+    for (const a of n.arguments ?? []) {
+      if (a?.type === 'Identifier') {
+        const d = decls.get(a.name);
+        if (d) scan.push(d);
+      }
+    }
+    return scan;
+  };
+
   walk(ast, (n) => {
     if (!isTweenCall(n, decls)) return;
-    walk(n.arguments, (a) => {
+    walk(argsToScan(n), (a) => {
       if (a.type === 'ObjectProperty' || a.type === 'ObjectMethod') {
         const key = a.computed && a.key?.type !== 'StringLiteral' ? null : a.key?.name ?? a.key?.value;
         if (typeof key === 'string' && CALLBACK_KEYS.has(key)) resolve(a.type === 'ObjectMethod' ? a : a.value);

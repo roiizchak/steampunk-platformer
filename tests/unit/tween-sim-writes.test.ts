@@ -294,4 +294,22 @@ describe('9.2b — no sim-owned state is written from a tween callback', () => {
    *    widening the callee match without the same identity resolution is how this rule was
    *    over-broadened once already, so it waits for a real occurrence.
    */
+  it('REJECTS a write through a CONFIG VARIABLE — `tweens.add(cfg)` (Codex impl review)', () => {
+    // 🔴 The scanner walked only the LITERAL arguments, so a config held in a variable returned
+    // **zero callback bodies** — a file that reads as having no tween callbacks rather than one the
+    // scanner could not open. Both 9.2 and 9.2b were blind to it, and the sibling test file recorded
+    // it as a known narrowing. Disclosure is not what C2 asks for.
+    const cfg = 'const cfg = { onComplete: () => { world.completed = true; } };';
+    expect(scan(`${cfg}
+scene.tweens.add(cfg);`)).toContain('a sim-state write');
+    expect(scan(`${cfg}
+const tm = scene.tweens;
+tm.add(cfg);`), 'config var THROUGH an alias')
+      .toContain('a sim-state write');
+    // And a config variable whose callback only touches the view is still legal — no blanket.
+    expect(
+      scan(`const c = { onComplete: () => { sprite.alpha = 1; } };
+scene.tweens.add(c);`),
+    ).toEqual([]);
+  });
 });

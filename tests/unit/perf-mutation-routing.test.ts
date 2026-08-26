@@ -79,17 +79,31 @@ const DECLARERS = ['effectMutation.ts', 'mutationTargets.ts', 'mutationRegistry.
  * The fix is to ignore the declaration and ask whether anything ELSE names the symbol. Lines that
  * bind it are dropped, then the search runs over what is left.
  *
- * ⚠️ **Still a text search, and still weaker than its title** — it cannot tell a live read from a
- * commented-out one, which the file header already discloses. It is strictly stronger than
- * `includes` and nothing more than that is claimed.
+ * ⚠️ **Still a text search.** Comments, string and template literals, and every binding form are
+ * removed first — the Codex implementation review named the comment case, and it is the sharp one:
+ * a `// STORM_MUTATION was applied here` left behind by the very edit that removed the application
+ * would keep this gate green. What remains unhandled is a use inside dead code the parser would see
+ * as live (an `if (false)` branch, an unreachable statement). A real parse would close that; it is
+ * not written because no such shape exists in `tests/e2e/` and the failure would be a MISSED gap
+ * rather than a false red. Strictly stronger than `includes`, and nothing more is claimed.
  */
 export function appliesSymbol(src: string, symbol: string): boolean {
-  const binds = new RegExp(`^\\s*(?:export\\s+)?(?:const|let|var|function)\\s+${symbol}\\b`);
-  return src
-    .split(NEWLINE)
-    .filter((line) => !binds.test(line))
-    .join(NEWLINE)
-    .includes(symbol);
+  // 🔴 Comments and string literals are stripped FIRST. Named by the Codex implementation review:
+  // without this, a `// STORM_MUTATION was applied here` left behind by the very edit that removed
+  // the application keeps this gate green — which is the `particlescale0` defect wearing the shape
+  // of a repair. Block comments, line comments, and both quote forms.
+  const stripped = src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ')
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``');
+  // Then every binding form, GLOBALLY — `const X`, `let X`, `var X`, `function X`, with or without
+  // `export`. Removing the binder rather than the whole line is what makes a MULTILINE declaration
+  // safe: `const X =` on one line with its initialiser on the next leaves no continuation behind to
+  // read as a use, and a second declarator on the same line is not swallowed with it.
+  const binds = new RegExp(`(?:export\\s+)?(?:const|let|var|function)\\s+${symbol}\\b`, 'g');
+  return stripped.replace(binds, ' ').includes(symbol);
 }
 
 /** Built from a char code so the shell that writes these fixtures cannot eat the escape. */
@@ -240,5 +254,26 @@ describe('every PARAMETRIC PERF_MUTATION family is wired to a spec that applies 
     ).toBe(false);
     expect(appliesSymbol(declaredOnly + NEWLINE + 'const peak = GHOST_MUTATION || 1;', 'GHOST_MUTATION'),
       'one real read was not enough to count as applied').toBe(true);
+
+    // 🔴 The three shapes the Codex implementation review named, each of which kept the old
+    // line-stripping version green while the mutation was unapplied.
+    const decl = String.raw`const G = stormCount(process.env.PERF_MUTATION);`;
+    const cases: [string, string][] = [
+      ['a line comment', `${decl}${NEWLINE}// G was applied here until 2026-08-25`],
+      ['a block comment', `${decl}${NEWLINE}/* see G above */`],
+      ['a string literal', `${decl}${NEWLINE}console.log('G');`],
+      ['a template literal', `${decl}${NEWLINE}console.log(\`G\`);`],
+      ['a MULTILINE declaration', `const G =${NEWLINE}  stormCount(process.env.PERF_MUTATION);`],
+    ];
+    for (const [why, src] of cases) {
+      expect(appliesSymbol(src, 'G'), `${why} counted as APPLYING the mutation`).toBe(false);
+    }
+
+    // And the multiline declaration still recognises a real read on a later line, so the stripping
+    // did not just swallow the file.
+    expect(
+      appliesSymbol(`const G =${NEWLINE}  stormCount(process.env.PERF_MUTATION);${NEWLINE}const p = G || 1;`, 'G'),
+      'a real read after a multiline declaration was stripped away with it',
+    ).toBe(true);
   });
 });

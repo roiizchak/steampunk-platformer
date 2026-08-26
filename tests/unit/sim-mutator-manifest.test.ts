@@ -149,4 +149,39 @@ describe('SIM_MUTATORS is complete against src/sim/', () => {
       'handing an OWN PARAMETER to a known mutator was not reported — the transitive clause is inert',
     ).toContain('notPure');
   });
+  it('sees a write through a PARAMETER ALIAS — the hole that hid collectGears', () => {
+    // 🔴 The real case, found by the Codex implementation review: `collectGears(world, …)` writes
+    // `gear.collected` inside `for (const gear of world.gears)`. Rooted at a local, invisible to a
+    // rule that only looks at parameter identifiers — so the plainest mutator in the pickup path was
+    // absent from the manifest. Both alias forms are pinned here, plus one hop of chaining.
+    const forOf = {
+      '/src/sim/a.ts': 'export function viaForOf(w) { for (const g of w.gears) { g.collected = true; } }',
+    };
+    expect(deriveSimMutators(forOf).closure, 'a for-of alias of a parameter was not followed').toContain(
+      'viaForOf',
+    );
+
+    const viaConst = {
+      '/src/sim/a.ts': 'export function viaConst(w) { const p = w.player; p.hp = 0; }',
+    };
+    expect(deriveSimMutators(viaConst).closure, 'a const alias of a parameter was not followed').toContain(
+      'viaConst',
+    );
+
+    // An alias OF an alias — why the resolution iterates to a fixed point rather than stopping at
+    // one hop. `const gs = world.gears; for (const g of gs)` is ordinary code.
+    const chained = {
+      '/src/sim/a.ts': 'export function chained(w) { const gs = w.gears; for (const g of gs) { g.x = 0; } }',
+    };
+    expect(deriveSimMutators(chained).closure, 'an alias of an alias was not followed').toContain('chained');
+
+    // 🔴 And it is not a blanket: a local built from something that is NOT a parameter stays pure.
+    // Without this the repair would trade a gap for false reds on production code, which is the
+    // worse direction — see the header.
+    const foreign = {
+      '/src/sim/a.ts': 'export function foreign(n) { const w = build(n); w.player.hp = 0; return w; }',
+    };
+    expect(deriveSimMutators(foreign).closure, 'a local built from a non-parameter was reported')
+      .not.toContain('foreign');
+  });
 });

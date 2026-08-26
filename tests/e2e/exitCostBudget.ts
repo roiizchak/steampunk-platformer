@@ -81,8 +81,14 @@
 
 type Page = import('@playwright/test').Page;
 
-/** Interleaved rounds. Matches 8.7's `PAIRS`, for the same reason: three is enough to median over. */
-export const ROUNDS = 3;
+/**
+ * Interleaved rounds. Matches 8.7's `PAIRS`, and 8.7 went 3 → 4 on 2026-08-25 for a reason that
+ * applies here verbatim: an ODD number of alternating AB/BA blocks leaves one order occurring twice,
+ * so under steady drift the per-round deltas are `+d, −d, +d` and their median is `+d` — the order
+ * bias survives the pairing. Three is enough to median over and is not enough to balance the order.
+ * Named by the Codex implementation review of the 2026-08-25 session.
+ */
+export const ROUNDS = 4;
 
 /**
  * The amplification sweep, in extra exits stacked on the real one.

@@ -150,7 +150,8 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
     *(vault C2)*.
 - ✅ **RE-MEASURED 2026-08-25 with a correctly-sized block, and the briefs were right.** 3000 frames
   per arm, sampling the delta `GameScene` actually receives (`loop.delta`) and draining a 1/60
-  accumulator exactly as `frameClock` does:
+  accumulator that REPLICATES `frameClock`'s arithmetic — same `1000/60` step, same
+  `MAX_TICKS_PER_FRAME` cap, same remainder carry:
 
   | arm | max smoothed delta | tick histogram |
   |---|---|---|
@@ -175,6 +176,22 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   of the game, and a bound reddened by the amplifier rather than by the code under test is not a gate.
   The 12 625 production frames measured across three runs — `ticks` never above 1, including on every
   one of the worst frames — stand as the observation that ordinary play does not reach it.
+
+  🔴 **Two claims in this bullet were over-stated, and the Codex implementation review of
+  2026-08-25 was right to name both.** They are corrected here rather than defended:
+  - *"exactly as `frameClock` does"* is now *"replicates `frameClock`'s arithmetic"* above. **The probe
+    re-implemented the accumulator; it did not import `drainTicks`.** The two agreed by inspection and
+    the probe source was not preserved, so nobody can now re-check that agreement — which makes the
+    table above evidence about the ENGINE's smoothing, which is what it was run to settle, and not
+    evidence about our seam. A probe that called the production function would have been the stronger
+    instrument; building one belongs to whichever session actually pursues a catch-up bound, and it is
+    recorded here rather than built, because the no-criterion decision does not turn on it.
+  - *"a block is not a property of the game"* was **too strong and is withdrawn**. Update and render
+    work, and allocation-driven GC, are main-thread work the game itself causes. What the evidence
+    supports is that the spike this probe induced is **unattributed** — an injected `while` loop is
+    not the code under test, so a bound it reddens names the amplifier. That is enough to refuse the
+    criterion; *"not a property of the game"* is a claim about all main-thread cost and was not
+    measured.
 - **What still stands, and it is the part worth having:** *do not attribute a slow frame to tick
   catch-up without measuring the tick delta.* A Phase 9 record did exactly that and was wrong — every
   one of the worst frames drained `ticks=1` or `0`, measured per frame. That refutation is direct

@@ -125,10 +125,7 @@ describe('the HUD elements do not crowd each other, at any supported size (item 
     // 🔴 This is the test that gives the three size cases their meaning. While it is green they are
     // one assertion written three times; when it goes red they are three different ones, and the
     // reader finds out on the commit that changed the layout rather than in a later review.
-    const base = hudLayout(1920, 1080, HUD_SLOT);
-    const half = hudLayout(960, 540, HUD_SLOT);
-    const ratio = half.scale / base.scale;
-    expect(ratio, 'scale did not halve with the height').toBeCloseTo(0.5, 10);
+    const base = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
 
     const flat = (l: typeof base): number[] => [
       l.plate.x, l.plate.y, l.plate.w, l.plate.h,
@@ -136,20 +133,27 @@ describe('the HUD elements do not crowd each other, at any supported size (item 
       l.counter.x, l.counter.y, l.counter.fontPx,
       l.slot.x, l.slot.y, l.slot.w, l.slot.h,
     ];
-    const scaled = flat(base).map((v) => v * ratio);
-    const got = flat(half);
-    // Per element rather than a whole-array compare, so the message names WHICH value stopped
-    // scaling. `toBeCloseTo(_, 9)` is float tolerance only — a real breakpoint or clamp moves a
-    // value by design pixels, not by 1e-9.
-    for (const [i, want] of scaled.entries()) {
-      expect(
-        got[i],
-        `layout value ${i} is NOT a pure multiple of scale (${got[i]} vs ${want}) — the size cases ` +
-          'above just became load-bearing, and this test needs replacing by whatever the new ' +
-          'non-linearity actually requires',
-      ).toBeCloseTo(want, 9);
+    // 🔴 **Every supported size, plus both sides of the range, not two points.** The first version
+    // compared 1080 against 540 only — so a breakpoint or a minimum-size clamp anywhere below 540,
+    // INCLUDING at the supported 852x480 viewport, left it green while its own comment claimed it
+    // would catch exactly that. Named by the Codex implementation review.
+    const heights = [...SIZES.map(([, , h]) => h), 2160, 1440, 540, 360, 240];
+    for (const h of heights) {
+      const got = hudLayout(Math.round((h * 16) / 9), h, HUD_SLOT);
+      const ratio = got.scale / base.scale;
+      expect(ratio, `scale did not track height at ${h}`).toBeCloseTo(h / GAME_HEIGHT, 9);
+      const want = flat(base).map((v) => v * ratio);
+      // Per element, so the message names WHICH value stopped scaling. `toBeCloseTo(_, 9)` is float
+      // tolerance only — a real breakpoint or clamp moves a value by design pixels, not by 1e-9.
+      for (const [i, w] of want.entries()) {
+        expect(
+          flat(got)[i],
+          `at height ${h}, layout value ${i} is NOT a pure multiple of scale ` +
+            `(${flat(got)[i]} vs ${w}) — the size cases above just became load-bearing, and this ` +
+            'test needs replacing by whatever the new non-linearity actually requires',
+        ).toBeCloseTo(w, 9);
+      }
     }
-
     // And `gameW` really is unread: the same height at a different width is the same layout.
     expect(flat(hudLayout(1280, 1080, HUD_SLOT)), "gameW changed the layout").toEqual(flat(base));
   });

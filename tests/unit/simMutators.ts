@@ -42,7 +42,7 @@
 import { ARRAY_MUTATOR_METHODS, parseFile, walk, type Node } from './astWalk';
 
 /**
- * The reviewed set. **32 names**, read off `src/sim/` on 2026-08-25 and agreed against the
+ * The reviewed set. **33 names**, read off `src/sim/` on 2026-08-25 and agreed against the
  * derivation below.
  *
  * ⚠️ It was **six** until this date, against 86 exported functions — **26 direct param-writers and 32
@@ -57,6 +57,10 @@ import { ARRAY_MUTATOR_METHODS, parseFile, walk, type Node } from './astWalk';
  * stylistic.
  */
 export const SIM_MUTATORS = new Set([
+  // Added 2026-08-25 by the Codex implementation review: it writes `gear.collected` through a
+  // `for (const gear of world.gears)` alias, which the derivation could not see until aliases were
+  // resolved. The gate named it the moment they were.
+  'collectGears',
   'advance',
   'advanceSplit',
   'advanceStride',
@@ -134,19 +138,59 @@ function exportedFunctions(sources: Record<string, string>): Map<string, Fn> {
           .filter((x: unknown): x is string => typeof x === 'string'),
       );
       const fn: Fn = { params, writesOwnParam: false, passesOwnParamTo: new Set() };
+
+      // 🔴 **Aliases of a parameter count as the parameter, and their absence hid a REAL mutator.**
+      // `collectGears(world, …)` (`src/sim/pickups.ts:115`) writes `gear.collected` inside
+      // `for (const gear of world.gears)`. The root of that write is `gear`, a local — so a rule
+      // that only recognises writes rooted at a parameter identifier missed it entirely, and
+      // `collectGears` was absent from the manifest while being one of the plainest mutators in the
+      // simulation. Named by the Codex implementation review, verified against the source.
+      //
+      // Two alias forms: `for (const x of p…)` and `const x = p…`. Iterated to a fixed point, so an
+      // alias of an alias is reached — `const gs = world.gears; for (const g of gs)` is ordinary
+      // code, and stopping at one hop would leave the same class of hole one level down.
+      //
+      // ⚠️ It is deliberately NOT a general dataflow analysis. It follows *member paths rooted at a
+      // parameter* and nothing else — not a function return, not an array index into a foreign
+      // value, not a conditional. Over-inference here is a false red on production code, which is
+      // the failure direction the header argues against; a missed alias is a gap `manifestGaps()`
+      // reports by name.
+      const roots = new Set(params);
+      for (let changed = true; changed; ) {
+        changed = false;
+        walk(d.body, (m: Node) => {
+          let name: string | undefined;
+          let from: Node | undefined;
+          if (m.type === 'ForOfStatement') {
+            const decl = m.left?.type === 'VariableDeclaration' ? m.left.declarations?.[0] : undefined;
+            if (decl?.id?.type === 'Identifier') name = decl.id.name;
+            from = m.right;
+          } else if (m.type === 'VariableDeclarator' && m.id?.type === 'Identifier') {
+            name = m.id.name;
+            from = m.init;
+          }
+          if (name === undefined || from === undefined || roots.has(name)) return;
+          const src = rootOf(from);
+          if (src?.type === 'Identifier' && roots.has(src.name)) {
+            roots.add(name);
+            changed = true;
+          }
+        });
+      }
+
       walk(d.body, (m: Node) => {
         if (m.type === 'AssignmentExpression' || m.type === 'UpdateExpression') {
           const target = m.type === 'AssignmentExpression' ? m.left : m.argument;
           const root = rootOf(target);
           // `p.x = 1` writes through the param; a bare `p = 1` only rebinds the local slot.
-          if (root?.type === 'Identifier' && params.has(root.name) && target !== root) fn.writesOwnParam = true;
+          if (root?.type === 'Identifier' && roots.has(root.name) && target !== root) fn.writesOwnParam = true;
         }
         if (m.type !== 'CallExpression' && m.type !== 'OptionalCallExpression') return;
         const callee = m.callee;
         if (callee?.type === 'Identifier') {
           for (const arg of m.arguments ?? []) {
             const root = rootOf(arg);
-            if (root?.type === 'Identifier' && params.has(root.name)) {
+            if (root?.type === 'Identifier' && roots.has(root.name)) {
               fn.passesOwnParamTo.add(callee.name);
               break;
             }
@@ -154,7 +198,7 @@ function exportedFunctions(sources: Record<string, string>): Map<string, Fn> {
         } else if (callee?.type === 'MemberExpression') {
           const method = callee.property?.name;
           const root = rootOf(callee.object);
-          if (typeof method === 'string' && ARRAY_MUTATOR_METHODS.has(method) && root?.type === 'Identifier' && params.has(root.name)) {
+          if (typeof method === 'string' && ARRAY_MUTATOR_METHODS.has(method) && root?.type === 'Identifier' && roots.has(root.name)) {
             fn.writesOwnParam = true;
           }
         }

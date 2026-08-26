@@ -55,7 +55,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 import { bootToGame } from './gameHarness';
-import { MIN_SAMPLES } from './perfBudget';
+import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
 import type { Sample } from './perfSampler';
 import { installGpuTimer } from './gpuTimer';
 import { assertRealGpu } from './realGpu';
@@ -139,8 +139,25 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     // by having no measurement at all, which is this project's own most-repeated failure shape.
     for (const s of [...small, ...large]) {
       expect(s.gpuSupported, 'EXT_disjoint_timer_query_webgl2 is absent — nothing below is measured').toBe(true);
-      expect(s.gpuSamples, 'the GPU timer produced no samples').toBeGreaterThan(0);
+      // 🔴 `MIN_GPU_SAMPLES`, not `> 0`. The shared contract (`perfBudget.ts:188`) says 30 is the
+      // fewest queries a GPU median may rest on; asserting `> 0` let ONE delayed query per arm
+      // decide the bound. Named by the Codex implementation review.
+      expect(s.gpuSamples, `the GPU median rests on ${s.gpuSamples} queries, under MIN_GPU_SAMPLES`)
+        .toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
     }
+    // 🔴 **A one-sided upper bound treats an arm-specific timer collapse as an excellent result**,
+    // and the QA record already contains one: a clean paired delta of −0.243 ms during the episode
+    // that broke the old ratio. A large NEGATIVE delta does not mean level-05 is cheaper than
+    // level-01 — it means one arm's median stopped being a measurement. Named by the Codex
+    // implementation review. So the delta is bounded on BOTH sides, and the lower side is an
+    // instrument-validity check, not a performance claim.
+    expect(
+      gpuDelta,
+      `level-05 measured ${gpuDelta.toFixed(4)} ms LESS rasteriser time per frame than level-01. It ` +
+        'paints 3.7x the tiles; a delta this negative is an arm-specific timer collapse, not a ' +
+        'result — the bound above is measuring nothing.',
+    ).toBeGreaterThan(-MAX_LEVEL_GPU_DELTA_MS);
+
     expect(
       gpuDelta,
       `level-05 costs ${gpuDelta.toFixed(4)} ms more rasteriser time per frame than level-01 ` +

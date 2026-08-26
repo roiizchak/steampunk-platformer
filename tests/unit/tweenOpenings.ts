@@ -17,6 +17,39 @@ export interface TweenOpening {
   held: boolean;
   /** Was it opened through an ALIAS of the manager rather than a literal `tweens.` chain? */
   aliased: boolean;
+  /**
+   * The name the handle was bound to — `t`, `this.pulse` — or `null` when it was `return`ed, bound
+   * to something unnameable, or not held at all.
+   *
+   * Held-ness alone cannot express a teardown obligation: `tweenTeardown.ts` needs to know *which*
+   * handle, because a file that stops one of its two tweens is not a file that stops both.
+   */
+  handle: string | null;
+}
+
+/**
+ * A member chain as dotted text: `this.hud.pulse` -> `"this.hud.pulse"`, `t` -> `"t"`.
+ *
+ * `null` for anything a name cannot be given to — a computed access (`live[i]`), a call result
+ * (`getTween().stop()`), a literal. Those are unnameable by construction, and a rule keyed on names
+ * has to say so rather than invent one.
+ */
+export function pathOf(n: Node | null | undefined): string | null {
+  if (!n) return null;
+  if (n.type === 'Identifier') return n.name;
+  if (n.type === 'ThisExpression') return 'this';
+  if (n.type === 'MemberExpression' || n.type === 'OptionalMemberExpression') {
+    if (n.computed) return null;
+    const base = pathOf(n.object);
+    const prop = n.property?.name;
+    return base && typeof prop === 'string' ? `${base}.${prop}` : null;
+  }
+  // `await t.stop()`, `(t as Tween).stop()`, `t!.stop()` — transparent to the name underneath.
+  if (n.type === 'AwaitExpression') return pathOf(n.argument);
+  if (n.type === 'TSNonNullExpression' || n.type === 'TSAsExpression' || n.type === 'ParenthesizedExpression') {
+    return pathOf(n.expression);
+  }
+  return null;
 }
 
 /**
@@ -41,6 +74,10 @@ export interface TweenOpening {
 export function tweenOpenings(ast: Node): TweenOpening[] {
   const decls = declarations(ast);
   const out: TweenOpening[] = [];
+  // Parents, captured in a first pass, so `held` can walk OUT through transparent wrappers rather
+  // than asking only about the immediate parent.
+  const parentOf = new Map<Node, Node | null>();
+  walk(ast, (n, parent) => parentOf.set(n, parent));
   walk(ast, (n, parent) => {
     if (!isTweenCall(n, decls)) return;
     const callee = n.callee;
@@ -54,12 +91,25 @@ export function tweenOpenings(ast: Node): TweenOpening[] {
       if (name === 'tweens') { literal = true; break; }
       cur = cur.object;
     }
-    const held =
-      (parent?.type === 'VariableDeclarator' && parent.init === n) ||
-      (parent?.type === 'AssignmentExpression' && parent.right === n) ||
-      (parent?.type === 'ReturnStatement' && parent.argument === n) ||
-      (parent?.type === 'AwaitExpression');
-    out.push({ method: String(method), held, aliased: !literal });
+    // 🔴 `await` and the TS wrappers are TRANSPARENT, not holds. `await tm.add(...)` on its own
+    // discards the handle exactly as a bare call does; the first version returned `held: true` for it
+    // and so excused the very shape the rule exists to catch. Named by the Codex implementation
+    // review. What matters is the nearest ENCLOSING node that keeps the value, so wrappers are
+    // walked through before the question is asked.
+    const TRANSPARENT = new Set(['AwaitExpression', 'TSNonNullExpression', 'TSAsExpression', 'ParenthesizedExpression']);
+    let value = n;
+    let owner = parent;
+    while (owner && TRANSPARENT.has(owner.type)) {
+      value = owner;
+      owner = parentOf.get(owner) ?? null;
+    }
+    const declared = owner?.type === 'VariableDeclarator' && owner.init === value;
+    const assigned = owner?.type === 'AssignmentExpression' && owner.right === value;
+    const held = declared || assigned || (owner?.type === 'ReturnStatement' && owner.argument === value);
+    // A RETURNED handle is held but unnamed here on purpose — its teardown is the caller's file's
+    // obligation, and `tweenTeardown.ts` exempts a `null` handle for that reason.
+    const handle = declared ? pathOf(owner.id) : assigned ? pathOf(owner.left) : null;
+    out.push({ method: String(method), held, aliased: !literal, handle });
   });
   return out;
 }
