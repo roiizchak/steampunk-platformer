@@ -232,11 +232,28 @@ occurred.
 ✅ **2026-08-26, LATER — the probe was RUN and the outcome is `STEPPED ghosts, SMOOTH is clean`.**
 The owner reported *"the bottom one that is smooth is what looks good."* Bottom is SMOOTH by
 construction (`LANE.smoothY` 640 vs `steppedY` 300), so the reading is unambiguous: **outcome 1 of
-three. The diagnosis holds and render interpolation is authorised.** It survived the falsifier the
-Codex plan review proposed — one frozen pose, pose cadence excluded by construction, only the
-position schedule differing. **Item 3.12 and the S.9 entry are CLOSED.** ⚠️ Interpolation must live
-in `src/render/`; `src/sim/` reaches no clock and the tick contract does not change. And it is a
-polish item, not a bug report: the same owner found ordinary play good at 173–174 Hz.
+three.** It survived the falsifier the Codex plan review proposed — one frozen pose, pose cadence
+excluded by construction, only the position schedule differing. **Item 3.12 and the S.9 entry are
+CLOSED.**
+
+🔴 **CORRECTION, same day, before anything was built on it.** The first version of this entry said
+the outcome *"authorises render interpolation"*. **It does not — interpolation ALREADY SHIPS.**
+`src/render/interpolate.ts` landed in `01f2ae7` on 2026-08-14, the same day the probe was built
+(`7ccc4ad`), and `renderAlpha` / `interpolatedPosition` are consumed unconditionally by
+`gamePlayerDraw.ts` and `enemyLayer.ts`. Caught by reading the render path before planning the work,
+which is the only reason no time was spent building a thing that exists.
+
+What the run therefore establishes is better than what was claimed:
+
+1. **The shipped behaviour is the SMOOTH lane**, confirmed by eye on hardware that can show the
+   difference — the first such confirmation this project has had, every prior measurement having run
+   on an 18–60 Hz headless harness that cannot exhibit the effect.
+2. **The probe's on-screen captions had gone STALE for twelve days**, reading *"how the game moves
+   today"* over the STEPPED lane and *"what interpolation would do"* over SMOOTH — written before
+   `01f2ae7` and never updated. A dev overlay telling its reader the game has a defect it already
+   fixed is worse than no overlay, and an owner read it in that state. Both captions repaired.
+3. It dissolves the apparent contradiction: ordinary play looked good **because** interpolation
+   ships, and STEPPED ghosted **because** it reproduces the old schedule deliberately.
 
 **240 Hz judder — the below is the pre-run state, kept for the record.** The harness measured **173–174 Hz**, so this box is
 the right substrate, and `probe-240hz-readout.png` shows `?probe=1` running. But the probe's three

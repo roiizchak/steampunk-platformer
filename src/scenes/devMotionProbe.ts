@@ -78,21 +78,29 @@ import { DEFAULT_TUNING } from '../sim/playerTuning';
  * `LANE.steppedY` 300), so the reading is unambiguous and it is the first of the three outcomes
  * above.
  *
- * 🔴 **The diagnosis therefore HOLDS**, and it held against the falsifier the Codex plan review
- * itself proposed: *"the effect persisting with one frozen pose translated directly per rAF."* The
+ * 🔴 **The diagnosis HOLDS**, and it held against the falsifier the Codex plan review itself
+ * proposed: *"the effect persisting with one frozen pose translated directly per rAF."* The
  * animation is stopped on a single frame here, so pose cadence is excluded by construction — the
  * only thing differing between the lanes is the position schedule. **Holding position for three
  * refreshes and then jumping 12 px is the cause**, on a display fast enough to show it.
  *
- * ⚠️ **What this authorises, and what it does not.** It authorises building render interpolation
- * — that was the decision this probe existed to gate, and the probe has now paid for itself. It does
- * NOT specify the design, and the design is not free: interpolation reads the frame clock's leftover
- * remainder and must live in `src/render/`, because `src/sim/` reaches no clock and every duration
- * there is an integer count of 60 Hz ticks (CLAUDE.md §3). Nothing about the tick contract changes.
+ * ⚠️ **AND IT COMMISSIONS NO WORK, because the fix already shipped — a correction to what was
+ * first written here.** `src/render/interpolate.ts` landed in `01f2ae7` on **2026-08-14**, the same
+ * day as this probe (`7ccc4ad`), and `renderAlpha` / `interpolatedPosition` are consumed
+ * unconditionally by `gamePlayerDraw.ts` for the player and `enemyLayer.ts` for the enemies. The
+ * first record of this outcome said it *"authorises building render interpolation"*. **It does not.
+ * That was already built, and the reading confirms it rather than commissioning it.**
  *
- * ⚠️ **And it is not a defect the owner saw in ORDINARY play** — the note above records them
- * playing the shipped game at 173–174 Hz and finding it good. So this is a polish item with a
- * measured cause, not a bug report. Scope and timing are the owner's call.
+ * So what the run actually establishes, which is the more useful thing:
+ *
+ *  1. **The shipped behaviour is the SMOOTH lane**, verified by eye on hardware that can show the
+ *     difference — the first such verification this project has ever had. Every prior measurement
+ *     ran on an 18–60 Hz headless harness that cannot exhibit the effect.
+ *  2. **The STEPPED lane is the PRE-`01f2ae7` schedule**, kept as the comparison, and its captions
+ *     had gone stale saying otherwise — fixed below.
+ *  3. It explains what looked like a contradiction: the owner found ordinary play good **because**
+ *     interpolation ships, and the STEPPED lane ghosted **because** it reproduces the old schedule
+ *     on purpose.
  *
  * Guarded at the point of creation in `GameScene`, so it is tree-shaken out of `dist/`.
  */
@@ -157,8 +165,14 @@ export function createMotionProbe(
       .setScrollFactor(0)
       .setDepth(901);
   };
-  caption(LANE.steppedY - 250, 'STEPPED  — how the game moves today (12 px every 4th refresh)');
-  caption(LANE.smoothY - 250, 'SMOOTH   — what interpolation would do (every refresh)');
+  // 🔴 **Both captions were STALE and said the opposite of the truth for twelve days.** They
+  // read *"how the game moves today"* and *"what interpolation would do"* — written before
+  // `01f2ae7` landed `src/render/interpolate.ts` on the same day this probe was built. The game has
+  // drawn between ticks ever since, so SMOOTH is what it does today and STEPPED is what it USED to
+  // do. A dev overlay that tells its reader the game has a defect it already fixed is worse than no
+  // overlay, and this one had an owner read it before the wording was caught.
+  caption(LANE.steppedY - 250, 'STEPPED  — the OLD schedule, before 01f2ae7 (12 px every 4th refresh)');
+  caption(LANE.smoothY - 250, 'SMOOTH   — what the game does TODAY: render interpolation, every refresh');
 
   const readout = scene.add
     .text(LANE.left, 60, '', {

@@ -313,7 +313,15 @@ are the things ordinary play cannot reach:
   (`sentry-coverage.test.ts` pins it). Whether the levels were authored assuming those shots landed
   **cannot be settled from a number**. Read the three against how their levels are built and put it to
   the owner as a decision with a recommendation.
-- **240 Hz** — the interpolation judder probe. The *choice* is settled; the *diagnosis* never was.
+- ✅ **240 Hz — CLOSED 2026-08-26.** The owner ran `?probe=1` on a 173–174 Hz display and read
+  **outcome 1: STEPPED ghosts, SMOOTH is clean.** The diagnosis holds, and it survived the falsifier
+  the Codex plan review proposed. ⚠️ **It commissions nothing** — render interpolation already
+  ships (`01f2ae7`, `src/render/interpolate.ts`, consumed by `gamePlayerDraw.ts` and
+  `enemyLayer.ts`), so the reading CONFIRMS the shipped fix rather than authorising a new one. This
+  item was itself half stale: `HANDOFF.md` already recorded *"confirmed in real play at 240 Hz: the
+  ghost is gone"*. What was genuinely missing was the probe's own side-by-side reading, and that is
+  now taken. See `devMotionProbe.ts`'s header and
+  `qa/session-tier5-gate-holes-03-sweep.md`.
 
 ⚠️ **Drive the capture with the `playwright-cli` skill, not `e2e-playwright-testing`** — two Playwright
 skills, two different jobs. **The deliverable is images plus a short index the owner can scan, not a
