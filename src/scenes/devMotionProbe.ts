@@ -71,6 +71,29 @@ import { DEFAULT_TUNING } from '../sim/playerTuning';
  * **The item stays OPEN.** What closes it is `?probe=1` on this display and a reading of which of
  * the three outcomes above occurred.
  *
+ * ## ✅ 2026-08-26 — RUN, AND THE OUTCOME IS RECORDED: **STEPPED ghosts, SMOOTH is clean**
+ *
+ * The owner ran `?probe=1` on this machine and reported that **the bottom lane — SMOOTH — is the
+ * one that looks good.** Bottom is SMOOTH by construction (`LANE.smoothY` 640 against
+ * `LANE.steppedY` 300), so the reading is unambiguous and it is the first of the three outcomes
+ * above.
+ *
+ * 🔴 **The diagnosis therefore HOLDS**, and it held against the falsifier the Codex plan review
+ * itself proposed: *"the effect persisting with one frozen pose translated directly per rAF."* The
+ * animation is stopped on a single frame here, so pose cadence is excluded by construction — the
+ * only thing differing between the lanes is the position schedule. **Holding position for three
+ * refreshes and then jumping 12 px is the cause**, on a display fast enough to show it.
+ *
+ * ⚠️ **What this authorises, and what it does not.** It authorises building render interpolation
+ * — that was the decision this probe existed to gate, and the probe has now paid for itself. It does
+ * NOT specify the design, and the design is not free: interpolation reads the frame clock's leftover
+ * remainder and must live in `src/render/`, because `src/sim/` reaches no clock and every duration
+ * there is an integer count of 60 Hz ticks (CLAUDE.md §3). Nothing about the tick contract changes.
+ *
+ * ⚠️ **And it is not a defect the owner saw in ORDINARY play** — the note above records them
+ * playing the shipped game at 173–174 Hz and finding it good. So this is a polish item with a
+ * measured cause, not a bug report. Scope and timing are the owner's call.
+ *
  * Guarded at the point of creation in `GameScene`, so it is tree-shaken out of `dist/`.
  */
 

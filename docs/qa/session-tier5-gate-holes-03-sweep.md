@@ -229,7 +229,16 @@ probe freezes one pose so that pose cadence is excluded by construction; ordinar
 nothing. What closes it is `?probe=1` on this display and a reading of which of the three outcomes
 occurred.
 
-**240 Hz judder — STILL OWED, and honestly so.** The harness measured **173–174 Hz**, so this box is
+✅ **2026-08-26, LATER — the probe was RUN and the outcome is `STEPPED ghosts, SMOOTH is clean`.**
+The owner reported *"the bottom one that is smooth is what looks good."* Bottom is SMOOTH by
+construction (`LANE.smoothY` 640 vs `steppedY` 300), so the reading is unambiguous: **outcome 1 of
+three. The diagnosis holds and render interpolation is authorised.** It survived the falsifier the
+Codex plan review proposed — one frozen pose, pose cadence excluded by construction, only the
+position schedule differing. **Item 3.12 and the S.9 entry are CLOSED.** ⚠️ Interpolation must live
+in `src/render/`; `src/sim/` reaches no clock and the tick contract does not change. And it is a
+polish item, not a bug report: the same owner found ordinary play good at 173–174 Hz.
+
+**240 Hz judder — the below is the pre-run state, kept for the record.** The harness measured **173–174 Hz**, so this box is
 the right substrate, and `probe-240hz-readout.png` shows `?probe=1` running. But the probe's three
 outcomes are decided by **a pair of eyes** comparing the STEPPED and SMOOTH lanes, and no automated
 reading can substitute. **Not closed.**
