@@ -13,3 +13,19 @@ export interface AnchorAuditRow {
 
 export declare function declaredAnchorSources(): string[];
 export declare function auditAnchors(paths: string[]): AnchorAuditRow[];
+
+/** Where generated art lands. Its existence is what turns ABSENT from context into a defect. */
+export declare const GENERATED_ROOT: string;
+
+/**
+ * Run the audit and THROW. The entry point every anchor-reading script calls.
+ *
+ * Throws on any FAIL; on any ABSENT when `generatedRoot` exists (a pipeline with a missing input,
+ * as opposed to a fresh clone that has no pipeline); and on an empty declaration list.
+ */
+export declare function auditOrThrow(opts?: {
+  label?: string;
+  generatedRoot?: string;
+  /** Injectable so the ABSENT rule is reachable from a test. Defaults to the declared list. */
+  sources?: string[];
+}): AnchorAuditRow[];

@@ -31,10 +31,10 @@
  * contract justified by a false premise is one the next reader will not trust. See `png.mjs`.
  */
 
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
 import { decodePng, encodePng } from './png.mjs';
+import { auditOrThrow } from './anchorAudit.mjs';
 import { dropCastShadow } from './chroma.mjs';
 import { packStrip } from './sheets.mjs';
 import { gateLoopWrap, gateMotionFloor, summarise, PASS } from './gates.mjs';
@@ -42,21 +42,9 @@ import { ACCEPTED_POSE_REPEATS, gateAdjacentDistinct } from './gateAdjacent.mjs'
 import { configFor, workListFor, resolveActionScale } from './slugConfig.mjs';
 import { hasCatalogTiming, catalogRowFor } from './catalogTimings.mjs';
 import { printDerivedScale } from './deriveScale.mjs';
-import {
-  decideCatalogRow,
-  liftProfileEntry,
-  sheetReportRow,
-  validateCatalogRows,
-} from './catalogDecision.mjs';
+import { decideCatalogRow, liftProfileEntry, sheetReportRow, validateCatalogRows } from './catalogDecision.mjs';
 import { upsertCatalogSheets, upsertLiftProfile } from './catalogWrite.mjs';
-import {
-  findSource,
-  loadConfig,
-  keySheet,
-  framesOf,
-  sliceFrame,
-  cellPitchFor,
-} from './assetSources.mjs';
+import { findSource, loadConfig, keySheet, framesOf, sliceFrame, cellPitchFor } from './assetSources.mjs';
 
 /** Where `upsertCatalogSheets` merges this build's rows into. */
 const CATALOG_PATH = 'public/assets/index.json';
@@ -66,6 +54,10 @@ const CATALOG_PATH = 'public/assets/index.json';
  * script's own behaviour for `brass-courier` is unchanged, just re-sourced. A later task points
  * this at more than one slug; that rewiring is out of scope here (see `slugConfig.mjs`'s header).
  */
+// 🔴 The 4.27 gate, HERE rather than on `assets:build` — `build-assets-all.mjs` spawns this file
+// directly and bypassed the script. Full argument in `anchorAudit.mjs`'s header.
+auditOrThrow({ label: 'anchor audit (pre-pack)' });
+
 const SLUG = process.argv[2] ?? 'brass-courier';
 // `process.argv.slice(3)` is the action filter (work item A-T5) — `--derive-scale` (read again at
 // `main()`, line ~148) is a flag, not an action, so it is dropped here rather than fed to

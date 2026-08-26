@@ -233,8 +233,11 @@ Each rule below cost a real false green or false red. **The evidence for every o
   A zero exit *through a pipe* is `tail`'s exit, not the gate's.
 - **Only one Playwright run at a time, and nothing heavy beside it** *(Phase 9)*. `test:e2e` shares
   port 5173 and `test-results/`, and its wall-clock-bounded specs read a busy box as a broken game —
-  seven specs once failed for no reason but three concurrent jobs. `tests/e2e/portGuard.ts` now kills
-  the orphaned dev server Playwright leaves behind on Windows; read its header before touching it.
+  seven specs once failed for no reason but three concurrent jobs. ⚠️ **This used to cite
+  `tests/e2e/portGuard.ts`, which does not exist and never did.** The orphaned-server problem is
+  real and the fix is real; it lives in `tools/dev/free-port.mjs` (run against **both** 5173 and
+  4173 by `test:e2e`) and in `tools/dev/e2e-server.mjs` / `prod-server.mjs`, which free the port
+  in-process before binding. Read `free-port.mjs`'s header before touching any of it.
 - **Assert the type before the value** in e2e.
 - **An existence assertion cannot verify a timing claim.** Assert *which tick*.
 - **Never `waitForTimeout`.** Wait on `window.__game.ready`.

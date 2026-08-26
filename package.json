@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "assets:audio": "node tools/gen/build-audio.mjs",
-    "assets:build": "node tools/gen/anchorAudit.mjs && node tools/gen/build-assets.mjs",
+    "assets:build": "node tools/gen/build-assets.mjs",
     "assets:build:all": "node tools/gen/build-assets-all.mjs",
     "assets:clips": "node tools/gen/build-clips.mjs",
     "assets:levels": "node tools/gen/make-levels.mjs",

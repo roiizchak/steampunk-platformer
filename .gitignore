@@ -20,3 +20,15 @@ Recording*.mp4
 # in Phase 6 before anyone noticed; evidence belongs in docs/evidence/, not the repo root.
 /*.png
 .claude/worktrees/
+
+# 🔴 ADDED 2026-08-26, BEFORE the repo goes public. Neither pattern existed, and the repository has
+# never held a secret (criterion 10.7's sweep: 506 commits, zero named-format hits) — which is
+# exactly why the rules were missing and exactly why they have to exist NOW. A `.gitignore` that has
+# never been tested by a real `.env` is not evidence that one would be caught.
+.env
+.env.*
+!.env.example
+
+# Vercel's project link and pulled environment. `.vercel/` carries the project + org ids and,
+# after `vercel env pull`, real values.
+.vercel/

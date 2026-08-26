@@ -133,7 +133,66 @@ test.describe('phase 10 — the production build', () => {
       'a CSP keyword is unquoted. The browser will read it as a HOST NAME and silently block ' +
         'everything the directive was meant to allow.',
     ).not.toMatch(/(?:^|[;\s])(?:self|none|unsafe-inline|unsafe-eval)(?=[;\s]|$)/);
-    expect(want['Content-Security-Policy']).toContain("default-src 'self'");
+
+    /**
+     * 🔴 **Every directive value, matched EXACTLY, against a list restated here on purpose.**
+     *
+     * The criterion 10.6 gate owner found two ways the previous version passed on a broken policy
+     * (findings F2 and F3), and they compose:
+     *
+     *  - It asserted `.toContain("default-src 'self'")` and nothing else, so
+     *    `script-src 'self' 'unsafe-inline' 'unsafe-eval'` passed every check in this file. It also
+     *    produces FEWER `securitypolicyviolation` events, so the playthrough test below goes greener
+     *    the more the policy is loosened.
+     *  - `frame-ancestors`, `form-action` and `base-uri` do **not** fall back to `default-src`. A
+     *    one-character typo in any of the three (`frame-ancestor`) silently drops that protection
+     *    with no `X-Frame-Options` backstop, and the quoting regex above sees nothing wrong.
+     *
+     * ⚠️ **This IS a second definition of the policy, and that is the point.** Everywhere else in
+     * this project a single source is the right answer, and it is here too for the *header
+     * plumbing*: the loop above proves the server serves exactly what `vercel.json` declares. But an
+     * expectation read out of the file under test can only detect drift, never wrongness — a policy
+     * that is wrong everywhere at once agrees with itself perfectly. So the security-critical values
+     * are written out by hand, once, in the place a reviewer looks. Changing the policy now takes
+     * two deliberate edits, which is the correct cost for a security header.
+     */
+    const REQUIRED_DIRECTIVES: Record<string, string> = {
+      'default-src': "'self'",
+      'script-src': "'self'",
+      // ⚠️ **`'unsafe-inline'` is load-bearing, but NOT for the reason vault 10.5 records.** The
+      // vault says *"the scale manager writes inline margins"*. It does — and CSSOM property writes
+      // (`el.style.margin = …`) are **not CSP-governed at all**; only inline `<style>` blocks and
+      // `style=` attributes in markup are. Removing it on that reasoning would have been safe and
+      // the reasoning would still be wrong. The real consumer is `index.html`'s own `<style>` block
+      // (the page background and the canvas centring), which Vite leaves inline in `dist/`. Found by
+      // the criterion 10.6 gate owner; verified by grepping `src/` for `innerHTML` and `<style>`
+      // injection — there is none.
+      'style-src': "'self' 'unsafe-inline'",
+      'img-src': "'self' data: blob:",
+      'media-src': "'self' data: blob:",
+      'connect-src': "'self'",
+      'font-src': "'self'",
+      'object-src': "'none'",
+      'base-uri': "'self'",
+      'frame-ancestors': "'none'",
+      'form-action': "'none'",
+    };
+    const served = Object.fromEntries(
+      want['Content-Security-Policy']
+        .split(';')
+        .map((d) => d.trim())
+        .filter((d) => d.length > 0)
+        .map((d) => {
+          const at = d.indexOf(' ');
+          return at < 0 ? [d, ''] : [d.slice(0, at), d.slice(at + 1).trim()];
+        }),
+    );
+    expect(
+      served,
+      'the shipped CSP no longer matches the security-critical directive list written out in this ' +
+        'spec. A directive that GREW (an added `unsafe-eval`, a widened host) passes every other ' +
+        'assertion in this file and produces fewer violations, not more.',
+    ).toEqual(REQUIRED_DIRECTIVES);
   });
 
   /**
@@ -183,9 +242,11 @@ test.describe('phase 10 — the production build', () => {
       'the frame after a full playthrough is byte-identical to the frame before it',
     ).toBe(false);
 
-    expect(await cspViolations(page), 'the page violated its own CSP while being played').toEqual(
-      [],
-    );
+    const violations = await cspViolations(page);
+    // `null` means no collector, which an empty array cannot be distinguished from. See
+    // `cspViolations`' header — the absence assertion is worthless without this line.
+    expect(violations, 'no CSP violation collector was installed on this page').not.toBeNull();
+    expect(violations, 'the page violated its own CSP while being played').toEqual([]);
     expect(errors, 'the production build threw while being played').toEqual([]);
   });
 
@@ -231,7 +292,9 @@ test.describe('phase 10 — the production build', () => {
         `point: if it fails here, a seam is live in dist/.`,
     ).not.toBeNull();
 
-    expect(await cspViolations(page)).toEqual([]);
+    const devViolations = await cspViolations(page);
+    expect(devViolations, 'no CSP violation collector was installed on this page').not.toBeNull();
+    expect(devViolations).toEqual([]);
     expect(errors, 'a dev key or flag threw in the production build').toEqual([]);
   });
 });

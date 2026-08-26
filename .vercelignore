@@ -1,18 +1,29 @@
 # What Vercel does NOT need as build input.
 #
-# `buildCommand` is `npm run build` — `tsc --noEmit && vite build && verify-dist.mjs` — so the
-# upload has to carry everything those three read, and nothing else. Measured 2026-08-26:
-# excluding the four entries below drops ~169 MB from every deploy.
+# `buildCommand` is `npm run build`, which is FOUR steps —
+#   tsc --noEmit && tsc --noEmit -p tsconfig.build.json && vite build && verify-dist.mjs
+# — so the upload has to carry everything those four read, and nothing else. Measured 2026-08-26:
+# excluding the entries below drops ~169 MB from every deploy.
 #
 # 🔴 WHAT MUST NOT BE ADDED HERE, and why each would break the build rather than slow it:
 #
 #   tests/                 `tsconfig.json`'s include list names it. 3.8 MB.
-#   playwright.config.ts   named individually in that same include list — tsc errors
-#                          "File not found" on a missing named include, not on an empty glob.
+#   playwright.config.ts   named individually in that same include list.
+#   vercel.json            read by BOTH typecheck programs and by tools/gen/vercelHeaders.mjs.
 #   public/                53 MB, and it IS the game: `vite build` copies it verbatim into
 #                          dist/, and `verify-dist.mjs` asserts every .tmj and audio file
 #                          arrived byte for byte.
-#   tools/                 `verify-dist.mjs` and the dev-seam gate live there.
+#   tools/                 verify-dist.mjs, the dev-seam gate, vercelHeaders.mjs and the
+#                          hand-written *.d.mts / node-shims.d.mts all live there, and the
+#                          build program typechecks the .mjs bodies as well as the declarations.
+#
+# ⚠️ **The two `playwright.config.ts` lines above used to justify themselves with a claim that is
+# FALSE**: *"tsc errors 'File not found' on a missing named include, not on an empty glob."* It does
+# not. Measured twice on 2026-08-26 — a named include that matches nothing is silently ignored, and
+# even removing `tests` from the include list typechecks clean; tsc errors only when EVERY pattern
+# in the list matches nothing. So excluding these would NOT break the build loudly. It would shrink
+# what the typecheck covers, silently, on the build box only — which is worse than the failure the
+# original note promised, and is why `tests/unit/build-program.test.ts` now pins the include list.
 #
 # Adding any of those would produce a build failure on Vercel and a green build locally,
 # which is the worst shape a config error can take.

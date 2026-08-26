@@ -43,27 +43,53 @@ import { readBytes } from '../../tools/gen/png.mjs';
  * of the one failure that comparison actually found.
  */
 
-/** Text under `public/`. Everything else there is PNG, WAV or OGG, where a CR byte means nothing. */
-const TEXT_EXTENSIONS = ['.json', '.tmj', '.txt', '.html', '.css', '.svg'];
+/**
+ * 🔴 **The filter is INVERTED: everything is text unless it is known to be binary.**
+ *
+ * It was an allowlist — `.json .tmj .txt .html .css .svg` — and the criterion 10.9 gate owner
+ * pointed out what that misses (brief A finding 10): three of those six match nothing under
+ * `public/` today, and any future `.webmanifest`, `.xml`, `.frag`, `.csv`, `.md` or `.js` added
+ * there is skipped **with no signal at all**. An allowlist over an evolving directory silently
+ * shrinks; a denylist over one fails loudly the day a new binary type arrives, which is the
+ * direction an error should point.
+ */
+const BINARY_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.wav', '.ogg', '.mp3', '.mp4'];
 
 function textFilesUnder(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) textFilesUnder(path, out);
-    else if (TEXT_EXTENSIONS.some((e) => entry.name.endsWith(e))) out.push(path);
+    else if (!BINARY_EXTENSIONS.some((e) => entry.name.toLowerCase().endsWith(e))) out.push(path);
   }
   return out;
 }
 
-describe('shipped text assets are LF', () => {
-  const files = textFilesUnder('public');
+/**
+ * The measured set on 2026-08-26. An EQUALITY, not a floor.
+ *
+ * The floor was `> 5` over 18 files — losing twelve of them, `public/assets/config/` included,
+ * still passed, and `public/assets/config/` is where the CRLF this gate exists for actually was.
+ * A vacuity guard three times looser than its own subject is not a guard (brief B, finding 8).
+ * Adding a shipped text file is a deliberate act and updating this number is part of it.
+ */
+const EXPECTED_TEXT_FILES = 19;
 
-  it('found text assets to check — the glob has not gone empty', () => {
-    // Vacuity guard. A refactor that moved `public/assets/config/` would leave this file asserting
-    // nothing over an empty list and reporting green, which is the failure mode this project has
-    // been bitten by more than any other.
-    expect(files.length, 'no text files found under public/ — this gate is measuring nothing').
-      toBeGreaterThan(5);
+describe('shipped text assets are LF', () => {
+  // ⚠️ `index.html` lives at the REPO ROOT, not under `public/` — it is the one shipped file Vite
+  // TRANSFORMS rather than copies, and it was checked by neither half of 10.9 (brief B, finding 7).
+  const files = [...textFilesUnder('public'), 'index.html'];
+
+  it('checks the whole measured set — the walk has not silently shrunk', () => {
+    expect(
+      files.length,
+      `expected ${EXPECTED_TEXT_FILES} shipped text files, found ${files.length}. If a file was ` +
+        'deliberately added or removed, update EXPECTED_TEXT_FILES; if not, a walk that lost ' +
+        'files is a gate measuring less than it claims.',
+    ).toBe(EXPECTED_TEXT_FILES);
+    expect(files, 'the level data is not in the checked set').toContain(
+      join('public', 'assets', 'levels', 'level-01.tmj'),
+    );
+    expect(files).toContain('index.html');
   });
 
   it.each(files)('%s has no CRLF', (file) => {

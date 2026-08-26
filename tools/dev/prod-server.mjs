@@ -55,7 +55,7 @@
  */
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join, extname, normalize, resolve } from 'node:path';
+import { join, extname, normalize, resolve, sep } from 'node:path';
 import { freePort } from './free-port.mjs';
 import { productionHeaders } from '../gen/vercelHeaders.mjs';
 
@@ -98,14 +98,30 @@ if (killed > 0) {
 
 createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${PORT}`);
-  let pathname = decodeURIComponent(url.pathname);
+  // 🔴 `decodeURIComponent` THROWS on a malformed escape, and an uncaught throw in a `createServer`
+  // callback takes the whole PROCESS down. Measured: one `GET /%` killed the server outright, and
+  // every request after it got ECONNREFUSED — a Playwright run that followed would read a dead port
+  // as a broken game. Found by the criterion 10.6 gate owner (finding F8).
+  let pathname;
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    res
+      .writeHead(400, { ...HEADERS, 'Content-Type': 'text/plain; charset=utf-8' })
+      .end('bad request');
+    return;
+  }
   if (pathname.endsWith('/')) pathname += 'index.html';
 
   // Path traversal guard. The server is local and short-lived, but it serves a directory and takes
   // a path from the request — that is a trust boundary whatever the lifetime, and "it is only a
   // test server" is how one ends up copied somewhere it matters.
+  //
+  // 🔴 This was `candidate.startsWith(ROOT)`, the classic sibling-prefix hole: with `ROOT` ending
+  // `\dist`, the path `\dist-backup\secrets` starts with it and passes. Same finding. A path is
+  // inside a directory when it IS that directory or begins with it plus a separator.
   const candidate = normalize(join(ROOT, pathname));
-  if (!candidate.startsWith(ROOT)) {
+  if (candidate !== ROOT && !candidate.startsWith(ROOT + sep)) {
     res.writeHead(403, HEADERS).end('forbidden');
     return;
   }

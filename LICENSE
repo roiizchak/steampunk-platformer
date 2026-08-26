@@ -11,6 +11,14 @@ THIS LICENCE COVERS THE CODE ONLY. It applies to:
     tsconfig.json, tsconfig.build.json, vercel.json, package.json,
     index.html, .vercelignore
 
+IT DOES NOT COVER THE VENDORED SKILL PACKS. `.claude/skills/` and
+`.agents/skills/` are 215 tracked files of third-party material — Phaser and
+fal.ai reference skills obtained from fal-ai-community/skills — kept in the
+repository so a session has them without a network fetch. They are NOT this
+project's work and are not licensed by this file; each pack carries whatever
+terms its own author set (`.agents/skills/fal-redesign/LICENSE` is one such).
+No build step reads either directory, and `.vercelignore` excludes both.
+
 IT DOES NOT COVER THE ART OR THE AUDIO. Everything under public/assets/ and
 assets/ — every sprite sheet, tile set, parallax layer, portrait and sound —
 was generated through fal.ai for this project and is licensed separately and

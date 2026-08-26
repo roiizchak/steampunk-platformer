@@ -18,6 +18,15 @@ import { styleTemplate, templateBlock } from './prompt.mjs';
 import { VIDEO_MOTIONS, videoPrompt } from './motion.mjs';
 import { CLIP_JOBS, PARAMS_OUT_DIR, PROMPT_OUT_DIR, clipStem } from './clipJobs.mjs';
 import { nextFreeDownloadPath, videoDirFor } from './clipSource.mjs';
+import { auditOrThrow } from './anchorAudit.mjs';
+
+/**
+ * 🔴 **The spend point.** This script renders the `genmedia run` command a human pays for, and the
+ * padded anchors ARE the bytes it submits. Criterion 4.27 says the geometry is measured *before
+ * generating from it* — anywhere later is a post-mortem. `requirePresent` is implicit: if
+ * `_generated/` exists at all (and it must, for anchors to be submitted), a missing anchor throws.
+ */
+auditOrThrow({ label: 'anchor audit (pre-submission)' });
 
 const requested = process.argv.slice(2);
 const keys = requested.length > 0 ? requested : Object.keys(CLIP_JOBS);

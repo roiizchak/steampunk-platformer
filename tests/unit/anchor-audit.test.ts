@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { auditAnchors, declaredAnchorSources } from '../../tools/gen/anchorAudit.mjs';
+import { auditAnchors, auditOrThrow, declaredAnchorSources } from '../../tools/gen/anchorAudit.mjs';
 
 /**
  * The WIRING half of criterion 4.27 — `tools/gen/anchorAudit.mjs`.
@@ -27,8 +27,8 @@ describe('anchor audit — the 4.27 wiring', () => {
     const sources = declaredAnchorSources();
     expect(
       sources.length,
-      'PADDED_ANCHORS declares no local anchor sources — `npm run assets:build` would run the ' +
-        'audit over nothing and exit 0. That is the shape criterion 4.27 was open on.',
+      'PADDED_ANCHORS declares no local anchor sources — the audit would run over nothing and ' +
+        'pass. That is the shape criterion 4.27 was open on.',
     ).toBeGreaterThan(0);
     expect(sources.every((s) => s.endsWith('.png'))).toBe(true);
     expect(new Set(sources).size, 'the source list is not deduped').toBe(sources.length);
@@ -45,5 +45,68 @@ describe('anchor audit — the 4.27 wiring', () => {
     expect(rows.map((r) => r.status)).toEqual(['PASS', 'FAIL', 'INDETERMINATE', 'ABSENT']);
     // Not just the status: the reason has to survive too, or a red build says nothing useful.
     expect(rows[1]!.detail).toContain('one foot is drawn off the floor');
+  });
+});
+
+/**
+ * 🔴 **The half this file CLAIMED to cover and did not.**
+ *
+ * Its own header said *"this covers the thing that was actually open for two phases: whether
+ * anything runs it"* — and neither test opened `package.json` or any consumer. Revert the wiring
+ * entirely and both tests above stay green: the gate returns to its pre-Phase-10 state with the
+ * whole suite passing over it. Found by the criterion 10.11 gate owner (brief B, finding 6).
+ *
+ * These read SOURCE TEXT, which is weaker than executing the consumer — but executing
+ * `build-assets.mjs` means packing sheets from `_generated/`, which is gitignored, so on CI there is
+ * nothing to pack. Source text is what is available, and it is stated as such rather than dressed up.
+ */
+const SOURCES = import.meta.glob('../../tools/gen/*.mjs', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>;
+
+const sourceOf = (name: string): string => {
+  const hit = Object.entries(SOURCES).find(([k]) => k.endsWith(`/${name}`));
+  if (hit === undefined) throw new Error(`${name} is not under tools/gen/ any more`);
+  return hit[1];
+};
+
+describe('the 4.27 wiring reaches the modules that READ an anchor', () => {
+  // Not the npm script. `build-assets-all.mjs` spawns `build-assets.mjs` directly, so a gate on
+  // `assets:build` left the multi-slug path — the one that exists because nobody runs the other —
+  // running zero anchors.
+  it.each([
+    ['build-assets.mjs', 'the sheet-packing entry point every assets:build* path goes through'],
+    ['submit-clips.mjs', 'the SPEND point: it renders the command a human pays for'],
+  ])('%s calls auditOrThrow', (file, why) => {
+    expect(sourceOf(file), `${file} no longer runs the anchor audit — ${why}`).toMatch(
+      /auditOrThrow\(/,
+    );
+  });
+
+  it('is fatal on a missing anchor once the pipeline directory exists', () => {
+    // The vacuity that made the audit exit 0 on any fresh clone: 4 declared, 4 ABSENT, 0 measured,
+    // "gated" printed. Both inputs are injected so the RULE is asserted, not this machine's disk.
+    const missing = ['tests/fixtures/anchors/no-such-anchor.png'];
+
+    expect(
+      () => auditOrThrow({ sources: missing, generatedRoot: 'tests/fixtures/anchors' }),
+      'a declared anchor is absent while the pipeline directory exists, and the audit passed. ' +
+        'That is the vacuous exit 0 criterion 4.27 was open on, reproduced.',
+    ).toThrow(/not on disk/);
+
+    // ...and NOT fatal without one, or a fresh clone could not run `npm test`.
+    expect(() =>
+      auditOrThrow({ sources: missing, generatedRoot: 'no/such/pipeline/root' }),
+    ).not.toThrow();
+
+    // A FAIL is fatal either way — absence is contextual, bad geometry never is.
+    expect(() =>
+      auditOrThrow({
+        sources: ['tests/fixtures/anchors/floating-foot.png'],
+        generatedRoot: 'no/such/pipeline/root',
+      }),
+    ).toThrow(/FAILED G1/);
   });
 });

@@ -107,9 +107,17 @@ export async function gotoProduction(page: Page, query = ''): Promise<void> {
   });
 }
 
-/** Every CSP violation the page has raised since navigation. */
-export async function cspViolations(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []);
+/**
+ * Every CSP violation the page has raised since navigation, or `null` if no collector is installed.
+ *
+ * 🔴 This returned `?? []` until 2026-08-26 — **zero violations and no listener were the same
+ * answer**, and the second is the one that happens when a navigation replaces the init script, a
+ * `goto` bypasses `gotoProduction`, or the listener throws before it registers. An empty array from
+ * a page that was never watching is a green nobody earned. Found by the criterion 10.6 gate owner
+ * (finding F4). Callers assert `not.toBeNull()` first.
+ */
+export async function cspViolations(page: Page): Promise<string[] | null> {
+  return page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? null);
 }
 
 /** The baseline criterion 10.12 needs BEFORE any key is pressed. */

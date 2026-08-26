@@ -1,5 +1,5 @@
 /**
- * **The wiring criterion 4.27 was missing.** `npm run assets:build` runs this first.
+ * **The wiring criterion 4.27 was missing.** Every path that reads an anchor runs this first.
  *
  * ## What was actually open
  *
@@ -25,15 +25,42 @@
  * is the failure `clipAnchors.mjs`'s header describes twice: a decision inferred from a directory
  * listing, and a URL that lived only in a gitignored job file. **Audit what is declared.**
  *
- * ## ABSENT is a reported verdict, not a pass and not a failure
+ * ## 🔴 Where this was wired, and why that was the wrong end of the pipeline
  *
- * `_generated/` is gitignored, so on a fresh clone every anchor is missing — and so is
- * `_generated/sheets/`, which `build-assets.mjs` refuses on two lines later. Making absence fatal
- * here would move that refusal to a worse message; making it silent would let a build claim the
- * anchors were gated when nothing was read. It prints `ABSENT` per anchor and says how many.
+ * It went on the `assets:build` npm script. Both criterion 10.11 gate owners found the same three
+ * holes in that, and each is a different way a gate can be present and useless (brief A finding 2,
+ * brief B finding 3):
  *
- * The one thing that IS fatal besides a FAIL is an **empty declaration list** — that is the vacuity
- * case, where this script would exit 0 having measured nothing at all.
+ *   1. **`assets:build:all` bypassed it entirely.** `build-assets-all.mjs` spawns
+ *      `build-assets.mjs` **directly**, not through npm — so the multi-slug path, which exists
+ *      precisely because *"the command nobody runs is the only one that prints it"*, ran zero
+ *      anchors. The new gate had been re-created in the exact shape that made 4.27 open.
+ *   2. **`assets:build` PACKS SHEETS — the money is already spent by then.** 4.27's own text is
+ *      *"measured before generating from it"*, and `docs/prd/phase-05-combat.md` is explicit that it
+ *      must land *"before the combat/enemy sheets are generated, not after"*. A gate at pack time
+ *      cannot prevent the ~$7 defect it exists to prevent.
+ *   3. **`assets:clips` reads anchors too** and was unwired.
+ *
+ * So the audit lives in `auditOrThrow()` and the CALLERS invoke it: `build-assets.mjs` itself (which
+ * covers `assets:build`, `assets:build:all` and a bare `node tools/gen/build-assets.mjs` alike), and
+ * `submit-clips.mjs`, the script that renders the command a human pays for. Wiring a gate to a
+ * SCRIPT NAME is wiring it to a habit; wiring it to the MODULE THAT READS THE INPUT is wiring it to
+ * the pipeline.
+ *
+ * ## ABSENT is fatal once the pipeline exists, and only then
+ *
+ * `_generated/` is gitignored, so on a fresh clone every anchor is missing. That used to make the
+ * audit print `0 PASS, 0 FAIL, 4 ABSENT` and **exit 0** — one person's out-of-band measurement
+ * wearing a gate's clothes, i.e. the original 4.27 defect exactly (brief A finding 4, brief B
+ * finding 5). The empty-declaration-list guard did not help: that list is a compile-time constant
+ * and can never be empty in practice, so it guarded the case that never happens.
+ *
+ * The discriminator is `_generated/` itself. Absent → there is no pipeline on this machine, nothing
+ * can be generated, and the audit reports and stands aside. Present → an anchor that is not on disk
+ * is a real gap, and it is fatal.
+ *
+ * The other fatal case is an **empty declaration list**, kept for what it is: a vacuity guard on the
+ * table rather than on the measurement.
  *
  * ⚠️ G1's own blind spot carries through: it measures an opaque mask in a ground band and cannot
  * tell a sheared limb from a discharge. `INDETERMINATE` (limbs merged at this resolution) is a real
@@ -66,25 +93,89 @@ export function auditAnchors(paths) {
   });
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const sources = declaredAnchorSources();
+/** Where generated art lands. Its existence is what turns ABSENT from context into a defect. */
+export const GENERATED_ROOT = '_generated';
+
+/**
+ * Run the audit and THROW rather than report. This is the entry point every anchor-reading script
+ * calls; the CLI below is a thin wrapper around it.
+ *
+ * `sources` and `generatedRoot` are injectable for ONE reason: the ABSENT rule below is otherwise
+ * unreachable from a test, because on any machine with the pipeline every declared anchor is
+ * present and on any machine without it none are. A rule nobody can watch fire is decoration
+ * *(vault C1, C2)*, and this rule's whole job is to stop a vacuous exit 0.
+ *
+ * @param {{ label?: string, generatedRoot?: string, sources?: string[] }} [opts]
+ * @returns {{ path: string, status: string, detail: string }[]}
+ */
+export function auditOrThrow(opts = {}) {
+  const label = opts.label ?? 'anchor audit';
+  const generatedRoot = opts.generatedRoot ?? GENERATED_ROOT;
+
+  const sources = opts.sources ?? declaredAnchorSources();
   if (sources.length === 0) {
-    console.error(
-      'anchor audit: PADDED_ANCHORS declares no anchor sources. This script would exit 0 having ' +
-        'measured nothing — refusing rather than reporting a vacuous pass.',
+    throw new Error(
+      label +
+        ': PADDED_ANCHORS declares no anchor sources. This would pass having measured nothing — ' +
+        'refusing rather than reporting a vacuous green.',
     );
-    process.exit(1);
   }
+
   const rows = auditAnchors(sources);
-  for (const row of rows) console.log(`${row.status}\t${row.path}\t${row.detail}`);
+  for (const row of rows) console.log(row.status + '\t' + row.path + '\t' + row.detail);
 
   const failed = rows.filter((r) => r.status === FAIL);
   const absent = rows.filter((r) => r.status === 'ABSENT');
   const passed = rows.filter((r) => r.status === PASS);
+  const indeterminate = rows.length - passed.length - failed.length - absent.length;
   console.log(
-    `anchor audit (G1): ${passed.length} PASS, ${failed.length} FAIL, ${absent.length} ABSENT, ` +
-      `${rows.length - passed.length - failed.length - absent.length} INDETERMINATE ` +
-      `of ${rows.length} declared`,
+    label +
+      ' (G1): ' +
+      passed.length +
+      ' PASS, ' +
+      failed.length +
+      ' FAIL, ' +
+      absent.length +
+      ' ABSENT, ' +
+      indeterminate +
+      ' INDETERMINATE of ' +
+      rows.length +
+      ' declared',
   );
-  if (failed.length > 0) process.exit(1);
+
+  if (failed.length > 0) {
+    throw new Error(
+      label +
+        ': ' +
+        failed.length +
+        ' anchor(s) FAILED G1 (contact geometry):\n' +
+        failed.map((r) => '  - ' + r.path + ': ' + r.detail).join('\n') +
+        '\n\nOne boot drawn above the other in the anchor is measured into every frame generated ' +
+        'from it. Re-pad the anchor; do not proceed.',
+    );
+  }
+
+  if (absent.length > 0 && existsSync(generatedRoot)) {
+    throw new Error(
+      label +
+        ': ' +
+        absent.length +
+        ' declared anchor(s) are not on disk, and ' +
+        generatedRoot +
+        '/ exists — so this is a pipeline with a missing input, not a fresh clone:\n' +
+        absent.map((r) => '  - ' + r.path).join('\n') +
+        '\n\nRunning on would gate nothing.',
+    );
+  }
+
+  return rows;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  try {
+    auditOrThrow();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
 }
