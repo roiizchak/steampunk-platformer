@@ -49,10 +49,28 @@ import { devSeamGate } from './tools/gen/devSeamGate.mjs';
  *   - **To support older browsers:** lower the numbers. The floor Vite supports is `es2015`,
  *     and beneath its own target Vite still requires native ESM dynamic import and
  *     `import.meta` — chrome ≥64, firefox ≥67, safari ≥11.1, edge ≥79.
- *   - **The recorded emitted syntax for this target** is in `docs/qa/phase-10-ship.md` under
- *     criterion 10.3, measured from the bundle: optional chaining, `??`, `??=` and `**` all
- *     present and NOT downlevelled. If a target change makes those disappear, the bundle grew
- *     downlevel helpers — which is exactly what vault 10.2's raw-vs-gzip discriminator is for.
+ *   - **The recorded emitted syntax for this target**, measured from the shipped bundle by
+ *     `tools/gen/measure-bundle.mjs` on 2026-08-26: `?.` ×70, `??` ×48, `??=` ×18, `**` ×41 —
+ *     all present, none downlevelled. If a target change makes those disappear, the bundle grew
+ *     downlevel helpers.
+ *
+ * ⚠️ **And do NOT reach for the raw-vs-gzip ratio to see that happen.** It was tried, as a
+ * three-arm A/B on the same commit:
+ *
+ * | arm | raw | gzip | ratio | `?.` | `??` |
+ * |---|---|---|---|---|---|
+ * | Vite 8 defaults | 1,441,653 | 377,486 | 3.819 | 70 | 48 |
+ * | this file, pinned | 1,441,653 | 377,486 | 3.819 | 70 | 48 |
+ * | `target: 'es2015'` | 1,446,448 | 378,656 | **3.820** | **19** | **0** |
+ *
+ * Downlevelling every `??` and two thirds of the optional chaining moved the ratio by **0.001**
+ * and the raw size by 0.33 %. The ratio is not a discriminator for a target change on this
+ * bundle; the syntax census is. *(Vault 10.2's own warning, arriving in the phase named after
+ * it — see `measure-bundle.mjs`.)*
+ *
+ * The first two rows being byte-identical is the other half of the result: **the pinned values
+ * ARE Vite 8.2.0's current defaults**, so pinning changed nothing today. Its whole value is that
+ * a Vite major can no longer move the contract silently.
  */
 const BROWSER_TARGET = ['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4'];
 

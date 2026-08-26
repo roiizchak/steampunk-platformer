@@ -1,7 +1,9 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
+
+import { readBytes } from '../../tools/gen/png.mjs';
 
 /**
  * **No CRLF in a shipped text asset.** Criterion 10.9, and it was found the hard way.
@@ -65,11 +67,13 @@ describe('shipped text assets are LF', () => {
   });
 
   it.each(files)('%s has no CRLF', (file) => {
-    const bytes = readFileSync(file);
-    const crlf = bytes.reduce(
-      (n, b, i) => (b === 0x0d && bytes[i + 1] === 0x0a ? n + 1 : n),
-      0,
-    );
+    // `readBytes`, not `readFileSync` — the node shim types the latter as returning a STRING, and
+    // a decoded string is exactly where a carriage return can go missing. Bytes are the subject.
+    const bytes = readBytes(file);
+    let crlf = 0;
+    for (let i = 0; i < bytes.length - 1; i += 1) {
+      if (bytes[i] === 0x0d && bytes[i + 1] === 0x0a) crlf += 1;
+    }
     expect(
       crlf,
       `${file} has ${crlf} CRLF line ending(s) in the working tree. The repository stores it with ` +
