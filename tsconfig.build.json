@@ -23,23 +23,38 @@
   // `npm run typecheck:build` runs it. Both programs run in the full regression; neither replaces
   // the other.
   //
-  // ## What is deliberately NOT here, and why
+  // ## What is in the program, and the half-claim that was false
   //
-  // ⚠️ Vault 10.3 also asks for **Node types** and for the **plugin directory** in the include list.
-  // This program has neither, and that is a recorded shortfall rather than an oversight:
+  // 🔴 This header used to say the plugin *"IS typechecked here, through its declaration"*. **It was
+  // not.** Found by the criterion 10.5 gate owner (brief A, finding 1): with `allowJs` off, the
+  // include list named `devSeamGate.d.mts` — 18 lines of hand-written assertions *about* the plugin —
+  // and `devSeamGate.mjs`, the 190-line body those assertions describe, was **in no program at all**.
+  // An unmet half recorded as met is precisely what C11 exists to catch, and this file was the one
+  // recording it.
   //
-  //   * `@types/node` is a **frozen-dependency STOP-and-ask** (CLAUDE.md §3). Phase 1 needed it
-  //     twice and solved it without adding it; this phase does the same.
-  //   * It is not needed, because `vite.config.ts` reads the CSP by **importing `vercel.json`**
-  //     (`resolveJsonModule`) rather than through `fs`. Removing the need for a dependency is a
-  //     better outcome than adding one.
-  //   * `tools/gen/devSeamGate.mjs` is plain `.mjs` with a hand-written `.d.mts` beside it — the
-  //     convention every other `tools/gen/*` module already uses — so the plugin IS typechecked
-  //     here, through its declaration, without pulling the whole tools directory (and its Node
-  //     built-ins) into the program.
+  // Worse, the justification was circular: it argued no Node types were needed, while
+  // `devSeamGate.mjs` opens with `import { readFileSync, readdirSync, existsSync } from 'node:fs'`.
+  // The Node-types *need* had not been removed; the Node-using *file* had been excluded.
   //
-  // The separate-program half of vault 10.3 is satisfied. The Node-types half is not, for the
-  // reason above. Recorded in docs/qa/phase-10-ship.md under 10.5 rather than left silent (C11).
+  // So `allowJs`/`checkJs` are on and the `.mjs` bodies are in the include list. This matters more
+  // for these two files than for any other `tools/gen/*`: every other one is EXECUTED by a unit test,
+  // so a drifted declaration dies at runtime in vitest. `devSeamGate.mjs` has no test consumer at all
+  // — its only exercise is `vite build` — which makes it the file that most needed a program.
+  //
+  // ## Still no `@types/node`
+  //
+  // `@types/node` is a **frozen-dependency STOP-and-ask** (CLAUDE.md §3). Phase 1 needed it twice and
+  // solved it without adding it; `tests/e2e/node-shims.d.ts` is that solution for the e2e suite, and
+  // `tools/gen/node-shims.d.mts` is the same answer here — exactly the members these files call, at
+  // the signatures they call them at.
+  //
+  // ⚠️ **`skipLibCheck` is what makes that survivable, and it is not free.** `vite`'s own
+  // `dist/node/index.d.ts` opens with `/// <reference types="node" />`; without the real package that
+  // reference is unresolvable, and `skipLibCheck` swallows the resulting error. The cost is that some
+  // Vite types that flow through Node ones degrade — `PreviewOptions.headers` widens to `any`, so the
+  // `preview.headers` assignment in `vite.config.ts` is NOT type-checked against Vite's shape. That
+  // is a measured, accepted shortfall (criterion 10.5 gate owner, brief A, finding 4), recorded here
+  // rather than left as an unexamined `true`.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
@@ -57,7 +72,21 @@
     // Load-bearing: it is what lets the CSP be imported from vercel.json instead of read with fs,
     // which is what keeps @types/node off the dependency list. See the note above.
     "resolveJsonModule": true,
+    // The two lines that put the plugin BODY in a program rather than only its declaration.
+    "allowJs": true,
+    "checkJs": true,
     "types": ["vite/client"]
   },
-  "include": ["vite.config.ts", "vercel.json", "tools/gen/devSeamGate.d.mts"]
+  // 🔴 Pinned by `tests/unit/build-program.test.ts`. Deleting an entry here, or the `-p` link from
+  // package.json's `typecheck:build`, is otherwise silently green: TypeScript does NOT error on a
+  // named include that matches nothing — it errors only when EVERY pattern matches nothing (measured
+  // twice, 2026-08-26). A shrinking include list is the exact way a config program stops covering
+  // what it claims to cover.
+  "include": [
+    "vite.config.ts",
+    "vercel.json",
+    "tools/gen/node-shims.d.mts",
+    "tools/gen/devSeamGate.mjs",
+    "tools/gen/vercelHeaders.mjs"
+  ]
 }

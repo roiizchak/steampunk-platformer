@@ -26,20 +26,13 @@
   "downloaded_files": [
     {
       "url": "https://v3b.fal.media/files/b/0aa5aca3/B_e6BEVKyeBwaua6sEFSH_EggAmZub.png",
-      "path": "C:\\Claude\\Steampunk Platformer\\_generated\\phase05\\brass-sentry-c0.png",
       "size_bytes": 3861045,
       "json_path": "images[0]"
     },
     {
       "url": "https://v3b.fal.media/files/b/0aa5aca3/E4h0y_UiKrd4GcTI2jOYt_l9G1oyVA.png",
-      "path": "C:\\Claude\\Steampunk Platformer\\_generated\\phase05\\brass-sentry-c1.png",
       "size_bytes": 4690325,
       "json_path": "images[1]"
     }
-  ],
-  "gallery": {
-    "session_id": "df02ba03db6b",
-    "path": "C:\\Users\\royko\\.genmedia\\gallery\\sessions\\df02ba03db6b\\index.html",
-    "url": "file:///C:/Users/royko/.genmedia/gallery/sessions/df02ba03db6b/index.html"
-  }
+  ]
 }

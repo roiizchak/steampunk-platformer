@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
-import vercel from './vercel.json' with { type: 'json' };
 import { devSeamGate } from './tools/gen/devSeamGate.mjs';
+import { productionHeaders } from './tools/gen/vercelHeaders.mjs';
 
 // Vault A8: this file MUST keep the `.ts` extension. If Vite ever warns about its config
 // loader, adding a `.js` config silences the warning AND breaks the loader. A warning
@@ -10,9 +10,15 @@ import { devSeamGate } from './tools/gen/devSeamGate.mjs';
 // Nothing here imports Phaser, which is what lets QA criterion 1.3 (run the sim suite with
 // Phaser uninstalled) work at all — vitest has to be able to load this file without it.
 //
-// ⚠️ It imports `vercel.json` and `tools/gen/devSeamGate.mjs`, and NEITHER pulls in Phaser or
-// `node:*`. That is deliberate: `resolveJsonModule` is already on, so reading the CSP needs no
-// `fs` and therefore no `@types/node`, which is a frozen-dependency STOP-and-ask (CLAUDE.md §3).
+// ⚠️ It imports two `tools/gen/*.mjs` modules and neither pulls in Phaser.
+//
+// 🔴 **They DO both import `node:*`, and this comment claimed the opposite until 2026-08-26.**
+// Found by the criterion 10.4 gate owner (brief A, finding 11): `devSeamGate.mjs` opens with
+// `import { readFileSync, readdirSync, existsSync } from 'node:fs'`. The conclusion — no
+// `@types/node`, which is a frozen-dependency STOP-and-ask (CLAUDE.md §3) — still holds, but the
+// stated reason was false, and the reason is what a future editor acts on. The real reason is
+// `tools/gen/node-shims.d.mts`: the Node built-ins those files use are **declared** rather than
+// installed, exactly as `tests/e2e/node-shims.d.ts` already does for the e2e suite.
 
 /**
  * 🔴 THE BROWSER CONTRACT IS PINNED, AND VITE WOULD OTHERWISE MOVE IT UNDER US.
@@ -74,36 +80,25 @@ import { devSeamGate } from './tools/gen/devSeamGate.mjs';
  */
 const BROWSER_TARGET = ['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4'];
 
-/**
- * The production response headers, **read from `vercel.json` rather than restated here.**
+/*
+ * The production response headers come from `tools/gen/vercelHeaders.mjs`, which reads
+ * `vercel.json`. **They are not restated here, and they used to be.**
  *
  * Criterion 10.6 says the CSP is verified against the PRODUCTION header config, never the dev
- * server. A second copy of the policy in this file would satisfy the letter of that and defeat
- * its purpose the first time the two drifted — so there is exactly one copy, and it is the one
- * Vercel serves.
+ * server. A second copy of the policy would satisfy the letter of that and defeat its purpose the
+ * first time the two drifted — so there is exactly one copy, and it is the one Vercel serves.
  *
- * ⚠️ This covers the LOCAL substrate only (`tools/dev/prod-server.mjs` reads the same import).
- * It cannot exercise Vercel's route matching or its edge, so a local pass is the FIRST check and
- * `curl -sI` against the real preview deployment is the production-relevant one. Both are
- * recorded in the QA log; neither substitutes for the other.
+ * 🔴 That claim was only half true until 2026-08-26. This file did the catch-all lookup itself,
+ * over a `resolveJsonModule` import; `tools/dev/prod-server.mjs` did the *same* lookup again over
+ * its own `JSON.parse(readFileSync(...))`, with its own shadowing `CATCH_ALL_SOURCE` — under two
+ * comments each claiming the logic existed once. Found by the criterion 10.5 gate owner (brief A,
+ * finding 2). The CSP *value* could not drift, because both really did read `vercel.json`; the
+ * logic around it could, and the prose describing it already had. Now both import one module.
  *
- * 🔴 The `source` pattern is NOT interpreted here. If `vercel.json` ever grows a rule whose
- * `source` is anything other than the catch-all, this returns the headers for the catch-all only
- * and `prod-server.mjs` throws rather than guessing — silent divergence between the local check
- * and production is the one failure this whole arrangement exists to prevent.
+ * ⚠️ This still covers the LOCAL substrate only. It cannot exercise Vercel's route matching or its
+ * edge, so a local pass is the FIRST check and `curl -sI` against the real preview deployment is
+ * the production-relevant one. Both are recorded in the QA log; neither substitutes for the other.
  */
-export const CATCH_ALL_SOURCE = '/(.*)';
-
-export function productionHeaders(): Record<string, string> {
-  const rule = vercel.headers.find((h) => h.source === CATCH_ALL_SOURCE);
-  if (rule === undefined) {
-    throw new Error(
-      `vercel.json has no headers rule with source "${CATCH_ALL_SOURCE}"; the local production ` +
-        'substrate cannot reproduce what Vercel would serve, so it refuses to guess.',
-    );
-  }
-  return Object.fromEntries(rule.headers.map((h) => [h.key, h.value]));
-}
 
 export default defineConfig({
   plugins: [devSeamGate()],

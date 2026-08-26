@@ -7,6 +7,7 @@ import { LevelSelectScene } from '../scenes/LevelSelectScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
 import { UIScene } from '../scenes/UIScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
+import { devSeam } from '../debug/devSeam';
 
 /**
  * The single filtering decision for this project, made once (vault 1.5).
@@ -58,6 +59,10 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   // ⚠️ Registration order is also DRAW order for parallel scenes, which is why `UIScene` must stay
   // after `GameScene`: the HUD draws over the world, and `hudFade`'s overlay depends on it.
   scene: import.meta.env.DEV
-    ? [BootScene, GameScene, UIScene, LevelSelectScene, PlaygroundScene, ElementEditorScene, GymScene]
+    ? // A ternary arm has no statement position, so the sentinel rides a comma expression. See
+      // `devSeam`'s header — this is the shape the criterion 10.2 gate owner named (brief B,
+      // finding 11) for the four guards previously reported UNCOVERED.
+      (devSeam('__DEVSEAM_config_devSceneRoster__'),
+      [BootScene, GameScene, UIScene, LevelSelectScene, PlaygroundScene, ElementEditorScene, GymScene])
     : [BootScene, GameScene, UIScene, LevelSelectScene],
 };

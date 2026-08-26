@@ -21,8 +21,13 @@
  * purpose the first time the two drifted — which, on this project's own evidence, is about four
  * days (`PRD.md:88-93`, where two documents disagreed about the art ceiling until someone noticed).
  *
- * So there is exactly one copy of the CSP, `vercel.json` holds it, and both this server and
- * `vite.config.ts`'s `preview.headers` import it.
+ * So there is exactly one copy of the CSP, `vercel.json` holds it, and exactly one piece of code
+ * looks it up: `tools/gen/vercelHeaders.mjs`, which this server and `vite.config.ts` both import.
+ *
+ * ⚠️ That was **not** true when this file was written. It said the two shared an import while
+ * doing its own `JSON.parse(readFileSync('vercel.json'))` with its own `CATCH_ALL_SOURCE` — the
+ * lookup existed twice under two comments claiming it existed once. The criterion 10.5 gate owner
+ * found it; the shared module is the repair.
  *
  * ## What this CANNOT prove, stated so nobody reads the local pass as more than it is
  *
@@ -52,10 +57,10 @@ import { createServer } from 'node:http';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname, normalize, resolve } from 'node:path';
 import { freePort } from './free-port.mjs';
+import { productionHeaders } from '../gen/vercelHeaders.mjs';
 
 const PORT = Number(process.argv[2] ?? 4173);
 const ROOT = resolve('dist');
-const CATCH_ALL_SOURCE = '/(.*)';
 
 if (!existsSync(join(ROOT, 'index.html'))) {
   throw new Error(
@@ -64,22 +69,7 @@ if (!existsSync(join(ROOT, 'index.html'))) {
   );
 }
 
-const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
-const rules = vercel.headers ?? [];
-const unknown = rules.filter((r) => r.source !== CATCH_ALL_SOURCE);
-if (unknown.length > 0) {
-  throw new Error(
-    `vercel.json has ${unknown.length} headers rule(s) whose source is not "${CATCH_ALL_SOURCE}": ` +
-      `${unknown.map((r) => JSON.stringify(r.source)).join(', ')}. This server applies the ` +
-      'catch-all rule only and refuses to guess at route matching — a local check that applied ' +
-      'different headers from production would be worse than no local check.',
-  );
-}
-const catchAll = rules.find((r) => r.source === CATCH_ALL_SOURCE);
-if (catchAll === undefined) {
-  throw new Error(`vercel.json has no headers rule with source "${CATCH_ALL_SOURCE}"`);
-}
-const HEADERS = Object.fromEntries(catchAll.headers.map((h) => [h.key, h.value]));
+const HEADERS = productionHeaders();
 
 // Enough of a content-type table for what this game actually ships. `nosniff` is one of the headers
 // under test, so a wrong type here would present as a broken page rather than a wrong header —

@@ -126,7 +126,7 @@ export function helpLine(): string {
   // both large text (≥42 px) and two DEV rows (≤41 px). Shortening the dev suffix removes the
   // conflict instead of trading the shipped banner against it, and costs nothing a player sees.
   return import.meta.env.DEV
-    ? `${base}  ·  P play  ·  O editor  ·  G gym`
+    ? (devSeam('__DEVSEAM_gameDev_helpLineSuffix__'), `${base}  ·  P play  ·  O editor  ·  G gym`)
     : base;
 }
 

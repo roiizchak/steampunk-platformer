@@ -16,11 +16,18 @@
  * 2026-08-26 — Vite 8 defaults, the pinned target, and `target: 'es2015'` — the ratio said
  * **nothing**:
  *
- * | arm | raw | gzip | ratio | `?.` | `??` |
- * |---|---|---|---|---|---|
- * | Vite 8 defaults | 1,441,653 | 377,486 | 3.819 | 70 | 66 |
- * | pinned (shipped) | 1,441,653 | 377,486 | 3.819 | 70 | 66 |
- * | `target: 'es2015'` | 1,446,448 | 378,656 | **3.820** | **19** | **0** |
+ * | arm | raw | gzip | ratio | `?.` | `??` | `??=` |
+ * |---|---|---|---|---|---|---|
+ * | Vite 8 defaults | 1,441,653 | 377,486 | 3.819 | 70 | 48 | 18 |
+ * | pinned (shipped) | 1,441,653 | 377,486 | 3.819 | 70 | 48 | 18 |
+ * | `target: 'es2015'` | 1,446,448 | 378,656 | **3.820** | **19** | **0** | **0** |
+ *
+ * 🔴 **This table read `??` = 66 until 2026-08-26**, contradicting `vite.config.ts`'s 48 for the
+ * same two arms **inside the same commit**. Found by the criterion 10.4 gate owner (brief A,
+ * finding 6), and the census is what settles it: the `??` row's regex is `/\?\?[^=]/g`, which
+ * **cannot match `??=`**, so 66 was `??` + `??=` summed by hand into a row that counts only the
+ * first. Re-measured live against the shipped chunk — 48 and 18. The `??=` column now exists so
+ * the two numbers cannot be silently re-merged.
  *
  * Downlevelling every `??` in the bundle and two thirds of the optional chaining moved the ratio
  * by **0.001**. The raw size moved 0.33 %. So the ratio is not a discriminator for a target

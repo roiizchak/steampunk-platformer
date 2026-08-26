@@ -16,3 +16,13 @@ export function devSeamGate(): Plugin;
  * repository with no sentinels.
  */
 export function countSentinelsInSource(root?: string): number;
+
+/**
+ * Every sentinel token in `src/`, in file order, excluding `devSeam.ts`.
+ *
+ * Counted from `devSeam('__DEVSEAM_…__')` CALL sites with comments stripped — not from raw file
+ * text, which counted a commented-out seam as live. Exported so the gate can check uniqueness as
+ * well as count: the floor is a number, and two bodies sharing a token satisfy it while one of them
+ * is deleted.
+ */
+export function sentinelTokensInSource(root?: string): string[];

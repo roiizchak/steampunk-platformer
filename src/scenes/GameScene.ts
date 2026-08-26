@@ -34,6 +34,7 @@ import { createSnapshot } from '../sim/input';
 import { createWorld } from '../sim/tick';
 import { advanceSplit } from '../sim/advanceSplit';
 import type { InputSnapshot, World } from '../sim/types';
+import { devSeam } from '../debug/devSeam';
 
 /**
  * The production play scene: it owns the clock, the keyboard, and the drawing. It owns no game
@@ -301,7 +302,9 @@ export class GameScene extends Phaser.Scene {
     drawFrame({
       world: this.world, camera: this.cameras.main, playerSprite: this.playerSprite,
       prevPlayer: this.prevPlayer, accumulatorMs: this.accumulatorMs,
-      feelTuner: import.meta.env.DEV ? this.feelTuner : undefined,
+      feelTuner: import.meta.env.DEV
+        ? (devSeam('__DEVSEAM_GameScene_feelTunerPass__'), this.feelTuner)
+        : undefined,
       effects: this.effects, ui: this.ui, gears: this.gears, enemies: this.enemies,
       parallax: this.parallax, motionProbe: this.motionProbe, deltaMs: delta,
       publish: publishWorldState,
@@ -310,13 +313,14 @@ export class GameScene extends Phaser.Scene {
 
   private bindKeys(): void {
     const dev = import.meta.env.DEV
-      ? {
+      ? (devSeam('__DEVSEAM_GameScene_bindKeysDevActions__'),
+        {
           togglePlayground: () => this.togglePlayground(),
           toggleElementEditor: () => this.toggleElementEditor(),
           toggleGym: () => this.toggleGym(),
           spawnDevFleet: () => this.spawnDevFleet(),
           spawnDevLowHpEnemy: () => this.spawnDevLowHpEnemy(),
-        }
+        })
       : undefined;
     this.held = bindPlayerKeys(
       this,

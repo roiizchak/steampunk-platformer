@@ -26,20 +26,13 @@
   "downloaded_files": [
     {
       "url": "https://v3b.fal.media/files/b/0aa5acb8/cft62g-UM6cKn_IFZbFV2_6keBI4y3.png",
-      "path": "C:\\Claude\\Steampunk Platformer\\_generated\\phase05\\rust-scavenger-r2-c0.png",
       "size_bytes": 4069816,
       "json_path": "images[0]"
     },
     {
       "url": "https://v3b.fal.media/files/b/0aa5aca7/YO9IpHPYIVFdAHa3n5P0n_bI5R0lcB.png",
-      "path": "C:\\Claude\\Steampunk Platformer\\_generated\\phase05\\rust-scavenger-r2-c1.png",
       "size_bytes": 3915094,
       "json_path": "images[1]"
     }
-  ],
-  "gallery": {
-    "session_id": "ffabc6c793cb",
-    "path": "C:\\Users\\royko\\.genmedia\\gallery\\sessions\\ffabc6c793cb\\index.html",
-    "url": "file:///C:/Users/royko/.genmedia/gallery/sessions/ffabc6c793cb/index.html"
-  }
+  ]
 }
