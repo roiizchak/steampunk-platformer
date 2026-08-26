@@ -23,6 +23,7 @@
 import { expect, test } from '@playwright/test';
 
 import {
+  DRAWN_FRAME_MIN_BYTES,
   ENTRY_LEVEL,
   assertNotYetCompleted,
   cspViolations,
@@ -35,15 +36,6 @@ import {
 /** Playwright creates the parent directories for a screenshot path, so nothing here makes them. */
 const EVIDENCE = 'docs/evidence/phase-10';
 
-/**
- * A frame with something in it. Full-screen PNGs of this game weigh ~1.1 MB; an all-black 1920x1080
- * frame compresses to a few kilobytes, so this separates "the compositor handed back the game" from
- * "the compositor handed back a blank canvas" without decoding a pixel.
- *
- * It is a SMOKE signal and is labelled as one. The evidence that the game is alive is the
- * completion transition below — a still frame proves a frame was drawn, never that the loop runs.
- */
-const DRAWN_FRAME_MIN_BYTES = 100_000;
 
 /**
  * Every dev query flag `src/` has ever read, and the two dev-only overlay switches.
@@ -55,6 +47,18 @@ const DRAWN_FRAME_MIN_BYTES = 100_000;
  */
 const DEV_QUERY =
   '?tune=1&probe=1&feel=2&hitstop=0&perfMutation=cue-stall&breakAsset=catalog&breakFilter=1';
+
+/**
+ * `breakAsset` is TWO seams with two sentinels, and one URL cannot carry both values.
+ *
+ * `BootScene.ts` tests `=== 'catalog'` (`__DEVSEAM_BootScene_breakAssetCatalog__`); `bootAssets.ts`
+ * tests `=== 'corrupt'` (`__DEVSEAM_bootAssets_breakAssetCorrupt__`). `DEV_QUERY` above carries
+ * `catalog`, so `corrupt` was never exercised — while the comment on it claimed *"every dev query
+ * flag `src/` has ever read"* and the exclusion list did not name it. The spec's own coverage map
+ * was wrong by one seam (criterion 10.2 gate owner, brief A, finding 9). A second navigation is
+ * cheaper than an exclusion, so it gets one.
+ */
+const DEV_QUERY_SECOND_BREAK = '?breakAsset=corrupt';
 
 /**
  * Every dev-only key binding (`gameInput.ts:153-166`).
@@ -276,12 +280,19 @@ test.describe('phase 10 — the production build', () => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
 
-    // If `breakAsset` or `breakFilter` were live, boot would refuse and this would never return.
+    // If `breakAsset` or `breakFilter` were live, boot would refuse and this would never return —
+    // and `gotoProduction` additionally requires a DRAWN frame, so a refusal screen fails too.
     await gotoProduction(page, DEV_QUERY);
     await assertNotYetCompleted(page);
 
-    // Only AFTER the readiness gate: the bindings are installed during input setup, and a press
-    // issued before `bindKeys` runs passes even if the binding leaked.
+    // The OTHER `breakAsset` value. One URL cannot carry both; see DEV_QUERY_SECOND_BREAK.
+    await gotoProduction(page, DEV_QUERY_SECOND_BREAK);
+    await assertNotYetCompleted(page);
+
+    // Only AFTER the readiness gate. ⚠️ The reason is NOT "the bindings are installed during input
+    // setup" — that was written here and is false: `bindKeys` runs 34 lines after the save write the
+    // gate polls for. The presses are safe because `create()` is synchronous, so the poll cannot
+    // observe a half-built scene, and because `gotoProduction` now also waits for a painted frame.
     for (const key of DEV_KEYS) await page.keyboard.press(key);
 
     const elapsed = await playToExit(page);

@@ -12,8 +12,22 @@ It is deliberately NOT a runtime flag — a production mutation selector would i
 seam in the very bundle this phase exists to prove clean.
 
     git apply --ignore-whitespace tests/fixtures/dead-sim.patch && npm run build
-    npx playwright test --project=chromium-prod -g "boots, draws"   # must FAIL
+    npx playwright test --project=chromium-prod -g "boots, draws"
     git apply -R --ignore-whitespace tests/fixtures/dead-sim.patch && npm run build
+    npx playwright test --project=chromium-prod -g "boots, draws"
+
+🔴 **READ THE COUNTS, NOT THE EXIT CODE.** `--project` plus `-g` is exactly the shape that selects
+NOTHING: Playwright then prints `expected: 0, unexpected: 0` and **exits 0**, indistinguishable from
+a clean pass unless the count is read (CLAUDE.md §5). The reverse-apply step is the dangerous
+direction — a zero-selection green reads as *"the mutation reverted cleanly"*. So:
+
+    mutated  → must print `1 failed`   (not `0 failed`, not `expected: 0`)
+    reverted → must print `1 passed`
+
+⚠️ **`npm run build` is not optional in either line.** `prod-server.mjs` serves whatever `dist/`
+happens to be on disk and refuses only if `dist/index.html` is MISSING, never if it is STALE. Run
+the bare `npx playwright test` without rebuilding and you test the previous build — a green that
+proves the mutation was never compiled.
 
 Git ignores everything above the first `diff --git` line.
 diff --git a/src/sim/advanceSplit.ts b/src/sim/advanceSplit.ts

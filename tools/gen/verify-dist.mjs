@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { measureBundle } from './measure-bundle.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const problems = [];
@@ -200,6 +201,37 @@ if (existsSync(builtCatalog)) {
   const authoredCatalog = readFileSync(join(root, 'public/assets/index.json'));
   if (!authoredCatalog.equals(readFileSync(builtCatalog))) {
     problems.push('dist/assets/index.json differs from public/assets/index.json');
+  }
+}
+
+/**
+ * **The emitted syntax the pinned `build.target` promises — asserted, not just recorded.**
+ *
+ * 🔴 `measure-bundle.mjs` had ZERO automated consumers. The three-arm A/B it produced lives in
+ * `vite.config.ts`'s reversal instructions as a comment, and a comment goes stale the first time a
+ * Vite upgrade moves the target — which is vault 10.1's failure exactly, one level up from the
+ * thing the pinning prevents. *"A decision function with no consumer is the same defect as a burst
+ * of zero particles"* (CLAUDE.md §2), applied to a measurement tool. Found by the criterion 10.4
+ * gate owner (brief B, finding 15).
+ *
+ * Only ES2020+ syntax is asserted, and only that it is PRESENT. Those are the features the pinned
+ * target (chrome111 / firefox114 / safari16.4) says survive untouched; if a target change starts
+ * downlevelling them the bundle has silently grown helpers and the browser contract moved. A
+ * presence check rather than a band: counts move with ordinary feature work, and a bound that
+ * false-reds on ordinary work gets widened until it means nothing.
+ */
+{
+  const measured = measureBundle(join(root, 'dist'));
+  const mustSurvive = measured.syntax.filter((f) => f.since >= 'ES2020');
+  for (const feature of mustSurvive) {
+    if (feature.count === 0) {
+      problems.push(
+        `no ${feature.label} in the emitted bundle. build.target pins chrome111/firefox114/` +
+          `safari16.4, all of which support ${feature.since} natively, so this syntax should reach ` +
+          'dist/ untouched. Zero means it was downlevelled — the browser contract moved. Run ' +
+          '`node tools/gen/measure-bundle.mjs dist` and reconcile vite.config.ts.',
+      );
+    }
   }
 }
 

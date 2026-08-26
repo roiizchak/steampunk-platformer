@@ -51,6 +51,14 @@ import vercel from '../../vercel.json' with { type: 'json' };
 export const SAVE_KEY = 'steampunk.progress';
 
 /** The level `resolveEntryLevel` hands back on a clean save — `order[0]`, always. */
+/**
+ * A drawn frame's PNG is at least this many bytes. Measured 2026-08-26 against the shipped build:
+ * a live first frame is ~350 kB; the blank-canvas failures that motivated the floor were under 10.
+ * Set an order of magnitude below the observed value, because the question is "is anything drawn",
+ * not "how much".
+ */
+export const DRAWN_FRAME_MIN_BYTES = 100_000;
+
 export const ENTRY_LEVEL = 'level-01';
 
 /**
@@ -105,6 +113,36 @@ export async function gotoProduction(page: Page, query = ''): Promise<void> {
   await page.waitForFunction((k) => window.localStorage.getItem(k) !== null, SAVE_KEY, {
     timeout: 60_000,
   });
+
+  /**
+   * 🔴 **The save key alone is `create()`'s FIRST statement, and that is not a running game.**
+   *
+   * `steampunk.progress` is written by `pickLevel` inside `this.loadLevel()` — `GameScene.create()`
+   * line 1. The sprite, the HUD, the audio, the camera and `bindKeys` are all lines 4 through 50.
+   * So a build that threw anywhere after the first line satisfied the gate, and
+   * `test('ships no debug surface')` then passed on a **dead page**: `typeof window.__game ===
+   * 'undefined'` is trivially true of a page where nothing is running. Found by the criterion 10.2
+   * gate owner (brief B, finding 12), and it made 10.2's runtime half vacuous under exactly the
+   * mutation this suite exists to catch.
+   *
+   * A drawn frame is the discriminator. `page.screenshot()` goes through the compositor, so it sees
+   * WebGL output without `preserveDrawingBuffer` — a `drawImage(webglCanvas)` readback would not.
+   * The floor is bytes of PNG: the game's first frame is a detailed lit scene and clears it by an
+   * order of magnitude, while a blank or single-colour canvas compresses to a few kB.
+   *
+   * ⚠️ This also fixes the ordering claim beside the dev-key presses in the spec. Their comment said
+   * the presses are safe because *"the bindings are installed during input setup"* — false;
+   * `bindKeys` runs 34 lines AFTER the write. They are safe because `create()` is synchronous and
+   * the poll above cannot interleave with it, and now because this waits for a painted frame too.
+   */
+  const frame = await page.screenshot();
+  if (frame.length < DRAWN_FRAME_MIN_BYTES) {
+    throw new Error(
+      `gotoProduction: the save key appeared but the canvas is blank (${frame.length} B < ` +
+        `${DRAWN_FRAME_MIN_BYTES} B). That is create() having written the save on its first line ` +
+        'and then died — a page every "no debug surface" assertion passes vacuously.',
+    );
+  }
 }
 
 /**
@@ -149,6 +187,18 @@ export async function assertNotYetCompleted(page: Page, levelId = ENTRY_LEVEL): 
  *
  * 🔴 It is also the first time this game's level 01 has been finished by playing it. Every prior
  * completion test teleported the player through `levelDriver.ts`'s `simWorld` handle *(vault C4)*.
+ */
+/**
+ * ⚠️ **CLAUDE.md §5 says "Never `waitForTimeout`", and this function uses it twice.** The rule is
+ * about waiting for STATE — a readiness poll dressed as a sleep, which is a flake generator and a
+ * false green when the state arrives late. These two are input DURATIONS: how long a key is held.
+ * A variable-height jump is defined by how long the button is down, and there is no page state that
+ * means "the jump has been held long enough" — the sim's own answer arrives as the jump's height.
+ * Recorded here rather than left implicit, because the criterion 10.2 gate owner flagged it from
+ * both briefs (A finding 13, B finding 16) and the deviation was argued nowhere.
+ *
+ * The readiness wait this function depends on is `gotoProduction`'s, which polls page state and
+ * never sleeps. Measured completion: 18.5–22.9 s against a 60 s budget.
  */
 export async function playToExit(
   page: Page,

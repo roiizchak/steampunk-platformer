@@ -3,7 +3,12 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 5173;
 
 /** `tools/dev/prod-server.mjs` — `dist/` with the real `vercel.json` headers. Phase 10. */
-const PROD_PORT = 4173;
+/**
+ * Exported so `globalSetup.ts` can refuse to warm up against it, instead of re-declaring either the
+ * number or the project's name. A second definition of a value this file owns is vault 5.3's
+ * failure, and the ordering guard had committed it with a string.
+ */
+export const PROD_PORT = 4173;
 
 /**
  * The specs that need a real GPU, as ONE value.
