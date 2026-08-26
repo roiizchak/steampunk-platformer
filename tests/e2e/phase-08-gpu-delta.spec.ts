@@ -70,13 +70,24 @@ import { addGroundLayerCopies } from './levelAmplifiers';
  * Each copy rasterises the SAME camera-culled painted cells the level already draws, so every extra
  * fragment is a tile fragment from the level under test.
  *
- * Measured, not guessed. Clean paired delta is 0.027-0.030 ms; the count below is the smallest that
- * put **every** pair over 0.5 ms with margin across two runs — see
- * `docs/qa/phase-08-levels-03-gpu-bound.md`. Deliberately not the smallest that reddens the median: a
- * red proof sitting on its bound flips with the weather, and this one has to be reliable enough that
- * a GREEN result means the gate is broken rather than the box is busy.
+ * Measured, not guessed. Clean paired delta is 0.027-0.030 ms.
+ *
+ * 🔴 **40 was chosen on isolated runs and FALSE-REDDED on the first held-out set** — the full
+ * `test:e2e` sweep, which is the only condition this spec ever actually runs under. Isolated, 40
+ * copies read per-pair 1.2442 / 1.3732 / 1.3537 / 1.2513. Inside the sweep the same 40 read
+ * 0.6636 / 0.5960 / **-0.0236** / 0.5499 — one pair inverted, and the per-pair assertion below
+ * correctly refused it. *"A perf bound is chosen on one set of runs and confirmed on a HELD-OUT
+ * set"*, and this is what that rule looks like when the held-out set disagrees: **raise the
+ * amplifier, never relax the assertion.** The docstring that said 40 put "every pair over 0.5 ms
+ * with margin" was true of the runs it was measured on and false of the run that matters.
+ *
+ * 100 is a 2.5x on a mutation whose weakest observed pair separated by 0.55 ms under sweep load.
+ * Deliberately not the smallest that reddens the median: a red proof sitting on its bound flips with
+ * the weather, and this one has to be reliable enough that a GREEN result means the gate is broken
+ * rather than the box is busy. Confirmed on a held-out full sweep — see
+ * `docs/qa/phase-08-levels-03-gpu-bound.md`.
  */
-const LAYER_COPIES = 40;
+const LAYER_COPIES = 100;
 
 test.describe('Phase 8 — criterion 8.7, the GPU delta can go RED (vault C2)', () => {
   test('level-05 drawn with real fill-rate cost breaks the paired GPU bound', async ({ page }) => {

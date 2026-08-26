@@ -124,3 +124,55 @@ rather than covered by a blanket *"all red-proved"*, which is the sentence that 
 necessary. `MIN_GPU_SAMPLES`, `installGpuTimer` and `Sample`'s GPU fields are consumed by Phases 5, 6
 and 8.
 
+
+---
+
+## The amplifier was sized on the wrong set of runs — twice, and the sweep caught both
+
+**2026-08-26.** The Codex implementation review replaced the scrim amplifier with
+`addGroundLayerCopies`, which rebuilds level-05's **own** ground layer N times, so every extra
+fragment is a tile fragment from the level under test rather than a stand-in. That was the right
+mutation. **The count was chosen on isolated runs, and the first held-out set — the full `test:e2e`
+sweep, the only condition this spec ever actually runs under — refused it.**
+
+| amplifier | isolated, per pair | inside the full sweep, per pair |
+|---|---|---|
+| 40 copies | 1.2442 / 1.3732 / 1.3537 / 1.2513 → **1.3025** | 0.6636 / 0.5960 / **-0.0236** / 0.5499 → 0.5729 |
+| **100 copies** | 1.1377 / 1.1602 / 0.7096 / 1.0209 → 1.0793 | 1.2595 / 1.8534 / 0.8571 / 1.8668 → **1.5565** |
+
+One pair *inverted* at 40 under sweep load and the per-pair assertion refused the run — correctly.
+*"A perf bound is chosen on one set of runs and confirmed on a HELD-OUT set"* cuts both ways: it
+governs the **amplifier** as much as the bound, and the answer when the held-out set disagrees is to
+**raise the amplifier, never to relax the assertion.** 100 is confirmed on a held-out full sweep with
+every pair separating by ≥ 0.86 ms against a bound of 0.5.
+
+## The p95 amplifier sat exactly on its own threshold
+
+`phase-08-p95.spec.ts` had the same defect in a different shape, and it is the sharper lesson.
+
+`installFrameSpike` wraps `window.requestAnimationFrame`, so its counter advances once per registered
+**callback**, and the page has more than one rAF consumer. A nominal *"one frame in ten"* is therefore
+about **1 in 20 of the frames the sampler measures — 5 %, which is the p95 threshold itself.** Whether
+the 95th percentile lands on a spiked frame became a coin flip, and the readings were bimodal:
+
+| duty cycle | p95 per pair | work median | ratio (bound 2) | verdict |
+|---|---|---|---|---|
+| 1 in 10, isolated | 24.70 / **4.30** / 24.60 / 24.60 | 0.90 | 1.40 | green, by luck |
+| 1 in 10, full sweep | **4.70 / 4.80 / 4.60** / 24.80 → 4.75 | 0.90 | 1.40 | **FALSE RED** |
+| 1 in 5 | 24.50–24.70, every pair | 4.05 | **8.10** | **red for the wrong reason** — the mutation stopped isolating, and the attribution assertion said so |
+| **1 in 7** | 24.70 / 24.50 / 24.50 / 24.50 | 0.65 | 1.44 | isolated ✅ |
+| **1 in 7**, held-out full sweep | 24.50 / 24.40 / 24.40 / 24.40 → **24.40** | 0.50 | 0.91 | ✅ |
+
+⚠️ **The window between "too rare for a p95" and "frequent enough to move the median" is narrow, and
+the constant does not control where in it a run lands** — the effective fraction depends on the page's
+rAF consumer count and on how loaded the box is. So the spec now **asserts the duty cycle it achieved**
+(`fired / measured frames > 0.06`) instead of trusting the nominal figure. `fired > 50`, the premise it
+shipped with, is satisfied by a 1 % duty cycle, which cannot move a p95 at all — a green under that
+premise would have read *"the p95 bound cannot fire"* when the truth was *"the mutation never asked
+it to."*
+
+**1 in 5 is worth keeping in the record for the opposite reason:** it reddened the p95 on every pair
+and then **failed its own attribution assertion** at a ratio of 8.10x. A minority-frame cost does not
+move a 50th percentile by arithmetic, but measured `work` is `now - frameStart`, so a 24 ms burn also
+delays the frames around it. The test caught its own mutation ceasing to isolate — which is the whole
+reason those three assertions sit under the red proof.

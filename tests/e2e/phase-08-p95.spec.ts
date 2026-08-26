@@ -52,10 +52,33 @@ import {
  * across a sample window is a few hundred milliseconds, orders of magnitude inside any stall guard.
  */
 const SPIKE_MS = 24;
-const SPIKE_EVERY = 10;
+/**
+ * 🔴 **10 sat exactly on the p95 boundary and flipped run to run.** One frame in ten is 10 %
+ * of frames — but the hook wraps `window.requestAnimationFrame`, so its counter advances once per
+ * registered CALLBACK, and the page has more than one rAF consumer. The effective duty cycle on the
+ * frames the sampler measures is therefore **1 in 20 — 5 %, the p95 threshold itself**, and whether
+ * the 95th percentile lands on a spiked frame becomes a coin flip. The readings are bimodal and say
+ * so: isolated, per-pair p95 came back `24.70, 4.30, 24.60, 24.60`; inside the full sweep the same
+ * spec read `4.70, 4.80, 4.60, 24.80` and the median fell to 4.75 against a bound of 16.
+ *
+ * ⚠️ **And 1 in 5 was too far the other way** — it reddened the p95 on every pair
+ * (24.50-24.70) and then failed the ATTRIBUTION assertion below: work median 4.05 ms and a ratio of
+ * **8.10x** against a bound of 2. A minority-frame cost does not move a 50th percentile by
+ * arithmetic, but the measured `work` is `now - frameStart`, so a 24 ms burn also delays the frames
+ * around it. The test caught its own mutation ceasing to isolate, which is exactly what those three
+ * assertions are for.
+ *
+ * **1 in 7 is the setting that satisfies both ends**, measured rather than reasoned: p95
+ * 24.70 / 24.50 / 24.50 / 24.50, work median **0.65 ms** and ratio **1.44x**, both comfortably under
+ * their bounds. The window between the p95 threshold and median contamination is narrow, and the
+ * duty-cycle premise below now ASSERTS where in it this run landed rather than trusting the
+ * nominal figure — the effective fraction depends on how many rAF consumers the page has and on
+ * how loaded the box is, neither of which this constant controls.
+ */
+const SPIKE_EVERY = 7;
 
 test.describe('Phase 8 — criterion 8.7, the work p95 can go RED (vault C2)', () => {
-  test('a one-in-ten frame spike breaks the p95 bound and NOTHING else', async ({ page }) => {
+  test('a minority-frame spike breaks the p95 bound and NOTHING else', async ({ page }) => {
     test.setTimeout(240_000);
     await page.addInitScript(
       ([key, value]) => window.localStorage.setItem(key, value),
@@ -81,6 +104,16 @@ test.describe('Phase 8 — criterion 8.7, the work p95 can go RED (vault C2)', (
     // green as a bound that cannot fire, and the whole point of this file is telling those apart.
     const fired = await frameSpikesFired(page);
     expect(fired, 'the frame spike hook never ran — nothing below measures anything').toBeGreaterThan(50);
+
+    // 🔴 **And it burned often enough to reach a 95th percentile.** `fired > 50` is satisfied by a
+    // duty cycle of 1 %, which cannot move a p95 at all — so a green below would have said "the p95
+    // bound cannot fire" when the truth was "the mutation never asked it to". This is the premise
+    // that the earlier `SPIKE_EVERY = 10` silently violated: measured 5 %, exactly the threshold.
+    const largeFrames = large.reduce((n, s) => n + s.frames, 0);
+    expect(
+      fired / largeFrames,
+      `${fired} spikes across ${largeFrames} measured frames is a duty cycle a p95 cannot see`,
+    ).toBeGreaterThan(0.06);
 
     for (const s of [...small, ...large]) {
       expect(s.frames, 'too few frames served to say anything').toBeGreaterThanOrEqual(MIN_SAMPLES);
