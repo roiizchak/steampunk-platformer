@@ -24,7 +24,7 @@ swapped.
 | 10.9 | 🔴 **AMENDED by owner ruling** — ship-path reproducibility, not asset-rebuild reproducibility | **PASS as amended; the ORIGINAL criterion is NOT met and that is recorded** | Fresh clone → `npm ci` → `npm run build` → **62/62 files byte-identical**. The first run was 61/62 and the 1 was a real defect git could not see. § 10.9 — and the objection to the amendment is recorded verbatim in the phase document. |
 | 10.10 | Specs 01–10 all green | **PASS** | `npm run test:e2e` → **141 passed**, read positively and reconciled per project: chromium 60 · chromium-dpr2 7 · chromium-gpu 69 · chromium-prod 5 = 141. Plus unit **2579 passed** and sim-isolated **2576 passed / 3 skipped**. |
 | 10.11 | **Every prior phase's acceptance criteria re-verified** | **PASS — and it found two things the PRD had wrong** | 4.27 closed with a wired, red-proved gate. **4.12 closed with the deliberate-removal run it had been owed since Phase 4.** 4.10 dispositioned as superseded. § 10.11. |
-| 10.12 | Full playthrough on the production build | **PARTIAL — the gate covers 2 levels and a transition; the 4-level run is a measurement; the HUMAN half is OPEN** | Levels 01–04 were completed **by playing them** against `dist/`, but the four-level test **flaked in the full suite while passing alone**, so it is recorded as a measurement and the GATE is level 01 → ENTER → level 02 boots and draws. `level-05` resists the position-blind BROWSER driver; its mechanical completability is proved at the sim level under three disjoint gate seeds with a negative control — **corrected 2026-08-27**, it was wrongly reported unmeasured. § 10.12. |
+| 10.12 | Full playthrough on the production build | **PASS — all five levels completed to the exit by the owner, 2026-08-27** | Three layers, and the third is the one no gate could supply. **Sim**: `level-completable.test.ts` proves every level completable in the exact shipped world, enemies live, under three disjoint gate seeds with a `jumpVelocity`-0 negative control. **Production e2e**: `phase-10-campaign.spec.ts` against `dist/` — level 01 completes under real keyboard input, ENTER advances, level 02 boots AND draws. **Hands-on**: the owner played all five to the exit on the live deployment. The automated driver is position-blind and stops at 04; that is a driver limit, not a level defect, and the correction to an earlier overstatement of this is recorded in § 10.12.
 | 10.13 | Every recorded-but-not-fixed Codex finding from phases 1–9 re-reviewed and dispositioned | **PASS** | All 35 files in `docs/reviews/` enumerated by name (not a `*-plan.md` glob, which misses Phase 5's three split records). 99 disposition lines extracted. `docs/qa/phase-10-ship-02-review-sweep.md`. |
 | 10.14 | Codex plan review ran; every finding applied or recorded | **PASS — and it did NOT converge, which is reported rather than dressed up** | Five rounds, all REVISE, hitting `MAX_ROUNDS`. `docs/reviews/phase-10-plan.md` + triage. § 10.14. |
 | 10.15 | Codex implementation review ran on the diff; every finding applied or recorded | **PASS** | `docs/reviews/phase-10-impl.md` — verdict REVISE, **2 CRITICAL, 4 HIGH, 2 MEDIUM** on a diff that had already been through six agents and twelve briefs. Every finding applied or recorded; both criticals confirmed by *building the mutation Codex described*. § The implementation review. |
@@ -1131,6 +1131,49 @@ outputs and not regenerable** — the generator is not seed-deterministic, and `
 ⚠️ **Nothing is deleted by this decision and nothing is lost today.** `_generated/` is 541 MB on the
 owner's disk, untouched; it is simply not duplicated anywhere else. The risk it accepts is a disk
 failure between now and the next art change, and that is the owner's to accept.
+
+---
+
+## ✅ 10.12 and 2.8 CLOSED — the owner played it, 2026-08-27
+
+*"I played all the levels."* — **all five completed to the exit**, on the production build, and the
+feel check with it: **weighty and responsive, no dropped inputs.**
+
+That closes the two criteria this project could never have closed on its own, and it is worth being
+exact about why neither was reachable any other way.
+
+### 10.12 — and `level-05` in particular
+
+The production driver is **position-blind by construction**: `dist/` exposes no `__phaserGame` and
+no `simWorld`, so `playToExit` holds RIGHT, taps Space on a fixed cadence, and reads
+`localStorage`. It cannot choose a route, backtrack deliberately, or decide to kill something. It
+completes 01–04 with a back-up move and stops at 05.
+
+So the automated evidence stopped exactly where a human's begins, and the two together are the
+whole claim:
+
+| | evidence | what it establishes |
+|---|---|---|
+| sim | `level-completable.test.ts` — the exact shipped world, enemies live, three disjoint gate seeds, a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control | every level is **mechanically** completable |
+| e2e | `phase-10-campaign.spec.ts` against `dist/` — level 01 completes, ENTER advances, level 02 boots and draws | the **shipped** progression flow carries a player forward |
+| **hands-on** | **the owner, all five to the exit, on the live production deployment** | **a person can actually find and play the route** |
+
+⚠️ Earlier in this phase I reported `level-05` as *"unmeasured, not claimed either way"* and that
+**overstated the gap** — the sim proof already existed and was stronger than the e2e one. The
+correction is recorded in this log's § 10.12. What was genuinely missing was only this: a human
+finishing it. It is no longer missing.
+
+### 2.8 — carried open since Phase 2
+
+*"Feel check in browser: weighty, responsive, no input drops."* Owned by `play`, hands-on, **never
+closeable by a gate** *(vault C4)*. It was re-verified and dispositioned by 10.11 rather than left
+silent, and it is now closed by the same playthrough — which is also the strongest available check
+on the two forgiveness windows in `tick.ts`, since a dropped jump at the lip of a ledge is exactly
+what they exist to prevent and exactly what a person notices.
+
+### Phase 10 is now **fifteen of fifteen PASS**
+
+Every criterion run, green, and carrying a QA-LOG row. **10.12 was the last PARTIAL.**
 
 ## Vault-out — Phase 10
 

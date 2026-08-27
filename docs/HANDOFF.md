@@ -1,47 +1,46 @@
 # Session handoff — Phase 10 (build and ship)
 
-> ## ⚠️ Phase 10 is REPORTED NOT DONE. Built, gated, deployed to a preview — with TWO items open, both of them hands-on and both yours.
->
-> Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
-> 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
->
-> **▶ PRODUCTION, live:** `https://steampunk-platformer-2n08tumsc-rois-projects-f9d9895d.vercel.app`
-> — `target: production`, `readyState: READY`.
->
-> ✅ **The owner has played it and confirms it: *"now it looks good in 60Hz and 240Hz"*.** That took
-> TWO fixes, both found by playing and neither findable by any gate here — see traps 10 and 11.
->
-> **Vercel's own build log ran all four gates**, which is the evidence that matters most here:
-> `dev-seam gate ok: 27 …` and `verify-dist ok: 5 level(s) and 12 audio file(s) shipped
-> byte-identical, no DEV-only scene key or debug surface`. The remote artifact is the same game.
->
-> (The earlier preview `…-97o1gq0tk-…` is behind Deployment Protection and cannot be opened without
-> signing in; see trap 1.)
->
-> ### The two open items
->
-> | # | item | what it needs from you |
+> ## ✅ Phase 10 is DONE. 15 of 15 criteria PASS, merged to `main`, live in production.
+> 
+> **▶ Play it:** `https://steampunk-platformer-2n08tumsc-rois-projects-f9d9895d.vercel.app`
+> 
+> `main` at `266f0df`+, pushed. The owner has played **all five levels to the exit** on the
+> production build, on both a 60 Hz and a 240 Hz display, and confirms the feel: *weighty and
+> responsive, no dropped inputs*. That closed **10.12** and **2.8**, the latter carried open
+> since Phase 2.
+> 
+> ### The two defects that only PLAYING could find — read these first
+> 
+> | | defect | why no gate here could see it |
 > |---|---|---|
-> | ~~1~~ | ~~**10.6's deploy half**~~ | **CLOSED 2026-08-27.** The owner disabled Vercel Authentication; the deployment is publicly reachable and all five declared headers arrive on all four probed paths, **including the 404** — the case a catch-all header rule most often misses. Every quoted CSP keyword survived the round trip. One divergence found: Vercel serves `.tmj` as `application/octet-stream` while `prod-server.mjs` says `application/json`. Harmless (`nosniff` does not gate XHR, and the game plays), but **the local substrate is more generous than production, which is the wrong direction to err** |
-> | 2 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)*. The mechanical half is proved for all five levels |
-> | 3 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
->
-> ### Two items CLOSED on 2026-08-27, one of which should never have been opened
->
-> | item | what happened |
+> | 1 | `FOLLOW_LERP` applied per **rendered frame** — camera 4x less responsive at 60 Hz than
+> on the 240 Hz box it was tuned on: 66 px of trail instead of 16.5, and a **264 px** character
+> swing per jump | every gate runs at ~240 fps, where it is four times smaller |
+> | 2 | `pixelArt` never governed the **canvas→screen** resample. `FIT` keeps a 1920x1080 buffer
+> and restyles only the CSS size, so nearest-neighbour at a fractional ratio **drops pixel
+> columns whose positions MOVE as the world scrolls** | nothing in the suite looked at the
+> canvas's presented geometry at all |
+> 
+> Both were reported in the same five words — *"blurry or smeared while moving"* — and fix 1
+> genuinely helped, which is exactly what made fix 2 easy to mistake for its remainder.
+> 
+> ⚠️ **Anything the ENGINE applies per rendered frame, or per presented pixel, sits outside
+> this project's tick rule** — which is written about `src/sim/`. The principle was never
+> narrower than the rule; the rule's wording was, and that is what let a frame-rate dependency
+> survive ten phases of review.
+> 
+> ### Outstanding, and none of it blocks
+> 
+> | item | status |
 > |---|---|
-> | ~~**10.12's `level-05`**~~ | 🔴 **I reported this open and I was wrong.** `level-completable.test.ts` already proved it completable in the **exact shipped world** — enemies, hazards and gears live — under all three disjoint gate seeds, with a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control. Its geometry is level-04's with one more segment: identical 288 px gaps. The browser driver is position-blind and cannot navigate; **that is a driver limit, not a level defect**, and the two are not the same claim |
-> | ~~**the dev-seam gate's residual hole**~~ | Closed by owner decision — `@babel/parser` widened from test-only to build time. `tools/gen/devSeamAst.mjs` now pins each sentinel's enclosing FUNCTION and proves a DEV guard dominates it. ⚠️ The **site** rule is what closes it; dominance alone does not, because both ends of a same-file move are guarded |
->
-> `vercel --prod --yes` **ran and succeeded** on the second attempt (the first was refused by the
-> sandbox's permission classifier, not by anything in the repo).
->
-> ⚠️ **The rollback is still NOT rehearsed.** The verbs are confirmed from CLI 56.5.0's own `--help`
-> — `vercel rollback <url|deploymentId>` (`--timeout` 3m, `-y`), `vercel rollback status [project]`,
-> `vercel promote <url|deploymentId>` — but the vault warning is about the deployment *that moves the
-> domain*, and reading a `--help` page is not a rehearsal. It is the one thing that should happen
-> before anything else is built on top of this deploy.
->
+> | **the rollback** | verbs confirmed from CLI 56.5.0's own `--help`, but **NOT rehearsed** —
+> and rehearsing it moves the live alias, so it needs a deliberate decision |
+> | **`.tmj` MIME** | Vercel serves `application/octet-stream`, `prod-server.mjs` says
+> `application/json`. Harmless, but the substrate is more generous than production |
+> | **Deployment Protection** | may be re-enabled; 10.6's evidence is already captured. With it
+> on, README's "Play it" link works only for the owner |
+> | **`_generated/`** | not archived, by owner decision. Production never reads it |
+
 > Full record: [qa/phase-10-ship.md](qa/phase-10-ship.md) (including **§ Vault-out — Phase 10** and
 > the ten-phase Codex-protocol verdict) · [plan review](reviews/phase-10-plan.md) ·
 > [implementation review](reviews/phase-10-impl.md) ·
