@@ -2762,50 +2762,50 @@
         0,
         0,
         0,
-        13,
-        13,
-        13,
-        0,
-        0,
-        1,
-        1,
         0,
         13,
         13,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
         13,
         13,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        13,
-        13,
         13,
         13,
         13,
@@ -2819,7 +2819,7 @@
         0,
         0,
         0,
-        13,
+        0,
         0,
         1,
         1,
@@ -4050,8 +4050,8 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 288,
-          "x": 2016,
+          "width": 192,
+          "x": 2112,
           "y": 1824
         },
         {
@@ -4109,44 +4109,8 @@
           "y": 1056
         },
         {
-          "height": 96,
-          "id": 20,
-          "name": "",
-          "properties": [
-            {
-              "name": "hazard",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "rotation": 0,
-          "type": "",
-          "visible": true,
-          "width": 384,
-          "x": 2784,
-          "y": 1824
-        },
-        {
-          "height": 96,
-          "id": 21,
-          "name": "",
-          "properties": [
-            {
-              "name": "hazard",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "rotation": 0,
-          "type": "",
-          "visible": true,
-          "width": 96,
-          "x": 7488,
-          "y": 1824
-        },
-        {
           "height": 240,
-          "id": 22,
+          "id": 20,
           "name": "",
           "properties": [
             {
@@ -4164,7 +4128,7 @@
         },
         {
           "height": 192,
-          "id": 23,
+          "id": 21,
           "name": "",
           "properties": [
             {
@@ -4182,7 +4146,7 @@
         },
         {
           "height": 240,
-          "id": 24,
+          "id": 22,
           "name": "",
           "properties": [
             {
@@ -4200,7 +4164,7 @@
         },
         {
           "height": 192,
-          "id": 25,
+          "id": 23,
           "name": "",
           "properties": [
             {
@@ -4218,7 +4182,7 @@
         },
         {
           "height": 240,
-          "id": 26,
+          "id": 24,
           "name": "",
           "properties": [
             {
@@ -4236,7 +4200,7 @@
         },
         {
           "height": 288,
-          "id": 27,
+          "id": 25,
           "name": "",
           "properties": [
             {
@@ -4254,7 +4218,7 @@
         },
         {
           "height": 0,
-          "id": 28,
+          "id": 26,
           "name": "",
           "point": true,
           "properties": [
@@ -4273,7 +4237,7 @@
         },
         {
           "height": 0,
-          "id": 29,
+          "id": 27,
           "name": "",
           "point": true,
           "properties": [
@@ -4292,7 +4256,7 @@
         },
         {
           "height": 0,
-          "id": 30,
+          "id": 28,
           "name": "",
           "point": true,
           "properties": [
@@ -4311,7 +4275,7 @@
         },
         {
           "height": 0,
-          "id": 31,
+          "id": 29,
           "name": "",
           "point": true,
           "properties": [
@@ -4330,7 +4294,7 @@
         },
         {
           "height": 0,
-          "id": 32,
+          "id": 30,
           "name": "",
           "point": true,
           "properties": [
@@ -4349,7 +4313,7 @@
         },
         {
           "height": 0,
-          "id": 33,
+          "id": 31,
           "name": "",
           "point": true,
           "properties": [
@@ -4368,7 +4332,7 @@
         },
         {
           "height": 0,
-          "id": 34,
+          "id": 32,
           "name": "",
           "point": true,
           "properties": [
@@ -4387,7 +4351,7 @@
         },
         {
           "height": 0,
-          "id": 35,
+          "id": 33,
           "name": "",
           "point": true,
           "properties": [
@@ -4406,7 +4370,7 @@
         },
         {
           "height": 0,
-          "id": 36,
+          "id": 34,
           "name": "",
           "point": true,
           "properties": [
@@ -4425,7 +4389,7 @@
         },
         {
           "height": 0,
-          "id": 37,
+          "id": 35,
           "name": "",
           "point": true,
           "properties": [
@@ -4451,7 +4415,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 38,
+  "nextobjectid": 36,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",

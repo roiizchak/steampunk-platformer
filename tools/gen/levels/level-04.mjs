@@ -60,16 +60,10 @@ export const level04 = {
 
   // 7 tiles of spikes = 672 px.
   spikes: [
-    { fromCol: 21, toCol: 23, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 22, toCol: 23, row: GROUND_TOP_ROW - 1 },
     { fromCol: 63, toCol: 67, row: GROUND_TOP_ROW - 1 },
     { fromCol: 102, toCol: 103, row: GROUND_TOP_ROW - 1 },
     { fromCol: 55, toCol: 55, row: 11 },
-    // 🔴 Added this session. Filling the three route pits took 672 px of hazard back out of 02 and
-    // 04, which left 03 more dangerous than 04 and broke the ramp's direction property. Owner
-    // decision was to raise 04 and 05 rather than change what the ramp measures. Every run below
-    // sits MID-stretch, never where a descent lands — that is the shape `level-hazard-free` rejects.
-    { fromCol: 29, toCol: 32, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 78, toCol: 78, row: GROUND_TOP_ROW - 1 },
   ],
 
   /**

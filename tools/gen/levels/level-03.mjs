@@ -71,6 +71,7 @@ export const level03 = {
   // 5 tiles of spikes (480 px): two 2-tile strips on the ground and one single on a summit.
   spikes: [
     { fromCol: 24, toCol: 26, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 65, toCol: 69, row: GROUND_TOP_ROW - 1 },
     { fromCol: 57, toCol: 57, row: 11 },
   ],
 

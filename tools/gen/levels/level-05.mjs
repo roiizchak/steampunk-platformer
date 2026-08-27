@@ -63,8 +63,6 @@ export const level05 = {
     { fromCol: 100, toCol: 101, row: GROUND_TOP_ROW - 1 },
     { fromCol: 134, toCol: 136, row: GROUND_TOP_ROW - 1 },
     { fromCol: 53, toCol: 53, row: 12 },
-    // 🔴 Added this session, for the same ramp repair as level-04's. Mid-stretch on three long clear
-    // runs of ground, clear of every patrol beat and gear.
   ],
 
   /**

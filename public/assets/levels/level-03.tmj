@@ -3488,9 +3488,9 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 96,
-          "x": 5472,
-          "y": 1056
+          "width": 480,
+          "x": 6240,
+          "y": 1824
         },
         {
           "height": 96,
@@ -3506,9 +3506,9 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 480,
-          "x": 6240,
-          "y": 1824
+          "width": 96,
+          "x": 5472,
+          "y": 1056
         },
         {
           "height": 96,

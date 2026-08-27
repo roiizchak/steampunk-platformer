@@ -73,9 +73,9 @@ const LEVELS: [string, LevelData][] = SHIPPED_ENTRIES.map(([id, raw]) => [
  */
 const EXPECTED_PITS: Record<string, string[]> = {
   'level-01': [],
-  'level-02': ['84-85'],
+  'level-02': [],
   'level-03': ['65-69', '107-111'],
-  'level-04': ['123-125', '128-131'],
+  'level-04': [],
   'level-05': [],
 };
 
