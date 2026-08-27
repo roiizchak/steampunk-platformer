@@ -18,7 +18,7 @@ swapped.
 | 10.3 | Build-target and minifier defaults recorded with reversal instructions | **PASS** | `vite.config.ts` records the EXPANSION (`chrome111, edge111, firefox114, safari16.4, ios16.4`), not the moving alias, with reversal instructions and the emitted syntax census beside them. Discharged by diffing the OUTPUT per vault 10.1. **Both halves are now gated**: `verify-dist.mjs` asserts the ES2020+ syntax survives AND pins the four config values — the census alone could not see `target: 'esnext'` dropping every promised browser minimum (Codex impl review, finding 3). Red-proved both ways. |
 | 10.4 | Bundle size change explained via raw-vs-gzip ratio | **PASS — with the criterion's own method corrected** | The ratio moved **0.001** across a three-arm A/B in which every `??` disappeared. It is not a discriminator for a target change on this bundle. The syntax census is, and it is what shipped. § 10.4. |
 | 10.5 | Build config typechecked as its own program | **PASS — after the gate owner found the claim was false** | `tsconfig.build.json` + `npm run typecheck:build`, run by `npm run build` and pinned by `tests/unit/build-program.test.ts`. It CLAIMED to typecheck the plugin and did not. § 10.5. |
-| 10.6 | CSP verified against the **production** header config locally — never the dev server | **PASS locally; the deploy half is OWED, and the deploy PROVED why it is a separate half** | `vercel.json` → `tools/gen/vercelHeaders.mjs` → both `vite.config.ts` and `tools/dev/prod-server.mjs`. Every directive matched EXACTLY; three red proofs. 🔴 **A preview deploy ran and FAILED on a defect no local gate could see** — `.vercelignore` had removed `public/assets/` from the build box. Fixed and gated. The CSP as SERVED is still unobserved: the preview is behind Vercel Deployment Protection and 302s to SSO. § 10.6. |
+| 10.6 | CSP verified against the **production** header config locally — never the dev server | **PASS — both halves, closed 2026-08-27 against a real Vercel edge response** | `vercel.json` → `tools/gen/vercelHeaders.mjs` → both `vite.config.ts` and `tools/dev/prod-server.mjs`. Every directive matched EXACTLY; three red proofs. 🔴 **A preview deploy ran and FAILED on a defect no local gate could see** — `.vercelignore` had removed `public/assets/` from the build box. Fixed and gated. The CSP as SERVED is still unobserved: the preview is behind Vercel Deployment Protection and 302s to SSO. § 10.6. |
 | 10.7 | `git log --all -p` clean of secrets — history, not the working tree | **PASS, with a stated blind spot and one real finding fixed** | 506 commits, 6,447 reachable objects, unreachable blobs included. Zero named-format secrets. **One real leak found and fixed**: three `anchor.job.json` files shipped a local home directory to the CDN. § 10.7. |
 | 10.8 | Licences split: code vs generated assets | **PASS** | `LICENSE` (MIT: `src/`, `tests/`, `tools/`, root config) · `ASSETS-LICENSE.md` (fal.ai output, all rights reserved) · a third-party carve-out for the 215 vendored skill files. § 10.8. |
 | 10.9 | 🔴 **AMENDED by owner ruling** — ship-path reproducibility, not asset-rebuild reproducibility | **PASS as amended; the ORIGINAL criterion is NOT met and that is recorded** | Fresh clone → `npm ci` → `npm run build` → **62/62 files byte-identical**. The first run was 61/62 and the 1 was a real defect git could not see. § 10.9 — and the objection to the amendment is recorded verbatim in the phase document. |
@@ -1043,6 +1043,67 @@ Before touching anything visual here, two questions are now worth asking by defa
 A third, procedural: **ask for F11 fullscreen early.** On a 1080p screen that is an exact 1.0 canvas
 scale, and it separates scaling artifacts from motion artifacts in about ten seconds. It would have
 split these two defects apart on the first report instead of the third.
+
+---
+
+## ✅ 10.6 CLOSED — the CSP as ACTUALLY SERVED, 2026-08-27
+
+The owner disabled Vercel Authentication. The deployment is publicly reachable and every header
+`vercel.json` declares arrives on every path, including a 404:
+
+```
+GET /                            -> 200   text/html
+GET /assets/index.json           -> 200   application/json
+GET /assets/levels/level-01.tmj  -> 200   application/octet-stream
+GET /no-such-file-here           -> 404   text/plain
+
+  content-security-policy: default-src 'self'; script-src 'self';
+    style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;
+    media-src 'self' data: blob:; connect-src 'self'; font-src 'self';
+    object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'
+  x-content-type-options: nosniff
+  referrer-policy: same-origin
+  permissions-policy: accelerometer=(), camera=(), … xr-spatial-tracking=()
+  cross-origin-resource-policy: same-origin
+  strict-transport-security: max-age=63072000; includeSubDomains; preload
+```
+
+**All five declared headers, on all four paths.** Vercel's catch-all `"source": "/(.*)"` matches the
+404 too, which is the case a header rule most often misses. HSTS is the sixth and is applied by the
+platform, not by us.
+
+Every quoted keyword survived the round trip — `'self'`, `'unsafe-inline'`, `'none'` all still
+quoted. That was the specific failure the criterion was written against *(vault 10.5)*: a bare
+`self` blanks the game rather than erroring, so it is invisible until someone loads the page.
+
+**Both halves of 10.6 now agree**, which is what makes the local substrate trustworthy going
+forward: `tools/dev/prod-server.mjs` reads `vercel.json` itself and five e2e specs assert the same
+map against it.
+
+### 🔴 The one divergence the deploy exposed — `.tmj` MIME
+
+| server | `Content-Type` for `.tmj` |
+|---|---|
+| `tools/dev/prod-server.mjs` | `application/json; charset=utf-8` |
+| **Vercel** | **`application/octet-stream`** |
+
+Vercel's MIME table does not know Tiled's extension. **It is harmless here, and that is a
+measurement rather than a hope:** `X-Content-Type-Options: nosniff` blocks a wrong MIME on scripts
+and stylesheets, not on `XMLHttpRequest`, and `bootLevels.ts` loads levels through Phaser's
+`tilemapTiledJSON` — an XHR read as text and `JSON.parse`d. The owner has played the deployed build
+through multiple levels, so the path is exercised, not merely argued.
+
+⚠️ **But the local substrate is more generous than production, and that is the wrong direction for
+a substrate to err in.** A future asset type could work locally and 404-in-spirit in production
+with nothing to catch it. Recorded as a known divergence rather than fixed silently: matching
+`prod-server.mjs` to Vercel's table would make the local run a truer test, and is a small deliberate
+change rather than a slip to be patched over.
+
+### What this leaves
+
+Criterion 10.6 asked for the CSP verified *"against the production header config, never the dev
+server"*. Both halves are now done: the config half locally against `vercel.json`, and the served
+half against a real Vercel edge response. **PASS.**
 
 ## Vault-out — Phase 10
 
