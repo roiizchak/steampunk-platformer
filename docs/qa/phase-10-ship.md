@@ -919,6 +919,47 @@ how long each frame is held on screen. At 60 Hz that is 16.7 ms against 4.2 ms a
 moving image sweeps ~4x further across the retina. Some difference between the two displays is
 physics and will remain.
 
+### What was left after the fix — measured, and two candidate fixes REJECTED on the measurement
+
+The owner re-tested the redeploy: *"it['s] better, but when the scavenger run[s] and the spikes when
+I jump are still [a] bit blur[ry]"*. Both remaining complaints name objects with high **on-screen**
+velocity — the character is camera-locked and therefore nearly still on screen, while the world and
+the enemies are not.
+
+First, the thing that is NOT wrong: **enemy interpolation is wired and consumed.**
+`gameFrameDraw.ts:71` calls `enemies.sync(renderAlpha(accumulatorMs))` and `enemyLayer.ts:186` calls
+`interpolatedPosition` per body against a snapshot taken before the last tick. Checked, not assumed.
+
+What remains is **sample-and-hold persistence blur** — the display holds each frame for the whole
+refresh period, so a tracked object slides that far across the retina. Measured, with the fix in:
+
+| | 240 Hz | 60 Hz |
+|---|---|---|
+| world sweep during a jump | 13.0 px/frame | **43.5 px/frame** |
+| world sweep while running | 2.3 px/frame | **9.0 px/frame** |
+
+The ratio is the frame-rate ratio, because that is what sample-and-hold is. ⚠️ **And it is amplified
+by `RENDER_SCALE` 6**: the world is drawn six times larger than the source art, so every gameplay
+speed is six times more *screen* pixels per tick than a native-resolution pixel-art game would
+produce. That is the Phase 4 world contract, `src/game/constants.ts` is its authority, and changing
+it is a STOP-and-ask that would invalidate every sheet.
+
+**Two fixes were modelled before being built, and both were rejected on the numbers:**
+
+| candidate | measured | verdict |
+|---|---|---|
+| **Vertical dead zone** — the camera ignores the player inside a box, standard platformer practice | 200 px → **3 %** less sweep; 600 px → **10 %** | **REJECTED.** The jump arc is far taller than any sensible dead zone, so the player leaves the box almost immediately and the camera chases anyway. It would add a mechanism and a tuning knob for ~5 % |
+| **Slower `lerpY`** — track vertically more gently so jumps sweep less | 0.40 → 0.03 (13x slower) buys **48 %** less sweep and costs a character swing of **65 px → 732 px, 68 % of the screen** | **REJECTED.** That trades a little less smear for a camera that loses the player entirely — it re-creates the original defect, worse, to treat a symptom |
+
+**So the honest position is: the bug is fixed and the remainder is the display.** A 60 Hz
+sample-and-hold panel will smear roughly four times more than a 240 Hz one for the same motion, and
+no camera constant changes that. The levers that would are design changes — slow the game down, or
+lower `RENDER_SCALE` — and both are STOP-and-ask against a locked contract, neither is mine to take,
+and each would invalidate work from several phases.
+
+⚠️ Recorded here rather than quietly attempted, because *"a deliberate non-fix with its reason"* is
+what this log is for — and because the next person to look at this will have the same two ideas.
+
 ### Gates, and their watched reds
 
 `tests/unit/camera-follow-rate.test.ts` — 11 tests:
