@@ -3,7 +3,7 @@ import { publishWorldState, updateDebugState } from '../debug/globals';
 import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import type { LevelData } from '../game/tilemap';
-import { cameraSetup } from '../render/cameraRig';
+import { cameraSetup, followLerpForFrame } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import type { Point } from '../render/interpolate';
 import type { MotionProbe } from './devMotionProbe';
@@ -34,6 +34,7 @@ import { createSnapshot } from '../sim/input';
 import { createWorld } from '../sim/tick';
 import { advanceSplit } from '../sim/advanceSplit';
 import type { InputSnapshot, World } from '../sim/types';
+import { devSeam } from '../debug/devSeam';
 
 /**
  * The production play scene: it owns the clock, the keyboard, and the drawing. It owns no game
@@ -251,6 +252,14 @@ export class GameScene extends Phaser.Scene {
     this.accumulatorMs = drain.remainderMs;
     const ticks = drain.ticks;
 
+    // 🔴 Phaser applies the follow lerp ONCE PER RENDERED FRAME, so a constant is a frame-rate
+    // dependency — and the shipped one was tuned at 240 Hz. `followLerpForFrame`'s header carries
+    // the measurements and is the ONE place they live. Written here every frame because
+    // `Camera.preRender` reads `lerp` during the render step after this method; `startFollow`'s
+    // argument only ever applies to the first frame.
+    const followLerp = followLerpForFrame(delta);
+    this.cameras.main.lerp.set(followLerp, followLerp);
+
     // Binding and per-frame sampling both live in `src/scenes/gameInput.ts` — see its header. This
     // scene still owns `playerInputEnabled` and the DEV scene-switch/fixture-spawn callbacks.
     sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
@@ -301,7 +310,9 @@ export class GameScene extends Phaser.Scene {
     drawFrame({
       world: this.world, camera: this.cameras.main, playerSprite: this.playerSprite,
       prevPlayer: this.prevPlayer, accumulatorMs: this.accumulatorMs,
-      feelTuner: import.meta.env.DEV ? this.feelTuner : undefined,
+      feelTuner: import.meta.env.DEV
+        ? (devSeam('__DEVSEAM_GameScene_feelTunerPass__'), this.feelTuner)
+        : undefined,
       effects: this.effects, ui: this.ui, gears: this.gears, enemies: this.enemies,
       parallax: this.parallax, motionProbe: this.motionProbe, deltaMs: delta,
       publish: publishWorldState,
@@ -310,13 +321,14 @@ export class GameScene extends Phaser.Scene {
 
   private bindKeys(): void {
     const dev = import.meta.env.DEV
-      ? {
+      ? (devSeam('__DEVSEAM_GameScene_bindKeysDevActions__'),
+        {
           togglePlayground: () => this.togglePlayground(),
           toggleElementEditor: () => this.toggleElementEditor(),
           toggleGym: () => this.toggleGym(),
           spawnDevFleet: () => this.spawnDevFleet(),
           spawnDevLowHpEnemy: () => this.spawnDevLowHpEnemy(),
-        }
+        })
       : undefined;
     this.held = bindPlayerKeys(
       this,

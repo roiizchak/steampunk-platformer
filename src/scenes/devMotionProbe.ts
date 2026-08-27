@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { MS_PER_TICK } from '../game/constants';
 import { DEFAULT_TUNING } from '../sim/playerTuning';
 
@@ -143,6 +144,7 @@ export function createMotionProbe(
   textureKey: string,
   frozenFrame = 0,
 ): MotionProbe {
+  devSeam('__DEVSEAM_devMotionProbe_createMotionProbe__');
   const make = (y: number): Phaser.GameObjects.Sprite => {
     const s = scene.add.sprite(LANE.left, y, textureKey);
     s.anims.stop();

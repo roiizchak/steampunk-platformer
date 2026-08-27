@@ -1,5 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 
+import { CRISP_IMAGE_RENDERING } from '../../src/game/constants';
+import { SMOOTH_IMAGE_RENDERING, isIntegerScale } from '../../src/render/canvasScaling';
+
 /**
  * Fixtures and page-driving helpers for phase-01-boot.spec.ts, extracted when that file crossed
  * 400 lines. DATA AND SETUP ONLY — no test assertion beyond the type-checks these helpers were
@@ -65,4 +68,45 @@ export function collectConsoleErrors(page: Page): string[] {
   });
   page.on('pageerror', (err) => errors.push(String(err)));
   return errors;
+}
+
+/**
+ * **The canvas is presented with the filtering its GEOMETRY calls for** — criterion 1.5's CSS half.
+ *
+ * Lives here rather than inline in `phase-01-boot.spec.ts` because that file hit the 400-line rule,
+ * and because the rule it asserts is shared: `src/render/canvasScaling.ts` is the one place the
+ * argument and its measurements live, `isIntegerScale` is imported from it, and the runtime
+ * (`applyCanvasFilter`) and this assertion therefore cannot drift apart.
+ *
+ * Stricter than the `toContain(CRISP_IMAGE_RENDERING)` it replaced: that passed a canvas the
+ * browser was nearest-neighbour-downscaling at a fractional ratio — dropping pixel columns whose
+ * positions move as the world scrolls — including on Playwright's own viewport.
+ */
+export async function expectCanvasFiltering(page: Page): Promise<void> {
+  const measured = await page.locator('#game canvas').evaluate((el) => {
+    const canvas = el as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      rendering: getComputedStyle(canvas).imageRendering,
+      buffer: [canvas.width, canvas.height] as [number, number],
+      css: [rect.width, rect.height] as [number, number],
+    };
+  });
+
+  const where =
+    `${measured.buffer.join('x')} buffer in ${measured.css.map(Math.round).join('x')} css`;
+
+  if (isIntegerScale(...measured.buffer, ...measured.css)) {
+    // Chromium keeps `pixelated`, Firefox `-moz-crisp-edges`; the list is imported, never retyped.
+    expect(
+      [...CRISP_IMAGE_RENDERING],
+      `canvas is at an INTEGER scale (${where}), where nearest-neighbour is exact and must be kept`,
+    ).toContain(measured.rendering);
+  } else {
+    expect(
+      measured.rendering,
+      `canvas is at a FRACTIONAL scale (${where}). Nearest-neighbour cannot be exact here and ` +
+        'fails by dropping pixel columns that MOVE as the world scrolls.',
+    ).toBe(SMOOTH_IMAGE_RENDERING);
+  }
 }

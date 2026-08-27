@@ -28,6 +28,16 @@ declare module 'node:fs' {
    * which a bare `try`/`catch` around `readFileSync` cannot: one is a skip, the other is a bug.
    */
   export function existsSync(path: string): boolean;
+  /**
+   * Needed by `shipped-eol.test.ts` to walk `public/` for text assets. `withFileTypes` is not
+   * optional in this shim on purpose: the string-returning overload would make `entry.isDirectory()`
+   * a type error at the call site rather than a runtime one, and a minimal shim's job is to type
+   * exactly the call that is made.
+   */
+  export function readdirSync(
+    path: string,
+    options: { withFileTypes: true },
+  ): { name: string; isDirectory(): boolean }[];
 }
 
 declare module 'node:path' {

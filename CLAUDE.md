@@ -146,7 +146,10 @@ Full rationale: [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowga
 
 - **Dependencies are frozen** at runtime `phaser@4.2.1` (exact, no caret); dev `vite`, `typescript`,
   `vitest`, `@playwright/test`, and **`@babel/parser`** (exact, added 2026-08-24 by owner decision —
-  test-only; see `tests/unit/tweenCallbacks.ts`). It pulls **three** transitive packages, not one as
+  originally test-only; **widened to BUILD time 2026-08-27 by owner decision**, for
+  `tools/gen/devSeamAst.mjs`. It stays a devDependency and reaches `dist/` never: the dev-seam gate
+  is a `generateBundle` hook, not a transform. See `tests/unit/tweenCallbacks.ts` for the original
+  use). It pulls **three** transitive packages, not one as
   first recorded: `@babel/types`, `@babel/helper-string-parser`, `@babel/helper-validator-identifier`
   (corrected 2026-08-25 from the lockfile — the decision is unaffected, the number put to the owner
   was wrong). **Anything else: STOP and ask.** Phase 1 needed
@@ -233,8 +236,11 @@ Each rule below cost a real false green or false red. **The evidence for every o
   A zero exit *through a pipe* is `tail`'s exit, not the gate's.
 - **Only one Playwright run at a time, and nothing heavy beside it** *(Phase 9)*. `test:e2e` shares
   port 5173 and `test-results/`, and its wall-clock-bounded specs read a busy box as a broken game —
-  seven specs once failed for no reason but three concurrent jobs. `tests/e2e/portGuard.ts` now kills
-  the orphaned dev server Playwright leaves behind on Windows; read its header before touching it.
+  seven specs once failed for no reason but three concurrent jobs. ⚠️ **This used to cite
+  `tests/e2e/portGuard.ts`, which does not exist and never did.** The orphaned-server problem is
+  real and the fix is real; it lives in `tools/dev/free-port.mjs` (run against **both** 5173 and
+  4173 by `test:e2e`) and in `tools/dev/e2e-server.mjs` / `prod-server.mjs`, which free the port
+  in-process before binding. Read `free-port.mjs`'s header before touching any of it.
 - **Assert the type before the value** in e2e.
 - **An existence assertion cannot verify a timing claim.** Assert *which tick*.
 - **Never `waitForTimeout`.** Wait on `window.__game.ready`.

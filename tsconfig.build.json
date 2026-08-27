@@ -1,0 +1,94 @@
+{
+  // Criterion 10.5 / vault 10.3 — **the build configuration typechecked as its own program.**
+  //
+  // ## Why a SECOND program, when tsconfig.json already includes vite.config.ts
+  //
+  // The vault item is blunt about the failure it comes from: *"Config files typechecked by nothing
+  // became a decision nothing could check"* — a build config drifted until it owned an
+  // authorization decision that no program checked. Vault A4 cites the same note for this repo's
+  // Gym save path.
+  //
+  // `tsconfig.json` does include `vite.config.ts`, but it includes it *alongside* `src` and `tests`,
+  // under the settings those need. That makes the config's typecheck a side effect of the app's,
+  // and couples it to the app's options: loosen `strict` for a test helper and the build config
+  // quietly gets loosened too. The vault's own phrasing is the rule —
+  //
+  //   > "The rigour applied to a file should follow what the file DECIDES, not where it sits in
+  //   >  the tree."
+  //
+  // — and `vite.config.ts` decides the browser contract, the minifier, and (via `vercel.json`) the
+  // production CSP. That is a lot of deciding for a file checked as an afterthought.
+  //
+  // So this program checks exactly the build surface, under its own settings, and
+  // `npm run typecheck:build` runs it. Both programs run in the full regression; neither replaces
+  // the other.
+  //
+  // ## What is in the program, and the half-claim that was false
+  //
+  // 🔴 This header used to say the plugin *"IS typechecked here, through its declaration"*. **It was
+  // not.** Found by the criterion 10.5 gate owner (brief A, finding 1): with `allowJs` off, the
+  // include list named `devSeamGate.d.mts` — 18 lines of hand-written assertions *about* the plugin —
+  // and `devSeamGate.mjs`, the 190-line body those assertions describe, was **in no program at all**.
+  // An unmet half recorded as met is precisely what C11 exists to catch, and this file was the one
+  // recording it.
+  //
+  // Worse, the justification was circular: it argued no Node types were needed, while
+  // `devSeamGate.mjs` opens with `import { readFileSync, readdirSync, existsSync } from 'node:fs'`.
+  // The Node-types *need* had not been removed; the Node-using *file* had been excluded.
+  //
+  // So `allowJs`/`checkJs` are on and the `.mjs` bodies are in the include list. This matters more
+  // for these two files than for any other `tools/gen/*`: every other one is EXECUTED by a unit test,
+  // so a drifted declaration dies at runtime in vitest. `devSeamGate.mjs` has no test consumer at all
+  // — its only exercise is `vite build` — which makes it the file that most needed a program.
+  //
+  // ## Still no `@types/node`
+  //
+  // `@types/node` is a **frozen-dependency STOP-and-ask** (CLAUDE.md §3). Phase 1 needed it twice and
+  // solved it without adding it; `tests/e2e/node-shims.d.ts` is that solution for the e2e suite, and
+  // `tools/gen/node-shims.d.mts` is the same answer here — exactly the members these files call, at
+  // the signatures they call them at.
+  //
+  // ⚠️ **`skipLibCheck` is what makes that survivable, and it is not free.** `vite`'s own
+  // `dist/node/index.d.ts` opens with `/// <reference types="node" />`; without the real package that
+  // reference is unresolvable, and `skipLibCheck` swallows the resulting error. The cost is that some
+  // Vite types that flow through Node ones degrade — `PreviewOptions.headers` widens to `any`, so the
+  // `preview.headers` assignment in `vite.config.ts` is NOT type-checked against Vite's shape. That
+  // is a measured, accepted shortfall (criterion 10.5 gate owner, brief A, finding 4), recorded here
+  // rather than left as an unexamined `true`.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    // Load-bearing: it is what lets the CSP be imported from vercel.json instead of read with fs,
+    // which is what keeps @types/node off the dependency list. See the note above.
+    "resolveJsonModule": true,
+    // The two lines that put the plugin BODY in a program rather than only its declaration.
+    "allowJs": true,
+    "checkJs": true,
+    "types": ["vite/client"]
+  },
+  // 🔴 Pinned by `tests/unit/build-program.test.ts`. Deleting an entry here, or the `-p` link from
+  // package.json's `typecheck:build`, is otherwise silently green: TypeScript does NOT error on a
+  // named include that matches nothing — it errors only when EVERY pattern matches nothing (measured
+  // twice, 2026-08-26). A shrinking include list is the exact way a config program stops covering
+  // what it claims to cover.
+  "include": [
+    "vite.config.ts",
+    "vercel.json",
+    "tools/gen/node-shims.d.mts",
+    "tools/gen/devSeamGate.mjs",
+    "tools/gen/devSeamManifest.mjs",
+    "tools/gen/devSeamAst.mjs",
+    "tools/gen/vercelHeaders.mjs"
+  ]
+}

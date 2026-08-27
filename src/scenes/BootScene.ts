@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { updateDebugState } from '../debug/globals';
 import { CATALOG_KEY, describeCatalogProblem, type AssetCatalog } from '../game/assetCatalog';
 import { destroyAudio } from '../game/audio';
@@ -9,6 +10,8 @@ import {
   verifySheets,
   assertFilteringPinned,
 } from './bootAssets';
+import { CRISP_IMAGE_RENDERING } from '../game/constants';
+import { SMOOTH_IMAGE_RENDERING, isIntegerScale } from '../render/canvasScaling';
 import { verifyLevels } from './bootLevels';
 import { LEVEL_SELECT_KEY } from './gameLevelPick';
 
@@ -217,6 +220,7 @@ export class BootScene extends Phaser.Scene {
     // ElementEditor here for the same reason Playground is here: a refused boot that leaves a play
     // scene ticking behind the error screen is a cosmetic refusal, not a refusal.
     if (import.meta.env.DEV) {
+      devSeam('__DEVSEAM_BootScene_stopDevScenes__');
       this.scene.stop('Playground');
       this.scene.stop('ElementEditor');
       this.scene.stop('Gym');
@@ -240,6 +244,7 @@ export class BootScene extends Phaser.Scene {
     if (!import.meta.env.DEV) {
       return url;
     }
+  devSeam('__DEVSEAM_BootScene_breakAssetCatalog__');
 
     return new URLSearchParams(window.location.search).get('breakAsset') === 'catalog'
       ? 'assets/this-catalog-does-not-exist.json'
@@ -251,14 +256,30 @@ export class BootScene extends Phaser.Scene {
    * which is not a synthetic failure but a faithful reproduction of the vault's recorded bug,
    * where a CSS property silently contradicted the engine-side decision. It proves the
    * assertion above actually runs, rather than being reviewed and never executed.
+   *
+   * 🔴 **It used to hardcode `'auto'`, and that stopped being a break on 2026-08-27.** When the
+   * filtering rule became conditional on the canvas's scale, `'auto'` became the CORRECT value at
+   * a fractional scale — so on any window that was not an exact multiple, the mutation set the
+   * right value, the gate passed, and `?breakFilter=1` silently proved nothing. A red proof that
+   * quietly stops reddening is worse than no red proof, because the green is still being counted.
+   *
+   * It now writes whichever value is WRONG for the current geometry, which is what "break it"
+   * always meant.
    */
   private applyBreakFilter(): void {
     if (!import.meta.env.DEV) {
       return;
     }
+  devSeam('__DEVSEAM_BootScene_breakFilter__');
 
     if (new URLSearchParams(window.location.search).get('breakFilter') === '1') {
-      this.game.canvas.style.setProperty('image-rendering', 'auto');
+      const canvas = this.game.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const integral = isIntegerScale(canvas.width, canvas.height, rect.width, rect.height);
+      canvas.style.setProperty(
+        'image-rendering',
+        integral ? SMOOTH_IMAGE_RENDERING : CRISP_IMAGE_RENDERING[CRISP_IMAGE_RENDERING.length - 1],
+      );
     }
   }
 }

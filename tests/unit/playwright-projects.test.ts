@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest';
  *
  * ## What this gate reads, and why it is source text rather than the imported config
  *
- * It reads `playwright.config.ts` as **raw source** and extracts the three patterns by their project
+ * It reads `playwright.config.ts` as **raw source** and extracts each project's patterns from its own
  * block. Importing the real config would pull in `@playwright/test` and `devices`, which the unit
  * suite deliberately does not depend on — `npm run test:sim-isolated` runs this same suite with
  * Phaser uninstalled, and adding an e2e-runner import here would be a new coupling for no gain.
@@ -36,17 +36,33 @@ import { describe, expect, it } from 'vitest';
  * ## The selection algebra it asserts
  *
  * Playwright selects a file for a project when `testMatch` matches (default: everything) **and**
- * `testIgnore` does not. With `P` = the shared GPU pattern and `D` = the DPR-2 pattern:
+ * `testIgnore` does not. With `P` = the shared GPU pattern, `D` = the DPR-2 pattern and `R` = the
+ * production pattern:
  *
  * | project | selects when |
  * |---|---|
- * | `chromium` | `!P` |
+ * | `chromium` | `!P && !R` |
  * | `chromium-gpu` | `P && !D` |
  * | `chromium-dpr2` | `D` |
+ * | `chromium-prod` | `R` |
  *
- * Summing those over the four possible `(P, D)` combinations gives 1, 1, 1 — except `!P && D`,
- * which gives **2**. So "exactly one project selects every spec" is a real assertion with a
- * reachable failure, not a tautology.
+ * Summing those over the possible combinations gives 1 — except `!P && D`, which gives **2**, and
+ * `P && R`, which gives **2**. So "exactly one project selects every spec" is a real assertion with
+ * a reachable failure, not a tautology.
+ *
+ * ## 🔴 Phase 10: the patterns are NAMED CONSTANTS now, and this gate reads through the name
+ *
+ * `chromium`'s `testIgnore` used to be a regex literal that had to stay byte-identical to
+ * `chromium-gpu`'s `testMatch`, and the paragraph above predicted what would happen: *"a refactor of
+ * the config's shape (a pattern hoisted to a `const`) reds this file rather than passing"*. It did,
+ * exactly, the first time a fourth project was added — because a third selection rule meant
+ * `chromium`'s ignore had to become a LIST, and a list can no longer be byte-equal to one literal.
+ *
+ * So the config hoists both patterns to `const GPU_SPECS` / `const PROD_SPECS` and the projects
+ * reference them by name, which makes the "same pattern" invariant structural rather than a promise
+ * — and this gate resolves an identifier back to the literal it was declared with. The vacuity guard
+ * is what keeps that resolution honest: a name it cannot resolve yields `null`, and `PATTERNS_FOUND`
+ * counts only what resolved, so a rename cannot quietly turn an assertion into `null === null`.
  */
 
 const CONFIG = import.meta.glob('../../playwright.config.ts', {
@@ -80,26 +96,66 @@ function projectBlock(name: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-/** The regex literal's SOURCE TEXT, not a constructed RegExp — two patterns are "identical" only if
- *  they are byte-identical, and comparing `RegExp` objects by `.source` after construction would
- *  hide a flags difference. */
+/** A regex literal as SOURCE TEXT — `/.../flags`, escaped slashes allowed. */
+const LITERAL = '/(?:[^/\\\\\\n]|\\\\.)+/[a-z]*';
+
+/**
+ * Every top-level `const NAME = /regex/;` in the config, as name -> literal source text.
+ *
+ * This is what lets a project say `testMatch: GPU_SPECS` and still be checked. Resolution either
+ * succeeds or yields nothing — there is deliberately no fallback, because an unresolved name
+ * treated as an empty pattern would match every spec and quietly select everything.
+ */
+const CONSTANTS: Record<string, string> = Object.fromEntries(
+  [...source.matchAll(new RegExp(`^const ([A-Z][A-Z0-9_]*) = (${LITERAL});`, 'gm'))].map((m) => [
+    m[1]!,
+    m[2]!,
+  ]),
+);
+
+/**
+ * The pattern literals a project attributes to `key`, in order — resolving identifiers through
+ * `CONSTANTS` and accepting either a bare value or an array of them.
+ *
+ * Source text rather than constructed `RegExp`s: two patterns are "identical" only if they are
+ * byte-identical, and comparing `RegExp` objects by `.source` after construction would hide a flags
+ * difference. An entry that is neither a literal nor a resolvable name yields `null`, which the
+ * vacuity guard counts.
+ */
+function patternTexts(block: string, key: 'testMatch' | 'testIgnore'): (string | null)[] {
+  const m = new RegExp(`${key}:\\s*(\\[[^\\]]*\\]|${LITERAL}|[A-Z][A-Z0-9_]*)`).exec(block);
+  if (!m) return [];
+  const raw = m[1]!;
+  const entries = raw.startsWith('[')
+    ? raw
+        .slice(1, -1)
+        .split(',')
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0)
+    : [raw];
+  return entries.map((e) => (e.startsWith('/') ? e : (CONSTANTS[e] ?? null)));
+}
+
+/** The single pattern a project attributes to `key`, or `null` if it declares none or several. */
 function patternText(block: string, key: 'testMatch' | 'testIgnore'): string | null {
-  const m = new RegExp(`${key}:\\s*(/(?:[^/\\\\\\n]|\\\\.)+/[a-z]*)`).exec(block);
-  return m ? m[1]! : null;
+  const all = patternTexts(block, key);
+  return all.length === 1 ? all[0]! : null;
 }
 
 const chromium = projectBlock('chromium');
 const gpu = projectBlock('chromium-gpu');
 const dpr2 = projectBlock('chromium-dpr2');
+const prod = projectBlock('chromium-prod');
 
-const chromiumIgnore = patternText(chromium, 'testIgnore');
+const chromiumIgnores = patternTexts(chromium, 'testIgnore');
 const gpuMatch = patternText(gpu, 'testMatch');
 const gpuIgnore = patternText(gpu, 'testIgnore');
 const dpr2Match = patternText(dpr2, 'testMatch');
+const prodMatch = patternText(prod, 'testMatch');
 
 /** Vacuity guard. If the config is refactored so the extraction finds nothing, every equality below
  *  would compare `null` to `null` and pass while measuring absolutely nothing. */
-const PATTERNS_FOUND = [chromiumIgnore, gpuMatch, gpuIgnore, dpr2Match].filter(
+const PATTERNS_FOUND = [...chromiumIgnores, gpuMatch, gpuIgnore, dpr2Match, prodMatch].filter(
   (p) => p !== null,
 ).length;
 
@@ -110,23 +166,28 @@ function toRegExp(literal: string): RegExp {
 }
 
 describe('playwright project selection', () => {
-  it('extracted all four patterns — the config shape has not drifted out from under this gate', () => {
+  it('extracted all six patterns — the config shape has not drifted out from under this gate', () => {
     expect(
       PATTERNS_FOUND,
       'could not extract the project patterns from playwright.config.ts — the config was refactored ' +
         'and every assertion in this file is now vacuous. Fix the extraction, do not delete the test.',
-    ).toBe(4);
+    ).toBe(6);
     expect(specNames.length, 'no e2e spec files were globbed at all').toBeGreaterThan(20);
   });
 
-  it("chromium's testIgnore and chromium-gpu's testMatch are the SAME pattern", () => {
-    // The config asserts this in prose at two separate places. This is the executable copy.
+  it("chromium's testIgnore is EXACTLY the other projects' testMatch patterns", () => {
+    // The config asserts this in prose in several places. This is the executable copy.
+    //
+    // `chromium` is the catch-all: it runs everything no other project claims. So its ignore list
+    // must be precisely the set of patterns the specialised projects match — no more (a spec running
+    // NOWHERE reports `0 passed` and exits 0) and no fewer (a spec running twice, once on
+    // SwiftShader, where a timing or pixel assertion measures the wrong substrate under a green
+    // tick). `chromium-dpr2` is absent on purpose: its pattern is a SUBSET of `GPU_SPECS`, already
+    // covered by that entry.
     expect(
-      chromiumIgnore,
-      "chromium's testIgnore has drifted from chromium-gpu's testMatch. A spec matching neither now " +
-        'runs NOWHERE and reports `0 passed` with exit 0 — the false green this config warns about ' +
-        'twice. A spec matching both runs twice, once on SwiftShader.',
-    ).toBe(gpuMatch);
+      [...chromiumIgnores].sort(),
+      "chromium's testIgnore has drifted from what the other projects claim.",
+    ).toEqual([gpuMatch, prodMatch].sort());
   });
 
   it("chromium-gpu's testIgnore and chromium-dpr2's testMatch are mirrors", () => {
@@ -147,15 +208,17 @@ describe('playwright project selection', () => {
     // mirror mutation reddened only the test above while this one stayed green. Modelling a project
     // by the value it is SUPPOSED to have rather than the one it HAS is how a gate ends up asserting
     // its own assumption. Caught by running the mutation this file names.
-    const chromiumSkip = toRegExp(chromiumIgnore!);
+    const chromiumSkips = chromiumIgnores.map((p) => toRegExp(p!));
     const gpuTake = toRegExp(gpuMatch!);
     const gpuSkip = toRegExp(gpuIgnore!);
     const dpr2Take = toRegExp(dpr2Match!);
+    const prodTake = toRegExp(prodMatch!);
 
     const wrong: string[] = [];
     for (const name of specNames) {
       const projects: string[] = [];
-      if (!chromiumSkip.test(name)) projects.push('chromium');
+      if (!chromiumSkips.some((r) => r.test(name))) projects.push('chromium');
+      if (prodTake.test(name)) projects.push('chromium-prod');
       if (gpuTake.test(name) && !gpuSkip.test(name)) projects.push('chromium-gpu');
       if (dpr2Take.test(name)) projects.push('chromium-dpr2');
       if (projects.length !== 1) {

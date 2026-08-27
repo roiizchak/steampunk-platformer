@@ -27,6 +27,7 @@
  */
 
 import type Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { RENDER_SCALE } from '../game/constants';
 import { completedIds, readProgress, safeLocalStorage, writeProgress, type SettingsStorage } from '../game/save';
@@ -250,6 +251,7 @@ export function hitstopScaleFromSearch(search: string): number {
   if (!import.meta.env.DEV) {
     return 1;
   }
+  devSeam('__DEVSEAM_gameLevelPick_hitstopScale__');
   const raw = new URLSearchParams(search).get('hitstop');
   if (raw === null || raw.trim() === '') {
     return 1;

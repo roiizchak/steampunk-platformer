@@ -38,6 +38,7 @@
  */
 
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 
 import type { AudioCue } from '../sim/audioCues';
 import type { AssetCatalog, AudioEntry } from './assetCatalog';
@@ -225,6 +226,7 @@ function stallPerCue(): void {
   if (!import.meta.env.DEV) {
     return;
   }
+  devSeam('__DEVSEAM_audio_cueStall__');
   if (new URLSearchParams(window.location.search).get('perfMutation') !== 'cue-stall') {
     return;
   }

@@ -1,6 +1,8 @@
 import { chromium } from '@playwright/test';
 import type { FullConfig } from '@playwright/test';
 
+import { PROD_PORT } from '../../playwright.config';
+
 /**
  * # Warm the dev server before the first spec, and never by loosening a bound
  *
@@ -76,7 +78,28 @@ const WARMUP_TIMEOUT_MS = 180_000;
  * Throws rather than falling back to a literal: a default here would re-create the bug quietly.
  */
 function baseUrlFrom(config: FullConfig): string {
+  /**
+   * 🔴 Phase 10 added `chromium-prod`, which serves `dist/` — a build with **no `window.__game`**.
+   * If it ever became `projects[0]`, the wait below would hang for its full 180 s and then abort the
+   * run having collected zero tests: `0 passed`, exit 0, the false green this file already exists to
+   * prevent. An ordering constraint that lives only in a comment is one reorder away from silence.
+   *
+   * ⚠️ **The guard is on the PORT, not the project NAME.** It checked `name === 'chromium-prod'`
+   * until 2026-08-26 — which is a second definition of a string `playwright.config.ts` owns, the
+   * exact sin the paragraph above this one was written about. Rename the project, or add a second
+   * production project, and the 180 s hang → zero tests → exit 0 comes straight back. Found by the
+   * criterion 10.2 gate owner (brief B, finding 9). The hazard is *"projects[0] serves a build with
+   * no debug surface"*, and the port is what decides that: 5173 is the dev server, 4173 is `dist/`.
+   */
   const url = config.projects[0]?.use?.baseURL;
+  if (typeof url === 'string' && url.includes(`:${PROD_PORT}`)) {
+    throw new Error(
+      `globalSetup: projects[0] points at :${PROD_PORT}, the PRODUCTION substrate. This warm-up ` +
+        'waits on `window.__game`, which `dist/` does not install by design — it would hang for ' +
+        'the full timeout and then abort the run having collected zero tests, which exits 0. ' +
+        'Move the production project back after the dev-server projects.',
+    );
+  }
   if (typeof url !== 'string' || url.length === 0) {
     throw new Error(
       'globalSetup: no baseURL on the first Playwright project. The warm-up reads the server ' +

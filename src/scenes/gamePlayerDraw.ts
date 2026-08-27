@@ -32,6 +32,7 @@
  */
 
 import type Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import { LOCOMOTION_KEYS, tunedFps, variantFromSearch } from '../game/feelVariants';
 import {
   ATTACK_CONTACT_FRAME_INDEX,
@@ -155,6 +156,7 @@ export function renderPlayerSprite(
   // DEV ONLY — the live locomotion tuner's per-frame update. Guarded at the point of use so the
   // branch and its import are tree-shaken out of `dist/`; `verify-dist` proves the absence.
   if (import.meta.env.DEV) {
+    devSeam('__DEVSEAM_gamePlayerDraw_feelTunerCallback__');
     feelTuner?.(sprite);
   }
 }
@@ -162,6 +164,7 @@ export function renderPlayerSprite(
 /** Registration logic lives in `gameAnimations.ts` — see its header. */
 export function registerAnimations(scene: Phaser.Scene): void {
   if (import.meta.env.DEV) {
+    devSeam('__DEVSEAM_gamePlayerDraw_feelAnimRate__');
     // DEV ONLY — the locomotion-feel A/B (`?feel=1`). Guarded at the point of use so the whole
     // branch, and the import it reaches, are tree-shaken out of `dist/`; `verify-dist` proves it.
     // Only locomotion is re-paced: `simTicks` for a one-shot like `attack` is a COMBAT WINDOW
@@ -204,6 +207,7 @@ export function applyFeelVariant(world: World): void {
   if (!import.meta.env.DEV) {
     return;
   }
+  devSeam('__DEVSEAM_gamePlayerDraw_feelSpeedScale__');
   const variant = variantFromSearch(globalThis.location?.search ?? '');
   if (variant.speedScale === 1) {
     return;

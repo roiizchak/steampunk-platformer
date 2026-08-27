@@ -1,5 +1,4 @@
 import { expect, test, type Page } from '@playwright/test';
-import { CRISP_IMAGE_RENDERING } from '../../src/game/constants';
 
 /**
  * Phase 1 QA criteria 1.4, 1.5 and 1.6.
@@ -25,7 +24,14 @@ import type { GameDebugView } from './debugView';
 // lines — DATA and SETUP only, every `test()`/`expect` verifying a criterion stays here. Not
 // named `*.spec.ts` so Playwright's testMatch does not collect it as an empty spec. See
 // bootHelpers.ts.
-import { catalogWith, collectConsoleErrors, firstImage, REFUSAL_TIMEOUT, waitForTerminalState } from './bootHelpers';
+import {
+  catalogWith,
+  collectConsoleErrors,
+  expectCanvasFiltering,
+  firstImage,
+  REFUSAL_TIMEOUT,
+  waitForTerminalState,
+} from './bootHelpers';
 
 /**
  * ADDED IN PHASE 3, and recorded in QA-LOG.md as a deliberate regression-set change.
@@ -384,15 +390,9 @@ test.describe('Phase 1 — Boot', () => {
     await page.goto('/');
     await waitForTerminalState(page, REFUSAL_TIMEOUT);
 
-    const render = await page
-      .locator('#game canvas')
-      .evaluate((el) => getComputedStyle(el).imageRendering);
-
-    // Phaser's setCrisp() tries a list of values and the browser keeps the last it recognises,
-    // so the winning string is engine-dependent (Chromium: 'pixelated'; Firefox:
-    // '-moz-crisp-edges'). The list is IMPORTED, not retyped: a second hand-maintained copy
-    // here previously omitted '-moz-crisp-edges' and 'optimizeSpeed', which would have been a
-    // false red on Firefox the day a second browser project was added.
-    expect([...CRISP_IMAGE_RENDERING]).toContain(render);
+    // The rule and its evidence live in `src/render/canvasScaling.ts`; the assertion lives in
+    // `bootHelpers.ts` so the runtime and the spec share ONE definition (vault 5.3) and this file
+    // stays inside the 400-line rule.
+    await expectCanvasFiltering(page);
   });
 });

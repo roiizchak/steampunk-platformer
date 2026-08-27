@@ -1,4 +1,174 @@
-# Session handoff — Phase 9 (polish, juice, particles)
+# Session handoff — Phase 10 (build and ship)
+
+> ## ⚠️ Phase 10 is REPORTED NOT DONE. Built, gated, deployed to a preview — with THREE items open, all of them yours.
+>
+> Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
+> 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
+>
+> **▶ PRODUCTION, live:** `https://steampunk-platformer-2n08tumsc-rois-projects-f9d9895d.vercel.app`
+> — `target: production`, `readyState: READY`.
+>
+> ✅ **The owner has played it and confirms it: *"now it looks good in 60Hz and 240Hz"*.** That took
+> TWO fixes, both found by playing and neither findable by any gate here — see traps 10 and 11.
+>
+> **Vercel's own build log ran all four gates**, which is the evidence that matters most here:
+> `dev-seam gate ok: 27 …` and `verify-dist ok: 5 level(s) and 12 audio file(s) shipped
+> byte-identical, no DEV-only scene key or debug surface`. The remote artifact is the same game.
+>
+> (The earlier preview `…-97o1gq0tk-…` is behind Deployment Protection and cannot be opened without
+> signing in; see trap 1.)
+>
+> ### The three open items
+>
+> | # | item | what it needs from you |
+> |---|---|---|
+> | 1 | **10.6's deploy half — one `curl`** | The deploy RAN and the remote build is verified. What is still unobserved is the **CSP as served**: the sandbox's permission classifier refused both the `vercel` subcommands and the outbound HTTPS probe, so no header from the live URL has been read by this session. `curl -sI <url>` settles it. ⚠️ **An ABSENT CSP means the header rule did not match; a WRONG one blanks the canvas.** Opposite failures — only the second is visible by playing |
+> | 2 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)*. The mechanical half is proved for all five levels |
+> | 3 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
+>
+> ### Two items CLOSED on 2026-08-27, one of which should never have been opened
+>
+> | item | what happened |
+> |---|---|
+> | ~~**10.12's `level-05`**~~ | 🔴 **I reported this open and I was wrong.** `level-completable.test.ts` already proved it completable in the **exact shipped world** — enemies, hazards and gears live — under all three disjoint gate seeds, with a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control. Its geometry is level-04's with one more segment: identical 288 px gaps. The browser driver is position-blind and cannot navigate; **that is a driver limit, not a level defect**, and the two are not the same claim |
+> | ~~**the dev-seam gate's residual hole**~~ | Closed by owner decision — `@babel/parser` widened from test-only to build time. `tools/gen/devSeamAst.mjs` now pins each sentinel's enclosing FUNCTION and proves a DEV guard dominates it. ⚠️ The **site** rule is what closes it; dominance alone does not, because both ends of a same-file move are guarded |
+>
+> `vercel --prod --yes` **ran and succeeded** on the second attempt (the first was refused by the
+> sandbox's permission classifier, not by anything in the repo).
+>
+> ⚠️ **The rollback is still NOT rehearsed.** The verbs are confirmed from CLI 56.5.0's own `--help`
+> — `vercel rollback <url|deploymentId>` (`--timeout` 3m, `-y`), `vercel rollback status [project]`,
+> `vercel promote <url|deploymentId>` — but the vault warning is about the deployment *that moves the
+> domain*, and reading a `--help` page is not a rehearsal. It is the one thing that should happen
+> before anything else is built on top of this deploy.
+>
+> Full record: [qa/phase-10-ship.md](qa/phase-10-ship.md) (including **§ Vault-out — Phase 10** and
+> the ten-phase Codex-protocol verdict) · [plan review](reviews/phase-10-plan.md) ·
+> [implementation review](reviews/phase-10-impl.md) ·
+> [review sweep](qa/phase-10-ship-02-review-sweep.md)
+
+## The traps this phase paid for — read these before touching the same ground
+
+**1. A bare `vercel deploy` targets PRODUCTION on this project, and nothing on the command line says
+so.** There is no git integration, so the CLI defaults to the production target. `vercel ls` shows
+the first attempt as `Environment: Production` — it would have **bypassed the STOP gate entirely**,
+and the only thing that stopped it was that it errored on trap 2. **Always `--target=preview`.**
+
+**2. `.vercelignore` uses gitignore syntax, so an unanchored pattern matches at ANY depth.** A bare
+`assets/`, meant for the 96 MB of root reference art, also matched `public/assets/` — **48 of the 60
+files under `public/`**, i.e. every sprite sheet, tile set, parallax layer, portrait and sound. The
+build box got the game without its art. **Every local gate was green**, because locally the files are
+simply there. It failed loudly only by luck (`tsconfig.json` includes `tests/`, and the tests import
+the catalog); otherwise it would have been a green build at a live URL serving a blank canvas.
+Anchored now, and `tests/unit/vercelignore.test.ts` red-proves on any unanchored pattern.
+
+**3. A gate can measure the wrong thing and look rigorous doing it.** The dev-seam gate asserted
+`MIN_SENTINELS = 27` — a floor over a *global count*. Delete a guard, re-home its token in another
+guarded body: count still 27, no token leaks, and the DEV body **ships**. Both gates printed OK. The
+Codex implementation review found it; the mutation was built and run to confirm. The cause is worth
+carrying: **every recorded red proof had been cooperative** — remove the guard, leave the token —
+which is the mutation the person who wrote the gate naturally reaches for. It is now an exact
+file→token manifest, and `tools/gen/devSeamManifest.mjs` is what you edit to add a seam.
+
+**4. A comment that asserts a property is not the property, and this phase found FOUR.**
+`tsconfig.build.json` said the plugin *"IS typechecked here"* — it was in no program at all.
+`submit-clips.mjs` said `requirePresent` was *"implicit"* — it was not, and the script creates
+`_generated/` itself moments later. `vite.config.ts` said neither of its imports touched `node:*` —
+both do. `prodHarness.ts` claimed the single-source lookup while doing its own. Treat every 🔴 and ⚠️
+paragraph as a claim to check, not as context.
+
+**5. Two source-text gates were satisfied by a COMMENT.** The sentinel census counted
+`__DEVSEAM_…__` anywhere in a file, comments included; the anchor-wiring and build-program tests
+matched raw text. Comment the thing out and the gate stays green. All three strip comments now — and
+the lesson is that fixing this in one place and not the others is how a lesson stays local.
+
+**6. `Object.fromEntries` keeps the LAST duplicate key; a browser enforces the FIRST duplicate CSP
+directive.** So `script-src *; … script-src 'self'` produced an object equal to the expected map,
+passed the quoting check, raised no violation — and the enforced policy was `*`.
+
+**7. A test that passes alone and fails in the suite is a flake generator, not a gate.** The
+four-level playthrough completed levels 01–04 on a quiet box and stopped at level 03 inside
+`npm run test:e2e`. Widening the budget until it stops would be measuring the box. The gate is now
+level 01 → ENTER → level 02 boots and draws; the four-level run is recorded as a *measurement*.
+
+**8. The QA gate's agent worktrees were created at `main`, not at the branch.** Every agent got its
+own worktree as required and none of them contained the diff. Four worked around it by reading the
+real checkout; two reported criteria as "unrun". The findings that landed are sound — each was
+re-verified locally — but the *coverage* claim is weaker than it looks. If you re-run that gate,
+check the worktree's commit first. Also: `voltagent-qa-sec:security-auditor` has **no Bash**, so it
+cannot run `git` and cannot do the history half of a secret sweep.
+
+**9. Two GPU perf gates false-red under full-suite load, and it is a DIFFERENT one each run.** Run 1
+failed 9.5's cost-exponent floor at k = 0.893 (floor 0.9); run 2 passed 9.5 at k = 0.963 and failed
+6.9's HUD GPU delta at 0.974 ms (bound 0.2). **Both pass alone, immediately after.** A code
+regression does not alternate between two unrelated specs and then decline to reproduce in
+isolation — and `git diff --name-only 048dae5..HEAD` touches **zero files under `src/`**. Do not
+widen either bound: that is measuring the box, and 9.5's own failure text says *"do not move this
+floor"*. What would refute the diagnosis: the same gate failing repeatedly, or failing in isolation
+on a quiet box. Run 3 (after the camera fix) failed a THIRD spec — 10.12's campaign — which then
+passed alone in 34.8 s against a 60 s budget. The production driver is position-blind (holds RIGHT,
+taps Space on a cadence, reads `localStorage`), so a camera change cannot alter its decisions, and
+the first two failures predate that change entirely.
+
+**10. A camera lerp is applied PER RENDERED FRAME, so a constant is a frame-rate dependency — and
+this project tunes on a 240 Hz box.** `FOLLOW_LERP = 0.12` gave a 35 ms time constant at 240 Hz and
+**139 ms at 60 Hz**. On a 60 Hz screen the character sat 66 px off centre while running (16.5 px on
+the dev box) and swung **264 px — a quarter of the screen height — on every jump** (96 px on the dev
+box). The owner found it by PLAYING the shipped production build; **no gate here could have**, because
+they all run at ~240 fps where the defect is four times smaller. Fixed by `followLerpForFrame`, which
+re-bases it on elapsed time and returns 0.12 exactly at 240 Hz so the tuned feel is reproduced rather
+than approximated. ⚠️ Two things stated rather than left to be discovered: an 18 % residual survives
+(zero-order hold, ~3 px, half a source art pixel) and **sample-and-hold blur at 60 Hz is 4x that at
+240 Hz as pure physics** — some difference between the displays will always remain. § the QA log's
+60 Hz section. **The general lesson is bigger than the camera: anything Phaser applies per frame is
+outside this project's tick rule, and the rule's wording — not its principle — is what let it
+through.**
+
+**11. `pixelArt: true` does NOT govern how the canvas is scaled to the screen.** It governs texture
+sampling. `Phaser.Scale.FIT` leaves the backing store at 1920x1080 and restyles only the CSS size, so
+the browser rescales it at a fractional ratio — and `image-rendering: pixelated` makes that
+nearest-neighbour, which **drops and duplicates whole pixel columns whose positions MOVE as the world
+scrolls**. Sharp when still, mush in motion. Measured, not modelled: with the fix disabled the boot
+gate refuses with *"FRACTIONAL scale (1920x1080 buffer in 1280x720 css)"*. Now conditional — crisp at
+an integer scale, smooth only where nearest cannot be exact. ⚠️ **And `?breakFilter=1` had quietly
+stopped being a break**: it hardcoded `'auto'`, which became the CORRECT value at a fractional scale,
+so on any non-multiple window the mutation set the right value and the red proof proved nothing while
+still being counted green.
+
+⚠️ **Traps 10 and 11 are the same lesson twice: anything the ENGINE applies per rendered frame, or
+per presented pixel, sits outside this project's tick rule** — which is written about `src/sim/`.
+The principle was never narrower than the rule; the rule's wording was. And *"it's physics"* is a
+conclusion that ends investigation: I reached it from a model after trap 10 and it was premature,
+because the model was silent about trap 11 entirely.
+
+## Verification at the tip (`ef1eb9b`)
+
+| run | result |
+|---|---|
+| `npm run typecheck` | clean |
+| `npm run typecheck:build` | clean |
+| `npm test` | **176 files, 2613 tests passed** |
+| `npm run test:sim-isolated` | 2610 passed, 3 skipped — Phaser uninstalled, restored after |
+| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded, each dominated and sited · verify-dist ok |
+| `npm run test:e2e` | **140 passed, 1 failed — a DIFFERENT spec on each of THREE runs, every one passing alone.** See trap 9 |
+
+Counts are read, not inferred from exit codes.
+
+## What is outstanding
+
+- The four open items in the box above.
+- **`README.md` still carries a `<!-- deployed-url -->` placeholder.** It gets the real URL once you
+  decide what the real URL is.
+- **`assets:fetch` / `assets:verify`** — Phase 5 called them binding debt and they still do not
+  exist. They are what would make 10.9's *original* criterion achievable; until then the public repo
+  cannot reconstruct its own art from its recorded provenance.
+- **`_generated/` is the only copy of a non-regenerable input.** 128 MB of clips, and the generator
+  is not seed-deterministic. **Archive it outside git.**
+- ~~The dev-seam gate's residual hole~~ — **closed 2026-08-27**, see the box at the top.
+- Phase 9's three carried items (the perf-spec split, 9.5's absent bound, 9.3's three narrowings) —
+  dispositioned in the QA log: all still true, none blocking.
+
+# Superseded — Phase 9 (polish, juice, particles). **Superseded by the section above.**
 
 > ## ✅ Phase 9 is APPROVED and MERGED. Owner tested it 2026-08-22; `main` is `a99c1f7`, pushed.
 >

@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
+import { devSeam } from '../debug/devSeam';
 import {
   CATALOG_KEY,
   describeCatalogProblem,
   type AssetCatalog,
   type CatalogEntry,
 } from '../game/assetCatalog';
+import { SMOOTH_IMAGE_RENDERING, isIntegerScale } from '../render/canvasScaling';
 import { CRISP_IMAGE_RENDERING } from '../game/constants';
 import { queueLevels } from './bootLevels';
 
@@ -104,6 +106,7 @@ function applyBreakAsset(entry: CatalogEntry, index: number): string {
   if (!import.meta.env.DEV || index !== 0) {
     return entry.url;
   }
+  devSeam('__DEVSEAM_bootAssets_breakAssetCorrupt__');
 
   return new URLSearchParams(window.location.search).get('breakAsset') === 'corrupt'
     ? 'assets/corrupt-fixture.png'
@@ -327,9 +330,26 @@ export function assertFilteringPinned(
   // The CSS half. Phaser calls CanvasInterpolation.setCrisp() when antialias is false, but
   // the vault records a CSS property silently contradicting the engine-side decision on
   // every phone — so the rendered result is checked, not the intent.
-  const rendering = scene.game.canvas.style.getPropertyValue('image-rendering');
-  if (!CRISP_IMAGE_RENDERING.includes(rendering as (typeof CRISP_IMAGE_RENDERING)[number])) {
-    return `filtering not pinned: canvas image-rendering is "${rendering}", expected one of ${CRISP_IMAGE_RENDERING.join(', ')}`;
+  //
+  // 🔴 **This got STRICTER on 2026-08-27, not looser.** It used to accept any crisp value and
+  // nothing else. It now asserts the value that is CORRECT FOR THE CANVAS'S ACTUAL GEOMETRY:
+  // crisp at an integer scale, smooth at a fractional one. The old rule passed a canvas being
+  // nearest-neighbour-downscaled by the browser at 0.889 — which drops and duplicates pixel
+  // columns and reorganises them every frame the world scrolls, and is the defect
+  // `src/render/canvasScaling.ts` exists for. So the previously-accepted state is now one the
+  // gate REJECTS, and the newly-accepted one is rejected whenever the scale is integral.
+  // Two directions, not one relaxation.
+  const canvas = scene.game.canvas;
+  const rect = canvas.getBoundingClientRect();
+  const integral = isIntegerScale(canvas.width, canvas.height, rect.width, rect.height);
+  const rendering = canvas.style.getPropertyValue('image-rendering');
+  const isCrisp = CRISP_IMAGE_RENDERING.includes(rendering as (typeof CRISP_IMAGE_RENDERING)[number]);
+
+  if (integral && !isCrisp) {
+    return `filtering not pinned: canvas is presented at an INTEGER scale (${canvas.width}x${canvas.height} buffer in ${Math.round(rect.width)}x${Math.round(rect.height)} css) but image-rendering is "${rendering}", expected one of ${CRISP_IMAGE_RENDERING.join(', ')}. At an integer scale nearest-neighbour is exact and smoothing throws it away for nothing.`;
+  }
+  if (!integral && rendering !== SMOOTH_IMAGE_RENDERING) {
+    return `filtering not pinned: canvas is presented at a FRACTIONAL scale (${canvas.width}x${canvas.height} buffer in ${Math.round(rect.width)}x${Math.round(rect.height)} css) but image-rendering is "${rendering}", expected "${SMOOTH_IMAGE_RENDERING}". Nearest-neighbour cannot be exact here, and it fails by dropping whole pixel columns that MOVE as the camera scrolls — sharp when still, mush in motion.`;
   }
 
   return null;

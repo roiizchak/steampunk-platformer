@@ -120,3 +120,63 @@ describe('mergeEvents', () => {
     expect(merged).not.toBe(b);
   });
 });
+
+/**
+ * **The committed red proof for criterion 10.12 still applies to this file.**
+ *
+ * `tests/fixtures/dead-sim.patch` neuters `advance()`'s loop so no tick runs, and it is the only
+ * evidence that the production completion predicate can go red. A patch pins its context lines
+ * verbatim: reformat that loop header — prettier, a rename, a `for...of` — and the fixture stops
+ * applying, silently, because nothing consumed it. *"A red proof nobody can re-run is a claim, not
+ * evidence"* is the patch's own line 10, and until now nothing enforced it (criterion 10.12 gate
+ * owner, brief B, finding 14).
+ *
+ * This asserts the two lines the patch anchors on, not the patch's whole content — the point is to
+ * fail on the *edit that would break it*, in the file being edited, at the moment it is made.
+ */
+describe('the dead-sim red proof is still applicable', () => {
+  const SOURCE = Object.values(
+    import.meta.glob('../../src/sim/advanceSplit.ts', {
+      eager: true,
+      query: '?raw',
+      import: 'default',
+    }),
+  )[0] as string;
+
+  const FIXTURE = Object.values(
+    import.meta.glob('../../tests/fixtures/dead-sim.patch', {
+      eager: true,
+      query: '?raw',
+      import: 'default',
+    }),
+  )[0] as string;
+
+  it('still contains every line the patch anchors on — context included', () => {
+    // 🔴 **Every line `git apply` must find, not just the `-` line.** Checking only the removed line
+    // left the CONTEXT unpinned: reformat or rename an adjacent line and the loop header survives,
+    // this test stays green, and `git apply` refuses anyway — the red proof silently stops existing,
+    // which is the exact thing this test was added to prevent. Found by the Codex implementation
+    // review. A hunk's context lines are part of what it matches on, so they are part of the pin.
+    const hunk = FIXTURE.slice(FIXTURE.indexOf('@@'));
+    const anchors = hunk
+      .split('\n')
+      .slice(1)
+      .filter((l) => l.startsWith('-') || l.startsWith(' '))
+      .map((l) => l.slice(1))
+      .filter((l) => l.trim().length > 0);
+
+    expect(anchors.length, 'the fixture no longer has a hunk to anchor on').toBeGreaterThan(3);
+    expect(
+      hunk.split('\n').filter((l) => l.startsWith('-')).length,
+      'the fixture no longer removes exactly one line',
+    ).toBe(1);
+
+    for (const line of anchors) {
+      expect(
+        SOURCE,
+        `tests/fixtures/dead-sim.patch anchors on "${line.trim()}" and advanceSplit.ts no longer ` +
+          'contains it. `git apply` will refuse, and criterion 10.12 loses its only red proof.',
+      ).toContain(line);
+    }
+  });
+});
