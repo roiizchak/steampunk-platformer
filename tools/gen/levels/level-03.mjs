@@ -52,7 +52,14 @@ export const level03 = {
 
   walls: [
     { col: 28, topRow: 17, rows: 3, cols: 2 },
-    { col: 104, topRow: 16, rows: 4, cols: 3 },
+    // 🔴 8 wide, not 3. Cols 107-111 used to be a ground-level PIT between this wall and the
+    // platform at 112 — and unlike the valley at 65-69, which is jumped mass to mass from an
+    // elevated walkway, this one sat where a descent lands. Owner decision was to fill it, the same
+    // call made for level-02 cols 84-85 and level-04 cols 123-125 and 128-131. Filling it also
+    // restores the difficulty ramp: the 480 px of derived pit spikes it would otherwise carry put
+    // level-03 above both 04 and 05, and neither of those can absorb matching hazard — every one of
+    // nine candidate placements was rejected by `level-hazard-free` or `level-completable`.
+    { col: 104, topRow: 16, rows: 4, cols: 8 },
   ],
 
   // Two ziggurats and a shelf, 4-tile steps: 20 -> 16 -> 12 -> 16 -> 20. The horizontal hops stay at 1
