@@ -1,0 +1,50 @@
+{
+  "why": "a gear body inside a spike run — checked by nothing else in the suite",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 0,
+      "y": 288,
+      "w": 672,
+      "h": 288
+    },
+    {
+      "x": 960,
+      "y": 288,
+      "w": 960,
+      "h": 288
+    }
+  ],
+  "hazards": [
+    {
+      "x": 672,
+      "y": 480,
+      "w": 288,
+      "h": 96
+    }
+  ],
+  "blockers": [
+    {
+      "label": "gear #0",
+      "x": 792,
+      "y": 504,
+      "w": 48,
+      "h": 48
+    }
+  ],
+  "expectPits": [
+    {
+      "fromCol": 7,
+      "toCol": 9
+    }
+  ],
+  "expectProblem": "gear #0 sits inside the hazard"
+}

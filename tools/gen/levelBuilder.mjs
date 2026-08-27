@@ -50,6 +50,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { levelObjects } from './levelObjects.mjs';
+import { mergeSpikeRuns, pitSpikeRuns } from './pitDetect.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -198,27 +199,8 @@ export function buildLevel(layout) {
     return row * W + col;
   };
 
-  // Painting order matters: fill, then walls, then platforms, then authored art LAST so it wins.
-  for (const { fromCol, toCol } of runs) {
-    for (let col = fromCol; col <= toCol; col += 1) {
-      for (let row = groundTopRow; row < H; row += 1) tiles[at(col, row)] = FILL_GID;
-    }
-  }
-  for (const { col, topRow, rows, cols = 1 } of walls) {
-    for (let row = topRow; row < topRow + rows; row += 1) {
-      for (let c = col; c < col + cols; c += 1) tiles[at(c, row)] = FILL_GID;
-    }
-  }
-  for (const { fromCol, toCol, row, rows = 1 } of platforms) {
-    for (let col = fromCol; col <= toCol; col += 1) {
-      for (let r = row; r < row + rows; r += 1) tiles[at(col, r)] = FILL_GID;
-    }
-  }
-  for (const { fromCol, toCol, row } of spikes) {
-    for (let col = fromCol; col <= toCol; col += 1) tiles[at(col, row)] = SPIKE_GID;
-  }
-
-  // The collision strips, in world pixels, derived from the geometry painted above.
+  // Collision strips, world px. Computed BEFORE painting because the pit rule reads them, and they
+  // depend only on runs/walls/platforms — never on a painted cell. Moving them up emits no new byte.
   const px = (t) => t * TILE;
   const strips = [
     ...runs.map(({ fromCol, toCol }) => ({
@@ -240,6 +222,31 @@ export function buildLevel(layout) {
       h: px(rows),
     })),
   ];
+
+  // 🔴 Pit spikes are DERIVED from `strips`, never typed — `pitDetect.mjs` has the rule, the defect
+  // it closes, and why a merged interval union rather than a concatenation.
+  const allSpikes = mergeSpikeRuns([...spikes, ...pitSpikeRuns(strips, W, TILE, groundTopRow)]);
+
+  // Painting order matters: fill, then walls, then platforms, then authored art LAST so it wins.
+  for (const { fromCol, toCol } of runs) {
+    for (let col = fromCol; col <= toCol; col += 1) {
+      for (let row = groundTopRow; row < H; row += 1) tiles[at(col, row)] = FILL_GID;
+    }
+  }
+  for (const { col, topRow, rows, cols = 1 } of walls) {
+    for (let row = topRow; row < topRow + rows; row += 1) {
+      for (let c = col; c < col + cols; c += 1) tiles[at(c, row)] = FILL_GID;
+    }
+  }
+  for (const { fromCol, toCol, row, rows = 1 } of platforms) {
+    for (let col = fromCol; col <= toCol; col += 1) {
+      for (let r = row; r < row + rows; r += 1) tiles[at(col, r)] = FILL_GID;
+    }
+  }
+  for (const { fromCol, toCol, row } of allSpikes) {
+    for (let col = fromCol; col <= toCol; col += 1) tiles[at(col, row)] = SPIKE_GID;
+  }
+
 
   /**
    * 🔴 The spawn's ground strip must be collision object index 0.
@@ -270,7 +277,7 @@ export function buildLevel(layout) {
   const { objects, nextObjectId } = levelObjects({
     strips,
     spawn: { x: px(spawnCol) + TILE / 2, y: px(groundTopRow) },
-    hazards: spikes.map(({ fromCol, toCol, row }) => ({
+    hazards: allSpikes.map(({ fromCol, toCol, row }) => ({
       x: px(fromCol),
       y: px(row),
       w: px(toCol - fromCol + 1),
@@ -364,7 +371,7 @@ export function buildLevel(layout) {
       version: '1.10',
       width: W,
     },
-    stats: { strips, runs, px },
+    stats: { strips, runs, px, hazardCount: allSpikes.length },
   };
 }
 
@@ -385,7 +392,7 @@ export function writeLevel(layout) {
       `  ${painted}/${cells} cells painted (${((painted / cells) * 100).toFixed(1)}%)\n` +
       `  ${stats.strips.length} collision strips, spawn at ` +
       `(${px(layout.spawnCol) + TILE / 2}, ${px(layout.groundTopRow)})\n` +
-      `  ${(layout.spikes ?? []).length} hazard rects, ` +
+      `  ${stats.hazardCount} hazard rects, ` +
       `${(layout.enemies ?? []).map((e) => e.slug).join(' + ') || 'no enemies'}\n` +
       `  ${(layout.gears ?? []).length} gears`,
   );

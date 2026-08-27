@@ -2432,9 +2432,9 @@
         1,
         1,
         1,
-        0,
-        0,
-        0,
+        1,
+        1,
+        1,
         0,
         0,
         0,
@@ -2576,15 +2576,12 @@
         1,
         1,
         1,
-        0,
-        0,
-        0,
         1,
         1,
-        0,
-        0,
-        0,
-        0,
+        1,
+        1,
+        1,
+        1,
         1,
         1,
         1,
@@ -2592,6 +2589,9 @@
         1,
         1,
         1,
+        1,
+        1,
+        1,
         0,
         0,
         0,
@@ -2720,15 +2720,8 @@
         1,
         1,
         1,
-        0,
-        0,
-        0,
         1,
         1,
-        0,
-        0,
-        0,
-        0,
         1,
         1,
         1,
@@ -2736,7 +2729,13 @@
         1,
         1,
         1,
-        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
         0,
         0,
         0,
@@ -2765,15 +2764,16 @@
         0,
         13,
         13,
+        13,
         0,
         0,
         1,
         1,
         0,
-        0,
-        0,
-        0,
-        0,
+        13,
+        13,
+        13,
+        13,
         0,
         0,
         0,
@@ -2819,7 +2819,7 @@
         0,
         0,
         0,
-        0,
+        13,
         0,
         1,
         1,
@@ -2864,15 +2864,15 @@
         1,
         1,
         1,
-        0,
-        0,
-        0,
         1,
         1,
-        0,
-        0,
-        0,
-        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
         1,
         1,
         1,
@@ -3869,7 +3869,7 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 192,
+          "width": 576,
           "x": 12096,
           "y": 1632
         },
@@ -3995,7 +3995,7 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 864,
+          "width": 1152,
           "x": 10944,
           "y": 1536
         },
@@ -4050,8 +4050,8 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 192,
-          "x": 2112,
+          "width": 288,
+          "x": 2016,
           "y": 1824
         },
         {
@@ -4109,8 +4109,44 @@
           "y": 1056
         },
         {
-          "height": 240,
+          "height": 96,
           "id": 20,
+          "name": "",
+          "properties": [
+            {
+              "name": "hazard",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 384,
+          "x": 2784,
+          "y": 1824
+        },
+        {
+          "height": 96,
+          "id": 21,
+          "name": "",
+          "properties": [
+            {
+              "name": "hazard",
+              "type": "bool",
+              "value": true
+            }
+          ],
+          "rotation": 0,
+          "type": "",
+          "visible": true,
+          "width": 96,
+          "x": 7488,
+          "y": 1824
+        },
+        {
+          "height": 240,
+          "id": 22,
           "name": "",
           "properties": [
             {
@@ -4128,7 +4164,7 @@
         },
         {
           "height": 192,
-          "id": 21,
+          "id": 23,
           "name": "",
           "properties": [
             {
@@ -4146,7 +4182,7 @@
         },
         {
           "height": 240,
-          "id": 22,
+          "id": 24,
           "name": "",
           "properties": [
             {
@@ -4164,7 +4200,7 @@
         },
         {
           "height": 192,
-          "id": 23,
+          "id": 25,
           "name": "",
           "properties": [
             {
@@ -4182,7 +4218,7 @@
         },
         {
           "height": 240,
-          "id": 24,
+          "id": 26,
           "name": "",
           "properties": [
             {
@@ -4200,7 +4236,7 @@
         },
         {
           "height": 288,
-          "id": 25,
+          "id": 27,
           "name": "",
           "properties": [
             {
@@ -4218,7 +4254,7 @@
         },
         {
           "height": 0,
-          "id": 26,
+          "id": 28,
           "name": "",
           "point": true,
           "properties": [
@@ -4237,7 +4273,7 @@
         },
         {
           "height": 0,
-          "id": 27,
+          "id": 29,
           "name": "",
           "point": true,
           "properties": [
@@ -4256,7 +4292,7 @@
         },
         {
           "height": 0,
-          "id": 28,
+          "id": 30,
           "name": "",
           "point": true,
           "properties": [
@@ -4275,7 +4311,7 @@
         },
         {
           "height": 0,
-          "id": 29,
+          "id": 31,
           "name": "",
           "point": true,
           "properties": [
@@ -4294,7 +4330,7 @@
         },
         {
           "height": 0,
-          "id": 30,
+          "id": 32,
           "name": "",
           "point": true,
           "properties": [
@@ -4313,7 +4349,7 @@
         },
         {
           "height": 0,
-          "id": 31,
+          "id": 33,
           "name": "",
           "point": true,
           "properties": [
@@ -4332,7 +4368,7 @@
         },
         {
           "height": 0,
-          "id": 32,
+          "id": 34,
           "name": "",
           "point": true,
           "properties": [
@@ -4351,7 +4387,7 @@
         },
         {
           "height": 0,
-          "id": 33,
+          "id": 35,
           "name": "",
           "point": true,
           "properties": [
@@ -4370,7 +4406,7 @@
         },
         {
           "height": 0,
-          "id": 34,
+          "id": 36,
           "name": "",
           "point": true,
           "properties": [
@@ -4389,7 +4425,7 @@
         },
         {
           "height": 0,
-          "id": 35,
+          "id": 37,
           "name": "",
           "point": true,
           "properties": [
@@ -4415,7 +4451,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 36,
+  "nextobjectid": 38,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",

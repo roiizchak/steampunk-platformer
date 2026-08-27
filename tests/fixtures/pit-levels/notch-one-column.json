@@ -1,0 +1,27 @@
+{
+  "why": "a one-column dip is a step you walk out of, not a pit (MIN_PIT_COLS)",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 0,
+      "y": 288,
+      "w": 672,
+      "h": 288
+    },
+    {
+      "x": 768,
+      "y": 288,
+      "w": 1152,
+      "h": 288
+    }
+  ],
+  "expectPits": []
+}

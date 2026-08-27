@@ -39,7 +39,11 @@ export const level04 = {
 
   walls: [
     { col: 26, topRow: 17, rows: 3, cols: 2 },
-    { col: 126, topRow: 17, rows: 3, cols: 2 },
+    // 🔴 6 wide, not 2. Cols 128-131 were a ground-level PIT between this wall and the platform at
+    // 132, and cols 123-125 another between the platform at 114 and this wall. Both sat where a
+    // descent lands, so spiking them was unavoidable damage. Filled by owner decision — see the
+    // widened platform below for the other half.
+    { col: 126, topRow: 17, rows: 3, cols: 6 },
   ],
 
   // Two ziggurats and two shelves. Steps stay 4 tiles: 20 -> 16 -> 12 -> 16 -> 20.
@@ -50,16 +54,22 @@ export const level04 = {
     { fromCol: 80, toCol: 86, row: 16, rows: 4 },
     { fromCol: 87, toCol: 93, row: 12, rows: 8 },
     { fromCol: 94, toCol: 100, row: 16, rows: 4 },
-    { fromCol: 114, toCol: 122, row: 16, rows: 4 },
+    { fromCol: 114, toCol: 125, row: 16, rows: 4 },
     { fromCol: 132, toCol: 138, row: 16, rows: 4 },
   ],
 
   // 7 tiles of spikes = 672 px.
   spikes: [
-    { fromCol: 22, toCol: 23, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 21, toCol: 23, row: GROUND_TOP_ROW - 1 },
     { fromCol: 63, toCol: 67, row: GROUND_TOP_ROW - 1 },
     { fromCol: 102, toCol: 103, row: GROUND_TOP_ROW - 1 },
     { fromCol: 55, toCol: 55, row: 11 },
+    // 🔴 Added this session. Filling the three route pits took 672 px of hazard back out of 02 and
+    // 04, which left 03 more dangerous than 04 and broke the ramp's direction property. Owner
+    // decision was to raise 04 and 05 rather than change what the ramp measures. Every run below
+    // sits MID-stretch, never where a descent lands — that is the shape `level-hazard-free` rejects.
+    { fromCol: 29, toCol: 32, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 78, toCol: 78, row: GROUND_TOP_ROW - 1 },
   ],
 
   /**

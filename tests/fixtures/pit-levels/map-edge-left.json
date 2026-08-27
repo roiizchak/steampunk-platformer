@@ -1,0 +1,21 @@
+{
+  "why": "the level opening has no mass on its outer side, so it is not a pit",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 576,
+      "y": 288,
+      "w": 1344,
+      "h": 288
+    }
+  ],
+  "expectPits": []
+}

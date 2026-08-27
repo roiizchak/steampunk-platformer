@@ -1,0 +1,27 @@
+{
+  "why": "one tile of wall on each side is a slope, not a pit (MIN_WALL_TILES)",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 0,
+      "y": 480,
+      "w": 672,
+      "h": 96
+    },
+    {
+      "x": 960,
+      "y": 480,
+      "w": 960,
+      "h": 96
+    }
+  ],
+  "expectPits": []
+}

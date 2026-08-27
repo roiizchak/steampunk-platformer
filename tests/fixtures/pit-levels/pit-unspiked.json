@@ -1,0 +1,34 @@
+{
+  "why": "a real pit with no hazard over it — the shipped defect, in miniature",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 0,
+      "y": 288,
+      "w": 672,
+      "h": 288
+    },
+    {
+      "x": 960,
+      "y": 288,
+      "w": 960,
+      "h": 288
+    }
+  ],
+  "hazards": [],
+  "expectPits": [
+    {
+      "fromCol": 7,
+      "toCol": 9
+    }
+  ],
+  "expectProblem": "has no hazard above column 7"
+}

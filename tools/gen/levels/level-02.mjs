@@ -42,7 +42,11 @@ export const level02 = {
 
   walls: [
     { col: 30, topRow: 17, rows: 3, cols: 2 },
-    { col: 82, topRow: 17, rows: 3, cols: 2 },
+    // 🔴 4 wide, not 2. Cols 84-85 used to be a 2-tile slot at ground level between this wall and
+    // the platform at 86 — a PIT, and one that sat exactly where a descent from the wall lands.
+    // Spiking it (the pit rule) made the damage unavoidable and `level-hazard-free` said so. Filled
+    // instead, by owner decision: the walkway now runs 82-92 unbroken.
+    { col: 82, topRow: 17, rows: 3, cols: 4 },
   ],
 
   // Two ziggurats, 3-tile steps: 20 -> 17 -> 14 -> 17 -> 20.
