@@ -162,8 +162,11 @@ Counts are read, not inferred from exit codes.
 - **`assets:fetch` / `assets:verify`** — Phase 5 called them binding debt and they still do not
   exist. They are what would make 10.9's *original* criterion achievable; until then the public repo
   cannot reconstruct its own art from its recorded provenance.
-- **`_generated/` is the only copy of a non-regenerable input.** 128 MB of clips, and the generator
-  is not seed-deterministic. **Archive it outside git.**
+- ~~`_generated/` is the only copy of a non-regenerable input~~ — **owner decision 2026-08-27: not
+  archived.** Production never reads it and the shipped game rebuilds from a clean clone forever;
+  what the archive would have protected is *changing* the art later (re-cutting a sheet, re-shooting
+  `brass-courier/fall`), which needs the ~115 MB of `.mp4` clips and ~18 MB of audio masters that
+  fal cannot reproduce. Nothing is deleted; it is simply not duplicated. See the QA log.
 - ~~The dev-seam gate's residual hole~~ — **closed 2026-08-27**, see the box at the top.
 - Phase 9's three carried items (the perf-spec split, 9.5's absent bound, 9.3's three narrowings) —
   dispositioned in the QA log: all still true, none blocking.

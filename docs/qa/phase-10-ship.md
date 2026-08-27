@@ -1105,6 +1105,33 @@ Criterion 10.6 asked for the CSP verified *"against the production header config
 server"*. Both halves are now done: the config half locally against `vercel.json`, and the served
 half against a real Vercel edge response. **PASS.**
 
+---
+
+## `_generated/` will NOT be archived — owner decision, 2026-08-27
+
+*"We don't really need to do it because there's no need to regenerate anything for production."*
+
+**Correct, and the reasoning holds for the claim it makes.** `public/assets/` is tracked in git, it
+is what the game loads, and `tools/gen/verify-dist.mjs` asserts every level and every audio file
+reaches `dist/` byte for byte on each build — including on Vercel's own machine. **No production
+path reads `_generated/`.** The shipped game is reproducible from a clean clone indefinitely.
+
+What the archive would have protected is narrower than "the art", and worth writing down so the
+decision is not later remembered as covering more than it did:
+
+| | |
+|---|---|
+| **Safe forever** | Building, deploying and re-deploying the game exactly as it is |
+| **At risk** | *Changing* the art later — re-cutting a sheet at different framing, pulling a new animation out of an existing clip, re-keying a background, re-shooting `brass-courier/fall`'s judder |
+
+Those need the raws: ~115 MB of `.mp4` clips and ~18 MB of audio masters, which are **fal.ai
+outputs and not regenerable** — the generator is not seed-deterministic, and `assets:fetch` /
+`assets:verify` still do not exist *(Phase 5's binding debt, dispositioned under 10.13)*.
+
+⚠️ **Nothing is deleted by this decision and nothing is lost today.** `_generated/` is 541 MB on the
+owner's disk, untouched; it is simply not duplicated anywhere else. The risk it accepts is a disk
+failure between now and the next art change, and that is the owner's to accept.
+
 ## Vault-out — Phase 10
 
 ### What the 400-line ceiling cost, and what it bought
