@@ -75,10 +75,17 @@ export const level03 = {
     { fromCol: 112, toCol: 118, row: 16, rows: 4 },
   ],
 
-  // 5 tiles of spikes (480 px): two 2-tile strips on the ground and one single on a summit.
+  /**
+   * The HAND-authored spikes only. The pit at cols 65-69 used to be listed here too and is not any
+   * more: `pitDetect.mjs` derives it from the geometry, and it is the only pit left in the game.
+   *
+   * 🔴 That is why the entry had to go rather than stay as a harmless duplicate. With both mechanisms
+   * producing the same run, deleting the derivation entirely left every gate in the suite green — the
+   * hand entry covered for it. A second mechanism that masks the first one failing is the exact shape
+   * of false green this session exists to remove.
+   */
   spikes: [
     { fromCol: 24, toCol: 26, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 65, toCol: 69, row: GROUND_TOP_ROW - 1 },
     { fromCol: 57, toCol: 57, row: 11 },
   ],
 
