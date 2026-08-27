@@ -5,14 +5,22 @@
 > Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
 > 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
 >
-> **Preview:** `https://steampunk-platformer-97o1gq0tk-rois-projects-f9d9895d.vercel.app`
-> — and you cannot open it without signing in; see trap 1.
+> **▶ PRODUCTION, live:** `https://steampunk-platformer-jvtgpyug9-rois-projects-f9d9895d.vercel.app`
+> — deployed 2026-08-27 on the owner's authorisation, `target: production`, `readyState: READY`,
+> `dpl_5Kbru3jg6WR6T5zyXXxSor4vAuHq`.
+>
+> **Vercel's own build log ran all four gates**, which is the evidence that matters most here:
+> `dev-seam gate ok: 27 …` and `verify-dist ok: 5 level(s) and 12 audio file(s) shipped
+> byte-identical, no DEV-only scene key or debug surface`. The remote artifact is the same game.
+>
+> (The earlier preview `…-97o1gq0tk-…` is behind Deployment Protection and cannot be opened without
+> signing in; see trap 1.)
 >
 > ### The three open items
 >
 > | # | item | what it needs from you |
 > |---|---|---|
-> | 1 | **10.6's deploy half** | The preview is behind **Vercel Deployment Protection**: every request 302s to `vercel.com/sso-api` before the header rules apply, so the CSP **as served** is still unobserved. Turning protection off makes the deployment publicly reachable — your call, not mine |
+> | 1 | **10.6's deploy half — one `curl`** | The deploy RAN and the remote build is verified. What is still unobserved is the **CSP as served**: the sandbox's permission classifier refused both the `vercel` subcommands and the outbound HTTPS probe, so no header from the live URL has been read by this session. `curl -sI <url>` settles it. ⚠️ **An ABSENT CSP means the header rule did not match; a WRONG one blanks the canvas.** Opposite failures — only the second is visible by playing |
 > | 2 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)*. The mechanical half is proved for all five levels |
 > | 3 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
 >
@@ -23,9 +31,14 @@
 > | ~~**10.12's `level-05`**~~ | 🔴 **I reported this open and I was wrong.** `level-completable.test.ts` already proved it completable in the **exact shipped world** — enemies, hazards and gears live — under all three disjoint gate seeds, with a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control. Its geometry is level-04's with one more segment: identical 288 px gaps. The browser driver is position-blind and cannot navigate; **that is a driver limit, not a level defect**, and the two are not the same claim |
 > | ~~**the dev-seam gate's residual hole**~~ | Closed by owner decision — `@babel/parser` widened from test-only to build time. `tools/gen/devSeamAst.mjs` now pins each sentinel's enclosing FUNCTION and proves a DEV guard dominates it. ⚠️ The **site** rule is what closes it; dominance alone does not, because both ends of a same-file move are guarded |
 >
-> `vercel --prod` has **not** been run. The one attempt on 2026-08-27 was **blocked by the sandbox's
-> own permission classifier**, not by anything in the repo and not by a missing decision — the
-> authorisation was given. It needs a Bash permission rule, or a hand-run `vercel --prod --yes`.
+> `vercel --prod --yes` **ran and succeeded** on the second attempt (the first was refused by the
+> sandbox's permission classifier, not by anything in the repo).
+>
+> ⚠️ **The rollback is still NOT rehearsed.** The verbs are confirmed from CLI 56.5.0's own `--help`
+> — `vercel rollback <url|deploymentId>` (`--timeout` 3m, `-y`), `vercel rollback status [project]`,
+> `vercel promote <url|deploymentId>` — but the vault warning is about the deployment *that moves the
+> domain*, and reading a `--help` page is not a rehearsal. It is the one thing that should happen
+> before anything else is built on top of this deploy.
 >
 > Full record: [qa/phase-10-ship.md](qa/phase-10-ship.md) (including **§ Vault-out — Phase 10** and
 > the ten-phase Codex-protocol verdict) · [plan review](reviews/phase-10-plan.md) ·

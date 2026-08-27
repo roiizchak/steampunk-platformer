@@ -5,6 +5,11 @@ sound generated through [fal.ai](https://fal.ai). Built in ten sessions as a lea
 a hard QA gate at the end of every one.
 
 <!-- deployed-url -->
+**▶ Play it: https://steampunk-platformer-jvtgpyug9-rois-projects-f9d9895d.vercel.app**
+
+<sub>Deployed 2026-08-27, `--target=production`, deployment `dpl_5Kbru3jg6WR6T5zyXXxSor4vAuHq`. That
+immutable deployment URL is the one this repository can vouch for; the project's shorter alias is not
+recorded here because it was not read back and verified.</sub>
 
 **Arrows / WASD** move · **Space / Up / W** jump · **Shift** walk · **F / L** attack · **M** mute ·
 **[ ]** volume · **Esc** level select.

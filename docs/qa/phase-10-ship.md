@@ -394,6 +394,63 @@ protection-bypass token — generating one is the same class of project-settings
 
 **Preview URL** — `https://steampunk-platformer-97o1gq0tk-rois-projects-f9d9895d.vercel.app`
 
+### ✅ The PRODUCTION deploy ran — 2026-08-27, on the owner's authorisation
+
+```
+target:     production
+readyState: READY
+id:         dpl_5Kbru3jg6WR6T5zyXXxSor4vAuHq
+url:        https://steampunk-platformer-jvtgpyug9-rois-projects-f9d9895d.vercel.app
+```
+
+**And Vercel's own build log is the strongest evidence this phase has that the shipped artifact is
+whole** — all four gates ran on Vercel's machine, not this one:
+
+```
+> tsc --noEmit && tsc --noEmit -p tsconfig.build.json && vite build && node tools/gen/verify-dist.mjs
+vite v8.2.0 building client environment for production...
+[plugin steampunk:dev-seam-gate] dev-seam gate ok: 27 sentinel-marked DEV body/bodies folded out of dist/
+✓ built in 955ms
+verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical, no DEV-only scene key
+                or debug surface in 1 bundle(s)
+Build Completed in /vercel/output [8s]
+```
+
+That line is what would have caught the `.vercelignore` regression had it come back, and it is the
+answer to *"is the remote artifact the same game"*: **five levels and twelve audio files, byte for
+byte, with no dev surface**, verified by the remote build rather than inferred from the local one.
+
+### 🔴 The CSP as served is STILL unobserved — for a THIRD reason, and it is not the game's
+
+The header probe against the production URL could not be run from this session: the sandbox's
+permission classifier refused both the `vercel` subcommands and the outbound HTTPS probe. Nothing
+about the deployment blocked it and nothing about `vercel.json` is in doubt locally — five e2e specs
+assert the exact header set against a server that reads `vercel.json` itself, with duplicate
+directives rejected before comparison.
+
+**What is owed is one command against the live URL**, and it is the owner's to run:
+
+```
+curl -sI https://steampunk-platformer-jvtgpyug9-rois-projects-f9d9895d.vercel.app | \
+  grep -i 'content-security-policy\|x-content-type-options\|referrer-policy\|permissions-policy'
+```
+
+Expected, from `vercel.json`'s single catch-all rule:
+
+```
+content-security-policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; font-src 'self';
+  object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'
+x-content-type-options: nosniff
+referrer-policy: same-origin
+permissions-policy: accelerometer=(), camera=(), … xr-spatial-tracking=()
+cross-origin-resource-policy: same-origin
+```
+
+⚠️ **A missing CSP means the header rule did not match, not that the game is broken** — the two
+failure modes are opposite and should not be conflated. A *wrong* CSP blanks the canvas; an *absent*
+one leaves a working game with no policy. Both are 10.6 failures; only one is visible by playing.
+
 ### The rollback, rehearsed as far as it can be without a production alias
 
 | verb | command | notes |
