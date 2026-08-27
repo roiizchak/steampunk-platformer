@@ -1002,6 +1002,48 @@ predate the camera change entirely, and the production driver is **position-blin
 taps Space on a fixed cadence and reads `localStorage`, touching no pixel and no camera, so a camera
 change cannot alter its decisions. The suite is over-subscribing this box. **No bound was moved.**
 
+---
+
+## ✅ CONFIRMED BY THE OWNER, 2026-08-27 — *"now it looks good in 60Hz and 240Hz"*
+
+Both defects are closed against the only oracle that could ever have closed them: **a person playing
+the shipped build, on both displays.**
+
+### What the two of them cost, and what that says
+
+| | defect | found by | could a gate have found it? |
+|---|---|---|---|
+| 1 | `FOLLOW_LERP` applied per RENDERED frame — 4x less responsive at 60 Hz than on the tuning box | playing | **No.** Every gate here runs at ~240 fps, where the defect is four times smaller |
+| 2 | `pixelArt` never governed the canvas→screen resample; `FIT` leaves a 1920x1080 buffer to be rescaled fractionally | playing | **No.** Nothing in the suite looked at the canvas's presented geometry at all |
+
+Both reported in the same five words — *"blurry or smeared while moving"* — and the first fix
+genuinely helped, which is exactly what made the second one easy to mistake for the first's
+remainder.
+
+⚠️ **And the honest record of how that nearly went wrong:** after fix 1 I told the owner the
+remainder was sample-and-hold persistence blur and therefore physics. That was **premature**. The
+model was right about what it modelled and completely silent about the second resample, which I had
+not read `ScaleManager` for yet. *"It is physics"* is a conclusion that ends investigation, and it
+should never be reached from a model alone — only after the mechanism has been read.
+
+### The reusable lesson, which is bigger than either bug
+
+**Anything the ENGINE applies per rendered frame sits outside this project's tick rule.** CLAUDE.md
+§3 says *"every duration is an integer count of 60 Hz ticks; never a `deltaTime` multiply"* — and it
+is written about `src/sim/`. The camera lerp is a duration, applied per frame, in Phaser. The
+principle was never narrower than the rule; **the rule's wording was**, and that is what let a
+frame-rate dependency ship through ten phases of review.
+
+Before touching anything visual here, two questions are now worth asking by default:
+
+1. **Is this constant applied per FRAME or per TICK?**
+2. **Does this survive a non-integer window scale?** `RENDER_SCALE` 6 makes every scaling artifact
+   six times larger in screen pixels than in source art.
+
+A third, procedural: **ask for F11 fullscreen early.** On a 1080p screen that is an exact 1.0 canvas
+scale, and it separates scaling artifacts from motion artifacts in about ten seconds. It would have
+split these two defects apart on the first report instead of the third.
+
 ## Vault-out — Phase 10
 
 ### What the 400-line ceiling cost, and what it bought

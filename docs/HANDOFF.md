@@ -5,9 +5,11 @@
 > Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
 > 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
 >
-> **▶ PRODUCTION, live:** `https://steampunk-platformer-25zu60adz-rois-projects-f9d9895d.vercel.app`
-> — redeployed 2026-08-27 with the 60 Hz camera fix, `target: production`, `readyState: READY`.
-> (The first production deploy was `…-jvtgpyug9-…`.)
+> **▶ PRODUCTION, live:** `https://steampunk-platformer-2n08tumsc-rois-projects-f9d9895d.vercel.app`
+> — `target: production`, `readyState: READY`.
+>
+> ✅ **The owner has played it and confirms it: *"now it looks good in 60Hz and 240Hz"*.** That took
+> TWO fixes, both found by playing and neither findable by any gate here — see traps 10 and 11.
 >
 > **Vercel's own build log ran all four gates**, which is the evidence that matters most here:
 > `dev-seam gate ok: 27 …` and `verify-dist ok: 5 level(s) and 12 audio file(s) shipped
@@ -121,6 +123,23 @@ than approximated. ⚠️ Two things stated rather than left to be discovered: a
 60 Hz section. **The general lesson is bigger than the camera: anything Phaser applies per frame is
 outside this project's tick rule, and the rule's wording — not its principle — is what let it
 through.**
+
+**11. `pixelArt: true` does NOT govern how the canvas is scaled to the screen.** It governs texture
+sampling. `Phaser.Scale.FIT` leaves the backing store at 1920x1080 and restyles only the CSS size, so
+the browser rescales it at a fractional ratio — and `image-rendering: pixelated` makes that
+nearest-neighbour, which **drops and duplicates whole pixel columns whose positions MOVE as the world
+scrolls**. Sharp when still, mush in motion. Measured, not modelled: with the fix disabled the boot
+gate refuses with *"FRACTIONAL scale (1920x1080 buffer in 1280x720 css)"*. Now conditional — crisp at
+an integer scale, smooth only where nearest cannot be exact. ⚠️ **And `?breakFilter=1` had quietly
+stopped being a break**: it hardcoded `'auto'`, which became the CORRECT value at a fractional scale,
+so on any non-multiple window the mutation set the right value and the red proof proved nothing while
+still being counted green.
+
+⚠️ **Traps 10 and 11 are the same lesson twice: anything the ENGINE applies per rendered frame, or
+per presented pixel, sits outside this project's tick rule** — which is written about `src/sim/`.
+The principle was never narrower than the rule; the rule's wording was. And *"it's physics"* is a
+conclusion that ends investigation: I reached it from a model after trap 10 and it was premature,
+because the model was silent about trap 11 entirely.
 
 ## Verification at the tip (`ef1eb9b`)
 
