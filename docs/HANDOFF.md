@@ -1,4 +1,110 @@
-# Session handoff — Phase 9 (polish, juice, particles)
+# Session handoff — Phase 10 (build and ship)
+
+> ## ⚠️ Phase 10 is REPORTED NOT DONE. Built, gated, and deployed to a preview — with FOUR items open, all of them yours.
+>
+> Branch `phase-10-ship`, tip `7e4a56f`, **not merged and not pushed**. 11 of 15 criteria PASS;
+> 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
+>
+> **Preview:** `https://steampunk-platformer-97o1gq0tk-rois-projects-f9d9895d.vercel.app`
+> — and you cannot open it without signing in; see trap 1.
+>
+> ### The four open items
+>
+> | # | item | what it needs from you |
+> |---|---|---|
+> | 1 | **10.6's deploy half** | The preview is behind **Vercel Deployment Protection**: every request 302s to `vercel.com/sso-api` before the header rules apply, so the CSP **as served** is still unobserved. Turning protection off makes the deployment publicly reachable — your call, not mine |
+> | 2 | **10.12's `level-05`** | A position-blind driver does not finish it at a 240 s budget. **Unmeasured — not claimed completable, not claimed broken.** Needs a human |
+> | 3 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)* |
+> | 4 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
+>
+> `vercel --prod` has **not** been run and will not be without your word.
+>
+> Full record: [qa/phase-10-ship.md](qa/phase-10-ship.md) (including **§ Vault-out — Phase 10** and
+> the ten-phase Codex-protocol verdict) · [plan review](reviews/phase-10-plan.md) ·
+> [implementation review](reviews/phase-10-impl.md) ·
+> [review sweep](qa/phase-10-ship-02-review-sweep.md)
+
+## The traps this phase paid for — read these before touching the same ground
+
+**1. A bare `vercel deploy` targets PRODUCTION on this project, and nothing on the command line says
+so.** There is no git integration, so the CLI defaults to the production target. `vercel ls` shows
+the first attempt as `Environment: Production` — it would have **bypassed the STOP gate entirely**,
+and the only thing that stopped it was that it errored on trap 2. **Always `--target=preview`.**
+
+**2. `.vercelignore` uses gitignore syntax, so an unanchored pattern matches at ANY depth.** A bare
+`assets/`, meant for the 96 MB of root reference art, also matched `public/assets/` — **48 of the 60
+files under `public/`**, i.e. every sprite sheet, tile set, parallax layer, portrait and sound. The
+build box got the game without its art. **Every local gate was green**, because locally the files are
+simply there. It failed loudly only by luck (`tsconfig.json` includes `tests/`, and the tests import
+the catalog); otherwise it would have been a green build at a live URL serving a blank canvas.
+Anchored now, and `tests/unit/vercelignore.test.ts` red-proves on any unanchored pattern.
+
+**3. A gate can measure the wrong thing and look rigorous doing it.** The dev-seam gate asserted
+`MIN_SENTINELS = 27` — a floor over a *global count*. Delete a guard, re-home its token in another
+guarded body: count still 27, no token leaks, and the DEV body **ships**. Both gates printed OK. The
+Codex implementation review found it; the mutation was built and run to confirm. The cause is worth
+carrying: **every recorded red proof had been cooperative** — remove the guard, leave the token —
+which is the mutation the person who wrote the gate naturally reaches for. It is now an exact
+file→token manifest, and `tools/gen/devSeamManifest.mjs` is what you edit to add a seam.
+
+**4. A comment that asserts a property is not the property, and this phase found FOUR.**
+`tsconfig.build.json` said the plugin *"IS typechecked here"* — it was in no program at all.
+`submit-clips.mjs` said `requirePresent` was *"implicit"* — it was not, and the script creates
+`_generated/` itself moments later. `vite.config.ts` said neither of its imports touched `node:*` —
+both do. `prodHarness.ts` claimed the single-source lookup while doing its own. Treat every 🔴 and ⚠️
+paragraph as a claim to check, not as context.
+
+**5. Two source-text gates were satisfied by a COMMENT.** The sentinel census counted
+`__DEVSEAM_…__` anywhere in a file, comments included; the anchor-wiring and build-program tests
+matched raw text. Comment the thing out and the gate stays green. All three strip comments now — and
+the lesson is that fixing this in one place and not the others is how a lesson stays local.
+
+**6. `Object.fromEntries` keeps the LAST duplicate key; a browser enforces the FIRST duplicate CSP
+directive.** So `script-src *; … script-src 'self'` produced an object equal to the expected map,
+passed the quoting check, raised no violation — and the enforced policy was `*`.
+
+**7. A test that passes alone and fails in the suite is a flake generator, not a gate.** The
+four-level playthrough completed levels 01–04 on a quiet box and stopped at level 03 inside
+`npm run test:e2e`. Widening the budget until it stops would be measuring the box. The gate is now
+level 01 → ENTER → level 02 boots and draws; the four-level run is recorded as a *measurement*.
+
+**8. The QA gate's agent worktrees were created at `main`, not at the branch.** Every agent got its
+own worktree as required and none of them contained the diff. Four worked around it by reading the
+real checkout; two reported criteria as "unrun". The findings that landed are sound — each was
+re-verified locally — but the *coverage* claim is weaker than it looks. If you re-run that gate,
+check the worktree's commit first. Also: `voltagent-qa-sec:security-auditor` has **no Bash**, so it
+cannot run `git` and cannot do the history half of a secret sweep.
+
+## Verification at the tip (`7e4a56f`)
+
+| run | result |
+|---|---|
+| `npm run typecheck` | clean |
+| `npm run typecheck:build` | clean |
+| `npm test` | **174 files, 2591 tests passed** |
+| `npm run test:sim-isolated` | 2576 passed, 3 skipped — Phaser uninstalled, restored after |
+| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded · verify-dist ok |
+| `npm run test:e2e` | **141 passed** — chromium 60 · dpr2 7 · gpu 69 · prod 5, reconciled against `--list` |
+
+Counts are read, not inferred from exit codes.
+
+## What is outstanding
+
+- The four open items in the box above.
+- **`README.md` still carries a `<!-- deployed-url -->` placeholder.** It gets the real URL once you
+  decide what the real URL is.
+- **`assets:fetch` / `assets:verify`** — Phase 5 called them binding debt and they still do not
+  exist. They are what would make 10.9's *original* criterion achievable; until then the public repo
+  cannot reconstruct its own art from its recorded provenance.
+- **`_generated/` is the only copy of a non-regenerable input.** 128 MB of clips, and the generator
+  is not seed-deterministic. **Archive it outside git.**
+- **The dev-seam gate's residual hole**: moving a sentinel between two guarded bodies *in the same
+  file* still satisfies the manifest. Closing it needs `@babel/parser` at BUILD time, which is a
+  change to an owner-approved test-only decision — a STOP-and-ask, deliberately not taken.
+- Phase 9's three carried items (the perf-spec split, 9.5's absent bound, 9.3's three narrowings) —
+  dispositioned in the QA log: all still true, none blocking.
+
+# Superseded — Phase 9 (polish, juice, particles). **Superseded by the section above.**
 
 > ## ✅ Phase 9 is APPROVED and MERGED. Owner tested it 2026-08-22; `main` is `a99c1f7`, pushed.
 >

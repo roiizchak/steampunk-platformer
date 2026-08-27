@@ -18,7 +18,7 @@ swapped.
 | 10.3 | Build-target and minifier defaults recorded with reversal instructions | **PASS** | `vite.config.ts` records the EXPANSION (`chrome111, edge111, firefox114, safari16.4, ios16.4`), not the moving alias, with reversal instructions and the emitted syntax census beside them. Discharged by diffing the OUTPUT per vault 10.1. **Both halves are now gated**: `verify-dist.mjs` asserts the ES2020+ syntax survives AND pins the four config values — the census alone could not see `target: 'esnext'` dropping every promised browser minimum (Codex impl review, finding 3). Red-proved both ways. |
 | 10.4 | Bundle size change explained via raw-vs-gzip ratio | **PASS — with the criterion's own method corrected** | The ratio moved **0.001** across a three-arm A/B in which every `??` disappeared. It is not a discriminator for a target change on this bundle. The syntax census is, and it is what shipped. § 10.4. |
 | 10.5 | Build config typechecked as its own program | **PASS — after the gate owner found the claim was false** | `tsconfig.build.json` + `npm run typecheck:build`, run by `npm run build` and pinned by `tests/unit/build-program.test.ts`. It CLAIMED to typecheck the plugin and did not. § 10.5. |
-| 10.6 | CSP verified against the **production** header config locally — never the dev server | **PASS locally; the deploy half is OWED** | `vercel.json` → `tools/gen/vercelHeaders.mjs` → both `vite.config.ts` and `tools/dev/prod-server.mjs`. Every directive matched EXACTLY. Red-proved twice. ⚠️ **`curl -sI` against a real deployment has not run** — it cannot until the owner authorises the deploy. § 10.6. |
+| 10.6 | CSP verified against the **production** header config locally — never the dev server | **PASS locally; the deploy half is OWED, and the deploy PROVED why it is a separate half** | `vercel.json` → `tools/gen/vercelHeaders.mjs` → both `vite.config.ts` and `tools/dev/prod-server.mjs`. Every directive matched EXACTLY; three red proofs. 🔴 **A preview deploy ran and FAILED on a defect no local gate could see** — `.vercelignore` had removed `public/assets/` from the build box. Fixed and gated. The CSP as SERVED is still unobserved: the preview is behind Vercel Deployment Protection and 302s to SSO. § 10.6. |
 | 10.7 | `git log --all -p` clean of secrets — history, not the working tree | **PASS, with a stated blind spot and one real finding fixed** | 506 commits, 6,447 reachable objects, unreachable blobs included. Zero named-format secrets. **One real leak found and fixed**: three `anchor.job.json` files shipped a local home directory to the CDN. § 10.7. |
 | 10.8 | Licences split: code vs generated assets | **PASS** | `LICENSE` (MIT: `src/`, `tests/`, `tools/`, root config) · `ASSETS-LICENSE.md` (fal.ai output, all rights reserved) · a third-party carve-out for the 215 vendored skill files. § 10.8. |
 | 10.9 | 🔴 **AMENDED by owner ruling** — ship-path reproducibility, not asset-rebuild reproducibility | **PASS as amended; the ORIGINAL criterion is NOT met and that is recorded** | Fresh clone → `npm ci` → `npm run build` → **62/62 files byte-identical**. The first run was 61/62 and the 1 was a real defect git could not see. § 10.9 — and the objection to the amendment is recorded verbatim in the phase document. |
@@ -33,7 +33,7 @@ swapped.
 
 | item | why |
 |---|---|
-| **10.6's deploy half** | `curl -sI` against a real preview URL. The local substrate cannot exercise Vercel's route matching, its CDN, or the artifact Vercel rebuilds. Blocked on the owner's authorisation to deploy |
+| **10.6's deploy half** | The deploy RAN and found a real defect. But the preview is behind **Vercel Deployment Protection** — every request 302s to SSO — so the CSP as served is still unobserved. Turning protection off makes the deployment publicly reachable: the owner's call |
 | **10.12's `level-05`** | Not completed by an automated position-blind driver at a 240 s budget. Not claimed completable; not claimed broken. **Unmeasured**, and owed to the owner's hands-on run |
 | **10.12's levels 02–04 as a GATE** | They complete on a quiet box and the four-level test flaked in the suite. Recorded as a measurement rather than widened into a green |
 | **10.12's human half** | A hands-on criterion is never closed on automated evidence alone *(vault C4)* |
@@ -295,10 +295,91 @@ throw `URIError` out of the `createServer` callback and kill the server, so ever
 ECONNREFUSED — a Playwright run would have read a dead port as a broken game); the traversal guard is
 `candidate === ROOT || startsWith(ROOT + sep)` rather than a prefix test that `dist-backup` passes.
 
-🔴 **The deploy half has not run.** `curl -sI` against a real preview URL is the
-production-relevant check — this local substrate cannot exercise Vercel's route matching, its CDN, or
-the artifact Vercel rebuilds on its own machine. It is owed, and it is blocked on the owner's
-authorisation to deploy.
+### 🔴 The deploy ran, and it justified every word of "the local substrate cannot see this"
+
+A preview deploy was made on 2026-08-27. **It failed on the first attempt, for a reason no local gate
+could have found**, and that failure is the strongest single piece of evidence this phase produced
+about why 10.6 has two halves:
+
+```
+Downloading 740 deployment files...
+tests/unit/audio-catalog.test.ts(20,21): error TS2307:
+  Cannot find module '../../public/assets/index.json'
+Error: Command "npm run build" exited with 1
+```
+
+**`.vercelignore` had removed the game's art from the build box.** It uses gitignore syntax, in which
+a pattern with no leading slash matches at **any depth**. The file carried a bare `assets/` — meant
+for the 96 MB of Phase 0 reference art at the repository root — and it also matched
+**`public/assets/`: 48 of the 60 files under `public/`**, every sprite sheet, tile set, parallax
+layer, portrait and sound the game loads.
+
+The header three lines above that rule said, in capitals, that `public/` must stay because *"it IS
+the game"*. The rule below it removed most of `public/`. **Every local gate was green** — `npm run
+build`, `verify-dist`, 2,579 unit tests, 141 e2e tests — because locally the files are simply there.
+
+It failed **loudly** only by luck: `tsconfig.json` includes `tests/`, and the tests import the
+catalog. Had they not, this would have produced a green build at a live URL serving a blank canvas.
+
+Verified with git's own matcher rather than reasoned about:
+
+| pattern | hides `public/assets/index.json` | hides `assets/x.png` |
+|---|---|---|
+| `assets/` | **YES** | YES |
+| `/assets/` | no | YES |
+
+Fixed by anchoring every directory pattern, and gated by `tests/unit/vercelignore.test.ts`, which
+red-proves on an un-anchored pattern.
+
+### ⚠️ The near-miss: a bare `vercel deploy` targets PRODUCTION on this project
+
+`vercel ls` reports that first, failed deployment as **Environment: Production**. A bare
+`vercel deploy` on a project with no git integration defaults to the production target — so it would
+have gone **straight to production, bypassing the owner's STOP gate**, and the only reason it did not
+is that it errored on the `.vercelignore` bug.
+
+The successful deploy was made with an explicit `--target=preview`. **A bare `vercel deploy` must
+never be run on this project**; this is recorded in HANDOFF.md as well, because it is a trap that is
+invisible from the command line.
+
+### 🔴 And the CSP as served is STILL unobserved — for a second, different reason
+
+```
+GET /                    -> 302   location: https://vercel.com/sso-api?url=…
+GET /assets/index.json   -> 302   location: https://vercel.com/sso-api?url=…
+GET /no-such-file-here   -> 302   location: https://vercel.com/sso-api?url=…
+  content-security-policy: *** ABSENT ***   (on all three)
+  strict-transport-security: max-age=63072000; includeSubDomains; preload
+```
+
+The deployment is behind **Vercel Deployment Protection**. Every request 302s to the SSO endpoint
+before the header rules apply, so the policy cannot be read off the real content and the playthrough
+cannot run against the preview either. HSTS is the one header observable, and it is applied by the
+platform rather than by `vercel.json`.
+
+**Turning protection off makes the deployment publicly reachable. That is the owner's decision, not
+mine**, and it is why 10.6's deploy half remains open rather than being worked around with a
+protection-bypass token — generating one is the same class of project-settings change.
+
+**Preview URL** — `https://steampunk-platformer-97o1gq0tk-rois-projects-f9d9895d.vercel.app`
+
+### The rollback, rehearsed as far as it can be without a production alias
+
+| verb | command | notes |
+|---|---|---|
+| roll back | `vercel rollback <url\|deploymentId>` | `--timeout` defaults to 3m; `-y` skips prompts |
+| watch it | `vercel rollback status [project]` | the rollback is asynchronous; this is how you know it landed |
+| go forward | `vercel promote <url\|deploymentId>` | promotes an existing deployment to current |
+
+Confirmed against **CLI 56.5.0's own `--help`**, not from memory — and ⚠️ note that the CLI is
+outdated (59.x is current) and that `vercel deploy` reported itself as **Vercel CLI 59.3.0** when it
+ran remotely, so the local and remote CLIs are different versions.
+
+⚠️ **The rollback is NOT rehearsed, and the vault is specific about why that matters**: the warning
+is about the deployment *that moves the domain*, and a preview-only exercise does not rehearse the
+production alias path. The staged rehearsal — verify the alias moved, then verify the rollback verb
+moves it back — can only happen immediately after `--prod` is authorised, and it must happen before
+anything else.
 
 ---
 
