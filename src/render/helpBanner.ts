@@ -175,9 +175,17 @@ export function helpBannerLayout(
   return {
     x,
     y: Math.max(margin, centred),
-    // Never negative: a game narrow enough to leave no band would otherwise hand Phaser a negative
-    // wrap width, which wraps every word onto its own row instead of failing.
-    wrapPx: Math.max(0, gameWidthPx - x - margin),
+    // 🔴 The STROKE is subtracted, and it is not a rounding fudge.
+    //
+    // `wordWrap.width` bounds where Phaser breaks LINES; the 4 px outline is then drawn outside
+    // that, and Phaser adds `strokeThickness` to the object's measured width. So a banner wrapped
+    // to exactly the remaining band draws about one stroke past it. Measured, not predicted: the
+    // e2e right-margin assertion failed by 1.56 px at 852 x 480 on the first run, which is what
+    // this term is. A layout that asks for an outline has to leave room for the outline.
+    //
+    // Never negative either: a game narrow enough to leave no band would otherwise hand Phaser a
+    // negative wrap width, which wraps every word onto its own row instead of failing.
+    wrapPx: Math.max(0, gameWidthPx - x - margin - HELP_STROKE_PX * scale),
     fontPx,
     lineHeightPx,
   };

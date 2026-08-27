@@ -48,6 +48,7 @@ import { expect, type Page } from '@playwright/test';
 import vercel from '../../vercel.json' with { type: 'json' };
 
 import { headersFrom } from '../../tools/gen/vercelHeaders.mjs';
+import { GAME_WIDTH } from '../../src/game/constants';
 
 /** The Phase 8 save key. Named here once; `src/game/save.ts` owns the schema. */
 export const SAVE_KEY = 'steampunk.progress';
@@ -318,4 +319,44 @@ export async function playCampaign(
       .catch(() => undefined);
   }
   return runs;
+}
+
+/**
+ * Count pixels matching the controls banner's own fill, inside a DESIGN-space rectangle.
+ *
+ * The only way to observe the banner in `dist/`: there is no `window.__phaserGame` to ask, which is
+ * this file's first criterion. Returns a counter rather than a number so one screenshot answers
+ * several regions — taking a fresh shot per region would compare two different frames.
+ *
+ * The canvas is `FIT`-scaled and letterboxed inside the viewport, so design coordinates are mapped
+ * through its real bounding box rather than assumed to be screen pixels.
+ */
+export async function bannerInk(
+  page: Page,
+): Promise<(x0: number, y0: number, x1: number, y1: number) => number> {
+  const box = await page.locator('canvas').boundingBox();
+  if (box === null || box.width <= 0) throw new Error('no canvas to measure banner ink in');
+  const shot = await page.screenshot();
+  const { decodePng } = await import('../../tools/gen/png.mjs');
+  const img = decodePng(new Uint8Array(shot));
+  const scale = box.width / GAME_WIDTH;
+
+  return (x0, y0, x1, y1) => {
+    let n = 0;
+    for (let y = Math.round(box.y + y0 * scale); y < Math.round(box.y + y1 * scale); y += 1) {
+      for (let x = Math.round(box.x + x0 * scale); x < Math.round(box.x + x1 * scale); x += 1) {
+        const i = (y * img.width + x) * 4;
+        // `COUNTER_FILL` #f7e3b8, the banner's fill. A tolerance rather than an equality: FIT
+        // downscales the canvas, so glyph edges blend with the 4 px dark stroke behind them.
+        if (
+          Math.abs((img.data[i] ?? 0) - 0xf7) <= 12 &&
+          Math.abs((img.data[i + 1] ?? 0) - 0xe3) <= 12 &&
+          Math.abs((img.data[i + 2] ?? 0) - 0xb8) <= 12
+        ) {
+          n += 1;
+        }
+      }
+    }
+    return n;
+  };
 }

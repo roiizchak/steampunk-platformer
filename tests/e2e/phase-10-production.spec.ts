@@ -26,6 +26,7 @@ import {
   DRAWN_FRAME_MIN_BYTES,
   ENTRY_LEVEL,
   assertNotYetCompleted,
+  bannerInk,
   cspViolations,
   expectedHeaders,
   gotoProduction,
@@ -229,6 +230,56 @@ test.describe('phase 10 — the production build', () => {
    * is absent. The drawn overlay is asserted by `phase-08-complete.spec.ts` on the dev build, where
    * the drawn objects can actually be read.
    */
+  /**
+   * 🔴 The controls banner, in the SHIPPED build, measured in pixels.
+   *
+   * ## Why this case is here and not in the dev spec
+   *
+   * `session-help-banner.spec.ts` asks the live `Text` where it is. `dist/` ships no
+   * `window.__phaserGame` — this file's first test asserts that — so there is no object to ask, and
+   * the production form of the legend is the only one a player ever sees. Every other project in
+   * `playwright.config.ts` runs the dev server and therefore always renders the DEV string, with
+   * three extra keys and a different wrap. Codex plan review round 2, finding 4.
+   *
+   * ⚠️ It goes in THIS file rather than a new one because `PROD_SPECS` is the narrow regex
+   * `/phase-10-(production|campaign)\.spec\.ts/` (`playwright.config.ts:26`) — a new spec file
+   * would silently never run in `chromium-prod`, which is `expected: 0, unexpected: 0` and exit 0.
+   *
+   * ## What it can and cannot say
+   *
+   * It counts pixels matching the banner's own fill, `COUNTER_FILL` `#f7e3b8`, in two regions. It
+   * **cannot** verify that every key is still printed — that is glyph recognition, and it is covered
+   * instead by `contrast-floor.test.ts` over the string and by the owner's hands-on pass. What it
+   * can say is exactly the thing the owner reported: the banner's ink is on the HUD row, and the
+   * strip across the play area where it used to be is empty.
+   *
+   * Bounds chosen from one run and confirmed on a held-out one, per this project's rule. Measured
+   * at 1280 x 720: band 5800 ink pixels, the old strip 0, the rest of the play area 1. The bounds
+   * below sit far inside those, because the numbers are not close.
+   */
+  test('the controls banner ships on the HUD row, not across the play area', async ({ page }) => {
+    await gotoProduction(page);
+
+    const ink = await bannerInk(page);
+
+    // The band right of the gear counter, on the HUD row. x starts at 640 to clear the counter
+    // itself, which is drawn in the same ink.
+    const band = ink(640, 24, 1896, 200);
+    expect(band, 'no banner ink on the HUD row — the banner is not being drawn in dist/').toBeGreaterThan(
+      1000,
+    );
+
+    // 🔴 The defect, as a number. `HELP_BANNER_Y` was `HUD_MARGIN * 3 + HUD_PLATE.h` = 200, and the
+    // banner wrapped to the full 1872 px width — so its two rows covered roughly y 200-320 across
+    // the whole screen. That is the strip the owner photographed.
+    const oldStrip = ink(24, 205, 1896, 340);
+    expect(
+      oldStrip,
+      `${oldStrip} banner-coloured pixels are in the strip below the HUD plate where the banner ` +
+        'used to be drawn across the play area — the defect this session fixed is back',
+    ).toBeLessThan(200);
+  });
+
   test('boots, draws, simulates, and completes a level on real keyboard input', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(String(e)));
