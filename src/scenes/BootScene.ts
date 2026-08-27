@@ -10,6 +10,8 @@ import {
   verifySheets,
   assertFilteringPinned,
 } from './bootAssets';
+import { CRISP_IMAGE_RENDERING } from '../game/constants';
+import { SMOOTH_IMAGE_RENDERING, isIntegerScale } from '../render/canvasScaling';
 import { verifyLevels } from './bootLevels';
 import { LEVEL_SELECT_KEY } from './gameLevelPick';
 
@@ -254,6 +256,15 @@ export class BootScene extends Phaser.Scene {
    * which is not a synthetic failure but a faithful reproduction of the vault's recorded bug,
    * where a CSS property silently contradicted the engine-side decision. It proves the
    * assertion above actually runs, rather than being reviewed and never executed.
+   *
+   * 🔴 **It used to hardcode `'auto'`, and that stopped being a break on 2026-08-27.** When the
+   * filtering rule became conditional on the canvas's scale, `'auto'` became the CORRECT value at
+   * a fractional scale — so on any window that was not an exact multiple, the mutation set the
+   * right value, the gate passed, and `?breakFilter=1` silently proved nothing. A red proof that
+   * quietly stops reddening is worse than no red proof, because the green is still being counted.
+   *
+   * It now writes whichever value is WRONG for the current geometry, which is what "break it"
+   * always meant.
    */
   private applyBreakFilter(): void {
     if (!import.meta.env.DEV) {
@@ -262,7 +273,13 @@ export class BootScene extends Phaser.Scene {
   devSeam('__DEVSEAM_BootScene_breakFilter__');
 
     if (new URLSearchParams(window.location.search).get('breakFilter') === '1') {
-      this.game.canvas.style.setProperty('image-rendering', 'auto');
+      const canvas = this.game.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const integral = isIntegerScale(canvas.width, canvas.height, rect.width, rect.height);
+      canvas.style.setProperty(
+        'image-rendering',
+        integral ? SMOOTH_IMAGE_RENDERING : CRISP_IMAGE_RENDERING[CRISP_IMAGE_RENDERING.length - 1],
+      );
     }
   }
 }
