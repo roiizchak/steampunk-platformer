@@ -5,9 +5,9 @@
 > Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
 > 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
 >
-> **▶ PRODUCTION, live:** `https://steampunk-platformer-jvtgpyug9-rois-projects-f9d9895d.vercel.app`
-> — deployed 2026-08-27 on the owner's authorisation, `target: production`, `readyState: READY`,
-> `dpl_5Kbru3jg6WR6T5zyXXxSor4vAuHq`.
+> **▶ PRODUCTION, live:** `https://steampunk-platformer-25zu60adz-rois-projects-f9d9895d.vercel.app`
+> — redeployed 2026-08-27 with the 60 Hz camera fix, `target: production`, `readyState: READY`.
+> (The first production deploy was `…-jvtgpyug9-…`.)
 >
 > **Vercel's own build log ran all four gates**, which is the evidence that matters most here:
 > `dev-seam gate ok: 27 …` and `verify-dist ok: 5 level(s) and 12 audio file(s) shipped
@@ -103,7 +103,24 @@ regression does not alternate between two unrelated specs and then decline to re
 isolation — and `git diff --name-only 048dae5..HEAD` touches **zero files under `src/`**. Do not
 widen either bound: that is measuring the box, and 9.5's own failure text says *"do not move this
 floor"*. What would refute the diagnosis: the same gate failing repeatedly, or failing in isolation
-on a quiet box.
+on a quiet box. Run 3 (after the camera fix) failed a THIRD spec — 10.12's campaign — which then
+passed alone in 34.8 s against a 60 s budget. The production driver is position-blind (holds RIGHT,
+taps Space on a cadence, reads `localStorage`), so a camera change cannot alter its decisions, and
+the first two failures predate that change entirely.
+
+**10. A camera lerp is applied PER RENDERED FRAME, so a constant is a frame-rate dependency — and
+this project tunes on a 240 Hz box.** `FOLLOW_LERP = 0.12` gave a 35 ms time constant at 240 Hz and
+**139 ms at 60 Hz**. On a 60 Hz screen the character sat 66 px off centre while running (16.5 px on
+the dev box) and swung **264 px — a quarter of the screen height — on every jump** (96 px on the dev
+box). The owner found it by PLAYING the shipped production build; **no gate here could have**, because
+they all run at ~240 fps where the defect is four times smaller. Fixed by `followLerpForFrame`, which
+re-bases it on elapsed time and returns 0.12 exactly at 240 Hz so the tuned feel is reproduced rather
+than approximated. ⚠️ Two things stated rather than left to be discovered: an 18 % residual survives
+(zero-order hold, ~3 px, half a source art pixel) and **sample-and-hold blur at 60 Hz is 4x that at
+240 Hz as pure physics** — some difference between the displays will always remain. § the QA log's
+60 Hz section. **The general lesson is bigger than the camera: anything Phaser applies per frame is
+outside this project's tick rule, and the rule's wording — not its principle — is what let it
+through.**
 
 ## Verification at the tip (`ef1eb9b`)
 
@@ -111,10 +128,10 @@ on a quiet box.
 |---|---|
 | `npm run typecheck` | clean |
 | `npm run typecheck:build` | clean |
-| `npm test` | **175 files, 2602 tests passed** |
-| `npm run test:sim-isolated` | 2599 passed, 3 skipped — Phaser uninstalled, restored after |
+| `npm test` | **176 files, 2613 tests passed** |
+| `npm run test:sim-isolated` | 2610 passed, 3 skipped — Phaser uninstalled, restored after |
 | `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded, each dominated and sited · verify-dist ok |
-| `npm run test:e2e` | **140 passed, 1 failed — a DIFFERENT gate each of two runs.** See trap 9 |
+| `npm run test:e2e` | **140 passed, 1 failed — a DIFFERENT spec on each of THREE runs, every one passing alone.** See trap 9 |
 
 Counts are read, not inferred from exit codes.
 

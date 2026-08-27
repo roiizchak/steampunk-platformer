@@ -3,7 +3,7 @@ import { publishWorldState, updateDebugState } from '../debug/globals';
 import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import type { LevelData } from '../game/tilemap';
-import { cameraSetup } from '../render/cameraRig';
+import { cameraSetup, followLerpForFrame } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import type { Point } from '../render/interpolate';
 import type { MotionProbe } from './devMotionProbe';
@@ -251,6 +251,14 @@ export class GameScene extends Phaser.Scene {
     const drain = drainTicks(this.accumulatorMs, delta);
     this.accumulatorMs = drain.remainderMs;
     const ticks = drain.ticks;
+
+    // 🔴 Phaser applies the follow lerp ONCE PER RENDERED FRAME, so a constant is a frame-rate
+    // dependency — and the shipped one was tuned at 240 Hz. `followLerpForFrame`'s header carries
+    // the measurements and is the ONE place they live. Written here every frame because
+    // `Camera.preRender` reads `lerp` during the render step after this method; `startFollow`'s
+    // argument only ever applies to the first frame.
+    const followLerp = followLerpForFrame(delta);
+    this.cameras.main.lerp.set(followLerp, followLerp);
 
     // Binding and per-frame sampling both live in `src/scenes/gameInput.ts` — see its header. This
     // scene still owns `playerInputEnabled` and the DEV scene-switch/fixture-spawn callbacks.

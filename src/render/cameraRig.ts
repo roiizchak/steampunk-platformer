@@ -1,4 +1,4 @@
-import { CAMERA_ZOOM } from '../game/constants';
+import { CAMERA_ZOOM, MS_PER_TICK } from '../game/constants';
 import type { LevelData } from '../game/tilemap';
 import type { Rect } from '../sim/types';
 
@@ -26,10 +26,69 @@ export interface CameraSetup {
 }
 
 /**
- * Follow smoothing. Low enough to read as a camera rather than a rigid attachment, high enough
- * that the player never outruns it — `tracksTarget` in the e2e spec is what holds that claim.
+ * Follow smoothing, **per rendered frame at 240 Hz** — the rate this was tuned at.
+ *
+ * 🔴 It is not the value handed to Phaser any more. Read `followLerpForFrame` before changing it.
  */
-const FOLLOW_LERP = 0.12;
+const FOLLOW_LERP_AT_240HZ = 0.12;
+
+/** Rendered frames per 60 Hz tick on the box the value above was tuned on. */
+const TUNED_FRAMES_PER_TICK = 4;
+
+/**
+ * The share of the remaining distance the camera closes in ONE 60 Hz tick.
+ *
+ * Derived, never typed *(vault 5.3)*: it is exactly what four applications of
+ * `FOLLOW_LERP_AT_240HZ` come to, so `followLerpForFrame` reproduces the tuned behaviour bit for
+ * bit at 240 Hz and merely *extends* it to every other display rate.
+ */
+export const FOLLOW_LERP_PER_TICK = 1 - (1 - FOLLOW_LERP_AT_240HZ) ** TUNED_FRAMES_PER_TICK;
+
+/**
+ * **Phaser applies the follow lerp ONCE PER RENDERED FRAME, so a fixed value is a frame-rate
+ * dependency — and this one was tuned on a 240 Hz box.**
+ *
+ * ## The defect, measured
+ *
+ * `Camera.preRender` does `scrollX += (target - scrollX) * lerp.x` every frame it draws. With a
+ * constant 0.12 the camera's time constant is `frameMs / 0.12`, which is **35 ms at 240 Hz and
+ * 139 ms at 60 Hz**. The camera is four times less responsive on a 60 Hz screen than on the one
+ * every tuning decision in this project was made on. Modelled against `DEFAULT_TUNING`:
+ *
+ * | display | trails a running player | character swing per jump |
+ * |---|---|---|
+ * | 240 Hz (the tuning box) | 16.5 px | 96 px — 8.9 % of screen height |
+ * | 144 Hz | 27.5 px | 143 px — 13.2 % |
+ * | **60 Hz** | **65.9 px** | **264 px — 24.5 %** |
+ *
+ * The character is the one object the player's eye is locked onto, and at 60 Hz it drifts a
+ * quarter of the screen on every jump while the world scrolls underneath it. Two independent
+ * motions on the thing you are tracking is what "smeared while moving" means. Reported from a
+ * hands-on playthrough of the production build — **no gate could have found it**, because every
+ * gate in this repository runs on a box that renders at ~240 fps *(vault C4)*.
+ *
+ * ## The fix, and why the exponent rather than a multiply
+ *
+ * A lerp is exponential decay: after `n` applications the remaining distance is `(1 - L)^n`. So
+ * the frame-rate-independent form asks for the fraction that leaves the SAME remainder over the
+ * elapsed time, which is `1 - (1 - L_perTick)^(elapsed in ticks)`.
+ *
+ * ⚠️ **Not `L * deltaMs / MS_PER_TICK`.** The naive multiply is the same trap `src/sim/` bans
+ * outright: it is a first-order approximation that diverges as the frame gets longer, and at a
+ * long frame it exceeds 1 and makes the camera overshoot its target — a snap, in the exact
+ * conditions (a stalled frame) where a snap is most visible.
+ *
+ * At 240 Hz this returns 0.12 exactly, so the tuned feel is preserved and not merely approximated.
+ * Clamped to `[0, 1]`: a non-finite or negative delta contributes nothing rather than poisoning
+ * `scrollX` with `NaN`, for the same reason `drainTicks` guards its own input — Phaser hands out
+ * NaN deltas after a tab restore, and a NaN scroll blanks the view instead of failing loudly.
+ */
+export function followLerpForFrame(deltaMs: number): number {
+  if (!Number.isFinite(deltaMs) || deltaMs <= 0) return 0;
+  const ticks = deltaMs / MS_PER_TICK;
+  const closed = 1 - (1 - FOLLOW_LERP_PER_TICK) ** ticks;
+  return closed > 1 ? 1 : closed;
+}
 
 /**
  * Bounds and zoom for a level, or a throw if the level is too small to scroll.
@@ -63,8 +122,12 @@ export function cameraSetup(level: LevelData, viewportW: number, viewportH: numb
   return {
     bounds: { x: 0, y: 0, w: level.widthPx, h: level.heightPx },
     zoom: CAMERA_ZOOM,
-    lerpX: FOLLOW_LERP,
-    lerpY: FOLLOW_LERP,
+    // The value `startFollow` is seeded with. It is overwritten every frame by
+    // `followLerpForFrame` — see its header — so this is only what the camera uses before the
+    // first `update()`. Seeding it with the per-TICK figure rather than the old per-frame 0.12
+    // keeps that single frame in the right ballpark on any display.
+    lerpX: FOLLOW_LERP_PER_TICK,
+    lerpY: FOLLOW_LERP_PER_TICK,
   };
 }
 

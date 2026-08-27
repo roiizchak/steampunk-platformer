@@ -833,6 +833,134 @@ recorded here as a live property of the suite, not resolved.
 
 ---
 
+---
+
+## 🔴 The 60 Hz camera defect — found by PLAYING the production build, 2026-08-27
+
+**This is criterion 10.12's hands-on half doing the only job it has, and it is the best evidence
+this project produced for why *(vault C4)* exists.** The phase was reported, the deploy was live,
+every gate was green — 2,613 unit tests, 141 e2e, two Codex reviews, six QA agents, twelve
+adversarial briefs. The owner opened the URL on a 60 Hz screen and said it was *"not smooth …
+blurry or smeared while moving"*.
+
+### What it was
+
+Phaser's `Camera.preRender` applies the follow lerp **once per rendered frame**:
+
+```js
+scrollX += (target - scrollX) * lerp.x
+```
+
+`cameraRig.ts` handed it a constant `0.12`. That makes the camera's time constant `frameMs / 0.12`
+— which is a function of the **display rate**, not of game time. Every tuning decision in this
+repository was made on a box that renders at ~240 fps.
+
+Modelled against `DEFAULT_TUNING` (`runMax` 9, `maxFallSpeed` 51.6, `jumpVelocity` 48.6):
+
+| display | time constant | trails a running player | character swing per jump |
+|---|---|---|---|
+| 240 Hz — the tuning box | 35 ms | 16.5 px | 96 px — 8.9 % of screen height |
+| 144 Hz | 58 ms | 27.5 px | 143 px — 13.2 % |
+| **60 Hz** | **139 ms** | **65.9 px** | **264 px — 24.5 %** |
+
+The character is the one object the player's eye is locked onto. On a 60 Hz screen it drifted a
+**quarter of the screen height on every jump** and sat 66 px off centre while running, while the
+world scrolled underneath it — two independent motions on the thing being tracked, which is what
+"smeared while moving" describes.
+
+⚠️ **The project's own rule already forbade this** — *"every duration is an integer count of 60 Hz
+ticks; never a `deltaTime` multiply"*. The camera escaped it because the rule is written about
+`src/sim/` and the camera lives in Phaser. The principle was not narrower than the rule; the rule's
+wording was.
+
+### Why no gate could have caught it
+
+Every gate in this repository — unit, e2e, GPU — runs on this box, at ~240 fps, where the defect is
+**four times smaller and invisible**. There is no bound that would have gone red, because there was
+no run at 60 Hz to bound. A perf gate would not have found it either: the frame *cost* was never
+the problem, only the frame *rate's* effect on a constant.
+
+### The fix
+
+`followLerpForFrame(deltaMs)` in `src/render/cameraRig.ts` re-bases the lerp on elapsed time:
+
+```
+FOLLOW_LERP_PER_TICK = 1 - (1 - 0.12) ** 4          // what 240 Hz already did per tick: 0.4003
+followLerpForFrame(ms) = 1 - (1 - FOLLOW_LERP_PER_TICK) ** (ms / MS_PER_TICK)
+```
+
+Derived, never typed *(vault 5.3)*, from the value that was actually tuned — so at 240 Hz it
+returns **0.12 exactly** and the approved feel is reproduced bit for bit rather than approximated.
+`GameScene.update()` writes it onto `cameras.main.lerp` every frame, because `Camera.preRender`
+reads `lerp` during the render step *after* `update()`; `startFollow`'s argument only ever applies
+to the first frame.
+
+⚠️ **Not the naive `L * deltaMs / MS_PER_TICK`.** A lerp is exponential decay; the multiply is a
+first-order approximation that diverges as the frame lengthens and **exceeds 1 past ~2.5 ticks** —
+making the camera snap past its target in exactly the conditions (a stalled frame) where a snap is
+most visible. Gated: `camera-follow-rate.test.ts` asserts the naive form breaks and the shipped one
+does not.
+
+### What the fix does NOT do — stated, not discovered later
+
+A residual difference survives: **16.5 px at 240 Hz against 13.5 px at 60 Hz, an 18 % spread where
+the shipped constant gave 300 %.** The cause is the zero-order hold, not the lerp — within a frame
+the target jumps its whole travel and *then* the camera closes a fraction of the gap, so one large
+step settles at a different phase than four small ones. Closed form: `pxPerFrame x (1 - L) / L`.
+
+Removing it entirely needs the camera integrated against sub-frame time instead of lerped once per
+frame, which is a larger change than the defect justifies. **3 px at `RENDER_SCALE` 6 is half a
+source art pixel**, against the 49 px the fix removes. The bound in the gate is set at the ratio,
+not at equality, and the derivation is written beside it so a later reader can tell a *measured*
+bound from a *loosened* one.
+
+⚠️ **And one thing no software fix can touch:** sample-and-hold persistence blur is proportional to
+how long each frame is held on screen. At 60 Hz that is 16.7 ms against 4.2 ms at 240 Hz, so a
+moving image sweeps ~4x further across the retina. Some difference between the two displays is
+physics and will remain.
+
+### Gates, and their watched reds
+
+`tests/unit/camera-follow-rate.test.ts` — 11 tests:
+
+| assertion | red proof |
+|---|---|
+| returns 0.12 exactly at 240 Hz | pins the tuned feel; a retune reddens it |
+| the same elapsed time closes the same fraction at 60/120/240/480 Hz | the OLD constant is asserted to FAIL this in the same file, so the property is shown discriminating |
+| monotonic in elapsed time, never exceeds 1 | a long frame must not overshoot |
+| rejects the naive multiply | asserted to exceed 1 where the shipped form does not |
+| NaN / infinite / negative delta → 0 | Phaser hands out NaN deltas after a tab restore |
+| run lag no longer display-dependent | 300 % spread → 18 %, ratio bounded at 1.25 |
+| the OLD behaviour measured in player-visible units | > 3.5x, > 60 px — the reported defect, quantified |
+| **draw path**: `GameScene` imports it, calls it with `delta`, writes `cameras.main.lerp.set` | **watched red**: replacing the write with a bare `followLerpForFrame(delta)` call — decision function intact, consumer gone — fails with *"nothing writes the computed lerp onto cameras.main.lerp"*. `lerp.set` count 1 → 0, confirmed by *content changed AND the count dropped by one* *(C12)*, reverted to a clean tree |
+
+The draw-path gate exists because `spriteFeedback.ts` shipped in Phase 9 with 221 source lines, a
+306-line test file and **zero production consumers** — a pure function can be perfect, fully tested,
+and have no effect on the shipped game.
+
+### `GameScene.ts` hit 406 lines and was SPLIT, not exempted
+
+The 400-line rule fired. The comment block explaining the fix was cut to five lines pointing at
+`followLerpForFrame`'s header, which already carries the measurement table — so the explanation
+lives in **one** place. That is also this phase's trap 4 avoided by construction: two copies of a
+measurement is two things to falsify. 400 lines exactly.
+
+### Regression at this fix
+
+| run | result |
+|---|---|
+| `npm run typecheck` · `typecheck:build` | clean |
+| `npm test` | **176 files, 2613 tests passed** |
+| `npm run test:sim-isolated` | 2610 passed, 3 skipped |
+| `npm run build` | 4 steps green · 27 sentinels folded, dominated and sited · verify-dist ok |
+| `npm run test:e2e` | 140 passed, 1 failed — the campaign spec, **which passes alone in 34.8 s** |
+
+⚠️ That is now **three full e2e runs, three DIFFERENT wall-clock-bounded specs failing, each passing
+in isolation** — 9.5's cost exponent, 6.9's HUD GPU delta, and 10.12's campaign. The first two
+predate the camera change entirely, and the production driver is **position-blind**: it holds RIGHT,
+taps Space on a fixed cadence and reads `localStorage`, touching no pixel and no camera, so a camera
+change cannot alter its decisions. The suite is over-subscribing this box. **No bound was moved.**
+
 ## Vault-out — Phase 10
 
 ### What the 400-line ceiling cost, and what it bought
