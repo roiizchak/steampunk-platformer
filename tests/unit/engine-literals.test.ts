@@ -1,5 +1,5 @@
 /**
- * 🔴 The three Phaser constants this project transcribes as literals, pinned against the engine.
+ * 🔴 The four Phaser constants this project transcribes as literals, pinned against the engine.
  *
  * ## Why this is in the UNIT suite and not only in e2e
  *
@@ -28,6 +28,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BLEND_MODE_NORMAL,
   SCENE_SHUTDOWN,
+  SCENE_UPDATE,
   TINT_MODE_ADD,
 } from '../../src/scenes/engineLiterals';
 
@@ -113,14 +114,23 @@ describe('the transcribed Phaser constants', () => {
     SCENE_SHUTDOWN,
     /@event\s+Phaser\.Scenes\.Events#SHUTDOWN/,
   );
+
+  pin(
+    'SCENE_UPDATE',
+    ['src', 'scene', 'events', 'UPDATE_EVENT.js'],
+    /module\.exports\s*=\s*'([a-z]+)'/,
+    SCENE_UPDATE,
+    /@event\s+Phaser\.Scenes\.Events#UPDATE/,
+  );
 });
 
 describe('the literals are what the modules that use them actually hold', () => {
   it('are the exact values transcribed, so a pin cannot be satisfied by a moved constant', () => {
-    // The pins above compare the engine to these three names. If a name were repointed at some
+    // The pins above compare the engine to these four names. If a name were repointed at some
     // other value the pin would simply follow it, and nothing would be red. This is the anchor.
     expect(TINT_MODE_ADD).toBe(2);
     expect(BLEND_MODE_NORMAL).toBe(0);
     expect(SCENE_SHUTDOWN).toBe('shutdown');
+    expect(SCENE_UPDATE).toBe('update');
   });
 });

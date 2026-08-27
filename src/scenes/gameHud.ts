@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { UIScene } from './UIScene';
 import { GearLayer } from './gearLayer';
+import { HelpBannerLayer } from './helpBannerLayer';
 import type { World } from '../sim/types';
 
 /**
@@ -24,6 +25,8 @@ import type { World } from '../sim/types';
 export interface HudAttachment {
   ui: UIScene;
   gears: GearLayer;
+  /** The controls banner. It positions itself against `ui`'s counter — see `helpBannerLayer.ts`. */
+  banner: HelpBannerLayer;
 }
 
 /**
@@ -34,7 +37,7 @@ export interface HudAttachment {
  * for the restart path — an e2e spec re-entering `BootScene` runs `create()` again, and launching a
  * scene that is already running stacks a second copy of every HUD object.
  */
-export function attachHud(scene: Phaser.Scene, world: World): HudAttachment {
+export function attachHud(scene: Phaser.Scene, world: World, helpText: string): HudAttachment {
   const gears = new GearLayer(scene, world);
   gears.create();
 
@@ -48,5 +51,13 @@ export function attachHud(scene: Phaser.Scene, world: World): HudAttachment {
   // level, including the restart path an e2e spec drives through Boot. On the first launch of the
   // frame this is a no-op, because `create()` has not run yet and there is nothing to clear.
   ui.levelComplete?.(null);
-  return { ui, gears };
+
+  // 🔴 Built here, laid out later. `ui` has only been LAUNCHED — `UIScene.create()` has not run, so
+  // the gear counter this banner measures itself against does not exist yet and neither does the
+  // layout. The layer defers its first placement to the owning scene's first update rather than
+  // taking a position now that would have to be a second copy of `helpBannerLayout()`.
+  const banner = new HelpBannerLayer(scene, ui, helpText);
+  banner.create();
+
+  return { ui, gears, banner };
 }

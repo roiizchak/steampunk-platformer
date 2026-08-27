@@ -5,8 +5,14 @@
  *
  * `hud.ts` owns the HUD PLATE: the portrait, the health bar, the gear counter, and `hudLayout`'s
  * scaling. The controls banner is a different element with a different job — it is the only place
- * the game tells anyone what the keys are — and it sits BELOW the plate rather than inside it. What
- * they share is `HUD_MARGIN`, the plate's height, and the counter's ink pair, all imported below.
+ * the game tells anyone what the keys are. What they share is `HUD_MARGIN`, the plate's height,
+ * `COUNTER_GAP`, and the counter's ink pair, all imported below.
+ *
+ * ⚠️ **It used to sit BELOW the plate and wrap at the full view width**, and this header said so
+ * for two sessions after it stopped being a design and started being a defect. The owner played the
+ * production build and found the reason: a full-width strip of 44 px bold text drawn across the
+ * middle of the play area. It now sits in the empty band to the RIGHT of the gear counter, on the
+ * HUD's own row — `helpBannerLayout()` below.
  *
  * The split was forced by the 400-line rule (`hud.ts` reached 457), and it is a real seam rather
  * than a convenience: every constant here is derived from, or measured against, the banner's own
@@ -16,9 +22,7 @@
 // The banner draws with the counter's own ink pair — `COUNTER_FILL` / `COUNTER_STROKE`, imported
 // by `gameDev.ts` at the draw site rather than re-exported here, so there is one definition and one
 // import path for them. `HELP_STROKE_PX` below is the only ink constant this file owns.
-import { HUD_MARGIN, HUD_PLATE } from './hud';
-
-export const HELP_BANNER_Y = HUD_MARGIN * 3 + HUD_PLATE.h;
+import { COUNTER_GAP, HUD_MARGIN, HUD_PLATE } from './hud';
 
 /**
  * The controls banner's inks and outline — **the counter's pair, reused deliberately.**
@@ -94,11 +98,87 @@ export const HELP_STROKE_PX = 4;
  * high-contrast. The same arithmetic and the same threshold the counter already uses, quoted from
  * `COUNTER_FILL`'s block above rather than re-argued.
  *
- * ⚠️ **The cost is real and it is vertical.** ~115 characters at 44 px monospace is far wider
- * than the 1872 px wrap width, so the banner is now **two lines**. `addHelpBanner` already wrapped;
- * what changed is that wrapping is now the normal case rather than the DEV-build case.
+ * ⚠️ **The cost is real and it is vertical, and the number below is no longer two.** This block used
+ * to end *"~115 characters at 44 px monospace is far wider than the 1872 px wrap width, so the banner
+ * is now two lines"*. The banner no longer wraps at 1872 px: it wraps inside the band right of the
+ * gear counter, which is roughly two thirds of that. The owner's decision this session was **keep
+ * every key printed and allow three lines**, so no row count is written down anywhere — the draw site
+ * measures it with `getWrappedText()` and `helpBannerLayout()` centres whatever it found.
  */
 export const HELP_FONT_PX = 44;
 
 /** Bold, for the same reason the counter is: 14 pt BOLD is the threshold 19.5 px clears. */
 export const HELP_FONT_STYLE = 'bold';
+
+/**
+ * Where the banner is drawn, given a MEASURED counter right edge.
+ *
+ * ## Why it takes a measurement and not a formula
+ *
+ * The first draft computed the counter's right edge from `GEAR_ICON_PX`, `COUNTER_FONT_PX` and a
+ * digit count. Codex plan review round 1, finding 2, killed it: two of those are private to
+ * `hud.ts`, the digit count was hard-coded at 2 while `counterText()` derives it from
+ * `MAX_LEVEL_GEARS`, and — the part that mattered — Phaser wraps on the browser's own
+ * `measureText()`, so any advance-width estimate is fiction that happens to agree at one font size.
+ * The caller reads `counter.width` off the live `Text` and passes it in.
+ *
+ * ⚠️ **The caller must read that width AFTER `setFontSize()`**, never before. Phaser's setter
+ * synchronously calls `updateText()`, which synchronously rewrites `Text.width`, so a read taken
+ * first during a resize returns the PREVIOUS scale's width — the banner would land correctly on
+ * first build and drift on every resize after. Codex round 2, finding 9. `UIScene.applyLayout()`
+ * already positions then sizes in that order; `helpBannerLayer.ts` lays out after it and gates the
+ * ordering behaviourally.
+ *
+ * ## Why `lineCount` is a parameter
+ *
+ * Because four different strings go through here and none of them may be a special case: the
+ * shipped legend, the DEV legend with its three extra keys, and the Playground and Element Editor
+ * legends, which are different again. The owner's decision this session was **keep every key
+ * printed and allow three lines**, so a row count can never be assumed — the caller measures it
+ * with `getWrappedText().length` and passes what it found.
+ *
+ * `y` centres those lines on the plate's own vertical middle, so a short form reads as part of the
+ * HUD assembly. It is then **clamped** to the top margin: a tall form grows DOWNWARD into the empty
+ * band beside the plate rather than off the top of the screen, which is what an uncorrected centring
+ * does at four rows.
+ */
+export interface HelpBannerLayout {
+  x: number;
+  y: number;
+  wrapPx: number;
+  fontPx: number;
+  lineHeightPx: number;
+}
+
+/**
+ * Phaser's own default line spacing for `Text` — 1.2 × the font size, one place.
+ *
+ * Not a tuning knob. It is here so `y`'s centring arithmetic and the caller's idea of how tall the
+ * banner is cannot disagree; if the draw site ever sets `lineSpacing`, this is what has to move.
+ */
+export const HELP_LINE_HEIGHT_RATIO = 1.2;
+
+export function helpBannerLayout(
+  counterRightPx: number,
+  gameWidthPx: number,
+  scale: number,
+  lineCount: number,
+): HelpBannerLayout {
+  const margin = HUD_MARGIN * scale;
+  const x = counterRightPx + COUNTER_GAP * scale;
+  const fontPx = HELP_FONT_PX * scale;
+  const lineHeightPx = fontPx * HELP_LINE_HEIGHT_RATIO;
+
+  const plateMiddle = margin + (HUD_PLATE.h * scale) / 2;
+  const centred = plateMiddle - (lineCount * lineHeightPx) / 2;
+
+  return {
+    x,
+    y: Math.max(margin, centred),
+    // Never negative: a game narrow enough to leave no band would otherwise hand Phaser a negative
+    // wrap width, which wraps every word onto its own row instead of failing.
+    wrapPx: Math.max(0, gameWidthPx - x - margin),
+    fontPx,
+    lineHeightPx,
+  };
+}

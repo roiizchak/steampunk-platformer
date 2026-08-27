@@ -226,16 +226,24 @@ describe('counterText gives tabular figures a fixed width', () => {
  * is about the constant, and the session log's watched-red was *"`HELP_FONT_PX` back to 18"* — which
  * mutates the constant, not the consumer.
  *
- * So reverting `gameDev.ts`'s `fontSize` to a hardcoded `'18px'` restored the shipped defect — an
+ * So reverting the banner's `fontSize` to a hardcoded `'18px'` restored the shipped defect — an
  * ~8 physical-pixel banner at the supported minimum — **with the whole suite green**. CLAUDE.md §2:
  * *"every module here owes a draw-path gate."* This is that gate.
  *
- * Source text rather than behaviour, because `gameDev.ts` imports Phaser as a **value** and cannot
- * be imported here. The weaker of the two shapes CLAUDE.md allows, and the only one reachable.
+ * ⚠️ **Repointed 2026-08-27 from `gameDev.ts` to `helpBannerLayer.ts`**, which is where the banner
+ * is drawn now. This block used to end by explaining that source text was *"the only shape
+ * reachable"*, because `gameDev.ts` imports Phaser as a value. That is no longer the constraint it
+ * describes: the banner moved to a type-only module precisely so it could be driven against a fake
+ * scene, and `help-banner-layer.test.ts` asserts the same claim **behaviourally**, from the style
+ * object the layer actually hands Phaser.
+ *
+ * This gate is kept anyway rather than deleted, for the one thing the behavioural one cannot say:
+ * that no hardcoded `px` font size has crept back in ANYWHERE in the module — a second `Text` added
+ * later with a literal size would satisfy every behavioural assertion about the first one.
  */
 describe('HELP_FONT_PX has a consumer (CLAUDE.md §2 draw-path gate)', () => {
   // ⚠️ vitest caches `?raw` glob results — touch this file too when re-running after an edit.
-  const sources = import.meta.glob('../../src/scenes/gameDev.ts', {
+  const sources = import.meta.glob('../../src/scenes/helpBannerLayer.ts', {
     eager: true,
     query: '?raw',
     import: 'default',
@@ -247,7 +255,7 @@ describe('HELP_FONT_PX has a consumer (CLAUDE.md §2 draw-path gate)', () => {
   });
 
   it('the banner draws at HELP_FONT_PX, not at a literal', () => {
-    expect(source, 'gameDev.ts no longer imports the constant').toContain('HELP_FONT_PX');
+    expect(source, 'helpBannerLayer.ts no longer imports the constant').toContain('HELP_FONT_PX');
     expect(source, 'the banner does not use HELP_FONT_PX for its fontSize').toContain(
       '`${HELP_FONT_PX}px`',
     );

@@ -32,9 +32,6 @@ import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
-import { HELP_BANNER_Y, HELP_FONT_PX, HELP_FONT_STYLE, HELP_STROKE_PX } from '../render/helpBanner';
-import { COUNTER_FILL, COUNTER_STROKE, HUD_MARGIN } from '../render/hud';
-import { GAME_WIDTH } from '../game/constants';
 import type { World } from '../sim/types';
 
 /**
@@ -128,44 +125,6 @@ export function helpLine(): string {
   return import.meta.env.DEV
     ? (devSeam('__DEVSEAM_gameDev_helpLineSuffix__'), `${base}  ·  P play  ·  O editor  ·  G gym`)
     : base;
-}
-
-/**
- * Draw the controls banner, pinned to the camera.
- *
- * 🔴 `y` is derived from the HUD's own geometry, not typed. It was a literal `168`, which sat
- * **16 px** below the HUD plate's bottom edge at `HUD_MARGIN + HUD_PLATE.h` = 152 — less than the
- * HUD's own 24 px outer margin, so the two blocks read as one cramped cluster with the boiler-gauge
- * background props showing through the seam. The UI/UX gate owner found it in the evidence
- * screenshots; no gate in the phase's table checks spacing BETWEEN elements.
- *
- * Deriving it means the banner follows the plate if the HUD is ever re-generated at a different
- * height — which, this phase having just watched the plate change size, is not hypothetical.
- */
-export function addHelpBanner(scene: Phaser.Scene, text: string): void {
-  scene.add
-    .text(HUD_MARGIN, HELP_BANNER_Y, text, {
-      fontFamily: 'monospace',
-      // 🔴 Was a hard-coded `'18px'` — ~8 physical px at 852 x 480, a third under the legibility
-      // floor the gear counter is sized against, and confirmed illegible in a playtest screenshot
-      // *(inventory 2.5)*. `HELP_FONT_PX` carries the derivation; `hud-layout.test.ts` fails if it
-      // ever drops back under the floor.
-      fontSize: `${HELP_FONT_PX}px`,
-      fontStyle: HELP_FONT_STYLE,
-      // 🔴 Was bare `#8f8776` with no stroke — 2.27:1 at worst, failing even the large-text
-      // bar the counter is held to, on text a third the counter's size. The counter's own note calls
-      // its stroke *"load-bearing, not decoration"*; the banner never had one. Both inks move
-      // together, because a stroke under the old mid-luminance fill still failed — see
-      // `HELP_STROKE_PX` in `hud.ts` for the sweep and for the 4.5:1 ceiling no fill can reach.
-      color: COUNTER_FILL,
-      stroke: COUNTER_STROKE,
-      strokeThickness: HELP_STROKE_PX,
-      // At 28 px the line is wider than the view — ~110 characters shipped and ~150 in a DEV build.
-      // Wrapping is what makes the legible size affordable; without it the fix would simply push the
-      // right-hand controls off the edge, which is the same defect wearing a bigger font.
-      wordWrap: { width: GAME_WIDTH - HUD_MARGIN * 2 },
-    })
-    .setScrollFactor(0);
 }
 
 /**

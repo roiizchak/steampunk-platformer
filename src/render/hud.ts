@@ -184,7 +184,7 @@ export function flyerDelayTicks(index: number): number {
 export const GEAR_TEXTURE_KEY = 'gear';
 
 /** Gap between the plate and the gear counter that follows it, in DESIGN pixels. */
-const COUNTER_GAP = 24;
+export const COUNTER_GAP = 24;
 
 /**
  * Counter type size, in DESIGN pixels.

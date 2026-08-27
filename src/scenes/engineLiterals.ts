@@ -6,13 +6,14 @@
  * `npm run test:sim-isolated` runs the whole unit suite with the engine **uninstalled** (QA
  * criterion 1.3). A value import of `phaser` anywhere in a module's import graph therefore turns a
  * boundary check into a module-resolution failure — so any scene module a unit test needs to drive
- * must reach the engine through `import type` only. Three modules needed exactly three constants:
+ * must reach the engine through `import type` only. Four modules needed exactly four constants:
  *
  * | literal | what it replaces | vendored source |
  * |---|---|---|
  * | `TINT_MODE_ADD` | `Phaser.TintModes.ADD` | `src/renderer/TintModes.js` |
  * | `BLEND_MODE_NORMAL` | `Phaser.BlendModes.NORMAL` | `src/renderer/BlendModes.js` |
  * | `SCENE_SHUTDOWN` | `Phaser.Scenes.Events.SHUTDOWN` | `src/scene/events/SHUTDOWN_EVENT.js` |
+ * | `SCENE_UPDATE` | `Phaser.Scenes.Events.UPDATE` | `src/scene/events/UPDATE_EVENT.js` |
  *
  * That bought `gamePlayerDraw.ts` and `gameEffects.ts` a behavioural gate each, in place of the
  * source-text gates QA log entry 33 recorded as the weaker of the two by some distance.
@@ -58,3 +59,19 @@ export const BLEND_MODE_NORMAL = 0;
  * docs say to listen for it as `this.events.on('shutdown', listener)`.
  */
 export const SCENE_SHUTDOWN = 'shutdown';
+
+/**
+ * `Phaser.Scenes.Events.UPDATE` — `node_modules/phaser/src/scene/events/UPDATE_EVENT.js:32`.
+ *
+ * `helpBannerLayer.ts` subscribes to it and does work only when a dirty flag is set — on the first
+ * update, and after a resize. Two reasons, both lifecycle: `attachHud()` returns before
+ * `UIScene.create()` has run (`gameHud.ts`), so the gear counter the banner measures itself against
+ * does not exist yet; and the banner's own `resize` listener is registered BEFORE `UIScene`'s, so
+ * reading the counter during a resize reads the previous size. An update always runs after every
+ * listener for that frame, so deferring to one removes both problems rather than ordering them.
+ *
+ * The alternative was a pending-text field inside `UIScene` — Codex plan review round 2 finding 1,
+ * whose fix put lifecycle state in the scene that already stops itself when `Game` shuts down. A
+ * `once` on the owner's own event keeps the whole problem inside the layer.
+ */
+export const SCENE_UPDATE = 'update';

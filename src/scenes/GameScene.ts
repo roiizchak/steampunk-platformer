@@ -8,7 +8,6 @@ import { playerRenderDesc } from '../render/playerView';
 import type { Point } from '../render/interpolate';
 import type { MotionProbe } from './devMotionProbe';
 import {
-  addHelpBanner,
   attachDevOverlays,
   helpLine,
   spawnFleetFixture,
@@ -23,6 +22,7 @@ import { createAudio, type AudioManager } from '../game/audio';
 import { audioCues } from '../sim/audioCues';
 import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
+import type { HelpBannerLayer } from './helpBannerLayer';
 import { drawLevelLayer } from './gameLevelDraw';
 import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor } from './gameLevelPick';
 import { runGoalFlow } from './gameComplete';
@@ -79,6 +79,7 @@ export class GameScene extends Phaser.Scene {
   private gears!: GearLayer;
   /** The parallel HUD scene. Optional at the type level: `launch` is async, so a frame can beat it. */
   private ui?: UIScene;
+  banner?: HelpBannerLayer;
   /** Phase 7's sound manager. Optional for the same reason `ui` is: a frame can beat `create()`. */
   private audio?: AudioManager;
   private effects!: EffectAttachment;
@@ -186,7 +187,7 @@ export class GameScene extends Phaser.Scene {
 
     // Phase 6: the HUD is a PARALLEL scene, not objects on this display list — see `UIScene` for
     // why that removes vault 6.1's reciprocal-ignore-list hazard instead of managing it.
-    ({ ui: this.ui, gears: this.gears } = attachHud(this, this.world));
+    ({ ui: this.ui, gears: this.gears, banner: this.banner } = attachHud(this, this.world, this.helpText()));
 
     // Phase 7. A plain module, not a scene, and torn down in `BootScene.init()` rather than from a
     // SHUTDOWN handler here — `src/game/audio.ts` carries the reasoning, which is Phase 6's HUD
@@ -194,7 +195,6 @@ export class GameScene extends Phaser.Scene {
     this.audio = createAudio(this, assetCatalog(this));
 
     this.bindKeys();
-    addHelpBanner(this, this.helpText());
 
     // DEV ONLY, both off unless their query flag is present. The guard lives inside
     // `attachDevOverlays` so this call folds away entirely in production — see `gameDev.ts`.
