@@ -32,3 +32,7 @@ Recording*.mp4
 # Vercel's project link and pulled environment. `.vercel/` carries the project + org ids and,
 # after `vercel env pull`, real values.
 .vercel/
+# Appended by `vercel link` on 2026-08-27. Redundant with the rules above — kept because they are
+# what the CLI re-adds if removed, and a rule fighting the tool is a rule that loses quietly.
+.vercel
+.env*

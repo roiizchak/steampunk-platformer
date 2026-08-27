@@ -5,6 +5,33 @@
 # — so the upload has to carry everything those four read, and nothing else. Measured 2026-08-26:
 # excluding the entries below drops ~169 MB from every deploy.
 #
+# 🔴 EVERY DIRECTORY PATTERN IS ANCHORED WITH A LEADING SLASH, AND THAT IS NOT COSMETIC.
+#
+# `.vercelignore` uses gitignore syntax, in which a pattern with **no leading slash matches at ANY
+# DEPTH**. So a bare `assets/` excludes `public/assets/` as well as `assets/` — and
+# `public/assets/` is 48 of the 60 files under `public/`: every sprite sheet, tile set, parallax
+# layer, portrait and sound the game loads.
+#
+# **This is not hypothetical. It is what the first deploy did**, on 2026-08-27:
+#
+#     Downloading 740 deployment files...
+#     tests/unit/audio-catalog.test.ts(20,21): error TS2307:
+#       Cannot find module '../../public/assets/index.json'
+#     Error: Command "npm run build" exited with 1
+#
+# Every local gate was green. The build fails loudly on Vercel only because `tsconfig.json`
+# includes `tests/`, and the tests import the catalog — had they not, this would have deployed a
+# game with no art at all. That is the whole reason criterion 10.6's deploy half was recorded as
+# OWED rather than assumed: the local production substrate cannot see what was never uploaded.
+#
+# Verified with git's own matcher rather than from memory:
+#
+#     bare `assets/`      hides public/assets/index.json: YES
+#     anchored `/assets/` hides public/assets/index.json: no
+#     anchored `/assets/` still hides assets/x.png:       YES
+#
+# `tests/unit/vercelignore.test.ts` fails on any unanchored directory pattern.
+#
 # 🔴 WHAT MUST NOT BE ADDED HERE, and why each would break the build rather than slow it:
 #
 #   tests/                 `tsconfig.json`'s include list names it. 3.8 MB.
@@ -29,23 +56,23 @@
 # which is the worst shape a config error can take.
 
 # 73 MB — prose and captured evidence. No build step reads docs/.
-docs/
+/docs/
 
 # 96 MB — Phase 0 style probes and reference art. Superseded by public/assets/; kept in the
 # repo for provenance, never read by the build.
-assets/
+/assets/
 
 # Local Playwright output. Regenerated per run, meaningless on a build box.
-test-results/
-playwright-report/
+/test-results/
+/playwright-report/
 
 # The build's own output. Uploading it would ship a stale bundle as the input to building a
 # fresh one.
-dist/
+/dist/
 
 # Raw model output. Already gitignored, so it is absent from a clone anyway — listed so the
 # intent survives if that ever changes.
-_generated/
+/_generated/
 
 # 🔴 THE LINES BELOW ARE NOT OPTIONAL, AND THE REASON IS A DOCUMENTED VERCEL BEHAVIOUR.
 #
@@ -59,10 +86,10 @@ _generated/
 # `.claude/` is **1.4 GB** on this machine — worktrees, plans and caches, 215 tracked files and a
 # very large amount of local state — and every byte of it would have gone up with every deploy.
 # Neither directory is read by `npm run build`.
-.claude/
-.agents/
+/.claude/
+/.agents/
 
 # Belt and braces: both are on Vercel's default-exclusion list, but that list is a property of the
 # platform rather than of this repository, and `.gitignore` does NOT back it up here.
-node_modules/
-.git/
+/node_modules/
+/.git/
