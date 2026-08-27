@@ -24,7 +24,7 @@ swapped.
 | 10.9 | 🔴 **AMENDED by owner ruling** — ship-path reproducibility, not asset-rebuild reproducibility | **PASS as amended; the ORIGINAL criterion is NOT met and that is recorded** | Fresh clone → `npm ci` → `npm run build` → **62/62 files byte-identical**. The first run was 61/62 and the 1 was a real defect git could not see. § 10.9 — and the objection to the amendment is recorded verbatim in the phase document. |
 | 10.10 | Specs 01–10 all green | **PASS** | `npm run test:e2e` → **141 passed**, read positively and reconciled per project: chromium 60 · chromium-dpr2 7 · chromium-gpu 69 · chromium-prod 5 = 141. Plus unit **2579 passed** and sim-isolated **2576 passed / 3 skipped**. |
 | 10.11 | **Every prior phase's acceptance criteria re-verified** | **PASS — and it found two things the PRD had wrong** | 4.27 closed with a wired, red-proved gate. **4.12 closed with the deliberate-removal run it had been owed since Phase 4.** 4.10 dispositioned as superseded. § 10.11. |
-| 10.12 | Full playthrough on the production build | **PARTIAL — the gate covers 2 levels and a transition; the 4-level run is a measurement; level 05 and the human half are OPEN** | Levels 01–04 were completed **by playing them** against `dist/`, but the four-level test **flaked in the full suite while passing alone**, so it is recorded as a measurement and the GATE is level 01 → ENTER → level 02 boots and draws. `level-05` resists a position-blind driver even at 240 s and is named unmeasured. § 10.12. |
+| 10.12 | Full playthrough on the production build | **PARTIAL — the gate covers 2 levels and a transition; the 4-level run is a measurement; the HUMAN half is OPEN** | Levels 01–04 were completed **by playing them** against `dist/`, but the four-level test **flaked in the full suite while passing alone**, so it is recorded as a measurement and the GATE is level 01 → ENTER → level 02 boots and draws. `level-05` resists the position-blind BROWSER driver; its mechanical completability is proved at the sim level under three disjoint gate seeds with a negative control — **corrected 2026-08-27**, it was wrongly reported unmeasured. § 10.12. |
 | 10.13 | Every recorded-but-not-fixed Codex finding from phases 1–9 re-reviewed and dispositioned | **PASS** | All 35 files in `docs/reviews/` enumerated by name (not a `*-plan.md` glob, which misses Phase 5's three split records). 99 disposition lines extracted. `docs/qa/phase-10-ship-02-review-sweep.md`. |
 | 10.14 | Codex plan review ran; every finding applied or recorded | **PASS — and it did NOT converge, which is reported rather than dressed up** | Five rounds, all REVISE, hitting `MAX_ROUNDS`. `docs/reviews/phase-10-plan.md` + triage. § 10.14. |
 | 10.15 | Codex implementation review ran on the diff; every finding applied or recorded | **PASS** | `docs/reviews/phase-10-impl.md` — verdict REVISE, **2 CRITICAL, 4 HIGH, 2 MEDIUM** on a diff that had already been through six agents and twelve briefs. Every finding applied or recorded; both criticals confirmed by *building the mutation Codex described*. § The implementation review. |
@@ -34,7 +34,7 @@ swapped.
 | item | why |
 |---|---|
 | **10.6's deploy half** | The deploy RAN and found a real defect. But the preview is behind **Vercel Deployment Protection** — every request 302s to SSO — so the CSP as served is still unobserved. Turning protection off makes the deployment publicly reachable: the owner's call |
-| **10.12's `level-05`** | Not completed by an automated position-blind driver at a 240 s budget. Not claimed completable; not claimed broken. **Unmeasured**, and owed to the owner's hands-on run |
+| ~~**10.12's `level-05`**~~ | **CLOSED 2026-08-27, and it should never have been opened.** `level-completable.test.ts` proves it completable in the exact shipped world under all three gate seeds, with a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control. What the browser driver could not do was navigate — a driver limit, not a level defect. See § 10.12's correction |
 | **10.12's levels 02–04 as a GATE** | They complete on a quiet box and the four-level test flaked in the suite. Recorded as a measurement rather than widened into a green |
 | **10.12's human half** | A hands-on criterion is never closed on automated evidence alone *(vault C4)* |
 | **2.8's human half** | Same shape, carried from Phase 2, re-verified and dispositioned by 10.11 rather than left silent. On the owner's list at approval |
@@ -619,7 +619,46 @@ behaviour — ENTER on the completion overlay bound to `nextLevelId`, no save-fi
 level-select shortcut, no `simWorld` — and the drawn-frame check is there because a progression that
 moves the save while the next level fails to boot is the shape a save-only assertion cannot see.
 
-**`level-05` is unmeasured — not claimed completable, not claimed broken.** A position-blind driver
+
+### 🔴 CORRECTION, 2026-08-27 — `level-05` was reported open and it should not have been
+
+The owner asked whether level-05 hides a real defect. It does not, and the evidence was already in
+the suite when this log called it *"unmeasured"*.
+
+`tests/unit/level-completable.test.ts` builds the **exact shipped world** — goal, hazards, enemies,
+gears, `DEFAULT_TUNING` — and plays it with a policy auto-player. For `level-05` it passes:
+
+| assertion | seeds |
+|---|---|
+| reaches the exit in the world the player gets, **enemies live** | 8201, 8202, 8203 |
+| the goal is reachable from the spawn | 8201, 8202, 8203 |
+| the route still connects with `jumpVelocity` **reduced by 1** | 8201, 8202, 8203 |
+| every gear is collected by some proved transition | — |
+| **negative control**: with `jumpVelocity` 0 the goal is UNREACHABLE | — |
+
+The gate seeds are disjoint from the tuning seeds, so a route that only survived its own tuning seed
+would not pass. And the geometry says the same thing independently — level-05 is level-04's shape
+with one more segment:
+
+| level | width | ground gaps | hazards | enemies | gears |
+|---|---|---|---|---|---|
+| level-04 | 13824 px | 288, 288, 288 | 4 | 5 | 10 |
+| level-05 | 15360 px | 288, 288, 288, **288** | 5 | 6 | 11 |
+
+Identical gap widths, one more of everything, goal sitting on the final ground slab exactly as in the
+other four. **There is no unreachable ledge and no missing trigger.**
+
+So what was actually missing was only the **browser end-to-end** run, and the reason it is missing is
+a property of the driver, not of the level: `playToExit` is position-blind — it holds RIGHT and jumps
+when the ground ahead runs out. It cannot choose a route, backtrack meaningfully, or decide to kill
+something. Calling that "the level is unmeasured" overstated the gap and pointed the owner at the
+wrong thing.
+
+**Corrected disposition:** `level-05`'s mechanical completability is PROVED, at the sim level, under
+adversarial seeds, with a negative control. What remains is the hands-on run — which criterion 10.12
+requires for *every* level regardless *(vault C4)*, and which no automated evidence closes.
+
+**`level-05` resists the BROWSER driver — not the sim.** A position-blind driver
 cannot navigate: it cannot choose a route, backtrack meaningfully, or decide to kill something. It is
 owed to the owner's hands-on run, which criterion 10.12 requires anyway *(vault C4)*.
 
@@ -695,17 +734,45 @@ four times. Neither substitutes for the other; both were cheap relative to what 
 
 ## The regression, read positively
 
+At the tip (`ef1eb9b`), after the parser gate landed:
+
 | run | result |
 |---|---|
 | `npm run typecheck` | clean |
 | `npm run typecheck:build` | clean |
-| `npm test` | **173 files, 2579 tests passed** |
-| `npm run test:sim-isolated` | **2576 passed, 3 skipped** — Phaser uninstalled, restored after |
-| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded · verify-dist ok |
-| `npm run test:e2e` | **141 passed** — chromium 60 · dpr2 7 · gpu 69 · prod 5, reconciled against `--list` |
+| `npm test` | **175 files, 2602 tests passed** |
+| `npm run test:sim-isolated` | **2599 passed, 3 skipped** — Phaser uninstalled, restored after |
+| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded, **each dominated by its own guard and in the function the manifest names** · verify-dist ok |
+| `npm run test:e2e` | **140 passed, 1 failed** — and the failure is a different spec each run. See below |
 
 Counts are read, not inferred from exit codes. A Playwright run that selects nothing prints
 `expected: 0, unexpected: 0` and exits 0; a zero exit through a pipe is `tail`'s exit.
+
+### ⚠️ Two GPU perf gates false-red under full-suite load, and NEITHER floor was moved
+
+The suite was run twice at this tip. Each run had exactly one failure, **and it was a different
+gate each time**:
+
+| run | failing gate | measured | bound | alone, immediately after |
+|---|---|---|---|---|
+| 1 | 9.5 cost exponent | k = 0.893 | ≥ 0.9 | **k = 0.922, passed** |
+| 2 | 6.9 HUD GPU delta | 0.974 ms | < 0.2 ms | **passed** |
+
+Run 2 passed 9.5 at k = 0.963 — the gate that had failed run 1 — which is the shape that settles it:
+a code regression does not alternate between two unrelated specs and then decline to reproduce in
+isolation.
+
+The causal claim, stated separately from the numbers *(vault 10.2)*: **nothing in this tip's diff
+can reach the render path.** `git diff --name-only 048dae5..HEAD` is 13 files — a build-time Vite
+plugin, its manifest and declarations, `tsconfig.build.json`, two unit tests, `CLAUDE.md` and four
+documents. **Zero files under `src/`.** What would refute it: the same gate failing repeatedly, or
+failing in isolation on a quiet box.
+
+This is CLAUDE.md §5's *"only one Playwright run at a time, and nothing heavy beside it"* and
+*"the headless harness is not the frame rate"* arriving together, on gates that Phase 6 and Phase 9
+already record as marginal. **Widening either bound would be measuring this box**, and 9.5's own
+failure message says *"do not move this floor"* in as many words. Neither was touched. It is
+recorded here as a live property of the suite, not resolved.
 
 ---
 
@@ -796,7 +863,7 @@ brief checks your evidence.** They are not substitutes, and the second one is ch
 | item | why it is not closed here |
 |---|---|
 | **10.6's deploy half** | `curl -sI` against a real preview URL. Blocked on the owner's authorisation |
-| **10.12's `level-05` and its human half** | Not completable by a position-blind driver at 240 s. Unmeasured, not claimed either way — and a hands-on criterion never closes on automated evidence *(C4)* |
+| **10.12's human half** | The mechanical half is proved — `level-05` included, corrected 2026-08-27. A hands-on criterion never closes on automated evidence *(C4)*, and that is all that remains here |
 | **2.8's human half** | Carried from Phase 2, re-verified and dispositioned rather than left silent |
 | **A parser-backed dev-seam gate** | The manifest narrows the hole to "within one file". Closing it needs `@babel/parser` at BUILD time, which is a change to an approved test-only decision — a STOP-and-ask, deliberately not taken |
 | **`assets:fetch` / `assets:verify`** | Phase 5 called them binding debt. They are what would make 10.9's original criterion achievable, and until they exist the public repo cannot reconstruct its own art |

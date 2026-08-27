@@ -1,23 +1,31 @@
 # Session handoff — Phase 10 (build and ship)
 
-> ## ⚠️ Phase 10 is REPORTED NOT DONE. Built, gated, and deployed to a preview — with FOUR items open, all of them yours.
+> ## ⚠️ Phase 10 is REPORTED NOT DONE. Built, gated, deployed to a preview — with THREE items open, all of them yours.
 >
-> Branch `phase-10-ship`, tip `7e4a56f`, **not merged and not pushed**. 11 of 15 criteria PASS;
+> Branch `phase-10-ship`, tip `ef1eb9b`, **not merged and not pushed**. 11 of 15 criteria PASS;
 > 10.6 passes locally with its deploy half open; 10.12 is PARTIAL.
 >
 > **Preview:** `https://steampunk-platformer-97o1gq0tk-rois-projects-f9d9895d.vercel.app`
 > — and you cannot open it without signing in; see trap 1.
 >
-> ### The four open items
+> ### The three open items
 >
 > | # | item | what it needs from you |
 > |---|---|---|
 > | 1 | **10.6's deploy half** | The preview is behind **Vercel Deployment Protection**: every request 302s to `vercel.com/sso-api` before the header rules apply, so the CSP **as served** is still unobserved. Turning protection off makes the deployment publicly reachable — your call, not mine |
-> | 2 | **10.12's `level-05`** | A position-blind driver does not finish it at a 240 s budget. **Unmeasured — not claimed completable, not claimed broken.** Needs a human |
-> | 3 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)* |
-> | 4 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
+> | 2 | **10.12's human half** | A hands-on criterion never closes on automated evidence *(C4)*. The mechanical half is proved for all five levels |
+> | 3 | **2.8's human half** | Same shape, carried from Phase 2. Re-verified and dispositioned by 10.11 rather than left silent |
 >
-> `vercel --prod` has **not** been run and will not be without your word.
+> ### Two items CLOSED on 2026-08-27, one of which should never have been opened
+>
+> | item | what happened |
+> |---|---|
+> | ~~**10.12's `level-05`**~~ | 🔴 **I reported this open and I was wrong.** `level-completable.test.ts` already proved it completable in the **exact shipped world** — enemies, hazards and gears live — under all three disjoint gate seeds, with a `jumpVelocity`-1 margin and a `jumpVelocity`-0 negative control. Its geometry is level-04's with one more segment: identical 288 px gaps. The browser driver is position-blind and cannot navigate; **that is a driver limit, not a level defect**, and the two are not the same claim |
+> | ~~**the dev-seam gate's residual hole**~~ | Closed by owner decision — `@babel/parser` widened from test-only to build time. `tools/gen/devSeamAst.mjs` now pins each sentinel's enclosing FUNCTION and proves a DEV guard dominates it. ⚠️ The **site** rule is what closes it; dominance alone does not, because both ends of a same-file move are guarded |
+>
+> `vercel --prod` has **not** been run. The one attempt on 2026-08-27 was **blocked by the sandbox's
+> own permission classifier**, not by anything in the repo and not by a missing decision — the
+> authorisation was given. It needs a Bash permission rule, or a hand-run `vercel --prod --yes`.
 >
 > Full record: [qa/phase-10-ship.md](qa/phase-10-ship.md) (including **§ Vault-out — Phase 10** and
 > the ten-phase Codex-protocol verdict) · [plan review](reviews/phase-10-plan.md) ·
@@ -75,16 +83,25 @@ re-verified locally — but the *coverage* claim is weaker than it looks. If you
 check the worktree's commit first. Also: `voltagent-qa-sec:security-auditor` has **no Bash**, so it
 cannot run `git` and cannot do the history half of a secret sweep.
 
-## Verification at the tip (`7e4a56f`)
+**9. Two GPU perf gates false-red under full-suite load, and it is a DIFFERENT one each run.** Run 1
+failed 9.5's cost-exponent floor at k = 0.893 (floor 0.9); run 2 passed 9.5 at k = 0.963 and failed
+6.9's HUD GPU delta at 0.974 ms (bound 0.2). **Both pass alone, immediately after.** A code
+regression does not alternate between two unrelated specs and then decline to reproduce in
+isolation — and `git diff --name-only 048dae5..HEAD` touches **zero files under `src/`**. Do not
+widen either bound: that is measuring the box, and 9.5's own failure text says *"do not move this
+floor"*. What would refute the diagnosis: the same gate failing repeatedly, or failing in isolation
+on a quiet box.
+
+## Verification at the tip (`ef1eb9b`)
 
 | run | result |
 |---|---|
 | `npm run typecheck` | clean |
 | `npm run typecheck:build` | clean |
-| `npm test` | **174 files, 2591 tests passed** |
-| `npm run test:sim-isolated` | 2576 passed, 3 skipped — Phaser uninstalled, restored after |
-| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded · verify-dist ok |
-| `npm run test:e2e` | **141 passed** — chromium 60 · dpr2 7 · gpu 69 · prod 5, reconciled against `--list` |
+| `npm test` | **175 files, 2602 tests passed** |
+| `npm run test:sim-isolated` | 2599 passed, 3 skipped — Phaser uninstalled, restored after |
+| `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded, each dominated and sited · verify-dist ok |
+| `npm run test:e2e` | **140 passed, 1 failed — a DIFFERENT gate each of two runs.** See trap 9 |
 
 Counts are read, not inferred from exit codes.
 
@@ -98,9 +115,7 @@ Counts are read, not inferred from exit codes.
   cannot reconstruct its own art from its recorded provenance.
 - **`_generated/` is the only copy of a non-regenerable input.** 128 MB of clips, and the generator
   is not seed-deterministic. **Archive it outside git.**
-- **The dev-seam gate's residual hole**: moving a sentinel between two guarded bodies *in the same
-  file* still satisfies the manifest. Closing it needs `@babel/parser` at BUILD time, which is a
-  change to an owner-approved test-only decision — a STOP-and-ask, deliberately not taken.
+- ~~The dev-seam gate's residual hole~~ — **closed 2026-08-27**, see the box at the top.
 - Phase 9's three carried items (the perf-spec split, 9.5's absent bound, 9.3's three narrowings) —
   dispositioned in the QA log: all still true, none blocking.
 
