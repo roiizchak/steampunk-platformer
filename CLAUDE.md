@@ -146,7 +146,10 @@ Full rationale: [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowga
 
 - **Dependencies are frozen** at runtime `phaser@4.2.1` (exact, no caret); dev `vite`, `typescript`,
   `vitest`, `@playwright/test`, and **`@babel/parser`** (exact, added 2026-08-24 by owner decision —
-  test-only; see `tests/unit/tweenCallbacks.ts`). It pulls **three** transitive packages, not one as
+  originally test-only; **widened to BUILD time 2026-08-27 by owner decision**, for
+  `tools/gen/devSeamAst.mjs`. It stays a devDependency and reaches `dist/` never: the dev-seam gate
+  is a `generateBundle` hook, not a transform. See `tests/unit/tweenCallbacks.ts` for the original
+  use). It pulls **three** transitive packages, not one as
   first recorded: `@babel/types`, `@babel/helper-string-parser`, `@babel/helper-validator-identifier`
   (corrected 2026-08-25 from the lockfile — the decision is unaffected, the number put to the owner
   was wrong). **Anything else: STOP and ask.** Phase 1 needed

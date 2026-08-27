@@ -56,6 +56,24 @@
 //   * **GUARDED BODIES in mixed modules** — a sentinel inside each body. This is the gap nothing
 //     else covers and the reason the gate exists.
 //
+// ## The parser half, owner-authorised 2026-08-27
+//
+// Two more rules, both read off the AST by `devSeamAst.mjs`:
+//
+//   * **DOMINANCE** — reaching a sentinel must imply `import.meta.env.DEV`. A sentinel with no
+//     guard over it is a seam that was never actually folded, and the leak scan cannot tell that
+//     apart from a seam that folded correctly.
+//   * **SITE** — a sentinel must sit in the function `SENTINEL_SITES` names for it.
+//
+// 🔴 The SITE rule is the one that closes the residual hole this gate's header used to name and
+// leave open: *"moving a token between two guarded bodies in the same file still satisfies the
+// manifest."* Both ends of that move are guarded, so dominance holds at both — **the dominance
+// rule alone would not have caught it.** The function name is the discriminator.
+//
+// `@babel/parser` is a devDependency pinned at 8.0.4 exactly and was approved test-only; the owner
+// widened that to build time on 2026-08-27 for this. It runs in `generateBundle` and touches no
+// transform, so nothing about it reaches `dist/`.
+//
 // ⚠️ A sentinel goes INSIDE a function or class body, **never at module scope**. A top-level
 // `devSeam(...)` call is an import-time side effect, and it would PIN the module into the bundle —
 // converting a gate against dead code into a cause of dead code.
@@ -85,75 +103,27 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { SENTINEL_MANIFEST } from './devSeamManifest.mjs';
+import { SENTINEL_MANIFEST, SENTINEL_SITES } from './devSeamManifest.mjs';
+import { sentinelSites } from './devSeamAst.mjs';
 
 /** The sentinel prefix. Any occurrence in the final production chunk is a leak. */
 const SENTINEL = '__DEVSEAM_';
 
 /**
- * A sentinel counts only where it is a **live `devSeam(...)` argument**, and comments are removed
- * before matching.
+ * A sentinel counts only where it is a **live `devSeam('__DEVSEAM_…__')` call argument**.
  *
  * 🔴 This was a bare `/__DEVSEAM_[A-Za-z0-9_]+__/` over raw file text until 2026-08-26 — plain text,
  * anywhere, including inside a comment. Found by the criterion 10.2 gate owner (brief A finding 8,
  * brief B finding 17), and the failure it allows is exact: comment out a `devSeam(...)` line and the
  * census still counts it, the floor still passes, the leak scan finds nothing either way — and the
  * guard beneath it is now invisible to the gate. That is the census *satisfying* the vacuity it was
- * written to close, which is the shape this whole gate exists to refuse.
- */
-const CALL_SHAPE = /devSeam\(\s*'(__DEVSEAM_[A-Za-z0-9_]+__)'\s*\)/g;
-
-/**
- * Line and block comments out; string and template contents left alone.
+ * written to close.
  *
- * Deliberately a lexer and not a parser: `@babel/parser` is approved **test-only** (CLAUDE.md §3)
- * and reaching for it at build time would be a change to an approved decision, i.e. a STOP-and-ask.
- * The only thing this has to get right is not mistaking a `//` inside a string literal for the start
- * of a comment, and it tracks quotes for exactly that.
- *
- * @param {string} src
- * @returns {string}
+ * The fix then was a hand-rolled comment lexer, with a note saying a parser would be a
+ * STOP-and-ask. The owner granted it on 2026-08-27, so the lexer is gone and `devSeamAst.mjs` is
+ * the one definition — a comment, a string containing `devSeam(`, and a call that is not a call are
+ * now all distinguished by the parser rather than approximated.
  */
-function stripComments(src) {
-  let out = '';
-  let i = 0;
-  /** @type {string | undefined} */
-  let quote = undefined;
-  while (i < src.length) {
-    const c = src[i];
-    const next = src[i + 1];
-    if (quote !== undefined) {
-      out += c;
-      if (c === '\\') {
-        out += next ?? '';
-        i += 2;
-        continue;
-      }
-      if (c === quote) quote = undefined;
-      i += 1;
-      continue;
-    }
-    if (c === "'" || c === '"' || c === '`') {
-      quote = c;
-      out += c;
-      i += 1;
-      continue;
-    }
-    if (c === '/' && next === '/') {
-      while (i < src.length && src[i] !== '\n') i += 1;
-      continue;
-    }
-    if (c === '/' && next === '*') {
-      i += 2;
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
-      i += 2;
-      continue;
-    }
-    out += c;
-    i += 1;
-  }
-  return out;
-}
 
 /**
  * `readdirSync` without `withFileTypes`, because `tools/gen/node-shims.d.mts` declares exactly the
@@ -190,9 +160,11 @@ export function sentinelsByFile(root = 'src') {
       const path = join(dir, name);
       if (isDirectory(path)) walk(path);
       else if (name.endsWith('.ts') && name !== 'devSeam.ts') {
-        const code = stripComments(readFileSync(path, 'utf8'));
-        const tokens = [...code.matchAll(CALL_SHAPE)].map((m) => m[1]).sort();
-        if (tokens.length > 0) byFile[path.split('\\').join('/')] = tokens;
+        const file = path.split('\\').join('/');
+        const tokens = sentinelSites(readFileSync(path, 'utf8'), file)
+          .map((entry) => entry.token)
+          .sort();
+        if (tokens.length > 0) byFile[file] = tokens;
       }
     }
   };
@@ -263,6 +235,79 @@ export function manifestGaps(live) {
 }
 
 /**
+ * Every sentinel under `root` with its enclosing function and whether a DEV guard dominates it.
+ *
+ * @param {string} [root]
+ * @returns {{ file: string; token: string; site: string; guarded: boolean; line: number }[]}
+ */
+export function sentinelSitesInSource(root = 'src') {
+  /** @type {{ file: string; token: string; site: string; guarded: boolean; line: number }[]} */
+  const all = [];
+  /** @param {string} dir */
+  const walk = (dir) => {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (isDirectory(path)) walk(path);
+      else if (name.endsWith('.ts') && name !== 'devSeam.ts') {
+        const file = path.split('\\').join('/');
+        for (const entry of sentinelSites(readFileSync(path, 'utf8'), file)) {
+          all.push({ file, ...entry });
+        }
+      }
+    }
+  };
+  walk(root);
+  return all;
+}
+
+/**
+ * The two parser rules: every sentinel is dominated by a DEV guard, and every sentinel is in the
+ * function the manifest names.
+ *
+ * @param {{ file: string; token: string; site: string; guarded: boolean; line: number }[]} live
+ * @returns {string[]}
+ */
+export function siteGaps(live) {
+  const problems = [];
+  for (const entry of live) {
+    if (!entry.guarded) {
+      problems.push(
+        `${entry.file}:${entry.line} reaches ${entry.token} without an import.meta.env.DEV guard ` +
+          'over it. A sentinel outside a guard never folds, so its absence from the bundle proves ' +
+          'nothing — and if the body around it is DEV-only, that body is shipping. Guard it, or, ' +
+          'if the whole module is DEV-only and guarded at every call site, declare the file in ' +
+          "devSeamAst.mjs's DEV_ONLY_MODULES.",
+      );
+    }
+    const want = SENTINEL_SITES[entry.token];
+    if (want === undefined) {
+      problems.push(
+        `${entry.token} has no entry in SENTINEL_SITES. Adding a dev seam means naming the ` +
+          'function it lives in, deliberately, which is the point.',
+      );
+    } else if (want !== entry.site) {
+      problems.push(
+        `${entry.token} is in "${entry.site}" but SENTINEL_SITES says "${want}" (${entry.file}:` +
+          `${entry.line}). A token that changed function is the same-file re-homing the per-file ` +
+          'map cannot see: both ends are guarded, the count is unchanged, and the guard the token ' +
+          'used to mark is gone. If the move is deliberate, update the manifest and check what ' +
+          'happened to the body it left.',
+      );
+    }
+  }
+  for (const token of Object.keys(SENTINEL_SITES)) {
+    if (!live.some((entry) => entry.token === token)) {
+      problems.push(
+        `${token} is in SENTINEL_SITES but no longer exists in src/. The guard it marked is either ` +
+          'gone or unmarked; either way nothing is proving that body folded.',
+      );
+    }
+  }
+  return problems;
+}
+
+/**
  * @returns {import('vite').Plugin}
  */
 export function devSeamGate() {
@@ -304,10 +349,15 @@ export function devSeamGate() {
         problems.push(`DEV-only body survived into the production bundle: ${s}`);
       }
 
-      const live = sentinelsByFile();
-      const tokens = Object.values(live).flat();
+      const sites = sentinelSitesInSource();
+      /** @type {Record<string, string[]>} */
+      const live = {};
+      for (const entry of sites) (live[entry.file] ??= []).push(entry.token);
+      for (const file of Object.keys(live)) live[file].sort();
+      const tokens = sites.map((entry) => entry.token);
       const seams = tokens.length;
       problems.push(...manifestGaps(live));
+      problems.push(...siteGaps(sites));
       const duplicates = [...new Set(tokens.filter((t, i) => tokens.indexOf(t) !== i))];
       if (duplicates.length > 0) {
         // `devSeam.ts` requires each token to be unique across the repository and nothing enforced
@@ -326,7 +376,10 @@ export function devSeamGate() {
         );
       }
 
-      this.info?.(`dev-seam gate ok: ${seams} sentinel-marked DEV body/bodies folded out of dist/`);
+      this.info?.(
+        `dev-seam gate ok: ${seams} sentinel-marked DEV body/bodies folded out of dist/, each ` +
+          'dominated by its own guard and in the function the manifest names',
+      );
     },
   };
 }

@@ -135,12 +135,18 @@ dev-seam gate FAILED — criterion 10.2:
   - __DEVSEAM_globals_updateDebugState__ is in src/scenes/gameDev.ts but names module "globals" …
 ```
 
-⚠️ **Codex's recommended AST check was NOT built, and the reason is a rule rather than effort.**
-`@babel/parser` is approved **test-only** (CLAUDE.md §3); using it at build time would be a change to
-an owner-approved decision, i.e. a STOP-and-ask. So the residual hole is stated in the gate's own
-header instead of papered over: **moving a token between two guarded bodies in the same file still
-satisfies the manifest.** The per-file map narrows the hole from "anywhere in `src/`" to "within one
-file". It is narrowed, not closed, and the header says so.
+⚠️ **Codex's recommended AST check was deferred, not refused — and it was BUILT the same day.**
+`@babel/parser` was approved **test-only** (CLAUDE.md §3), so reaching for it at build time was a
+change to an owner-approved decision, i.e. a STOP-and-ask. The residual hole was therefore stated in
+the gate's own header rather than papered over: *moving a token between two guarded bodies in the
+same file still satisfies the manifest.*
+
+**The owner authorised the widening on 2026-08-27 and `tools/gen/devSeamAst.mjs` closes it.** The
+gate now pins each sentinel's **enclosing function** and asserts a DEV guard dominates it. Codex was
+right about the mechanism and right that the manifest alone was not enough; it is worth recording
+that **dominance alone would still not have caught the same-file move** — both ends of it are
+guarded — so the *site* is the rule that closes the hole, and the AST is what makes the site
+readable. Red-proved both ways, watched failing, reverted. See `docs/qa/phase-10-ship.md` § 10.2.
 
 ### 1 — CRITICAL, confirmed in both halves
 

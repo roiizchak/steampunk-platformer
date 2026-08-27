@@ -48,6 +48,7 @@ const REQUIRED_INCLUDES = [
   'vite.config.ts',
   'vercel.json',
   'tools/gen/devSeamGate.mjs',
+  'tools/gen/devSeamAst.mjs',
   'tools/gen/vercelHeaders.mjs',
 ];
 

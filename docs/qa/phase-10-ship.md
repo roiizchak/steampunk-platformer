@@ -171,18 +171,49 @@ token's `<module>` segment must match its file's basename. Deleting a guard shri
 moving a token fails twice over; adding a seam is a deliberate edit. Re-running Codex's mutation now
 fails three ways at once, naming the file each time.
 
-⚠️ **The residual hole is stated rather than papered over.** Moving a token between two guarded
-bodies **in the same file** still satisfies the manifest. Closing that needs a parser proving each
-sentinel is dominated by its own guard, and `@babel/parser` is approved **test-only** (CLAUDE.md §3)
-— using it at build time would be a change to an owner-approved decision, i.e. a STOP-and-ask. The
-hole is narrowed from "anywhere in `src/`" to "within one file". Narrowed, not closed.
+### The residual hole was stated, then the owner authorised closing it — 2026-08-27
+
+The per-file map left one move: take a token out of one guarded body and paste it into another
+**in the same file**. Same file, same token, same count, and *both ends are guarded* — so a
+dominance check alone would not have caught it either. The gate header said so and called it
+"narrowed, not closed", because closing it needs a parser and `@babel/parser` was approved
+**test-only** (CLAUDE.md §3).
+
+**The owner widened that approval to build time on 2026-08-27.** `tools/gen/devSeamAst.mjs` parses
+each file and reports, per sentinel, the **enclosing function** and whether reaching it implies
+`import.meta.env.DEV`. Two rules follow:
+
+| rule | what it catches |
+|---|---|
+| **SITE** — the sentinel must sit in the function `SENTINEL_SITES` names | the same-file re-homing; **this is the one that closes the hole** |
+| **DOMINANCE** — reaching the sentinel must imply DEV | a sentinel with no guard over it, which never folds and so proves nothing by being absent |
+
+⚠️ **The site rule, not the dominance rule, is the fix** — worth stating because dominance is the
+intuitive answer and it is the wrong one here.
+
+The parser also replaced the hand-rolled comment lexer the census used, so a `devSeam(` inside a
+string, inside a comment, or written as something that is not a call are now distinguished rather
+than approximated. `@babel/parser` stays a devDependency and reaches `dist/` never: the gate is a
+`generateBundle` hook, not a transform.
+
+**Five files carry a sentinel with no local guard** — `render/enemyTuning.ts`, `devFeelTuner.ts`,
+`devMotionProbe.ts`, `devSpawn.ts`, `gymKeys.ts`. They are DEV-only *modules*, guarded at every call
+site, and a blanket dominance rule false-reds all five — the exact failure mode of the
+`renderedLength` rule this gate deleted on 2026-08-26. They are declared in `DEV_ONLY_MODULES`, and
+that is not a loophole: each of their callers carries its own dominated sentinel.
 
 **Red proofs, all watched and reverted:**
 
 | mutation | result |
 |---|---|
 | each of the 27 guards removed individually | its own token in the leak report |
-| **a guard deleted and its token re-homed elsewhere** | **3 named failures** — was silently green |
+| **a guard deleted and its token re-homed to ANOTHER FILE** | **3 named failures** — was silently green |
+| **a guard deleted and its token re-homed WITHIN globals.ts** | **named**: *"is in `installDebugGlobals` but SENTINEL_SITES says `updateDebugState`"*, build exit 1, no bundle emitted — and the per-file rule stayed silent on it, which is the proof that the site rule is what caught it |
+| **`gameLevelPick.ts`'s guard removed, token left in place** | **named**: *"reaches … without an `import.meta.env.DEV` guard over it"* |
+
+Both new mutations were confirmed applied by *content changed AND the guard count dropped by one*
+*(C12)* — never by "the count is now zero" — driven from the shell, and both reverted to a clean
+`git diff` before the green was re-read.
 | a `devSeam(...)` line commented out | `only 26 dev-seam sentinel(s) found, expected at least 27` |
 | a token duplicated | `sentinel token(s) used more than once` |
 | a sentinel injected into `index.html` | caught by the asset scan |
