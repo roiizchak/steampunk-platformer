@@ -85,6 +85,7 @@
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { SENTINEL_MANIFEST } from './devSeamManifest.mjs';
 
 /** The sentinel prefix. Any occurrence in the final production chunk is a leak. */
 const SENTINEL = '__DEVSEAM_';
@@ -179,9 +180,9 @@ function isDirectory(path) {
  * that selects nothing, prints `expected: 0`, and exits 0. Reading the count is the difference
  * between "nothing leaked" and "nothing was looked for", so the gate fails when it reaches zero.
  */
-export function sentinelTokensInSource(root = 'src') {
-  /** @type {string[]} */
-  const tokens = [];
+export function sentinelsByFile(root = 'src') {
+  /** @type {Record<string, string[]>} */
+  const byFile = {};
   /** @param {string} dir */
   const walk = (dir) => {
     if (!existsSync(dir)) return;
@@ -190,12 +191,23 @@ export function sentinelTokensInSource(root = 'src') {
       if (isDirectory(path)) walk(path);
       else if (name.endsWith('.ts') && name !== 'devSeam.ts') {
         const code = stripComments(readFileSync(path, 'utf8'));
-        for (const m of code.matchAll(CALL_SHAPE)) tokens.push(m[1]);
+        const tokens = [...code.matchAll(CALL_SHAPE)].map((m) => m[1]).sort();
+        if (tokens.length > 0) byFile[path.split('\\').join('/')] = tokens;
       }
     }
   };
   walk(root);
-  return tokens;
+  return byFile;
+}
+
+/**
+ * Every sentinel token in `root`, in file order, excluding `devSeam.ts`.
+ *
+ * @param {string} [root]
+ * @returns {string[]}
+ */
+export function sentinelTokensInSource(root = 'src') {
+  return Object.values(sentinelsByFile(root)).flat();
 }
 
 /**
@@ -209,22 +221,46 @@ export function countSentinelsInSource(root = 'src') {
 }
 
 /**
- * The floor the sentinel census must not fall below. Set from the measured count on 2026-08-26.
+ * Every way the live source can disagree with the manifest, as human-readable lines.
  *
- * It is a FLOOR, not an equality: adding a guarded body and its sentinel is ordinary work and must
- * not fail the build. Losing sentinels is not — it silently shrinks what the gate looks at, which
- * is how a gate stops being able to fail without anyone editing the gate.
- *
- * 23 → 27 on 2026-08-26. The four ternary guards this file used to report UNCOVERED — `config.ts`'s
- * scene roster, `gameDev.ts`'s help-line suffix, and `GameScene.ts`'s feel-tuner pass and dev-action
- * object — now carry sentinels on a comma expression. The criterion 10.2 gate owner (brief B,
- * finding 11) pointed out that `devSeam` returns `void`, so `(devSeam('…'), value)` is legal in
- * every one of them: they were awkward, not uncoverable, and the honesty clause was being used to
- * excuse four seams it could have covered. `GameScene.ts:312`'s was the one that mattered — five dev
- * closures with no tell any gate read, because `verify-dist.mjs` measures those identifiers
- * surviving as empty stubs either way.
+ * @param {Record<string, string[]>} live
+ * @returns {string[]}
  */
-const MIN_SENTINELS = 27;
+export function manifestGaps(live) {
+  const problems = [];
+  const files = [...new Set([...Object.keys(SENTINEL_MANIFEST), ...Object.keys(live)])].sort();
+  for (const file of files) {
+    const want = SENTINEL_MANIFEST[file] ?? [];
+    const got = live[file] ?? [];
+    for (const token of want) {
+      if (!got.includes(token)) {
+        problems.push(
+          `${file} no longer carries ${token}. A sentinel that left its file took its guard with ` +
+            'it, or was re-homed elsewhere — either way the DEV body it marked is now unguarded ' +
+            'and nothing else would notice, because the total count is unchanged.',
+        );
+      }
+    }
+    for (const token of got) {
+      if (!want.includes(token)) {
+        problems.push(
+          `${file} carries ${token}, which the manifest does not list for it. Adding a dev seam ` +
+            'means adding it to SENTINEL_MANIFEST in tools/gen/devSeamGate.mjs — deliberately, ' +
+            'which is the point.',
+        );
+      }
+      const module = file.slice(file.lastIndexOf('/') + 1, -'.ts'.length);
+      if (!token.startsWith(`__DEVSEAM_${module}_`)) {
+        problems.push(
+          `${token} is in ${file} but names module "${token.split('_')[3]}". A token's module ` +
+            'segment must match its file, so a token cannot be moved to another file and still ' +
+            'satisfy the count.',
+        );
+      }
+    }
+  }
+  return problems;
+}
 
 /**
  * @returns {import('vite').Plugin}
@@ -268,8 +304,10 @@ export function devSeamGate() {
         problems.push(`DEV-only body survived into the production bundle: ${s}`);
       }
 
-      const tokens = sentinelTokensInSource();
+      const live = sentinelsByFile();
+      const tokens = Object.values(live).flat();
       const seams = tokens.length;
+      problems.push(...manifestGaps(live));
       const duplicates = [...new Set(tokens.filter((t, i) => tokens.indexOf(t) !== i))];
       if (duplicates.length > 0) {
         // `devSeam.ts` requires each token to be unique across the repository and nothing enforced
@@ -280,14 +318,6 @@ export function devSeamGate() {
             'its own token, or a leak cannot be traced to the guard that stopped folding.',
         );
       }
-      if (seams < MIN_SENTINELS) {
-        problems.push(
-          `only ${seams} dev-seam sentinel(s) found in src/, expected at least ${MIN_SENTINELS}. ` +
-            'A shrinking census means the gate is looking at less than it was built to look at — ' +
-            'which is a gate quietly losing the ability to fail, not a pass.',
-        );
-      }
-
       if (problems.length > 0) {
         throw new Error(
           'dev-seam gate FAILED — criterion 10.2:\n' +

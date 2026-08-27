@@ -59,7 +59,15 @@ describe('anchor audit — the 4.27 wiring', () => {
  * These read SOURCE TEXT, which is weaker than executing the consumer — but executing
  * `build-assets.mjs` means packing sheets from `_generated/`, which is gitignored, so on CI there is
  * nothing to pack. Source text is what is available, and it is stated as such rather than dressed up.
+ *
+ * ⚠️ **Comments are stripped first**, because a raw `.toContain('auditOrThrow(')` is satisfied by
+ * commenting the call out — the wiring goes away and the wiring test stays green. Found by the Codex
+ * implementation review, and it is the same defect the sentinel census had two commits earlier: a
+ * text gate that cannot tell code from prose. Fixing it in one place and not the other is how a
+ * lesson stays local.
  */
+const withoutComments = (src: string): string =>
+  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 const SOURCES = import.meta.glob('../../tools/gen/*.mjs', {
   eager: true,
   query: '?raw',
@@ -69,7 +77,7 @@ const SOURCES = import.meta.glob('../../tools/gen/*.mjs', {
 const sourceOf = (name: string): string => {
   const hit = Object.entries(SOURCES).find(([k]) => k.endsWith(`/${name}`));
   if (hit === undefined) throw new Error(`${name} is not under tools/gen/ any more`);
-  return hit[1];
+  return withoutComments(hit[1]);
 };
 
 describe('the 4.27 wiring reaches the modules that READ an anchor', () => {

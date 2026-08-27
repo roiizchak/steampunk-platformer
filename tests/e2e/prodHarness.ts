@@ -47,6 +47,8 @@ import { expect, type Page } from '@playwright/test';
 
 import vercel from '../../vercel.json' with { type: 'json' };
 
+import { headersFrom } from '../../tools/gen/vercelHeaders.mjs';
+
 /** The Phase 8 save key. Named here once; `src/game/save.ts` owns the schema. */
 export const SAVE_KEY = 'steampunk.progress';
 
@@ -64,14 +66,19 @@ export const ENTRY_LEVEL = 'level-01';
 /**
  * The catch-all header rule from `vercel.json`, as a plain map.
  *
- * 🔴 Imported, never re-typed. Criterion 10.6 asks whether the CSP that SHIPS is correct, and a
- * second copy of the policy in a test would pass against itself while production served something
- * else. `vite.config.ts` and `tools/dev/prod-server.mjs` read the same file for the same reason.
+ * 🔴 **Delegated, not re-implemented — and it WAS re-implemented until the Codex implementation
+ * review.** This file did its own `vercel.headers.find(h => h.source === '/(.*)')`, with the path
+ * literal spelled out a third time, inside the phase that had just consolidated exactly that lookup
+ * into `vercelHeaders.mjs` for exactly this reason. The header above claimed the single-source
+ * property while duplicating the plumbing under it.
+ *
+ * Criterion 10.6 asks whether the CSP that SHIPS is correct, and a second copy of the POLICY in a
+ * test would pass against itself while production served something else. (The spec does restate the
+ * security-critical directive VALUES on purpose — see its comment; that is a deliberate second
+ * definition of the policy, which is a different thing from a second copy of the lookup.)
  */
 export function expectedHeaders(): Record<string, string> {
-  const rule = vercel.headers.find((h) => h.source === '/(.*)');
-  if (rule === undefined) throw new Error('vercel.json has no catch-all headers rule');
-  return Object.fromEntries(rule.headers.map((h) => [h.key, h.value]));
+  return headersFrom(vercel);
 }
 
 export interface SaveState {
@@ -206,6 +213,7 @@ export async function playToExit(
   budgetMs = 60_000,
 ): Promise<number | null> {
   const started = Date.now();
+  let hops = 0;
   await page.keyboard.down('ArrowRight');
   try {
     while (Date.now() - started < budgetMs) {
@@ -215,11 +223,99 @@ export async function playToExit(
       await page.waitForTimeout(500);
       await page.keyboard.up('Space');
       await page.waitForTimeout(60);
+      hops += 1;
+
       const save = await readSave(page);
       if (save?.levels?.[levelId]?.completed === true) return Date.now() - started;
+
+      /**
+       * **The unstick move, and it is a real one rather than a harness cheat.**
+       *
+       * Holding RIGHT into a wall taller than a full-hold jump is a permanent stall: the courier
+       * hops in place forever and the budget expires with nothing learned. A player backs up and
+       * takes a run at it, so the driver does too — every ~14 hops, release RIGHT, hold LEFT briefly,
+       * and resume. It costs about a second and it is the only reason a level with a run-up is
+       * reachable by a position-blind driver at all.
+       *
+       * ⚠️ It is still position-blind: it cannot know it is stuck, only that it has been hopping for
+       * a while. A level needing genuine navigation — a route choice, a backtrack of more than a
+       * moment, an enemy that must be killed — is beyond it, and the campaign test reports WHICH
+       * level it stopped on rather than pretending otherwise.
+       */
+      if (hops % 14 === 0) {
+        await page.keyboard.up('ArrowRight');
+        await page.keyboard.down('ArrowLeft');
+        await page.waitForTimeout(420);
+        await page.keyboard.up('ArrowLeft');
+        await page.keyboard.down('ArrowRight');
+      }
     }
   } finally {
     await page.keyboard.up('ArrowRight');
+    await page.keyboard.up('ArrowLeft');
   }
   return null;
+}
+
+/** Every level the game ships, in play order. */
+export const ALL_LEVELS = ['level-01', 'level-02', 'level-03', 'level-04', 'level-05'] as const;
+
+/** What one level's attempt produced. `ms === null` means the budget ran out. */
+export interface LevelRun {
+  levelId: string;
+  ms: number | null;
+}
+
+/**
+ * **The FULL playthrough criterion 10.12 actually names** — every level, in order, on the
+ * production build, with no teleporting and no scene-key shortcut.
+ *
+ * 🔴 The spec proved only `level-01` until the Codex implementation review pointed out that
+ * `README.md` advertises five and the criterion says *"full playthrough"*. One level is a
+ * playthrough of one level; calling it the criterion was overclaiming, and the fix is to play them
+ * rather than to reword the criterion.
+ *
+ * ## How it advances, and why that is production behaviour and not a harness trick
+ *
+ * `gameComplete.ts` binds ENTER on the completion overlay to `nextLevelId(levelId, order)`. That is
+ * the shipped flow a player uses — there is no level-select shortcut here and no save-file surgery.
+ * It also means the run is a chain: a failure at level 3 leaves 4 and 5 unattempted rather than
+ * unproven, which is why this returns a row per level instead of a single boolean.
+ *
+ * ⚠️ **The driver is position-blind by design** (see `playToExit`). It cannot know a level is
+ * unwinnable by hold-right-and-hop; it can only report which level it stopped on. A `null` here is
+ * therefore *"this level was not completed by THIS driver within the budget"* — a real result, not
+ * necessarily a defect in the level, and the spec says so where it asserts on the outcome.
+ */
+export async function playCampaign(
+  page: Page,
+  levels: readonly string[] = ALL_LEVELS,
+  budgetMsPerLevel = 60_000,
+): Promise<LevelRun[]> {
+  const runs: LevelRun[] = [];
+  for (const levelId of levels) {
+    const ms = await playToExit(page, levelId, budgetMsPerLevel);
+    runs.push({ levelId, ms });
+    if (ms === null) break;
+    // The shipped advance. ENTER is bound `once` on the overlay, so one press is one level.
+    await page.keyboard.press('Enter');
+    // Wait for the save's `lastLevel` to move rather than sleeping on the transition.
+    const next = levels[levels.indexOf(levelId) + 1];
+    if (next === undefined) break;
+    await page
+      .waitForFunction(
+        ([key, want]: [string, string]) => {
+          try {
+            const raw = window.localStorage.getItem(key);
+            return raw !== null && (JSON.parse(raw) as { lastLevel?: string }).lastLevel === want;
+          } catch {
+            return false;
+          }
+        },
+        [SAVE_KEY, next] as [string, string],
+        { timeout: 30_000 },
+      )
+      .catch(() => undefined);
+  }
+  return runs;
 }

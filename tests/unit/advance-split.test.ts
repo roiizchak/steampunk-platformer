@@ -151,16 +151,32 @@ describe('the dead-sim red proof is still applicable', () => {
     }),
   )[0] as string;
 
-  it('still contains the exact loop header the patch anchors on', () => {
-    // The `-` line of the diff, i.e. what the patch expects to find here.
-    const removed = FIXTURE.split('\n')
-      .filter((l) => l.startsWith('-') && !l.startsWith('---'))
-      .map((l) => l.slice(1));
-    expect(removed.length, 'the fixture no longer removes exactly one line').toBe(1);
+  it('still contains every line the patch anchors on — context included', () => {
+    // 🔴 **Every line `git apply` must find, not just the `-` line.** Checking only the removed line
+    // left the CONTEXT unpinned: reformat or rename an adjacent line and the loop header survives,
+    // this test stays green, and `git apply` refuses anyway — the red proof silently stops existing,
+    // which is the exact thing this test was added to prevent. Found by the Codex implementation
+    // review. A hunk's context lines are part of what it matches on, so they are part of the pin.
+    const hunk = FIXTURE.slice(FIXTURE.indexOf('@@'));
+    const anchors = hunk
+      .split('\n')
+      .slice(1)
+      .filter((l) => l.startsWith('-') || l.startsWith(' '))
+      .map((l) => l.slice(1))
+      .filter((l) => l.trim().length > 0);
+
+    expect(anchors.length, 'the fixture no longer has a hunk to anchor on').toBeGreaterThan(3);
     expect(
-      SOURCE,
-      `tests/fixtures/dead-sim.patch expects this file to contain "${removed[0]?.trim()}" and it ` +
-        'does not. `git apply` will refuse, and criterion 10.12 loses the only red proof it has.',
-    ).toContain(removed[0]);
+      hunk.split('\n').filter((l) => l.startsWith('-')).length,
+      'the fixture no longer removes exactly one line',
+    ).toBe(1);
+
+    for (const line of anchors) {
+      expect(
+        SOURCE,
+        `tests/fixtures/dead-sim.patch anchors on "${line.trim()}" and advanceSplit.ts no longer ` +
+          'contains it. `git apply` will refuse, and criterion 10.12 loses its only red proof.',
+      ).toContain(line);
+    }
   });
 });

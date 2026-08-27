@@ -87,6 +87,7 @@
     "vercel.json",
     "tools/gen/node-shims.d.mts",
     "tools/gen/devSeamGate.mjs",
+    "tools/gen/devSeamManifest.mjs",
     "tools/gen/vercelHeaders.mjs"
   ]
 }

@@ -105,7 +105,15 @@ export const GENERATED_ROOT = '_generated';
  * present and on any machine without it none are. A rule nobody can watch fire is decoration
  * *(vault C1, C2)*, and this rule's whole job is to stop a vacuous exit 0.
  *
- * @param {{ label?: string, generatedRoot?: string, sources?: string[] }} [opts]
+ * `requirePresent` makes ABSENT fatal REGARDLESS of `generatedRoot`. The spend point needs it: on a
+ * clean clone `_generated/` does not exist yet — `submit-clips.mjs` CREATES it moments later — so the
+ * `generatedRoot` heuristic said "no pipeline here, stand aside" on the one path where standing
+ * aside means printing a paid generation command having measured **zero** submitted bytes. Found by
+ * the Codex implementation review, and the comment at the call site had asserted the opposite:
+ * *"`requirePresent` is implicit: if `_generated/` exists at all (and it must, for anchors to be
+ * submitted)"*. It must not, and it did not.
+ *
+ * @param {{ label?: string, generatedRoot?: string, sources?: string[], requirePresent?: boolean }} [opts]
  * @returns {{ path: string, status: string, detail: string }[]}
  */
 export function auditOrThrow(opts = {}) {
@@ -155,14 +163,12 @@ export function auditOrThrow(opts = {}) {
     );
   }
 
-  if (absent.length > 0 && existsSync(generatedRoot)) {
+  if (absent.length > 0 && (opts.requirePresent === true || existsSync(generatedRoot))) {
     throw new Error(
       label +
         ': ' +
         absent.length +
-        ' declared anchor(s) are not on disk, and ' +
-        generatedRoot +
-        '/ exists — so this is a pipeline with a missing input, not a fresh clone:\n' +
+        ' declared anchor(s) are not on disk:\n' +
         absent.map((r) => '  - ' + r.path).join('\n') +
         '\n\nRunning on would gate nothing.',
     );

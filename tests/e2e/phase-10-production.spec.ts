@@ -181,16 +181,34 @@ test.describe('phase 10 — the production build', () => {
       'frame-ancestors': "'none'",
       'form-action': "'none'",
     };
-    const served = Object.fromEntries(
-      want['Content-Security-Policy']
-        .split(';')
-        .map((d) => d.trim())
-        .filter((d) => d.length > 0)
-        .map((d) => {
-          const at = d.indexOf(' ');
-          return at < 0 ? [d, ''] : [d.slice(0, at), d.slice(at + 1).trim()];
-        }),
-    );
+    const parsed = want['Content-Security-Policy']
+      .split(';')
+      .map((d) => d.trim())
+      .filter((d) => d.length > 0)
+      .map((d): [string, string] => {
+        const at = d.indexOf(' ');
+        return at < 0 ? [d, ''] : [d.slice(0, at), d.slice(at + 1).trim()];
+      });
+
+    /**
+     * 🔴 **Duplicates are rejected BEFORE the comparison, because the browser and `fromEntries`
+     * disagree about which one wins.** CSP takes the FIRST occurrence of a directive and ignores
+     * every later one; `Object.fromEntries` keeps the LAST. So prepending `script-src *;` to a
+     * policy that already ends in the exact `script-src 'self'` produces an object equal to
+     * `REQUIRED_DIRECTIVES`, passes the unquoted-keyword check, and raises no extra violation —
+     * while the policy the browser actually enforces is `script-src *`. Found by the Codex
+     * implementation review; the exact-match map alone did NOT close this, which is the point of
+     * checking a fix rather than assuming it.
+     */
+    const names = parsed.map(([name]) => name);
+    expect(
+      [...new Set(names.filter((n, i) => names.indexOf(n) !== i))],
+      'the CSP declares a directive twice. A browser enforces the FIRST occurrence and ignores the ' +
+        'rest, so a permissive duplicate ahead of a strict one loosens the policy while every ' +
+        'equality check below still passes.',
+    ).toEqual([]);
+
+    const served = Object.fromEntries(parsed);
     expect(
       served,
       'the shipped CSP no longer matches the security-critical directive list written out in this ' +
@@ -308,4 +326,5 @@ test.describe('phase 10 — the production build', () => {
     expect(devViolations).toEqual([]);
     expect(errors, 'a dev key or flag threw in the production build').toEqual([]);
   });
+
 });

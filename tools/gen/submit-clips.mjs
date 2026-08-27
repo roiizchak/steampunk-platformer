@@ -23,10 +23,16 @@ import { auditOrThrow } from './anchorAudit.mjs';
 /**
  * 🔴 **The spend point.** This script renders the `genmedia run` command a human pays for, and the
  * padded anchors ARE the bytes it submits. Criterion 4.27 says the geometry is measured *before
- * generating from it* — anywhere later is a post-mortem. `requirePresent` is implicit: if
- * `_generated/` exists at all (and it must, for anchors to be submitted), a missing anchor throws.
+ * generating from it* — anywhere later is a post-mortem.
+ *
+ * 🔴 `requirePresent` is EXPLICIT, and the comment here used to claim it was implicit *"if
+ * `_generated/` exists at all (and it must, for anchors to be submitted)"*. **It need not, and on a
+ * clean clone it does not** — this script `mkdirSync`s the tree itself a few lines below. So the
+ * `generatedRoot` heuristic stood aside on the one path where standing aside means printing a paid
+ * generation command having measured zero bytes. Found by the Codex implementation review. You
+ * cannot submit an anchor you do not have; absence here is never context.
  */
-auditOrThrow({ label: 'anchor audit (pre-submission)' });
+auditOrThrow({ label: 'anchor audit (pre-submission)', requirePresent: true });
 
 const requested = process.argv.slice(2);
 const keys = requested.length > 0 ? requested : Object.keys(CLIP_JOBS);

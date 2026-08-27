@@ -23,7 +23,7 @@ export const PROD_PORT = 4173;
 const GPU_SPECS = /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!polish)[a-z0-9-]+)\.spec\.ts/;
 
 /** The spec that runs against `dist/` rather than the dev server. Phase 10. */
-const PROD_SPECS = /phase-10-production\.spec\.ts/;
+const PROD_SPECS = /phase-10-(production|campaign)\.spec\.ts/;
 
 export default defineConfig({
   testDir: './tests/e2e',

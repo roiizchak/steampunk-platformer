@@ -13,25 +13,36 @@ swapped.
 <!-- gate-verdicts -->
 | # | Criterion | Verdict | Evidence |
 |---|---|---|---|
-| 10.1 | `npm run build` clean; production bundle runs | **PASS** | `npm run build` → 4 steps green, `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical`. The bundle *runs* is not a doc claim: `tests/e2e/phase-10-production.spec.ts` boots `dist/` on a real server and **completes level 01 on real keyboard input**, 4 passed. |
-| 10.2 | `window.__game`, Playground, Gym and Element Editor absent from `dist/` | **PASS, with its coverage stated** | Three independent gates, not one grep. `verify-dist.mjs` (scene keys, debug symbols, `URLSearchParams`, dev prose); `tools/gen/devSeamGate.mjs` (**27** sentinel-marked DEV bodies must fold out of every emitted chunk *and asset*); the production spec (`typeof window.__game === 'undefined'`, every dev query flag and dev key inert). **27/27 seams red-proved**, each by removing its OWN guard. See § 10.2 below for what the gate cannot see. |
-| 10.3 | Build-target and minifier defaults recorded with reversal instructions | **PASS** | `vite.config.ts` records the EXPANSION (`chrome111, edge111, firefox114, safari16.4, ios16.4`), not the moving alias, with reversal instructions and the emitted syntax census beside them. Discharged by diffing the OUTPUT per vault 10.1: `tools/gen/measure-bundle.mjs`, now **consumed by `verify-dist.mjs`** rather than left as prose. |
+| 10.1 | `npm run build` clean; production bundle runs | **PASS** | `npm run build` → 4 steps green, `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical`. The bundle *runs* is not a doc claim: `tests/e2e/phase-10-production.spec.ts` boots `dist/` on a real server and **completes level 01 on real keyboard input**, 5 passed. |
+| 10.2 | `window.__game`, Playground, Gym and Element Editor absent from `dist/` | **PASS, with its coverage stated** | Three independent gates, not one grep. `verify-dist.mjs` (scene keys, debug symbols, `URLSearchParams`, dev prose); `tools/gen/devSeamGate.mjs` (an exact **file → sentinel manifest**, 27 tokens, none surviving into any emitted chunk *or asset*); the production spec. 🔴 **The Codex implementation review broke the first version of this gate and it is the phase's most important finding** — a bare count of 27 was pad-able. See § 10.2. |
+| 10.3 | Build-target and minifier defaults recorded with reversal instructions | **PASS** | `vite.config.ts` records the EXPANSION (`chrome111, edge111, firefox114, safari16.4, ios16.4`), not the moving alias, with reversal instructions and the emitted syntax census beside them. Discharged by diffing the OUTPUT per vault 10.1. **Both halves are now gated**: `verify-dist.mjs` asserts the ES2020+ syntax survives AND pins the four config values — the census alone could not see `target: 'esnext'` dropping every promised browser minimum (Codex impl review, finding 3). Red-proved both ways. |
 | 10.4 | Bundle size change explained via raw-vs-gzip ratio | **PASS — with the criterion's own method corrected** | The ratio moved **0.001** across a three-arm A/B in which every `??` disappeared. It is not a discriminator for a target change on this bundle. The syntax census is, and it is what shipped. § 10.4. |
 | 10.5 | Build config typechecked as its own program | **PASS — after the gate owner found the claim was false** | `tsconfig.build.json` + `npm run typecheck:build`, run by `npm run build` and pinned by `tests/unit/build-program.test.ts`. It CLAIMED to typecheck the plugin and did not. § 10.5. |
 | 10.6 | CSP verified against the **production** header config locally — never the dev server | **PASS locally; the deploy half is OWED** | `vercel.json` → `tools/gen/vercelHeaders.mjs` → both `vite.config.ts` and `tools/dev/prod-server.mjs`. Every directive matched EXACTLY. Red-proved twice. ⚠️ **`curl -sI` against a real deployment has not run** — it cannot until the owner authorises the deploy. § 10.6. |
 | 10.7 | `git log --all -p` clean of secrets — history, not the working tree | **PASS, with a stated blind spot and one real finding fixed** | 506 commits, 6,447 reachable objects, unreachable blobs included. Zero named-format secrets. **One real leak found and fixed**: three `anchor.job.json` files shipped a local home directory to the CDN. § 10.7. |
 | 10.8 | Licences split: code vs generated assets | **PASS** | `LICENSE` (MIT: `src/`, `tests/`, `tools/`, root config) · `ASSETS-LICENSE.md` (fal.ai output, all rights reserved) · a third-party carve-out for the 215 vendored skill files. § 10.8. |
 | 10.9 | 🔴 **AMENDED by owner ruling** — ship-path reproducibility, not asset-rebuild reproducibility | **PASS as amended; the ORIGINAL criterion is NOT met and that is recorded** | Fresh clone → `npm ci` → `npm run build` → **62/62 files byte-identical**. The first run was 61/62 and the 1 was a real defect git could not see. § 10.9 — and the objection to the amendment is recorded verbatim in the phase document. |
-| 10.10 | Specs 01–10 all green | **PASS** | `npm run test:e2e` → **140 passed**, read positively and reconciled per project: chromium 60 · chromium-dpr2 7 · chromium-gpu 69 · chromium-prod 4 = 140. Plus unit **2579 passed** and sim-isolated **2576 passed / 3 skipped**. |
+| 10.10 | Specs 01–10 all green | **PASS** | `npm run test:e2e` → **141 passed**, read positively and reconciled per project: chromium 60 · chromium-dpr2 7 · chromium-gpu 69 · chromium-prod 5 = 141. Plus unit **2579 passed** and sim-isolated **2576 passed / 3 skipped**. |
 | 10.11 | **Every prior phase's acceptance criteria re-verified** | **PASS — and it found two things the PRD had wrong** | 4.27 closed with a wired, red-proved gate. **4.12 closed with the deliberate-removal run it had been owed since Phase 4.** 4.10 dispositioned as superseded. § 10.11. |
-| 10.12 | Full playthrough on the production build | **PASS automated; the HUMAN half is the owner's at approval** *(C4)* | Level 01 completed **by playing it**, against `dist/`, on real keyboard input — 18.5–22.9 s, 3/3. Screenshots in `docs/evidence/phase-10/`. § 10.12. |
+| 10.12 | Full playthrough on the production build | **PARTIAL — the gate covers 2 levels and a transition; the 4-level run is a measurement; level 05 and the human half are OPEN** | Levels 01–04 were completed **by playing them** against `dist/`, but the four-level test **flaked in the full suite while passing alone**, so it is recorded as a measurement and the GATE is level 01 → ENTER → level 02 boots and draws. `level-05` resists a position-blind driver even at 240 s and is named unmeasured. § 10.12. |
 | 10.13 | Every recorded-but-not-fixed Codex finding from phases 1–9 re-reviewed and dispositioned | **PASS** | All 35 files in `docs/reviews/` enumerated by name (not a `*-plan.md` glob, which misses Phase 5's three split records). 99 disposition lines extracted. `docs/qa/phase-10-ship-02-review-sweep.md`. |
 | 10.14 | Codex plan review ran; every finding applied or recorded | **PASS — and it did NOT converge, which is reported rather than dressed up** | Five rounds, all REVISE, hitting `MAX_ROUNDS`. `docs/reviews/phase-10-plan.md` + triage. § 10.14. |
-| 10.15 | Codex implementation review ran on the diff; every finding applied or recorded | **PENDING** | `docs/reviews/phase-10-impl.md`. Runs after this log, on the diff the QA gate's findings produced. |
+| 10.15 | Codex implementation review ran on the diff; every finding applied or recorded | **PASS** | `docs/reviews/phase-10-impl.md` — verdict REVISE, **2 CRITICAL, 4 HIGH, 2 MEDIUM** on a diff that had already been through six agents and twelve briefs. Every finding applied or recorded; both criticals confirmed by *building the mutation Codex described*. § The implementation review. |
 
-**Two criteria are not closed: 10.6's deploy half and 10.15.** Both are blocked on the owner —
-`vercel --prod` is a STOP-and-confirm gate and the implementation review runs on the finished diff.
-Phase 10 is therefore **not reported done**; it is reported at this state, with those two named.
+### 🔴 What is NOT closed — four items, named
+
+| item | why |
+|---|---|
+| **10.6's deploy half** | `curl -sI` against a real preview URL. The local substrate cannot exercise Vercel's route matching, its CDN, or the artifact Vercel rebuilds. Blocked on the owner's authorisation to deploy |
+| **10.12's `level-05`** | Not completed by an automated position-blind driver at a 240 s budget. Not claimed completable; not claimed broken. **Unmeasured**, and owed to the owner's hands-on run |
+| **10.12's levels 02–04 as a GATE** | They complete on a quiet box and the four-level test flaked in the suite. Recorded as a measurement rather than widened into a green |
+| **10.12's human half** | A hands-on criterion is never closed on automated evidence alone *(vault C4)* |
+| **2.8's human half** | Same shape, carried from Phase 2, re-verified and dispositioned by 10.11 rather than left silent. On the owner's list at approval |
+
+**Phase 10 is therefore reported NOT DONE.** It is reported at this state, with those four named.
+⚠️ The summary here said *"two criteria"* until the Codex implementation review pointed out that a
+later section of this same file admitted a third — a log contradicting itself is the shape every
+other gate in this phase exists to prevent, and it happened in the record rather than in the code.
 
 ---
 
@@ -131,11 +142,47 @@ its guard was never written has no sentinel to leak, and nothing here would know
 `dev-guard-census.test.ts` is the half that counts guards in source; this is the half that proves
 they folded. Neither alone is sufficient and the split is deliberate.
 
+### 🔴 The count was pad-able, and the Codex implementation review broke it
+
+The gate asserted `MIN_SENTINELS = 27` — a floor over a **global count**. Codex named the mutation
+and I built it, because a finding it could not execute is a claim until a command here confirms it:
+
+```
+1. delete the import.meta.env.DEV guard in globals.ts's updateDebugState, taking its devSeam line
+2. re-home '__DEVSEAM_globals_updateDebugState__' inside gameDev.ts's already-guarded body
+3. npm run build
+
+   [plugin steampunk:dev-seam-gate] dev-seam gate ok: 27 sentinel-marked DEV bodies folded
+   verify-dist ok
+   __DEVSEAM_ in bundle: false
+   updateDebugState body shipped (Object.assign present): TRUE
+```
+
+**Both gates printed OK while the DEV body shipped into every production tick** — *the exact leak
+this gate exists to close*, the one `verify-dist.mjs` has carried as a documented uncaught mutation
+since 2026-08-23, passing the gate that claimed to close it.
+
+The diagnosis is the sharp part: **every recorded red proof was cooperative.** They removed a guard
+and left its token behind — which is the mutation the person who wrote the gate naturally reaches
+for. A count over a set cannot answer *"is this token still inside the guard it names"*.
+
+So the floor is replaced by `SENTINEL_MANIFEST`: the exact **file → token map**, plus a rule that a
+token's `<module>` segment must match its file's basename. Deleting a guard shrinks its file's list;
+moving a token fails twice over; adding a seam is a deliberate edit. Re-running Codex's mutation now
+fails three ways at once, naming the file each time.
+
+⚠️ **The residual hole is stated rather than papered over.** Moving a token between two guarded
+bodies **in the same file** still satisfies the manifest. Closing that needs a parser proving each
+sentinel is dominated by its own guard, and `@babel/parser` is approved **test-only** (CLAUDE.md §3)
+— using it at build time would be a change to an owner-approved decision, i.e. a STOP-and-ask. The
+hole is narrowed from "anywhere in `src/`" to "within one file". Narrowed, not closed.
+
 **Red proofs, all watched and reverted:**
 
 | mutation | result |
 |---|---|
 | each of the 27 guards removed individually | its own token in the leak report |
+| **a guard deleted and its token re-homed elsewhere** | **3 named failures** — was silently green |
 | a `devSeam(...)` line commented out | `only 26 dev-seam sentinel(s) found, expected at least 27` |
 | a token duplicated | `sentinel token(s) used more than once` |
 | a sentinel injected into `index.html` | caught by the asset scan |
@@ -422,6 +469,48 @@ dev build; a route keyed to coordinates is a route that breaks on any level edit
 
 **Result: 3/3 in dev, 3/3 against `dist/`, 18.5–22.9 s.** Screenshots in `docs/evidence/phase-10/`.
 
+### 🔴 One level of five is not a "full playthrough", and the fix was to play more, not to reword
+
+The Codex implementation review pointed out that `README.md` advertises five levels while the spec
+proved one. Rather than amend the criterion, the driver was extended and the result **measured**:
+
+| levels | budget/level | result |
+|---|---|---|
+| 01 | 60 s | completes, 18.5–22.9 s |
+| 01→02 | 60 s | **stopped at 02** — no way past a wall needing a run-up |
+| 01→03 | 60 s + a back-up move | reaches 04 |
+| 01→04 | 120 s + a back-up move | reaches 05, **all four completed** |
+| 05 | 240 s | **not completed** |
+
+The back-up move — release RIGHT, hold LEFT for 420 ms, resume — is what a stuck player does, and it
+took the reach from **one level to four**.
+
+### ⚠️ And then the four-level test flaked, which changed what it is allowed to be
+
+Scoped to four levels it passed alone and **failed at level 03 inside `npm run test:e2e`**, having
+completed those same three levels comfortably on a quiet box minutes before. That is exactly
+CLAUDE.md §5's *"its wall-clock-bounded specs read a busy box as a broken game"*, and **a test that
+passes alone and fails in the suite is a flake generator, not a gate.** Widening the budget until it
+stopped flaking is the move this project has a rule against — the bound would then be measuring the
+box.
+
+So the two things are separated by what they actually are:
+
+| | what it is | where it lives |
+|---|---|---|
+| **The gate** | level 01 completes · ENTER advances · **level 02 boots and draws** | `tests/e2e/phase-10-campaign.spec.ts`, in the suite |
+| **The measurement** | levels 01–04 completed end to end on a quiet box; 05 did not | this table, and `playCampaign()` in `prodHarness.ts` for re-running it |
+
+The gate is strictly more than the single-level assertion it replaces: **nothing before this proved
+the game had a second level a player could reach.** Every step of it is a shipped production
+behaviour — ENTER on the completion overlay bound to `nextLevelId`, no save-file surgery, no
+level-select shortcut, no `simWorld` — and the drawn-frame check is there because a progression that
+moves the save while the next level fails to boot is the shape a save-only assertion cannot see.
+
+**`level-05` is unmeasured — not claimed completable, not claimed broken.** A position-blind driver
+cannot navigate: it cannot choose a route, backtrack meaningfully, or decide to kill something. It is
+owed to the owner's hands-on run, which criterion 10.12 requires anyway *(vault C4)*.
+
 **Red-proved against a DEAD SIM**, not a frozen rAF — the distinction matters here because the
 courier's idle sheet loops at 7.5 fps with `repeat: -1`, so "pixels changed" stays TRUE while the
 fixed-tick sim is dead. `tests/fixtures/dead-sim.patch` neuters `advance()`'s loop:
@@ -465,6 +554,33 @@ command *execution*, so its findings are file-evidence only and every one was re
 
 ---
 
+## The implementation review — 8 findings on a diff that had already been through twelve briefs
+
+`docs/reviews/phase-10-impl.md` carries the verbatim review and the full triage. Verdict **REVISE**:
+2 CRITICAL, 4 HIGH, 2 MEDIUM. Every finding is applied or recorded with a reason.
+
+| # | finding | disposition |
+|---|---|---|
+| 2 | **the 27-sentinel gate is a pad-able count** | **APPLIED** — exact file→token manifest. Confirmed by BUILDING the mutation; it shipped a DEV body with both gates green. § 10.2 |
+| 1a | the spend-point anchor audit is permissive on a clean clone | **APPLIED** — `requirePresent: true`. `submit-clips.mjs` creates `_generated/` itself, so the heuristic stood aside on the one path that spends money |
+| 1b | the wiring test is satisfied by a COMMENT | **APPLIED** — comments stripped. Same defect the sentinel census had two commits earlier; fixing it in one place and not the other is how a lesson stays local |
+| 1c | verify each anchor's SHA-256 at submission | **RECORDED, not done** — `clipAnchors.mjs` states the declared sha is *"data, not a runtime check"*. Making it one changes a recorded decision, i.e. a STOP-and-ask |
+| 3 | the census cannot see `target: 'esnext'` | **APPLIED** — the four config values pinned in `verify-dist.mjs`. Red-proved |
+| 4 | `Object.fromEntries` keeps the LAST duplicate directive; a browser enforces the FIRST | **APPLIED** — duplicates rejected before comparison. Red-proved with `script-src *;` prepended |
+| 5 | 10.12 claims a "full playthrough" of one level; the log contradicts itself on what is open | **APPLIED** — four levels now automated, level 05 named as unmeasured, four open items listed |
+| 5b | 2.8's human half contradicts 10.11's PASS | **RECORDED, disagreed** — 10.11 asks that every prior criterion be RE-VERIFIED, not closed. 2.8 is dispositioned in the sweep as owner-facing; that is a verdict, and silence would have been the failure |
+| 6 | the build-program test is satisfied by a comment | **APPLIED** — comments stripped. Codex's suggested fix (TS's config parser) does not exist in TS 7: it is the Go port, and `require('typescript')` exports only `version` |
+| 7 | `prodHarness` does its own catch-all lookup | **APPLIED** — delegates to `headersFrom()`. It duplicated the lookup inside the phase that consolidated it, under a header claiming otherwise |
+| 8 | the fixture pin checks only the removed line, not the context | **APPLIED** — every anchor line of the hunk pinned. Red-proved |
+
+**What it says about the protocol.** Two CRITICALs survived six agents and twelve adversarial briefs.
+The sentinel-manifest one was invisible to all of them *because the red proofs were cooperative*.
+That is the argument for a reviewer who did not write the gate — and its counterpart is this phase's
+other protocol lesson, that the QA gate's adversarial brief found a false claim Codex had read past
+four times. Neither substitutes for the other; both were cheap relative to what they found.
+
+---
+
 ## The regression, read positively
 
 | run | result |
@@ -474,7 +590,7 @@ command *execution*, so its findings are file-evidence only and every one was re
 | `npm test` | **173 files, 2579 tests passed** |
 | `npm run test:sim-isolated` | **2576 passed, 3 skipped** — Phaser uninstalled, restored after |
 | `npm run build` | 4 steps green · dev-seam gate ok, 27 sentinels folded · verify-dist ok |
-| `npm run test:e2e` | **140 passed** — chromium 60 · dpr2 7 · gpu 69 · prod 4, reconciled against `--list` |
+| `npm run test:e2e` | **141 passed** — chromium 60 · dpr2 7 · gpu 69 · prod 5, reconciled against `--list` |
 
 Counts are read, not inferred from exit codes. A Playwright run that selects nothing prints
 `expected: 0, unexpected: 0` and exits 0; a zero exit through a pipe is `tail`'s exit.
@@ -568,7 +684,9 @@ brief checks your evidence.** They are not substitutes, and the second one is ch
 | item | why it is not closed here |
 |---|---|
 | **10.6's deploy half** | `curl -sI` against a real preview URL. Blocked on the owner's authorisation |
-| **10.15** | The implementation review runs on the finished diff |
+| **10.12's `level-05` and its human half** | Not completable by a position-blind driver at 240 s. Unmeasured, not claimed either way — and a hands-on criterion never closes on automated evidence *(C4)* |
+| **2.8's human half** | Carried from Phase 2, re-verified and dispositioned rather than left silent |
+| **A parser-backed dev-seam gate** | The manifest narrows the hole to "within one file". Closing it needs `@babel/parser` at BUILD time, which is a change to an approved test-only decision — a STOP-and-ask, deliberately not taken |
 | **`assets:fetch` / `assets:verify`** | Phase 5 called them binding debt. They are what would make 10.9's original criterion achievable, and until they exist the public repo cannot reconstruct its own art |
 | **`_generated/` is the only copy of a non-regenerable input** | 128 MB of clips; the generator is not seed-deterministic. **Archive it outside git.** Losing it freezes the art at its current packing forever |
 | **The QA gate's worktrees were at the wrong commit** | Recorded above. The findings are sound; the coverage claim is weaker than it looks |

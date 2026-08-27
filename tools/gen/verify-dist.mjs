@@ -219,7 +219,37 @@ if (existsSync(builtCatalog)) {
  * downlevelling them the bundle has silently grown helpers and the browser contract moved. A
  * presence check rather than a band: counts move with ordinary feature work, and a bound that
  * false-reds on ordinary work gets widened until it means nothing.
+ *
+ * ⚠️ **The census alone does NOT gate the contract, and saying it did was the mistake.** Raising the
+ * target to `'esnext'` drops every promised browser minimum and leaves all these counts nonzero —
+ * greener, if anything. Found by the Codex implementation review. Emitted syntax answers *"was
+ * anything downlevelled"*; it cannot answer *"which browsers were promised"*, because that is a
+ * value in the config and nowhere in the output. So the config values are pinned separately, below.
  */
+{
+  const config = readFileSync(join(root, 'vite.config.ts'), 'utf8');
+  // The three build values criterion 10.3 says are RECORDED. Recorded is not enough on its own —
+  // a document that accurately quotes a config string while the config has moved is this
+  // criterion's named false green (vault 10.1), so the string is pinned where the build can see it.
+  const PINNED = [
+    "const BROWSER_TARGET = ['chrome111', 'edge111', 'firefox114', 'safari16.4', 'ios16.4'];",
+    'target: BROWSER_TARGET,',
+    "minify: 'oxc',",
+    'sourcemap: false,',
+  ];
+  for (const line of PINNED) {
+    if (!config.includes(line)) {
+      problems.push(
+        `vite.config.ts no longer contains \`${line}\`. The browser contract, the minifier and the ` +
+          'sourcemap setting are what criterion 10.3 pins, and none of them is visible in the ' +
+          'emitted bundle — raising the target to esnext drops every promised browser minimum ' +
+          'while leaving the syntax census greener than before. Changing any of these is a ' +
+          "deliberate act: update this list, and update vite.config.ts's reversal instructions.",
+      );
+    }
+  }
+}
+
 {
   const measured = measureBundle(join(root, 'dist'));
   const mustSurvive = measured.syntax.filter((f) => f.since >= 'ES2020');

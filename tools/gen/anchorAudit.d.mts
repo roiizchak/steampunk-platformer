@@ -28,4 +28,6 @@ export declare function auditOrThrow(opts?: {
   generatedRoot?: string;
   /** Injectable so the ABSENT rule is reachable from a test. Defaults to the declared list. */
   sources?: string[];
+  /** Make ABSENT fatal regardless of `generatedRoot`. Required at the submission point. */
+  requirePresent?: boolean;
 }): AnchorAuditRow[];
