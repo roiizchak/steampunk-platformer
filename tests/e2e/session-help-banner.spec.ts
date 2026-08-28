@@ -36,7 +36,16 @@ import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
 import { readBanner } from './bannerHelpers';
 import { readHud } from './hudHelpers';
-import { HUD_MARGIN } from '../../src/render/hud';
+import { HUD_MARGIN, HUD_PLATE } from '../../src/render/hud';
+import {
+  HELP_BANNER_MAX_ROWS,
+  HELP_FONT_PX,
+  HELP_LINE_BOX_SLACK,
+  HELP_LINE_HEIGHT_RATIO,
+} from '../../src/render/helpBanner';
+
+/** Playwright creates the parent directories for a screenshot path, so nothing here makes them. */
+const EVIDENCE = 'docs/evidence/session-hud-and-pits';
 
 /** Do two rectangles share any area? Half-open, so touching edges are not an overlap. */
 function overlaps(
@@ -95,6 +104,83 @@ function assertPlaced(
   expect(banner.bounds.bottom, 'the banner runs off the bottom of the screen').toBeLessThanOrEqual(
     banner.gameSize.height,
   );
+
+  /**
+   * 🔴 Bounded against the HUD BAND, not against the screen.
+   *
+   * This used to stop at `bottom <= gameSize.height`, and the UI/UX gate owner (brief 2, finding 4)
+   * showed what that permits: add one word to the legend, the block goes from three rows to four to
+   * twenty, hangs from y = 24 down to y = 1000 over the entire play area — and every assertion above
+   * still passes, because 1000 is less than 1080. The spec bounded the banner against the screen
+   * while the defect it exists for is about the PLAY AREA.
+   *
+   * The ceiling is `HELP_BANNER_MAX_ROWS`, whose block explains why it is four and why three rows
+   * already overflow the plate. This is not the row-count pin the header refuses — that would be an
+   * equality, and would red the next time a key is added. It is a ceiling with room in it.
+   */
+  const maxBottom =
+    HUD_MARGIN * hud.layout.scale +
+    HELP_BANNER_MAX_ROWS *
+      HELP_FONT_PX *
+      HELP_LINE_HEIGHT_RATIO *
+      HELP_LINE_BOX_SLACK *
+      hud.layout.scale;
+  expect(
+    banner.bounds.bottom,
+    `the banner reaches ${banner.bounds.bottom} in ${banner.lines} rows, past the ` +
+      `${HELP_BANNER_MAX_ROWS}-row ceiling at ${maxBottom} — it is eating the play area, which is ` +
+      'the defect this session exists to fix, in a taller and narrower shape',
+  ).toBeLessThanOrEqual(maxBottom + 1);
+
+  // And the honest half, recorded as a number rather than implied away: three rows of 43 px cannot
+  // fit a 128 px plate, so the banner DOES extend below the plate's bottom edge. See
+  // `HELP_BANNER_MAX_ROWS`. This asserts the overflow is bounded, not that it is absent.
+  expect(banner.bounds.top, 'the banner starts below the HUD margin').toBeLessThanOrEqual(
+    (HUD_MARGIN + HUD_PLATE.h) * hud.layout.scale,
+  );
+}
+
+/**
+ * 🔴 The banner does not cover the PLAYER — the half of the criterion the HUD rects cannot express.
+ *
+ * Found by the UI/UX gate owner, brief 1, finding D: `assertPlaced` checks the banner against the
+ * plate and the counter and nothing else, so a banner sitting on top of a sprite would satisfy every
+ * assertion in this file. And the block genuinely does extend below the HUD plate's bottom edge —
+ * measured at design y = 220 in a DEV build's four rows, against a plate that ends at 152 — so
+ * "it is inside the HUD's footprint" is **not** true and cannot be the argument.
+ *
+ * The player is drawn in WORLD space and the banner in SCREEN space, so the comparison has to go
+ * through the camera. Done in the page, once, because a scroll value read separately from a player
+ * position is two samples of two different frames.
+ */
+async function assertClearOfPlayer(
+  page: import('@playwright/test').Page,
+  banner: Awaited<ReturnType<typeof readBanner>>,
+): Promise<void> {
+  const player = await page.evaluate(() => {
+    const scene = (
+      window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
+    ).__phaserGame.scene.getScene('Game') as unknown as {
+      cameras: { main: { scrollX: number; scrollY: number; zoom: number } };
+      playerSprite?: { getBounds(): { left: number; right: number; top: number; bottom: number } };
+    };
+    const cam = scene.cameras.main;
+    const b = scene.playerSprite?.getBounds();
+    if (!b) return null;
+    return {
+      left: (b.left - cam.scrollX) * cam.zoom,
+      right: (b.right - cam.scrollX) * cam.zoom,
+      top: (b.top - cam.scrollY) * cam.zoom,
+      bottom: (b.bottom - cam.scrollY) * cam.zoom,
+    };
+  });
+
+  expect(player, 'no drawn player to compare against — this check would be vacuous').not.toBeNull();
+  expect(
+    overlaps(banner.bounds, player!),
+    `the controls banner ${JSON.stringify(banner.bounds)} is drawn over the player ` +
+      `${JSON.stringify(player)} — which is the defect the owner reported, at a smaller size`,
+  ).toBe(false);
 }
 
 test.describe('the controls banner is placed beside the HUD, not over the level', () => {
@@ -103,6 +189,7 @@ test.describe('the controls banner is placed beside the HUD, not over the level'
     const { hud, banner } = await bannerAndHud(page);
 
     assertPlaced(hud, banner);
+    await assertClearOfPlayer(page, banner);
 
     // Non-vacuity: it is a real legend, not an empty string that trivially overlaps nothing.
     expect(banner.text.length, 'the banner is empty — every bounds check above is vacuous').toBeGreaterThan(
@@ -149,6 +236,57 @@ test.describe('the controls banner is placed beside the HUD, not over the level'
     const small = await bannerAndHud(page);
     expect(small.banner.gameSize.width).toBe(852);
     assertPlaced(small.hud, small.banner);
+  });
+
+
+  /**
+   * Evidence, and the row count nobody may assume.
+   *
+   * The owner reported this defect from four screenshots of the shipped build. A fix to a visual
+   * defect with no captured picture of the result is an unverified fix, so the three supported sizes
+   * are photographed here rather than in a throwaway script — the evidence is then a by-product of a
+   * gate that runs, not a file somebody remembered to make once.
+   *
+   * ⚠️ The row count is REPORTED, never asserted. Every row-count figure previously written down in
+   * this repo was measured at the old 1872 px wrap and is wrong for the band the banner now uses;
+   * the numbers this case prints are the live ones. They are not a contract — the owner's decision
+   * was to keep every key printed at whatever row count that takes.
+   */
+  test('captures the placement at every supported size', async ({ page }) => {
+    await bootToGame(page);
+    const sizes: [number, number][] = [
+      [1920, 1080],
+      [1280, 720],
+      [852, 480],
+    ];
+    const rows: string[] = [];
+
+    for (const [w, h] of sizes) {
+      await page.setViewportSize({ width: w, height: h });
+      await page.evaluate(
+        ([gw, gh]) => {
+          (
+            window as unknown as { __phaserGame: { scale: { resize(a: number, b: number): void } } }
+          ).__phaserGame.scale.resize(gw, gh);
+        },
+        [w, h],
+      );
+      await waitTicks(page, 4);
+
+      const { hud, banner } = await bannerAndHud(page);
+      assertPlaced(hud, banner);
+      await assertClearOfPlayer(page, banner);
+      rows.push(
+        [
+          `${w}x${h}: ${banner.lines} rows, bounds ${JSON.stringify(banner.bounds)}`,
+          ...banner.rows.map((r) => `    | ${r}`),
+        ].join('\n  '),
+      );
+      await page.screenshot({ path: `${EVIDENCE}/banner-${w}x${h}.png` });
+    }
+
+    console.log(['BANNER PLACEMENT', ...rows].join('\n  '));
+    expect(rows.length).toBe(3);
   });
 
   /**

@@ -1,0 +1,27 @@
+{
+  "why": "a slab high above ground that is at the PIT'S OWN LEVEL is not a wall \u2014 you walk straight out underneath it. The old rule took the highest rectangle in the column as the surface and ORed ground-reaching over every rectangle in it, so this read as a ten-tile wall (Codex plan review round 3, finding 7).",
+  "tileSize": 96,
+  "widthTiles": 20,
+  "groundTopRow": 6,
+  "solids": [
+    {
+      "x": 0,
+      "y": 576,
+      "w": 1920,
+      "h": 384
+    },
+    {
+      "x": 0,
+      "y": 288,
+      "w": 672,
+      "h": 288
+    },
+    {
+      "x": 960,
+      "y": 0,
+      "w": 960,
+      "h": 96
+    }
+  ],
+  "expectPits": []
+}

@@ -92,11 +92,19 @@ export const HELP_STROKE_PX = 4;
  * `#fffaf0` fails at 4.493) over a stroke of `#060606` or darker. White-on-black, and the text would
  * still be 8 px.
  *
- * **44 × 0.44375 = 19.5 physical px, bold** clears WCAG's 14 pt bold large-text threshold
+ * **43 × 0.44375 = 19.1 physical px, bold** clears WCAG's 14 pt bold large-text threshold
  * (≈18.66 px), so the bar is **3:1** — and the shipped ink pair measures **3.80:1**. Formal
  * conformance, the locked palette untouched, and the banner is now legible rather than merely
  * high-contrast. The same arithmetic and the same threshold the counter already uses, quoted from
  * `COUNTER_FILL`'s block above rather than re-argued.
+ *
+ * ⚠️ **43 is one step off the FLOOR, and the floor is 42.06 — not a preference.** The owner asked
+ * for the legend "a bit smaller" on 2026-08-27 after watching it draw beside the counter. The value
+ * moved 44 → 43, which is as far as it can go: `18.66 × 1920 / 852 = 42.06`, so 42 draws at
+ * 18.6 physical px at the smallest supported size and drops the banner OUT of WCAG's large-text
+ * class — at which point the bar becomes 4.5:1, which the "road not taken" case in
+ * `contrast-floor.test.ts` shows this palette cannot reach without going white-on-black. Anything
+ * below 43 is a STYLE.md change and an approval checkpoint, not a tuning tweak.
  *
  * ⚠️ **The cost is real and it is vertical, and the number below is no longer two.** This block used
  * to end *"~115 characters at 44 px monospace is far wider than the 1872 px wrap width, so the banner
@@ -105,7 +113,7 @@ export const HELP_STROKE_PX = 4;
  * every key printed and allow three lines**, so no row count is written down anywhere — the draw site
  * measures it with `getWrappedText()` and `helpBannerLayout()` centres whatever it found.
  */
-export const HELP_FONT_PX = 44;
+export const HELP_FONT_PX = 43;
 
 /** Bold, for the same reason the counter is: 14 pt BOLD is the threshold 19.5 px clears. */
 export const HELP_FONT_STYLE = 'bold';
@@ -158,6 +166,65 @@ export interface HelpBannerLayout {
  */
 export const HELP_LINE_HEIGHT_RATIO = 1.2;
 
+/**
+ * How much taller the BROWSER's line box runs than the nominal ratio above.
+ *
+ * 🔴 `HELP_LINE_HEIGHT_RATIO` is what *this* file uses to centre the block. It is not what Chrome
+ * draws. Phaser measures each row through the browser's own font metrics, and for the shipped face
+ * that comes out a little over the nominal 1.2 — a four-row block at 1280×720 measured **158.67 px**
+ * against a nominal **156.80**, i.e. **1.216** per row (2026-08-27, `session-help-banner.spec.ts`).
+ *
+ * A ceiling written from the nominal ratio therefore fails by ~1 % on a banner that is behaving
+ * exactly as designed, which is a false red, and "fix" it by nudging the bound is the move
+ * TESTING-RULES.md §5 forbids. This constant says the real thing instead: the ceiling is a
+ * **play-area** bound, not a glyph-metrics claim.
+ *
+ * 5 % rather than the measured 1.3 % so a font substitution on another machine cannot false-red it,
+ * and far below the 25 % an extra row would add — so the gate still goes red for the mutation it
+ * exists for, which is the only property that matters *(C2)*.
+ */
+export const HELP_LINE_BOX_SLACK = 1.05;
+
+/**
+ * The banner draws ABOVE everything `GameScene` owns.
+ *
+ * 🔴 It had no depth at all — default 0 — while the player is at 10, enemies at 9, their shots at
+ * 11, their health bars at 12, gears at 8, the goal at 7 and the effect band at 10.1-10.3. The
+ * banner is `setScrollFactor(0)`, so the world slides underneath it: **any sprite that scrolled into
+ * its screen-space column drew straight through the legend.** Found by the UI/UX gate owner, brief 2,
+ * finding 5, and true of the old full-width placement too — it is simply much easier to hit now that
+ * the banner sits where the level scrolls past.
+ *
+ * 20 rather than 13 to leave the whole `GameScene` band room to grow without anyone having to come
+ * back here. `UIScene` is a separate, later-registered scene and composites over all of this
+ * regardless, which is why `OVERLAY_DEPTH` is a different number in a different file.
+ */
+export const HELP_BANNER_DEPTH = 20;
+
+/**
+ * How many wrapped rows the banner may occupy before it is eating the play area.
+ *
+ * ## 🔴 This bound exists because the fix was incomplete without it
+ *
+ * The owner's decision was **keep every key printed and allow three lines**. Three lines at 43 px is
+ * `3 * 43 * 1.2 = 154.8` px, and the HUD plate is `HUD_PLATE.h` = **128**. So a three-row banner
+ * cannot fit the plate's band — it is arithmetic, not a bug, and it follows directly from the
+ * decision. Measured on the shipped build: the block runs to design y ≈ 182, about 30 px past the
+ * plate's bottom edge at 152. The DEV legend is four rows and reaches ≈ 235.
+ *
+ * That is a far smaller intrusion than the full-width strip the owner reported — it is confined to
+ * the column right of the counter instead of spanning the screen — but it is **not zero**, and
+ * saying otherwise would be false. The UI/UX gate owner, brief 2, found it and produced the
+ * screenshot already in the repo that shows it.
+ *
+ * What was genuinely missing is a ceiling. `session-help-banner.spec.ts` bounded the banner against
+ * the **screen**, so a legend that grew to twenty rows and hung from y = 24 down to y = 1000, over
+ * the entire play area, satisfied every assertion in it (brief 2, finding 4). This constant is that
+ * ceiling: four rows, which is what the DEV form takes today, so an ordinary edit does not red it
+ * and a runaway one does.
+ */
+export const HELP_BANNER_MAX_ROWS = 4;
+
 export function helpBannerLayout(
   counterRightPx: number,
   gameWidthPx: number,
@@ -183,9 +250,25 @@ export function helpBannerLayout(
     // e2e right-margin assertion failed by 1.56 px at 852 x 480 on the first run, which is what
     // this term is. A layout that asks for an outline has to leave room for the outline.
     //
-    // Never negative either: a game narrow enough to leave no band would otherwise hand Phaser a
-    // negative wrap width, which wraps every word onto its own row instead of failing.
-    wrapPx: Math.max(0, gameWidthPx - x - margin - HELP_STROKE_PX * scale),
+    // 🔴 **TWICE the stroke, because one was still not enough** — the same assertion failed again
+    // by 1.33 px at 1280 x 720 after the font moved to 43. Read out of the vendored engine rather
+    // than fitted to the failure: `GetTextSize.js:41` starts each line width AT `strokeThickness`
+    // and `Text.js:1381` then draws the glyphs from `strokeThickness / 2`, so up to **1.5 strokes**
+    // of the object's width is outline rather than text — and `GetTextSize.js:67` runs the result
+    // through `Math.ceil`, which can add one more device pixel on top. `2 x` covers 1.5 x plus the
+    // rounding with room to spare, and costs 8 design px out of a ~1274 px band.
+    //
+    // 🔴 **The floor is one em, and it was `Math.max(0, …)` — which turns wrapping OFF.**
+    //
+    // `Text.js:392` is `else if (style.wordWrapWidth)`, so **zero is falsy** and Phaser takes the
+    // no-wrap branch: the clamp's chosen "safe" value produces one unwrapped line running off the
+    // right of the screen, which is strictly worse than the column of single words it was written to
+    // avoid — and is a rehearsal of the very full-width strip this session exists to remove. The
+    // comment asserted the opposite as fact and `help-banner-layer.test.ts` pinned the wrong number
+    // beside it, which is §5's *read the assertion, not the statistic* exactly. Found by the
+    // code-review gate owner (brief 2, finding 6) and checked against the vendored engine before
+    // changing anything. A one-em floor still wraps.
+    wrapPx: Math.max(fontPx, gameWidthPx - x - margin - 2 * HELP_STROKE_PX * scale),
     fontPx,
     lineHeightPx,
   };

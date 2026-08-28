@@ -1,5 +1,5 @@
 {
-  "why": "spikes covering only part of the floor \u2014 you land on the bare column",
+  "why": "a full-height hazard one pixel WIDE at the edge of each column touches every cell and covers none of them \u2014 the other half of the same hole (Codex round 3, finding 6).",
   "tileSize": 96,
   "widthTiles": 20,
   "groundTopRow": 6,
@@ -27,7 +27,19 @@
     {
       "x": 672,
       "y": 480,
-      "w": 192,
+      "w": 1,
+      "h": 96
+    },
+    {
+      "x": 768,
+      "y": 480,
+      "w": 1,
+      "h": 96
+    },
+    {
+      "x": 864,
+      "y": 480,
+      "w": 1,
       "h": 96
     }
   ],
@@ -37,5 +49,5 @@
       "toCol": 9
     }
   ],
-  "expectProblem": "is not fully covered above column 9"
+  "expectProblem": "is not fully covered above column 7"
 }

@@ -114,8 +114,21 @@ export function helpLine(): string {
   // currently tells anyone what the keys are.
   // `ESC levels` is in the shipped half too, and for the identical reason: Phase 8 put the level menu
   // behind a key rather than in front of the game, so this banner is the only thing that says so.
+  // 🔴 The spaces INSIDE each key/label pair are non-breaking (U+00A0); the `  ·  ` separators are
+  // ordinary. Phaser wraps on word boundaries, and in the narrower band the banner now occupies it
+  // broke `[ ]` from `volume` and, at 852 x 480, `G` from `gym` — a key rendered adrift from the
+  // thing it does, on the one surface that teaches the controls. Predicted by the accessibility gate
+  // owner (brief 2, finding 1) and then MEASURED from `getWrappedText()`, not argued.
+  //
+  // A non-breaking space is the minimal fix: every key is still printed, every glyph still renders
+  // identically in a monospace face, and the only thing that changes is that a segment now wraps as
+  // a unit. The DEV suffix below deliberately keeps ordinary spaces — `verify-dist.mjs` sweeps
+  // `dist/` for the literal phrases `'p play'`, `'o editor'` and `' gym'`, and rewriting them here
+  // would make that sweep unable to match, which is a gate narrowed by a change somewhere else.
   const base =
-    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume  ·  ESC levels';
+    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
+    'SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume  ·  ' +
+    'ESC levels';
   // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
   // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the
   // long DEV form onto a THIRD wrapped row, which `hud-layout.test.ts` caps against for eating the

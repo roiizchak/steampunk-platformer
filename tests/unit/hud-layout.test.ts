@@ -119,7 +119,23 @@ describe('hudLayout is derived from the live game size', () => {
     // silently re-allowed the three-row DEV banner this cap exists to prevent — the cap has to be
     // the DEV threshold, not the shipped one. 44-45 is the whole window where the banner is large
     // text AND both forms are two rows.
-    expect(HELP_FONT_PX, 'above 45 the DEV banner needs a third row and eats the play area')
+    //
+    // 🔴 **EVERY ROW COUNT IN THE TABLE AND THE PARAGRAPH ABOVE IS A MEASUREMENT AT A WRAP WIDTH
+    // THAT NO LONGER EXISTS, and the reason the cap exists has been overruled** (2026-08-27).
+    //
+    // All of it was swept `wrapped at 1872 px` — the full view. The banner does not wrap there any
+    // more: it wraps inside the band right of the gear counter, which is roughly two thirds of that,
+    // so both forms take MORE rows than the numbers above say. And the thing the cap protects
+    // against is gone twice over: the owner's decision this session was **keep every key printed and
+    // allow three lines**, and the banner no longer sits over the play area for a third row to eat —
+    // `helpBannerLayout()` centres it on the HUD plate's band and clamps it to the top margin.
+    //
+    // The cap SURVIVES anyway, with a different job: it stops a runaway font size from overflowing a
+    // band that is now much narrower than the view. That is a weaker claim than the one it was
+    // written for, and it is the honest one. **A row count is deliberately gated nowhere** — see
+    // `tests/e2e/session-help-banner.spec.ts`, which pins clearance and containment instead, because
+    // pinning rows would gate the wrong thing and red the next time a key is added.
+    expect(HELP_FONT_PX, 'above 45 the banner overflows the band right of the gear counter')
       .toBeLessThanOrEqual(45);
   });
 

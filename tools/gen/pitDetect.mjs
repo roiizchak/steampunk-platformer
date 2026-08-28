@@ -32,29 +32,46 @@
  *
  * - **the run is at least 2 columns wide** — a one-column notch is a step, not a pit, and you leave
  *   it by walking;
- * - **the nearest surface on the left AND on the right is at least 2 tiles higher** — a single step
- *   down is not a pit either, and both sides must be walls or it is a slope you walk out of;
- * - **both neighbours exist** — a run touching the map edge has nothing on the outer side, which is
- *   what keeps the level's opening stretch and the goal apron out;
- * - **both neighbours reach the ground row** — a platform floating over a bottomless gap is not a
- *   wall you are trapped behind, and the gap beside it is the kill plane's business, not this
- *   file's.
+ * - **the column on each side is SOLID at the 2 rows immediately above the pit floor** — which is
+ *   the only thing that actually stops you walking out sideways.
  *
- * Every clause is a fixture in `tests/fixtures/pit-levels/`. That is not ceremony: the five shipped
- * valleys are ALSO found by a far broader detector that checks none of these clauses, so the
- * shipped maps cannot tell a correct implementation from a sloppy one. Codex's plan review round 2
- * caught exactly that — four fixtures about coverage would all have passed against a rule that had
- * quietly lost every narrowing clause.
+ * ## 🔴 Two clauses, not five, and the reason that correction was forced
+ *
+ * This rule used to be written as five clauses, and three of them were **dead code**. It asked for
+ * the neighbour's *nearest surface* to be 2 tiles higher, and separately that the neighbour existed
+ * (map edge), that it was not bottomless, and that it reached the ground row. Two independent
+ * reviewers found the same thing on the same day: whenever the map-edge or bottomless test would
+ * have fired, the ground-reaching test fired anyway — an out-of-bounds index reads `undefined` and
+ * `!undefined` is true, and a column no rectangle covers never has its flag set. **No fixture could
+ * ever have discriminated them**, and three of the twelve committed fixtures were therefore proving
+ * nothing while carrying names that said they were.
+ *
+ * Worse, the surface-height test was wrong on a case nobody had thought of. `surfaceRow` took the
+ * highest rectangle in a column while `reachesGround` ORed over *every* rectangle in it, so a slab
+ * floating at row 10 above a **separate** ground rectangle at row 20 read as a ten-tile wall — when
+ * in fact the ground beside the pit is at the pit's own level and the player simply walks out.
+ *
+ * Asking "is the column solid at the rows just above the floor" says what the wall clause was always
+ * trying to say, in one question instead of four. The map edge is not solid; a bottomless gap is not
+ * solid; a floating platform is not solid at those rows; and neither is a slab over separate ground.
+ * The exclusions are all still there — as consequences of one live rule rather than four tests of
+ * which three could not fail.
+ *
+ * The fixtures in `tests/fixtures/pit-levels/` keep their place: they are distinct SHAPES the rule
+ * must reject, and the shipped maps contain none of them, so without them the gate could not tell a
+ * correct detector from a far broader one (Codex plan review round 2, finding 6). What changed is
+ * the claim made about them — they are examples of the wall clause, not proofs of five separate
+ * ones, and `level-pits.test.ts` no longer says otherwise.
  */
 
 /** A one-column dip is a step you walk out of, not a pit. */
 export const MIN_PIT_COLS = 2;
 
 /**
- * How much higher than the pit floor both sides must stand.
+ * How many rows above the pit floor each side must be SOLID for the pit to be inescapable sideways.
  *
- * 2 tiles rather than 1 because a single step down is a slope, and rather than 3 because the
- * shallowest shipped pit is 3 and a threshold set AT the observed minimum cannot tell "just deep
+ * 2 rather than 1 because a single step down is a slope you walk back up, and rather than 3 because
+ * the shallowest shipped pit is 3 and a threshold set AT the observed minimum cannot tell "just deep
  * enough" from "one tile too shallow" — it has no room to be wrong in the safe direction.
  */
 export const MIN_WALL_TILES = 2;
@@ -73,6 +90,8 @@ export const MIN_WALL_TILES = 2;
 export function columnProfile(rects, widthTiles, tileSize, groundTopRow) {
   const surfaceRow = new Array(widthTiles).fill(null);
   const reachesGround = new Array(widthTiles).fill(false);
+  /** Every row each column has solid material in — what the wall test actually asks about. */
+  const solidRows = Array.from({ length: widthTiles }, () => new Set());
 
   for (let col = 0; col < widthTiles; col += 1) {
     const left = col * tileSize;
@@ -83,9 +102,28 @@ export function columnProfile(rects, widthTiles, tileSize, groundTopRow) {
       const bottomRow = Math.ceil((r.y + r.h) / tileSize); // exclusive
       if (surfaceRow[col] === null || topRow < surfaceRow[col]) surfaceRow[col] = topRow;
       if (topRow <= groundTopRow && bottomRow > groundTopRow) reachesGround[col] = true;
+      for (let row = topRow; row < bottomRow; row += 1) solidRows[col].add(row);
     }
   }
-  return { surfaceRow, reachesGround };
+  return { surfaceRow, reachesGround, solidRows };
+}
+
+/**
+ * Is this column a WALL for a pit floored at `groundTopRow` — can the pit not be walked out of here?
+ *
+ * The whole wall clause in one question, and the reason the header says two clauses rather than
+ * five. Off the map has no entry at all, which excludes the level's opening stretch and the goal
+ * apron; a bottomless gap has no rows; a platform floating over one is solid at row 16 and not at
+ * row 19; and a slab above SEPARATE ground is solid high up and not at row 19 either — the case the
+ * previous surface-height formulation got wrong.
+ */
+function isWall(solidRows, col, groundTopRow) {
+  const rows = solidRows[col];
+  if (rows === undefined) return false;
+  for (let i = 1; i <= MIN_WALL_TILES; i += 1) {
+    if (!rows.has(groundTopRow - i)) return false;
+  }
+  return true;
 }
 
 /**
@@ -94,7 +132,7 @@ export function columnProfile(rects, widthTiles, tileSize, groundTopRow) {
  * Returns the RUN rather than a boolean or a rect so a caller can decide what to put in it — spikes
  * today, and the same shape would carry a furnace or water later without changing this rule.
  */
-export function detectPits({ surfaceRow, reachesGround }, groundTopRow) {
+export function detectPits({ surfaceRow, solidRows }, groundTopRow) {
   const pits = [];
   const width = surfaceRow.length;
 
@@ -110,13 +148,10 @@ export function detectPits({ surfaceRow, reachesGround }, groundTopRow) {
 
     if (to - from + 1 < MIN_PIT_COLS) continue;
 
-    const l = from - 1;
-    const r = to + 1;
-    if (l < 0 || r >= width) continue; // a map edge is not a wall
-    if (surfaceRow[l] === null || surfaceRow[r] === null) continue; // a bottomless gap is not a wall
-    if (!reachesGround[l] || !reachesGround[r]) continue; // nor is a floating platform
-    if (groundTopRow - surfaceRow[l] < MIN_WALL_TILES) continue;
-    if (groundTopRow - surfaceRow[r] < MIN_WALL_TILES) continue;
+    // Both sides solid at the rows just above the floor, or it is not a pit — it is ground you walk
+    // off and back onto. `isWall` above lists every shape this single test excludes.
+    if (!isWall(solidRows, from - 1, groundTopRow)) continue;
+    if (!isWall(solidRows, to + 1, groundTopRow)) continue;
 
     pits.push({ fromCol: from, toCol: to });
   }
@@ -172,6 +207,36 @@ function overlaps(a, b) {
 }
 
 /**
+ * Is `cell` COMPLETELY covered by the union of `rects` — not merely touched by one of them?
+ *
+ * 🔴 It used to be `hazards.some(h => overlaps(cell, h))`, and Codex plan review round 3, finding 6
+ * is why it is not any more: *"fully covered pit floor" meant only "touched somewhere"*. A hazard one
+ * pixel tall lying across the top of the pit, or one that clipped the outer edge of each end column,
+ * satisfied every assertion in the suite while leaving most of the floor harmless — which is the
+ * Phase 4 defect of a spike run that is drawn and does not hurt, wearing a different shape.
+ *
+ * Only rectangles that span the cell's full HEIGHT can contribute, which is what rejects a
+ * horizontal sliver; their x-intervals are then merged and must cover the cell's full WIDTH, which
+ * is what rejects a vertical one. Coverage by several adjacent rectangles counts, because the union
+ * is what the player walks into — `mergeSpikeRuns` happens to emit one rectangle per run today, and
+ * this must not silently depend on that.
+ */
+function fullyCovered(cell, rects) {
+  const spans = rects
+    .filter((r) => r.y <= cell.y && r.y + r.h >= cell.y + cell.h)
+    .map((r) => [r.x, r.x + r.w])
+    .sort((a, b) => a[0] - b[0]);
+
+  let reached = cell.x;
+  for (const [from, to] of spans) {
+    if (from > reached) break; // a gap the union does not close
+    if (to > reached) reached = to;
+    if (reached >= cell.x + cell.w) return true;
+  }
+  return reached >= cell.x + cell.w;
+}
+
+/**
  * `null` when the level's pits are all properly spiked, otherwise a one-line reason.
  *
  * Mirrors `describeLevelProblem`'s `string | null` contract deliberately: every reason names the
@@ -199,10 +264,10 @@ export function describePitProblem({
     const floorTop = groundTopRow * tileSize;
     for (let col = fromCol; col <= toCol; col += 1) {
       const cell = { x: col * tileSize, y: floorTop - tileSize, w: tileSize, h: tileSize };
-      if (!hazards.some((h) => overlaps(cell, h))) {
+      if (!fullyCovered(cell, hazards)) {
         return (
-          `the pit at cols ${fromCol}-${toCol} has no hazard above column ${col} — you fall in and ` +
-          'nothing hurts you, which is the defect this rule exists to prevent'
+          `the pit at cols ${fromCol}-${toCol} is not fully covered above column ${col} — you fall ` +
+          'in and nothing hurts you, which is the defect this rule exists to prevent'
         );
       }
     }

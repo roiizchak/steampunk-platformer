@@ -341,10 +341,26 @@ export async function bannerInk(
   const img = decodePng(new Uint8Array(shot));
   const scale = box.width / GAME_WIDTH;
 
+  // 🔴 `boundingBox()` is CSS pixels and `screenshot()` is DEVICE pixels, so `scale` is only the
+  // right number at a device pixel ratio of 1. `chromium-prod` runs at 1 and `chromium-dpr2` exists
+  // in the same config at 2 — where every region would be off by a factor of two and would still
+  // return a plausible non-zero count, i.e. fail silently rather than loudly. Asserted, not assumed.
+  // Code-review gate owner, brief 1, finding 5.
+  expect(
+    img.width,
+    'the screenshot is not 1:1 with the CSS viewport — bannerInk assumes a device pixel ratio of 1',
+  ).toBe(page.viewportSize()?.width);
+
   return (x0, y0, x1, y1) => {
     let n = 0;
     for (let y = Math.round(box.y + y0 * scale); y < Math.round(box.y + y1 * scale); y += 1) {
+      if (y < 0 || y >= img.height) continue;
       for (let x = Math.round(box.x + x0 * scale); x < Math.round(box.x + x1 * scale); x += 1) {
+        // 🔴 Out of range must be SKIPPED, not indexed. `(y * img.width + x) * 4` with an `x` past
+        // the width is a perfectly valid index in the NEXT scanline, so the `?? 0` below is false
+        // safety: an over-wide region would silently count pixels from the wrong row rather than
+        // failing. Code-review gate owner, brief 1, finding 4.
+        if (x < 0 || x >= img.width) continue;
         const i = (y * img.width + x) * 4;
         // `COUNTER_FILL` #f7e3b8, the banner's fill. A tolerance rather than an equality: FIT
         // downscales the canvas, so glyph edges blend with the 4 px dark stroke behind them.

@@ -20,6 +20,10 @@
  * the layer is not a field on `UIScene`, which names Phaser as a value (Codex round 2, finding 3).
  * `npm run test:sim-isolated` runs this file with the engine uninstalled.
  *
+ * ⚠️ The PURE decision function's own cases live in `help-banner-layout.test.ts` — this file drives
+ * the layer that applies it. They were one file until it reached 509 lines against the 400-line
+ * ceiling; the seam is `src/render/` decides, `src/scenes/` applies.
+ *
  * ## Every assertion is written to fail if the module does nothing
  *
  * The recorder starts at `(0, 0)` with a wrap width of 1 — the values `create()` leaves behind — so
@@ -29,187 +33,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import type Phaser from 'phaser';
-
-import { HelpBannerLayer } from '../../src/scenes/helpBannerLayer';
-import { SCENE_SHUTDOWN, SCENE_UPDATE } from '../../src/scenes/engineLiterals';
-import { COUNTER_GAP, HUD_MARGIN, hudLayout, type HudLayout } from '../../src/render/hud';
-import { HELP_FONT_PX, helpBannerLayout } from '../../src/render/helpBanner';
-
-const HUD_SLOT = { x: 150, y: 44, w: 232, h: 40 };
-
-interface TextRecorder {
-  x: number;
-  y: number;
-  width: number;
-  fontPx: number | null;
-  wrapPx: number | null;
-  /** How many rows `getWrappedText()` will claim, so the two-pass layout can be exercised. */
-  rows: number;
-  destroyed: boolean;
-  style: Record<string, unknown>;
-  content: string;
-}
-
-interface Harness {
-  layer: HelpBannerLayer;
-  banner: TextRecorder;
-  counter: { x: number; y: number; width: number; fontPx: number };
-  emitUpdate: () => void;
-  emitResize: () => void;
-  emitShutdown: () => void;
-  setGameSize: (w: number, h: number) => void;
-  /** Order in which the two `resize` listeners fired, for the ordering assertion. */
-  resizeOrder: string[];
-  updateListeners: number;
-  resizeListeners: number;
-}
-
-/**
- * A fake scene, a fake parallel HUD, and the ONE ordering fact this whole design turns on.
- *
- * `UIScene` registers its `resize` listener inside its own `create()`, which runs after
- * `GameScene.create()` has already built this layer — so the layer's listener is registered first
- * and the emitter calls it first. The harness reproduces that order deliberately: the layer is
- * built, and only then does the fake HUD subscribe. A harness that subscribed the HUD first would
- * make a broken read-during-resize implementation look correct.
- */
-function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
-  let gameW = 1920;
-  let gameH = 1080;
-
-  const resizeOrder: string[] = [];
-  // ⚠️ Every handler is stored WITH its context. Phaser's emitter binds the third argument of
-  // `on`/`once` when it calls back; a fake that drops it calls the layer's private methods unbound,
-  // and every one of them throws on `this`. That is a harness defect, not a product one — but it
-  // presents as six red tests with a plausible-looking stack, so it is worth the two extra fields.
-  const updateHandlers: { fn: () => void; ctx: unknown }[] = [];
-  const resizeHandlers: { fn: () => void; ctx: unknown }[] = [];
-  const shutdownHandlers: { fn: () => void; ctx: unknown }[] = [];
-
-  const banner: TextRecorder = {
-    x: 0,
-    y: 0,
-    width: 0,
-    fontPx: null,
-    wrapPx: null,
-    rows: 2,
-    destroyed: false,
-    style: {},
-    content: '',
-  };
-
-  const text = {
-    setScrollFactor: () => text,
-    setPosition: (x: number, y: number) => {
-      resizeOrder.push('banner');
-      banner.x = x;
-      banner.y = y;
-      return text;
-    },
-    setFontSize: (px: number) => {
-      banner.fontPx = px;
-      return text;
-    },
-    setWordWrapWidth: (px: number) => {
-      banner.wrapPx = px;
-      return text;
-    },
-    getWrappedText: () => {
-      // 🔴 The one thing a real `Text` will not do for a fake: refuse to answer before it has been
-      // told how wide to wrap. Without this the two-pass layout could read rows first and still
-      // look right here, which is precisely the ordering hazard the design removes.
-      if (banner.wrapPx === null || banner.fontPx === null) {
-        throw new Error('getWrappedText() was called before the wrap width and font size were set');
-      }
-      return new Array(banner.rows).fill('row');
-    },
-    destroy: () => {
-      banner.destroyed = true;
-    },
-  };
-
-  // The counter, and a HudLayout that moves with the game size exactly as `UIScene`'s does.
-  let layout: HudLayout = hudLayout(gameW, gameH, HUD_SLOT);
-  const counter = { x: layout.counter.x, y: layout.counter.y, width: 96, fontPx: layout.counter.fontPx };
-
-  const applyHudLayout = (): void => {
-    resizeOrder.push('hud');
-    layout = hudLayout(gameW, gameH, HUD_SLOT);
-    counter.x = layout.counter.x;
-    counter.y = layout.counter.y;
-    // Phaser rewrites `Text.width` synchronously inside `setFontSize`. The fake does the same, so a
-    // read taken before this point is a read of the previous scale's width.
-    counter.fontPx = layout.counter.fontPx;
-    counter.width = 96 * layout.scale;
-  };
-
-  const scene = {
-    add: {
-      text: (_x: number, _y: number, c: string, style: Record<string, unknown>) => {
-        banner.content = c;
-        banner.style = style;
-        banner.wrapPx = (style.wordWrap as { width: number }).width;
-        return text;
-      },
-    },
-    events: {
-      on: (event: string, fn: () => void, ctx: unknown) => {
-        if (event === SCENE_UPDATE) updateHandlers.push({ fn, ctx });
-      },
-      once: (event: string, fn: () => void, ctx: unknown) => {
-        if (event === SCENE_SHUTDOWN) shutdownHandlers.push({ fn, ctx });
-      },
-      off: (event: string, fn: () => void) => {
-        if (event === SCENE_UPDATE) {
-          const i = updateHandlers.findIndex((h) => h.fn === fn);
-          if (i >= 0) updateHandlers.splice(i, 1);
-        }
-      },
-    },
-    scale: {
-      get gameSize() {
-        return { width: gameW, height: gameH };
-      },
-      on: (_event: string, fn: () => void, ctx: unknown) => {
-        resizeHandlers.push({ fn, ctx });
-      },
-      off: (_event: string, fn: () => void) => {
-        const i = resizeHandlers.findIndex((h) => h.fn === fn);
-        if (i >= 0) resizeHandlers.splice(i, 1);
-      },
-    },
-  } as unknown as Phaser.Scene;
-
-  const hud = {
-    hudObjects: () => ({ counter: counter as unknown as Phaser.GameObjects.Text, layout }),
-  };
-
-  const layer = new HelpBannerLayer(scene, hud, content);
-  layer.create();
-  // ⚠️ AFTER the layer, matching the real registration order. See this function's header.
-  resizeHandlers.push({ fn: applyHudLayout, ctx: hud });
-
-  return {
-    layer,
-    banner,
-    counter,
-    resizeOrder,
-    emitUpdate: () => [...updateHandlers].forEach((h) => h.fn.call(h.ctx)),
-    emitResize: () => [...resizeHandlers].forEach((h) => h.fn.call(h.ctx)),
-    emitShutdown: () => [...shutdownHandlers].forEach((h) => h.fn.call(h.ctx)),
-    setGameSize: (w: number, h: number) => {
-      gameW = w;
-      gameH = h;
-    },
-    get updateListeners() {
-      return updateHandlers.length;
-    },
-    get resizeListeners() {
-      return resizeHandlers.length;
-    },
-  };
-}
+import { build } from './helpBannerFake';
+import { HUD_MARGIN } from '../../src/render/hud';
+import { HELP_BANNER_DEPTH, HELP_FONT_PX, helpBannerLayout } from '../../src/render/helpBanner';
 
 describe('the controls banner reaches a drawn object', () => {
   it('creates one, with the legend it was given', () => {
@@ -224,6 +50,89 @@ describe('the controls banner reaches a drawn object', () => {
     // `attachHud()` returns before `UIScene.create()`. Positioning at construction would be
     // positioning against nothing; this asserts the layer does not try.
     expect([h.banner.x, h.banner.y]).toEqual([0, 0]);
+  });
+
+  it('is INVISIBLE until it has been placed, so no frame shows it at the origin', () => {
+    // 🔴 Codex plan review round 3, finding 4. The banner used to be created visible, at (0, 0),
+    // wrapped to one pixel — a column of single characters in the top-left of the level on any frame
+    // that rendered before the first update. This assertion is the difference between confirming
+    // that state and preventing it.
+    const h = build();
+    expect(h.banner.visible, 'the unlaid-out banner is drawable').toBe(false);
+    h.emitUpdate();
+    expect(h.banner.visible, 'the banner was never revealed after being placed').toBe(true);
+  });
+
+  /**
+   * 🔴 The two cameras are different cameras, and the layout has to reconcile them.
+   *
+   * `gameEffects.ts` moves `GameScene`'s camera to `(-shakeSafeMargin.x, -shakeSafeMargin.y)` —
+   * about (-10, -8) — so a `setScrollFactor(0)` object at `x` draws 10 px to the LEFT of `x`, while
+   * the counter it clears lives on `UIScene`'s camera at the origin. At 852 x 480 the whole
+   * `COUNTER_GAP` is 10.7 px, so the banner all but touched the counter. Found by the code-review
+   * gate owner, brief 1, finding 1, and invisible to the e2e clearance assertions because they
+   * compare bounds in one camera's space against rectangles in the other's.
+   */
+  it('compensates for an offset camera, so it lands where the layout put it on screen', () => {
+    const centred = build();
+    centred.emitUpdate();
+
+    const offset = build();
+    offset.camera.x = -10;
+    offset.camera.y = -8;
+    offset.emitUpdate();
+
+    expect(
+      offset.banner.x - centred.banner.x,
+      'the banner did not compensate for the camera offset, so it draws 10 px left of its layout',
+    ).toBeCloseTo(10, 6);
+    expect(offset.banner.y - centred.banner.y).toBeCloseTo(8, 6);
+  });
+
+  it('draws above everything GameScene owns', () => {
+    // Enemy health bars are the deepest thing in that scene at 12. Without a depth the banner sat at
+    // 0 and the world scrolled OVER it — UI/UX gate owner, brief 2, finding 5.
+    const h = build();
+    expect(h.banner.depth, 'the banner has no depth, so sprites draw through it').toBe(
+      HELP_BANNER_DEPTH,
+    );
+    expect(HELP_BANNER_DEPTH).toBeGreaterThan(12);
+  });
+
+  /**
+   * 🔴 A stopped `UIScene` hands back DESTROYED objects, and they are truthy.
+   *
+   * Its SHUTDOWN handler resets only `built`; `this.counter` keeps pointing at a destroyed `Text`
+   * whose `.x` and `.width` still read as numbers. The guard was `if (!counter || !layout)`, which
+   * passes — so the banner was positioned against a corpse at a stale scale and `dirty` was cleared
+   * **permanently**, never retrying when the HUD came back. Reachable through `scene.stop('UI')`
+   * and through every dev-scene transition. Code-review gate owner, brief 2, finding 3; the guard
+   * had no red proof at all before this case, which was that owner's brief 1, finding 2.
+   */
+  it('will not lay out against an absent or destroyed counter, and retries when it returns', () => {
+    const absent = build();
+    absent.counterPresent = false;
+    absent.emitUpdate();
+    expect([absent.banner.x, absent.banner.y], 'laid out against no counter').toEqual([0, 0]);
+    absent.counterPresent = true;
+    absent.emitUpdate();
+    expect(absent.banner.x, 'never retried once the counter existed').toBeGreaterThan(0);
+
+    const dead = build();
+    dead.emitUpdate();
+    const placed = dead.banner.x;
+
+    dead.counter.active = false; // UIScene stopped; the Text is destroyed but still referenced
+    dead.emitResize();
+    // ⚠️ AFTER the resize, because the fake's HUD handler rewrites the counter's width on one — set
+    // before, this would be overwritten and the test would compare a number against itself.
+    dead.counter.width = 9999; // would move the banner a long way, if it were read
+    dead.emitUpdate();
+    expect(dead.banner.x, 'laid out against a DESTROYED counter').toBe(placed);
+
+    dead.counter.active = true;
+    dead.emitUpdate();
+    expect(dead.banner.x, 'never retried once the HUD came back').not.toBe(placed);
   });
 
   it('lands beside the counter on the first update, at the layout the pure function returned', () => {
@@ -323,43 +232,5 @@ describe('and it tears itself down', () => {
     expect(h.resizeListeners, 'the resize listener outlived the scene').toBe(before.resize - 1);
     expect(h.banner.destroyed).toBe(true);
     expect(h.layer.object()).toBeNull();
-  });
-});
-
-describe('helpBannerLayout — the pure decision', () => {
-  it('clears the counter by exactly COUNTER_GAP, scaled', () => {
-    expect(helpBannerLayout(600, 1920, 1, 2).x).toBe(600 + COUNTER_GAP);
-    expect(helpBannerLayout(600, 852, 0.5, 2).x).toBe(600 + COUNTER_GAP * 0.5);
-  });
-
-  it('leaves a usable band at the smallest supported size', () => {
-    const scale = 480 / 1080;
-    const layout = hudLayout(852, 480, HUD_SLOT);
-    const counterRight = layout.counter.x + 96 * scale;
-    const banner = helpBannerLayout(counterRight, 852, scale, 3);
-    expect(banner.wrapPx, 'no room left for the banner at 852 x 480').toBeGreaterThan(0);
-    expect(banner.x + banner.wrapPx).toBeLessThanOrEqual(852);
-  });
-
-  it('never returns a negative wrap width, however narrow the game', () => {
-    // A band that has run out is a band of zero, not a negative one — Phaser reads a negative wrap
-    // as "wrap every word", which draws a column of single words rather than failing.
-    expect(helpBannerLayout(900, 800, 1, 2).wrapPx).toBe(0);
-  });
-
-  it('is homogeneous in scale, so nothing is a raw design pixel by accident', () => {
-    const one = helpBannerLayout(600, 1920, 1, 3);
-    const half = helpBannerLayout(300, 960, 0.5, 3);
-    expect(half.x).toBeCloseTo(one.x / 2, 6);
-    expect(half.wrapPx).toBeCloseTo(one.wrapPx / 2, 6);
-    expect(half.fontPx).toBeCloseTo(one.fontPx / 2, 6);
-    expect(half.lineHeightPx).toBeCloseTo(one.lineHeightPx / 2, 6);
-  });
-
-  it('clamps a tall form to the top margin instead of running off the screen', () => {
-    // Eight rows is far taller than the plate; an uncorrected centring puts it above y = 0.
-    expect(helpBannerLayout(600, 1920, 1, 8).y).toBe(HUD_MARGIN);
-    // And a short one is genuinely centred, so the clamp is not simply always winning.
-    expect(helpBannerLayout(600, 1920, 1, 1).y).toBeGreaterThan(HUD_MARGIN);
   });
 });

@@ -48,24 +48,6 @@ export const HUD_PLATE = { w: 413, h: 128 } as const;
 export const HUD_MARGIN = 24;
 
 /**
- * Where the controls banner sits: one clear margin below the HUD plate, in DESIGN space.
- *
- * ⚠️ **This is here so there is ONE definition, not two that agree** *(vault 5.3)*. `gameDev.ts`
- * computed `HUD_MARGIN + HUD_PLATE.h + HUD_MARGIN * 2` by hand — a second derivation of the plate's
- * bottom edge, in a different module from the one that owns HUD geometry.
- *
- * The S.7 gate owner found it and named the inconsistency rather than the arithmetic: this same
- * session routed the banner's **font size** through a shared constant (`HELP_FONT_PX`) while leaving
- * its **position** as a hand-summed copy. Both numbers describe the same object; only one of them
- * had one owner. It is numerically correct today and would drift silently the day `hudLayout`'s
- * margin or gap formula changes — and no gate checks spacing between HUD elements *(item 5.20)*.
- *
- * `HUD_MARGIN * 3` rather than `* 2` because the plate itself starts one margin down: the gap
- * *below* the plate is `HUD_MARGIN * 2`, deliberately double, so the banner reads as a separate
- * element instead of part of the plate.
- */
-
-/**
  * The gear counter's colours, and **the contrast method that was never written down** — 2b.4.
  *
  * Item 2b.4 recorded **3.13:1 and 1.13:1**, both failing WCAG AA, across four levels never

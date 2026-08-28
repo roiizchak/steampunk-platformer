@@ -56,6 +56,7 @@ import type Phaser from 'phaser';
 import { COUNTER_FILL, COUNTER_STROKE } from '../render/hud';
 import type { HudLayout } from '../render/hud';
 import {
+  HELP_BANNER_DEPTH,
   HELP_FONT_PX,
   HELP_FONT_STYLE,
   HELP_STROKE_PX,
@@ -107,7 +108,16 @@ export class HelpBannerLayer {
         // initial `getWrappedText()` meaningful if anything reads it before then.
         wordWrap: { width: 1 },
       })
-      .setScrollFactor(0);
+      .setScrollFactor(0)
+      // Above every depth `GameScene` owns — see `HELP_BANNER_DEPTH`. Without it the banner sat at
+      // 0 and the player, the enemies and their shots all drew through it.
+      .setDepth(HELP_BANNER_DEPTH)
+      // 🔴 HIDDEN until the first successful layout. Codex plan review round 3, finding 4: the
+      // banner was created visible, at (0, 0), wrapped to one pixel — so between `create()` and the
+      // first update there is a frame on which the player could see a column of single characters
+      // in the top-left corner of the level. The unit test CONFIRMED that origin state rather than
+      // preventing it. Nothing may be drawn before it has been placed.
+      .setVisible(false);
 
     this.scene.events.on(SCENE_UPDATE, this.onUpdate, this);
     this.scene.scale.on('resize', this.markDirty, this);
@@ -131,9 +141,9 @@ export class HelpBannerLayer {
   /**
    * Place the banner beside the counter, at the counter's CURRENT measured width.
    *
-   * ⚠️ Silently a no-op while the counter has not been built — `attachHud()` launches `UIScene` in
-   * parallel, and on a scene restart the first update can land in the gap. `dirty` stays true, so
-   * this simply tries again next frame rather than positioning against `undefined`.
+   * ⚠️ Silently a no-op while the counter is absent OR destroyed — `attachHud()` launches `UIScene`
+   * in parallel, and a stopped `UIScene` keeps handing back its dead objects. `dirty` stays true in
+   * both cases, so this tries again next frame rather than positioning against a corpse.
    *
    * The line count is **measured, never declared**. Four different strings reach this class — the
    * shipped legend, the DEV legend with three extra keys, and the Playground and Element Editor
@@ -146,21 +156,53 @@ export class HelpBannerLayer {
     if (banner === null) return;
 
     const { counter, layout } = this.hud.hudObjects();
-    if (!counter || !layout) return;
+    // 🔴 `active`, not truthiness. `UIScene`'s SHUTDOWN handler resets only `built` and leaves
+    // `this.counter` pointing at a DESTROYED `Text` — which is still truthy and whose `.x` and
+    // `.width` still read as numbers. So this guard passed, the banner was positioned against a
+    // dead object at a stale scale, and `dirty` was cleared **permanently**: it never retried when
+    // the HUD came back. Reachable by `scene.stop('UI')` and by any dev-scene transition. Found by
+    // the code-review gate owner, brief 2, finding 3.
+    if (!counter?.active || !layout) return;
 
     const { width } = this.scene.scale.gameSize;
     const counterRight = counter.x + counter.width;
+
+    /**
+     * 🔴 The two cameras are not the same camera, and this is the term that reconciles them.
+     *
+     * The banner is on the OWNING scene's display list; the counter it measures itself against is
+     * on `UIScene`'s. `gameEffects.ts` deliberately grows `GameScene`'s camera by `shakeSafeMargin`
+     * and moves it to `(-margin.x, -margin.y)` so a screen shake never uncovers the edge of the
+     * view — so a `setScrollFactor(0)` object at `x` on that camera draws at `x + camera.x`, about
+     * 10 px left and 8 px up of where the layout put it, while `UIScene`'s camera sits at the
+     * origin. At 852 x 480 the whole `COUNTER_GAP` is 10.7 px, so the banner very nearly butts
+     * against the counter.
+     *
+     * Found by the code-review gate owner (brief 1, finding 1) and invisible to the e2e clearance
+     * assertions, which compare bounds in one camera's space against rectangles in the other's.
+     * Read from the live camera rather than recomputed from `shakeSafeMargin`, so it stays correct
+     * if the margin is retuned — and it is zero on any scene that never grew its camera.
+     */
+    const cam = this.scene.cameras.main;
 
     // First pass: everything that does not depend on how many rows the text becomes. The wrap width
     // and the font size are what DECIDE the row count, so they must be applied before it is read.
     const first = helpBannerLayout(counterRight, width, layout.scale, 1);
     banner.setFontSize(first.fontPx);
     banner.setWordWrapWidth(first.wrapPx);
+    // 🔴 The stroke is rescaled with the font, and it was not before. `create()` set a flat 4 px
+    // and only the font size moved on resize, so at 852 x 480 the outline drew at 4 px against a
+    // 19.5 px glyph — proportionally 2.25x thicker than designed — while `helpBannerLayout`
+    // reserved `4 * scale` for it. That unit mismatch is what the e2e right-margin assertion caught
+    // as a 1.56 px overrun, and reserving the scaled amount only masked it. Codex round 3,
+    // finding 10.
+    banner.setStroke(COUNTER_STROKE, HELP_STROKE_PX * layout.scale);
 
     // Second pass: re-centre on the rows the browser actually produced.
     const lines = Math.max(1, banner.getWrappedText().length);
     const final = helpBannerLayout(counterRight, width, layout.scale, lines);
-    banner.setPosition(final.x, final.y);
+    banner.setPosition(final.x - cam.x, final.y - cam.y);
+    banner.setVisible(true);
 
     this.dirty = false;
   }

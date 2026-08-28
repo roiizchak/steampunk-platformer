@@ -1,5 +1,5 @@
 {
-  "why": "spikes covering only part of the floor \u2014 you land on the bare column",
+  "why": "a hazard one pixel tall lying across the pit is not spikes. It overlaps every floor cell, so the old `hazards.some(overlaps)` coverage test passed it (Codex round 3, finding 6).",
   "tileSize": 96,
   "widthTiles": 20,
   "groundTopRow": 6,
@@ -27,8 +27,8 @@
     {
       "x": 672,
       "y": 480,
-      "w": 192,
-      "h": 96
+      "w": 288,
+      "h": 1
     }
   ],
   "expectPits": [
@@ -37,5 +37,5 @@
       "toCol": 9
     }
   ],
-  "expectProblem": "is not fully covered above column 9"
+  "expectProblem": "is not fully covered above column 7"
 }

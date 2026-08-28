@@ -81,16 +81,38 @@ async function enterLevel(page: import('@playwright/test').Page): Promise<void> 
     timeout: 20_000,
   });
 
-  await page.evaluate(() => {
+  const cleared = await page.evaluate(() => {
     const scene = (
       window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
     ).__phaserGame.scene.getScene('Game') as unknown as {
-      world: { enemies: unknown[]; projectiles: unknown[] };
+      world: {
+        enemies: { scavengers: unknown[]; sentries: unknown[] };
+        projectiles: unknown[];
+      };
     };
-    // 🔴 Emptied in place rather than reassigned: the sim holds the same array the scene does, and
-    // a fresh `[]` would leave the tick loop iterating the original.
-    scene.world.enemies.length = 0;
+    // 🔴 `world.enemies` is an `EnemySet` — `{ scavengers, sentries }` (`src/sim/enemyPlacement.ts`)
+    // — NOT an array. This was `scene.world.enemies.length = 0`, which sets a `length` property on a
+    // plain object and clears NOTHING: level-03's four enemies stayed live and the spec's whole
+    // claim to have removed the alternative cause of damage was false while it passed. Codex plan
+    // review round 3, blocker 2; confirmed against the type before fixing.
+    //
+    // Emptied in place rather than reassigned: the sim holds the same arrays the scene does, so a
+    // fresh `[]` would leave the tick loop iterating the originals.
+    scene.world.enemies.scavengers.length = 0;
+    scene.world.enemies.sentries.length = 0;
     scene.world.projectiles.length = 0;
+    return {
+      scavengers: scene.world.enemies.scavengers.length,
+      sentries: scene.world.enemies.sentries.length,
+      projectiles: scene.world.projectiles.length,
+    };
+  });
+
+  // Read back, because the bug above was exactly a clear that silently did nothing.
+  expect(cleared, 'the enemies were not actually cleared').toEqual({
+    scavengers: 0,
+    sentries: 0,
+    projectiles: 0,
   });
 }
 

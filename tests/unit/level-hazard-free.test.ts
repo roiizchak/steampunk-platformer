@@ -84,7 +84,10 @@ describe.each(LEVELS)('%s is crossable without taking a hit', (id, level) => {
         'A hazard on the required route that cannot be jumped is the defect this gate exists for. ' +
         'Measured on these levels: 480 px of continuous hazard crosses clean, 576 px does not — and ' +
         'a run placed where a DESCENT lands is unavoidable at any width, because the policy only ' +
-        'reacts while grounded. Three shipped runs were exactly that, and this gate found all three.',
+        'reacts while grounded. Three shipped runs were exactly that, and this gate found all three. ' +
+        'A FOURTH class was found on 2026-08-27: four unspiked PITS sat on descent landings, and ' +
+        'spiking them per the new pit rule made every one unavoidable here. The owner filled them ' +
+        'in rather than move them — see `tools/gen/pitDetect.mjs` and `docs/qa/session-hud-and-pits.md`.',
     ).toBe(0);
   });
 });

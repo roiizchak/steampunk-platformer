@@ -1,5 +1,5 @@
 {
-  "why": "spikes covering only part of the floor \u2014 you land on the bare column",
+  "why": "coverage by SEVERAL adjacent rectangles counts \u2014 the union is what the player walks into. Without this the fix for the sliver fixtures could have been 'one rect must contain the cell', which would false-red a hand-authored pair of runs.",
   "tileSize": 96,
   "widthTiles": 20,
   "groundTopRow": 6,
@@ -27,6 +27,12 @@
     {
       "x": 672,
       "y": 480,
+      "w": 96,
+      "h": 96
+    },
+    {
+      "x": 768,
+      "y": 480,
       "w": 192,
       "h": 96
     }
@@ -37,5 +43,5 @@
       "toCol": 9
     }
   ],
-  "expectProblem": "is not fully covered above column 9"
+  "expectProblem": null
 }

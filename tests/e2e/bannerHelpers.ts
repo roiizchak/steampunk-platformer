@@ -20,6 +20,29 @@ export interface BannerProbe {
   text: string;
   /** Rows the browser's own `measureText()` produced — never a number this suite declared. */
   lines: number;
+  /**
+   * The rows themselves, so a review can see WHERE the legend broke.
+   *
+   * Added after the accessibility gate owner (brief 2, finding 1) predicted that a key and its
+   * label would be split across rows in the narrower band — e.g. `[ ]` on one row and `volume` on
+   * the next. That is a claim about the actual break points, and it is only answerable by printing
+   * them.
+   */
+  rows: string[];
+  /**
+   * SCREEN-space bounds — `getBounds()` shifted by the owning camera's position.
+   *
+   * 🔴 `getBounds()` answers in the object's own space, and the banner's object x is deliberately
+   * NOT where it draws: `helpBannerLayer.ts` places it at `layout.x - camera.x` because
+   * `gameEffects.ts` moves `GameScene`'s camera to `(-margin.x, -margin.y)` so a screen shake never
+   * uncovers the edge of the view. A `setScrollFactor(0)` object therefore draws `camera.x` to the
+   * LEFT of its own x — about 10 px — while every limit this spec compares against (`gameSize`, the
+   * HUD margin, the counter on `UIScene`'s camera at the origin) is screen space.
+   *
+   * Comparing the two spaces made the right-margin assertion fail by 1.33 px at 1280x720 on a
+   * banner that was drawing exactly where it should, and made the left and top assertions 10 px
+   * lenient in the other direction. Converted here, once, so no caller can forget.
+   */
   bounds: { left: number; right: number; top: number; bottom: number };
   willRender: boolean;
   fontSize: string;
@@ -64,7 +87,7 @@ export async function readBanner(page: Page): Promise<BannerProbe> {
     ).__phaserGame;
     const key = (window as unknown as { __game: { sceneKey: string } }).__game.sceneKey;
     const scene = game.scene.getScene(key) as unknown as {
-      cameras: { main: unknown };
+      cameras: { main: { x: number; y: number } };
       banner?: {
         object(): {
           text: string;
@@ -81,6 +104,7 @@ export async function readBanner(page: Page): Promise<BannerProbe> {
         exists: false,
         text: '',
         lines: 0,
+        rows: [],
         bounds: { left: 0, right: 0, top: 0, bottom: 0 },
         willRender: false,
         fontSize: '',
@@ -88,11 +112,19 @@ export async function readBanner(page: Page): Promise<BannerProbe> {
       };
     }
     const b = obj.getBounds();
+    const cam = scene.cameras.main;
+    const wrapped = obj.getWrappedText();
     return {
       exists: true,
       text: obj.text,
-      lines: obj.getWrappedText().length,
-      bounds: { left: b.left, right: b.right, top: b.top, bottom: b.bottom },
+      lines: wrapped.length,
+      rows: wrapped,
+      bounds: {
+        left: b.left + cam.x,
+        right: b.right + cam.x,
+        top: b.top + cam.y,
+        bottom: b.bottom + cam.y,
+      },
       willRender: obj.willRender(scene.cameras.main),
       fontSize: obj.style.fontSize,
       gameSize: { width: game.scale.gameSize.width, height: game.scale.gameSize.height },

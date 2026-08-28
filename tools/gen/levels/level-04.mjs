@@ -2,7 +2,7 @@
 //
 // Step 4 of 5. The rise and the gap are already at the ceiling level-03 took them to — 384 px against a
 // 413 px apex, 288 px of gap — so this step adds VOLUME around them: longer (144 tiles), three 3-tile
-// gaps instead of two, 672 px of spikes, five enemies, a 6-row ground stack.
+// gaps instead of two, 960 px of spikes, five enemies, a 6-row ground stack.
 //
 // 🔴 The dials that do not move are named on purpose. Vault 8.3 says cross-level absolute-stat
 // comparisons are suspect, and `level-ramp.test.ts` allows a plateau in the directional set — because
@@ -58,7 +58,11 @@ export const level04 = {
     { fromCol: 132, toCol: 138, row: 16, rows: 4 },
   ],
 
-  // 7 tiles of spikes = 672 px.
+  // 10 tiles of spikes = 960 px.
+  //
+  // ⚠️ This said "7 tiles = 672 px" and the header said 672. Both were already wrong on `main`:
+  // 22-23, 63-67, 102-103 and 55 is ten tiles. Corrected 2026-08-27 while filling the route pits;
+  // the spike list is untouched by that work, so this is a pre-existing prose defect.
   spikes: [
     { fromCol: 22, toCol: 23, row: GROUND_TOP_ROW - 1 },
     { fromCol: 63, toCol: 67, row: GROUND_TOP_ROW - 1 },

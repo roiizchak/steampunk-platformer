@@ -22,6 +22,29 @@ production string is **1771 px** wide at `x = 24`, so its right edge is 1795 of 
 spare, and `wordWrap` was already set at 1872. What looked like clipping was the same low contrast
 over a bright pipe highlight. One defect, not two.
 
+> ### 🔴 SUPERSEDED 2026-08-27 — every geometry figure above is about a placement that no longer ships
+>
+> The three numbers in that paragraph — the 1771 px string, the `x = 24` origin and the 1872 px
+> `wordWrap` — describe the banner drawn as a **full-width strip below the HUD plate**. The owner
+> played the shipped Phase 10 build and reported exactly that strip as a defect: it spans the screen
+> across the play area.
+>
+> The banner now sits in the band to the **right of the gear counter**, on the HUD row, and its
+> wrap width is that band rather than the view. `helpBannerLayout()` in `src/render/helpBanner.ts`
+> computes it from a **measured** counter width, so no fixed pixel figure replaces the ones above.
+> The row count is measured too — the owner's decision this session was *keep every key printed,
+> allow three lines* — so "both forms are two rows", stated later in this file, is also no longer a
+> claim anyone should carry forward.
+>
+> **What is NOT superseded:** everything about the SIZE and the INKS. `HELP_FONT_PX` 44 bold,
+> 19.5 physical px at 852×480, the 3:1 large-text bar, the measured 3.80:1 pair and the 4.5:1
+> ceiling no fill can reach are all unchanged and still the live reasoning. This session moved the
+> banner; it did not retune it.
+>
+> Gated by `tests/unit/help-banner-layer.test.ts`, `tests/e2e/session-help-banner.spec.ts` and a
+> pixel case in `tests/e2e/phase-10-production.spec.ts`. Session log:
+> `docs/qa/session-hud-and-pits.md`.
+
 ## The fix, and why it is the SIZE and not only the colour
 
 For two inks over an arbitrary background the worst case has a closed form —

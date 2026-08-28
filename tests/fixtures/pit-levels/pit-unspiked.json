@@ -1,5 +1,5 @@
 {
-  "why": "a real pit with no hazard over it — the shipped defect, in miniature",
+  "why": "a real pit with no hazard over it \u2014 the shipped defect, in miniature",
   "tileSize": 96,
   "widthTiles": 20,
   "groundTopRow": 6,
@@ -30,5 +30,5 @@
       "toCol": 9
     }
   ],
-  "expectProblem": "has no hazard above column 7"
+  "expectProblem": "is not fully covered above column 7"
 }

@@ -1,7 +1,7 @@
 // level-02 geometry, in TILES. See `shared.mjs` for the measured limits every layout sits inside.
 //
-// Step 2 of 5 on the ramp. What rises from level-01: length (96 -> 112 tiles), hazard total (192 ->
-// 288 px), enemy count (2 -> 3), ground depth (3 -> 4 rows). What deliberately does NOT rise yet: the
+// Step 2 of 5 on the ramp. What rises from level-01: length (96 -> 112 tiles), hazard total (672 ->
+// 768 px), enemy count (2 -> 3), ground depth (3 -> 4 rows). What deliberately does NOT rise yet: the
 // maximum rise stays 3 tiles and the widest gap stays 2, because a ramp that moves every dial at once
 // teaches nothing — the second level adds volume, not new demands.
 //
@@ -59,8 +59,13 @@ export const level02 = {
     { fromCol: 100, toCol: 106, row: 17, rows: 3 },
   ],
 
-  // 3 tiles of spikes (288 px): one 2-tile strip on the ground and one single on a summit, so the climb
-  // has a cost as well as a gear.
+  // 8 tiles of spikes (768 px): three ground strips and one single on a summit, so the climb has a
+  // cost as well as a gear.
+  //
+  // ⚠️ This said "3 tiles (288 px)" and the header said the total rose 192 -> 288. Both were already
+  // wrong on `main` — the list below has been eight tiles for some time and nothing counted it.
+  // Corrected 2026-08-27 while filling the route pits; the spike list itself is untouched by that
+  // work, so this is a pre-existing prose defect, not one this session introduced.
   spikes: [
     { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
     { fromCol: 27, toCol: 28, row: GROUND_TOP_ROW - 1 },

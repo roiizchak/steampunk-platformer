@@ -1,5 +1,5 @@
 {
-  "why": "a slab floating over a gap is not a wall you are trapped behind",
+  "why": "a slab floating over a gap is not a wall you are trapped behind. The ground is CONTINUOUS under the pit: an earlier version left a bottomless column on the left, so the left side rejected the run and the floating right neighbour was never judged at all \u2014 the fixture passed while proving nothing (QA gate owner, brief 1).",
   "tileSize": 96,
   "widthTiles": 20,
   "groundTopRow": 6,
@@ -7,7 +7,7 @@
     {
       "x": 0,
       "y": 576,
-      "w": 672,
+      "w": 1920,
       "h": 384
     },
     {
@@ -17,15 +17,9 @@
       "h": 288
     },
     {
-      "x": 768,
-      "y": 576,
-      "w": 576,
-      "h": 384
-    },
-    {
-      "x": 1344,
+      "x": 960,
       "y": 288,
-      "w": 576,
+      "w": 960,
       "h": 96
     }
   ],

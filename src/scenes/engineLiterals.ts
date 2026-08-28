@@ -1,5 +1,5 @@
 /**
- * The three Phaser VALUES this project writes down as literals, and the reason it has to.
+ * The four Phaser VALUES this project writes down as literals, and the reason it has to.
  *
  * ## Why literals at all
  *
@@ -21,7 +21,7 @@
  * ## 🔴 A transcribed constant is only as good as its pin
  *
  * Copying a number out of a dependency is a silent-drift hazard: the engine moves, the literal does
- * not, and nothing anywhere is red. `tests/unit/engine-literals.test.ts` pins all three against the
+ * not, and nothing anywhere is red. `tests/unit/engine-literals.test.ts` pins all four against the
  * vendored source **in the unit suite**, so a Phaser upgrade landed without running Playwright is
  * still caught — QA log entry 34, which is the half of this that used to run only under e2e.
  *

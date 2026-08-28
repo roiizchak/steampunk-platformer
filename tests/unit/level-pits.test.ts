@@ -169,7 +169,7 @@ const FIXTURES: [string, PitFixture][] = Object.keys(FIXTURE_SOURCES)
  */
 describe('the committed pit fixtures (vault C2)', () => {
   it('has one, and the suite knows how many', () => {
-    expect(FIXTURES.length).toBe(12);
+    expect(FIXTURES.length).toBe(16);
   });
 
   it.each(FIXTURES)('%s — detects the pits its file declares', (_name, fixture) => {
@@ -201,18 +201,41 @@ describe('the committed pit fixtures (vault C2)', () => {
     },
   );
 
-  it('every narrowing clause has a fixture that would fail without it', () => {
-    // Named rather than counted: a clause deleted from the rule must leave a fixture with no owner,
-    // and a fixture deleted from the directory must leave a clause with no proof.
+  /**
+   * 🔴 What this assertion claims, after it was caught claiming more.
+   *
+   * It used to be titled *"every narrowing clause has a fixture that would fail without it"* and it
+   * checked **file names**. It could not see content, so it stayed green while three of the fixtures
+   * it named proved nothing at all: the QA gate owner deleted each clause of `detectPits` in turn
+   * and found that `map-edge-left`, `goal-apron-right` and `bottomless-neighbour` never flipped —
+   * their clauses were dead code, subsumed by the ground-reaching test — and that
+   * `floating-platform-wall` was rejected by an accidental bottomless column before the clause it
+   * was named for was ever reached. Codex plan review round 3 reached the same conclusion
+   * independently.
+   *
+   * The rule has since been restructured to the two clauses that are actually live
+   * (`pitDetect.mjs`), and the fixtures are now what they always were in fact: **distinct SHAPES the
+   * rule must reject**, not proofs of separate clauses. The claim is narrowed to that, because a
+   * gate must not say more than it checks. Each shape's own `expectPits` is what pins it, and the
+   * `it.each` above is what runs it — this case only guarantees the shapes are all still present.
+   */
+  it('every shape the rule must reject is still present', () => {
     expect(FIXTURES.map(([name]) => name)).toEqual(
       expect.arrayContaining([
-        'notch-one-column',
-        'walls-one-tile',
+        // The two live clauses.
+        'notch-one-column', // width
+        'walls-one-tile', // wall depth
+        // Shapes the wall clause excludes, each a different way of not being solid beside the floor.
         'map-edge-left',
         'goal-apron-right',
         'bottomless-neighbour',
         'floating-platform-wall',
+        'floating-slab-over-ground',
         'raised-platform-floor',
+        // Coverage: what "fully covered" has to mean, and what it must not accept.
+        'hazard-horizontal-sliver',
+        'hazard-vertical-sliver',
+        'hazard-split-but-complete',
       ]),
     );
   });
