@@ -197,17 +197,41 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     expect(source).toContain('export class TitleScene');
   });
 
-  for (const name of ['TITLE_FILL', 'SUB_FILL', 'CHOICE_FILL', 'HINT_FILL']) {
-    it(`${name} reaches a text style`, () => {
-      // Imported AND used: the import line alone is one occurrence, a style that spends it is two.
-      const uses = source.split(name).length - 1;
-      expect(uses, `${name} appears ${uses}x — imported but never drawn?`).toBeGreaterThanOrEqual(2);
-      expect(source).toMatch(new RegExp(`color: ${name}`));
+  /**
+   * 🔴 **A style DECLARATION is not a drawn object.** The first version of this block asserted only
+   * that each fill appeared in a `color:` position — which stays green if the `make(...)` call that
+   * spends the style is deleted and the constant sits in an unused `const`. Codex implementation
+   * review, finding 6. So the chain is followed the whole way: fill → style name → a `make()` call.
+   */
+  const STYLES: ReadonlyArray<readonly [string, string]> = [
+    ['TITLE_FILL', 'TITLE_STYLE'],
+    ['SUB_FILL', 'SUB_STYLE'],
+    ['CHOICE_FILL', 'CHOICE_STYLE'],
+    ['HINT_FILL', 'HINT_STYLE'],
+  ];
+
+  for (const [fill, style] of STYLES) {
+    it(`${fill} reaches a DRAWN object through ${style}`, () => {
+      expect(source, `${fill} is not the colour of ${style}`).toMatch(
+        new RegExp(`${style} = \\{[^}]*color: ${fill}`),
+      );
+      // And that style is passed to a make() call — the thing that actually adds text to the scene.
+      expect(source, `${style} is declared but never drawn`).toMatch(
+        new RegExp(`make[(][^;]*${style}[)]`),
+      );
     });
   }
 
-  it('the scrim is drawn with the alpha the sweep assumes', () => {
-    expect(source).toMatch(/SCRIM_COLOUR, SCRIM_ALPHA/);
+  it('every style declared is a style drawn — no orphans, no missing lines', () => {
+    // CHOICE_STYLE is deliberately spent twice (ENTER and L), so five draws across four styles.
+    const draws = source.match(/make[(]/g) ?? [];
+    expect(draws.length, `${draws.length} make() calls`).toBe(5);
+  });
+
+  it('the scrim is drawn with the colour and alpha the sweep assumes', () => {
+    // Anchored on the factory call, not a bare mention: two constants sitting in a comment or an
+    // unused local would satisfy a loose match while nothing painted the scrim.
+    expect(source).toMatch(/add[.]rectangle[(][^;]*SCRIM_COLOUR, SCRIM_ALPHA[)]/);
   });
 
   it('no raw hex colour was inlined back into the scene', () => {

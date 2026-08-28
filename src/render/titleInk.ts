@@ -46,9 +46,15 @@
 export const TITLE_FILL = '#f0d79a';
 
 /**
- * The line under the heading. Was `#7fb2c8` at 4.84:1 — passing, but with 7 % of headroom against a
- * bound derived from *sampled* level pixels. Lightened to 6.10:1 so a bright frame nobody has
- * measured yet cannot quietly take it under the bar.
+ * The line under the heading. Was `#7fb2c8` at 4.84:1 — passing, with 7 % of headroom.
+ *
+ * ⚠️ This used to justify the change by saying the bound came from *sampled* level pixels and a
+ * brighter unseen frame could defeat it. **That was wrong**, and the same file says why two blocks
+ * up: the bound is computed against a **pure-white** underlying pixel, which is the strict maximum,
+ * so no frame can beat it. The honest reason it moved is thinner: 7 % is a small margin on a
+ * derivation that also carries model risk — the sRGB compositing assumption, and the possibility of
+ * a future `SCRIM_ALPHA` change — and the lighter blue costs nothing. Corrected by the Codex
+ * implementation review, which caught the file contradicting itself.
  */
 export const SUB_FILL = '#9cc6d8';
 
@@ -76,11 +82,22 @@ export const SCRIM_ALPHA = 0.82;
 /**
  * Every ink the screen draws, with the physical size it draws at in DESIGN pixels.
  *
- * The size is here because it decides the bar: WCAG's large-text allowance starts at 14 pt bold
- * (≈18.66 px) **physical**, and at the smallest supported window every one of these scales by
- * 852/1920 = 0.444. The largest, 72 design px, lands at 32 physical px — but it is not bold, so the
- * large-text allowance does not apply to it either. **All four are small text, and the bar is 4.5:1
- * for all four.** Stated as data so a future red cannot be cleared by reclassifying the text.
+ * The size is here because it DECIDES the bar, and `title-contrast.test.ts` derives the bar from it
+ * rather than declaring one. WCAG's large-text allowance is **24 px regular** or 14 pt bold; at the
+ * smallest supported window each of these scales by 852/1920 = 0.444.
+ *
+ * | role | design px | physical px | bar |
+ * |---|---|---|---|
+ * | title | 72 | 31.9 | 3:1 — **large text** |
+ * | choice | 34 | 15.1 | 4.5:1 |
+ * | subtitle | 26 | 11.5 | 4.5:1 |
+ * | hint | 22 | 9.8 | 4.5:1 |
+ *
+ * ⚠️ This block used to claim all four were small text *"because none is bold"*. **False** — the
+ * bold threshold is the 14 pt one; regular text becomes large at 24 px, and the heading is through
+ * that door at 31.9. Codex implementation review. It changes nothing in practice, because the
+ * heading measures 7.91:1 and the test asserts all four clear 4.5 regardless — but a wrong reason
+ * beside a right number is the kind of comment this project treats as worse than none.
  */
 export const TITLE_INKS: ReadonlyArray<{ role: string; fill: string; designPx: number }> = [
   { role: 'title', fill: TITLE_FILL, designPx: 72 },

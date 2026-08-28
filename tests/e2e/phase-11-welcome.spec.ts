@@ -1,88 +1,30 @@
 /**
- * The welcome screen — Phase 11, criteria 11.6 / 11.8 / 11.9 / 11.10 / 11.13.
+ * The welcome screen — Phase 11, criteria 11.5 / 11.6 / 11.8 / 11.10 / 11.13.
  *
  * These specs deliberately do NOT use `bootToGame`, because it dismisses the title. They boot by
  * hand and then measure the screen the player actually lands on.
+ *
+ * The routes OUT of the title live in `phase-11-title-routes.spec.ts`; the page-side helpers both
+ * files share live in `titleHarness.ts`.
  */
 
 import { expect, test } from '@playwright/test';
 import { BOOT_TIMEOUT, dismissTitle } from './gameHarness';
 import { storedSettings } from './audioHelpers';
+import {
+  PAUSED,
+  RUNNING,
+  TITLE,
+  bootToTitle,
+  fireKey,
+  restartGame,
+  gameStatus,
+  sceneActive,
+  tickOverFrames,
+} from './titleHarness';
+import type { SceneHandle } from './titleHarness';
 import './debugView';
 
-type Page = import('@playwright/test').Page;
-type SceneHandle = { scene: { isActive(key: string): boolean; getScene(key: string): unknown } };
-
-/** Phaser scene status constants: PAUSED sits one above RUNNING. */
-const RUNNING = 5;
-const PAUSED = 6;
-
-/**
- * ⚠️ There is deliberately no Node-side `handle()` helper. A function declared in the spec module
- * does not exist inside `page.evaluate` — the body is serialised and run in the browser — so every
- * reach for `__phaserGame` is written inline, in the page, the way `audioHelpers.ts` does it.
- */
-const TITLE = 'Title';
-
-/** Boot and stop at the welcome screen, without dismissing it. */
-async function bootToTitle(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.waitForFunction(
-    () => Boolean(window.__game && (window.__game.ready || window.__game.bootError !== null)),
-    undefined,
-    { timeout: BOOT_TIMEOUT },
-  );
-  await page.waitForFunction(
-    () =>
-      Boolean(
-        (window as unknown as { __phaserGame?: SceneHandle }).__phaserGame?.scene.isActive('Title'),
-      ),
-    undefined,
-    { timeout: BOOT_TIMEOUT },
-  );
-  await page.locator('canvas').click();
-}
-
-/** Is `key` an active scene? The cast lives INSIDE the evaluate, which is where it must run. */
-function sceneActive(page: Page, key: string): Promise<boolean> {
-  return page.evaluate(
-    (k) => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive(k as string),
-    key,
-  );
-}
-
-function gameStatus(page: Page): Promise<number | undefined> {
-  return page.evaluate(() => {
-    const scene = (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.getScene(
-      'Game',
-    ) as { sys?: { settings?: { status?: number } } } | undefined;
-    return scene?.sys?.settings?.status;
-  });
-}
-
-/** Sample the tick across N animation frames INSIDE the page and return the aggregate. */
-function tickOverFrames(page: Page, frames: number): Promise<{ first: number; last: number; max: number }> {
-  return page.evaluate(
-    (n) =>
-      new Promise<{ first: number; last: number; max: number }>((resolve) => {
-        const first = window.__game?.tick ?? -1;
-        let max = first;
-        let seen = 0;
-        const step = (): void => {
-          const t = window.__game?.tick ?? -1;
-          if (t > max) max = t;
-          seen += 1;
-          if (seen >= (n as number)) {
-            resolve({ first, last: t, max });
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }),
-    frames,
-  );
-}
 
 test.describe('Phase 11 — 11.13 the overlay does not move the boot contract', () => {
   test('the debug surface still reports a ready Game', async ({ page }) => {
@@ -207,12 +149,9 @@ test.describe('Phase 11 — 11.10 the title shows once per page load', () => {
 
     // The shape `phase-07-audio-adopt.spec.ts` and the lifecycle suite use: restart Game directly,
     // with no data. The old `levelId === null` cold-entry test reopened the title on every one.
-    await page.evaluate(() => {
-      const scene = (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.getScene(
-        'Game',
-      ) as { scene: { restart(): void } };
-      scene.scene.restart();
-    });
+    await restartGame(page);
+    // The restart is proven done by 's SHUTDOWN barrier; this only waits for the NEW
+    // world to start stepping, which a re-opened (and therefore pausing) title would prevent.
     await page.waitForFunction(() => (window.__game?.tick ?? 0) > 0, undefined, { timeout: BOOT_TIMEOUT });
 
     expect(await sceneActive(page, TITLE)).toBe(false);
@@ -228,13 +167,7 @@ test.describe('Phase 11 — 11.10 the title shows once per page load', () => {
   test('a restart WHILE the title is up re-pauses the new Game', async ({ page }) => {
     await bootToTitle(page);
 
-    await page.evaluate(() => {
-      const scene = (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.getScene(
-        'Game',
-      ) as { scene: { restart(): void } };
-      scene.scene.restart();
-    });
-    await page.waitForFunction(() => window.__game?.ready === true, undefined, { timeout: BOOT_TIMEOUT });
+    await restartGame(page);
 
     expect(await sceneActive(page, TITLE)).toBe(true);
     expect(await gameStatus(page), 'a title over a running game is the defect').toBe(PAUSED);
@@ -248,29 +181,6 @@ test.describe('Phase 11 — 11.10 the title shows once per page load', () => {
     expect(await sceneActive(page, TITLE)).toBe(true);
   });
 });
-
-/**
- * Dispatch a keydown/keyup pair at the page, optionally as an OS auto-repeat.
- *
- * The same shape `phase-11-audio-keys.spec.ts` uses, and for the same reason its header gives: an
- * unreleased synthetic key leaves `Key.isDown` true and poisons every later press.
- */
-async function fireKey(page: Page, code: string, repeat = false): Promise<void> {
-  await page.evaluate(
-    ([c, rp]) => {
-      const make = (type: string): KeyboardEvent =>
-        new KeyboardEvent(type, {
-          code: c as string,
-          repeat: rp as boolean,
-          bubbles: true,
-          cancelable: true,
-        });
-      window.dispatchEvent(make('keydown'));
-      window.dispatchEvent(make('keyup'));
-    },
-    [code, repeat] as const,
-  );
-}
 
 test.describe('Phase 11 — 11.5 the title has its own repeat guard, and it is not the same one', () => {
   /**
@@ -293,69 +203,5 @@ test.describe('Phase 11 — 11.5 the title has its own repeat guard, and it is n
     await fireKey(page, 'BracketLeft', false);
 
     await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
-  });
-});
-
-test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the ones that must not exist', () => {
-  test('L opens the level menu', async ({ page }) => {
-    await bootToTitle(page);
-
-    await page.keyboard.press('l');
-
-    await page.waitForFunction(
-      () => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
-      undefined,
-      { timeout: 5_000 },
-    );
-    expect(await sceneActive(page, TITLE), 'the title must be gone, not drawn over the menu').toBe(false);
-  });
-
-  /**
-   * The DEV half of 11.9. `P` / `O` / `G` are bound only in the dev build and are deliberately NOT
-   * gated on `isPlayerInputEnabled`; the pause is the only thing stopping them.
-   */
-  for (const key of ['p', 'o', 'g']) {
-    test(`DEV key ${key.toUpperCase()} cannot leak past the title`, async ({ page }) => {
-      await bootToTitle(page);
-
-      await page.keyboard.press(key);
-      await page.evaluate(
-        () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
-      );
-
-      expect(await sceneActive(page, TITLE), 'the title is still up').toBe(true);
-      expect((await page.evaluate(() => window.__game))?.sceneKey, 'still Game-owned').toBe('Game');
-    });
-  }
-
-  /**
-   * 🔴 **Two dismissing keys in ONE input batch.** Phaser drains its whole key queue in a single
-   * `KeyboardPlugin.update()` pass, so `L` and `ENTER` in the same frame both reached `dismiss`. The
-   * queue that produced was `[stop Title, stop Game, start LevelSelect, stop Title, resume Game]` —
-   * and `Systems.resume()` cannot tell a stopped scene from a paused one, because `shutdown()` sets
-   * the same `active = false` flag `pause` does. It would step a torn-down `Game` under the menu.
-   * Closed by a `dismissed` latch; found by the criterion 11.14 review reading the engine.
-   */
-  test('L and ENTER in the same frame do not resurrect the stopped Game', async ({ page }) => {
-    await bootToTitle(page);
-
-    await page.evaluate(() => {
-      const fire = (code: string): void => {
-        for (const type of ['keydown', 'keyup']) {
-          window.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true, cancelable: true }));
-        }
-      };
-      fire('KeyL');
-      fire('Enter');
-    });
-
-    await page.waitForFunction(
-      () => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
-      undefined,
-      { timeout: 5_000 },
-    );
-    const status = await gameStatus(page);
-    expect(typeof status, 'type before value').toBe('number');
-    expect(status, 'a resumed Game would be stepped against a dead display list').not.toBe(RUNNING);
   });
 });

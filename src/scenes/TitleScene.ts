@@ -158,7 +158,11 @@ export class TitleScene extends Phaser.Scene {
    * constructor runs once, so state initialised there survives a restart.
    */
   init(data?: TitleSceneData): void {
-    this.data$ = data && typeof data.onPlay === 'function' ? data : null;
+    // BOTH callbacks, not just `onPlay`. `L` stops this scene and calls `onLevelSelect`; a missing
+    // one strands the player exactly as a missing `onPlay` does. Codex implementation review.
+    const complete =
+      typeof data?.onPlay === 'function' && typeof data?.onLevelSelect === 'function';
+    this.data$ = complete && data ? data : null;
     this.items = [];
     this.dismissed = false;
     this.audioState = readAudioSettings(safeLocalStorage());
@@ -223,7 +227,13 @@ export class TitleScene extends Phaser.Scene {
     keyboard.on('keydown', (event: KeyboardEvent) => {
       // The OS repeats a held key ~30 times a second, and this scene is entered with a key possibly
       // still down from whatever started the game. Nothing here may fire twice.
-      if (event.repeat) {
+      //
+      // 🔴 `isComposing` too, and it is NOT redundant with `gameInput.ts`'s. This scene registers
+      // no `Key` objects at all, so `keys[229]` is undefined and Phaser's `ANY_KEY_DOWN` accepts a
+      // composition keydown here that the game listener rejects — the welcome screen was the one
+      // place a CJK user composing text could still walk the volume. Codex implementation review,
+      // finding 3: the guard was copied to one of the two listeners.
+      if (event.repeat || event.isComposing) {
         return;
       }
       /**

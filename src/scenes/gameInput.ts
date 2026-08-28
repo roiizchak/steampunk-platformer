@@ -137,11 +137,27 @@ export function bindPlayerKeys(
      * of the defect this phase exists to close. Found by the criterion 11.14 adversarial brief, which
      * asked how the fix could still be wrong rather than whether it was applied.
      *
-     * ⚠️ **The DOM listener does not inherit the plugin's activity gating, and that gating is
-     * load-bearing.** `KeyboardPlugin.isActive()` is what makes a PAUSED `Game` deaf under the
-     * welcome screen; without an explicit check, BOTH this listener and `TitleScene`'s would fire on
-     * one press and step the volume twice. `Systems.isActive()` is `status === RUNNING`, which is
-     * exactly that gate, so it is asserted here by hand.
+     * ⚠️ **The DOM listener does not inherit the plugin's gating, and that gating is load-bearing.**
+     * `KeyboardPlugin.isActive()` is what makes a PAUSED `Game` deaf under the welcome screen;
+     * without it, BOTH this listener and `TitleScene`'s fire on one press and step the volume twice.
+     *
+     * 🔴 So the plugin's OWN predicate is called, not a re-derivation of it. This first read
+     * `scene.sys.isActive()` with a comment claiming that was "exactly that gate" — **it is not**:
+     * `KeyboardPlugin.isActive()` is `this.enabled && sys.canInput()`, which also honours the
+     * plugin's `enabled` flag and accepts the pre-RUNNING statuses `isActive()` rejects. A disabled
+     * `KeyboardManager` is checked beside it for the same reason. Codex implementation review,
+     * finding 4: an approximation of an engine predicate is a second definition that agrees on the
+     * happy path.
+     *
+     * 🔴 **`event.defaultPrevented` is deliberately NOT checked, though `KeyboardManager.js:188`
+     * checks it.** Copying that clause looked like faithfulness and was a regression: `addKey(code,
+     * **true**, false)` enables capture for every key this function registers, so Phaser calls
+     * `preventDefault()` on them itself. **Measured, not reasoned** — a probe on the real page
+     * reported `defaultPrevented: true` for a keyCode-76 event with every other gate open. The
+     * collision spec went red the moment the clause was added, which is the whole reason C1 asks for
+     * a gate to be watched failing before it is trusted: the clause would have silently restored the
+     * exact defect this phase exists to close. The manager checks it to avoid double-handling an
+     * event another listener consumed; a capture flag is not consumption.
      *
      * `TitleScene` needs none of this: it registers no keys at all, so `keys[code]` is always
      * undefined there and `ANY_KEY_DOWN` always fires.
@@ -170,8 +186,11 @@ export function bindPlayerKeys(
       if (event.repeat || event.isComposing) {
         return;
       }
-      // The pause gate, by hand — see the block comment above.
-      if (!scene.sys.isActive() || !isPlayerInputEnabled()) {
+      // The plugin's own gate, plus the two the manager applies before it.
+      if (!keyboard.isActive() || keyboard.manager?.enabled === false) {
+        return;
+      }
+      if (!isPlayerInputEnabled()) {
         return;
       }
       const action = audioActionForCode(event.code);
@@ -189,9 +208,15 @@ export function bindPlayerKeys(
     target.addEventListener('keydown', onAudioKey as EventListener);
     // The plugin used to own this teardown. A raw DOM listener outlives its scene unless the scene
     // removes it — the same trap `TitleScene` handles for the global `ScaleManager`.
-    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    const drop = (): void => {
       target.removeEventListener('keydown', onAudioKey as EventListener);
-    });
+    };
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, drop);
+    // 🔴 DESTROY as well as SHUTDOWN. `SceneManager.remove()` calls `sys.destroy()` **without**
+    // emitting SHUTDOWN first (`SceneManager.js:429`), so a removed scene would leak this listener
+    // and the closure retaining it. Nothing removes a scene today; one line is cheaper than
+    // depending on that staying true. Codex implementation review, finding 5.
+    scene.events.once(Phaser.Scenes.Events.DESTROY, drop);
   }
 
   if (openLevelSelect) {

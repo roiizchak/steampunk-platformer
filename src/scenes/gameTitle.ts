@@ -70,7 +70,13 @@ export function attachTitle(
 
   // A title left over from a previous `Game` that restarted underneath it. Re-pause and leave the
   // existing screen alone — relaunching would stack a second copy of every text object.
-  if (manager.isActive(TITLE_KEY)) {
+  //
+  // 🔴 **Three states, not one.** This tested `isActive` alone, and `isActive` is false for a
+  // PAUSED or SLEEPING scene — so a title in either of those states would have fallen through to the
+  // latch, returned without pausing, and left a still-rendering title drawn over a RUNNING level. A
+  // paused scene still renders, which is what makes the wrong answer invisible. Codex implementation
+  // review, finding 2.
+  if (manager.isActive(TITLE_KEY) || manager.isPaused(TITLE_KEY) || manager.isSleeping(TITLE_KEY)) {
     manager.pause();
     return;
   }
@@ -88,7 +94,12 @@ export function attachTitle(
     onPlay: () => manager.resume(),
   };
   manager.launch(TITLE_KEY, data);
-  // AFTER the launch, so the operation is queued against a running scene. `pause()` with no argument
-  // pauses the scene this plugin belongs to — `Game` itself.
+  // `pause()` with no argument pauses the scene this plugin belongs to — `Game` itself.
+  //
+  // ⚠️ This used to add *"AFTER the launch, so the operation is queued against a running scene."*
+  // **That is not a mechanism.** `pause` targets `Game`, which is running either way, and both ops
+  // drain in the same `processQueue` pass regardless of order. The order is how it reads, not
+  // something the engine requires — corrected by the Codex implementation review, which caught the
+  // unit test below enforcing a rule that does not exist.
   manager.pause();
 }

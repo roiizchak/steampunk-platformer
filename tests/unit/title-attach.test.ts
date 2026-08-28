@@ -26,22 +26,36 @@ import type { TitleSceneData } from '../../src/scenes/TitleScene';
  *
  * ## What the fake has to model faithfully
  *
- * Only that `pause()` with no argument pauses the scene the plugin belongs to, and that `isActive`
- * answers about a named scene. The queueing `SceneManager` does is deliberately NOT modelled — the
- * ordering claim it settles ("launch and pause drain in the same pass") is an engine fact, asserted
- * in `phase-11-welcome.spec.ts` against the real thing. This file holds the branch logic.
+ * Only that `pause()` with no argument pauses the scene the plugin belongs to, and that the three
+ * state predicates answer about a named scene. The queueing `SceneManager` does is deliberately NOT
+ * modelled — that is an engine fact, asserted in `phase-11-welcome.spec.ts` against the real thing.
+ * This file holds the branch logic.
+ *
+ * ⚠️ **The fake models all THREE predicates on purpose.** It first modelled only `isActive`, which
+ * is exactly the blind spot the code had: `isActive` is false for a PAUSED or SLEEPING scene, and a
+ * paused scene still renders. Codex implementation review, finding 2.
  */
+
+type TitleState = 'gone' | 'active' | 'paused' | 'sleeping';
 
 interface FakePlugin {
   calls: string[];
   active: Set<string>;
   launched: TitleSceneData[];
+  state: TitleState;
 }
 
-function fakeScene(activeKeys: string[] = []): { scene: Phaser.Scene; plugin: FakePlugin } {
-  const plugin: FakePlugin = { calls: [], active: new Set(activeKeys), launched: [] };
+function fakeScene(state: TitleState = 'gone'): { scene: Phaser.Scene; plugin: FakePlugin } {
+  const plugin: FakePlugin = {
+    calls: [],
+    active: new Set(state === 'active' ? [TITLE_KEY] : []),
+    launched: [],
+    state,
+  };
   const scenePlugin = {
     isActive: (key: string) => plugin.active.has(key),
+    isPaused: (key: string) => key === TITLE_KEY && plugin.state === 'paused',
+    isSleeping: (key: string) => key === TITLE_KEY && plugin.state === 'sleeping',
     pause: () => {
       plugin.calls.push('pause');
     },
@@ -51,6 +65,7 @@ function fakeScene(activeKeys: string[] = []): { scene: Phaser.Scene; plugin: Fa
     launch: (key: string, data: TitleSceneData) => {
       plugin.calls.push(`launch:${key}`);
       plugin.active.add(key);
+      plugin.state = 'active';
       plugin.launched.push(data);
     },
   };
@@ -72,7 +87,9 @@ describe('attachTitle', () => {
 
     attachTitle(scene, noAudio, noop);
 
-    expect(plugin.calls, 'launch must come first, so the pause is queued against a live scene').toEqual([
+    // Both ops, and the order they are written in. NOT a mechanism claim: they drain in the same
+    // processQueue pass either way, so this is a change-detector, not an engine requirement.
+    expect(plugin.calls).toEqual([
       `launch:${TITLE_KEY}`,
       'pause',
     ]);
@@ -82,6 +99,7 @@ describe('attachTitle', () => {
     const { scene, plugin } = fakeScene();
     attachTitle(scene, noAudio, noop);
     plugin.active.delete(TITLE_KEY);
+    plugin.state = 'gone';
     plugin.calls.length = 0;
 
     attachTitle(scene, noAudio, noop);
@@ -92,7 +110,7 @@ describe('attachTitle', () => {
   });
 
   it('a restart WHILE the title is up re-pauses the new game and does not stack a second title', () => {
-    const { scene, plugin } = fakeScene([TITLE_KEY]);
+    const { scene, plugin } = fakeScene('active');
 
     attachTitle(scene, noAudio, noop);
 
@@ -102,6 +120,23 @@ describe('attachTitle', () => {
     expect(plugin.calls).toEqual(['pause']);
     expect(plugin.launched, 'relaunching would stack a second copy of every text object').toHaveLength(0);
   });
+
+  /**
+   * 🔴 A title that is PAUSED or SLEEPING is still on screen — Phaser renders both. `isActive` says
+   * false for either, so a check written on `isActive` alone fell through to the latch, returned
+   * without pausing, and left the title drawn over a running level. The exact invariant the branch
+   * above exists for, in the two states that hide it.
+   */
+  for (const state of ['paused', 'sleeping'] as const) {
+    it(`a ${state} title still counts as present, and the new game is re-paused`, () => {
+      const { scene, plugin } = fakeScene(state);
+
+      attachTitle(scene, noAudio, noop);
+
+      expect(plugin.calls, 'a rendering title over a RUNNING game is the defect').toEqual(['pause']);
+      expect(plugin.launched).toHaveLength(0);
+    });
+  }
 
   it('the resume handed to the scene resumes the game this helper paused', () => {
     const { scene, plugin } = fakeScene();
@@ -144,6 +179,7 @@ describe('attachTitle', () => {
     const { scene, plugin } = fakeScene();
     attachTitle(scene, noAudio, noop);
     plugin.active.delete(TITLE_KEY);
+    plugin.state = 'gone';
     plugin.calls.length = 0;
 
     // A real reload gets a fresh module; this is that, in one call.
