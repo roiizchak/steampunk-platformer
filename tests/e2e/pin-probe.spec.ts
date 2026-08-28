@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { dismissTitle } from './gameHarness';
 
 /**
  * # The overlay must be VISIBLE, not merely present
@@ -54,6 +55,8 @@ test.describe('the pin probe overlay', () => {
   test('paints a visible magenta collision overlay when ?pin=1 is present', async ({ page }) => {
     await page.goto('/?pin=1');
     await page.waitForFunction(() => window.__game?.ready === true, null, { timeout: 30_000 });
+    // Phase 11: the welcome screen's scrim dims the whole canvas, magenta overlay included.
+    await dismissTitle(page);
 
     const share = await magentaShare(page);
     // The ground solid alone fills the lower third of the view. One percent is far below what the
@@ -66,6 +69,7 @@ test.describe('the pin probe overlay', () => {
   test('paints nothing at all without the flag', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => window.__game?.ready === true, null, { timeout: 30_000 });
+    await dismissTitle(page);
 
     const share = await magentaShare(page);
     expect(share, 'the overlay drew without its flag').toBeLessThan(0.001);

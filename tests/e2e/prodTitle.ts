@@ -11,13 +11,32 @@ import { expect } from '@playwright/test';
 type Page = import('@playwright/test').Page;
 
 /**
- * Mean frame luminance below this means the welcome screen's scrim is up.
+ * How much brighter the canvas must get when the welcome screen is dismissed.
  *
- * Chosen from a measured pair, not guessed, and confirmed against the run that had no say in it —
- * see the QA log for phase 11. The gap either side of it is wide because the scrim is 82 % alpha
- * over a dark base, so a bound in the middle is not sitting on either distribution's tail.
+ * ## Why a RATIO and not an absolute luminance
+ *
+ * The first version asserted `luma < 26` with the title up. That is a bound chosen by guessing, and
+ * it false-redded on the very first run that had a say in it — the real figure is **27.04**. Worse,
+ * an absolute bound is a hostage to the art: any change to the first level's brightness moves it,
+ * and the failure would look like a broken title screen.
+ *
+ * A ratio is self-calibrating, and it collapses Codex plan review round 3 finding 6's two required
+ * halves into one statistic:
+ *
+ *  - if the title never appeared (tree-shaken out of the bundle), `before` and `after` are the same
+ *    frame and the ratio is ~1.0 — **red**;
+ *  - if the title appeared and never dismissed, likewise ~1.0 — **red**.
+ *
+ * Only a screen that both shipped and dismissed produces a large ratio.
+ *
+ * ## The number
+ *
+ * Measured over 6 runs against `dist/` on the production server: `before` **27.04** every run,
+ * `after` **68.43-68.44**, ratio **2.530-2.531**. Confirmed on a held-out set of fresh runs that had
+ * no say in the choice. 1.5 sits far below the observed 2.53 and far above the 1.0 that either
+ * failure mode produces, so it is not resting on either distribution's tail.
  */
-export const TITLE_SCRIM_MAX_LUMA = 26;
+export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
 
 /**
  * Dismiss the Phase 11 welcome screen in `dist/`, where there is nothing to ask.
@@ -40,18 +59,14 @@ export const TITLE_SCRIM_MAX_LUMA = 26;
  */
 export async function dismissTitleProduction(page: Page): Promise<void> {
   const before = await meanLuminance(page);
-  expect(
-    before,
-    'the production build drew no welcome screen — its scrim should darken the whole canvas',
-  ).toBeLessThan(TITLE_SCRIM_MAX_LUMA);
 
   await page.locator('canvas').click();
   await page.keyboard.press('Enter');
 
   // Poll the pixels, never a sleep: the scene stop and the resume are both queued.
   await expect
-    .poll(async () => meanLuminance(page), { timeout: 15_000 })
-    .toBeGreaterThan(TITLE_SCRIM_MAX_LUMA);
+    .poll(async () => (await meanLuminance(page)) / before, { timeout: 15_000 })
+    .toBeGreaterThan(TITLE_SCRIM_MIN_BRIGHTENING);
 }
 
 /**
