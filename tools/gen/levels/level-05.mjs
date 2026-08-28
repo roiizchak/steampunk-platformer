@@ -52,16 +52,34 @@ export const level05 = {
     { fromCol: 90, toCol: 96, row: 17, rows: 4 },
     { fromCol: 112, toCol: 118, row: 17, rows: 4 },
     { fromCol: 119, toCol: 125, row: 13, rows: 8 },
-    { fromCol: 126, toCol: 132, row: 17, rows: 4 },
+    // Widened 126-132 -> 126-133 on 2026-08-28 so the spike run at 134-136 sits FLUSH
+    // against it instead of 96 px away — see the note beside that run. Step HEIGHT is unchanged, so
+    // the ziggurat still steps 4 tiles; only the shelf is one column longer.
+    { fromCol: 126, toCol: 133, row: 17, rows: 4 },
     { fromCol: 146, toCol: 154, row: 17, rows: 4 },
   ],
 
   // 11 tiles of spikes = 1056 px. (Was written as 9 / 864 and had been wrong since this list
   // last grew — Codex implementation review, finding 6. `level-ramp.test.ts` now pins the totals.)
   spikes: [
-    { fromCol: 20, toCol: 22, row: GROUND_TOP_ROW - 1 },
+    // 🔴 Shifted one column AWAY from the wall on 2026-08-28. The owner reported *"I get stuck
+    // by a hazard that I cannot see"*: the run ended 96 px short of the wall face and the player
+    // is 132 px wide, so there was nowhere to stand. Land a beat late and you are pinned in the
+    // spikes with a wall in front of you, taking damage you cannot see because you are standing
+    // on it. The WIDTH is unchanged, so the hazard ramp totals are untouched.
+    // Gated by `tests/unit/level-hazard-clearance.test.ts`.
+    { fromCol: 19, toCol: 21, row: GROUND_TOP_ROW - 1 },
     { fromCol: 97, toCol: 98, row: GROUND_TOP_ROW - 1 },
     { fromCol: 100, toCol: 101, row: GROUND_TOP_ROW - 1 },
+    // 🔴 UNMOVED, and that is the point. The owner reported *"I get stuck by a hazard that I
+    // cannot see"*: this run ended 96 px short of the platform face on its LEFT and the player is
+    // 132 px wide, so there was nowhere to stand — land a beat late and you are pinned in the
+    // spikes with a wall in front of you, taking damage you cannot see because you are standing
+    // on it. Shifting the RUN was tried on 2026-08-28 and failed BOTH ways: one column right lands
+    // where the cols 119-125 descent touches down, which `level-hazard-free` refuses as unavoidable
+    // damage; one column left blocks the auto-player outright. So the shelf moved instead — widened
+    // one column to 126-133, closing the gap to zero. Zero is legal on purpose: flush spikes are
+    // somewhere you were never meant to stand. Gated by `tests/unit/level-hazard-clearance.test.ts`.
     { fromCol: 134, toCol: 136, row: GROUND_TOP_ROW - 1 },
     { fromCol: 53, toCol: 53, row: 12 },
   ],

@@ -67,8 +67,16 @@ export const level02 = {
   // Corrected 2026-08-27 while filling the route pits; the spike list itself is untouched by that
   // work, so this is a pre-existing prose defect, not one this session introduced.
   spikes: [
-    { fromCol: 24, toCol: 25, row: GROUND_TOP_ROW - 1 },
-    { fromCol: 27, toCol: 28, row: GROUND_TOP_ROW - 1 },
+    // 🔴 Shifted one column AWAY from the wall on 2026-08-28. The owner reported *"I get stuck
+    // by a hazard that I cannot see"*: the run ended 96 px short of the wall face and the player
+    // is 132 px wide, so there was nowhere to stand. Land a beat late and you are pinned in the
+    // spikes with a wall in front of you, taking damage you cannot see because you are standing
+    // on it. The WIDTH is unchanged, so the hazard ramp totals are untouched.
+    // Gated by `tests/unit/level-hazard-clearance.test.ts`.
+    // Both moved, not just the second: shifting 27-28 alone would have butted it against 24-25 and
+    // merged two 2-tile runs into one 4-tile run, which is a different jump.
+    { fromCol: 23, toCol: 24, row: GROUND_TOP_ROW - 1 },
+    { fromCol: 26, toCol: 27, row: GROUND_TOP_ROW - 1 },
     { fromCol: 65, toCol: 67, row: GROUND_TOP_ROW - 1 },
     { fromCol: 56, toCol: 56, row: 13 },
   ],

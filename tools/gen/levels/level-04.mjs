@@ -53,7 +53,10 @@ export const level04 = {
     { fromCol: 56, toCol: 62, row: 16, rows: 4 },
     { fromCol: 80, toCol: 86, row: 16, rows: 4 },
     { fromCol: 87, toCol: 93, row: 12, rows: 8 },
-    { fromCol: 94, toCol: 100, row: 16, rows: 4 },
+    // Widened 94-100 -> 94-101 on 2026-08-28 so the spike run at 102-103 sits FLUSH
+    // against it instead of 96 px away — see the note beside that run. Step HEIGHT is unchanged, so
+    // the ziggurat still steps 4 tiles; only the shelf is one column longer.
+    { fromCol: 94, toCol: 101, row: 16, rows: 4 },
     { fromCol: 114, toCol: 125, row: 16, rows: 4 },
     { fromCol: 132, toCol: 138, row: 16, rows: 4 },
   ],
@@ -66,6 +69,15 @@ export const level04 = {
   spikes: [
     { fromCol: 22, toCol: 23, row: GROUND_TOP_ROW - 1 },
     { fromCol: 63, toCol: 67, row: GROUND_TOP_ROW - 1 },
+    // 🔴 UNMOVED, and that is the point. The owner reported *"I get stuck by a hazard that I
+    // cannot see"*: this run ended 96 px short of the platform face on its LEFT and the player is
+    // 132 px wide, so there was nowhere to stand — land a beat late and you are pinned in the
+    // spikes with a wall in front of you, taking damage you cannot see because you are standing
+    // on it. Shifting the RUN was tried on 2026-08-28 and failed BOTH ways: one column right lands
+    // where the cols 87-93 descent touches down, which `level-hazard-free` refuses as unavoidable
+    // damage; one column left blocks the auto-player outright. So the shelf moved instead — widened
+    // one column to 94-101, closing the gap to zero. Zero is legal on purpose: flush spikes are
+    // somewhere you were never meant to stand. Gated by `tests/unit/level-hazard-clearance.test.ts`.
     { fromCol: 102, toCol: 103, row: GROUND_TOP_ROW - 1 },
     { fromCol: 55, toCol: 55, row: 11 },
   ],

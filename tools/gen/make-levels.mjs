@@ -25,6 +25,10 @@ import { level03 } from './levels/level-03.mjs';
 import { level04 } from './levels/level-04.mjs';
 import { level05 } from './levels/level-05.mjs';
 import { writeLevel } from './levelBuilder.mjs';
+import { describeClearanceProblem } from './hazardClearance.mjs';
+
+/** Repo root, the same way `levelBuilder.mjs` derives it. */
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * Everything that ships, in play order.
@@ -45,7 +49,60 @@ if (selected.length === 0) {
   throw new Error(`make-levels: no level with id "${requested}". Known ids: ${ids}`);
 }
 
-for (const layout of selected) writeLevel(layout);
+/**
+ * 🔴 Every written level is re-read and checked for a place the player can be PINNED.
+ *
+ * The check runs here rather than inside `levelBuilder.mjs` for two reasons. That file is at exactly
+ * 400 lines against a hard ceiling; and reading the bytes back is a stronger check than inspecting
+ * the object that produced them — it is the same *(vault 3.1)* reasoning that makes the unit suite
+ * run the real validator over the shipped file.
+ *
+ * The rule and the defect are in `hazardClearance.mjs`. In short: a hazard run that stops one tile
+ * short of a wall leaves 96 px of floor for a 132 px player, and landing there pins you in the
+ * spikes with a wall in front of you. Three shipped levels had one. **Throws rather than warns** —
+ * a generator that prints a problem and writes the file anyway is how four unspiked pits shipped.
+ */
+function assertStandable(layout, out) {
+  const map = JSON.parse(readFileSync(out, 'utf8'));
+  const objects = map.layers.find((l) => l.type === 'objectgroup').objects;
+  const of = (name) =>
+    objects
+      .filter((o) => (o.properties ?? []).some((p) => p.name === name && p.value === true))
+      .map((o) => ({ x: o.x, y: o.y, w: o.width, h: o.height }));
+
+  const problem = describeClearanceProblem({
+    solids: of('solid'),
+    hazards: of('hazard'),
+    tileSize: map.tilewidth,
+    groundTopRow: layout.groundTopRow,
+    // `PLAYER_BOX.w * RENDER_SCALE`, parsed from the runtime rather than restated — the same rule
+    // `build-world.mjs` follows for `TILE_SIZE`, and for the same reason.
+    playerWidthPx: runtimePlayerWidth(),
+  });
+  if (problem !== null) {
+    throw new Error(`make-levels: ${layout.id} — ${problem}`);
+  }
+}
+
+/** `PLAYER_BOX.w * RENDER_SCALE`, read from the source of truth. Throws rather than defaulting. */
+function runtimePlayerWidth() {
+  // `[^=]*` spans the type annotation: the declaration is `PLAYER_BOX: LocalBox = { ... }`.
+  const box = /export const PLAYER_BOX[^=]*=\s*\{[^}]*?\bw:\s*(\d+)/s.exec(
+    readFileSync(resolve(ROOT, 'src/sim/playerTuning.ts'), 'utf8'),
+  );
+  const scale = /export const RENDER_SCALE = (\d+);/.exec(
+    readFileSync(resolve(ROOT, 'src/game/constants.ts'), 'utf8'),
+  );
+  if (!box || !scale) {
+    throw new Error(
+      'make-levels: could not read PLAYER_BOX.w / RENDER_SCALE from the runtime. The clearance ' +
+        'rule is a body width; it must not fall back to a guess.',
+    );
+  }
+  return Number(box[1]) * Number(scale[1]);
+}
+
+for (const layout of selected) assertStandable(layout, writeLevel(layout));
 
 /**
  * Rewrite `index.json`'s `levels` array from `LEVELS`, and nothing else in the file.

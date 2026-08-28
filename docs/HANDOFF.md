@@ -1,10 +1,11 @@
 # Session handoff — the HUD banner's placement + the pit rule
 
-> ## Session `hud-and-pits` — two defects the owner found by PLAYING the shipped build
+> ## Session `hud-and-pits` — FOUR defects the owner found by PLAYING the shipped build
 >
 > **Not a phase.** Phase 10 is still DONE and still shipped; its handoff follows below, unchanged.
 > Branch `session-hud-and-pits`. Full record: [qa/session-hud-and-pits.md](qa/session-hud-and-pits.md)
-> + [gate owners](qa/session-hud-and-pits-02-gate-owners.md) ·
+> + [gate owners](qa/session-hud-and-pits-02-gate-owners.md)
+> + [hazard clearance](qa/session-hud-and-pits-03-hazard-clearance.md) ·
 > [plan review](reviews/session-hud-and-pits-plan.md) ·
 > [impl review](reviews/session-hud-and-pits-impl.md).
 >
@@ -13,10 +14,36 @@
 > | 1 | the controls legend drew **full-width across the level** | it was `addHelpBanner()` at `x = 24` below the plate, wrapped to the whole 1872 px view. It now has its own layer, `src/scenes/helpBannerLayer.ts`, in the empty band right of the gear counter |
 > | 2 | *"in levels 2, 3 and 4 the character can fall through tiles"* and nothing happens | a **bottomless** gap already kills via the kill plane. A **walled valley** has a bottom, so falling in cost nothing. Five shipped; **four had no spikes**, because spikes were a hand-typed per-level list and nothing ever compared it to the geometry |
 > | 3 | *"there is a hazard that is not being seen"* | the spike tile was a **cool silver picket**, and STYLE.md §5 rule 2 makes the foreground warm and saturated. A cool desaturated foreground object reads as background *because the separation rules say it should* — and it shared a silhouette with the ornamental fence one cell over, which really is decoration. New tile generated as an isolated object and **composited into cell 12**; exactly one of sixteen cells changed |
+> | 4 | *"okay, I still get stuck by a hazard that I cannot see"* — the SAME sentence again, after the tile fix | **geometry, not art.** Five floor hazard runs ended exactly **96 px** — one tile — before the wall facing them, and the player is **132 px** wide. There was nowhere to stand: land a beat late and you are pinned in the spikes with a wall in front of you, taking damage you cannot see *because you are standing on it* |
 >
-> ### The three things worth knowing before touching any of this
+> ### The four things worth knowing before touching any of this
 >
-> **1. The pit rule is DERIVED, and it lives in one file two consumers import.**
+> **1. A tile is 96 px and the player is 132. Never write a level rule in tiles.**
+> That one comparison is defect 4 in full. `tools/gen/hazardClearance.mjs` (+ `.d.mts`) states the
+> rule — *a floor hazard run leaves either **no gap at all** to the wall facing it, or **at least
+> one player width** of clear floor* — and it is read by `tests/unit/level-hazard-clearance.test.ts`
+> over the **shipped bytes** and by `tools/gen/make-levels.mjs`, which re-reads each `.tmj` it wrote
+> and **throws** *(vault 5.3)*. The bound is `PLAYER_BOX.w * RENDER_SCALE`, imported, never a tile
+> count — a rule written in tiles would have called the defect legal.
+>
+> ⚠️ **Zero gap is LEGAL and is not a loophole.** Flush spikes, and a pit floor spiked wall to
+> wall, are places you were never meant to stand — four shipped runs are that shape, including the
+> level-03 cols 65-69 pit above. What is forbidden is the **almost**-gap.
+>
+> ⚠️ **Moving a pinning RUN is the fix that usually does not work.** It worked in levels 02, 03 and
+> at level-05 cols 20-22. It failed in BOTH directions at level-04 cols 102-103 and level-05 cols
+> 134-136: one column right lands where a descent touches down (unavoidable damage,
+> `level-hazard-free` refuses it), one column left blocks the auto-player outright. Those two were
+> fixed by widening the **ziggurat shelf** beside each one column, closing the gap to zero, with
+> the run left exactly where it shipped. Reasoning is recorded beside every run and shelf involved.
+>
+> ⚠️ **Five existing gates were blind to this** — `level-hazard-free` (its auto-player jumps early
+> and never lands in the gap), `level-completable` (tanks the damage), `level-pits` (asks whether a
+> *pit* is spiked, not whether a *floor* has room), `level-reach` (ignores hazards), and
+> `level-traversal` (reads a frozen retired level). Five gates over the same rectangles, and not
+> one asks the question a player asks by standing still.
+>
+> **2. The pit rule is DERIVED, and it lives in one file two consumers import.**
 > `tools/gen/pitDetect.mjs` (+ `.d.mts`) is read by `tools/gen/levelBuilder.mjs`, which paints the
 > spikes, *and* by `tests/unit/level-pits.test.ts`, which checks the **shipped bytes** *(vault 5.3,
 > vault 3.1)*. It is deliberately **two** clauses, not the five the plan specified: two reviewers
@@ -25,7 +52,7 @@
 > bottomless tests, and **no fixture could ever have discriminated them**. `isWall()` asks the one
 > question they were all circling: *is this column solid at the two rows just above the pit floor?*
 >
-> **2. Four of the five pits were FILLED IN, not spiked — and that was the right call.**
+> **3. Four of the five pits were FILLED IN, not spiked — and that was the right call.**
 > Spiking all five made three of them **unavoidable damage**: they sit where a descent lands, which
 > is the class `level-hazard-free.test.ts` exists to refuse. Owner decision, in order: *"Fill them
 > in"* → *"Add hazard to levels 4 and 5"* → *"Fill level-3's remaining pit too"*. **One pit ships:
@@ -39,7 +66,7 @@
 > return the same answer and the gate could not tell it from a correct one (Codex plan round 2,
 > finding 6 — the sharpest finding of either round).
 >
-> **3. The banner lives in TWO camera spaces, and that is not an accident.**
+> **4. The banner lives in TWO camera spaces, and that is not an accident.**
 > It is on `GameScene`'s display list; the counter it measures itself against is on `UIScene`'s.
 > `gameEffects.ts` moves `GameScene`'s camera to `(-margin.x, -margin.y)` so a screen shake never
 > uncovers the view edge — so a `setScrollFactor(0)` object draws about 10 px left of its own `x`.

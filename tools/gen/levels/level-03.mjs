@@ -85,7 +85,13 @@ export const level03 = {
    * of false green this session exists to remove.
    */
   spikes: [
-    { fromCol: 24, toCol: 26, row: GROUND_TOP_ROW - 1 },
+    // 🔴 Shifted one column AWAY from the wall on 2026-08-28. The owner reported *"I get stuck
+    // by a hazard that I cannot see"*: the run ended 96 px short of the wall face and the player
+    // is 132 px wide, so there was nowhere to stand. Land a beat late and you are pinned in the
+    // spikes with a wall in front of you, taking damage you cannot see because you are standing
+    // on it. The WIDTH is unchanged, so the hazard ramp totals are untouched.
+    // Gated by `tests/unit/level-hazard-clearance.test.ts`.
+    { fromCol: 23, toCol: 25, row: GROUND_TOP_ROW - 1 },
     { fromCol: 57, toCol: 57, row: 11 },
   ],
 
