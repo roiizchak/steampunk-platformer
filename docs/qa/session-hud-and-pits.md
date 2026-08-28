@@ -236,6 +236,12 @@ is **not** a second proof of it. Written into the file's own header.
 | `npm run build` | dev-seam gate ok (27 bodies folded); `verify-dist ok: 5 level(s) and 12 audio file(s) byte-identical, no DEV-only scene key or debug surface` |
 | `npm run test:e2e` | **148 passed**, exit 0 — the count read positively, not inferred from the exit code |
 
+🔴 **Re-run in full after the hazard tile landed: unit 2690/0, e2e 148 passed exit 0, build and
+verify-dist ok.** One spec failed on the first of those runs — 8.7's level-cost ratio, at
+`2.0000000000034106` against a bound of 2 — and is written up at the end of this file as a float tie
+in a quantised timer, not a regression. It passed 4/4 in isolation at the same bound on the same
+commit before the comparison was made noise-proof, and 148/148 after.
+
 ⚠️ **These are the figures AFTER the gate owners' AND the Codex implementation review's findings
 were applied.** The first pass through this table recorded 2677 / 2673 / 147 — the pre-review state.
 The gate owners added eleven unit tests and an e2e case; Codex's review added two more (the shipped
