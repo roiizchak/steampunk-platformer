@@ -64,6 +64,9 @@ export const SIM_MUTATORS = new Set([
   'advance',
   'advanceSplit',
   'advanceStride',
+  // Step 13 of the tick contract, moved whole out of `tick.ts` to make room for the trace seam.
+  // It writes `player.ticksSinceGrounded` and `player.ticksSinceJumpPressed` — both sim-owned.
+  'advanceTickWindows',
   'applyPlayerAttack',
   'applyWorldDamage',
   'clampToBounds',

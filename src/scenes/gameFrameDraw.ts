@@ -36,6 +36,7 @@ import type { EffectAttachment } from './gameEffects';
 import type { EnemyLayer } from './enemyLayer';
 import type { GearLayer } from './gearLayer';
 import type { UIScene } from './UIScene';
+import type { PinProbe } from './devPinProbe';
 import type { MotionProbe } from './devMotionProbe';
 import type { World } from '../sim/types';
 
@@ -54,6 +55,11 @@ export interface FrameDrawContext {
   parallax: ParallaxImage[];
   /** DEV ONLY, and driven by the RAW millisecond delta rather than by whole ticks. */
   motionProbe?: MotionProbe;
+  /** DEV ONLY. Needs the raw delta AND this frame's tick accounting — see `devPinProbe.ts`. */
+  pinProbe?: PinProbe;
+  /** Whole ticks this frame simulated, and how many `drainTicks` threw away over the cap. */
+  ticks?: number;
+  dropped?: number;
   deltaMs: number;
   publish: (world: World) => void;
 }
@@ -72,6 +78,9 @@ export function drawFrame(ctx: FrameDrawContext): void {
   // After the camera has followed, not before — see the header.
   renderParallax(ctx.parallax, ctx.camera.scrollX);
   ctx.motionProbe?.update(ctx.deltaMs);
+  // Fed the tick accounting as well as the delta: wall time a dropped-tick frame never simulated
+  // must not count toward a stall. `devPinProbe.ts` explains why that is not a refinement.
+  ctx.pinProbe?.update(ctx.deltaMs, ctx.ticks ?? 0, ctx.dropped ?? 0);
   // Last, so the debug surface describes a frame that was actually drawn.
   ctx.publish(ctx.world);
 }

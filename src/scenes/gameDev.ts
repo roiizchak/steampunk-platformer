@@ -30,6 +30,8 @@ import type Phaser from 'phaser';
 import { devSeam } from '../debug/devSeam';
 import { CATALOG_KEY, type AssetCatalog } from '../game/assetCatalog';
 import { createFeelTuner } from './devFeelTuner';
+import { createPinProbe } from './devPinProbe';
+import type { PinProbe } from './devPinProbe';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
 import type { World } from '../sim/types';
@@ -65,6 +67,8 @@ const DEV_LOW_HP_OFFSET_X = 200;
 export interface DevOverlays {
   feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void;
   motionProbe?: MotionProbe;
+  /** The collision overlay and stall classifier, `?pin=1`. See `devPinProbe.ts`. */
+  pinProbe?: PinProbe;
 }
 
 /**
@@ -93,6 +97,11 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
   // position schedule is the only variable. `devMotionProbe.ts` explains the three outcomes.
   if (params.get('probe') === '1') {
     overlays.motionProbe = createMotionProbe(scene, 'brass-courier-run');
+  }
+  // Draws every solid and hazard rectangle and names what stopped the player. Built because three
+  // fixes shipped against a stuck state nobody had put on screen — `devPinProbe.ts` has the account.
+  if (params.get('pin') === '1') {
+    overlays.pinProbe = createPinProbe(scene, world);
   }
   return overlays;
 }

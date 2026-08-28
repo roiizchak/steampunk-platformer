@@ -118,6 +118,10 @@ for (const [label, path] of scanned) {
     '__game',
     '__phaserGame',
     'spawnDevEnemies',
+    // The pin probe's own name. `URLSearchParams` below catches the `?pin=1` read, but only while
+    // the flag is how it is reached — this pins the overlay itself, which is what must never ship.
+    'createPinProbe',
+    'devPinProbe',
     // 🔴 **No production path in this project parses a query string**, so the constructor itself is
     // the tell. Added in Phase 9 for `?hitstop=N` (`gameLevelPick.hitstopScaleFromSearch`), and it
     // pins the four older affordances at the same time — `?perfMutation` (`audio.ts`), `?breakAsset`

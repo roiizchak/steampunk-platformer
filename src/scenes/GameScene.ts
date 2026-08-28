@@ -6,9 +6,9 @@ import type { LevelData } from '../game/tilemap';
 import { cameraSetup, followLerpForFrame } from '../render/cameraRig';
 import { playerRenderDesc } from '../render/playerView';
 import type { Point } from '../render/interpolate';
-import type { MotionProbe } from './devMotionProbe';
 import {
   attachDevOverlays,
+  type DevOverlays,
   helpLine,
   spawnFleetFixture,
   spawnLowHpFixture,
@@ -96,10 +96,12 @@ export class GameScene extends Phaser.Scene {
   protected goalObject!: Phaser.GameObjects.GameObject;
   /** Bound and sampled in `src/scenes/gameInput.ts`; see `bindKeys`/`sampleHeldKeys` below. */
   private held: HeldKeys = { left: [], right: [], jump: [], walk: [], attack: [] };
-  /** DEV ONLY — see `devFeelTuner.ts`. Undefined in production, where the branch is compiled out. */
-  private feelTuner?: (sprite: Phaser.GameObjects.Sprite) => void;
-  /** DEV ONLY — see `devMotionProbe.ts`. The ghost-report falsifier, `?probe=1`. */
-  private motionProbe?: MotionProbe;
+  /**
+   * DEV ONLY, every URL-flag overlay in one handle — `?tune=1`, `?probe=1`, `?pin=1`. One object
+   * rather than three fields: a third would push this file past the 400-line cap, and splitting the
+   * scene moves code `camera-follow-rate.test.ts` source-scans. Empty in production.
+   */
+  private dev: DevOverlays = {};
 
   /**
    * Whether the keyboard drives the PLAYER. ElementEditorScene turns it off, because there the
@@ -198,10 +200,7 @@ export class GameScene extends Phaser.Scene {
 
     // DEV ONLY, both off unless their query flag is present. The guard lives inside
     // `attachDevOverlays` so this call folds away entirely in production — see `gameDev.ts`.
-    ({ feelTuner: this.feelTuner, motionProbe: this.motionProbe } = attachDevOverlays(
-      this,
-      this.world,
-    ));
+    this.dev = attachDevOverlays(this, this.world);
 
     // Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4).
     const camera = this.cameras.main;
@@ -311,11 +310,11 @@ export class GameScene extends Phaser.Scene {
       world: this.world, camera: this.cameras.main, playerSprite: this.playerSprite,
       prevPlayer: this.prevPlayer, accumulatorMs: this.accumulatorMs,
       feelTuner: import.meta.env.DEV
-        ? (devSeam('__DEVSEAM_GameScene_feelTunerPass__'), this.feelTuner)
+        ? (devSeam('__DEVSEAM_GameScene_feelTunerPass__'), this.dev.feelTuner)
         : undefined,
       effects: this.effects, ui: this.ui, gears: this.gears, enemies: this.enemies,
-      parallax: this.parallax, motionProbe: this.motionProbe, deltaMs: delta,
-      publish: publishWorldState,
+      parallax: this.parallax, motionProbe: this.dev.motionProbe, deltaMs: delta,
+      pinProbe: this.dev.pinProbe, ticks, dropped: drain.dropped, publish: publishWorldState,
     });
   }
 

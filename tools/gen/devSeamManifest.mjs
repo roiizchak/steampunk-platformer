@@ -59,6 +59,7 @@ export const SENTINEL_MANIFEST = {
   'src/scenes/bootAssets.ts': ['__DEVSEAM_bootAssets_breakAssetCorrupt__'],
   'src/scenes/devFeelTuner.ts': ['__DEVSEAM_devFeelTuner_createFeelTuner__'],
   'src/scenes/devMotionProbe.ts': ['__DEVSEAM_devMotionProbe_createMotionProbe__'],
+  'src/scenes/devPinProbe.ts': ['__DEVSEAM_devPinProbe_createPinProbe__'],
   'src/scenes/devSpawn.ts': [
     '__DEVSEAM_devSpawn_spawnDevEnemies__',
     '__DEVSEAM_devSpawn_spawnDevFleet__',
@@ -112,6 +113,7 @@ export const SENTINEL_SITES = {
   '__DEVSEAM_config_devSceneRoster__': 'gameConfig',
   '__DEVSEAM_devFeelTuner_createFeelTuner__': 'createFeelTuner',
   '__DEVSEAM_devMotionProbe_createMotionProbe__': 'createMotionProbe',
+  '__DEVSEAM_devPinProbe_createPinProbe__': 'createPinProbe',
   '__DEVSEAM_devSpawn_spawnDevEnemies__': 'spawnDevEnemies',
   '__DEVSEAM_devSpawn_spawnDevFleet__': 'spawnDevFleet',
   '__DEVSEAM_enemyTuning_enemyKnobs__': 'enemyKnobs',

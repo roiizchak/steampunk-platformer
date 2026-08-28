@@ -37,6 +37,7 @@ import { damagePlayer, killPlayer } from './combat';
 import { freezePair, frozen } from './hitstop';
 import { PLAYER_BOX, toWorld } from './player';
 import { projectileHit } from './projectiles';
+import type { DamageSource } from './trace';
 import type { PlayerSim, World } from './types';
 
 /**
@@ -112,6 +113,19 @@ export interface WorldDamageResult {
   hurt: boolean;
   /** The player entered `death` on THIS tick, by damage **or** by the kill plane. */
   died: boolean;
+  /**
+   * WHICH source landed, or `null` if none did.
+   *
+   * 🔴 **Authoritative, because it cannot be recovered afterwards.** A lethal projectile applies no
+   * knockback (`applyKnockback` is guarded by `player.hp > 0`), takes no hit-stop, and has its shot
+   * deleted on the same tick — leaving it observationally identical to a lethal hazard in the
+   * post-tick world. A diagnostic that has to guess between those two guesses wrong exactly where
+   * the interesting bugs are. Set where each source actually lands, never inferred.
+   *
+   * When several sources touch the player on one tick, this names the FIRST that landed, matching
+   * the fixed evaluation order this function's header describes.
+   */
+  source: DamageSource | null;
 }
 
 /**
@@ -142,7 +156,7 @@ export function applyWorldDamage(
     // the lethal-damage path for exactly that reason: an edge derived only from `damagePlayer`'s
     // return leaves falling out of the world silent (Codex plan review F4). `killPlayer` is
     // idempotent, so `wasDead` is what keeps this to one edge rather than one per tick of the corpse.
-    return { hurt: false, died: !wasDead && player.state === 'death' };
+    return { hurt: false, died: !wasDead && player.state === 'death', source: 'killPlane' };
   }
 
   const box = toWorld(PLAYER_BOX, player.x, player.y, player.facing, world.scale);
@@ -151,6 +165,9 @@ export function applyWorldDamage(
   // no event behind it. Each source ORs into this rather than overwriting, because a later refusal
   // must not erase an earlier landing.
   let landed = false;
+  // The first source that actually cost hp. Assigned only where `landed` flips false -> true, so a
+  // later refused hit cannot overwrite the one that really connected.
+  let source: DamageSource | null = null;
 
   const hazard = hazardHit(previousX, previousY, player.x, player.y, world.hazards);
   if (hazard !== null) {
@@ -167,7 +184,9 @@ export function applyWorldDamage(
     // there is no pair to pass `freezePair`. Freezing the player alone would be a one-sided pause
     // with no visible cause — the player stops, nothing else does, and it reads as a stutter rather
     // than as a hit. Recorded as a decision, not left to fall out of the code as an omission.
-    landed = damagePlayer(player, HAZARD_DAMAGE) || landed;
+    const hazardLanded = damagePlayer(player, HAZARD_DAMAGE);
+    if (hazardLanded && source === null) source = 'hazard';
+    landed = hazardLanded || landed;
   }
 
   const shot = projectileHit(world.projectiles, box);
@@ -177,6 +196,7 @@ export function applyWorldDamage(
     // "no shove on a corpse" — `combat.ts`'s step-4 ordering exists so a lethal hit does not also
     // move the body it just killed (Codex plan review correction 1).
     const hit = damagePlayer(player, shot.damage);
+    if (hit && source === null) source = 'projectile';
     landed = hit || landed;
     if (hit && player.hp > 0) {
       applyKnockback(player, shot.x);
@@ -221,6 +241,7 @@ export function applyWorldDamage(
     }
     if (overlapsScavenger(scavenger, box, world.scale)) {
       const hit = damagePlayer(player, SCAVENGER.damage);
+      if (hit && source === null) source = 'enemyContact';
       landed = hit || landed;
       if (hit && player.hp > 0) {
         applyKnockback(player, scavenger.x);
@@ -243,5 +264,5 @@ export function applyWorldDamage(
   // One cue per event. A lethal hit is `died`, never both — otherwise the hurt sound plays over the
   // death sound on the one tick both are true, and the player hears the less important of the two.
   const died = landed && !wasDead && player.state === 'death';
-  return { hurt: landed && !died, died };
+  return { hurt: landed && !died, died, source: landed ? source : null };
 }

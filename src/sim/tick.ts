@@ -128,6 +128,8 @@ import { consumeAttackPress, consumeJumpPress } from './input';
 import { PLAYER_BOX, advanceStride, resolveCollisions, resolveState } from './player';
 import { deathWindowClosed, movementLocked, respawnPlayer, stepCombat } from './combat';
 import { releaseAggro } from './enemies';
+import { advanceTickWindows } from './tickWindows';
+import { emitIfTracing } from './trace';
 import { noEvents } from './events';
 import { stepEnemies } from './enemyTurn';
 import { goalEntryDir, stepGoalEntry } from './goal';
@@ -138,7 +140,6 @@ import { stepPlayerMotion } from './playerMotion';
 import { applyWorldDamage } from './worldDamage';
 import { nextFloat } from './rng';
 import type { InputSnapshot, TickEvents, World } from './types';
-import { advanceWindow } from './windows';
 
 export { GREY_BOX_SOLIDS, createWorld } from './world';
 export type { CreateWorldOptions } from './world';
@@ -348,39 +349,19 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   events.footstep = motionRan ? advanceStride(player) : false;
 
   // 13. Advance every window counter, LAST, after every test of one.
-  //
-  //     ONE RULE, applied to both windows:
-  //
-  //       > A window does not spend a tick on which step 8 could not yet see the fact that tick
-  //       > established.
-  //
-  //     Step 8 runs before step 10 resolves collisions, so it necessarily tests LAST tick's
-  //     grounded flag. Two ticks are therefore not real chances to jump, and charging the window
-  //     for them makes a knob of `N` behave like `N - 1`:
-  //
-  //       - the tick the player walks off a ledge — coyote is armed at step 11, after step 8 ran;
-  //       - the tick the player touches down — the buffer was tested at step 8 while `grounded`
-  //         was still false, so the buffered jump actually fires on the following tick.
-  //
-  //     Codex plan review F5 predicted the first and this implementation had it; `coyote-time.
-  //     test.ts` then caught the second, which is the same defect mirrored. Both endpoints of
-  //     both windows are asserted there against the live knob.
-  //
-  //     The `advanceWindow` call is the shared saturating increment from `windows.ts`; the guard in
-  //     front of it — WHETHER this tick is spent at all — is the step-order rule above and stays
-  //     here, with the numbered order that owns it.
-  //     🔴 **A FROZEN tick is not spent either** (Phase 9): step 7 did not run at all. Ungated, a
-  //     9-tick `lethal` freeze saturated both knobs from inside itself and ate the press. `motionRan`
-  //     and NOT `frozen()` — `PlayerMotion.ran` says why they differ on the arming tick.
-  if (!coyoteArmedThisTick && motionRan) {
-    player.ticksSinceGrounded = advanceWindow(player.ticksSinceGrounded, tuning.coyoteTicks);
-  }
-  if (!events.landed && motionRan) {
-    player.ticksSinceJumpPressed = advanceWindow(
-      player.ticksSinceJumpPressed,
-      tuning.jumpBufferTicks,
-    );
-  }
+  //     Moved whole to `tickWindows.ts` to make room for the trace emission below — the BLOCK
+  //     moved, the NUMBERING did not, exactly as steps 5-8 did into `playerMotion.ts`. Every word
+  //     of the reasoning went with it.
+  advanceTickWindows(player, tuning, coyoteArmedThisTick, events.landed, motionRan);
+
+  // The trace seam. Emitted HERE, before step 14, so `world.tickCount` is still the tick that just
+  // ran — read after the increment, every incident is filed against the wrong tick. The payload is
+  // assembled in `trace.ts`, which also says why this is a registry and not a parameter: a committed
+  // mutation fixture anchors `advance`'s signature and `advanceSplit`'s call to this function.
+  emitIfTracing(world, {
+    input, player, effectiveDir: dir, previousX, previousY, wasGrounded,
+    entryLocked, hitstunLocked, motionRan, damage, respawned: events.respawned,
+  });
 
   // 14.
   world.tickCount += 1;

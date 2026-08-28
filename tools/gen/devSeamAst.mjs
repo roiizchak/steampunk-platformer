@@ -52,6 +52,7 @@ export const DEV_ONLY_MODULES = new Set([
   'src/render/enemyTuning.ts',
   'src/scenes/devFeelTuner.ts',
   'src/scenes/devMotionProbe.ts',
+  'src/scenes/devPinProbe.ts',
   'src/scenes/devSpawn.ts',
   'src/scenes/gymKeys.ts',
 ]);
