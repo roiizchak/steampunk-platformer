@@ -57,14 +57,18 @@
 > | `HELP_LINE_BOX_SLACK` | 1.05 | Chrome's line box measures **1.216** per row against our nominal 1.2. The ceiling is a play-area bound, not a glyph-metrics claim |
 > | `MIN_WALL_TILES` | 2 | one is a slope you walk back up; three is the shallowest shipped pit, and a threshold set AT the observed minimum has no room to be wrong safely |
 >
-> ### 🔴 The art budget is BREACHED, and it is the owner's call
+> ### The art budget: $55.20 spent, the overrun CLEARED, no new ceiling set
 >
 > `GENERATION-LOG.md` stood at **$55.05 against a $55 ceiling** before this session — knowingly over,
 > by an owner decision of 2026-08-26 — and its last line read *"the next generation needs a ceiling
-> raise, not a decision."* The hazard tile cost **$0.15**, taken on the owner's explicit choice of
-> the fal option when the defect was put to them with four alternatives. **That was a choice between
-> fixes, not a ceiling raise.** Total is now **$55.20, $0.20 over**, recorded as a breach rather than
-> absorbed. **The next generation of any kind needs the ceiling moved first.**
+> raise, not a decision."* The hazard tile cost **$0.15**, taking the total to **$55.20**.
+>
+> ✅ **The owner cleared the overrun on 2026-08-28**, with the $0.20 quoted to them before they
+> answered. That spend is authorised and is not a breach.
+>
+> ⚠️ **But no new ceiling FIGURE exists.** They were never asked for a number and none was given, so
+> nothing in this repo states what the limit now is. **The next generation needs that number first**
+> — a ceiling invented by a document is a limit nobody set.
 >
 > ### What is still open
 >

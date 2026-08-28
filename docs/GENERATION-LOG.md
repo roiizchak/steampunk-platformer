@@ -291,6 +291,13 @@ next generation on this endpoint needs a ceiling raise, not a decision.**
 🔴 **The ceiling was already exceeded before this generation** ($55.05, knowingly, on 2026-08-26) and
 the line above it said *"the next generation needs a ceiling raise, not a decision."* This spend was
 made on the owner's explicit choice of the fal option when the hazard-legibility defect was put to
-them with four alternatives — but **that was a choice between fixes, not a ceiling raise**, and the
-raise has still not been granted. Recorded as a breach rather than absorbed. **The ceiling stands at
-$55 and is $0.20 exceeded; the next generation of any kind needs the ceiling moved first.**
+them with four alternatives — but **that was a choice between fixes, not a ceiling raise**.
+
+✅ **Cleared by the owner on 2026-08-28**, when the $0.20 overrun was put to them explicitly and in
+the same words as above. The $0.15 hazard-tile generation stands as authorised spend and is not a
+breach.
+
+⚠️ **No new ceiling FIGURE was named**, and this log does not invent one. So the position is:
+$55.20 spent, the last stated ceiling is $55, and the overrun to date is cleared. **The next
+generation still needs a number** — not because the owner refused one, but because they were never
+asked for one, and a ceiling this file made up would be a limit nobody set.
