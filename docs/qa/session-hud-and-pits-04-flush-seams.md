@@ -1,6 +1,6 @@
 # The invisible blocker, attempt 4 — reproduced, then fixed
 
-**Session:** 2026-08-28 · branch `session-hud-and-pits` · no fal spend (budget stays at $55.20/$55)
+**Session:** 2026-08-28 · branch `session-invisible-blocker-repro`, off `session-hud-and-pits` · no fal spend (budget stays at $55.20/$55)
 
 ## The brief
 
