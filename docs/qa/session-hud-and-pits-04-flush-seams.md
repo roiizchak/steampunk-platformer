@@ -159,9 +159,16 @@ uninstalled, so `package-lock.json` shipped with **zero** phaser entries. `npm c
 would not have installed the runtime dependency — and CLAUDE.md's worktree-recovery note explicitly
 relies on "the lockfile pins `phaser@4.2.1`". Restored in this commit.
 
-## 13. Still open
+## 13. Owner sign-off — all five levels, by hand, at 60 Hz
 
-- **Levels 1, 4 and 5 unverified by hand.** The census says zero seams there and always did, but the
-  owner asked to check them at `?pin=1` and has not yet. Reported open, not assumed clean.
-- **The resolver latch** (§7).
+> *"okay, it tested all the levels, and now it's working as expected."*
+
+The owner walked **all five** levels at `?pin=1` on their own machine and reported the stuck state
+gone. That closes criterion C4 for this defect: the bug was first reported by playing and it is
+closed by playing. No automated gate in this repo could have closed it — the offline sweep (§8) was
+negative, and every one of the previous three misses was green across the entire suite.
+
+## 14. Still open
+
+- **The resolver latch** (§7) — tracked, deliberately unfixed, recorded in `HANDOFF.md`.
 - **Codex implementation review** and the owner's own review of the diff.

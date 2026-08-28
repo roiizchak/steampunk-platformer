@@ -52,8 +52,11 @@
 > `drawImage` without `preserveDrawingBuffer`, which returns a **cleared** buffer: false red with the
 > flag, false green without it. Decode `page.screenshot()`.
 >
-> ⚠️ **Levels 1, 4 and 5 are unverified by hand.** The census says zero seams and always did, but the
-> owner asked to walk them at `?pin=1` and has not yet. Open, not assumed clean.
+> ### Closed by the owner, by PLAYING — all five levels
+>
+> *"okay, it tested all the levels, and now it's working as expected."* Walked at `?pin=1` on the
+> owner's own 60 Hz machine. That is what closed this, and it is the only thing that could have: the
+> offline sweep was **negative**, and all three previous misses were green across the whole suite.
 
 > ## Session `hud-and-pits` — FOUR defects the owner found by PLAYING the shipped build
 >
