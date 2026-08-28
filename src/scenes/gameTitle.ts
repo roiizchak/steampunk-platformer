@@ -18,6 +18,21 @@
  * So the rule is a module-scope latch, which is exactly "once per page load": it survives every
  * scene restart, and a real reload gets a fresh module. Nothing else is consulted.
  *
+ * ## ⚠️ One interleaving is knowingly NOT defended *(C11)*
+ *
+ * Codex implementation review round 3, finding 2. Queue a `Game.restart()` while the title is up,
+ * then press ENTER before the next SceneManager pass, and the queue ends
+ * `[stop Title, resume Game, pause Game]` — the resume from `onPlay` lands before the pause this
+ * helper appends during the new `create()`, leaving `Game` PAUSED with no title over it.
+ *
+ * It is not reachable from shipped code: nothing in `src/` calls `scene.restart()`, every (re)start
+ * of `Game` is an explicit `scene.start('Game', …)` from Boot, the level menu, the completion path
+ * or a dev scene, and none of those can be in flight while a key is dismissing the title. A spec
+ * cannot construct it accidentally either: `titleHarness.restartGame()` waits on a SHUTDOWN observer
+ * before returning, so no keypress can be queued mid-restart. Recorded rather than defended, because
+ * the only fix that would close it — moving the pause/resume pair into the title's own lifecycle —
+ * trades a queue race nobody can reach for a different one everybody would.
+ *
  * ## 🔴 A restart while the title is still up must re-pause
  *
  * If the latch only suppressed later attachments, restarting `Game` while a `Title` was still active
@@ -74,8 +89,10 @@ export function attachTitle(
   // 🔴 **Three states, not one — and the title is RESTORED, not merely counted.**
   //
   // This tested `isActive` alone, and `isActive` is false for a PAUSED or SLEEPING scene, so a title
-  // in either state fell through to the latch and was left drawn over a RUNNING level *(Codex
-  // implementation review round 1, finding 2)*.
+  // in either state fell through to the latch and the new `Game` was never paused *(Codex
+  // implementation review round 1, finding 2)*. A PAUSED title is then drawn over a RUNNING level; a
+  // SLEEPING one is not drawn at all. The wording used to say "left drawn" for both, which is wrong
+  // for the sleeping case and contradicted the paragraph below it *(round 3)*.
   //
   // Detecting them is not enough, though, and round 2 caught the half-fix: pausing `Game` under a
   // title that is itself paused or asleep **strands the player**. Read from the engine, not assumed:

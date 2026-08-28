@@ -159,13 +159,28 @@ export function bindPlayerKeys(
      * exact defect this phase exists to close. The manager checks it to avoid double-handling an
      * event another listener consumed; a capture flag is not consumption.
      *
-     * ⚠️ **Two of the plugin's other rejections are knowingly not reproduced** *(round 2, finding 1;
-     * recorded rather than built, per C11)*: an event some other DOM listener `preventDefault`-ed
-     * before Phaser saw it, and one a higher scene cancelled with `stopPropagation()`. Neither is
-     * reachable here — nothing in this project calls either on a keyboard event, and `cancelled` is
-     * a field Phaser sets during its own queue drain, which happens **after** this listener has
-     * already run. The duplicate bailout below IS reproduced, because that one depends on the
-     * player's operating system rather than on our code.
+     * 🔴 **`event.cancelled` is the marker that DOES work, and it is checked.**
+     *
+     * Round 2 recorded two of the plugin's rejections as unreproducible, on the reasoning that
+     * Phaser's queue drain happens after this listener. **That reasoning was backwards**, and round 3
+     * caught it: `KeyboardManager` emits `MANAGER_PROCESS` synchronously from inside its own DOM
+     * handler (`KeyboardManager.js:194`), so `KeyboardPlugin.update()` has already run by the time a
+     * listener registered later in `create()` sees the event.
+     *
+     * Measured on the real page rather than argued a second time: a `BracketLeft` event reaches this
+     * listener with `cancelled: 0`, **a number**, alongside `defaultPrevented: false`; the captured
+     * `KeyL` event reaches it with `cancelled: 0` and `defaultPrevented: true`. So the two are
+     * genuinely different signals, and `cancelled` is the one that means what we need:
+     *
+     * | `event.cancelled` | meaning |
+     * |---|---|
+     * | `undefined` | Phaser never queued it — rejected before the plugin, or the plugin is inactive |
+     * | `0` | queued and accepted, whatever `preventDefault` a capture flag caused |
+     * | `1` / `-1` | `stopImmediatePropagation()` / `stopPropagation()` — deliberately stopped |
+     *
+     * Requiring exactly `0` reproduces both rejections without touching `defaultPrevented`, and it
+     * leaves the keyCode-collision fix intact: the plugin sets `cancelled` **before** it looks up
+     * `keys[keyCode]`, so a suppressed `ANY_KEY_DOWN` still leaves a `0` behind.
      *
      * `TitleScene` needs none of this: it registers no keys at all, so `keys[code]` is always
      * undefined there and `ANY_KEY_DOWN` always fires.
@@ -175,17 +190,25 @@ export function bindPlayerKeys(
     /**
      * Phaser's duplicate-event bailout, reproduced.
      *
-     *  skips an event whose ,  and  all match
-     * the one before it, with the comment *"on some systems, the exact same event will fire multiple
-     * times"*. Leaving the plugin gave that up, and a duplicate is not an  — so on
-     * such a system one press would apply two volume steps. Codex implementation review round 2,
-     * finding 1.
+     * `KeyboardPlugin.js:776` skips an event whose `keyCode`, `timeStamp` and `type` all match the
+     * one before it, with the comment *"on some systems, the exact same event will fire multiple
+     * times"*. Leaving the plugin gave that up, and a duplicate is **not** an `event.repeat` — so on
+     * such a system one press would apply two volume steps. Round 2, finding 1.
      *
-     * Keyed on  rather than , because  is what this listener dispatches on
-     * and is therefore the thing that must not be honoured twice.
+     * Keyed on `code` rather than `keyCode`, because `code` is what this listener dispatches on and
+     * is therefore the thing that must not be honoured twice.
+     *
+     * 🔴 **And the keyUP resets it**, which the first version missed. Phaser's triplet includes
+     * `event.type` and is updated for keyups too, so two legitimate presses that happen to share a
+     * millisecond — separated by a release — are accepted there and would have been swallowed here.
+     * A timestamp is not a press identifier; the release between them is. Round 3, finding 3.
      */
     let prevCode = '';
     let prevTime = -1;
+    const forgetPrevious = (): void => {
+      prevCode = '';
+      prevTime = -1;
+    };
 
     const onAudioKey = (event: KeyboardEvent): void => {
       // 🔴 `event.repeat` is the guard, and it replaces something we gave up above. The `Key`
@@ -217,6 +240,14 @@ export function bindPlayerKeys(
       if (!isPlayerInputEnabled()) {
         return;
       }
+      // Phaser queued it and nobody stopped it. `undefined` means the plugin never saw it.
+      //
+      // The cast is the honest shape: `cancelled` is a field PHASER adds to the DOM event
+      // (`KeyboardPlugin.js:751`), not part of the `KeyboardEvent` interface, so no lib.dom type
+      // describes it.
+      if ((event as KeyboardEvent & { cancelled?: number }).cancelled !== 0) {
+        return;
+      }
       if (event.code === prevCode && event.timeStamp === prevTime) {
         return;
       }
@@ -236,6 +267,7 @@ export function bindPlayerKeys(
       applyAudioAction(manager, action);
     };
     target.addEventListener('keydown', onAudioKey as EventListener);
+    target.addEventListener('keyup', forgetPrevious);
     // The plugin used to own this teardown. A raw DOM listener outlives its scene unless the scene
     // removes it — the same trap `TitleScene` handles for the global `ScaleManager`.
     /**
@@ -252,6 +284,7 @@ export function bindPlayerKeys(
      */
     const drop = (): void => {
       target.removeEventListener('keydown', onAudioKey as EventListener);
+      target.removeEventListener('keyup', forgetPrevious);
       scene.events.off(Phaser.Scenes.Events.SHUTDOWN, drop);
       scene.events.off(Phaser.Scenes.Events.DESTROY, drop);
     };

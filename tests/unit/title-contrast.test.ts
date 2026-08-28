@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  audioHint,
   CHOICE_FILL,
   HINT_FILL,
   SCRIM_ALPHA,
@@ -78,11 +79,11 @@ function throughScrim(under: readonly [number, number, number]): number {
  * The bar, **derived from the size rather than declared**.
  *
  * WCAG's large-text allowance is 18 pt (24 px) for a regular weight, or 14 pt bold. Nothing on this
- * screen is bold, so 24 physical px is the only door — and at the smallest supported window that is
+ * screen is bold, so 24 displayed CSS px is the only door — and at the smallest supported window that is
  * `24 / (852/1920) = 54` design px. Only the 72 px heading is through it.
  *
  * 🔴 The first version of this file asserted all four were small text and **went red on its first
- * run** against a heading that draws at 31.9 physical px. Deriving the bar is the fix: a size change
+ * run** against a heading that draws at 31.9 displayed CSS px. Deriving the bar is the fix: a size change
  * moves the bar automatically, and nobody can clear a future red by reclassifying the text in prose.
  */
 const LARGE_TEXT_PX = 24;
@@ -92,11 +93,11 @@ const LARGE_TEXT_RATIO = 3;
 /** The smallest supported window, the same figure `contrast-floor.test.ts` measures against. */
 const SMALLEST_WIDTH = 852;
 
-function physicalPx(designPx: number): number {
+function displayedCssPx(designPx: number): number {
   return designPx * (SMALLEST_WIDTH / GAME_WIDTH);
 }
 function barFor(designPx: number): number {
-  return physicalPx(designPx) >= LARGE_TEXT_PX ? LARGE_TEXT_RATIO : SMALL_TEXT_RATIO;
+  return displayedCssPx(designPx) >= LARGE_TEXT_PX ? LARGE_TEXT_RATIO : SMALL_TEXT_RATIO;
 }
 
 describe('the welcome screen clears the small-text bar over everything the scrim admits', () => {
@@ -117,8 +118,8 @@ describe('the welcome screen clears the small-text bar over everything the scrim
     // are the ones carrying information, and none of them is anywhere near the large-text door.
     for (const ink of TITLE_INKS.filter((i) => i.role !== 'title')) {
       expect(
-        physicalPx(ink.designPx),
-        `${ink.role} draws at ${physicalPx(ink.designPx).toFixed(1)}px`,
+        displayedCssPx(ink.designPx),
+        `${ink.role} draws at ${displayedCssPx(ink.designPx).toFixed(1)}px`,
       ).toBeLessThan(LARGE_TEXT_PX);
       expect(barFor(ink.designPx)).toBe(SMALL_TEXT_RATIO);
     }
@@ -198,7 +199,15 @@ const SCENE_SOURCE = import.meta.glob('../../src/scenes/TitleScene.ts', {
  * and it must not eat a `//` inside a string, of which this scene has none.
  */
 function stripComments(text: string): string {
-  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return (
+    text
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      // 🔴 TRAILING `//` too, not only whole-line ones. `void 0; // make(...)` satisfied every line
+      // assertion below while the screen drew nothing — Codex implementation review round 3,
+      // finding 4. The `[^:]` guard leaves a `https://` inside a string alone; this scene has none,
+      // and the non-vacuity assertion below catches an over-eager strip.
+      .replace(/(^|[^:])\/\/.*$/gm, '$1')
+  );
 }
 
 describe('TitleScene spends the inks rather than merely importing them', () => {
@@ -267,9 +276,21 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   }
 
   it('the audio hint is drawn from the live state, not a fixed string', () => {
-    // The one line whose text is computed. It must go through `audioHint`, or the readout that
-    // answers "did that key do anything?" is a constant again.
+    // Half of the claim: the scene routes that line through `audioHint`.
     expect(source).toMatch(/this[.]hint = make[(]audioHint[(][^;]*HINT_STYLE[)]/);
+  });
+
+  it('and audioHint actually SPENDS both of its arguments', () => {
+    // 🔴 The other half. An `audioHint` that ignored both arguments and returned a fixed '100%'
+    // satisfied the source scan above while the readout was a constant again — Codex implementation
+    // review round 3, finding 4. This assertion is behavioural, which is why the function moved to
+    // the engine-free module: a source-text gate cannot ask what a function RETURNS.
+    expect(audioHint(false, 1)).toContain('100%');
+    expect(audioHint(false, 0.4)).toContain('40%');
+    expect(audioHint(true, 0.4), 'mute must win over the number').toContain('muted');
+    expect(audioHint(true, 0.4)).not.toContain('40%');
+    // And it is still a hint for the keys it names.
+    expect(audioHint(false, 1)).toContain('M mute');
   });
 
   it('five lines and no more — an extra draw is a layout the row fractions do not place', () => {
@@ -279,6 +300,12 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     // `make(` of its own — checked by running this, not assumed.
     const draws = source.match(/make[(]/g) ?? [];
     expect(draws.length, `${draws.length} occurrences of make(`).toBe(5);
+
+    // 🔴 And exactly ONE `this.add.text`, inside `make`. Counting only `make(` let a sixth line be
+    // added as a direct `this.add.text(...)` — drawn, unplaced by `applyLayout`'s five-entry row
+    // table, and invisible to every assertion here. Codex implementation review round 3, finding 4.
+    const rawText = source.match(/this[.]add[.]text[(]/g) ?? [];
+    expect(rawText.length, `${rawText.length} direct this.add.text calls`).toBe(1);
   });
 
   it('the scrim is drawn with the colour and alpha the sweep assumes', () => {

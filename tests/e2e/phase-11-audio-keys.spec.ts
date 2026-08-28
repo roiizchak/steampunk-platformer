@@ -241,3 +241,57 @@ test.describe('Phase 11 — the dispatch GATE, not only the interpretation', () 
       .toBe(0.4);
   });
 });
+
+test.describe('Phase 11 — the duplicate-event bailout the plugin used to provide', () => {
+  /**
+   * 🔴 `KeyboardPlugin.js:776` skips an event whose `keyCode`, `timeStamp` and `type` all match the
+   * one before it — *"on some systems, the exact same event will fire multiple times"*. Moving to a
+   * DOM listener gave that up, and a duplicate is **not** an `event.repeat`, so on such a system one
+   * press applied two volume steps. Codex implementation review round 2, finding 1; this gate is
+   * round 3, finding 3, which pointed out the guard had no test at all.
+   *
+   * `timeStamp` is read-only, so it is redefined on the instance — the only way to author a
+   * duplicate deliberately rather than waiting for a machine that produces them.
+   */
+  async function fireAt(page: import('@playwright/test').Page, type: string, at: number): Promise<void> {
+    await page.evaluate(
+      ([t, stamp]) => {
+        const ev = new KeyboardEvent(t as string, {
+          code: 'BracketLeft',
+          keyCode: 219,
+          which: 219,
+          bubbles: true,
+          cancelable: true,
+        });
+        Object.defineProperty(ev, 'timeStamp', { value: stamp as number });
+        window.dispatchEvent(ev);
+      },
+      [type, at] as const,
+    );
+  }
+
+  test('the exact same event twice is one volume step', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireAt(page, 'keydown', 4242);
+    await fireAt(page, 'keydown', 4242);
+
+    // 0.4 is one step. 0.3 would be the duplicate being honoured.
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+  });
+
+  test('but a RELEASE between them makes the second press real', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    // Two genuine presses that happen to share a millisecond. Phaser accepts both, because its
+    // triplet includes `type` and is updated on keyup — so the bailout must forget on release, or a
+    // fast player loses a press.
+    await fireAt(page, 'keydown', 5150);
+    await fireAt(page, 'keyup', 5150);
+    await fireAt(page, 'keydown', 5150);
+
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.3);
+  });
+});

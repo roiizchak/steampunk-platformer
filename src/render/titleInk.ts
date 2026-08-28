@@ -80,13 +80,18 @@ export const SCRIM_COLOUR = 0x12100e;
 export const SCRIM_ALPHA = 0.82;
 
 /**
- * Every ink the screen draws, with the physical size it draws at in DESIGN pixels.
+ * Every ink the screen draws, with the size it is authored at in DESIGN pixels.
  *
  * The size is here because it DECIDES the bar, and `title-contrast.test.ts` derives the bar from it
  * rather than declaring one. WCAG's large-text allowance is **24 px regular** or 14 pt bold; at the
  * smallest supported window each of these scales by 852/1920 = 0.444.
  *
- * | role | design px | physical px | bar |
+ * ⚠️ The second column used to be labelled "physical px". These are **displayed CSS pixels** —
+ * what the browser lays out after `Phaser.Scale.FIT` letterboxes the fixed 1920x1080 canvas — not
+ * device pixels, which a high-DPR screen multiplies again. WCAG's thresholds are CSS pixels, so the
+ * arithmetic was always right and only the name was wrong. Codex implementation review round 3.
+ *
+ * | role | design px | displayed CSS px | bar |
  * |---|---|---|---|
  * | title | 72 | 31.9 | 3:1 — **large text** |
  * | choice | 34 | 15.1 | 4.5:1 |
@@ -105,3 +110,23 @@ export const TITLE_INKS: ReadonlyArray<{ role: string; fill: string; designPx: n
   { role: 'choice', fill: CHOICE_FILL, designPx: 34 },
   { role: 'hint', fill: HINT_FILL, designPx: 22 },
 ];
+
+/**
+ * The audio hint line, rendered from the CURRENT state rather than as a fixed string.
+ *
+ * 🔴 **A screen that advertises a control owes the player the control's value.** Nothing else in the
+ * game shows the volume — not the HUD, not the level menu — and at the shipped default of
+ * `volume: 1`, `stepVolume(1, +1)` clamps, so the first press of `]` does nothing at all. A player
+ * who tries the key this screen just taught them gets silence, with no way to tell "already at
+ * maximum" from "still broken" — which is exactly the reading the owner reported before the dispatch
+ * bug was found. Found by the criterion 11.12 adversarial brief.
+ *
+ * ⚠️ **It lives here, not in `TitleScene`, so a unit test can drive it.** A source-text gate could
+ * only prove the scene *calls* something named `audioHint`; an implementation that ignored both
+ * arguments and returned a fixed `100%` would have satisfied it. Codex implementation review round 3,
+ * finding 4. `title-contrast.test.ts` now asserts the two arguments actually reach the string.
+ */
+export function audioHint(muted: boolean, volume: number): string {
+  const level = muted ? 'muted' : `${Math.round(volume * 100)}%`;
+  return `M mute   ·   [ ] volume   ${level}`;
+}

@@ -57,6 +57,7 @@ import type { AudioActionResult } from './audioKeyMap';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
 import type { AudioManager } from '../game/audio';
 import {
+  audioHint,
   CHOICE_FILL,
   HINT_FILL,
   SCRIM_ALPHA,
@@ -102,23 +103,6 @@ export interface TitleSceneData {
    * being written wrong.
    */
   onPlay: () => void;
-}
-
-/**
- * The audio hint, rendered from the CURRENT state rather than as a fixed string.
- *
- * 🔴 **A screen that advertises a control owes the player the control's value.** Nothing else in the
- * game shows the volume — not the HUD, not the level menu — and at the shipped default of
- * `volume: 1` the first press of `]` clamps and does nothing at all. A player who tries the key
- * this screen just taught them gets silence, with no way to tell "already at maximum" from "still
- * broken" — which is exactly the reading the owner reported before the dispatch bug was found.
- *
- * Showing the number costs one line and makes both answers visible. Found by the criterion 11.12
- * adversarial brief, which asked who the screen fails rather than whether it is laid out correctly.
- */
-function audioHint(muted: boolean, volume: number): string {
-  const level = muted ? 'muted' : `${Math.round(volume * 100)}%`;
-  return `M mute   ·   [ ] volume   ${level}`;
 }
 
 export class TitleScene extends Phaser.Scene {
