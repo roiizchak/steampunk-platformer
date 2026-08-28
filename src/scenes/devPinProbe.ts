@@ -36,8 +36,21 @@ import { observeTicks } from '../sim/trace';
 import type { TickTrace } from '../sim/trace';
 import type { World } from '../sim/types';
 
-const SOLID_COLOUR = 0x4fb0c6;
-const HAZARD_COLOUR = 0xe0553a;
+/**
+ * 🔴 **Magenta, not the editor's cyan.** The first cut used `0x4fb0c6` at `0.18` fill. The rectangles
+ * rendered correctly — and the owner still reported "no rectangle, just nothing to see", because a
+ * pale cyan wash at 18 % over this palette's dark blue-grey and brown brick is invisible, and the
+ * one edge that WAS on screen sat exactly under the floor's own painted top edge. An overlay that is
+ * technically drawing and practically unreadable is a broken instrument.
+ *
+ * Magenta appears nowhere in the steampunk palette, so any tint of it reads as "this is the overlay".
+ * **Verify a colour change with a screenshot, never by asserting the object exists.**
+ */
+const SOLID_COLOUR = 0xff00ff;
+const HAZARD_COLOUR = 0xff2200;
+const SOLID_FILL = 0.22;
+const HAZARD_FILL = 0.4;
+const STROKE_PX = 6;
 const RECT_DEPTH = 5;
 const TEXT_DEPTH = 1000;
 
@@ -82,15 +95,37 @@ function describe(hit: StallIncident): string {
  */
 export function createPinProbe(scene: Phaser.Scene, world: World): PinProbe {
   devSeam('__DEVSEAM_devPinProbe_createPinProbe__');
-  const rects = scene.add.graphics().setDepth(RECT_DEPTH).setName(PIN_PROBE_RECTS);
-  rects.lineStyle(3, SOLID_COLOUR, 0.9);
-  for (const s of world.solids) {
-    rects.strokeRect(s.x, s.y, s.w, s.h);
-  }
-  rects.lineStyle(3, HAZARD_COLOUR, 0.95);
-  for (const h of world.hazards) {
-    rects.strokeRect(h.x, h.y, h.w, h.h);
-  }
+  /**
+   * 🔴 **One `Rectangle` per rect, NOT a `Graphics` with `strokeRect`.**
+   *
+   * The first cut used `scene.add.graphics()` and drew every rect into it. The object existed, was
+   * `visible`, had `alpha` 1 and sat at depth 5 above the tile layer — and drew **nothing at all** on
+   * screen. The owner played a whole session against that overlay and reported "no rectangle, just
+   * nothing to see", which reads exactly like the bug being hunted. An instrument that asserts its
+   * own existence and draws nothing is the zero-particle burst from `CLAUDE.md` §2, and it cost a
+   * playtest.
+   *
+   * `ElementEditorScene` has drawn `world.solids` this way since Phase 2 and is known to work. This
+   * is that code. **Do not "simplify" it back into a single `Graphics`** without a screenshot.
+   */
+  const rects: Phaser.GameObjects.Rectangle[] = [];
+  const draw = (
+    r: { x: number; y: number; w: number; h: number },
+    colour: number,
+    fill: number,
+  ): void => {
+    rects.push(
+      scene.add
+        .rectangle(r.x, r.y, r.w, r.h, colour, fill)
+        .setOrigin(0, 0)
+        .setStrokeStyle(STROKE_PX, colour, 1)
+        .setDepth(RECT_DEPTH)
+        .setName(PIN_PROBE_RECTS),
+    );
+  };
+  for (const solid of world.solids) draw(solid, SOLID_COLOUR, SOLID_FILL);
+  // Hazards last and louder, so a hazard sitting on top of a solid is never hidden by it.
+  for (const hazard of world.hazards) draw(hazard, HAZARD_COLOUR, HAZARD_FILL);
 
   const readout = scene.add
     .text(24, GAME_HEIGHT - 220, '', {
@@ -140,7 +175,8 @@ export function createPinProbe(scene: Phaser.Scene, world: World): PinProbe {
 
     destroy(): void {
       dispose();
-      rects.destroy();
+      for (const r of rects) r.destroy();
+      rects.length = 0;
       readout.destroy();
     },
   };
