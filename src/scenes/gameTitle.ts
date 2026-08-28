@@ -71,12 +71,32 @@ export function attachTitle(
   // A title left over from a previous `Game` that restarted underneath it. Re-pause and leave the
   // existing screen alone — relaunching would stack a second copy of every text object.
   //
-  // 🔴 **Three states, not one.** This tested `isActive` alone, and `isActive` is false for a
-  // PAUSED or SLEEPING scene — so a title in either of those states would have fallen through to the
-  // latch, returned without pausing, and left a still-rendering title drawn over a RUNNING level. A
-  // paused scene still renders, which is what makes the wrong answer invisible. Codex implementation
-  // review, finding 2.
-  if (manager.isActive(TITLE_KEY) || manager.isPaused(TITLE_KEY) || manager.isSleeping(TITLE_KEY)) {
+  // 🔴 **Three states, not one — and the title is RESTORED, not merely counted.**
+  //
+  // This tested `isActive` alone, and `isActive` is false for a PAUSED or SLEEPING scene, so a title
+  // in either state fell through to the latch and was left drawn over a RUNNING level *(Codex
+  // implementation review round 1, finding 2)*.
+  //
+  // Detecting them is not enough, though, and round 2 caught the half-fix: pausing `Game` under a
+  // title that is itself paused or asleep **strands the player**. Read from the engine, not assumed:
+  // `SceneManager.render` draws a scene while `status < SLEEPING` (`SceneManager.js:595`), and
+  // `PAUSED` is 6 against `SLEEPING`'s 7 — so a **paused** title still draws but its
+  // `KeyboardPlugin` is inert, giving an undismissable screen over a frozen game; a **sleeping** one
+  // does not draw at all, giving a frozen game with nothing on it. Either way there is no way out.
+  //
+  // So the title is put back into a state that can answer a key before `Game` is paused behind it.
+  //
+  // ⚠️ Presence is read ONCE, into a local. `wake` and `resume` are queued like every other scene
+  // op, so re-reading `isActive` after calling one still answers false — the branch would fall
+  // through to the latch and return without pausing `Game` at all.
+  const sleeping = manager.isSleeping(TITLE_KEY);
+  const paused = manager.isPaused(TITLE_KEY);
+  if (manager.isActive(TITLE_KEY) || paused || sleeping) {
+    if (sleeping) {
+      manager.wake(TITLE_KEY);
+    } else if (paused) {
+      manager.resume(TITLE_KEY);
+    }
     manager.pause();
     return;
   }

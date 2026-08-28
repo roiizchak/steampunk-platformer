@@ -189,12 +189,38 @@ const SCENE_SOURCE = import.meta.glob('../../src/scenes/TitleScene.ts', {
   eager: true,
 }) as Record<string, string>;
 
+/**
+ * 🔴 Strip comments before scanning.
+ *
+ * A source-text gate that reads comments can be satisfied by **commented-out code** — the exact
+ * shape of a change that removes a line from the screen while leaving its text in the file. Codex
+ * implementation review round 2, finding 4. Crude on purpose: it only has to defeat `//` and `/* *​/`,
+ * and it must not eat a `//` inside a string, of which this scene has none.
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
 describe('TitleScene spends the inks rather than merely importing them', () => {
-  const source = Object.values(SCENE_SOURCE)[0] ?? '';
+  const source = stripComments(Object.values(SCENE_SOURCE)[0] ?? '');
 
   it('the glob resolved the scene', () => {
     expect(source.length, 'TitleScene.ts read empty — the glob path is wrong').toBeGreaterThan(1000);
     expect(source).toContain('export class TitleScene');
+    // Non-vacuity for the stripper itself: it must remove prose without eating the code.
+    expect(source, 'stripComments ate the file').toContain('applyLayout');
+  });
+
+  /**
+   * 🔴 **`make` must be the thing that draws.** Every assertion below routes through the local
+   * `make` helper, and all of them stay green if `make` is reduced to a no-op that returns a bare
+   * object — the styles would still be "passed to a make() call" while the screen drew nothing.
+   * Codex implementation review round 2, finding 4. So the helper's own body is pinned first.
+   */
+  it('make() is a wrapper around this.add.text, not a name', () => {
+    expect(source, 'make no longer reaches the display list').toMatch(
+      /const make = [^;]*this[.]add[.]text[(]/,
+    );
   });
 
   /**
@@ -222,10 +248,37 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     });
   }
 
-  it('every style declared is a style drawn — no orphans, no missing lines', () => {
-    // CHOICE_STYLE is deliberately spent twice (ENTER and L), so five draws across four styles.
+  /**
+   * The five LINES, named. A bare count of five `make()` calls passes if one line is deleted and
+   * another duplicated — the screen would lose a choice and the gate would not notice. Codex
+   * implementation review round 2, finding 4.
+   */
+  const LINES: ReadonlyArray<readonly [string, string]> = [
+    ['STEAMPUNK PLATFORMER', 'TITLE_STYLE'],
+    ['a short climb through the works', 'SUB_STYLE'],
+    ['ENTER   begin', 'CHOICE_STYLE'],
+    ['L   choose a level', 'CHOICE_STYLE'],
+  ];
+
+  for (const [text, style] of LINES) {
+    it(`the line "${text}" is drawn with ${style}`, () => {
+      expect(source, `"${text}" is not drawn`).toContain(`make('${text}', ${style})`);
+    });
+  }
+
+  it('the audio hint is drawn from the live state, not a fixed string', () => {
+    // The one line whose text is computed. It must go through `audioHint`, or the readout that
+    // answers "did that key do anything?" is a constant again.
+    expect(source).toMatch(/this[.]hint = make[(]audioHint[(][^;]*HINT_STYLE[)]/);
+  });
+
+  it('five lines and no more — an extra draw is a layout the row fractions do not place', () => {
+    // `applyLayout` positions items against a fixed five-entry `rows` table; a sixth would land at
+    // its `?? 0.5` fallback, on top of another line.
+    // Five call sites. The declaration reads `const make = (text, style) =>`, so it contributes no
+    // `make(` of its own — checked by running this, not assumed.
     const draws = source.match(/make[(]/g) ?? [];
-    expect(draws.length, `${draws.length} make() calls`).toBe(5);
+    expect(draws.length, `${draws.length} occurrences of make(`).toBe(5);
   });
 
   it('the scrim is drawn with the colour and alpha the sweep assumes', () => {

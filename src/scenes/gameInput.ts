@@ -159,10 +159,34 @@ export function bindPlayerKeys(
      * exact defect this phase exists to close. The manager checks it to avoid double-handling an
      * event another listener consumed; a capture flag is not consumption.
      *
+     * ⚠️ **Two of the plugin's other rejections are knowingly not reproduced** *(round 2, finding 1;
+     * recorded rather than built, per C11)*: an event some other DOM listener `preventDefault`-ed
+     * before Phaser saw it, and one a higher scene cancelled with `stopPropagation()`. Neither is
+     * reachable here — nothing in this project calls either on a keyboard event, and `cancelled` is
+     * a field Phaser sets during its own queue drain, which happens **after** this listener has
+     * already run. The duplicate bailout below IS reproduced, because that one depends on the
+     * player's operating system rather than on our code.
+     *
      * `TitleScene` needs none of this: it registers no keys at all, so `keys[code]` is always
      * undefined there and `ANY_KEY_DOWN` always fires.
      */
     const target: EventTarget = keyboard.manager?.target ?? window;
+
+    /**
+     * Phaser's duplicate-event bailout, reproduced.
+     *
+     *  skips an event whose ,  and  all match
+     * the one before it, with the comment *"on some systems, the exact same event will fire multiple
+     * times"*. Leaving the plugin gave that up, and a duplicate is not an  — so on
+     * such a system one press would apply two volume steps. Codex implementation review round 2,
+     * finding 1.
+     *
+     * Keyed on  rather than , because  is what this listener dispatches on
+     * and is therefore the thing that must not be honoured twice.
+     */
+    let prevCode = '';
+    let prevTime = -1;
+
     const onAudioKey = (event: KeyboardEvent): void => {
       // 🔴 `event.repeat` is the guard, and it replaces something we gave up above. The `Key`
       // objects these bindings used to be got `emitOnRepeat: false` from `addKey(code, true, false)`
@@ -193,6 +217,12 @@ export function bindPlayerKeys(
       if (!isPlayerInputEnabled()) {
         return;
       }
+      if (event.code === prevCode && event.timeStamp === prevTime) {
+        return;
+      }
+      prevCode = event.code;
+      prevTime = event.timeStamp;
+
       const action = audioActionForCode(event.code);
       // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
       // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
@@ -208,14 +238,24 @@ export function bindPlayerKeys(
     target.addEventListener('keydown', onAudioKey as EventListener);
     // The plugin used to own this teardown. A raw DOM listener outlives its scene unless the scene
     // removes it — the same trap `TitleScene` handles for the global `ScaleManager`.
+    /**
+     * 🔴 BOTH lifecycle events, and **each one cancels the other**.
+     *
+     * DESTROY as well as SHUTDOWN because `SceneManager.remove()` calls `sys.destroy()` without
+     * emitting SHUTDOWN first (`SceneManager.js:429`), so a removed scene would otherwise leak this
+     * listener and the closure retaining it *(Codex review round 1, finding 5)*.
+     *
+     * ⚠️ And each unregisters the other, because `Systems.shutdown()` does **not** clear the scene's
+     * own emitter. Registering two independent `once` handlers meant SHUTDOWN fired, removed the DOM
+     * listener, and left its DESTROY twin behind — one more dead closure per restart, for the life of
+     * the page *(round 2, finding 2)*. A leak this small is still a leak that grows.
+     */
     const drop = (): void => {
       target.removeEventListener('keydown', onAudioKey as EventListener);
+      scene.events.off(Phaser.Scenes.Events.SHUTDOWN, drop);
+      scene.events.off(Phaser.Scenes.Events.DESTROY, drop);
     };
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, drop);
-    // 🔴 DESTROY as well as SHUTDOWN. `SceneManager.remove()` calls `sys.destroy()` **without**
-    // emitting SHUTDOWN first (`SceneManager.js:429`), so a removed scene would leak this listener
-    // and the closure retaining it. Nothing removes a scene today; one line is cheaper than
-    // depending on that staying true. Codex implementation review, finding 5.
     scene.events.once(Phaser.Scenes.Events.DESTROY, drop);
   }
 

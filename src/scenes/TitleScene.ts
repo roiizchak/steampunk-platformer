@@ -198,12 +198,21 @@ export class TitleScene extends Phaser.Scene {
      * listener — a later resize would run `applyLayout` against destroyed `Text` objects.
      * `UIScene` unsubscribes on shutdown for exactly this reason.
      */
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    // 🔴 DESTROY as well, and each cancels the other — the same pair `gameInput.ts` documents.
+    // `SceneManager.remove()` reaches `sys.destroy()` without emitting SHUTDOWN, so removing an
+    // active Title would leak this GLOBAL ScaleManager subscription and every `Text` it retains.
+    // Round 1 fixed this on the game listener and missed it here; round 2 found the half. Codex
+    // implementation review.
+    const teardown = (): void => {
+      this.events.off(Phaser.Scenes.Events.SHUTDOWN, teardown);
+      this.events.off(Phaser.Scenes.Events.DESTROY, teardown);
       this.scale.off('resize', this.applyLayout, this);
       this.items = [];
       this.scrim = undefined;
       this.hint = undefined;
-    });
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, teardown);
+    this.events.once(Phaser.Scenes.Events.DESTROY, teardown);
 
     this.bindKeys();
   }

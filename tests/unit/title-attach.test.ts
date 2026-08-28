@@ -59,8 +59,13 @@ function fakeScene(state: TitleState = 'gone'): { scene: Phaser.Scene; plugin: F
     pause: () => {
       plugin.calls.push('pause');
     },
-    resume: () => {
-      plugin.calls.push('resume');
+    resume: (key?: string) => {
+      plugin.calls.push(key === undefined ? 'resume' : `resume:${key}`);
+      if (key === TITLE_KEY) plugin.state = 'active';
+    },
+    wake: (key?: string) => {
+      plugin.calls.push(key === undefined ? 'wake' : `wake:${key}`);
+      if (key === TITLE_KEY) plugin.state = 'active';
     },
     launch: (key: string, data: TitleSceneData) => {
       plugin.calls.push(`launch:${key}`);
@@ -122,19 +127,29 @@ describe('attachTitle', () => {
   });
 
   /**
-   * 🔴 A title that is PAUSED or SLEEPING is still on screen — Phaser renders both. `isActive` says
-   * false for either, so a check written on `isActive` alone fell through to the latch, returned
-   * without pausing, and left the title drawn over a running level. The exact invariant the branch
-   * above exists for, in the two states that hide it.
+   * 🔴 A PAUSED or SLEEPING title is still THERE, and `isActive` says false for both — so a check
+   * written on `isActive` alone fell through to the latch and left the title over a running level.
+   *
+   * ⚠️ **The two states are not symmetric, and detecting them is not enough.** `SceneManager.render`
+   * draws while `status < SLEEPING`, and PAUSED is 6 to SLEEPING's 7: a paused title still DRAWS but
+   * takes no input — an undismissable screen over a frozen game — while a sleeping one draws
+   * nothing, leaving a frozen game with a blank overlay. Simply re-pausing `Game` under either
+   * strands the player. This test used to assert exactly that broken behaviour, and its comment
+   * claimed "Phaser renders both", which is false. Codex implementation review round 2, finding 3.
    */
-  for (const state of ['paused', 'sleeping'] as const) {
-    it(`a ${state} title still counts as present, and the new game is re-paused`, () => {
+  for (const [state, restore] of [
+    ['paused', `resume:${TITLE_KEY}`],
+    ['sleeping', `wake:${TITLE_KEY}`],
+  ] as const) {
+    it(`a ${state} title is RESTORED, then the new game is re-paused behind it`, () => {
       const { scene, plugin } = fakeScene(state);
 
       attachTitle(scene, noAudio, noop);
 
-      expect(plugin.calls, 'a rendering title over a RUNNING game is the defect').toEqual(['pause']);
-      expect(plugin.launched).toHaveLength(0);
+      // The restore must come first: pausing Game behind a screen that cannot answer a key is the
+      // stranded state, not a fix for it.
+      expect(plugin.calls, 'the player must be left with a way out').toEqual([restore, 'pause']);
+      expect(plugin.launched, 'and still no second copy of every text object').toHaveLength(0);
     });
   }
 
