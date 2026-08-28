@@ -182,3 +182,62 @@ test.describe('Phase 11 — 11.5 a held key is one press', () => {
     expect((await storedSettings(page))?.volume).toBe(0.4);
   });
 });
+
+test.describe('Phase 11 — the dispatch GATE, not only the interpretation', () => {
+  /**
+   * 🔴 The half the first fix missed. `audioKeyMap.ts` made the meaning of a press layout-independent
+   * by reading `event.code` — but the listener it fed was `keyboard.on('keydown')`, which is
+   * `ANY_KEY_DOWN`, and Phaser emits that **conditionally** (`KeyboardPlugin.js:797`):
+   *
+   * ```js
+   * var key = keys[event.keyCode];
+   * repeat = key.isDown;
+   * if (!event.cancelled && (!key || !repeat)) { ... emit(ANY_KEY_DOWN) }
+   * ```
+   *
+   * So the gate deciding whether the listener runs at all was STILL keyed on `event.keyCode`. On a
+   * layout that puts `[` on a registered code — `L` (76) is an attack key, `SHIFT` (16) the walk
+   * modifier — holding that key and tapping `[` suppressed the event outright.
+   *
+   * Red on the `ANY_KEY_DOWN` listener, green on the DOM one. Found by the criterion 11.14
+   * adversarial brief.
+   */
+  test('a bracket press lands even while a key sharing its keyCode is held down', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    // `L` is a registered attack key at keyCode 76. Hold it, then press a `[` that this layout puts
+    // on the same number.
+    await page.keyboard.down('l');
+    await fireKey(page, 'BracketLeft', 76);
+    await page.keyboard.up('l');
+
+    await expect
+      .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
+      .toBe(0.4);
+  });
+
+  /**
+   * The cost of moving to a DOM listener, paid rather than discovered later. During IME composition
+   * a browser fires `keydown` with `keyCode === 229` while `event.code` stays the physical key. The
+   * old `addKey(219)` binding was inert for those because 229 was never registered; a code-based
+   * listener is not, so a CJK user composing text would walk the volume on every keystroke.
+   */
+  test('an IME composition keystroke does not move the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.evaluate(() => {
+      const make = (type: string): KeyboardEvent =>
+        new KeyboardEvent(type, { code: 'BracketLeft', keyCode: 229, isComposing: true, bubbles: true });
+      window.dispatchEvent(make('keydown'));
+      window.dispatchEvent(make('keyup'));
+    });
+    // A real press after it, so this cannot pass by the whole path being broken.
+    await fireKey(page, 'BracketLeft', 219);
+
+    await expect
+      .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
+      .toBe(0.4);
+  });
+});

@@ -64,7 +64,24 @@ export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
  * file contradicting each other.
  */
 export async function dismissTitleProduction(page: Page): Promise<void> {
-  const before = await centrePatchLuminance(page);
+  /**
+   * 🔴 The DARKEST of three samples, not the first one.
+   *
+   * `before` is only reliably a title frame because `gotoProduction`'s `DRAWN_FRAME_MIN_BYTES` check
+   * screenshots the canvas just ahead of it. That is an accident of another gate's cost, and this
+   * file's own header is about making screenshots cheaper — so a future optimisation there could
+   * start sampling `before` a frame early, put a bright level pixel in the denominator, and
+   * **false-red** this gate. Taking the minimum removes the dependency without introducing an
+   * absolute luminance number, which is the thing that false-redded this bound once already.
+   *
+   * It cannot manufacture a green: with no title in the bundle every sample is a bright level frame,
+   * so the minimum is bright too and the ratio still lands near 1.0.
+   */
+  const samples: number[] = [];
+  for (let i = 0; i < 3; i += 1) {
+    samples.push(await centrePatchLuminance(page));
+  }
+  const before = Math.min(...samples);
 
   await page.locator('canvas').click();
   await page.keyboard.press('Enter');

@@ -270,10 +270,17 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /**
-   * Stop this scene, then hand over.
+   * Stop this scene, then hand over — **once**.
    *
-   * Order matters: `onLevelSelect` calls `Game`'s `ScenePlugin.start()`, which stops `Game` — and
-   * this scene must already be on its way out rather than left drawn over the menu that replaces it.
+   * ⚠️ This used to say *"order matters: this scene must already be on its way out rather than left
+   * drawn over the menu that replaces it."* **That claim is not falsifiable and is therefore not
+   * kept.** Both operations are queued, and `SceneManager.processQueue` re-reads `_queue.length`
+   * every iteration, so the stop and the start drain in the SAME pass either way: swapping these two
+   * lines produces no rendered frame with the title over the menu and leaves the whole suite green.
+   * A comment naming a mechanism no gate can test is the kind this project treats as worse than
+   * none. Criterion 11.14 review.
+   *
+   * What *is* load-bearing is the `dismissed` latch — see the field's own note.
    */
   private dismiss(then?: () => void): void {
     if (this.dismissed) {

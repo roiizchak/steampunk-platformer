@@ -117,7 +117,37 @@ export function bindPlayerKeys(
   // keyCode 219 changed the volume, while the RIGHT `code` carrying keyCode 186 did nothing at all.
   // `audioKeyMap.ts` holds the evidence table and the layout-independent map.
   if (audio) {
-    keyboard.on('keydown', (event: KeyboardEvent) => {
+    /**
+     * 🔴 **On the DOM target, NOT `keyboard.on('keydown')` — the second half of the same bug.**
+     *
+     * Phase 11's first fix made the INTERPRETATION layout-independent by reading `event.code`. It
+     * left the **gate in front of the listener** keyed on `event.keyCode`. `KeyboardPlugin`'s
+     * `ANY_KEY_DOWN` is conditional (`KeyboardPlugin.js:797`):
+     *
+     * ```js
+     * var key = keys[event.keyCode];
+     * repeat = key.isDown;                       // not `&& event.repeat`
+     * if (!event.cancelled && (!key || !repeat)) { ... this.emit(ANY_KEY_DOWN, event); }
+     * ```
+     *
+     * So if the player's layout puts `[` on a keyCode this function has REGISTERED — the shipped set
+     * is 37, 39, 65, 68, 32, 38, 87, 16, 70, 76, 27 — then holding that key (`L` is an attack key,
+     * `SHIFT` is the walk modifier) and tapping `[` suppresses the event entirely. The volume key
+     * goes dead intermittently, only while another key is held, only on that layout: the exact shape
+     * of the defect this phase exists to close. Found by the criterion 11.14 adversarial brief, which
+     * asked how the fix could still be wrong rather than whether it was applied.
+     *
+     * ⚠️ **The DOM listener does not inherit the plugin's activity gating, and that gating is
+     * load-bearing.** `KeyboardPlugin.isActive()` is what makes a PAUSED `Game` deaf under the
+     * welcome screen; without an explicit check, BOTH this listener and `TitleScene`'s would fire on
+     * one press and step the volume twice. `Systems.isActive()` is `status === RUNNING`, which is
+     * exactly that gate, so it is asserted here by hand.
+     *
+     * `TitleScene` needs none of this: it registers no keys at all, so `keys[code]` is always
+     * undefined there and `ANY_KEY_DOWN` always fires.
+     */
+    const target: EventTarget = keyboard.manager?.target ?? window;
+    const onAudioKey = (event: KeyboardEvent): void => {
       // 🔴 `event.repeat` is the guard, and it replaces something we gave up above. The `Key`
       // objects these bindings used to be got `emitOnRepeat: false` from `addKey(code, true, false)`
       // for free; a raw `keydown` listener inherits nothing, and the OS repeats a held key ~30 times
@@ -132,7 +162,16 @@ export function bindPlayerKeys(
       // question this collision needs asked. Muting still SURVIVES into the editor; only the keys
       // stop. The title screen's own listener deliberately does NOT carry this guard — see
       // `TitleScene`.
-      if (event.repeat || !isPlayerInputEnabled()) {
+      // 🔴 `isComposing` is new with the DOM listener and is not decoration. During IME
+      // composition a browser fires `keydown` with `keyCode === 229` while `event.code` stays the
+      // physical key — so a CJK user composing text with the canvas focused would walk the volume
+      // and write `localStorage` on every keystroke. The old `addKey(219)` binding was inert for
+      // those because 229 was unregistered; this listener is not, so it says so.
+      if (event.repeat || event.isComposing) {
+        return;
+      }
+      // The pause gate, by hand — see the block comment above.
+      if (!scene.sys.isActive() || !isPlayerInputEnabled()) {
         return;
       }
       const action = audioActionForCode(event.code);
@@ -146,6 +185,12 @@ export function bindPlayerKeys(
         return;
       }
       applyAudioAction(manager, action);
+    };
+    target.addEventListener('keydown', onAudioKey as EventListener);
+    // The plugin used to own this teardown. A raw DOM listener outlives its scene unless the scene
+    // removes it — the same trap `TitleScene` handles for the global `ScaleManager`.
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      target.removeEventListener('keydown', onAudioKey as EventListener);
     });
   }
 
