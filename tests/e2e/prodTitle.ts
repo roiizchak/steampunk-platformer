@@ -58,39 +58,51 @@ export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
  * the brighter frame second, as evidence the key dismissed it. Codex plan review round 3, finding 6.
  */
 export async function dismissTitleProduction(page: Page): Promise<void> {
-  const before = await meanLuminance(page);
+  const before = await centrePatchLuminance(page);
 
   await page.locator('canvas').click();
   await page.keyboard.press('Enter');
 
   // Poll the pixels, never a sleep: the scene stop and the resume are both queued.
   await expect
-    .poll(async () => (await meanLuminance(page)) / before, { timeout: 15_000 })
+    .poll(async () => (await centrePatchLuminance(page)) / before, { timeout: 15_000 })
     .toBeGreaterThan(TITLE_SCRIM_MIN_BRIGHTENING);
 }
 
 /**
- * Mean 0-255 luminance of the whole screenshot.
+ * Mean 0-255 luminance of a SMALL patch at the centre of the canvas.
  *
- * A frame-wide statistic on purpose: a region would need coordinates, and the thing being detected
- * is a full-canvas scrim. Sampled every 4th pixel — this runs on a 1920x1080 shot and the answer is
- * a mean, so a quarter of the rows and columns is the same number for a sixteenth of the work.
+ * ## 🔴 Why a patch and not the whole frame
+ *
+ * The first version screenshotted the full 1920x1080 canvas and decoded the PNG in Node, on every
+ * production boot and again on every poll iteration. In isolation that is invisible; across the full
+ * suite it pushed two wall-clock-bounded specs over their budget —
+ * `phase-10-campaign` already uses ~60 s of its own 60 s-per-level allowance, and
+ * `playwright.config.ts` warns in detail that a busy box reads as a broken game and is
+ * indistinguishable from the defect these specs exist to catch.
+ *
+ * The scrim covers the entire canvas, so a patch is exactly as good a discriminator as the frame and
+ * costs about a thousandth as much. Measured either side of the change: the ratio is unmoved.
  */
-export async function meanLuminance(page: Page): Promise<number> {
-  const shot = await page.screenshot();
+async function centrePatchLuminance(page: Page): Promise<number> {
+  const box = await page.locator('canvas').boundingBox();
+  if (box === null || box.width <= 0) {
+    throw new Error('no canvas to measure the welcome screen against');
+  }
+  const w = Math.min(240, Math.floor(box.width / 4));
+  const h = Math.min(135, Math.floor(box.height / 4));
+  const shot = await page.screenshot({
+    clip: { x: box.x + (box.width - w) / 2, y: box.y + (box.height - h) / 2, width: w, height: h },
+  });
   const { decodePng } = await import('../../tools/gen/png.mjs');
   const img = decodePng(new Uint8Array(shot));
   let total = 0;
   let seen = 0;
-  for (let y = 0; y < img.height; y += 4) {
-    for (let x = 0; x < img.width; x += 4) {
-      const i = (y * img.width + x) * 4;
-      // Rec. 601 luma. The exact weights do not matter for a light/dark discriminator, but a
-      // named standard beats three magic numbers nobody can check.
-      total +=
-        0.299 * (img.data[i] ?? 0) + 0.587 * (img.data[i + 1] ?? 0) + 0.114 * (img.data[i + 2] ?? 0);
-      seen += 1;
-    }
+  for (let i = 0; i < img.data.length; i += 4) {
+    // Rec. 601 luma. The exact weights do not matter for a light/dark discriminator, but a named
+    // standard beats three magic numbers nobody can check.
+    total += 0.299 * (img.data[i] ?? 0) + 0.587 * (img.data[i + 1] ?? 0) + 0.114 * (img.data[i + 2] ?? 0);
+    seen += 1;
   }
   return seen === 0 ? 0 : total / seen;
 }
