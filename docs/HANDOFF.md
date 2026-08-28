@@ -1,5 +1,15 @@
 # Session handoff — the HUD banner's placement + the pit rule
 
+> # 🔴 OPEN: the invisible blocker is NOT FIXED. Start here.
+>
+> The owner has now reported *"I get stuck in something invisible"* **four times**, and **three**
+> fixes have shipped against it — none of them the thing. Defect 4 below is a real defect that was
+> found and fixed, and it was still not what the owner is hitting.
+>
+> **The next session starts by REPRODUCING it, not by measuring level data again.** The brief,
+> the five hypotheses already ruled out with their measurements, and the leads still open are in
+> [handoff/next-session-invisible-blocker.md](handoff/next-session-invisible-blocker.md).
+
 > ## Session `hud-and-pits` — FOUR defects the owner found by PLAYING the shipped build
 >
 > **Not a phase.** Phase 10 is still DONE and still shipped; its handoff follows below, unchanged.
