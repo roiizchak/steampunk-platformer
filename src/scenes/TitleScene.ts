@@ -51,23 +51,33 @@
  */
 
 import Phaser from 'phaser';
+import { TITLE_KEY } from './gameTitle';
 import { applyAudioAction, audioActionForCode } from './audioKeyMap';
+import type { AudioActionResult } from './audioKeyMap';
+import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
 import type { AudioManager } from '../game/audio';
+import {
+  CHOICE_FILL,
+  HINT_FILL,
+  SCRIM_ALPHA,
+  SCRIM_COLOUR,
+  SUB_FILL,
+  TITLE_FILL,
+} from '../render/titleInk';
 
-export const TITLE_KEY = 'Title';
-
-const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '72px', color: '#f0d79a' } as const;
-const SUB_STYLE = { fontFamily: 'monospace', fontSize: '26px', color: '#7fb2c8' } as const;
-const CHOICE_STYLE = { fontFamily: 'monospace', fontSize: '34px', color: '#d9cdb0' } as const;
-const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
+export { TITLE_KEY } from './gameTitle';
 
 /**
- * A scrim, so the frozen level behind stays legible as a backdrop without competing with the text.
- * Alpha rather than a solid fill: the point of pausing rather than hiding `Game` is that the world
- * is visible behind the title.
+ * 🔴 **The four fills and the scrim are imported, not written here.** They are the numbers
+ * `tests/unit/title-contrast.test.ts` sweeps, and this file cannot be reached by a unit test because
+ * it value-imports `phaser` on line 1. Two of them moved during the QA gate: the hint measured
+ * **3.13:1** against the brightest background the scrim admits, under the 4.5:1 small-text bar. The
+ * derivation is in `titleInk.ts`; do not inline a colour back into this file.
  */
-const SCRIM_COLOUR = 0x12100e;
-const SCRIM_ALPHA = 0.82;
+const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '72px', color: TITLE_FILL } as const;
+const SUB_STYLE = { fontFamily: 'monospace', fontSize: '26px', color: SUB_FILL } as const;
+const CHOICE_STYLE = { fontFamily: 'monospace', fontSize: '34px', color: CHOICE_FILL } as const;
+const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: HINT_FILL } as const;
 
 export interface TitleSceneData {
   /**
@@ -81,15 +91,63 @@ export interface TitleSceneData {
    * while `LevelSelect` published `player: null` over a live world. The existing safe path starts
    * the menu from `Game` (`gameLevelPick.openLevelSelect`), and this keeps using it.
    */
-  onLevelSelect?: () => void;
-  /** Resume the paused `Game`. Owned by `gameTitle.ts`, which is what paused it. */
-  onPlay?: () => void;
+  onLevelSelect: () => void;
+  /**
+   * Resume the paused `Game`. Owned by `gameTitle.ts`, which is what paused it.
+   *
+   * 🔴 **Required, not optional.** `audio` may be absent and degrade to a dead key, which is the
+   * right failure. This one cannot: a `Title` launched without it answers ENTER by stopping itself
+   * and never resuming, leaving a frozen `Game` with nothing drawn over it and no way out. The type
+   * is the guard — `attachTitle` is the only launcher today, and this stops the second one from
+   * being written wrong.
+   */
+  onPlay: () => void;
+}
+
+/**
+ * The audio hint, rendered from the CURRENT state rather than as a fixed string.
+ *
+ * 🔴 **A screen that advertises a control owes the player the control's value.** Nothing else in the
+ * game shows the volume — not the HUD, not the level menu — and at the shipped default of
+ * `volume: 1` the first press of `]` clamps and does nothing at all. A player who tries the key
+ * this screen just taught them gets silence, with no way to tell "already at maximum" from "still
+ * broken" — which is exactly the reading the owner reported before the dispatch bug was found.
+ *
+ * Showing the number costs one line and makes both answers visible. Found by the criterion 11.12
+ * adversarial brief, which asked who the screen fails rather than whether it is laid out correctly.
+ */
+function audioHint(muted: boolean, volume: number): string {
+  const level = muted ? 'muted' : `${Math.round(volume * 100)}%`;
+  return `M mute   ·   [ ] volume   ${level}`;
 }
 
 export class TitleScene extends Phaser.Scene {
-  private data$: TitleSceneData = {};
+  /**
+   * `null` means "launched with no data at all", which `attachTitle` never does and a second
+   * launcher might. `create()` refuses to draw in that state rather than putting up a screen whose
+   * ENTER key stops the scene and resumes nothing — see `TitleSceneData.onPlay`.
+   */
+  private data$: TitleSceneData | null = null;
+  /**
+   * 🔴 **Dismissal is once, and the flag is why.** Phaser drains its whole key queue in a single
+   * `KeyboardPlugin.update()` pass, so `L` and `ENTER` arriving in the same frame both reach
+   * `dismiss`. The queue that produces is `[stop Title, stop Game, start LevelSelect, stop Title,
+   * resume Game]` — and that last op is **not** a no-op: `Systems.shutdown()` sets
+   * `settings.active = false`, which is the same thing `pause` sets, so `Systems.resume()` cannot
+   * tell a paused scene from a stopped one. It would flip the torn-down `Game` back to `RUNNING`
+   * and `SceneManager.update` would step it against a dead display list while `LevelSelect` owns
+   * the screen. Found by the criterion 11.14 review, reading the engine rather than the diff.
+   */
+  private dismissed = false;
   private items: Phaser.GameObjects.Text[] = [];
   private scrim?: Phaser.GameObjects.Rectangle;
+  private hint?: Phaser.GameObjects.Text;
+  /**
+   * Seeded from the PERSISTED settings, which is the same store `createAudio()` copies at boot —
+   * so the first frame shows the truth without `AudioManager` growing a getter it has no other use
+   * for. Kept in step afterwards from what `applyAudioAction` returns.
+   */
+  private audioState = { muted: false, volume: 1 };
 
   constructor() {
     super(TITLE_KEY);
@@ -100,11 +158,18 @@ export class TitleScene extends Phaser.Scene {
    * constructor runs once, so state initialised there survives a restart.
    */
   init(data?: TitleSceneData): void {
-    this.data$ = data ?? {};
+    this.data$ = data && typeof data.onPlay === 'function' ? data : null;
     this.items = [];
+    this.dismissed = false;
+    this.audioState = readAudioSettings(safeLocalStorage());
   }
 
   create(): void {
+    // No resume path means no screen. An inert Title is harmless — nothing paused `Game` either,
+    // because `attachTitle` is what pauses it and `attachTitle` always passes `onPlay`.
+    if (!this.data$) {
+      return;
+    }
     this.scrim = this.add.rectangle(0, 0, 10, 10, SCRIM_COLOUR, SCRIM_ALPHA).setOrigin(0).setScrollFactor(0);
 
     const make = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text => {
@@ -118,7 +183,7 @@ export class TitleScene extends Phaser.Scene {
     make('ENTER   begin', CHOICE_STYLE);
     make('L   choose a level', CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
-    make('M mute   ·   [ ] volume', HINT_STYLE);
+    this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
 
     this.applyLayout();
     // Re-layout rather than re-create, so a spec holding a reference across a resize is still
@@ -133,6 +198,7 @@ export class TitleScene extends Phaser.Scene {
       this.scale.off('resize', this.applyLayout, this);
       this.items = [];
       this.scrim = undefined;
+      this.hint = undefined;
     });
 
     this.bindKeys();
@@ -171,20 +237,36 @@ export class TitleScene extends Phaser.Scene {
        */
       const action = audioActionForCode(event.code);
       if (action) {
-        const manager = this.data$.audio?.();
+        const manager = this.data$?.audio?.();
         if (manager) {
-          applyAudioAction(manager, action);
+          this.showAudio(applyAudioAction(manager, action));
         }
         return;
       }
       if (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') {
-        this.dismiss(this.data$.onPlay);
+        this.dismiss(this.data$?.onPlay);
         return;
       }
       if (event.code === 'KeyL') {
-        this.dismiss(this.data$.onLevelSelect);
+        this.dismiss(this.data$?.onLevelSelect);
       }
     });
+  }
+
+  /**
+   * Redraw the hint from what the action actually became.
+   *
+   * The value comes from the manager's own return, not from a second read of storage — a press that
+   * clamps returns the unchanged number, and the player seeing `100%` stay `100%` is the answer to
+   * "did that key work?". Silence was not.
+   */
+  private showAudio(result: AudioActionResult): void {
+    if (result.kind === 'mute') {
+      this.audioState = { ...this.audioState, muted: result.muted };
+    } else {
+      this.audioState = { ...this.audioState, volume: result.volume };
+    }
+    this.hint?.setText(audioHint(this.audioState.muted, this.audioState.volume));
   }
 
   /**
@@ -194,6 +276,10 @@ export class TitleScene extends Phaser.Scene {
    * this scene must already be on its way out rather than left drawn over the menu that replaces it.
    */
   private dismiss(then?: () => void): void {
+    if (this.dismissed) {
+      return;
+    }
+    this.dismissed = true;
     this.scene.stop();
     then?.();
   }

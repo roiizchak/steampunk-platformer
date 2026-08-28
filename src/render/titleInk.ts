@@ -1,0 +1,90 @@
+/**
+ * The welcome screen's inks, and the scrim that makes them measurable — Phase 11.
+ *
+ * ## Why these live outside the scene
+ *
+ * `TitleScene.ts` value-imports `phaser` on line 1, so nothing in it can be reached by a unit test
+ * with the engine uninstalled. These constants are the numbers a contrast gate has to read, so they
+ * live where `tests/unit/title-contrast.test.ts` can import them directly — the same split
+ * `src/render/hud.ts` already makes for `COUNTER_FILL` / `COUNTER_STROKE`.
+ *
+ * ## 🔴 The scrim is what makes a 4.5:1 bar reachable at all
+ *
+ * `src/render/helpBanner.ts` states the ceiling for text over the live world: swept across every
+ * possible background luminance, *"even pure white over this stroke tops out at 4.27:1... the only
+ * thing that beats it is a scrim that makes the background KNOWN rather than arbitrary."*
+ *
+ * This screen has that scrim. At `SCRIM_ALPHA` the darkest thing behind can only reach the scrim's
+ * own luminance and the brightest can only reach `0.82 × scrim + 0.18 × white` — so the background
+ * is a **bounded interval**, not an arbitrary value, and a fill can be chosen to clear the small-text
+ * bar over the whole of it. That is why the banner settles for 3.80:1 and this screen does not.
+ *
+ * ## What the numbers were, and why two of them moved
+ *
+ * Measured with the same WCAG method `contrast-floor.test.ts` runs, against the brightest background
+ * the scrim admits (`L = 0.0441`):
+ *
+ * | role | ink | ratio | verdict |
+ * |---|---|---|---|
+ * | title | `#f0d79a` | 7.91:1 | kept |
+ * | choice | `#d9cdb0` | 7.07:1 | kept |
+ * | subtitle | `#7fb2c8` | **4.84:1** | replaced — passes, but on 7 % headroom |
+ * | hint | `#8f8776` | **3.13:1** | replaced — **fails the 4.5:1 small-text bar** |
+ *
+ * ⚠️ **`#8f8776` is not a coincidence.** It is the exact fill `helpBanner.ts` records as having
+ * shipped bare and failed: *"a 852×480 production capture measured 8 CSS px of ink."* It reached this
+ * file by being copied from `LevelSelectScene`, where it is safe **only because that scene stops
+ * `Game` and draws over the config's opaque `#12100e`** — 5.33:1. Copying the colour without the
+ * opaque background copied the number and dropped the guarantee.
+ *
+ * And a stroke would not have rescued it: the banner's own note explains why — *"adding a stroke
+ * under the old muted fill would still have failed, because the fill is mid-luminance itself and a
+ * stroke only helps where the fill does not."* So the fill moved, which is the half that works.
+ */
+
+/** The heading. Unchanged — 7.91:1 over the worst background the scrim admits. */
+export const TITLE_FILL = '#f0d79a';
+
+/**
+ * The line under the heading. Was `#7fb2c8` at 4.84:1 — passing, but with 7 % of headroom against a
+ * bound derived from *sampled* level pixels. Lightened to 6.10:1 so a bright frame nobody has
+ * measured yet cannot quietly take it under the bar.
+ */
+export const SUB_FILL = '#9cc6d8';
+
+/** `ENTER begin` / `L choose a level`. Unchanged — 7.07:1. */
+export const CHOICE_FILL = '#d9cdb0';
+
+/**
+ * The audio-keys hint. **The one that actually failed**, at 3.13:1 against a 4.5:1 bar. Lightened to
+ * 5.24:1 while staying a clear step below `CHOICE_FILL` (0.443 vs 0.616 relative luminance), so the
+ * visual hierarchy survives the repair.
+ */
+export const HINT_FILL = '#bab19c';
+
+/**
+ * The scrim. Alpha rather than an opaque fill on purpose: the reason this screen pauses `Game`
+ * instead of hiding it is that the world stays visible behind the title.
+ *
+ * 🔴 **`SCRIM_ALPHA` is load-bearing, not decoration.** Every ratio above is computed through it.
+ * Lowering it widens the background interval and can take an ink under the bar without touching a
+ * single colour — which is why `title-contrast.test.ts` reads this value rather than assuming one.
+ */
+export const SCRIM_COLOUR = 0x12100e;
+export const SCRIM_ALPHA = 0.82;
+
+/**
+ * Every ink the screen draws, with the physical size it draws at in DESIGN pixels.
+ *
+ * The size is here because it decides the bar: WCAG's large-text allowance starts at 14 pt bold
+ * (≈18.66 px) **physical**, and at the smallest supported window every one of these scales by
+ * 852/1920 = 0.444. The largest, 72 design px, lands at 32 physical px — but it is not bold, so the
+ * large-text allowance does not apply to it either. **All four are small text, and the bar is 4.5:1
+ * for all four.** Stated as data so a future red cannot be cleared by reclassifying the text.
+ */
+export const TITLE_INKS: ReadonlyArray<{ role: string; fill: string; designPx: number }> = [
+  { role: 'title', fill: TITLE_FILL, designPx: 72 },
+  { role: 'subtitle', fill: SUB_FILL, designPx: 26 },
+  { role: 'choice', fill: CHOICE_FILL, designPx: 34 },
+  { role: 'hint', fill: HINT_FILL, designPx: 22 },
+];

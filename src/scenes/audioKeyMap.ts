@@ -63,23 +63,34 @@ export function audioActionForCode(code: string): AudioAction | null {
 }
 
 /**
- * Perform an action on a manager.
+ * What the action did, so a caller can show it.
+ *
+ * 🔴 **The returns were being thrown away.** `toggleMute()` and `nudgeVolume()` both already report
+ * their new value, and every caller discarded it — which is why nothing anywhere in the game shows
+ * the current volume. That is only a curiosity in play, where the sound itself is the feedback; it
+ * is a real defect on the welcome screen, which **advertises** the keys. At the shipped default of
+ * `volume: 1`, `stepVolume(1, +1)` clamps back to 1, so a first-time player's very first press of
+ * the key the screen just told them about is a guaranteed silent no-op.
+ */
+export type AudioActionResult =
+  | { readonly kind: 'mute'; readonly muted: boolean }
+  | { readonly kind: 'volume'; readonly volume: number };
+
+/**
+ * Perform an action on a manager, and report what it became.
  *
  * Lives beside the map so there is exactly ONE place that knows what each action means. Both
  * listeners that can produce an action — `gameInput.ts` during play and `TitleScene` on the welcome
  * screen — route through here, so the two can never drift into meaning different things by the same
  * name. `import type` only: this module still reaches no engine at runtime.
  */
-export function applyAudioAction(manager: AudioManager, action: AudioAction): void {
+export function applyAudioAction(manager: AudioManager, action: AudioAction): AudioActionResult {
   switch (action) {
     case 'mute':
-      manager.toggleMute();
-      return;
+      return { kind: 'mute', muted: manager.toggleMute() };
     case 'volumeDown':
-      manager.nudgeVolume(-1);
-      return;
+      return { kind: 'volume', volume: manager.nudgeVolume(-1) };
     case 'volumeUp':
-      manager.nudgeVolume(1);
-      return;
+      return { kind: 'volume', volume: manager.nudgeVolume(1) };
   }
 }

@@ -54,8 +54,14 @@ export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
  *
  * 🔴 Asserting only that the title is GONE afterwards would also pass if `TitleScene` had been
  * tree-shaken out of the production bundle and never appeared at all — a green earned by the
- * feature being missing. So the dark frame is asserted FIRST, as evidence the screen shipped, and
- * the brighter frame second, as evidence the key dismissed it. Codex plan review round 3, finding 6.
+ * feature being missing. Codex plan review round 3, finding 6.
+ *
+ * ⚠️ **This used to say the dark frame is "asserted FIRST" and the bright one second.** It is not,
+ * and there is no separate assertion on `before`: it is the ratio's **denominator**. The single
+ * statistic still carries both halves, which is why the wording was wrong rather than the code — a
+ * bundle with no title screen starts bright, so `after / before` lands near 1.0 and the bound fails
+ * exactly as it should. Corrected after the criterion 11.14 review found the two docstrings in this
+ * file contradicting each other.
  */
 export async function dismissTitleProduction(page: Page): Promise<void> {
   const before = await centrePatchLuminance(page);

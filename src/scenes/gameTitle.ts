@@ -27,8 +27,18 @@
  */
 
 import type Phaser from 'phaser';
-import { TITLE_KEY } from './TitleScene';
 import type { TitleSceneData } from './TitleScene';
+
+/**
+ * The scene key, owned HERE rather than by `TitleScene`.
+ *
+ * 🔴 It used to live in `TitleScene.ts`, and that one value import was enough to drag Phaser into
+ * anything that named the key — including a unit test of this file, which is otherwise Phaser-free
+ * and drivable against a fake `ScenePlugin`. `TitleScene` re-exports it, so every existing import
+ * path still resolves; the type import back the other way is erased and creates no runtime cycle.
+ * (Criterion 11.14 review: `attachTitle` had three branches and no unit test at all.)
+ */
+export const TITLE_KEY = 'Title';
 import type { AudioManager } from '../game/audio';
 
 /**

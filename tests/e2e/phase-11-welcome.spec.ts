@@ -248,3 +248,114 @@ test.describe('Phase 11 — 11.10 the title shows once per page load', () => {
     expect(await sceneActive(page, TITLE)).toBe(true);
   });
 });
+
+/**
+ * Dispatch a keydown/keyup pair at the page, optionally as an OS auto-repeat.
+ *
+ * The same shape `phase-11-audio-keys.spec.ts` uses, and for the same reason its header gives: an
+ * unreleased synthetic key leaves `Key.isDown` true and poisons every later press.
+ */
+async function fireKey(page: Page, code: string, repeat = false): Promise<void> {
+  await page.evaluate(
+    ([c, rp]) => {
+      const make = (type: string): KeyboardEvent =>
+        new KeyboardEvent(type, {
+          code: c as string,
+          repeat: rp as boolean,
+          bubbles: true,
+          cancelable: true,
+        });
+      window.dispatchEvent(make('keydown'));
+      window.dispatchEvent(make('keyup'));
+    },
+    [code, repeat] as const,
+  );
+}
+
+test.describe('Phase 11 — 11.5 the title has its own repeat guard, and it is not the same one', () => {
+  /**
+   * 🔴 `gameInput.ts` and `TitleScene` each carry their OWN `event.repeat` guard, because the shared
+   * `audioKeyMap` maps codes to actions and does not — cannot — share a guard. Every test in
+   * `phase-11-audio-keys.spec.ts` runs after `bootToGame`, which dismisses the title, so all six
+   * exercise the GAME listener. Deleting the title's guard left the entire suite green. Found by the
+   * criterion 11.14 review; this is the missing half.
+   */
+  test('an auto-repeat on the title does not move the volume', async ({ page }) => {
+    await page.addInitScript(
+      ([k, v]) => window.localStorage.setItem(k as string, v as string),
+      ['steampunk.audio', JSON.stringify({ muted: false, volume: 0.5 })] as const,
+    );
+    await bootToTitle(page);
+
+    await fireKey(page, 'BracketLeft', true);
+    await fireKey(page, 'BracketLeft', true);
+    // Then a real press, so the assertion cannot pass by nothing working at all.
+    await fireKey(page, 'BracketLeft', false);
+
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+  });
+});
+
+test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the ones that must not exist', () => {
+  test('L opens the level menu', async ({ page }) => {
+    await bootToTitle(page);
+
+    await page.keyboard.press('l');
+
+    await page.waitForFunction(
+      () => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
+      undefined,
+      { timeout: 5_000 },
+    );
+    expect(await sceneActive(page, TITLE), 'the title must be gone, not drawn over the menu').toBe(false);
+  });
+
+  /**
+   * The DEV half of 11.9. `P` / `O` / `G` are bound only in the dev build and are deliberately NOT
+   * gated on `isPlayerInputEnabled`; the pause is the only thing stopping them.
+   */
+  for (const key of ['p', 'o', 'g']) {
+    test(`DEV key ${key.toUpperCase()} cannot leak past the title`, async ({ page }) => {
+      await bootToTitle(page);
+
+      await page.keyboard.press(key);
+      await page.evaluate(
+        () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+      );
+
+      expect(await sceneActive(page, TITLE), 'the title is still up').toBe(true);
+      expect((await page.evaluate(() => window.__game))?.sceneKey, 'still Game-owned').toBe('Game');
+    });
+  }
+
+  /**
+   * 🔴 **Two dismissing keys in ONE input batch.** Phaser drains its whole key queue in a single
+   * `KeyboardPlugin.update()` pass, so `L` and `ENTER` in the same frame both reached `dismiss`. The
+   * queue that produced was `[stop Title, stop Game, start LevelSelect, stop Title, resume Game]` —
+   * and `Systems.resume()` cannot tell a stopped scene from a paused one, because `shutdown()` sets
+   * the same `active = false` flag `pause` does. It would step a torn-down `Game` under the menu.
+   * Closed by a `dismissed` latch; found by the criterion 11.14 review reading the engine.
+   */
+  test('L and ENTER in the same frame do not resurrect the stopped Game', async ({ page }) => {
+    await bootToTitle(page);
+
+    await page.evaluate(() => {
+      const fire = (code: string): void => {
+        for (const type of ['keydown', 'keyup']) {
+          window.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true, cancelable: true }));
+        }
+      };
+      fire('KeyL');
+      fire('Enter');
+    });
+
+    await page.waitForFunction(
+      () => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
+      undefined,
+      { timeout: 5_000 },
+    );
+    const status = await gameStatus(page);
+    expect(typeof status, 'type before value').toBe('number');
+    expect(status, 'a resumed Game would be stepped against a dead display list').not.toBe(RUNNING);
+  });
+});

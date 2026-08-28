@@ -97,4 +97,30 @@ describe('applyAudioAction', () => {
     expect(up.calls).toEqual(['nudgeVolume(1)']);
     expect(down.calls).not.toEqual(up.calls);
   });
+
+  /**
+   * 🔴 The RETURN, which used to be thrown away.
+   *
+   * `toggleMute()` and `nudgeVolume()` both already reported their new value and every caller
+   * discarded it — which is why nothing in the game showed the current volume. That is a curiosity
+   * during play, where the sound is its own feedback, and a real defect on the welcome screen, which
+   * advertises the keys: at the shipped default of `volume: 1`, `stepVolume(1, +1)` clamps, so a
+   * first-time player's first press of the key the screen just taught them is a silent no-op.
+   * `TitleScene` renders this result, so a return that stopped reporting would show a stale number.
+   */
+  it('reports what the action became, so a caller can show it', () => {
+    const muted = fakeManager();
+    expect(applyAudioAction(muted.manager, 'mute')).toEqual({ kind: 'mute', muted: true });
+
+    const louder = fakeManager();
+    expect(applyAudioAction(louder.manager, 'volumeUp')).toEqual({ kind: 'volume', volume: 0.5 });
+  });
+
+  it('the result is discriminated, so a caller cannot read a volume off a mute', () => {
+    // The failure this forbids is a single flat shape where an unchanged field reads as a real
+    // value — a mute press appearing to set the volume to whatever the field defaulted to.
+    const result = applyAudioAction(fakeManager().manager, 'mute');
+    expect(result.kind).toBe('mute');
+    expect(Object.keys(result).sort()).toEqual(['kind', 'muted']);
+  });
 });
