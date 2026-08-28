@@ -198,6 +198,46 @@ The vault had **zero** tilemap coverage before this phase *(vault A3)*, so all o
   evidence and is unaffected by everything above. Evidence:
   `docs/qa/session-tier5-gate-holes-02-tweens.md` §Batch 6 and §Batch 13.
 
+## Pausing a scene, and the delta cool-down *(Phase 11, measured)*
+
+**`scene.pause()` deactivates the scene's KeyboardPlugin, and that is load-bearing.**
+`KeyboardPlugin.isActive()` is `this.enabled && this.scene.sys.canInput()`, and `Systems.canInput()`
+returns `status > PENDING && status <= RUNNING`. **PAUSED is 6, above RUNNING's 5**, so a paused
+scene processes no key events at all. Phase 11 relies on this: it is what stops ESC — deliberately
+ungated on `playerInputEnabled` — and the DEV scene-switch keys leaking past the welcome screen, and
+what stops SPACE latching a jump on the press that dismisses it.
+
+A paused scene still **renders**, which is what makes a title card over a frozen level possible.
+`UIScene` survives PAUSED on purpose and retires only at SLEEPING, so the HUD stays put.
+
+### 🔴 `game.loop.delta` is clamped to the 60 Hz target while `_coolDown > 0`
+
+Measured 2026-08-28 in the headless harness, reading `game.loop` directly through a page evaluate:
+
+| moment | `_coolDown` | `loop.delta` | ticks drained per frame |
+|---|---|---|---|
+| shortly after boot | 86 | 16.65 | 1 |
+| +1 s | 48 | 16.67 | 1 |
+| +4 s | **0** | 46.66 | ~3 |
+| +9 s | 0 | 53.33 | ~3 |
+
+While the cool-down is draining, Phaser reports `delta` as its `_target` (16.67 ms) rather than the
+measured frame time. `drainTicks` therefore yields **one tick per rendered frame**, so on a box
+rendering at ~20 fps the simulation runs at **~20 ticks/second instead of 60** — a third of speed —
+until the cool-down expires. Confirmed by a same-session interleaved A/B: 21.6 ticks/s inside the
+cool-down against 60.3 outside it.
+
+⚠️ **This is boot behaviour, not pause behaviour.** A plain pause+resume on an already-warm loop
+measured a healthy 55 ms delta with `_coolDown: 0`. The cool-down is set at start-up (and by
+`resetDelta()`), and it decrements once per **game frame** regardless of whether any scene is paused
+— so a title screen held up for a second or two *absorbs* part of it (86 → 68 observed) and the
+player gets **less** slow motion, not more.
+
+It matters anyway, because it means **the first seconds after boot are not running at the tick rate
+everything else is tuned against**, on any box whose frame rate is below 60. Anything measured in
+that window is measuring the cool-down. It is the same family as Phase 10's camera defect: what the
+engine does per rendered frame sits outside a rule written about `src/sim/`.
+
 ## Scene teardown *(Phase 9)*
 
 - 🔴 **By the time YOUR `SHUTDOWN` listener runs, `scene.cameras.main` is `undefined`.**

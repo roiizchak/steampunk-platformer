@@ -39,7 +39,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 | **11.12, 11.14** | Agent-owned, two briefs each *(A7)*. Not yet run. |
 | **11.15, 11.16, 11.19** | Full suite, build, and the Codex implementation review. Not yet run. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
-| **`TITLE_SCRIM_MAX_LUMA`** | The production barrier's bound is currently a **chosen** number, not one confirmed on a held-out run. It must be measured either side before 11.16 can pass. |
+| **The `playToExit` production spec** | Fails on this branch — and **also on `main` at `6da76b7`**. Pre-existing, not introduced here. See § The production flake. |
 
 **This phase is therefore reported FAILING, not done.** Eight criteria are unrun or partial.
 
@@ -202,6 +202,59 @@ reasonably report that nothing happens. This is a **separate defect** from the o
 it is not fixed here, and it is a candidate for the next phase. Recorded rather than silently
 bundled, because bundling it would have made the dispatch fix impossible to evaluate on its own.
 
+## The production barrier's bound — measured, not chosen *(C1, and the held-out rule)*
+
+The first version of `prodTitle.ts` asserted an absolute `TITLE_SCRIM_MAX_LUMA = 26`, a number I
+picked. It **false-redded on its first run**, against a real pre-dismiss luminance of **27.04** —
+exactly the failure the §5 rule about bounds chosen on one set of runs exists to describe.
+
+It was replaced with a **self-calibrating ratio**: measure the centre patch before the dismissing
+keypress, measure it after, and require the after/before ratio to exceed
+`TITLE_SCRIM_MIN_BRIGHTENING = 1.5`. The statistic now orders its own mutation, and no absolute
+level has to be guessed.
+
+| run | before | after | ratio |
+|---|---|---|---|
+| 1 | 27.04 | 68.43 | 2.530 |
+| 2 | 27.04 | 68.44 | 2.531 |
+
+Bound 1.5 sits well under both and well over 1.0. Red-proved by suppressing the dismissing keypress:
+`1 failed`, restored to green. The probe also clips to a 240 × 135 centre patch rather than decoding
+a full frame — the full-frame version was slow enough to push neighbouring specs into their own
+timeouts.
+
+## The production flake is PRE-EXISTING — measured on `main`, not assumed
+
+`tests/e2e/phase-10-prod.spec.ts`'s `playToExit` fails in the `chromium-prod` project on this
+branch. The obvious reading is that the title broke it. That reading is **wrong**, and the way to
+know is to run the same project on the base commit.
+
+| tree | `chromium-prod` result |
+|---|---|
+| `phase-11-welcome` | 1 failed, 5 passed |
+| `main` @ `6da76b7` (checked out, rebuilt, re-run) | **1 failed, 5 passed — the same spec** |
+
+So the phase did not introduce it. Recorded rather than fixed *(C11)*: it is a Phase 10 production
+timing defect, it is outside this phase's scope, and it is owed forward.
+
+### What the investigation turned up on the way
+
+Chasing it produced a real engine finding, now written into
+[ENGINE-NOTES.md](../ENGINE-NOTES.md) — *"Pausing a scene, and the delta cool-down"*. The chain:
+
+1. Same-session interleaved A/B of resumed tick rate: **21.6 vs 60.3 ticks/s**.
+2. Both arms ran at ~20 fps, but at **1.0 vs 3.0 ticks per frame** — so it was the delta, not the
+   frame rate.
+3. Scene delta read **16.67 ms** where wall clock said **56 ms**.
+4. A plain pause + resume on a *warm* loop measured a healthy **55 ms** with `_coolDown: 0`.
+5. A full trace showed `game.loop._coolDown` counting **86 → 68 → 48 → 0**, with delta clamped to
+   `_target` for as long as it stayed above zero.
+
+**So this is boot behaviour, not pause behaviour** — and the title *absorbs* part of the cool-down
+(86 → 68) rather than causing it, which means the player gets **less** slow motion after the title,
+not more. Diagnosing this by argument rather than by instrument would have blamed the new scene
+*(C8)*.
+
 ---
 
 ## Vault-out — Phase 11
@@ -221,5 +274,14 @@ else in the tick keeps running. Any future "freeze the game" requirement should 
 `scene.pause()`, and should know that PAUSED sits outside `canInput()`'s accepted range — which is
 now load-bearing in two places.
 
-**Owed forward:** the volume step size and its missing feedback; `TITLE_SCRIM_MAX_LUMA` confirmed on
-a held-out run; and the five owner-owned criteria.
+**A bound picked by a person false-reds; a bound the run computes for itself does not.** The absolute
+scrim-luminance number failed on its very first honest run. The ratio that replaced it needs no
+guess, and it can still go red — which is the whole test of a bound.
+
+**Before blaming the new code for a failing spec, run that spec on the base commit.** The production
+`playToExit` failure looked exactly like something the title screen had caused. It fails identically
+on `main`. One checkout and one re-run separated a phase defect from an inherited one — the same
+move that closed the invisible-blocker report last session.
+
+**Owed forward:** the volume step size and its missing feedback; the pre-existing `playToExit`
+production flake; and the five owner-owned criteria.
