@@ -3,6 +3,7 @@ import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
 import type { AudioManager } from '../game/audio';
+import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 
 /**
  * The keyboard half of `GameScene`: binding keys to `Phaser.Input.Keyboard.Key` objects and
@@ -64,7 +65,7 @@ export function bindPlayerKeys(
     return NO_KEYS;
   }
 
-  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M, K, ESC, OPEN_BRACKET, CLOSED_BRACKET } =
+  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, K, ESC } =
     Phaser.Input.Keyboard.KeyCodes;
 
   // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
@@ -108,29 +109,44 @@ export function bindPlayerKeys(
   // `audio` is passed as a getter rather than a manager, because `bindPlayerKeys` runs during
   // `create()` and the binding must not capture whatever the field held at that instant.
   //
-  // 🔴 **Gated on `isPlayerInputEnabled`, and the brackets are why.** `ElementEditorScene` extends
-  // `GameScene`, so it inherits these bindings — and it already binds `[` and `]` to "select the
-  // previous/next collision strip". Ungated, one press would both move the selection AND change the
-  // volume, persisting a change the user never asked for to `localStorage`. The editor sets
-  // `playerInputEnabled = false`, which is exactly the "is the keyboard driving the game" flag this
-  // question needs, so the collision resolves through a mechanism that already exists rather than
-  // through a second one invented here. Muting still SURVIVES into the editor; only the keys stop.
+  // 🔴 **A raw `keydown` on `event.code`, NOT three `addKey` bindings — Phase 11.** These were
+  // `addKey(M)` / `addKey(OPEN_BRACKET)` / `addKey(CLOSED_BRACKET)`, and the brackets were dead on
+  // the owner's Hebrew/English keyboard while `M` kept working. Phaser indexes registered keys by
+  // the legacy `event.keyCode` (`KeyboardPlugin.js:747`), which a layout may reassign for
+  // punctuation but not for letters. Measured, not guessed: a press carrying the WRONG `code` and
+  // keyCode 219 changed the volume, while the RIGHT `code` carrying keyCode 186 did nothing at all.
+  // `audioKeyMap.ts` holds the evidence table and the layout-independent map.
   if (audio) {
-    // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
-    // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
-    // the mute key depend on `create()`'s statement order. Here a manager that is not yet built is
-    // simply a press that does nothing, which is the right failure for a key the player may hit
-    // during a scene transition.
-    const audioKey = (code: number, act: (manager: AudioManager) => void) =>
-      addKey(code).on('down', () => {
-        const manager = audio();
-        if (isPlayerInputEnabled() && manager) {
-          act(manager);
-        }
-      });
-    audioKey(M, (manager) => manager.toggleMute());
-    audioKey(OPEN_BRACKET, (manager) => manager.nudgeVolume(-1));
-    audioKey(CLOSED_BRACKET, (manager) => manager.nudgeVolume(1));
+    keyboard.on('keydown', (event: KeyboardEvent) => {
+      // 🔴 `event.repeat` is the guard, and it replaces something we gave up above. The `Key`
+      // objects these bindings used to be got `emitOnRepeat: false` from `addKey(code, true, false)`
+      // for free; a raw `keydown` listener inherits nothing, and the OS repeats a held key ~30 times
+      // a second. Without this, holding `]` walks the volume to an end stop and writes
+      // `localStorage` thirty times a second, and holding `M` toggles mute continuously.
+      // `LevelSelectScene.bindKeys()` carries the same native-`repeat` guard, for a related reason.
+      //
+      // 🔴 `isPlayerInputEnabled()` stays, and pausing under the title screen is NOT a substitute
+      // for it. `ElementEditorScene` extends `GameScene`, so it inherits this listener, and it
+      // already binds `[` and `]` to "select the previous/next collision strip". It sets
+      // `playerInputEnabled = false`, which is exactly the "is the keyboard driving the game"
+      // question this collision needs asked. Muting still SURVIVES into the editor; only the keys
+      // stop. The title screen's own listener deliberately does NOT carry this guard — see
+      // `TitleScene`.
+      if (event.repeat || !isPlayerInputEnabled()) {
+        return;
+      }
+      const action = audioActionForCode(event.code);
+      // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
+      // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
+      // the mute key depend on `create()`'s statement order. Here a manager that is not yet built is
+      // simply a press that does nothing, which is the right failure for a key the player may hit
+      // during a scene transition.
+      const manager = audio();
+      if (!action || !manager) {
+        return;
+      }
+      applyAudioAction(manager, action);
+    });
   }
 
   if (openLevelSelect) {
