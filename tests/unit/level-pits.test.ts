@@ -13,6 +13,14 @@
  * fifth, level-03 cols 65-69, did: hand-typed, which is what makes the other four an omission rather
  * than a design.
  *
+ * ⚠️ **That paragraph is the DEFECT, not the shipped state.** Spiking all five made three of them
+ * unavoidable damage — they sit where a descent lands, which is the class `level-hazard-free.test.ts`
+ * exists to refuse — so the owner's decision was to **fill four of them in** and keep spikes on the
+ * one that is jumped mass to mass. `EXPECTED_PITS` below is the result: one pit, in level-03. The
+ * rule did not get weaker; the geometry stopped containing the shapes it was catching. Full record,
+ * with the widths that changed and the hazard totals per level, in
+ * `docs/qa/session-hud-and-pits.md`.
+ *
  * ## Why the rule is computed and not four more list entries
  *
  * Spikes were a per-level hand-written array and **nothing in the suite ever compared that array to

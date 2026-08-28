@@ -988,9 +988,11 @@ bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
   grid makes that the default authoring outcome, and Phase 8 is the phase that authors multi-rect
   floors. Also re-measure counter contrast against any new palette: the fill alone is 3.13:1 on
   mid-grey and 1.13:1 on bright sky.
-- **Phase 9:** `addHelpBanner`'s literal `18px` (~8 physical px at 852×480 — **confirmed illegible in
-  the playtest screenshot**) and its `setScrollFactor(0)`, which re-creates vault 6.1's pattern
-  outside `UIScene`; DPR ≠ 1 centring; the collect-tween polish.
+- **Phase 9:** ~~`addHelpBanner`'s literal `18px`~~ (**both banner items CLOSED 2026-08-28** by
+  session `hud-and-pits` — the font is 43 px scaled and the banner lives in its own type-only layer,
+  `src/scenes/helpBannerLayer.ts`; `addHelpBanner` no longer exists and the `setScrollFactor(0)` is
+  now reconciled against the owning camera rather than removed); DPR ≠ 1 centring; the collect-tween
+  polish.
 - **Phase 4 debt:** only **4.2b** (owner decision — an ordering violation no work can undo) and
   **4.27** remain. 4.10/4.12 were already closed; **4.16 closed this session**. The PRD row was
   stale and is corrected.

@@ -58,7 +58,7 @@ near-copy that agrees on the easy cases)*.
 Each clause earns its place, and each has a committed fixture — because **the shipped maps cannot
 tell a correct detector from a sloppy one.** A far broader rule that checks none of these clauses
 returns the same five pits. That was Codex plan review round 2's sharpest finding and it is the
-reason `tests/fixtures/pit-levels/` holds twelve files rather than four.
+reason `tests/fixtures/pit-levels/` holds sixteen files rather than four.
 
 ### 🔴 The deviation from the plan, and why the owner made it
 
@@ -221,10 +221,14 @@ is **not** a second proof of it. Written into the file's own header.
 | Command | Result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **2677 passed, 0 failed**, 736 files — count read, not inferred |
-| `npm run test:sim-isolated` | **2673 passed, 4 skipped** — the four engine-literal pins, correctly skipped with Phaser removed |
+| `npm test` | **2688 passed, 0 failed**, 737 files — count read, not inferred |
+| `npm run test:sim-isolated` | **2684 passed, 4 skipped** (2688) — the four engine-literal pins, correctly skipped with Phaser removed |
 | `npm run build` | dev-seam gate ok (27 bodies folded); `verify-dist ok: 5 level(s) and 12 audio file(s) byte-identical, no DEV-only scene key or debug surface` |
-| `npm run test:e2e` | **147 expected, 0 unexpected, 0 flaky, 0 skipped** |
+| `npm run test:e2e` | **148 passed**, exit 0 — the count read positively, not inferred from the exit code |
+
+⚠️ **These are the figures AFTER the gate owners' and Codex's findings were applied.** The first
+pass through this table recorded 2677 / 2673 / 147, which was the pre-review state; eleven unit tests
+and one e2e case were added by the findings below, and the numbers moved with them.
 
 Levels 01 and 05 regenerate **byte-identical** to `main`; only `level-0{2,3,4}.tmj` changed.
 

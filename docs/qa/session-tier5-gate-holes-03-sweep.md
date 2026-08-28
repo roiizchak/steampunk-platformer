@@ -214,6 +214,11 @@ changing the scale mode is a design decision and the owner's. Looking at the ima
 bar and gear counter are clean at 44 %; the controls banner is the marginal element, running edge to
 edge over busy art at roughly 7 CSS px.
 
+⚠️ **Superseded 2026-08-28.** *"Running edge to edge over busy art"* was the defect the owner reported
+from the shipped build, and session `hud-and-pits` fixed it: the banner is confined to the band right
+of the gear counter and no longer spans the level. The 7 CSS px figure predates the tier-5 font fix
+as well. Current geometry and evidence: `docs/qa/session-hud-and-pits.md`.
+
 **DPR 2 — read, and it is fine.** The canvas backing store stays **1920×1080** at every DPR, so DPR 2
 is a 2× upscale of the same buffer. With `pixelArt: true` deriving `antialias: false`, that is
 *nearest-neighbour doubling of pixel art* — the one case where upscaling is crisp rather than soft.
