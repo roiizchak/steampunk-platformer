@@ -1,3 +1,72 @@
+# Session handoff — the HUD banner's placement + the pit rule
+
+> ## Session `hud-and-pits` — two defects the owner found by PLAYING the shipped build
+>
+> **Not a phase.** Phase 10 is still DONE and still shipped; its handoff follows below, unchanged.
+> Branch `session-hud-and-pits`. Full record: [qa/session-hud-and-pits.md](qa/session-hud-and-pits.md)
+> + [gate owners](qa/session-hud-and-pits-02-gate-owners.md) ·
+> [plan review](reviews/session-hud-and-pits-plan.md) ·
+> [impl review](reviews/session-hud-and-pits-impl.md).
+>
+> | | defect | what it turned out to be |
+> |---|---|---|
+> | 1 | the controls legend drew **full-width across the level** | it was `addHelpBanner()` at `x = 24` below the plate, wrapped to the whole 1872 px view. It now has its own layer, `src/scenes/helpBannerLayer.ts`, in the empty band right of the gear counter |
+> | 2 | *"in levels 2, 3 and 4 the character can fall through tiles"* and nothing happens | a **bottomless** gap already kills via the kill plane. A **walled valley** has a bottom, so falling in cost nothing. Five shipped; **four had no spikes**, because spikes were a hand-typed per-level list and nothing ever compared it to the geometry |
+>
+> ### The three things worth knowing before touching any of this
+>
+> **1. The pit rule is DERIVED, and it lives in one file two consumers import.**
+> `tools/gen/pitDetect.mjs` (+ `.d.mts`) is read by `tools/gen/levelBuilder.mjs`, which paints the
+> spikes, *and* by `tests/unit/level-pits.test.ts`, which checks the **shipped bytes** *(vault 5.3,
+> vault 3.1)*. It is deliberately **two** clauses, not the five the plan specified: two reviewers
+> found independently that three of the five were **dead code** — an out-of-bounds index reads
+> `undefined` and `!undefined` is true, so `reachesGround` already subsumed the map-edge and
+> bottomless tests, and **no fixture could ever have discriminated them**. `isWall()` asks the one
+> question they were all circling: *is this column solid at the two rows just above the pit floor?*
+>
+> **2. Four of the five pits were FILLED IN, not spiked — and that was the right call.**
+> Spiking all five made three of them **unavoidable damage**: they sit where a descent lands, which
+> is the class `level-hazard-free.test.ts` exists to refuse. Owner decision, in order: *"Fill them
+> in"* → *"Add hazard to levels 4 and 5"* → *"Fill level-3's remaining pit too"*. **One pit ships:
+> level-03 cols 65-69**, reached jumping mass to mass rather than by a descent, and it keeps its
+> spikes. `EXPECTED_PITS` in the gate is the inventory, and a layout edit that adds an unspiked pit
+> now fails **with the level and the columns named**.
+>
+> ⚠️ **The rule did not get weaker when the pits went away.** The geometry stopped containing the
+> shapes it catches. That is why `tests/fixtures/pit-levels/` holds **sixteen** committed fixtures:
+> the shipped maps contain no negative case at all, so without them a far broader detector would
+> return the same answer and the gate could not tell it from a correct one (Codex plan round 2,
+> finding 6 — the sharpest finding of either round).
+>
+> **3. The banner lives in TWO camera spaces, and that is not an accident.**
+> It is on `GameScene`'s display list; the counter it measures itself against is on `UIScene`'s.
+> `gameEffects.ts` moves `GameScene`'s camera to `(-margin.x, -margin.y)` so a screen shake never
+> uncovers the view edge — so a `setScrollFactor(0)` object draws about 10 px left of its own `x`.
+> The layer places at `layout.x - camera.x`; `tests/e2e/bannerHelpers.ts` converts `getBounds()` back
+> with `+ camera.x`. **Both halves are required and neither is optional.** Getting one without the
+> other is how the right-margin assertion spent a run failing by 1.33 px on a banner that was drawing
+> exactly where it should.
+>
+> ### Numbers that are floors, not preferences
+>
+> | constant | value | why it cannot move |
+> |---|---|---|
+> | `HELP_FONT_PX` | **43** | `18.66 × 1920 / 852 = 42.06`. Below that the banner leaves WCAG's 14 pt bold large-text class and the bar becomes 4.5:1, which `contrast-floor.test.ts`'s *road not taken* case shows this palette cannot reach without going white-on-black. It moved 44 → 43 at the owner's request on 2026-08-28; **anything smaller is a STYLE.md change and an approval checkpoint** |
+> | `HELP_BANNER_MAX_ROWS` | 4 | a ceiling with room in it, never a row-count pin — the owner's decision is "every key printed, however many rows that takes" |
+> | `HELP_LINE_BOX_SLACK` | 1.05 | Chrome's line box measures **1.216** per row against our nominal 1.2. The ceiling is a play-area bound, not a glyph-metrics claim |
+> | `MIN_WALL_TILES` | 2 | one is a slope you walk back up; three is the shallowest shipped pit, and a threshold set AT the observed minimum has no room to be wrong safely |
+>
+> ### What is still open
+>
+> - **The owner's own hands-on pass.** It cannot be closed on automated evidence *(C4)* — level 3,
+>   the pit at cols 65-69, plus a look at the banner beside the health bar at a size they actually
+>   play at. Both defects were found this way in the first place.
+> - **The banner still extends below the HUD plate** by design: three rows at 43 px is 154.8 px
+>   against a 128 px plate. Bounded, measured and written down rather than implied away. If that is
+>   not acceptable, the lever is a **backing plate** behind the legend — a known dark background
+>   makes contrast deterministic and would unlock a much smaller font, at the cost of a STYLE.md
+>   decision.
+
 # Session handoff — Phase 10 (build and ship)
 
 > ## ✅ Phase 10 is DONE. 15 of 15 criteria PASS, merged to `main`, live in production.
