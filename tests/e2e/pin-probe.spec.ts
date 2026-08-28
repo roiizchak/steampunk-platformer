@@ -31,7 +31,11 @@ import { expect, test } from '@playwright/test';
 async function magentaShare(page: import('@playwright/test').Page): Promise<number> {
   const png = await page.screenshot();
   const { decodePng } = (await import('../../tools/gen/png.mjs')) as {
-    decodePng: (b: Uint8Array) => { width: number; height: number; data: Uint8Array };
+    decodePng: (b: Uint8Array) => {
+      width: number;
+      height: number;
+      data: Uint8Array | Uint8ClampedArray;
+    };
   };
   const { width, height, data } = decodePng(png);
   let hits = 0;
@@ -66,8 +70,12 @@ test.describe('the pin probe overlay', () => {
     const share = await magentaShare(page);
     expect(share, 'the overlay drew without its flag').toBeLessThan(0.001);
 
+    // Reached the way every other spec reaches the live scene tree — see `drawnVsSim.ts`.
     const named = await page.evaluate(() => {
-      const scene = window.__phaserGame.scene.getScene('Game') as unknown as {
+      const w = window as unknown as {
+        __phaserGame: { scene: { getScene(k: string): unknown } };
+      };
+      const scene = w.__phaserGame.scene.getScene('Game') as {
         children: { list: { name?: string }[] };
       };
       return scene.children.list.filter((k) => (k.name ?? '').startsWith('devPinProbe')).length;
