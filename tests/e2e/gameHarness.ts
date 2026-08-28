@@ -52,6 +52,56 @@ export async function bootToGame(page: Page, search = ''): Promise<void> {
   // Focus the page before sending keys. Without it the keystrokes have no target and every
   // movement assertion in every spec would fail for a reason unrelated to movement.
   await page.locator('canvas').click();
+
+  // Phase 11: the welcome screen is a PARALLEL scene over a paused `Game`, so `sceneKey` is still
+  // `'Game'` and every assertion above holds unchanged — but the sim is frozen until it is
+  // dismissed. One place, so the ~31 specs that boot through here keep driving a running game.
+  await dismissTitle(page);
+}
+
+/**
+ * Dismiss the Phase 11 welcome screen and wait until the simulation is genuinely running again.
+ *
+ * ## 🔴 "Title is gone" is NOT a sufficient barrier
+ *
+ * `GameScene` is PAUSED while the title is up, so its published `tick` stops advancing. On the first
+ * resumed frame `update()` can receive a **sub-tick delta** — this box runs ~240 Hz, so ~4.17 ms
+ * against a 16.67 ms tick — and `drainTicks` floors that to **zero** ticks
+ * (`src/game/frameClock.ts`). So the scene can be inactive while `tick` is still exactly what it was.
+ * `phase-01-boot.spec.ts` reads a snapshot immediately after this and asserts `tick > 0`, which is
+ * how that shows up: a confusing ordinary failure, while `globalSetup` passes because `ready` is
+ * true. Codex plan review round 4.
+ *
+ * So this captures the tick first and waits for it to MOVE. That is the only observation that proves
+ * the game is running rather than merely uncovered.
+ *
+ * A no-op when no title is up — the latch in `gameTitle.ts` shows it once per page load, so a
+ * mid-spec `Game` restart does not reopen it and this returns immediately.
+ */
+export async function dismissTitle(page: Page): Promise<void> {
+  // `__phaserGame` is reached by a local cast, never a second `declare global` — two declarations of
+  // one property is a TS2717 build failure the moment they differ. See `debugView.ts`'s header.
+  type SceneHandle = { scene: { isActive(key: string): boolean } };
+  const titleActive = (): Promise<boolean> =>
+    page.evaluate(() =>
+      Boolean((window as unknown as { __phaserGame?: SceneHandle }).__phaserGame?.scene.isActive('Title')),
+    );
+
+  if (!(await titleActive())) {
+    return;
+  }
+
+  const before = await page.evaluate(() => window.__game?.tick ?? 0);
+  await page.locator('canvas').click();
+  await page.keyboard.press('Enter');
+
+  await page.waitForFunction(
+    (t) =>
+      !(window as unknown as { __phaserGame?: SceneHandle }).__phaserGame?.scene.isActive('Title') &&
+      (window.__game?.tick ?? 0) > (t as number),
+    before,
+    { timeout: BOOT_TIMEOUT },
+  );
 }
 
 export async function readPlayer(page: Page): Promise<DebugPlayer> {
