@@ -166,7 +166,19 @@ test.describe('Phase 8 — criterion 8.7, the frame budget across the level ramp
     ).toBeLessThanOrEqual(MAX_LEVEL_GPU_DELTA_MS);
 
     expect(
-      ratio,
+      // 🔴 Rounded to nanoseconds' worth of ratio, and this is NOT the bound being nudged.
+      //
+      // `workMedianMs` comes off `performance.now()`, which Chrome quantises — so when both arms
+      // land on values in an exact 2:1 relationship the division returns `2.0000000000034106`
+      // rather than 2, and `toBeLessThanOrEqual(2)` fails on 3.4e-12 of IEEE-754 remainder. Seen
+      // once in a full-suite run on 2026-08-28 and NOT reproducible: the same spec passed four
+      // times out of four in isolation, at the same bound, on the same commit.
+      //
+      // The measurement is unchanged and the bound is unchanged at exactly 2. What changes is that
+      // the comparison stops being sensitive to float noise 12 decimal places below anything the
+      // timer can resolve. A real regression moves this ratio by tenths — 2.1 still fails, and
+      // `toFixed(12)` cannot round it down to 2.
+      Number(ratio.toFixed(9)),
       `level-05 costs ${ratio.toFixed(2)}x level-01 per frame. It has 2.4x the cells and 3.7x the ` +
         'painted tiles, so a ratio near that number means the tilemap is NOT being culled to the ' +
         'camera and the frame cost scales with level size — which would make the ramp a performance ' +

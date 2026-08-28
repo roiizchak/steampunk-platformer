@@ -249,3 +249,99 @@ level that had never been regenerated made a gate look like it could not go red.
 Levels 01 and 05 regenerate **byte-identical** to `main`; only `level-0{2,3,4}.tmj` changed.
 
 Ports 5173 and 4173 freed before reporting *(C13)*.
+
+---
+
+## The third defect — *"there is a hazard that is not being seen"*
+
+Reported by the owner on 2026-08-28, playing level 3, **after** everything above had shipped green.
+Not a regression: it had been true since Phase 4.
+
+### The reproduction, before any theory
+
+A throwaway Playwright probe booted level-03, cleared the enemies, held ArrowRight and sampled the
+player every 30 ticks until forward progress stopped:
+
+```
+STALLS [{"col":27,"x":2622,"y":1920,"hp":80}, ... ]
+```
+
+Two facts fall out of that one line. The player **stops dead at col 27.3**, against the 3-tile mass
+at cols 28-29 — real, drawn, jumpable level design, and the *"jump above him"* half of the report.
+And they arrive there at **hp 80**: they walked through the spike run at cols 24-26 and lost 20 hp
+without ever seeing it.
+
+`level-hazard-free.test.ts` proves every shipped level is finishable **without touching a single
+spike** — its auto-player jumps them. So the spikes are avoidable and the level is not broken. What
+failed is that a human did not know to jump.
+
+### Why the tile could not be seen, in the project's own terms
+
+The tile the sheet produced for `SPIKE_GID` is a **cool silver picket**. STYLE.md §5 rule 2 is
+*"background entirely cool blue-grey and desaturated; foreground warm copper/brass/amber, saturated,
+high contrast"* — the whole reason §1 says *"the player can tell what is standable without thinking
+about it"*. **A cool desaturated object in the foreground reads as background because the separation
+rules say it should.** It also shares a silhouette family with the ornamental fence in the very next
+cell of the same sheet, which genuinely *is* decoration.
+
+So this was never a new art direction. It was the existing one, never applied to one tile.
+**No STYLE.md amendment; the §2-§5 hash lock is untouched** and `style-lock.test.ts` stayed green.
+
+### The fix: one isolated generation composited into cell 12
+
+Re-shooting the sheet was the obvious move and the wrong one — it is **one** generation of sixteen
+tiles, so fixing one re-rolls the walkway, the brass cap, the brick and the masonry the whole game
+stands on, two of which `ground-tiles.test.ts` pins against shipped pixels.
+
+`promptHazard.mjs` asks for the tile alone on chroma; `buildChrome.mjs`'s `hazardTile()` keys it and
+`build-world.mjs` pastes it into cell 12 before the grid gate measures the sheet or `walkway.png` is
+cut from it. Verified afterwards by comparing all sixteen cells against `main`: **exactly one cell
+changed, 6378 pixels.**
+
+Three things in that path are gates rather than hopes:
+
+| gate | what it refuses |
+|---|---|
+| ONE detected component | the four blades are joined by the base rail, so two components means the rail keyed away and what ships is spikes floating over the walkway |
+| ink in column 0 **and** column w-1 | runs are 2-5 tiles wide and painted as adjacent cells, so a tile that does not reach both edges draws a transparent gap every 96 px — a striped hazard that reads as decoration again, which is the defect being fixed |
+| cell 12 must exist in the packed sheet | a sheet with a different column count would paste the spikes over the pipes |
+
+🔴 **The key colour is estimated from a TOP STRIP, not the whole border.** `estimateKeyColour`
+samples the border one pixel deep and refuses under 90 % agreement — right for every other asset here
+and exactly wrong for this one, which is *required* to reach three of its four edges. It refused at
+67.2 %. The strip is the part of the image where the estimator's assumption actually holds, and
+running the real estimator over it keeps its agreement check rather than swapping in a hardcoded
+green *(vault 4.13: key by distance with a tolerance, never by equality — the model returned
+~(1,252,2), not pure green)*.
+
+### The spend, and a ceiling that was already breached
+
+**One generation, first take, adopted. `01a046c7-54ec-7eb0-8009-0d48530b570b`, seed 20260828,
+`fal-ai/nano-banana-pro`, 2K, 1:1, $0.15.** *(Probe one, then batch — vault 4.9. There was no batch:
+the probe was good.)*
+
+🔴 **The project's $55 art ceiling was ALREADY $0.05 over before this**, knowingly, on 2026-08-26,
+and `GENERATION-LOG.md`'s own last line said *"the next generation needs a ceiling raise, not a
+decision."* The owner explicitly chose the fal option when the defect was put to them with four
+alternatives — **but that is a choice between fixes, not a ceiling raise.** Total is now **$55.20,
+$0.20 over.** Recorded as a breach in `GENERATION-LOG.md` rather than absorbed. The next generation
+of any kind needs the ceiling moved first.
+
+### Two files split to stay under the 400-line rule
+
+`build-world.mjs` reached 424 and `promptWorld.mjs` 411. `hazardTile()` moved to `buildChrome.mjs`,
+which is the isolated-object module and states that as its job; `spikesPrompt()` moved to a new
+`promptHazard.mjs`, the same split `promptWorld.mjs` itself records in its own header. `TILE_SIZE` is
+passed into `hazardTile()` as an argument rather than re-parsed, because `build-world.mjs` parses it
+out of `src/game/constants.ts` precisely so this pipeline cannot hold a second copy of the grid size.
+
+### One unrelated flake, fixed at its cause
+
+The full e2e run that followed failed **one** spec: 8.7's level-cost ratio, at
+`2.0000000000034106` against a bound of 2. Not a regression — a tile's pixels do not change frame
+cost, and the same spec passed **four out of four** in isolation at the same bound on the same
+commit. `performance.now()` is quantised, so two arms in an exact 2:1 relationship divide to 2 plus
+3.4e-12 of IEEE-754 remainder. The comparison now rounds to 9 decimal places; **the bound is
+unchanged at exactly 2** and a real regression moves the ratio by tenths. The spec's own
+inverse case — *"the ratio bound goes RED on a level whose size stops being free"* — still passes,
+so the gate can still go red *(C2)*.

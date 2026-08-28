@@ -21,7 +21,7 @@ import { detectFrames } from './sheets.mjs';
 import { crop, downscale, mirrorLoop } from './resize.mjs';
 import { gateGridExact, gateSeam, regionStats, PASS, WARM } from './gates.mjs';
 import { raw } from './rawSource.mjs';
-import { buildHud, buildGear, buildGate } from './buildChrome.mjs';
+import { buildHud, buildGear, buildGate, hazardTile, HAZARD_INDEX } from './buildChrome.mjs';
 
 /**
  * Read `TILE_SIZE` out of the runtime constants rather than declaring a second copy.
@@ -129,6 +129,22 @@ function buildTileset() {
     }
   });
 
+  // The hazard tile replaces cell 12 before anything measures or writes the sheet, so the grid gate
+  // and `walkway.png` both see the bytes that ship.
+  const hazard = hazardTile(TILE_SIZE);
+  const hx = (HAZARD_INDEX % cols) * TILE_SIZE;
+  const hy = Math.floor(HAZARD_INDEX / cols) * TILE_SIZE;
+  if (hy + TILE_SIZE > height) {
+    throw new Error(
+      `assets:world: the sheet is ${rects.length} tiles, so cell ${HAZARD_INDEX} does not exist. ` +
+        'The hazard tile has nowhere to go and the level would draw the wrong gid.',
+    );
+  }
+  for (let y = 0; y < TILE_SIZE; y += 1) {
+    const from = y * TILE_SIZE * 4;
+    data.set(hazard.scaled.data.subarray(from, from + TILE_SIZE * 4), ((hy + y) * width + hx) * 4);
+  }
+
   const packed = { width, height, data };
   const grid = gateGridExact(packed, TILE_SIZE);
   if (grid.status !== PASS) {
@@ -149,6 +165,10 @@ function buildTileset() {
   console.log(
     `ok  tileset   ${rects.length} tiles detected  ->  ${width}x${height} ` +
       `(${grid.value.cols}x${grid.value.rows} @ ${TILE_SIZE}px)  ${grid.status}`,
+  );
+  console.log(
+    `ok  hazard    1 object    ${hazard.source} -> ${TILE_SIZE}x${TILE_SIZE}  ` +
+      `pasted into cell ${HAZARD_INDEX} (gid 13)`,
   );
   return rects.length;
 }

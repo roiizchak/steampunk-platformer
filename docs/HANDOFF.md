@@ -12,6 +12,7 @@
 > |---|---|---|
 > | 1 | the controls legend drew **full-width across the level** | it was `addHelpBanner()` at `x = 24` below the plate, wrapped to the whole 1872 px view. It now has its own layer, `src/scenes/helpBannerLayer.ts`, in the empty band right of the gear counter |
 > | 2 | *"in levels 2, 3 and 4 the character can fall through tiles"* and nothing happens | a **bottomless** gap already kills via the kill plane. A **walled valley** has a bottom, so falling in cost nothing. Five shipped; **four had no spikes**, because spikes were a hand-typed per-level list and nothing ever compared it to the geometry |
+> | 3 | *"there is a hazard that is not being seen"* | the spike tile was a **cool silver picket**, and STYLE.md §5 rule 2 makes the foreground warm and saturated. A cool desaturated foreground object reads as background *because the separation rules say it should* — and it shared a silhouette with the ornamental fence one cell over, which really is decoration. New tile generated as an isolated object and **composited into cell 12**; exactly one of sixteen cells changed |
 >
 > ### The three things worth knowing before touching any of this
 >
@@ -55,6 +56,15 @@
 > | `HELP_BANNER_MAX_ROWS` | 4 | a ceiling with room in it, never a row-count pin — the owner's decision is "every key printed, however many rows that takes" |
 > | `HELP_LINE_BOX_SLACK` | 1.05 | Chrome's line box measures **1.216** per row against our nominal 1.2. The ceiling is a play-area bound, not a glyph-metrics claim |
 > | `MIN_WALL_TILES` | 2 | one is a slope you walk back up; three is the shallowest shipped pit, and a threshold set AT the observed minimum has no room to be wrong safely |
+>
+> ### 🔴 The art budget is BREACHED, and it is the owner's call
+>
+> `GENERATION-LOG.md` stood at **$55.05 against a $55 ceiling** before this session — knowingly over,
+> by an owner decision of 2026-08-26 — and its last line read *"the next generation needs a ceiling
+> raise, not a decision."* The hazard tile cost **$0.15**, taken on the owner's explicit choice of
+> the fal option when the defect was put to them with four alternatives. **That was a choice between
+> fixes, not a ceiling raise.** Total is now **$55.20, $0.20 over**, recorded as a breach rather than
+> absorbed. **The next generation of any kind needs the ceiling moved first.**
 >
 > ### What is still open
 >

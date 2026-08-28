@@ -166,3 +166,88 @@ export function buildGate() {
   );
   return { width: scaled.width, height: scaled.height };
 }
+
+/**
+ * The HAZARD tile, generated on its own and pasted into the packed sheet.
+ *
+ * ## Why it is a separate source
+ *
+ * The sheet is ONE generation of sixteen tiles. Re-shooting it to fix one re-rolls the walkway, the
+ * brass cap and the brick the whole game stands on — two of which `ground-tiles.test.ts` pins
+ * against the shipped pixels. Pasting one isolated object into cell 12 changes exactly the tile that
+ * was wrong and leaves the other fifteen byte-identical. `promptWorld.mjs`'s `spikesPrompt` carries
+ * the rest of the reasoning, including why the old tile failed STYLE.md §5 rule 2.
+ *
+ * ## The two gates here, and why each earns its place
+ *
+ * **ONE component**, like the gear: the four blades are joined by the base rail, so anything that
+ * detects as two means the rail keyed away and what would ship is loose spikes floating over the
+ * walkway.
+ *
+ * **The rail must touch BOTH side edges.** Hazard runs are 2-5 tiles wide and painted as adjacent
+ * cells, so a tile with a transparent margin at its sides draws a gap every 96 px along the run —
+ * a striped hazard that looks like decoration again, which is the whole defect being fixed. Checked
+ * on the keyed pixels rather than trusted to the prompt.
+ *
+ * Deliberately NOT squared. `square()` centres the crop and pads it, which would put a transparent
+ * strip under the rail and lift the spikes off the floor by a pixel or two at 96 px. The source is
+ * taken full-width and from the topmost ink to the bottom edge, so the rail stays flush.
+ */
+export function hazardTile(tileSize) {
+  // Taken as an argument rather than re-read here: `build-world.mjs` parses `TILE_SIZE` out of
+  // `src/game/constants.ts` precisely so this pipeline cannot carry a second copy of the grid size,
+  // and a second parser in a second file would be that copy under another name.
+  const image = raw('spikes');
+
+  /**
+   * 🔴 The key is estimated from a TOP STRIP, not from the whole border.
+   *
+   * `estimateKeyColour` samples the border one pixel deep and refuses when under 90 % of it agrees
+   * — which is the right rule for every other asset in this project, and exactly wrong for this one.
+   * The tile is *required* to reach the left, right and bottom edges so a run of them has no seam,
+   * so three of its four borders are iron by design and the estimator refused at 67.2 % agreement.
+   *
+   * The strip is where the prompt asks for a clear chroma margin, so it is the part of the image the
+   * estimator's assumption actually holds for — and running the real estimator over it keeps its
+   * agreement check rather than replacing it with a hardcoded green *(vault 4.13: key by distance
+   * with a tolerance, never by equality — the model returned ~(1,252,2), not pure green)*.
+   */
+  const STRIP = Math.max(2, Math.round(image.height * 0.05));
+  const { key } = estimateKeyColour(crop(image, 0, 0, image.width, STRIP));
+  const keyed = removeSpecks(keyOut(image, { key }));
+
+  const rects = detectFrames(keyed, { minGap: 16, minExtent: 64 });
+  if (rects.length !== 1) {
+    throw new Error(
+      `assets:world: expected ONE spike row, detected ${rects.length}. The blades are joined by ` +
+        `the base rail; more than one component means the rail keyed away, and what would ship is ` +
+        `loose spikes floating over the walkway.`,
+    );
+  }
+
+  const opaqueAt = (x, y) => keyed.data[(y * keyed.width + x) * 4 + 3] > 0;
+  const columnHasInk = (x) => {
+    for (let y = 0; y < keyed.height; y += 1) if (opaqueAt(x, y)) return true;
+    return false;
+  };
+  if (!columnHasInk(0) || !columnHasInk(keyed.width - 1)) {
+    throw new Error(
+      'assets:world: the spike tile does not reach both side edges, so a run of them would draw a ' +
+        'transparent gap every tile. The base rail must run edge to edge.',
+    );
+  }
+
+  const top = rects[0].y;
+  const trimmed = crop(keyed, 0, top, keyed.width, keyed.height - top);
+  const scaled = downscale(trimmed, tileSize, tileSize);
+  return { scaled, source: `${trimmed.width}x${trimmed.height}` };
+}
+
+/**
+ * Which cell the hazard tile occupies.
+ *
+ * `SPIKE_GID` is 13 and the tileset's `firstgid` is 1, so the local index is 12 — row 3, column 0.
+ * Derived from the two constants rather than written as `12`, because a sheet with a different
+ * column count would silently paste the spikes over the pipes.
+ */
+export const HAZARD_INDEX = 12;

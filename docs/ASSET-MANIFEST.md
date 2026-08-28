@@ -92,13 +92,13 @@ against one line before shooting any clip *(criterion 4.27)*.
 | Asset | Catalog key | Phase | State |
 |---|---|---|---|
 | walkway tile | `walkway-tile` | 3 | ✅ shipped |
-| industrial tileset | `tiles-industrial` | 3 | ✅ shipped |
+| industrial tileset | `tiles-industrial` | 3 | ✅ shipped — 4 × 4 at 96 px. **Cell 12 (gid 13, the hazard) is NOT from that generation**: it is an isolated object composited in by `hazardTile()`, see the row below |
 | parallax far / mid / near | `bg-far` `bg-mid` `bg-near` | 3 | ✅ shipped |
 | HUD health assembly | `hud-health` | 4 | ✅ shipped, **unused until Phase 6** |
 | gear pickup | `gear` | 6 | ✅ shipped, 72 × 72 |
 | **level exit gate** | `goal-gate` | **8 follow-up** | ✅ shipped, **288 × 432** — `GATE_PX`, deliberately larger than the 192 × 288 trigger rect and anchored bottom-centre on it. It was authored at the rect until the owner saw it was the same height as the character |
 | collect → scoreboard tween art | — | 6 | ⬜ |
-| hazard art (spikes beyond the tileset) | — | 5 | ⬜ |
+| hazard tile (spikes) | cell 12 of `tiles-industrial` | **session `hud-and-pits`** | ✅ shipped — generated on its own (`01a046c7`) and pasted into cell 12 rather than re-shooting the sheet, which would have re-rolled the walkway, brass cap and brick that `ground-tiles.test.ts` pins. Replaced a cool silver picket that read as decoration and violated STYLE.md §5 rule 2 |
 | audio cues | — | 7 | ⬜ — needs the catalog schema extended |
 
 **`hud-health` is shipped but nothing draws it.** That is deliberate and worth stating: the HUD is a

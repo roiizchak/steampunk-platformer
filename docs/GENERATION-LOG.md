@@ -283,3 +283,14 @@ so the next re-shoot is a CEILING decision, not a budget one.**
 2026-08-26, taken with the overrun quoted before the spend.** The ceiling has not been raised; it has
 been knowingly exceeded by one generation, and the amount is recorded here rather than absorbed. **The
 next generation on this endpoint needs a ceiling raise, not a decision.**
+
+| [qa/session-hud-and-pits.md § the hazard tile](qa/session-hud-and-pits.md) | ✅ **The HAZARD tile — first take, ADOPTED.** `01a046c7-54ec-7eb0-8009-0d48530b570b`, seed 20260828, 2K, 1:1, `2048×2048`. The owner played level 3, walked into the spikes and reported *"there is a hazard that is not being seen"*. The tile the sheet produced is a **cool silver picket** sharing a silhouette family with the ornamental fence in the very next cell — and STYLE.md §5 rule 2 is *"foreground warm copper/brass/amber, saturated"*. A cool desaturated foreground object reads as background because the separation rules say it should. The new tile is rust-orange iron with amber-brass highlights on a riveted rail. **No STYLE.md amendment**: this brings the tile INTO §5 compliance rather than changing the direction, and the §2–§5 hash lock is untouched. Generated as an **isolated object and composited into cell 12**, not by re-shooting the sheet — a re-shoot would re-roll the walkway, the brass cap and the brick, two of which `ground-tiles.test.ts` pins against shipped pixels. Verified: exactly **one** of sixteen cells changed | `fal-ai/nano-banana-pro` | 1 · $0.15 |
+
+**Running total: $55.20 of the $55 ceiling — ⚠️ $0.20 OVER.**
+
+🔴 **The ceiling was already exceeded before this generation** ($55.05, knowingly, on 2026-08-26) and
+the line above it said *"the next generation needs a ceiling raise, not a decision."* This spend was
+made on the owner's explicit choice of the fal option when the hazard-legibility defect was put to
+them with four alternatives — but **that was a choice between fixes, not a ceiling raise**, and the
+raise has still not been granted. Recorded as a breach rather than absorbed. **The ceiling stands at
+$55 and is $0.20 exceeded; the next generation of any kind needs the ceiling moved first.**
