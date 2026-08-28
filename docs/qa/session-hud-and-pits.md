@@ -52,12 +52,22 @@ to check the shipped `.tmj` bytes *(vault 3.1, vault 5.3 — one definition, two
 near-copy that agrees on the easy cases)*.
 
 > A **pit** is a maximal run of **≥ 2** columns whose walkable surface is the level's
-> `groundTopRow`, where the nearest surface to the left **and** to the right are both **≥ 2 tiles
-> higher** and both belong to masses that reach the ground row.
+> `groundTopRow`, where the column on **each side** is solid at the **2 rows immediately above the
+> pit floor** — which is the only thing that actually stops you walking out sideways.
 
-Each clause earns its place, and each has a committed fixture — because **the shipped maps cannot
-tell a correct detector from a sloppy one.** A far broader rule that checks none of these clauses
-returns the same five pits. That was Codex plan review round 2's sharpest finding and it is the
+⚠️ **That is the SHIPPED rule, and it is two clauses. The plan specified five.** This block used to
+quote the five-clause version — nearest surface 2 tiles higher, both neighbours existing, neither
+bottomless, both reaching the ground — and **three of them were dead code**: an out-of-bounds index
+reads `undefined` and `!undefined` is true, and a column no rectangle covers never has its
+ground-reaching flag set, so `reachesGround` already subsumed the map-edge and bottomless tests. No
+fixture could ever have discriminated them. Found independently and on the same day by the
+`qa-expert` gate owner (brief 1) and by Codex round 3; restructured to `isWall()`, which asks the one
+question all four were circling. The exclusions all survive as consequences of the live rule.
+
+Each clause earns its place, and each SHAPE the rule must reject has a committed fixture — because
+**the shipped maps cannot tell a correct detector from a sloppy one.** A far broader rule that checks
+none of these clauses returns the same five pits. That was Codex plan review round 2's sharpest
+finding and it is the
 reason `tests/fixtures/pit-levels/` holds sixteen files rather than four.
 
 ### 🔴 The deviation from the plan, and why the owner made it
@@ -221,14 +231,20 @@ is **not** a second proof of it. Written into the file's own header.
 | Command | Result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **2688 passed, 0 failed**, 737 files — count read, not inferred |
-| `npm run test:sim-isolated` | **2684 passed, 4 skipped** (2688) — the four engine-literal pins, correctly skipped with Phaser removed |
+| `npm test` | **2690 passed, 0 failed**, 738 files — count read, not inferred |
+| `npm run test:sim-isolated` | **2686 passed, 4 skipped** (2690) — the four engine-literal pins, correctly skipped with Phaser removed |
 | `npm run build` | dev-seam gate ok (27 bodies folded); `verify-dist ok: 5 level(s) and 12 audio file(s) byte-identical, no DEV-only scene key or debug surface` |
 | `npm run test:e2e` | **148 passed**, exit 0 — the count read positively, not inferred from the exit code |
 
-⚠️ **These are the figures AFTER the gate owners' and Codex's findings were applied.** The first
-pass through this table recorded 2677 / 2673 / 147, which was the pre-review state; eleven unit tests
-and one e2e case were added by the findings below, and the numbers moved with them.
+⚠️ **These are the figures AFTER the gate owners' AND the Codex implementation review's findings
+were applied.** The first pass through this table recorded 2677 / 2673 / 147 — the pre-review state.
+The gate owners added eleven unit tests and an e2e case; Codex's review added two more (the shipped
+legend's content, and the hazard ramp's exact per-level delta). The numbers moved with them.
+
+⚠️ **`npm run assets:levels` regenerates the `.tmj` files, not `assets:world`** — `assets:world`
+writes tiles, backgrounds, HUD and gear art and never touches a level. The plan said `assets:world`
+in two places and was corrected; it was caught while driving a mutation loop, where a "reverted"
+level that had never been regenerated made a gate look like it could not go red.
 
 Levels 01 and 05 regenerate **byte-identical** to `main`; only `level-0{2,3,4}.tmj` changed.
 

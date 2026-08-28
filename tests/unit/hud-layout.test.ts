@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { HELP_FONT_PX } from '../../src/render/helpBanner';
+import { helpLine } from '../../src/scenes/gameDev';
 import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
@@ -73,6 +74,47 @@ describe('hudLayout is derived from the live game size', () => {
     // ~11 physical px stops being readable digits on a low-DPI screen.
     const layout = hudLayout(852, 480, HUD_SLOT);
     expect(layout.counter.fontPx).toBeGreaterThanOrEqual(11);
+  });
+
+  /**
+   * 🔴 Every control the SHIPPED banner promises is still in it.
+   *
+   * Codex implementation review, finding 5: nothing discriminating gated the content. The e2e asks
+   * for `length > 40` and the word `move`; the production spec says outright that it cannot verify
+   * content and delegates the claim to `contrast-floor.test.ts`, which checks size, weight, stroke
+   * and ink and says nothing about keys. **Deleting `M mute` or `[ ] volume` would have left every
+   * gate in this repo green** — on the one surface that teaches the controls, and for two controls
+   * whose whole argument for being in the shipped half is *"a mute control the player cannot
+   * discover is a mute control they do not have"*.
+   *
+   * Asserted against the SHIPPED half specifically. `helpLine()` returns the DEV form under vitest,
+   * and the DEV form is a superset — so checking the whole string would pass on keys that only
+   * exist in a dev build. The split is on the dev suffix's first key.
+   */
+  it('the shipped banner still names every control it is the only place to learn', () => {
+    // Non-breaking spaces normalised first: `helpLine()` joins each key to its label with U+00A0
+    // so Phaser cannot wrap between them, which is invisible on screen and would make every
+    // assertion below read as a missing control.
+    const shipped = helpLine().replace(/ /g, ' ').split('  ·  P play')[0] ?? '';
+    expect(shipped, 'the DEV suffix boundary moved — this split no longer isolates the shipped half')
+      .not.toContain('editor');
+
+    for (const control of [
+      'move',
+      'jump',
+      'walk',
+      'attack',
+      'mute',
+      'volume',
+      'levels',
+    ]) {
+      expect(shipped, `the shipped controls banner no longer names "${control}"`).toContain(control);
+    }
+    // And the keys themselves, not just the verbs — a legend naming an action with no key is worse
+    // than no legend.
+    for (const key of ['ARROWS', 'WASD', 'SPACE', 'SHIFT', 'ESC', 'M', '[ ]']) {
+      expect(shipped, `the shipped controls banner no longer names the "${key}" key`).toContain(key);
+    }
   });
 
   it('the CONTROLS BANNER stays legible at the smallest supported size too', () => {

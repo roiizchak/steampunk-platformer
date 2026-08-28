@@ -87,6 +87,17 @@ export const MIN_WALL_TILES = 2;
  * An inclusive test makes every mass one column wider than it is drawn, which would swallow the pit
  * beside it and report no pit at all.
  */
+/**
+ * ⚠️ **Assumes TILE-ALIGNED collision rectangles**, and every shipped level is generated from
+ * `{ fromCol, toCol }` runs, so every one of them is.
+ *
+ * A rectangle overlapping a column by a single pixel marks that whole column-row solid, and
+ * `Math.floor`/`Math.ceil` widen a partial row to a whole one. Codex implementation review,
+ * finding 3 is right that the Element Editor can author a one-pixel intrusion. Not tightened,
+ * because the tightening has to pick a threshold and every threshold is arbitrary; the honest
+ * statement is the precondition, and a level that violates it is a level whose geometry needs
+ * looking at rather than a detector that needs a fudge factor.
+ */
 export function columnProfile(rects, widthTiles, tileSize, groundTopRow) {
   const surfaceRow = new Array(widthTiles).fill(null);
   const reachesGround = new Array(widthTiles).fill(false);
@@ -217,9 +228,17 @@ function overlaps(a, b) {
  *
  * Only rectangles that span the cell's full HEIGHT can contribute, which is what rejects a
  * horizontal sliver; their x-intervals are then merged and must cover the cell's full WIDTH, which
- * is what rejects a vertical one. Coverage by several adjacent rectangles counts, because the union
- * is what the player walks into — `mergeSpikeRuns` happens to emit one rectangle per run today, and
- * this must not silently depend on that.
+ * is what rejects a vertical one. Coverage by several HORIZONTALLY adjacent rectangles counts,
+ * because the union is what the player walks into — `mergeSpikeRuns` happens to emit one rectangle
+ * per run today, and this must not silently depend on that.
+ *
+ * ⚠️ **It is a one-dimensional union, and that is a deliberate limit.** Two half-height rectangles
+ * stacked to cover the cell between them are rejected, even though their union does cover it —
+ * Codex implementation review, finding 3. The alternative is 2-D interval coverage for a shape no
+ * producer emits: every hazard in this project is exactly one tile tall, painted from a
+ * `{ fromCol, toCol, row }` run. Recorded rather than built *(YAGNI)*, and it fails in the SAFE
+ * direction: a vertically partitioned floor would be reported as uncovered, which is a false red
+ * somebody has to come and look at, not a pit that silently cannot hurt you.
  */
 function fullyCovered(cell, rects) {
   const spans = rects

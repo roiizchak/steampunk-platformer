@@ -1,6 +1,6 @@
 // level-05 geometry, in TILES. See `shared.mjs` for the measured limits every layout sits inside.
 //
-// The last level. 160 tiles, four 3-tile gaps, 864 px of spikes, six enemies, a 7-row ground stack — the
+// The last level. 160 tiles, four 3-tile gaps, 1056 px of spikes, six enemies, a 7-row ground stack — the
 // longest and densest in the game. The rise and the gap are still at the ceiling level-03 established,
 // for the reason `level-04.mjs` records: a measured limit pushed past its measurement is not difficulty.
 //
@@ -56,7 +56,8 @@ export const level05 = {
     { fromCol: 146, toCol: 154, row: 17, rows: 4 },
   ],
 
-  // 9 tiles of spikes = 864 px.
+  // 11 tiles of spikes = 1056 px. (Was written as 9 / 864 and had been wrong since this list
+  // last grew — Codex implementation review, finding 6. `level-ramp.test.ts` now pins the totals.)
   spikes: [
     { fromCol: 20, toCol: 22, row: GROUND_TOP_ROW - 1 },
     { fromCol: 97, toCol: 98, row: GROUND_TOP_ROW - 1 },

@@ -81,6 +81,18 @@ export class HelpBannerLayer {
   /** Does the banner need laying out on the next update? True until the first one lands. */
   private dirty = true;
 
+  /**
+   * The last placement, in SCREEN space — before the owning camera's offset is taken off it.
+   *
+   * 🔴 The camera offset is not a constant, and treating it as one was a bug. `gameEffects.ts` moves
+   * `GameScene`'s camera every frame of a screen shake; the layout only ran when `dirty`, so the
+   * banner shook with the world while the `UIScene` counter it is aligned to stood still, and a
+   * resize mid-shake could leave a residual offset once the camera settled. Codex implementation
+   * review, finding 1. The expensive half — measuring the counter and re-wrapping the text — still
+   * runs only when dirty; only the two-number camera term is re-applied per frame.
+   */
+  private placed: { x: number; y: number } | null = null;
+
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly hud: HudCounterSource,
@@ -134,8 +146,21 @@ export class HelpBannerLayer {
   }
 
   private onUpdate(): void {
-    if (!this.dirty) return;
-    this.layout();
+    if (this.dirty) {
+      this.layout();
+      return;
+    }
+    // Not dirty, but the camera may still have moved — see `placed`.
+    this.reposition();
+  }
+
+  /** Re-apply the last placement against the camera's CURRENT offset. Two reads and a setter. */
+  private reposition(): void {
+    const banner = this.banner;
+    const placed = this.placed;
+    if (banner === null || placed === null) return;
+    const cam = this.scene.cameras.main;
+    banner.setPosition(placed.x - cam.x, placed.y - cam.y);
   }
 
   /**
@@ -201,8 +226,16 @@ export class HelpBannerLayer {
     // Second pass: re-centre on the rows the browser actually produced.
     const lines = Math.max(1, banner.getWrappedText().length);
     const final = helpBannerLayout(counterRight, width, layout.scale, lines);
+    this.placed = { x: final.x, y: final.y };
     banner.setPosition(final.x - cam.x, final.y - cam.y);
     banner.setVisible(true);
+
+    // The measured row count is bounded by `HELP_BANNER_MAX_ROWS`, and it is bounded where it can
+    // be watched failing: `session-help-banner.spec.ts` asserts `banner.lines` directly as well as
+    // the pixel ceiling derived from it. Deriving a pixel bound from a row count and then never
+    // checking the row count leaves the bound answerable by the wrong thing — Codex implementation
+    // review, finding 7. It is NOT re-asserted here: a guard inside the draw path would have to be
+    // dev-only to stay out of `dist/`, and a dev-only guard is not a gate.
 
     this.dirty = false;
   }
@@ -213,5 +246,6 @@ export class HelpBannerLayer {
     this.scene.scale.off('resize', this.markDirty, this);
     this.banner?.destroy();
     this.banner = null;
+    this.placed = null;
   }
 }

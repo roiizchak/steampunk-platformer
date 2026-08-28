@@ -118,6 +118,16 @@ function assertPlaced(
    * already overflow the plate. This is not the row-count pin the header refuses — that would be an
    * equality, and would red the next time a key is added. It is a ceiling with room in it.
    */
+  // 🔴 The row COUNT itself, not only the pixel ceiling derived from it. Codex implementation
+  // review, finding 7: `maxBottom` allows 4.2 nominal rows once the line-box slack is folded in, so
+  // the ceiling alone answers a slightly different question than the one it is named for. This
+  // asserts the thing `HELP_BANNER_MAX_ROWS` actually says. It is still a ceiling, never an
+  // equality — the owner's decision is "every key printed, however many rows that takes".
+  expect(
+    banner.lines,
+    `the legend wrapped to ${banner.lines} rows: ${JSON.stringify(banner.rows)}`,
+  ).toBeLessThanOrEqual(HELP_BANNER_MAX_ROWS);
+
   const maxBottom =
     HUD_MARGIN * hud.layout.scale +
     HELP_BANNER_MAX_ROWS *
@@ -161,17 +171,22 @@ async function assertClearOfPlayer(
     const scene = (
       window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
     ).__phaserGame.scene.getScene('Game') as unknown as {
-      cameras: { main: { scrollX: number; scrollY: number; zoom: number } };
+      cameras: { main: { scrollX: number; scrollY: number; zoom: number; x: number; y: number } };
       playerSprite?: { getBounds(): { left: number; right: number; top: number; bottom: number } };
     };
     const cam = scene.cameras.main;
     const b = scene.playerSprite?.getBounds();
     if (!b) return null;
+    // 🔴 `+ cam.x` / `+ cam.y`, because this camera is NOT at the origin. `gameEffects.ts` moves
+    // GameScene's camera to `(-margin.x, -margin.y)` so a shake never uncovers the view edge, so a
+    // world point converted with scroll and zoom alone lands ~10 px right and ~8 px down of where
+    // it is actually drawn. The banner's own bounds are converted the same way in
+    // `bannerHelpers.ts`; this half was missed. Codex implementation review, finding 1.
     return {
-      left: (b.left - cam.scrollX) * cam.zoom,
-      right: (b.right - cam.scrollX) * cam.zoom,
-      top: (b.top - cam.scrollY) * cam.zoom,
-      bottom: (b.bottom - cam.scrollY) * cam.zoom,
+      left: (b.left - cam.scrollX) * cam.zoom + cam.x,
+      right: (b.right - cam.scrollX) * cam.zoom + cam.x,
+      top: (b.top - cam.scrollY) * cam.zoom + cam.y,
+      bottom: (b.bottom - cam.scrollY) * cam.zoom + cam.y,
     };
   });
 

@@ -36,10 +36,13 @@ over a bright pipe highlight. One defect, not two.
 > allow three lines* — so "both forms are two rows", stated later in this file, is also no longer a
 > claim anyone should carry forward.
 >
-> **What is NOT superseded:** everything about the SIZE and the INKS. `HELP_FONT_PX` 44 bold,
-> 19.5 physical px at 852×480, the 3:1 large-text bar, the measured 3.80:1 pair and the 4.5:1
-> ceiling no fill can reach are all unchanged and still the live reasoning. This session moved the
-> banner; it did not retune it.
+> **What is NOT superseded:** the INKS and the REASONING about size. The 3:1 large-text bar, the
+> measured 3.80:1 pair and the 4.5:1 ceiling no fill can reach are all unchanged and still live.
+>
+> ⚠️ **The number itself moved: `HELP_FONT_PX` is 43, not 44** (2026-08-28, at the owner's request
+> after watching the banner in its new band). It is one step off the floor — `18.66 × 1920 / 852 =
+> 42.06` — so it still draws at 19.1 physical px at 852×480 and is still WCAG large text, and the
+> whole argument above still applies to it unchanged. Anything below 43 is a STYLE.md change.
 >
 > Gated by `tests/unit/help-banner-layer.test.ts`, `tests/e2e/session-help-banner.spec.ts` and a
 > pixel case in `tests/e2e/phase-10-production.spec.ts`. Session log:

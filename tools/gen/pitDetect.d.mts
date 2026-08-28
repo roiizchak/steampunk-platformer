@@ -20,12 +20,26 @@ export interface SpikeRun extends ColumnRun {
 }
 
 /**
- * Per-column solidity. `surfaceRow[col]` is `null` where the column is bottomless;
- * `reachesGround[col]` is false for a mass that floats above the ground row.
+ * Per-column solidity.
+ *
+ * ⚠️ **`solidRows` is what `detectPits` actually reads**, and this declaration did not name it —
+ * so a TypeScript caller could build a profile the compiler accepted and the detector crashed on.
+ * Codex implementation review, finding 4. `png.d.mts`'s header says why these are hand-written; a
+ * hand-written declaration is exactly the thing that can drift out of step with the runtime, and
+ * this one did.
+ *
+ * - `surfaceRow[col]` — the topmost solid row, `null` where the column is bottomless.
+ * - `reachesGround[col]` — false for a mass floating above the ground row. **No longer read by
+ *   `detectPits`**: it was subsumed by `isWall()` when the rule went from five clauses to two. Kept
+ *   because `columnProfile` still returns it and `level-pits.test.ts` reports it, and removing a
+ *   returned field from a declaration is how the two drift apart in the other direction.
+ * - `solidRows[col]` — every row the column has solid material in, which is the question
+ *   `isWall()` asks.
  */
 export interface ColumnProfile {
   surfaceRow: (number | null)[];
   reachesGround: boolean[];
+  solidRows: ReadonlySet<number>[];
 }
 
 export declare const MIN_PIT_COLS: number;

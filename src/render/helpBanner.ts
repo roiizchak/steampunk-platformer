@@ -169,19 +169,24 @@ export const HELP_LINE_HEIGHT_RATIO = 1.2;
 /**
  * How much taller the BROWSER's line box runs than the nominal ratio above.
  *
- * 🔴 `HELP_LINE_HEIGHT_RATIO` is what *this* file uses to centre the block. It is not what Chrome
- * draws. Phaser measures each row through the browser's own font metrics, and for the shipped face
- * that comes out a little over the nominal 1.2 — a four-row block at 1280×720 measured **158.67 px**
+ * 🔴 `HELP_LINE_HEIGHT_RATIO` is what *this* file uses to centre the block. It is not what Phaser
+ * draws, and the two do not have the same shape. `GetTextSize.js:74` is
+ * `lineHeight = size.fontSize + style.strokeThickness` — where `size.fontSize` is the **measured**
+ * ascent + descent for the resolved face, not the px we asked for. So the drawn row height is a
+ * font metric plus a stroke, and 1.2 × the requested size is our own convention standing in for it.
+ *
+ * Measured, because it cannot be derived: a four-row block at 1280×720 came out at **158.67 px**
  * against a nominal **156.80**, i.e. **1.216** per row (2026-08-27, `session-help-banner.spec.ts`).
+ * A ceiling written from the nominal ratio therefore false-reds a banner that is behaving exactly
+ * as designed — and nudging the bound to clear it is the move TESTING-RULES.md §5 forbids.
  *
- * A ceiling written from the nominal ratio therefore fails by ~1 % on a banner that is behaving
- * exactly as designed, which is a false red, and "fix" it by nudging the bound is the move
- * TESTING-RULES.md §5 forbids. This constant says the real thing instead: the ceiling is a
- * **play-area** bound, not a glyph-metrics claim.
- *
- * 5 % rather than the measured 1.3 % so a font substitution on another machine cannot false-red it,
- * and far below the 25 % an extra row would add — so the gate still goes red for the mutation it
- * exists for, which is the only property that matters *(C2)*.
+ * ⚠️ **This is an EMPIRICAL allowance and it is named as one** (Codex implementation review,
+ * finding 7, which caught an earlier version of this block claiming more derivation than the engine
+ * supports). 5 % rather than the measured 1.3 % so a face substitution on another machine cannot
+ * false-red it, and far below the 25 % one more row would add. The ceiling is a **play-area** bound,
+ * not a glyph-metrics claim — and the row COUNT is asserted directly beside it in
+ * `session-help-banner.spec.ts`, so the pixel bound is not the only thing standing between the
+ * legend and the play area.
  */
 export const HELP_LINE_BOX_SLACK = 1.05;
 
@@ -250,13 +255,16 @@ export function helpBannerLayout(
     // e2e right-margin assertion failed by 1.56 px at 852 x 480 on the first run, which is what
     // this term is. A layout that asks for an outline has to leave room for the outline.
     //
-    // 🔴 **TWICE the stroke, because one was still not enough** — the same assertion failed again
-    // by 1.33 px at 1280 x 720 after the font moved to 43. Read out of the vendored engine rather
-    // than fitted to the failure: `GetTextSize.js:41` starts each line width AT `strokeThickness`
-    // and `Text.js:1381` then draws the glyphs from `strokeThickness / 2`, so up to **1.5 strokes**
-    // of the object's width is outline rather than text — and `GetTextSize.js:67` runs the result
-    // through `Math.ceil`, which can add one more device pixel on top. `2 x` covers 1.5 x plus the
-    // rounding with room to spare, and costs 8 design px out of a ~1274 px band.
+    // 🔴 **TWICE the stroke — and this is EMPIRICAL HEADROOM, not a derivation.**
+    //
+    // `GetTextSize.js:41` starts each line width at `strokeThickness` and `Text.js:1381` draws the
+    // glyphs from `strokeThickness / 2`, so some of the object's measured width is outline rather
+    // than text, and `GetTextSize.js:68` runs the result through `Math.ceil`. An earlier version of
+    // this comment turned that into a tidy "1.5 strokes" and presented `2 x` as its consequence;
+    // Codex's implementation review (finding 7) read the same file and showed the arithmetic does
+    // not actually close. What is true is the bound and the measurement: one stroke was not enough
+    // (the right-margin assertion failed by 1.33 px at 1280 x 720), two is, and it costs 8 design px
+    // out of a ~1274 px band. Stated as a measured allowance, because that is what it is.
     //
     // 🔴 **The floor is one em, and it was `Math.max(0, …)` — which turns wrapping OFF.**
     //
