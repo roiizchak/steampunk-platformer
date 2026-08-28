@@ -64,27 +64,81 @@ function walkFrom(id: string, x: number, y: number, ticks: number): StallInciden
   return hits;
 }
 
-describe('the detector fires on the two pins we can prove', () => {
-  it('level-02: the flush seam at feet x=8190 on the y=1632 floor', () => {
-    const hits = walkFrom('level-02', 8100, 1632, 200);
+/**
+ * 🔴 **Synthetic geometry, deliberately.**
+ *
+ * This gate first asserted against the two flush seams that existed in the shipped `level-02` and
+ * `level-03` — and went red the moment those were fixed, because it was proving the instrument
+ * against a live defect. A gate that dies when the bug is fixed proves nothing afterwards, and the
+ * instrument still has to be trustworthy for the NEXT bug.
+ *
+ * So the seam is built here: two slabs, same top edge, touching exactly at `SEAM_X`. That is the
+ * exact shape `no-flush-seams.test.ts` now forbids in shipped data.
+ */
+const SEAM_X = 2000;
+const SEAM_TOP = 1000;
+const SEAM_SOLIDS = [
+  { x: 800, y: SEAM_TOP, w: SEAM_X - 800, h: 400 },
+  { x: SEAM_X, y: SEAM_TOP, w: 1200, h: 400 },
+];
 
-    expect(hits.length, 'the known level-02 seam pin was not detected').toBeGreaterThan(0);
+describe('the detector fires on a flush seam', () => {
+  function walkSynthetic(startX: number, ticks: number): StallIncident[] {
+    const world = createWorld({
+      seed: 1,
+      scale: 6,
+      solids: SEAM_SOLIDS,
+      bounds: { widthPx: 6000, heightPx: 3000 },
+      spawn: { x: startX, y: SEAM_TOP },
+    });
+    const detector = createStallDetector();
+    const hits: StallIncident[] = [];
+    const dispose = observeTicks(world, (t) => {
+      const hit = detector.observe(t);
+      if (hit !== null) hits.push(hit);
+    });
+    try {
+      for (let i = 0; i < ticks; i += 1) advance(world, heldRight(), 1);
+    } finally {
+      dispose();
+    }
+    return hits;
+  }
+
+  it('names it `geometry`, at the feet position the seam pins the body to', () => {
+    const hits = walkSynthetic(SEAM_X - 300, 200);
+
+    expect(hits.length, 'the flush seam pin was not detected').toBeGreaterThan(0);
     const hit = hits[0]!;
-    expect(hit.x).toBeCloseTo(8190, 1);
-    expect(hit.y).toBeCloseTo(1632, 1);
+    // The box half-width is 66, so a body pinned at the seam has its feet exactly 66 px short of it.
+    expect(hit.x).toBeCloseTo(SEAM_X - 66, 1);
+    expect(hit.y).toBeCloseTo(SEAM_TOP, 1);
     expect(hit.cause).toBe('geometry');
     expect(hit.dir).toBe(1);
     expect(hit.ticks).toBeGreaterThanOrEqual(MIN_STALL_TICKS);
   });
 
-  it('level-03: the flush seam at feet x=10686 on the y=1536 floor', () => {
-    const hits = walkFrom('level-03', 10600, 1536, 200);
-
-    expect(hits.length, 'the known level-03 seam pin was not detected').toBeGreaterThan(0);
-    const hit = hits[0]!;
-    expect(hit.x).toBeCloseTo(10686, 1);
-    expect(hit.y).toBeCloseTo(1536, 1);
-    expect(hit.cause).toBe('geometry');
+  it('reports nothing on the same slabs once they are merged into one', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: 6,
+      // The merge `mergeStrips.mjs` performs, by hand: one rect instead of two.
+      solids: [{ x: 800, y: SEAM_TOP, w: 2400, h: 400 }],
+      bounds: { widthPx: 6000, heightPx: 3000 },
+      spawn: { x: SEAM_X - 300, y: SEAM_TOP },
+    });
+    const detector = createStallDetector();
+    const hits: StallIncident[] = [];
+    const dispose = observeTicks(world, (t) => {
+      const hit = detector.observe(t);
+      if (hit !== null) hits.push(hit);
+    });
+    try {
+      for (let i = 0; i < 200; i += 1) advance(world, heldRight(), 1);
+    } finally {
+      dispose();
+    }
+    expect(hits, 'a merged slab still pinned the player').toEqual([]);
   });
 });
 

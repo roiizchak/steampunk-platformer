@@ -3307,7 +3307,7 @@
           "rotation": 0,
           "type": "",
           "visible": true,
-          "width": 768,
+          "width": 1440,
           "x": 9984,
           "y": 1536
         },
@@ -3420,26 +3420,8 @@
           "y": 1536
         },
         {
-          "height": 384,
-          "id": 12,
-          "name": "",
-          "properties": [
-            {
-              "name": "solid",
-              "type": "bool",
-              "value": true
-            }
-          ],
-          "rotation": 0,
-          "type": "",
-          "visible": true,
-          "width": 672,
-          "x": 10752,
-          "y": 1536
-        },
-        {
           "height": 0,
-          "id": 13,
+          "id": 12,
           "name": "",
           "point": true,
           "properties": [
@@ -3458,7 +3440,7 @@
         },
         {
           "height": 96,
-          "id": 14,
+          "id": 13,
           "name": "",
           "properties": [
             {
@@ -3476,7 +3458,7 @@
         },
         {
           "height": 96,
-          "id": 15,
+          "id": 14,
           "name": "",
           "properties": [
             {
@@ -3494,7 +3476,7 @@
         },
         {
           "height": 96,
-          "id": 16,
+          "id": 15,
           "name": "",
           "properties": [
             {
@@ -3512,7 +3494,7 @@
         },
         {
           "height": 240,
-          "id": 17,
+          "id": 16,
           "name": "",
           "properties": [
             {
@@ -3530,7 +3512,7 @@
         },
         {
           "height": 192,
-          "id": 18,
+          "id": 17,
           "name": "",
           "properties": [
             {
@@ -3548,7 +3530,7 @@
         },
         {
           "height": 192,
-          "id": 19,
+          "id": 18,
           "name": "",
           "properties": [
             {
@@ -3566,7 +3548,7 @@
         },
         {
           "height": 240,
-          "id": 20,
+          "id": 19,
           "name": "",
           "properties": [
             {
@@ -3584,7 +3566,7 @@
         },
         {
           "height": 288,
-          "id": 21,
+          "id": 20,
           "name": "",
           "properties": [
             {
@@ -3602,7 +3584,7 @@
         },
         {
           "height": 0,
-          "id": 22,
+          "id": 21,
           "name": "",
           "point": true,
           "properties": [
@@ -3621,7 +3603,7 @@
         },
         {
           "height": 0,
-          "id": 23,
+          "id": 22,
           "name": "",
           "point": true,
           "properties": [
@@ -3640,7 +3622,7 @@
         },
         {
           "height": 0,
-          "id": 24,
+          "id": 23,
           "name": "",
           "point": true,
           "properties": [
@@ -3659,7 +3641,7 @@
         },
         {
           "height": 0,
-          "id": 25,
+          "id": 24,
           "name": "",
           "point": true,
           "properties": [
@@ -3678,7 +3660,7 @@
         },
         {
           "height": 0,
-          "id": 26,
+          "id": 25,
           "name": "",
           "point": true,
           "properties": [
@@ -3697,7 +3679,7 @@
         },
         {
           "height": 0,
-          "id": 27,
+          "id": 26,
           "name": "",
           "point": true,
           "properties": [
@@ -3716,7 +3698,7 @@
         },
         {
           "height": 0,
-          "id": 28,
+          "id": 27,
           "name": "",
           "point": true,
           "properties": [
@@ -3735,7 +3717,7 @@
         },
         {
           "height": 0,
-          "id": 29,
+          "id": 28,
           "name": "",
           "point": true,
           "properties": [
@@ -3754,7 +3736,7 @@
         },
         {
           "height": 0,
-          "id": 30,
+          "id": 29,
           "name": "",
           "point": true,
           "properties": [
@@ -3780,7 +3762,7 @@
     }
   ],
   "nextlayerid": 3,
-  "nextobjectid": 31,
+  "nextobjectid": 30,
   "orientation": "orthogonal",
   "renderorder": "right-down",
   "tiledversion": "1.11.2",

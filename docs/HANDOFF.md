@@ -1,14 +1,59 @@
 # Session handoff — the HUD banner's placement + the pit rule
 
-> # 🔴 OPEN: the invisible blocker is NOT FIXED. Start here.
+> # ✅ The invisible blocker is FIXED — and this time it was REPRODUCED first.
 >
-> The owner has now reported *"I get stuck in something invisible"* **four times**, and **three**
-> fixes have shipped against it — none of them the thing. Defect 4 below is a real defect that was
-> found and fixed, and it was still not what the owner is hitting.
+> Reported **five** times; three fixes shipped against it, none of them the thing. The fifth report
+> was handled by refusing to guess: an instrument was built, the owner drove it, and the stuck state
+> was read off the screen with coordinates **before** any fix was proposed.
 >
-> **The next session starts by REPRODUCING it, not by measuring level data again.** The brief,
-> the five hypotheses already ruled out with their measurements, and the leads still open are in
-> [handoff/next-session-invisible-blocker.md](handoff/next-session-invisible-blocker.md).
+> **It was `01a518e`’s own platform widening.** Widening two platforms flush against their spike runs
+> — itself a correct fix, and kept — made them abut their neighbours **exactly**. Two solid rects
+> sharing a top edge and touching **draw as one platform and collide as two**: while grounded the body
+> sits `0.675 px` inside its own floor when the horizontal pass runs, and `wasLeft` at `player.ts:343`
+> is a **closed** comparison, so once snapped flush it re-fires every tick forever. Reverse frees it,
+> jump frees it, holding the key never does.
+>
+> Seam census — `main` **0** in all five levels; the branch **2**, in levels **2 and 3**, the exact two
+> the owner named. Confirmed on screen at `?pin=1`: feet `(8190, 1632)` and `(10686, 1536)`,
+> `cause=geometry`. Fixed at build time by `tools/gen/mergeStrips.mjs`; gated over the **shipped
+> bytes** by `tests/unit/no-flush-seams.test.ts`. Full record:
+> [qa/session-hud-and-pits-04-flush-seams.md](qa/session-hud-and-pits-04-flush-seams.md).
+>
+> ## 🔴 TRACKED LATENT DEFECT — the resolver latch is still there
+>
+> The **data** no longer contains the trigger. `resolveCollisions` still latches, and it is
+> deliberately **not** fixed — it is the file the 14-step tick contract and every combat window rest
+> on, and the obvious repair has a documented **inverse** failure: give the horizontal pass a foot
+> tolerance and the player enters a solid whose top is a few px above the feet, which the vertical
+> pass at `player.ts:366` will not land them on because `previousY` was already below it — **the
+> player falls through a low ledge**. Invisible to a flat-pin sweep, and worse than the bug it fixes.
+>
+> If it is ever authorised: 0/1/2/>2 px fixtures that **block or step up, never pass through**, plus a
+> **new** player/enemy foot-tolerance parity fixture. ⚠️ `overlap-escape-parity.test.ts` stays
+> **green** through that change — its fixture is a full-height wall with the body mid-span, so it
+> offers the change no protection at all. Do not cite it as cover.
+>
+> **Do not delete `no-flush-seams.test.ts` because “the builder handles it now.”** The builder merges
+> only strips sharing a top edge **and** a height; a same-top pair of different heights cannot be
+> fused without inventing collision, and that gate is what stops it shipping.
+>
+> ### The instrument, which outlives the bug
+>
+> `?pin=1` on a dev build draws every collision rect (magenta) and hazard (red) over the level with a
+> live per-tick readout and the last three stall incidents, each with a named cause.
+> `src/sim/trace.ts` is a per-tick trace seam registered against a `World`; `src/sim/stallAnalysis.ts`
+> is the engine-free classifier both the live probe and the offline sweep share.
+>
+> ⚠️ **Its first version was invisible on screen** and every check I ran said it existed — objects
+> present, visible, alpha 1, right depth, inside the worldView, all true. An 18 % cyan wash on dark
+> brick is simply unreadable, and its only visible edge sat under the floor’s own painted top edge.
+> **“It is drawn” and “it can be seen” are different claims.** `tests/e2e/pin-probe.spec.ts` now counts
+> magenta **pixels in a real screenshot** — and its own first version read a WebGL canvas through
+> `drawImage` without `preserveDrawingBuffer`, which returns a **cleared** buffer: false red with the
+> flag, false green without it. Decode `page.screenshot()`.
+>
+> ⚠️ **Levels 1, 4 and 5 are unverified by hand.** The census says zero seams and always did, but the
+> owner asked to walk them at `?pin=1` and has not yet. Open, not assumed clean.
 
 > ## Session `hud-and-pits` — FOUR defects the owner found by PLAYING the shipped build
 >

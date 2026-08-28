@@ -83,7 +83,9 @@ function describe(hit: StallIncident): string {
   const verdict =
     hit.cause === 'unexplained'
       ? 'NOTHING EXPLAINS THIS STOP'
-      : `cause=${hit.cause}${src}`;
+      : hit.cause === 'airborneBlock'
+        ? 'airborne against a wall (normal)'
+        : `cause=${hit.cause}${src}`;
   return `#${hit.id} tick ${hit.tick} feet ${where} dir=${dir} ${verdict} (${hit.ticks} ticks)`;
 }
 

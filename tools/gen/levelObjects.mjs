@@ -1,3 +1,5 @@
+import { mergeStrips } from './mergeStrips.mjs';
+
 // Emitting the Tiled OBJECT layer: collision strips, spawn, hazards, enemies, gears, the exit.
 //
 // Split out of `levelBuilder.mjs` in Phase 8, when adding the goal object pushed that file to 437 of
@@ -27,7 +29,14 @@ function prop(name, value) {
  * @param geometry rects and points already converted to world pixels by the builder
  */
 export function levelObjects(geometry) {
-  const { strips, spawn, hazards, enemies, gears, goal } = geometry;
+  const { spawn, hazards, enemies, gears, goal } = geometry;
+  /**
+   * 🔴 Merged before anything is numbered. Two strips sharing a top edge that touch exactly draw as
+   * one platform and collide as two, and the seam pins the player permanently — `mergeStrips.mjs`
+   * carries the mechanism and the two shipped instances. It lives here because this file owns the
+   * strip-to-object mapping AND the "spawn strip must be object 0" contract the merge must not break.
+   */
+  const strips = mergeStrips(geometry.strips);
 
   let nextObjectId = 1;
   const objects = strips.map((s) => ({

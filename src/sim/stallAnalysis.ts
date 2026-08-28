@@ -38,6 +38,7 @@ export type StallCause =
   | 'respawn'
   | 'boundsClamp'
   | 'geometry'
+  | 'airborneBlock'
   | 'unexplained';
 
 export interface StallReading {
@@ -105,6 +106,18 @@ export function classify(trace: TickTrace): StallReading | null {
   if (trace.damageSource !== null) return reading('damage');
   // Geometry is claimed ONLY when the body was free to move, on the ground, and still did not.
   if (trace.grounded) return reading('geometry');
+  /**
+   * 🔴 Airborne, asking to move, and `vx` is exactly zero — something ZEROED it, and in this sim only
+   * the collision resolver and `clampToBounds` do that. So this is a wall met in mid-air: ordinary
+   * platforming, not a defect.
+   *
+   * It gets its own label because the first version let it fall through to `unexplained`, and the
+   * owner's very first probe run reported "NOTHING EXPLAINS THIS STOP" for a player pressed against
+   * a plainly visible 3-tile wall while jumping. A last-resort label that fires on ordinary events
+   * teaches the reader to ignore it — which destroys the one line this whole instrument exists to
+   * print.
+   */
+  if (trace.vx === 0) return reading('airborneBlock');
   return reading('unexplained');
 }
 
