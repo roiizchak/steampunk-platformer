@@ -142,6 +142,69 @@ describe('the detector fires on a flush seam', () => {
   });
 });
 
+/**
+ * 🔴 **The world edge is not geometry.** Added after the Codex implementation review found
+ * `boundsClamp` declared in `StallCause` and returned by nothing: `clampToBounds` zeroes `vx`
+ * exactly as the solid resolver does, so a player walking into the end of the level was reported
+ * as `cause=geometry` — the same confident-wrong label the three shipped misses were built on.
+ */
+describe('the world edge is named, not blamed on the level', () => {
+  it('reports `boundsClamp`, not `geometry`, at the right-hand world edge', () => {
+    const WIDTH = 2000;
+    const world = createWorld({
+      seed: 1,
+      scale: 6,
+      solids: [{ x: 0, y: 1000, w: WIDTH, h: 400 }],
+      bounds: { widthPx: WIDTH, heightPx: 3000 },
+      spawn: { x: WIDTH - 400, y: 1000 },
+    });
+    const detector = createStallDetector();
+    const hits: StallIncident[] = [];
+    const dispose = observeTicks(world, (t) => {
+      const hit = detector.observe(t);
+      if (hit !== null) hits.push(hit);
+    });
+    try {
+      for (let i = 0; i < 200; i += 1) advance(world, heldRight(), 1);
+    } finally {
+      dispose();
+    }
+
+    expect(hits.length, 'the player never reached the world edge — fixture is wrong').toBeGreaterThan(0);
+    expect(hits[0]!.cause).toBe('boundsClamp');
+    // Grounded and pinned: without the `boundsClamped` branch this is `geometry`, and the branch
+    // above `geometry` in `classify()` is the only thing separating them.
+    expect(hits[0]!.x).toBeCloseTo(WIDTH - 66, 1);
+  });
+});
+
+/**
+ * 🔴 **A diagnostic may not break the thing it is diagnosing.** The observer runs synchronously
+ * inside `tick()` before step 14 stamps `tickCount`, so a throwing callback would leave the world
+ * mutated and unstamped, and kill `advanceSplit`'s batch mid-frame.
+ */
+describe('a throwing observer cannot damage the simulation', () => {
+  it('still increments the tick and still moves the player', () => {
+    const world = createWorld({
+      seed: 1,
+      scale: 6,
+      solids: [{ x: 0, y: 1000, w: 4000, h: 400 }],
+      bounds: { widthPx: 4000, heightPx: 3000 },
+      spawn: { x: 300, y: 1000 },
+    });
+    const dispose = observeTicks(world, () => {
+      throw new Error('a hostile observer');
+    });
+    try {
+      expect(() => advance(world, heldRight(), 30)).not.toThrow();
+    } finally {
+      dispose();
+    }
+    expect(world.tickCount, 'the tick counter was left short').toBe(30);
+    expect(world.player.x, 'the player never moved').toBeGreaterThan(300);
+  });
+});
+
 describe('the detector stays quiet where there is nothing to report', () => {
   /**
    * Bounded on purpose. "A clean stretch of level-01" is not a test — it cannot be re-run by anyone

@@ -6,6 +6,8 @@ import { createStallDetector } from '../../src/sim/stallAnalysis';
 import { advance, createWorld } from '../../src/sim/tick';
 import { observeTicks } from '../../src/sim/trace';
 import type { InputSnapshot } from '../../src/sim/types';
+import { mergeStrips } from '../../tools/gen/mergeStrips.mjs';
+import type { Strip } from '../../tools/gen/mergeStrips.d.mts';
 import { SHIPPED_ENTRIES } from './tilemap-data-fixtures';
 
 /**
@@ -19,7 +21,9 @@ import { SHIPPED_ENTRIES } from './tilemap-data-fixtures';
  * horizontal pass runs, and `wasLeft`'s comparison is closed. The player stops dead on open floor in
  * the `idle` pose and only a jump gets them past.
  *
- * Reported four times by the owner. Three fixes shipped against other mechanisms before this one was
+ * Reported "FOUR times" — the owner's own words at the time of what was in fact the fifth report.
+ * Either count is defensible; what matters is that three fixes shipped and none of them was it.
+ * Fixes shipped against other mechanisms before this one was
  * seen on screen, at level-02 feet `(8190, 1632)` and level-03 `(10686, 1536)` — coordinates read
  * off the pin probe, not inferred.
  *
@@ -120,5 +124,47 @@ describe('the two confirmed pin sites are walkable', () => {
     // 60 ticks at runMax 9 is ~520 px, and the former seam sat 156 px ahead of the start. Anything
     // near zero means still pinned.
     expect(world.player.x - x).toBeGreaterThan(400);
+  });
+});
+
+/**
+ * The merger's own invariants — the ones the shipped data happens to satisfy, asserted so they stop
+ * being a happy accident.
+ *
+ * 🔴 The Codex implementation review found the code weaker than its own docstring: the first
+ * version merged only when `out[i]` was geometrically LEFT of `out[j]`, so a right-hand strip
+ * appearing EARLIER in the array was the one deleted, and the survivor's index depended on
+ * geometry rather than order. Safe on shipped data purely because strip 0 begins at `x=0` and
+ * nothing of positive width can abut it from the left — an accident that stops holding the day
+ * someone authors a level differently. `phase-03-element-editor.spec.ts` asserts `spawnStrip === 0`.
+ */
+describe('mergeStrips keeps the lower-indexed strip, whatever order it is given', () => {
+  const LEFT: Strip = { x: 0, y: 10, w: 100, h: 20 };
+  const RIGHT: Strip = { x: 100, y: 10, w: 50, h: 20 };
+  const UNRELATED: Strip = { x: 9, y: 99, w: 1, h: 1 };
+
+  it('produces the same merged strip at index 0 from either input order', () => {
+    const forward = mergeStrips([LEFT, UNRELATED, RIGHT]);
+    const reversed = mergeStrips([RIGHT, UNRELATED, LEFT]);
+    expect(forward[0]).toEqual({ x: 0, y: 10, w: 150, h: 20 });
+    expect(reversed[0], 'the survivor moved when the input was permuted').toEqual(forward[0]);
+    expect(reversed).toEqual(forward);
+  });
+
+  it('does not mutate the array it was given, or the objects in it', () => {
+    const input: Strip[] = [{ ...LEFT }, { ...RIGHT }];
+    const snapshot = JSON.stringify(input);
+    mergeStrips(input);
+    expect(JSON.stringify(input), 'mergeStrips wrote through to its caller').toBe(snapshot);
+  });
+
+  it('leaves a same-top DIFFERENT-height pair alone — fusing it would invent collision', () => {
+    const tall: Strip = { x: 100, y: 10, w: 50, h: 400 };
+    expect(mergeStrips([LEFT, tall])).toHaveLength(2);
+  });
+
+  it('leaves a gap and an overlap alone', () => {
+    expect(mergeStrips([LEFT, { x: 101, y: 10, w: 50, h: 20 }])).toHaveLength(2);
+    expect(mergeStrips([LEFT, { x: 99, y: 10, w: 50, h: 20 }])).toHaveLength(2);
   });
 });

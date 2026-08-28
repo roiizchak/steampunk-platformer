@@ -2,7 +2,7 @@
  * # The pin probe — draw the collision, and name what stopped the player
  *
  * `?pin=1`. Built for the invisible-blocker hunt: the owner has reported getting stuck in something
- * invisible four times, three fixes have shipped against it, and **nobody has ever put the stuck
+ * invisible — "FOUR times" in their words — three fixes have shipped, and **nobody has ever put the stuck
  * state on screen**. Every previous attempt reasoned from level data. This one waits to be shown.
  *
  * It does three things:
@@ -13,18 +13,24 @@
  *  3. **Detects a stall and names its cause**, from the per-tick trace rather than from the
  *     post-frame world — see `trace.ts` for why the difference is not cosmetic.
  *
- * ## The wall-clock half, and why the tick half exists
+ * ## The threshold is TICKS. The clock is a readout, and nothing else.
  *
- * ⚠️ **Wall time alone is not a measure of simulation.** `drainTicks` caps a frame at
- * `MAX_TICKS_PER_FRAME` and **drops** the backlog, so after a 500 ms stall — a tab restore, a
+ * ⚠️ **Wall time is not a measure of simulation.** `drainTicks` caps a frame at
+ * `MAX_TICKS_PER_FRAME` and **drops** the backlog, so after a 500 ms freeze — a tab restore, a
  * breakpoint, a long GC — as little as 83 ms of simulation may actually have run. A detector that
- * counted only milliseconds would report a pin that never happened, on a machine that merely
- * hiccuped. So a stall needs BOTH: `STALL_MS` of eligible wall time **and**
- * `MIN_STALL_TICKS` consecutive eligible ticks, with the wall-clock accumulator reset whenever
- * `drainTicks` reports dropped ticks.
+ * counted milliseconds would report a pin that never happened on a machine that merely hiccuped.
  *
- * The tick half lives in `stallAnalysis.ts` and is shared with the offline sweep, so the two cannot
- * classify the same evidence differently. Only the clock lives here, because the sim may not have one.
+ * So the stall condition is `MIN_STALL_TICKS` consecutive eligible **ticks** and nothing else. It
+ * lives in `stallAnalysis.ts`, shared with the offline sweep, so the two cannot classify the same
+ * evidence differently.
+ *
+ * 🔴 **This header used to claim a stall needed BOTH `STALL_MS` of wall time AND the ticks. It did
+ * not, and it never had.** `stallMs` was only ever accumulated and printed; no comparison read it.
+ * The Codex implementation review found the claim false after the fix had shipped — which is this
+ * project's own §5 rule *"read the assertion, not the statistic"* landing on the very instrument
+ * built to stop confident wrong answers. The wall-clock half is **deliberately not** reinstated:
+ * it was the unsound half, and `MIN_STALL_TICKS` already measures the thing wall time was a proxy
+ * for. `STALL_MS` is gone; `elapsedMs` is a **displayed figure only**, and the readout says so
  */
 
 import type Phaser from 'phaser';
@@ -55,7 +61,7 @@ const RECT_DEPTH = 5;
 const TEXT_DEPTH = 1000;
 
 /** Eligible wall time before a stall is called. Paired with `MIN_STALL_TICKS`, never alone. */
-export const STALL_MS = 500;
+// (no wall-clock threshold: see the header. The ms figure below is displayed, never compared.)
 
 /** How many incidents stay on screen. The newest is what a screenshot needs; the rest give context. */
 const KEEP = 4;
@@ -144,7 +150,7 @@ export function createPinProbe(scene: Phaser.Scene, world: World): PinProbe {
   const detector = createStallDetector();
   const incidents: string[] = [];
   let last: TickTrace | null = null;
-  let stallMs = 0;
+  let elapsedMs = 0;
 
   const dispose = observeTicks(world, (trace) => {
     last = trace;
@@ -157,20 +163,25 @@ export function createPinProbe(scene: Phaser.Scene, world: World): PinProbe {
 
   return {
     update(deltaMs: number, ticks: number, dropped: number): void {
+      // Displayed only — no branch below or in `stallAnalysis.ts` compares it. It is still reset on
+      // a dropped-tick frame, because a number on screen that counts time the sim never spent is a
+      // number a reader will draw a conclusion from.
       if (dropped > 0 || ticks === 0) {
-        // A frame that dropped ticks measured wall time the simulation never spent. A frame that
-        // ran none measured nothing at all. Neither may accumulate toward a stall.
-        stallMs = dropped > 0 ? 0 : stallMs;
+        elapsedMs = dropped > 0 ? 0 : elapsedMs;
       } else if (detector.current() !== null || (last !== null && last.rawDir !== 0)) {
-        stallMs += deltaMs;
+        elapsedMs += deltaMs;
       } else {
-        stallMs = 0;
+        elapsedMs = 0;
       }
 
       const t = last;
+      const feet = t ? `(${t.x.toFixed(1)}, ${t.y.toFixed(1)})` : '';
+      const vel = t ? `(${t.vx.toFixed(2)}, ${t.vy.toFixed(2)})` : '';
+      const dir = t ? `raw=${t.rawDir} eff=${t.effectiveDir}` : '';
       const head = t
-        ? `tick ${t.tick}  feet (${t.x.toFixed(1)}, ${t.y.toFixed(1)})  v (${t.vx.toFixed(2)}, ${t.vy.toFixed(2)})\n` +
-          `${t.state}  grounded=${t.grounded}  dir raw=${t.rawDir} eff=${t.effectiveDir}  stall=${Math.round(stallMs)}ms`
+        ? `tick ${t.tick}  feet ${feet}  v ${vel}\n` +
+          `${t.state}  grounded=${t.grounded}  dir ${dir}\n` +
+          `held ${Math.round(elapsedMs)}ms (shown, never compared — the threshold is ticks)`
         : 'waiting for the first tick';
       readout.setText([head, ...incidents].join('\n'));
     },

@@ -109,6 +109,15 @@ export interface TickTrace {
 
   /** `world.goalEntryTicks`, so a stall inside the exit run-in is never mistaken for geometry. */
   readonly goalEntryTicks: number | null;
+  /**
+   * Did `clampToBounds` fire this tick?
+   *
+   * 🔴 Without this the classifier's `boundsClamp` cause is **unreachable**, and a player held
+   * against the left or right world edge is reported as `geometry` — a confident wrong answer, in
+   * the one label this whole instrument exists to print. Found by the Codex implementation review
+   * after the fix had already shipped.
+   */
+  readonly boundsClamped: boolean;
 }
 
 export type TickTraceObserver = (trace: TickTrace) => void;
@@ -155,7 +164,26 @@ export function tracing(world: World): boolean {
 
 /** Hand one tick's trace to this world's observer, if it has one. */
 export function emitTickTrace(world: World, trace: TickTrace): void {
-  observers.get(world)?.(trace);
+  const observer = observers.get(world);
+  if (observer === undefined) return;
+  try {
+    observer(trace);
+  } catch {
+    /**
+     * 🔴 **A diagnostic may not break the thing it is diagnosing.**
+     *
+     * The observer runs synchronously inside `tick()`, before step 14 increments `tickCount`. A
+     * callback that throws therefore escapes through `tick()` leaving the world **already mutated
+     * but never stamped** — every later tick is then attributed one short, and `advanceSplit`'s
+     * batch dies mid-frame. That is a far worse failure than losing a trace line, and it is
+     * reachable from any registered observer, not just ours.
+     *
+     * Swallowed deliberately and silently: this is a DEV-only read-only seam, the throw belongs to
+     * the observer, and re-raising it would hand the sim a fault it did not cause. Raised by the
+     * Codex implementation review against the file's own claim to be behaviourally transparent —
+     * which was true of the payload and not of the call.
+     */
+  }
 }
 
 /** Test-only reset, so one spec's leaked registration cannot alter the next spec's world. */
@@ -181,6 +209,7 @@ export interface TickTraceContext {
   readonly motionRan: boolean;
   readonly damage: WorldDamageResult;
   readonly respawned: boolean;
+  readonly boundsClamped: boolean;
 }
 
 /**
@@ -215,5 +244,6 @@ export function emitIfTracing(world: World, ctx: TickTraceContext): void {
     died: damage.died,
     respawned: ctx.respawned,
     goalEntryTicks: world.goalEntryTicks,
+    boundsClamped: ctx.boundsClamped,
   });
 }

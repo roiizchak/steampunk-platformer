@@ -104,6 +104,15 @@ export function classify(trace: TickTrace): StallReading | null {
   if (trace.hitstunLocked) return reading('movementLock');
   // Damage that landed but did not lock — knockback fighting the held direction.
   if (trace.damageSource !== null) return reading('damage');
+  /**
+   * 🔴 The world edge, before geometry. `clampToBounds` zeroes `vx` exactly as the solid resolver
+   * does, so the two are indistinguishable from position alone — and this branch did not exist
+   * until the Codex implementation review pointed out that `boundsClamp` was declared in
+   * `StallCause` and returned by nothing. A player walking into the end of the level was being
+   * reported as `geometry`: the same label, and the same confident wrongness, that three shipped
+   * fixes were built on.
+   */
+  if (trace.boundsClamped) return reading('boundsClamp');
   // Geometry is claimed ONLY when the body was free to move, on the ground, and still did not.
   if (trace.grounded) return reading('geometry');
   /**

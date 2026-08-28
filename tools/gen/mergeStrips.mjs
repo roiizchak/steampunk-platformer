@@ -14,7 +14,9 @@
  *    snapped flush against the seam it re-fires every tick, forever.
  *
  * The player stops dead on open floor, holding the key, in the `idle` pose, and only a jump gets
- * them past. The owner reported it four times; three fixes shipped against other mechanisms.
+ * them past. Reported "FOUR times" — the owner's own words at the time of what was in fact the
+ * fifth report. Either count is defensible; what matters is that three fixes shipped and none of
+ * them was the thing.
  * Confirmed on screen 2026-08-28 at level-02 feet `(8190, 1632)` and level-03 `(10686, 1536)`.
  *
  * ## Why the fix is here and not in the resolver
@@ -37,8 +39,17 @@
  *
  * 🔴 **Order is preserved and merging never reorders.** `levelObjects.mjs` documents that the strip
  * the player spawns on must be collision object 0, because `phase-03-element-editor.spec.ts` asserts
- * `spawnStrip === 0`. A merge extends the EARLIER strip and drops the later one, so index 0 keeps
- * its identity.
+ * `spawnStrip === 0`. The survivor is always the **lower-indexed** strip, so index 0 keeps its
+ * identity.
+ *
+ * ⚠️ That invariant is stated in the code, not merely intended. The first version scanned every
+ * ordered pair and merged only when `out[i]` was geometrically LEFT of `out[j]` — so a right-hand
+ * strip appearing earlier in the array was the one spliced out, and the survivor's index was
+ * whichever side happened to be left. The shipped data was safe by accident (strip 0 starts at
+ * `x=0`, and nothing of positive width can abut it from the left), which is exactly the kind of
+ * accident that stops being true when someone adds a level. Caught by the Codex implementation
+ * review. The inner loop now starts at `i + 1` and merges adjacency in **either** direction, and
+ * the survivor is `out[i]` by construction.
  *
  * Strips of the same top edge but a DIFFERENT height are deliberately left alone: fusing them would
  * invent collision where the author put none. `no-flush-seams.test.ts` fails the build on that case
@@ -53,13 +64,14 @@ export function mergeStrips(strips) {
   while (merged) {
     merged = false;
     for (let i = 0; i < out.length && !merged; i += 1) {
-      for (let j = 0; j < out.length; j += 1) {
-        if (i === j) continue;
+      for (let j = i + 1; j < out.length; j += 1) {
         const a = out[i];
         const b = out[j];
         if (a.y !== b.y || a.h !== b.h) continue;
-        if (a.x + a.w !== b.x) continue;
-        a.w += b.w;
+        // Either order of adjacency, but the SURVIVOR is always `out[i]` — the lower index.
+        const left = a.x + a.w === b.x ? a : b.x + b.w === a.x ? b : null;
+        if (left === null) continue;
+        out[i] = { x: left.x, y: a.y, w: a.w + b.w, h: a.h };
         out.splice(j, 1);
         merged = true;
         break;

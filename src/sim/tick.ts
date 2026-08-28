@@ -273,7 +273,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // Captured BEFORE the resolve zeroes it; step 10 stamps it. `playerSim.ts` has the argument.
   const impactVy = player.vy;
   player.grounded = resolveCollisions(player, world.solids, world.scale, previousX, previousY);
-  clampToBounds(player, world.bounds, (PLAYER_BOX.w / 2) * world.scale);
+  const boundsClamped = clampToBounds(player, world.bounds, (PLAYER_BOX.w / 2) * world.scale);
 
   // 9b. World-geometry damage — hazards, the kill plane, enemy contact and projectiles.
   //     Evaluated HERE and not at step 4, because a swept hazard test needs both endpoints of this
@@ -360,7 +360,7 @@ export function tick(world: World, input: InputSnapshot): TickEvents {
   // mutation fixture anchors `advance`'s signature and `advanceSplit`'s call to this function.
   emitIfTracing(world, {
     input, player, effectiveDir: dir, previousX, previousY, wasGrounded,
-    entryLocked, hitstunLocked, motionRan, damage, respawned: events.respawned,
+    entryLocked, hitstunLocked, motionRan, damage, respawned: events.respawned, boundsClamped,
   });
 
   // 14.

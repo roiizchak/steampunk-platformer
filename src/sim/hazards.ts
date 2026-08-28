@@ -77,21 +77,31 @@ export interface Clampable {
  * The velocity is zeroed as well as the position. Leaving it live means a player holding left at
  * the wall keeps a negative `vx` that fights every other force and re-triggers the clamp every
  * tick — the position looks right and the physics underneath is wrong.
+ *
+ * 🔴 **Returns whether it fired**, because that is the only place a world-edge stop is
+ * distinguishable from a level-geometry stop. `stallAnalysis.ts` declared a `boundsClamp` cause it
+ * could never reach without this, so a player held against the world edge was reported as
+ * `geometry` — the exact label that drove a whole session's fix. Found by the Codex implementation
+ * review. Nothing else reads the return, and ignoring it is legal.
  */
-export function clampToBounds(player: Clampable, bounds: WorldBounds, halfWidth: number): void {
+export function clampToBounds(player: Clampable, bounds: WorldBounds, halfWidth: number): boolean {
   const min = halfWidth;
   const max = bounds.widthPx - halfWidth;
 
   if (player.x < min) {
     player.x = min;
     player.vx = 0;
-  } else if (player.x > max) {
+    return true;
+  }
+  if (player.x > max) {
     player.x = max;
     player.vx = 0;
+    return true;
   }
   // The bottom is deliberately absent — see `belowKillPlane`. The top is not clamped either: a
   // player cannot reach it in `level-01`, and a ceiling that stops a jump is a level-design
   // decision, not a world-edge one.
+  return false;
 }
 
 /**
