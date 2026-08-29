@@ -167,8 +167,11 @@ describe('the chain that carries a press to the banner', () => {
 
   it('the scene hands the banner a PROVIDER and reads the live settings', () => {
     const code = source('GameScene.ts');
+    // Phase 12 widened this call with a fourth argument (the touch binding), and the closing
+    // paren was pinned here — so the gate went red for a change that has nothing to do with what it
+    // measures. It pins the PROVIDER now, up to the arrow, and not the call's arity.
     expect(code, 'a captured string freezes the readout at create()').toContain(
-      'attachHud(this, this.world, () => this.helpText())',
+      'attachHud(this, this.world, () => this.helpText()',
     );
     expect(code, 'helpText must ask the manager, not print a constant').toContain(
       'helpLine(this.audio?.settings())',

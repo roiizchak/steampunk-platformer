@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
+import { applyHeld, type TouchHeld } from './inputMerge';
 import type { AudioManager } from '../game/audio';
 import { AUDIO_CHANGED, applyAudioAction, audioActionForCode } from './audioKeyMap';
 
@@ -345,7 +346,19 @@ export function bindPlayerKeys(
  * player never aimed at the game is not vault 2.4's "cleared because a tick ran" — no tick is
  * running.
  */
-export function sampleHeldKeys(input$: InputSnapshot, held: HeldKeys, enabled: boolean): void {
+export function sampleHeldKeys(
+  input$: InputSnapshot,
+  held: HeldKeys,
+  enabled: boolean,
+  /**
+   * This frame's touch levels, or nothing on a device that has none.
+   *
+   * 🔴 It arrives HERE rather than being written straight into the snapshot by the touch layer,
+   * because the four assignments below **overwrite** — a second writer would be erased on the very
+   * next frame. There is one merge, in `inputMerge.ts`, and this is its only caller.
+   */
+  touch?: Readonly<TouchHeld> | null,
+): void {
   if (!enabled) {
     input$.left = false;
     input$.right = false;
@@ -356,8 +369,14 @@ export function sampleHeldKeys(input$: InputSnapshot, held: HeldKeys, enabled: b
     return;
   }
 
-  input$.left = held.left.some((key) => key.isDown);
-  input$.right = held.right.some((key) => key.isDown);
-  input$.jumpHeld = held.jump.some((key) => key.isDown);
-  input$.walkHeld = held.walk.some((key) => key.isDown);
+  applyHeld(
+    input$,
+    {
+      left: held.left.some((key) => key.isDown),
+      right: held.right.some((key) => key.isDown),
+      jumpHeld: held.jump.some((key) => key.isDown),
+      walkHeld: held.walk.some((key) => key.isDown),
+    },
+    touch,
+  );
 }

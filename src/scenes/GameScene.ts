@@ -191,7 +191,7 @@ export class GameScene extends Phaser.Scene {
 
     // Phase 6: the HUD is a PARALLEL scene, not objects on this display list — see `UIScene` for
     // why that removes vault 6.1's reciprocal-ignore-list hazard instead of managing it.
-    ({ ui: this.ui, gears: this.gears, banner: this.banner } = attachHud(this, this.world, () => this.helpText()));
+    ({ ui: this.ui, gears: this.gears, banner: this.banner } = attachHud(this, this.world, () => this.helpText(), { input$: this.input$, isPlayerInputEnabled: () => this.playerInputEnabled, openLevelSelect: () => openLevelSelect(this) }));
 
     // Phase 7. A plain module, not a scene, and torn down in `BootScene.init()` rather than from a
     // SHUTDOWN handler here — `src/game/audio.ts` carries the reasoning, which is Phase 6's HUD
@@ -261,7 +261,7 @@ export class GameScene extends Phaser.Scene {
 
     // Binding and per-frame sampling both live in `src/scenes/gameInput.ts` — see its header. This
     // scene still owns `playerInputEnabled` and the DEV scene-switch/fixture-spawn callbacks.
-    sampleHeldKeys(this.input$, this.held, this.playerInputEnabled);
+    sampleHeldKeys(this.input$, this.held, this.playerInputEnabled, this.ui?.touchHeld());
     // Called even when `ticks === 0`, and that case is load-bearing: it must NOT consume the
     // input snapshot. A frame too short to produce a whole tick that ate a jump press is vault
     // 2.4's "a tick ran is not your input was consumed", inverted.
