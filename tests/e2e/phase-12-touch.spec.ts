@@ -253,6 +253,43 @@ test.describe('the controls stop being touchable when they must not be touched',
       'a tap on a retired control moved the game somewhere',
     ).toBe('LevelSelect');
   });
+
+  test('12.5d two fingers on two level rows start ONE level', async ({ page }) => {
+    // 🔴 The Codex re-review found this one. `attachTapRoutes` spends a press per POINTER, on
+    // purpose — a lifted finger has to be able to tap again after a locked row refused — so two
+    // fingers landing on two unlocked rows in the same frame called `play()` twice and queued two
+    // `scene.start('Game')` ops (`ScenePlugin.js:481-484` queues every start). ENTER cannot produce
+    // this; a phone can, and the level the player gets is whichever finger landed second.
+    await bootToTouchPlay(page);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, {
+      timeout: 10_000,
+    });
+
+    const rect = await canvasRect(page);
+    const rows = (await drawnZones(page, 'LevelSelect')).filter((z) => z.name.startsWith('row-'));
+    expect(rows.length, 'the level menu drew no rows, so this test proves nothing').toBeGreaterThan(1);
+    const first = centreOf(rect, rows[0]);
+    const second = centreOf(rect, rows[1]);
+
+    // Both DOWN before either UP — two live contacts, which is the case a single `tap` cannot make.
+    await contactDown(page, 21, first.x, first.y);
+    await contactDown(page, 22, second.x, second.y);
+    await contactUp(page, 21);
+    await contactUp(page, 22);
+
+    await page.waitForFunction(() => window.__game?.sceneKey === 'Game', undefined, { timeout: 20_000 });
+    // Settle: a second queued start would drain on a later frame, not this one.
+    await waitTicks(page, 60);
+    expect(
+      await page.evaluate(() => window.__game?.sceneKey),
+      'the second queued start pulled the game back out of the level',
+    ).toBe('Game');
+    expect(
+      await page.evaluate(() => window.__game?.levelId),
+      'two fingers started two levels, and the second one won',
+    ).toBe('level-01');
+  });
 });
 
 test.describe('desktop is untouched', () => {

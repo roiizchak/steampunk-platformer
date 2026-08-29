@@ -158,7 +158,7 @@ papered over.
 | M23 | make the PRESSED plate opaque, hiding the level under the thumb | 12.14 | RED 1/3 |
 | M24 | drop the TARGETS term from the tap gate, so a too-small route stays live | 12.9 | **GREEN — hole; gate written** → RED 1/12 |
 
-**Three rows reddened nothing, and all three were holes rather than mutations to drop.**
+**Four rows reddened nothing, and all four were holes rather than mutations to drop.**
 
 🔴 **M2b.** `attachUiTouch`'s teardown had no gate at all. `touch-session.test.ts` drives the session
 against a fake layer and never imports `attachUiTouch`; `touch-draw-path.test.ts` drives the layer

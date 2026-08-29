@@ -187,7 +187,22 @@ describe('touchMenuLayout', () => {
   });
 
   it('keeps the rows disjoint, which widening the keyboard rows in place could not', () => {
-    // Overlap is covered by `touchTargetsFit` above: `separation` is 0 for overlapping boxes and
+    // 🔴 This body was a truncated comment and NO ASSERTION — a gate that cannot go red, which is
+    // the one thing *(C2)* forbids, sitting inside the criterion that checks for exactly that. The
+    // reasoning it was trying to record is sound and is now stated correctly: `separation` returns
+    // **0** for overlapping boxes and `0 * scale < TOUCH_MIN_GAP_CSS_PX` is **true**, so
+    // `touchTargetsFit` already refuses an overlapping layout. But *already covered elsewhere* is
+    // not a reason to assert nothing; it is a reason to assert it INDEPENDENTLY, so this half can
+    // fail on its own if the fit predicate ever stops covering it.
+    const rows = touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT);
+    for (let i = 0; i < rows.length; i += 1) {
+      for (let j = i + 1; j < rows.length; j += 1) {
+        const a = rows[i];
+        const b = rows[j];
+        const apart = a.y + a.h <= b.y || b.y + b.h <= a.y || a.x + a.w <= b.x || b.x + b.w <= a.x;
+        expect(apart, `${a.id} and ${b.id} overlap`).toBe(true);
+      }
+    }
   });
 
   it('stays inside the band, leaving the heading above and the hint below', () => {
@@ -206,7 +221,9 @@ describe('touchMenuLayout', () => {
     const many = touchMenuLayout(12, GAME_WIDTH, GAME_HEIGHT);
     expect(many).toHaveLength(12);
     expect(many.at(-1)!.y + many.at(-1)!.h).toBeLessThanOrEqual(GAME_HEIGHT - TOUCH_MENU_BOTTOM_PX);
-    // `0 * scale < 8` is always false, so a fitting layout is a disjoint one by construction.
+    // `separation` is 0 for overlapping boxes and `0 * scale < 8` is TRUE, so a layout that FITS is
+    // a disjoint one by construction. (The comment here read "always false" and had the sense of the
+    // comparison backwards — same slip, three places, all corrected.)
   });
 
   it('scales off the view instead of the design size', () => {

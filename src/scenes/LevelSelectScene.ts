@@ -240,9 +240,20 @@ export class LevelSelectScene extends Phaser.Scene {
    * the two rules agreeing *and* keeps the reason visible: the row is drawn `locked`, and pressing
    * ENTER on it does nothing.
    */
+  /** One start per visit. See `play()`. */
+  private started = false;
+
   private play(): void {
+    // 🔴 Latched, and the Codex implementation review is why. `attachTapRoutes` spends a press per
+    // POINTER — correctly, so a lifted finger can tap a second row after a locked one refused — so
+    // two fingers landing on two unlocked rows in the same frame called `play()` twice and queued
+    // two `scene.start('Game')` ops. `ScenePlugin.start` is a queued op (`ScenePlugin.js:481-484`),
+    // so both would drain and which level wins is whichever finger landed second. ENTER cannot do
+    // this; a phone can.
+    if (this.started) return;
     const row = this.rows[this.cursor];
     if (!row || !row.unlocked) return;
+    this.started = true;
     this.scene.start('Game', { levelId: row.id });
   }
 }

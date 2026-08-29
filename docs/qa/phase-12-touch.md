@@ -288,7 +288,9 @@ attack was `F / L` while the plate showed the letter `A`.
 🔴 **`touchTargetsDisjoint` had zero production consumers.** Verified locally. Blanking it to
 `return true` reddened nothing behavioural and left the game byte-identical — the `spriteFeedback.ts`
 shape this criterion exists to forbid. It was redundant too: `separation` returns 0 for overlapping
-boxes and `0 * scale < 8` is false at every scale, so `touchTargetsFit` already refuses them.
+boxes and `0 * scale < 8` is **true** at every scale, so `touchTargetsFit` already refuses them.
+(This sentence said *false* in three places — here and two comments — which inverts the reasoning
+while reaching the right conclusion. Corrected 2026-08-29 after the Codex re-review.)
 **Deleted**, with the reasoning left where it stood.
 
 **Also applied:** `TOUCH_CONTROL_IDS`, a re-export alias whose only reference was its own declaration,

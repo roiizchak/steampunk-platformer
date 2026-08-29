@@ -76,9 +76,37 @@ describe('the plate stays translucent, because the level is behind it', () => {
     const atRest = plate();
     scene.press('right', 1);
     expect(plate(), 'the plate does not answer a thumb at all').toBeGreaterThan(atRest);
-    expect(plate(), 'the pressed plate hides the level under the thumb').toBeLessThan(0.9);
+    // 🔴 The bound is COMPUTED from the resting alpha, not written down beside it. A literal
+    // `< 0.9` was the first repair's, and the Codex re-review was right that it still admitted
+    // **0.86** — the one value § 12.14 measured as erasing the content underneath. What a plate
+    // leaves visible is `1 - alpha`, and 0.55's 0.45 is the figure the occlusion measurement
+    // cleared, so the rule is a share of that: a pressed plate keeps at least 60 % of it.
+    const RESIDUAL_SHARE = 0.6;
+    expect(
+      1 - plate(),
+      `the pressed plate leaves ${(1 - plate()).toFixed(2)} of the level visible against ` +
+        `${(RESIDUAL_SHARE * (1 - atRest)).toFixed(3)} required — 0.86 was measured to erase it`,
+    ).toBeGreaterThanOrEqual(RESIDUAL_SHARE * (1 - atRest));
     scene.releasePointer(1);
     expect(plate(), 'the plate stayed lit after the finger left').toBe(atRest);
+  });
+
+  it('stays lit while a SECOND finger is still on the plate', () => {
+    // 🔴 The Codex re-review: `onRelease` set the plate back to rest on any release, while
+    // `touchContacts` went on correctly reporting the action held by the other finger. The player
+    // saw an unpressed button that was still driving the sim — the contact-identity defect this
+    // phase gated on the sim side, reappearing on the side they can see.
+    const { scene } = live();
+    const plate = (): number => scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].alpha;
+    const atRest = plate();
+    scene.press('right', 1);
+    scene.press('right', 2);
+    const lit = plate();
+    expect(lit, 'the plate never lit at all — this gate proves nothing').toBeGreaterThan(atRest);
+    scene.releasePointer(1);
+    expect(plate(), 'the plate went dark while a finger was still holding the control').toBe(lit);
+    scene.releasePointer(2);
+    expect(plate(), 'the plate stayed lit after the last finger left').toBe(atRest);
   });
 
   it('draws the marks OPAQUE, which is what pays for the legibility the plate no longer does', () => {

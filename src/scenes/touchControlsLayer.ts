@@ -153,7 +153,12 @@ export class TouchControlsLayer {
 
   private readonly onRelease = (pointer: PointerLike): void => {
     const id = this.contacts.release(pointer.id);
-    if (id) this.setPressed(id, false);
+    // 🔴 `isHeld`, not `false`. The Codex implementation review: two fingers on one plate, lifting
+    // either, left the plate drawn at rest while `touchContacts` correctly went on reporting the
+    // action held by the other — the same contact-identity defect this phase gated in the SIM half,
+    // reappearing in the half the player can see. The feedback follows the contact set, not the
+    // event.
+    if (id) this.setPressed(id, this.contacts.isHeld(id));
   };
   private readonly onLoseEverything = (): void => {
     this.contacts.cancelAll();

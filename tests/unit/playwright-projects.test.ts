@@ -198,9 +198,10 @@ const PATTERNS_FOUND = [
  * arm, so the project's value never reaches it, and no other gate read the `use` block at all.
  */
 function declaresTouch(block: string): boolean {
-  // Comments stripped first: the Codex implementation review pointed out that
-  // `hasTouch: false, // hasTouch: true` satisfied the raw scan.
-  const stripped = block.replace(/[/][/].*/g, '');
+  // Comments stripped first, BOTH kinds: the Codex implementation review pointed out that
+  // `hasTouch: false, // hasTouch: true` satisfied the raw scan, and its re-review that stripping
+  // only line comments still let `hasTouch: false /* hasTouch: true */` through.
+  const stripped = block.replace(/[/][*][^]*?[*][/]/g, '').replace(/[/][/].*/g, '');
   return /(^|[\s,{])hasTouch:\s*true(,|\s|})/.test(stripped);
 }
 

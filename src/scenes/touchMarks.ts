@@ -93,10 +93,19 @@ export const PLATE_STROKE_PX = 6;
  * 🔴 It was 1, and the Codex implementation review caught what that undid. The whole reason the
  * resting alpha is 0.55 is that 19.9 % of standing positions have a hazard, an enemy or the goal
  * behind a plate — and a fully opaque pressed state hides exactly that content at exactly the
- * moment the player is moving through it. The pressed state has to be *visibly different*, which
- * 0.55 -> 0.78 is, not *opaque*.
+ * moment the player is moving through it. The pressed state has to be *visibly different*, not
+ * *opaque*.
+ *
+ * ⚠️ **The number is DERIVED, and the first repair's 0.78 was not.** The re-review was right that
+ * a bound of "< 0.9" still admitted **0.86** — the exact value measured to erase the content
+ * underneath — and that nothing established 0.78 as safe either. What a plate leaves visible is its
+ * residual transparency `1 - alpha`, and the resting value's is the measured-readable one: 0.45.
+ * The rule is therefore stated against that measurement rather than against a taste: **a pressed
+ * plate keeps at least 60 % of the resting state's residual transparency**, `1 - a >= 0.6 * 0.45`,
+ * so `a <= 0.73`. 0.72 clears it, is a plain step up from 0.55, and reds at 0.78 and at 0.86 alike.
+ * Pinned by `touch-plate-ink.test.ts`, which computes the bound rather than repeating the literal.
  */
-export const PLATE_ALPHA_PRESSED = 0.78;
+export const PLATE_ALPHA_PRESSED = 0.72;
 
 /** The plate itself: brass fill for a bright background, a pale keyline for a dark one. */
 export function drawPlate(

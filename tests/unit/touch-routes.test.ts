@@ -81,9 +81,11 @@ describe('attachTapRoutes', () => {
     expect(taps).toEqual(['b', 'a']);
   });
 
-  it('fires once per press, not once per pointer already down', () => {
-    // A second finger landing while the first is still down must not double-advance a screen whose
-    // action is `scene.start`.
+  it('spends a press per pointer, so one finger held down cannot repeat', () => {
+    // ⚠️ **This test used to be named for something it did not do.** It pressed pointer 1 twice
+    // under the title *"not once per pointer already down"*, and the Codex re-review caught that
+    // the two-FINGER case it claimed to cover was untested. The one-pointer rule is real and is
+    // kept; the two-pointer rule is the case below.
     const h = scene();
     let count = 0;
     attachTapRoutes(h.scene, true, RECTS, () => {
@@ -92,6 +94,22 @@ describe('attachTapRoutes', () => {
     h.press('a' as never, 1);
     h.press('a' as never, 1);
     expect(count, 'the same pointer pressed twice ran the route twice').toBe(1);
+  });
+
+  it('gives each FINGER its own press, which is why a navigating caller has to latch', () => {
+    // 🔴 The contract, stated rather than assumed. `spent` is keyed by pointer id ON PURPOSE: a
+    // finger that lifts must be able to tap again, which is how a player picks a second row after a
+    // locked one refused. The consequence is that two fingers landing in the same frame produce
+    // TWO callbacks — and a caller whose callback is `scene.start` must therefore latch, or it
+    // queues two scene starts and the level the player gets is whichever finger landed second.
+    // `TitleScene.dismiss` latches on `dismissed`, `gameComplete`'s `go` destroys the routes first,
+    // and `LevelSelectScene.play` did neither until the Codex re-review found it.
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+    h.press('a' as never, 1);
+    h.press('b' as never, 2);
+    expect(taps, 'the routes layer silently swallowed the second finger').toEqual(['a', 'b']);
   });
 
   it('tears itself down on the drawing scene SHUTDOWN and on DESTROY', () => {

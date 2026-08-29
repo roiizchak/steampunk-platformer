@@ -107,7 +107,17 @@ export function attachTapRoutes(
 ): TapRoutes {
   if (!isTouchDevice || targets.length === 0) return NO_ROUTES;
 
-  /** True on exactly the frames `RotatePrompt` covers the screen. Same call, same arguments. */
+  /**
+   * May this route be touched right now?
+   *
+   * ⚠️ **This is NOT "exactly the frames `RotatePrompt` covers the screen"** — it used to say that
+   * and the Codex re-review was right that it is false. The first term is `RotatePrompt`'s own
+   * predicate, so the two can never disagree about a prompt. The second term is broader: a route
+   * whose own targets are unhittable is refused whether or not a prompt is up. That second case is
+   * unreachable through the three shipped screens — none passes a target under `TOUCH_BOX_PX` — so
+   * 12.10's "iff" holds for everything that ships, and the term exists so a fourth caller with a
+   * smaller target is refused rather than silently accepted.
+   */
   const promptIsUp = (): boolean => {
     const { width, height } = scene.scale.gameSize;
     if (!(width > 0 && height > 0)) return false;
