@@ -1,6 +1,10 @@
 # Session handoff — Phase 11, the welcome screen and the volume repair
 
-> # ⚠️ Phase 11 is OPEN. Four criteria are owner-owned and unrun.
+> # ⚠️ Phase 11 is OPEN. Three criteria are owner-owned and unrun.
+>
+> ✅ **11.2 is CLOSED** — the owner played the game on 2026-08-29 and confirmed the volume keys
+> respond on **both the Hebrew and the English layout**. That is the observation the whole phase
+> existed to earn, and no gate here could have produced it.
 >
 > Branch `phase-11-welcome`, four commits on top of `main` at `6da76b7`. Everything automated is
 > green; nothing that needs a human at the keyboard has been done.
@@ -39,8 +43,6 @@ barrier. Production ships no debug surface, so pixels are the only signal.
 
 ## What is owed
 
-- **11.2** — the owner's own Hebrew keyboard. The only thing that can confirm the real defect is the
-  one that was fixed.
 - **11.4** (the audible half), **11.7** (routing), **11.11** (lock state and gear totals) — hands-on.
 - **The title backdrop.** Two fal plates generated 2026-08-29 with the owner's authorisation, $0.30,
   in `_generated/title-backdrop/` (gitignored; request ids are in GENERATION-LOG.md). **Variant B is

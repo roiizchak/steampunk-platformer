@@ -12,7 +12,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 | # | Criterion | Verdict | Evidence |
 |---|---|---|---|
 | 11.1 | Volume failure reproduced and root cause proved by measurement | **PASS** | § 11.1. Four-trial experiment against the running page; `code` proven irrelevant and `keyCode` decisive. |
-| 11.2 | The owner's own keyboard confirms the repaired keys | **UNRUN — owner-owned** | § What is NOT closed. Needs the owner at the Hebrew layout; no automated evidence can stand in *(C4)*. |
+| 11.2 | The owner's own keyboard confirms the repaired keys | **PASS — owner-confirmed 2026-08-29** | § 11.2 hands-on. The owner played the game and checked the volume keys **on both the Hebrew and the English layout**. |
 | 11.3 | Volume gate goes RED on the un-fixed code, mutation reverted | **PASS** | § 11.3. `5 failed, 1 passed` mutated; `6 passed` restored. |
 | 11.4 | Both keys move the level from a 0.5 baseline and survive a reload | **PARTIAL — automated half PASS, hands-on UNRUN** | § 11.4. Persistence and both directions proven in-browser; the audible half is owner-owned. |
 | 11.5 | A held key is exactly one step, Title-active and Game-active | **PASS** | § 11.5. Both arms in `phase-11-audio-keys.spec.ts` and `phase-11-welcome.spec.ts`. |
@@ -35,11 +35,11 @@ The gate table below is the record. Everything under it is the evidence for one 
 
 | item | why |
 |---|---|
-| **11.2, 11.4 (audible half), 11.7 (routing), 11.11** | `play`-owned. Per *(C4)* and the `playtest-finds-what-gates-cannot` rule, a hands-on criterion is **never** reported done on automated evidence. 11.2 in particular needs the **Hebrew layout**, which is the only thing that can confirm the real-world defect is the one that was fixed. |
+| **11.4 (audible half), 11.7 (routing), 11.11** | `play`-owned. Per *(C4)* and the `playtest-finds-what-gates-cannot` rule, a hands-on criterion is **never** reported done on automated evidence. **11.2 is now CLOSED** — see § 11.2 hands-on. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
 | **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
-**This phase is therefore reported FAILING, not done.** Four criteria are owner-owned and unrun.
+**This phase is therefore reported FAILING, not done.** Three criteria are owner-owned and unrun.
 
 ---
 
@@ -327,6 +327,25 @@ Two briefs *(A7)*. What they found, each cited in place in the code it changed:
   deleting the title's guard left the whole suite green.
 - **`prodTitle.ts` contained two docstrings contradicting each other** about which frame is asserted
   first. The code was right and the prose was wrong — corrected rather than the other way round.
+
+## 11.2 hands-on — the owner's own keyboard, 2026-08-29
+
+**The criterion is closed, by the only evidence that could ever close it.** The owner played the
+game and confirmed the volume keys respond **on both the Hebrew and the English layout**, in their
+own words: *"I tested the game and see if it's working, and here I check that volume buttons is
+working. in hebrew and English."*
+
+🔴 **This is what the whole phase was for, and no gate in this repository could have produced it.**
+The dispatch defect was invisible to the suite because `tests/e2e/phase-07-audio.spec.ts` already
+pressed `BracketLeft` and passed — on a US layout, through the very `keyCode` path that was broken
+everywhere else. A green suite and a broken game, for the same reason the vault records under
+*(C4)*: an automated pass proves the path the harness drives, not the path the player drives.
+
+It also confirms the **root cause** rather than merely the symptom. The fix moved dispatch from
+`event.keyCode` — layout-dependent for punctuation, stable for letters, which is exactly the split
+the owner originally reported — to `event.code`, a physical key position. A fix aimed at the wrong
+cause could have made the keys work on one layout; working on **both** is the discriminating
+observation.
 
 ## 11.12 re-run — two fresh briefs against the SHIPPED screen
 
