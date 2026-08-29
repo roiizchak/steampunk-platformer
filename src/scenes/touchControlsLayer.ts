@@ -105,6 +105,12 @@ export interface TouchZoneLike {
   setDepth(depth: number): TouchZoneLike;
   setPosition(x: number, y: number): TouchZoneLike;
   setSize(width: number, height: number): TouchZoneLike;
+  /**
+   * 🔴 Required by tap routes drawn on `GameScene`, whose camera SCROLLS with the player.
+   * Without it the completion zone sits in world space at the level origin, thousands of pixels
+   * behind the player by the time the panel appears — drawn, interactive, and unreachable.
+   */
+  setScrollFactor(x: number, y?: number): TouchZoneLike;
   setInteractive(): TouchZoneLike;
   disableInteractive(): TouchZoneLike;
   on(event: string, fn: (...args: never[]) => void): TouchZoneLike;
@@ -355,6 +361,15 @@ export class TouchControlsLayer {
       .setOrigin(0, 0)
       .setDepth(TOUCH_ZONE_DEPTH);
     zone.on(GAMEOBJECT_POINTER_DOWN, (pointer: PointerLike) => this.onPress(target.id, pointer));
+
+    // 🔴 Built HIDDEN, to match `isLive`, which starts false.
+    //
+    // `refresh()` early-outs when the wanted state equals the current one, so a face created visible
+    // while `isLive` was false would never be told to hide — and on a phone held upright the five
+    // controls stayed drawn under the rotate prompt, non-interactive but plainly there. Caught by
+    // `phase-12-viewport.spec.ts`, not by a unit test: every unit case reached the live state, where
+    // the flag and the objects agree again.
+    for (const face of faces) face.setVisible(false);
 
     return { id: target.id, zone, faces };
   }

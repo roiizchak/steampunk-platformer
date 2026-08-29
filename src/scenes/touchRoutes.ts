@@ -97,6 +97,11 @@ export function attachTapRoutes(
       .setName(target.id)
       .setOrigin(0, 0)
       .setDepth(depth)
+      // 🔴 Screen space, not world space. `TitleScene` and `LevelSelectScene` have static
+      // cameras so it changes nothing there, but `GameScene`'s camera follows the player — and
+      // the completion zone spent one e2e run sitting at the level origin while the panel it
+      // belonged to was on screen four thousand pixels away.
+      .setScrollFactor(0)
       .setInteractive();
     zone.on(GAMEOBJECT_POINTER_DOWN, (pointer: PointerLike) => {
       if (!alive || spent.has(pointer.id)) return;

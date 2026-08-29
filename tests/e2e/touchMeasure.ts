@@ -1,0 +1,187 @@
+/**
+ * **What is actually on screen, measured — the other half of `touchHarness.ts`.**
+ *
+ * 🔴 Every number here comes from a LIVE object or from the canvas's own
+ * `getBoundingClientRect`, never from `touchLayout()`. The Codex plan review named the trap in
+ * round 1: a layout predicate used as its own oracle is green with nothing drawn at all, and green
+ * with every control four hundred pixels off the canvas. Criteria 12.8 and 12.9 stand on this file
+ * being independent of the production layout, so it imports nothing from `src/render/`.
+ *
+ * Split out of `touchHarness.ts` when that file crossed the 400-line ceiling. The seam is real,
+ * not arbitrary: driving contacts and measuring geometry are two jobs, and only one of them has
+ * to be careful about where its numbers come from.
+ */
+
+import { expect } from '@playwright/test';
+
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+
+type Page = import('@playwright/test').Page;
+
+/** Where a drawn touch object actually is, in GAME pixels, read off the live display list. */
+export interface DrawnZone {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  interactive: boolean;
+  visible: boolean;
+}
+
+/** The canvas as the browser lays it out, in CSS pixels. */
+export interface CanvasRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+/** The canvas's laid-out rectangle. The denominator for every CSS-pixel claim in this phase. */
+export async function canvasRect(page: Page): Promise<CanvasRect> {
+  const rect = await page.evaluate(() => {
+    const c = document.querySelector('canvas');
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  });
+  expect(rect, 'no canvas on the page').not.toBeNull();
+  expect(typeof rect!.width).toBe('number');
+  expect(rect!.width, 'the canvas has collapsed').toBeGreaterThan(0);
+  return rect!;
+}
+
+/**
+ * Every named Zone on a scene's display list, in game pixels.
+ *
+ * 🔴 Read off the LIVE objects, never from `touchLayout()`. The Codex plan review named the trap in
+ * round 1: a layout predicate used as its own oracle is green with nothing drawn at all, and green
+ * with every control 400 px off the canvas. Criteria 12.8 and 12.9 measure what is on screen.
+ */
+export async function drawnZones(page: Page, sceneKey: string): Promise<DrawnZone[]> {
+  const zones = await page.evaluate((key) => {
+    type Obj = {
+      type: string;
+      name: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      visible: boolean;
+      input?: { enabled?: boolean } | null;
+    };
+    type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
+    const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
+    const list = scene?.children?.list ?? [];
+    return list
+      .filter((o) => o.type === 'Zone' && o.name !== '')
+      .map((o) => ({
+        name: o.name,
+        x: o.x,
+        y: o.y,
+        w: o.width,
+        h: o.height,
+        interactive: Boolean(o.input && o.input.enabled !== false),
+        visible: o.visible,
+      }));
+  }, sceneKey);
+  expect(Array.isArray(zones)).toBe(true);
+  return zones as DrawnZone[];
+}
+
+/** One named zone, asserted to exist — a missing control is a failure, never an empty result. */
+export async function drawnZone(page: Page, sceneKey: string, name: string): Promise<DrawnZone> {
+  const zones = await drawnZones(page, sceneKey);
+  const zone = zones.find((z) => z.name === name);
+  expect(zone, `no zone named "${name}" on scene ${sceneKey} — found [${zones.map((z) => z.name)}]`).toBeDefined();
+  return zone!;
+}
+
+/** Game pixels -> CSS pixels on the page, through the canvas's measured rectangle. */
+export function toClient(rect: CanvasRect, gameX: number, gameY: number): { x: number; y: number } {
+  return {
+    x: rect.left + (gameX * rect.width) / GAME_WIDTH,
+    y: rect.top + (gameY * rect.height) / GAME_HEIGHT,
+  };
+}
+
+/** The centre of a drawn zone, in CSS pixels — where a thumb would actually land. */
+export function centreOf(rect: CanvasRect, zone: DrawnZone): { x: number; y: number } {
+  return toClient(rect, zone.x + zone.w / 2, zone.y + zone.h / 2);
+}
+
+/**
+ * The named objects the player can SEE, as opposed to the zones they can hit.
+ *
+ * ⚠️ A `Zone` renders nothing, so its `visible` flag stays true whatever the controls are doing —
+ * the first version of the viewport spec asserted on it and failed for that reason alone. Visibility
+ * is a property of the faces; hittability is a property of the zones. Two questions, two readings.
+ */
+export async function drawnFaces(page: Page, sceneKey: string): Promise<{ name: string; visible: boolean }[]> {
+  return page.evaluate((key) => {
+    type Obj = { type: string; name: string; visible: boolean };
+    type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
+    const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
+    return (scene?.children?.list ?? [])
+      .filter((o) => o.type !== 'Zone' && o.name !== '')
+      .map((o) => ({ name: o.name, visible: o.visible }));
+  }, sceneKey);
+}
+
+/**
+ * Is the rotate prompt on screen?
+ *
+ * Read from the drawn `Text` objects, not from a flag the production code exports — a flag would be
+ * the same circularity the layout predicate has, satisfied with nothing rendered.
+ */
+export async function rotatePromptVisible(page: Page, sceneKey: string): Promise<boolean> {
+  return page.evaluate((key) => {
+    type Obj = { type: string; text?: string; visible: boolean };
+    type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
+    const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
+    return (scene?.children?.list ?? []).some(
+      (o) => o.type === 'Text' && typeof o.text === 'string' && o.text.includes('ROTATE') && o.visible,
+    );
+  }, sceneKey);
+}
+
+/** Every measured touch target on a scene, in CSS pixels — the units the accessibility floor is in. */
+export interface MeasuredTarget {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Convert the live zones to CSS pixels through the live canvas rect.
+ *
+ * 🔴 Both halves measured, neither computed. Criteria 12.8 and 12.9 are the ones the Codex plan
+ * review flagged as circular in round 1: derived from `touchLayout()` they would be green with
+ * nothing drawn and green with every control off the canvas.
+ */
+export async function measuredTargets(page: Page, sceneKey: string): Promise<MeasuredTarget[]> {
+  const rect = await canvasRect(page);
+  const zones = await drawnZones(page, sceneKey);
+  return zones
+    .filter((z) => z.interactive)
+    .map((z) => {
+      const topLeft = toClient(rect, z.x, z.y);
+      const bottomRight = toClient(rect, z.x + z.w, z.y + z.h);
+      return {
+        name: z.name,
+        x: topLeft.x,
+        y: topLeft.y,
+        w: bottomRight.x - topLeft.x,
+        h: bottomRight.y - topLeft.y,
+      };
+    });
+}
+
+/** The clear gap between two measured targets, in CSS pixels. 0 if they touch or overlap. */
+export function cssSeparation(a: MeasuredTarget, b: MeasuredTarget): number {
+  const dx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
+  const dy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
+  return Math.max(dx, dy);
+}
+

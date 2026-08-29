@@ -162,7 +162,10 @@ function bindContinue(scene: Phaser.Scene, next: string | null): void {
   const taps = attachTapRoutes(
     scene,
     scene.game.device.input.touch,
-    [{ id: 'continue', x: 0, y: 0, w: width, h: height }],
+    // Deliberately larger than the view. `GameScene`'s camera is displaced to `(-10, -8)` for
+    // shake headroom (`gameEffects.ts:156-158`), and a shake in progress moves it further, so a
+    // zone sized exactly to the view can leave a live strip of screen along two edges.
+    [{ id: 'continue', x: -64, y: -64, w: width + 128, h: height + 128 }],
     go,
   );
   armContinueKey(scene, go);

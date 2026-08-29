@@ -183,6 +183,9 @@ export function makeTouchScene(): TouchSceneHarness {
         api.h = nh;
         return api;
       },
+      setScrollFactor() {
+        return api;
+      },
       setInteractive() {
         z.interactive = true;
         api.interactive = true;

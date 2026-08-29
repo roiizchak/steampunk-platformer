@@ -65,6 +65,21 @@ import { describe, expect, it } from 'vitest';
  * counts only what resolved, so a rename cannot quietly turn an assertion into `null === null`.
  */
 
+/**
+ * 🔴 Phase 12: the touch patterns are declared in `tests/e2e/specRouting.ts`, not in the config.
+ *
+ * They have to be, because `tests/unit/spec-routing.test.ts` drives them against filenames that
+ * do not exist yet, and importing the config to reach them would pull `@playwright/test` into a
+ * suite that runs with Phaser uninstalled. So the resolver below follows the import: it scans
+ * both files for `const NAME = /regex/`. An unresolvable name still yields `null` and still
+ * counts against the vacuity guard — the rule that keeps this gate honest is unchanged.
+ */
+const ROUTING = import.meta.glob('../e2e/specRouting.ts', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 const CONFIG = import.meta.glob('../../playwright.config.ts', {
   query: '?raw',
   import: 'default',
@@ -78,6 +93,7 @@ const SPEC_FILES = import.meta.glob('../e2e/*.spec.ts', {
 }) as Record<string, string>;
 
 const source = Object.values(CONFIG)[0] ?? '';
+const routingSource = Object.values(ROUTING)[0] ?? '';
 
 const specNames = Object.keys(SPEC_FILES)
   .map((p) => p.split('/').pop() ?? '')
@@ -107,10 +123,10 @@ const LITERAL = '/(?:[^/\\\\\\n]|\\\\.)+/[a-z]*';
  * treated as an empty pattern would match every spec and quietly select everything.
  */
 const CONSTANTS: Record<string, string> = Object.fromEntries(
-  [...source.matchAll(new RegExp(`^const ([A-Z][A-Z0-9_]*) = (${LITERAL});`, 'gm'))].map((m) => [
-    m[1]!,
-    m[2]!,
-  ]),
+  [
+    ...source.matchAll(new RegExp(`^const ([A-Z][A-Z0-9_]*) = (${LITERAL});`, 'gm')),
+    ...routingSource.matchAll(new RegExp(`^export const ([A-Z][A-Z0-9_]*) = (${LITERAL});`, 'gm')),
+  ].map((m) => [m[1]!, m[2]!]),
 );
 
 /**
@@ -146,18 +162,30 @@ const chromium = projectBlock('chromium');
 const gpu = projectBlock('chromium-gpu');
 const dpr2 = projectBlock('chromium-dpr2');
 const prod = projectBlock('chromium-prod');
+const touch = projectBlock('chromium-touch');
+const touchGpu = projectBlock('chromium-touch-gpu');
 
 const chromiumIgnores = patternTexts(chromium, 'testIgnore');
 const gpuMatch = patternText(gpu, 'testMatch');
 const gpuIgnore = patternText(gpu, 'testIgnore');
 const dpr2Match = patternText(dpr2, 'testMatch');
 const prodMatch = patternText(prod, 'testMatch');
+const touchMatch = patternText(touch, 'testMatch');
+const touchIgnore = patternText(touch, 'testIgnore');
+const touchGpuMatch = patternText(touchGpu, 'testMatch');
 
 /** Vacuity guard. If the config is refactored so the extraction finds nothing, every equality below
  *  would compare `null` to `null` and pass while measuring absolutely nothing. */
-const PATTERNS_FOUND = [...chromiumIgnores, gpuMatch, gpuIgnore, dpr2Match, prodMatch].filter(
-  (p) => p !== null,
-).length;
+const PATTERNS_FOUND = [
+  ...chromiumIgnores,
+  gpuMatch,
+  gpuIgnore,
+  dpr2Match,
+  prodMatch,
+  touchMatch,
+  touchIgnore,
+  touchGpuMatch,
+].filter((p) => p !== null).length;
 
 /** Build a live RegExp from the extracted literal so selection can actually be evaluated. */
 function toRegExp(literal: string): RegExp {
@@ -166,12 +194,12 @@ function toRegExp(literal: string): RegExp {
 }
 
 describe('playwright project selection', () => {
-  it('extracted all six patterns — the config shape has not drifted out from under this gate', () => {
+  it('extracted all ten patterns — the config shape has not drifted out from under this gate', () => {
     expect(
       PATTERNS_FOUND,
       'could not extract the project patterns from playwright.config.ts — the config was refactored ' +
         'and every assertion in this file is now vacuous. Fix the extraction, do not delete the test.',
-    ).toBe(6);
+    ).toBe(10);
     expect(specNames.length, 'no e2e spec files were globbed at all').toBeGreaterThan(20);
   });
 
@@ -187,7 +215,7 @@ describe('playwright project selection', () => {
     expect(
       [...chromiumIgnores].sort(),
       "chromium's testIgnore has drifted from what the other projects claim.",
-    ).toEqual([gpuMatch, prodMatch].sort());
+    ).toEqual([gpuMatch, prodMatch, touchMatch].sort());
   });
 
   it("chromium-gpu's testIgnore and chromium-dpr2's testMatch are mirrors", () => {
@@ -213,6 +241,9 @@ describe('playwright project selection', () => {
     const gpuSkip = toRegExp(gpuIgnore!);
     const dpr2Take = toRegExp(dpr2Match!);
     const prodTake = toRegExp(prodMatch!);
+    const touchTake = toRegExp(touchMatch!);
+    const touchSkip = toRegExp(touchIgnore!);
+    const touchGpuTake = toRegExp(touchGpuMatch!);
 
     const wrong: string[] = [];
     for (const name of specNames) {
@@ -221,6 +252,10 @@ describe('playwright project selection', () => {
       if (prodTake.test(name)) projects.push('chromium-prod');
       if (gpuTake.test(name) && !gpuSkip.test(name)) projects.push('chromium-gpu');
       if (dpr2Take.test(name)) projects.push('chromium-dpr2');
+      // Phase 12. Behaviour is *everything minus perf* and perf matches by PREFIX, so the two are a
+      // total partition of `phase-12-*` by construction — see `tests/e2e/specRouting.ts`.
+      if (touchTake.test(name) && !touchSkip.test(name)) projects.push('chromium-touch');
+      if (touchGpuTake.test(name)) projects.push('chromium-touch-gpu');
       if (projects.length !== 1) {
         wrong.push(`${name} -> ${projects.length === 0 ? 'NOWHERE' : projects.join(' + ')}`);
       }
