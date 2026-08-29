@@ -142,8 +142,17 @@ function unqualifiedAgentNouns(text: string): string[] {
 }
 
 describe('phase documents are executable instructions', () => {
-  it('all ten phase documents were found', () => {
-    expect(PHASES.map(([name]) => name)).toHaveLength(11);
+  /**
+   * The count is a hardcoded literal on purpose: adding a phase must be a DELIBERATE edit here, not
+   * something a glob absorbs silently. Every assertion below is `describe.each`-driven, so a phase
+   * document that was never written would simply produce no cases and this file would stay green.
+   *
+   * ⚠️ The title said "ten" while the literal said 11 for a whole phase, and then said "ten" while
+   * the literal said 12. It no longer carries a number, because a number in a test NAME is a second
+   * copy of the assertion that nothing keeps honest — the exact shape vault 5.3 is about.
+   */
+  it('every phase document named by the PRD table was found', () => {
+    expect(PHASES.map(([name]) => name)).toHaveLength(12);
   });
 
   it('PRD.md defines the owner roster the gates are checked against', () => {
