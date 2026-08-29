@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { PROGRESS_KEY } from '../../src/game/save';
 import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
 import {
@@ -7,6 +8,7 @@ import {
   centreOf,
   contactDown,
   contactMove,
+  contactsDown,
   contactUp,
   drawnZone,
   drawnZones,
@@ -260,11 +262,37 @@ test.describe('the controls stop being touchable when they must not be touched',
     // fingers landing on two unlocked rows in the same frame called `play()` twice and queued two
     // `scene.start('Game')` ops (`ScenePlugin.js:481-484` queues every start). ENTER cannot produce
     // this; a phone can, and the level the player gets is whichever finger landed second.
+    // ⚠️ **A fresh save cannot show this defect and a gate built on one is decoration.** Only
+    // level-01 is unlocked out of the box, so `play()` refuses the second row before the latch is
+    // ever consulted — the mutation stayed green until this seed was added. Two UNLOCKED rows are
+    // the precondition, and they are asserted below rather than assumed.
+    await page.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [
+        PROGRESS_KEY,
+        JSON.stringify({
+          version: 1,
+          lastLevel: 'level-01',
+          levels: { 'level-01': { completed: true, bestGears: 1 } },
+        }),
+      ] as const,
+    );
     await bootToTouchPlay(page);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, {
       timeout: 10_000,
     });
+
+    const unlocked = await page.evaluate(
+      () =>
+        (
+          (window as unknown as { __phaserGame: { scene: { getScene(k: string): { rows: { unlocked: boolean }[] } } } })
+            .__phaserGame.scene.getScene('LevelSelect').rows ?? []
+        ).filter((r) => r.unlocked).length,
+    );
+    expect(unlocked, 'fewer than two rows are unlocked, so two fingers cannot start two levels').toBeGreaterThanOrEqual(
+      2,
+    );
 
     const rect = await canvasRect(page);
     const rows = (await drawnZones(page, 'LevelSelect')).filter((z) => z.name.startsWith('row-'));
@@ -272,9 +300,14 @@ test.describe('the controls stop being touchable when they must not be touched',
     const first = centreOf(rect, rows[0]);
     const second = centreOf(rect, rows[1]);
 
-    // Both DOWN before either UP — two live contacts, which is the case a single `tap` cannot make.
-    await contactDown(page, 21, first.x, first.y);
-    await contactDown(page, 22, second.x, second.y);
+    // 🔴 ONE round trip, so both `touchstart`s land in the same JS task and Phaser's input queue
+    // drains them in one frame. Two awaited `contactDown` calls are not two simultaneous fingers:
+    // the first is fully processed — scene start included — before the second is dispatched, and
+    // the mutation that deletes the latch stayed GREEN through a gate built that way.
+    await contactsDown(page, [
+      { id: 21, x: first.x, y: first.y },
+      { id: 22, x: second.x, y: second.y },
+    ]);
     await contactUp(page, 21);
     await contactUp(page, 22);
 

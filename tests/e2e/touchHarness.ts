@@ -128,6 +128,24 @@ export async function contactDown(page: Page, id: number, x: number, y: number):
   );
 }
 
+/**
+ * Several fingers down in ONE round trip, so they reach Phaser in the SAME frame.
+ *
+ * 🔴 Two awaited `contactDown` calls are not two simultaneous fingers. Each is its own CDP round
+ * trip, so the first is fully processed — scene start and all — before the second is dispatched,
+ * and a gate built from them cannot see a same-frame race at all: the M25 mutation stayed green
+ * through one. Firing both inside a single `page.evaluate` puts both `touchstart`s in one JS task,
+ * which is where Phaser's input queue drains them together.
+ */
+export async function contactsDown(
+  page: Page,
+  contacts: readonly { id: number; x: number; y: number }[],
+): Promise<void> {
+  await page.evaluate((list) => {
+    for (const c of list) (window as unknown as { __touch: Driver }).__touch.down(c.id, c.x, c.y);
+  }, contacts as { id: number; x: number; y: number }[]);
+}
+
 export async function contactMove(page: Page, id: number, x: number, y: number): Promise<void> {
   await page.evaluate(
     ([i, cx, cy]) => (window as unknown as { __touch: Driver }).__touch.move(i, cx, cy),
