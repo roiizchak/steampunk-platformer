@@ -392,9 +392,11 @@ than left standing.
 | gate | result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **201 files, 2929 tests, 0 failed** (2923 before this phase's gate repairs) |
+| `npm test` | **202 files, 2949 tests, 0 failed** (2923 before this phase's gate repairs) |
+| `npm run test:sim-isolated` | **202 files, 2949 tests, 0 failed** with Phaser uninstalled — 2936 passed, 13 skipped. Same file and test COUNT as the normal run, which is what makes the skips a deliberate arm and not a silent deselection. |
+| `npm run test:e2e` | **212 passed, 0 failed**, 28.7 min, one run alone on the box. ⚠️ The run before the Codex repairs landed reported three failures: the new title-zone test (a real defect — it waited on `__game.sceneKey === 'Title'`, and the title plate is a PARALLEL scene, so that read never changes), plus `phase-06-perf` and `phase-10-production`, neither of which reproduced once the box was not also running a timing-out spec. Recorded rather than dropped. |
 | `npm run build` | `dev-seam gate ok: 28 sentinel-marked DEV bodies folded out`; `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical, no DEV-only scene key or debug surface` |
-| 400-line sweep | nothing over 400 across `src/**/*.ts`, `tools/**/*.mjs`, `tests/**/*.ts`, root `*.config.ts`. Largest: `tools/gen/levelBuilder.mjs` and three others at exactly 400; `src/scenes/GameScene.ts` 399. |
+| 400-line sweep | nothing over 400 across `src/**/*.ts`, `tools/**/*.mjs`, `tests/**/*.ts`, root `*.config.ts`. Largest: `tools/gen/levelBuilder.mjs`, `tests/unit/audio-cue-edges.test.ts`, `tests/e2e/phase-01-boot.spec.ts` and `tests/e2e/effectBudget.ts` at exactly 400; `src/scenes/GameScene.ts` 399. Four splits were taken this phase rather than an exemption — `touchMarks.ts`, `touchTypes.ts`, `touchSceneObjects.ts` and `touch-plate-ink.test.ts`. |
 
 ---
 
