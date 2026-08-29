@@ -198,7 +198,10 @@ const PATTERNS_FOUND = [
  * arm, so the project's value never reaches it, and no other gate read the `use` block at all.
  */
 function declaresTouch(block: string): boolean {
-  return /(^|[\s,{])hasTouch:\s*true(,|\s|})/.test(block);
+  // Comments stripped first: the Codex implementation review pointed out that
+  // `hasTouch: false, // hasTouch: true` satisfied the raw scan.
+  const stripped = block.replace(/[/][/].*/g, '');
+  return /(^|[\s,{])hasTouch:\s*true(,|\s|})/.test(stripped);
 }
 
 /** Build a live RegExp from the extracted literal so selection can actually be evaluated. */

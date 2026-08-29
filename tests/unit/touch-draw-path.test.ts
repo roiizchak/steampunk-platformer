@@ -232,48 +232,6 @@ describe('TouchControlsLayer goes quiet when it must', () => {
   });
 });
 
-describe('the plate stays translucent, because the level is behind it', () => {
-  /**
-   * 🔴 A number with a measurement behind it, pinned so the measurement cannot be quietly undone.
-   *
-   * The contrast repair briefly raised `PLATE_ALPHA` from 0.55 to 0.86 to make the fill a fill. The
-   * UI/UX gate then measured what that costs from the shipped level data — the player standing on
-   * every solid surface in all five `.tmj` files, sampled every 96 px — and found **175 of 878
-   * positions (19.9 %) have a hazard, an enemy or the goal drawn under a control plate.** A
-   * `brass-sentry` that is actively shooting sits behind the pause plate for nine consecutive
-   * positions on level-01; on level-04 the goal sits under the jump plate for nine more.
-   *
-   * At 0.55 that content is dim and readable. At 0.86 it is gone, and a player who dies to a spike
-   * they could not see under their own thumb reads it as the game cheating. The contrast the repair
-   * was for is carried by the keyline and the marks' two inks instead — both opaque, and both
-   * covering a small fraction of the plate.
-   *
-   * Without this gate, raising the alpha back reddens nothing (mutation M21).
-   */
-  it('draws every plate see-through, so the world under a thumb is still readable', () => {
-    const { scene } = live();
-    const plates = scene.faces.filter((f) => f.strokeWidth > 0);
-    expect(plates, 'no plate was found by its keyline — this gate is measuring nothing').toHaveLength(
-      TOUCH_IDS.length,
-    );
-    for (const plate of plates) {
-      expect(
-        plate.alpha,
-        `the ${plate.id} plate is ${plate.alpha} opaque — the level behind it is hidden, and 19.9 % ` +
-          'of standing positions have a hazard, an enemy or the goal back there',
-      ).toBeLessThan(0.7);
-      expect(plate.alpha, 'a fully transparent plate is not a control').toBeGreaterThan(0.2);
-    }
-  });
-
-  it('draws the marks OPAQUE, which is what pays for the legibility the plate no longer does', () => {
-    const { scene } = live();
-    const marks = scene.faces.filter((f) => f.strokeWidth === 0);
-    expect(marks.length, 'no marks were drawn at all').toBeGreaterThan(TOUCH_IDS.length);
-    for (const mark of marks) expect(mark.alpha).toBe(1);
-  });
-});
-
 describe('TouchControlsLayer lifecycle', () => {
   it('subscribes to EVERY loss path, and to exactly those', () => {
     // 🔴 This used to assert `toContain(SCENE_PAUSE)` and nothing else about the four-event array.

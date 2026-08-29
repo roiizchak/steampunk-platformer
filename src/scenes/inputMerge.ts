@@ -24,8 +24,7 @@
  *
  * ## Why an OR and not an assignment
  *
- * `sampleHeldKeys` **overwrites** all four level fields from `key.isDown` every frame
- * (`gameInput.ts:359-362`). A touch source that wrote the snapshot directly would therefore be
+ * `applyHeld` **overwrites** all four level fields every frame (its own assignments below). A touch source that wrote the snapshot directly would therefore be
  * erased on the next frame — silently, and only in the case where no key was also down, which is
  * every case that matters on a phone.
  */

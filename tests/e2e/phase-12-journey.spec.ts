@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { drawnOverlay } from './completeHelpers';
 import { readPlayer } from './gameHarness';
+import { TOUCH_MIN_CSS_PX } from '../../src/render/touchLayout';
 import {
   canvasRect,
   centreOf,
@@ -11,6 +12,7 @@ import {
   drawnZones,
   installTouchDriver,
   liftEveryContact,
+  measuredTargets,
   playToExitByTouch,
   TOUCH_RUN_TIMEOUT,
 } from './touchHarness';
@@ -160,8 +162,31 @@ test('12.1 the whole journey, driven only by touch', async ({ page }) => {
     'the completion prompt does not offer a tap, so a phone player is stuck here',
   ).toContain('TAP');
 
+  // 12.8 / 12.9 ride along here: the completion zone is the third target those criteria name and
+  // the only one that cannot be reached without playing a level, so it is measured at the one
+  // moment it exists. Coverage rather than containment — the zone is deliberately oversized by
+  // 64 px (`gameComplete.ts:164-168`) for the shake-displaced camera, so `inside the canvas` would
+  // fail a correct implementation.
   const completeRect = await canvasRect(page);
-  await tapAt(page, completeRect.left + completeRect.width / 2, completeRect.top + completeRect.height * 0.75, 4);
+  const completeTargets = await measuredTargets(page, 'Game');
+  expect(
+    completeTargets.map((t) => t.name),
+    'the completion panel has no live tap route, so a phone player is stuck on it',
+  ).toEqual(['continue']);
+  const cont = completeTargets[0]!;
+  expect(cont.w, `the continue zone is ${cont.w.toFixed(1)} CSS px wide`).toBeGreaterThanOrEqual(TOUCH_MIN_CSS_PX);
+  expect(cont.h, `the continue zone is ${cont.h.toFixed(1)} CSS px tall`).toBeGreaterThanOrEqual(TOUCH_MIN_CSS_PX);
+  expect(cont.x, 'a live strip of canvas is left of the continue zone').toBeLessThanOrEqual(completeRect.left + 0.5);
+  expect(cont.y, 'a live strip of canvas is above the continue zone').toBeLessThanOrEqual(completeRect.top + 0.5);
+  expect(cont.x + cont.w, 'a live strip of canvas is right of the continue zone').toBeGreaterThanOrEqual(
+    completeRect.left + completeRect.width - 0.5,
+  );
+  expect(cont.y + cont.h, 'a live strip of canvas is below the continue zone').toBeGreaterThanOrEqual(
+    completeRect.top + completeRect.height - 0.5,
+  );
+  // Tapped at its MEASURED centre, not at a fraction of the canvas — 12.1 forbids a coordinate that
+  // could hit nothing and still advance.
+  await tapAt(page, cont.x + cont.w / 2, cont.y + cont.h / 2, 4);
 
   // ---------------------------------------------------------------- the next level
   await page.waitForFunction(

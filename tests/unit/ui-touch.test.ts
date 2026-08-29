@@ -93,7 +93,11 @@ describe('attachUiTouch wires the session to the layer it just built', () => {
     for (const z of scene.zones) expect(z.interactive).toBe(false);
   });
 
-  it('DEACTIVATES the session before the layer is destroyed, so a later bind cannot reach it', () => {
+  // ⚠️ This proves the session IS deactivated, not that it happens BEFORE `layer.destroy()`. The
+  // Codex implementation review is right that swapping the two calls stays green here: nothing
+  // re-enters during destruction, so the order has no observable consequence to assert against.
+  // The order is still correct and worth keeping; the claim is narrowed to what is measured.
+  it('DEACTIVATES the session, so a later bind cannot reach the destroyed layer', () => {
     const { scene, session, overlay } = attached();
     session.bind(bindingFor(scene, scene.gameScene));
     expect(scene.gameSceneEvents.length).toBeGreaterThan(0);

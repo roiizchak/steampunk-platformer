@@ -87,8 +87,16 @@ export const PLATE_FILL = 0x6b4b21;
 export const PLATE_ALPHA = 0.55;
 export const PLATE_STROKE = 0xf7e3b8;
 export const PLATE_STROKE_PX = 6;
-/** The plate at rest, and the plate under a thumb. */
-export const PLATE_ALPHA_PRESSED = 1;
+/**
+ * The plate under a thumb: brighter, and still see-through.
+ *
+ * 🔴 It was 1, and the Codex implementation review caught what that undid. The whole reason the
+ * resting alpha is 0.55 is that 19.9 % of standing positions have a hazard, an enemy or the goal
+ * behind a plate — and a fully opaque pressed state hides exactly that content at exactly the
+ * moment the player is moving through it. The pressed state has to be *visibly different*, which
+ * 0.55 -> 0.78 is, not *opaque*.
+ */
+export const PLATE_ALPHA_PRESSED = 0.78;
 
 /** The plate itself: brass fill for a bright background, a pale keyline for a dark one. */
 export function drawPlate(

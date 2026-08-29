@@ -169,3 +169,39 @@ describe('a tap route is dead on the frames the rotate prompt covers the screen'
     expect(taps, 'the route stayed dead after the device was turned back').toEqual(['b']);
   });
 });
+
+describe('a FULL-SCREEN route is dead under the prompt too, however big its own target is', () => {
+  /**
+   * 🔴 The Codex implementation review found this, and it is a regression the previous repair
+   * introduced. `RotatePrompt` decides visibility from the five 160 px play controls; the routes had
+   * just been changed to decide from their OWN targets. On a 390 px portrait canvas those disagree:
+   * a control is 32.5 CSS px so the prompt is up, while the title's full-viewport zone measures
+   * 390 x 219 CSS px and clears every floor by a factor of seven — so a tap on "ROTATE YOUR DEVICE"
+   * dismissed the title underneath it.
+   *
+   * The route's own targets are still a term, because a route whose targets are too small to hit is
+   * unusable with or without a prompt. Both, not either.
+   */
+  const FULL_SCREEN = [{ id: 'title', x: 0, y: 0, w: GAME_WIDTH, h: GAME_HEIGHT }];
+  /** iPhone 14 portrait: 390 CSS px of canvas for 1920 game px. */
+  const PORTRAIT = 390;
+
+  it('refuses a tap on a full-viewport zone while the prompt is covering it', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, FULL_SCREEN, (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('title' as never, 1);
+    expect(taps, 'the full-screen route never fired at all — this test proves nothing').toEqual(['title']);
+    h.releasePointer(1);
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    // The zone itself is 390 x 219 CSS px here — far over every floor. Only the PROMPT makes it dead.
+    h.press('title' as never, 2);
+    expect(
+      taps,
+      'a tap meant for ROTATE YOUR DEVICE dismissed the screen underneath it',
+    ).toEqual(['title']);
+  });
+});

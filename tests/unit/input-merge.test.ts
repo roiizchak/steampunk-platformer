@@ -52,7 +52,7 @@ describe('applyHeld', () => {
 
   it('ORs the two sources rather than letting either win', () => {
     // 🔴 This is the defect the module exists for. `sampleHeldKeys` OVERWRITES all four fields from
-    // `key.isDown` every frame (`gameInput.ts:359-362`), so a touch source that wrote the snapshot
+    // `key.isDown` every frame (`applyHeld`'s own assignments), so a touch source that wrote the snapshot
     // directly would be erased on the very next frame — silently, and only while a key was also up.
     const input = createSnapshot();
     applyHeld(input, { ...NO_KEYBOARD_HELD, left: true }, { ...NO_TOUCH_HELD, right: true, jump: true });

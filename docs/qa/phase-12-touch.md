@@ -23,32 +23,33 @@ than reinterpreted.
 | 12.5 | Contact identity and every loss path, registrations asserted | **PASS — two holes found and closed** | § 12.5. Exact-set assertion + six loss paths fired; M19/M20 red. Three recorded. |
 | 12.6 | A level transition rebinds idempotently | **PASS** | `touch-draw-path.test.ts` rebind case; M2b red after its gate was written. |
 | 12.7 | Nothing drawn or interactive on a desktop pointer | **PASS** | 12.7 in a `hasTouch:false` context; Phase 2 suite unregressed. |
-| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **PASS** | `phase-12-viewport.spec.ts`, 10 viewports. M11 red 8/11, M11b 7/11. |
-| 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. |
+| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **PASS — after a Codex repair** | `phase-12-viewport.spec.ts`, 10 viewports. M11 red 8/11, M11b 7/11. The two full-screen zones were unmeasured; § 12.8 below. |
+| 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
 | 12.10 | The prompt appears iff a target falls under 44 CSS px | **PASS** | Viewport spec portrait rows; M8 red 2/11. |
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **PASS for the grey-box — art UNRUN** | § 12.14. Four measured defects repaired. The generated plate is the owner's decision. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET** | § 12.14. **No art was adopted**, so the criterion's subject does not exist. The grey-box faces were measured and four defects repaired; that is evidence, not a pass. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 27 rows; 3 holes found, all closed. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 29 rows; 3 holes found, all closed. M22/M23 cover the Codex repairs. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Two criteria are NOT MET and two are UNRUN, so the phase is reported FAILING.** 12.11's statistic
-cannot detect the regression it names and 12.17 has no artifact to check; 12.13 and 12.24 are the
-owner's and cannot be closed from here. Every other row passed, several only after a repair.
+**Three criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
+statistic cannot detect the regression it names; 12.17 and 12.14 both have no adopted artifact to
+check; 12.13 and 12.24 are the owner's and cannot be closed from here; 12.23 is the Codex
+implementation review, which returned `REVISE` and is re-running on the repaired diff. Every other
+row passed, several only after a repair.
 
----|---|---|---|
-| 12.19 | Every new gate watched failing under the mutation it names | **PASS** | § The mutation matrix. 22 rows, each applied, watched, reverted; 2 holes found and closed. |
-| 12.20 | `dist/` carries no dev-only scene key, debug symbol or dev prose | **PASS** | § Regression evidence. `verify-dist ok`, 28 DEV bodies folded out, 5 levels + 12 audio byte-identical. |
-| 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` line | **PASS** | § Regression evidence. Sweep over the lint's own glob returns nothing above 400; largest is 400. No exemption taken. |
+🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
+was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder
+that stands where the art would be. The measurement is real and is kept below; the verdict is not.
 
 ---
 

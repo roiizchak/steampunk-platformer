@@ -213,3 +213,39 @@ test('12.8/12.9 the level menu rows clear the same floors', async ({ page }) => 
     }
   }
 });
+
+test('12.8/12.9 the title zone is a real target, and it covers the canvas', async ({ page }) => {
+  // 🔴 Codex's implementation review, verified: 12.8/12.9 name the TITLE and COMPLETION zones as
+  // well as the five controls and the menu rows, and only the last two were being measured. The
+  // measurement is here rather than a verdict correction, because it is one navigation.
+  //
+  // ⚠️ **Coverage, not containment, and that is deliberate.** A full-screen route zone is sized to
+  // the view or DELIBERATELY BEYOND it — `gameComplete.ts:164-168` oversizes by 64 px because
+  // `GameScene`'s camera is displaced for shake headroom, so a zone sized exactly to the view
+  // leaves a live strip along two edges. Asserting `inside the canvas` on such a zone would fail a
+  // correct implementation. What matters for a whole-screen target is that no part of the canvas
+  // is unreachable, which is what this asserts.
+  await page.setViewportSize({ width: 667, height: 375 });
+  await installTouchDriver(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__game?.ready === true, undefined, { timeout: 30_000 });
+  await page.waitForFunction(() => window.__game?.sceneKey === 'Title', undefined, { timeout: 20_000 });
+
+  const rect = await canvasRect(page);
+  const targets = await measuredTargets(page, 'Title');
+  expect(
+    targets.map((t) => t.name),
+    'the title screen has no live tap route, so a phone player cannot start the game',
+  ).toEqual(['title']);
+  const zone = targets[0]!;
+  expect(zone.w, `the title zone is ${zone.w.toFixed(1)} CSS px wide`).toBeGreaterThanOrEqual(TOUCH_MIN_CSS_PX);
+  expect(zone.h, `the title zone is ${zone.h.toFixed(1)} CSS px tall`).toBeGreaterThanOrEqual(TOUCH_MIN_CSS_PX);
+  expect(zone.x, 'a live strip of canvas is left of the title zone').toBeLessThanOrEqual(rect.left + 0.5);
+  expect(zone.y, 'a live strip of canvas is above the title zone').toBeLessThanOrEqual(rect.top + 0.5);
+  expect(zone.x + zone.w, 'a live strip of canvas is right of the title zone').toBeGreaterThanOrEqual(
+    rect.left + rect.width - 0.5,
+  );
+  expect(zone.y + zone.h, 'a live strip of canvas is below the title zone').toBeGreaterThanOrEqual(
+    rect.top + rect.height - 0.5,
+  );
+});

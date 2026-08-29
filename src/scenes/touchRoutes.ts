@@ -1,9 +1,9 @@
 /**
  * **Tap routes for the screens that are not the play scene.**
  *
- * 🔴 Everything outside `GameScene` is keyboard-only, and a grep says so: `TitleScene.ts:333-335`
- * takes `Enter` / `NumpadEnter` / `Space`, `LevelSelectScene.ts:145-167` takes `UP W DOWN S ENTER`,
- * and `gameComplete.ts:119-135` takes `ANY_KEY_DOWN` filtered to `Enter`. So a phone player cannot
+ * 🔴 Everything outside `GameScene` is keyboard-only, and a grep says so: `TitleScene.bindKeys`
+ * takes `Enter` / `NumpadEnter` / `Space`, `LevelSelectScene.bindKeys` takes `UP W DOWN S ENTER`,
+ * and `gameComplete.armContinueKey` takes `ANY_KEY_DOWN` filtered to `Enter`. So a phone player cannot
  * start the game, cannot choose a level and cannot continue past one — and shipping the five in-play
  * controls alone would produce a build that still cannot be played, with a criterion *"the owner
  * played it on a phone"* that could only be passed by reaching for a keyboard. The Codex plan
@@ -46,19 +46,17 @@
  * `ScaleManager`. Every screen carrying a route also carries a prompt (`rotateGuard.ts`), so a
  * gated tap is never a silent one.
  *
- * 🔴 **Over ITS OWN targets, not over the play controls.** The first version asked
- * `touchTargetsFit(touchLayout(...))` — the five in-play buttons — from every screen, and the
- * accessibility gate's adversarial brief found both halves of what that costs. A **full-screen**
- * title or completion zone, which is 334 CSS px wide at 200 % browser zoom and seven times over
- * any floor, went dead because a button that is not on that screen would have been too small
- * (WCAG 1.4.4). And a **level row** was judged by a 160 px threshold while being 128 px, so
- * between scale 0.275 and 0.344 it was under-floor, live, and unannounced. Asking about the
- * targets in hand answers both: a route is dead exactly when the things it draws are too small.
+ * 🔴 **Two terms, and it took three attempts to see why.** Gating on the play controls alone
+ * killed a full-screen title zone at 200 % browser zoom (WCAG 1.4.4). Gating on the route's own
+ * targets alone re-opened the tap-through, because the PROMPT is driven by the play controls:
+ * on a portrait phone it is up while a 390 x 219 CSS px title zone clears every floor. The
+ * question is not *are these targets big enough* — it is *may this route be touched right now*,
+ * and the answer is no if a prompt covers it **or** if its own targets are too small to hit.
  *
  * No Phaser import, for the reason `touchControlsLayer.ts`'s header gives.
  */
 
-import { cssScaleFor, type HitBox, touchTargetsFit } from '../render/touchLayout';
+import { cssScaleFor, type HitBox, touchLayout, touchTargetsFit } from '../render/touchLayout';
 import {
   GAMEOBJECT_POINTER_DOWN,
   INPUT_POINTER_UP,
@@ -111,9 +109,24 @@ export function attachTapRoutes(
 
   /** True on exactly the frames `RotatePrompt` covers the screen. Same call, same arguments. */
   const promptIsUp = (): boolean => {
-    const { width } = scene.scale.gameSize;
-    if (!(width > 0)) return false;
-    return !touchTargetsFit(targets, cssScaleFor(scene.scale.displaySize.width, width));
+    const { width, height } = scene.scale.gameSize;
+    if (!(width > 0 && height > 0)) return false;
+    const scale = cssScaleFor(scene.scale.displaySize.width, width);
+    // 🔴 BOTH terms, and the Codex implementation review is why.
+    //
+    // The first repair gated a route on the play controls, which killed a FULL-SCREEN title zone
+    // at 200 % browser zoom because a button that is not on that screen would have been too small
+    // (WCAG 1.4.4). The second gated it on the route's own targets — and re-opened the defect the
+    // first one closed, because `RotatePrompt` decides visibility from the play controls: on a
+    // portrait phone the prompt is up while a 390 x 219 CSS px title zone is comfortably over
+    // every floor, so a tap on "ROTATE YOUR DEVICE" dismissed the title underneath it.
+    //
+    // Neither predicate alone is the question. The question is *may this route be touched right
+    // now*, and the answer is no if a prompt is covering it OR if its own targets are too small to
+    // hit. The first term is literally `RotatePrompt.refresh()`'s own call, so the two cannot
+    // disagree about whether a prompt is up.
+    if (!touchTargetsFit(touchLayout(width, height), scale)) return true;
+    return !touchTargetsFit(targets, scale);
   };
 
   const zones: TouchZoneLike[] = [];
