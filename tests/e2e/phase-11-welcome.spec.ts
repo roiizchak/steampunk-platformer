@@ -95,25 +95,30 @@ test.describe('Phase 11 — 11.9 keys cannot leak past the title', () => {
     expect((await page.evaluate(() => window.__game))?.sceneKey).toBe('Game');
   });
 
-  test('SPACE does not latch a jump on the press that dismisses the title', async ({ page }) => {
+  /**
+   * ⚠️ **This test used to assert the opposite half of a flow that no longer exists.** SPACE
+   * dismissed the title straight into a running level, so the risk was that the same press also
+   * latched a jump — and the assertion was "the player has not moved up after the resume".
+   *
+   * Since 2026-08-29 there is one way in and it is the level menu, so SPACE stops `Game` rather than
+   * resuming it and there is no frame in which a latched jump could fire. The press still must not
+   * reach the sim, though, and that is what is asserted now: the world is gone, not running.
+   */
+  test('SPACE reaches the menu and never the paused simulation', async ({ page }) => {
     await bootToTitle(page);
     const before = await page.evaluate(() => window.__game?.player as { y: number } | null);
+    expect(typeof before?.y, 'type before value (vault C1)').toBe('number');
 
     await page.keyboard.press('Space');
     await page.waitForFunction(
-      () => !(window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('Title'),
+      () =>
+        (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
       undefined,
       { timeout: 5_000 },
     );
-    const sample = await tickOverFrames(page, 12);
 
-    const after = await page.evaluate(() => window.__game?.player as { y: number; vy: number } | null);
-    expect(typeof after?.y, 'type before value (vault C1)').toBe('number');
-    expect(sample.last, 'the game resumed').toBeGreaterThan(sample.first);
-    // A latched jump would show as upward velocity in the first frames after the resume.
-    expect(after?.y, 'the dismissing press must not also be a jump').toBeGreaterThanOrEqual(
-      (before?.y ?? 0) - 1,
-    );
+    expect(await sceneActive(page, TITLE), 'the title is gone').toBe(false);
+    expect(await gameStatus(page), 'a jump can only latch in a RUNNING game').not.toBe(RUNNING);
   });
 });
 

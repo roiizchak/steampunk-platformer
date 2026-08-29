@@ -123,13 +123,7 @@ export function attachTitle(
   }
   titleShown = true;
 
-  const data: TitleSceneData = {
-    audio,
-    onLevelSelect,
-    // Resume the scene this helper paused. Held here rather than in the title so the pause and the
-    // resume are written in one place and cannot drift apart.
-    onPlay: () => manager.resume(),
-  };
+  const data: TitleSceneData = { audio, onLevelSelect };
   manager.launch(TITLE_KEY, data);
   // `pause()` with no argument pauses the scene this plugin belongs to — `Game` itself.
   //

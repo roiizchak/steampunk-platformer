@@ -281,15 +281,14 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   }
 
   /**
-   * The five LINES, named. A bare count of five `make()` calls passes if one line is deleted and
+   * The four LINES, named. A bare count of `make()` calls passes if one line is deleted and
    * another duplicated — the screen would lose a choice and the gate would not notice. Codex
    * implementation review round 2, finding 4.
    */
   const LINES: ReadonlyArray<readonly [string, string]> = [
     ['STEAMPUNK PLATFORMER', 'TITLE_STYLE'],
     ['a short climb through the works', 'SUB_STYLE'],
-    ['ENTER   begin', 'CHOICE_STYLE'],
-    ['L   choose a level', 'CHOICE_STYLE'],
+    ['ENTER   choose a level', 'CHOICE_STYLE'],
   ];
 
   for (const [text, style] of LINES) {
@@ -316,13 +315,13 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     expect(audioHint(false, 1)).toContain('M mute');
   });
 
-  it('five lines and no more — an extra draw is a layout the row fractions do not place', () => {
+  it('four lines and no more — an extra draw is a layout the row fractions do not place', () => {
     // `applyLayout` positions items against a fixed five-entry `rows` table; a sixth would land at
     // its `?? 0.5` fallback, on top of another line.
     // Five call sites. The declaration reads `const make = (text, style) =>`, so it contributes no
     // `make(` of its own — checked by running this, not assumed.
     const draws = source.match(/make[(]/g) ?? [];
-    expect(draws.length, `${draws.length} occurrences of make(`).toBe(5);
+    expect(draws.length, `${draws.length} occurrences of make(`).toBe(4);
 
     // 🔴 And exactly ONE `this.add.text`, inside `make`. Counting only `make(` let a sixth line be
     // added as a direct `this.add.text(...)` — drawn, unplaced by `applyLayout`'s five-entry row

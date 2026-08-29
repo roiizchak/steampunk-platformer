@@ -55,6 +55,9 @@ import { TITLE_KEY } from './gameTitle';
 import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 import type { AudioActionResult } from './audioKeyMap';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
+import { createParallax, renderParallax } from './gameParallax';
+import type { ParallaxImage } from './gameParallax';
+import { RULE_ALPHA, RULE_PX, TITLE_DRIFT_PX_PER_TICK, panelSize } from '../render/titleInk';
 import type { AudioManager } from '../game/audio';
 import {
   audioHint,
@@ -76,6 +79,8 @@ export { TITLE_KEY } from './gameTitle';
  * derivation is in `titleInk.ts`; do not inline a colour back into this file.
  */
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '72px', color: TITLE_FILL } as const;
+/** The heading ink as a Phaser numeric colour, for the two shapes that are not text. */
+const TITLE_FILL_HEX = Number.parseInt(TITLE_FILL.slice(1), 16);
 const SUB_STYLE = { fontFamily: 'monospace', fontSize: '26px', color: SUB_FILL } as const;
 const CHOICE_STYLE = { fontFamily: 'monospace', fontSize: '34px', color: CHOICE_FILL } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: HINT_FILL } as const;
@@ -92,17 +97,18 @@ export interface TitleSceneData {
    * while `LevelSelect` published `player: null` over a live world. The existing safe path starts
    * the menu from `Game` (`gameLevelPick.openLevelSelect`), and this keeps using it.
    */
-  onLevelSelect: () => void;
   /**
-   * Resume the paused `Game`. Owned by `gameTitle.ts`, which is what paused it.
+   * 🔴 **The only way out, and therefore required.** `audio` may be absent and degrade to a dead
+   * key, which is the right failure; this one cannot — a `Title` launched without it answers ENTER
+   * by stopping itself and going nowhere, leaving a frozen `Game` with nothing drawn over it.
    *
-   * 🔴 **Required, not optional.** `audio` may be absent and degrade to a dead key, which is the
-   * right failure. This one cannot: a `Title` launched without it answers ENTER by stopping itself
-   * and never resuming, leaving a frozen `Game` with nothing drawn over it and no way out. The type
-   * is the guard — `attachTitle` is the only launcher today, and this stops the second one from
-   * being written wrong.
+   * ⚠️ There used to be an `onPlay` beside this, resuming the paused `Game` for a title that could
+   * start a level directly. **The owner's 2026-08-29 decision left it with no caller**, and an
+   * exported callback nobody invokes is the defect this project names for decision functions. It is
+   * gone rather than kept "in case": the menu is the way in, and the menu STOPS `Game` rather than
+   * resuming it.
    */
-  onPlay: () => void;
+  onLevelSelect: () => void;
 }
 
 export class TitleScene extends Phaser.Scene {
@@ -124,7 +130,24 @@ export class TitleScene extends Phaser.Scene {
    */
   private dismissed = false;
   private items: Phaser.GameObjects.Text[] = [];
-  private scrim?: Phaser.GameObjects.Rectangle;
+  /**
+   * The panel behind the TEXT — no longer a full-canvas scrim.
+   *
+   * 🔴 The first version dimmed the whole screen to 82 %, which is what made the backdrop unreadable
+   * and is the thing the owner objected to. The contrast bound has not moved: it was always
+   * "ink over `SCRIM_ALPHA` of `SCRIM_COLOUR` over an arbitrary bright pixel", and that is exactly
+   * what the panel still is. Shrinking WHERE it applies changes nothing the sweep in
+   * `title-contrast.test.ts` measures — but it does mean the ink is only ever drawn on top of it,
+   * which `applyLayout` guarantees by sizing the panel from the text it contains.
+   */
+  private panel?: Phaser.GameObjects.Rectangle;
+  /** The two brass hairlines at the band edges. Decoration, but decoration that has to be laid out. */
+  private rules: Phaser.GameObjects.Rectangle[] = [];
+  /** An opaque floor, so the PAUSED level underneath is never visible through a transparent layer. */
+  private backdrop?: Phaser.GameObjects.Rectangle;
+  private parallax: ParallaxImage[] = [];
+  /** Ticks since the screen opened, for the backdrop drift. Integer counts, never a delta multiply. */
+  private drift = 0;
   private hint?: Phaser.GameObjects.Text;
   /**
    * Seeded from the PERSISTED settings, which is the same store `createAudio()` copies at boot —
@@ -142,23 +165,48 @@ export class TitleScene extends Phaser.Scene {
    * constructor runs once, so state initialised there survives a restart.
    */
   init(data?: TitleSceneData): void {
-    // BOTH callbacks, not just `onPlay`. `L` stops this scene and calls `onLevelSelect`; a missing
-    // one strands the player exactly as a missing `onPlay` does. Codex implementation review.
-    const complete =
-      typeof data?.onPlay === 'function' && typeof data?.onLevelSelect === 'function';
-    this.data$ = complete && data ? data : null;
+    // The one callback that is the way out. Without it this screen has no exit, so it refuses to
+    // draw rather than trapping the player behind a paused game.
+    this.data$ = typeof data?.onLevelSelect === 'function' && data ? data : null;
     this.items = [];
+    this.parallax = [];
+    this.rules = [];
+    this.drift = 0;
     this.dismissed = false;
     this.audioState = readAudioSettings(safeLocalStorage());
   }
 
   create(): void {
-    // No resume path means no screen. An inert Title is harmless — nothing paused `Game` either,
-    // because `attachTitle` is what pauses it and `attachTitle` always passes `onPlay`.
+    // No way out means no screen. An inert Title is harmless — nothing paused `Game` either,
+    // because `attachTitle` is what pauses it and `attachTitle` always passes the callback.
     if (!this.data$) {
       return;
     }
-    this.scrim = this.add.rectangle(0, 0, 10, 10, SCRIM_COLOUR, SCRIM_ALPHA).setOrigin(0).setScrollFactor(0);
+    /**
+     * The backdrop, in three parts and in this order.
+     *
+     * 1. An OPAQUE rectangle, because `Game` is paused underneath rather than stopped and would show
+     *    through any gap the parallax art leaves. "No platforms, no player, no HUD" is the owner's
+     *    requirement, and only an opaque floor guarantees it.
+     * 2. The same three parallax layers the game draws, from `gameParallax.ts` — the identical
+     *    builder, so a texture key that stopped existing breaks the title and the level together
+     *    rather than silently drawing nothing here.
+     * 3. Nothing else. No tiles, no sprites: this is a composed screen, not a frozen level.
+     */
+    // 🔴 BELOW the parallax, which `createParallax` puts at depth -100..-98. The first version left
+    // this at the default depth 0 and painted an opaque rectangle straight over all three layers —
+    // the screen rendered as a flat dark field and looked exactly like the version it replaced.
+    this.backdrop = this.add
+      .rectangle(0, 0, 10, 10, SCRIM_COLOUR, 1)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(-200);
+    this.parallax = createParallax(this);
+    // The panel goes ON TOP of the parallax and UNDER the text — the only thing that dims anything.
+    this.panel = this.add.rectangle(0, 0, 10, 10, SCRIM_COLOUR, SCRIM_ALPHA).setOrigin(0.5).setScrollFactor(0);
+    this.rules = [0, 1].map(() =>
+      this.add.rectangle(0, 0, 10, RULE_PX, TITLE_FILL_HEX, RULE_ALPHA).setOrigin(0.5).setScrollFactor(0),
+    );
 
     const make = (text: string, style: Phaser.Types.GameObjects.Text.TextStyle): Phaser.GameObjects.Text => {
       const object = this.add.text(0, 0, text, style).setOrigin(0.5).setScrollFactor(0);
@@ -168,8 +216,10 @@ export class TitleScene extends Phaser.Scene {
 
     make('STEAMPUNK PLATFORMER', TITLE_STYLE);
     make('a short climb through the works', SUB_STYLE);
-    make('ENTER   begin', CHOICE_STYLE);
-    make('L   choose a level', CHOICE_STYLE);
+    // 🔴 ONE way in, and it is the level menu — owner's decision, 2026-08-29. `ENTER` used to start
+    // a level directly with `L` as a second route to the menu; two doors to the same place is a
+    // choice the player has no basis to make on the first screen they see.
+    make('ENTER   choose a level', CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
     this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
 
@@ -192,7 +242,10 @@ export class TitleScene extends Phaser.Scene {
       this.events.off(Phaser.Scenes.Events.DESTROY, teardown);
       this.scale.off('resize', this.applyLayout, this);
       this.items = [];
-      this.scrim = undefined;
+      this.panel = undefined;
+      this.rules = [];
+      this.backdrop = undefined;
+      this.parallax = [];
       this.hint = undefined;
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, teardown);
@@ -201,12 +254,44 @@ export class TitleScene extends Phaser.Scene {
     this.bindKeys();
   }
 
+  /**
+   * Drift the backdrop.
+   *
+   * Phaser hands `update` a wall-clock delta and this screen deliberately ignores it: the drift is an
+   * integer count of frames times an integer pixel step, so the same number of frames always moves it
+   * the same distance. That is the project's rule for durations and distances, applied to the one
+   * piece of motion a paused screen owns.
+   *
+   * `renderParallax` is the same function `gameFrameDraw.ts` calls, taking a scroll in world pixels
+   * — so each layer's own factor still decides how fast it moves relative to the others.
+   */
+  override update(): void {
+    if (this.parallax.length === 0) {
+      return;
+    }
+    this.drift += TITLE_DRIFT_PX_PER_TICK;
+    renderParallax(this.parallax, this.drift);
+  }
+
   /** Centre everything against the LIVE size, never a literal (vault 6.2). */
   private applyLayout(): void {
     const { width, height } = this.scale.gameSize;
-    this.scrim?.setSize(width, height);
+    this.backdrop?.setSize(width, height);
+    for (const { image } of this.parallax) {
+      image.setSize(width, height);
+    }
+    // The panel is sized FROM the text it has to cover, so no ink can ever land outside it — which is
+    // what keeps `title-contrast.test.ts`'s bound true rather than approximately true.
+    const { w, h } = panelSize(width, height);
+    this.panel?.setPosition(width / 2, height / 2).setSize(w, h);
+    this.rules.forEach((rule, i) => {
+      rule.setPosition(width / 2, height / 2 + (i === 0 ? -h / 2 : h / 2)).setSize(w, RULE_PX);
+    });
     // Fractions of the height, so the arrangement survives any viewport the scale manager hands us.
-    const rows = [0.3, 0.4, 0.56, 0.64, 0.82];
+    // FOUR rows now, not five — the second choice line went when ENTER became the only way in.
+    // Re-spread rather than left as [0.3, 0.4, 0.56, 0.64] with a hole at 0.82, which would have
+    // bunched everything into the top two thirds of the panel.
+    const rows = [0.34, 0.45, 0.61, 0.72];
     this.items.forEach((item, index) => {
       item.setPosition(width / 2, height * (rows[index] ?? 0.5));
     });
@@ -246,11 +331,8 @@ export class TitleScene extends Phaser.Scene {
         }
         return;
       }
+      // Every begin key goes to the LEVEL MENU. There is no second route and no resume.
       if (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') {
-        this.dismiss(this.data$?.onPlay);
-        return;
-      }
-      if (event.code === 'KeyL') {
         this.dismiss(this.data$?.onLevelSelect);
       }
     });

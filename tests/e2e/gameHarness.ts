@@ -93,7 +93,32 @@ export async function dismissTitle(page: Page): Promise<void> {
 
   const before = await page.evaluate(() => window.__game?.tick ?? 0);
   await page.locator('canvas').click();
-  await page.keyboard.press('Enter');
+
+  /**
+   * 🔴 **SKIPS the screen through the dev surface — it does not press the keys a player presses.**
+   *
+   * Since 2026-08-29 the welcome screen's only exit is the level menu, so driving it the way a player
+   * does means title → menu → level. That was tried, and it moved two things ~40 specs depend on:
+   *
+   *  - **which level loads.** The menu opens on the furthest UNLOCKED row; boot uses
+   *    `resolveEntryLevel`, which prefers the SAVED level. They agree on an empty save and diverge
+   *    the moment a spec seeds progress — `phase-08-complete` failed with
+   *    `Expected "ENTER — level-02", Received "ENTER — level-03"`.
+   *  - **when the simulation starts.** Going through the menu restarts `Game`, so it is already
+   *    running by the time a spec installs a probe. `phase-09-polish` failed with *"the camera was
+   *    not at its unshaken base at install"* — scroll 1.15 instead of 0.
+   *
+   * Both are real behaviour changes for a PLAYER and neither is one these specs are about. So the
+   * harness says what it means: skip the welcome screen, leave everything else exactly as boot left
+   * it. The player-facing route is covered on its own by `phase-11-title-routes.spec.ts`.
+   */
+  await page.evaluate(() => {
+    const handle = (window as unknown as {
+      __phaserGame?: { scene: { stop(key: string): void; resume(key: string): void } };
+    }).__phaserGame;
+    handle?.scene.stop('Title');
+    handle?.scene.resume('Game');
+  });
 
   await page.waitForFunction(
     (t) =>

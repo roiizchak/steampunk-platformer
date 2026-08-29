@@ -21,21 +21,45 @@ import { dismissTitle } from './gameHarness';
 import './debugView';
 
 test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the ones that must not exist', () => {
-  test('L opens the level menu', async ({ page }) => {
+  /**
+   * 🔴 **ENTER, not L.** The screen shipped with two doors to the same place — ENTER straight into a
+   * level, `L` to the menu — and the owner's call on 2026-08-29 was one way in, through the menu.
+   * `L` is no longer bound here at all, so a test still pressing it would pass by pressing nothing.
+   */
+  for (const key of ['Enter', 'Space', 'NumpadEnter']) {
+    test(`${key} opens the level menu`, async ({ page }) => {
+      await bootToTitle(page);
+
+      await page.keyboard.press(key);
+
+      await page.waitForFunction(
+        () =>
+          (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
+        undefined,
+        { timeout: 5_000 },
+      );
+      expect(await sceneActive(page, TITLE), 'the title must be gone, not drawn over the menu').toBe(
+        false,
+      );
+      // 🔴 And GAME must be gone too. Checking only that the menu opened would pass if the title had
+      // ALSO resumed Game — a live world updating under the level menu, which is the failure mode
+      // `openLevelSelect` being Game-owned exists to prevent. Codex implementation review, finding 6.
+      expect(await gameStatus(page), 'a running Game under the menu is the defect').not.toBe(RUNNING);
+    });
+  }
+
+  test('L is not a route any more', async ({ page }) => {
     await bootToTitle(page);
 
     await page.keyboard.press('l');
-
-    await page.waitForFunction(
-      () => (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
-      undefined,
-      { timeout: 5_000 },
+    await page.evaluate(
+      () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
     );
-    expect(await sceneActive(page, TITLE), 'the title must be gone, not drawn over the menu').toBe(false);
-    // 🔴 And GAME must be gone too. Checking only that the menu opened would pass if the title had
-    // ALSO resumed Game — a live world updating under the level menu, which is the failure mode
-    //  being Game-owned exists to prevent. Codex implementation review, finding 6.
-    expect(await gameStatus(page), 'a running Game under the menu is the defect').not.toBe(RUNNING);
+
+    // Not a formality: `L` is still an ATTACK key in `gameInput.ts`, so if the title ever stopped
+    // being the thing that swallows it, this press would reach a paused game's listener.
+    expect(await sceneActive(page, 'LevelSelect'), 'L must no longer open the menu').toBe(false);
+    expect(await sceneActive(page, TITLE), 'and the title stays up').toBe(true);
   });
 
   /**

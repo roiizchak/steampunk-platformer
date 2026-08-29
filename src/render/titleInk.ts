@@ -130,3 +130,44 @@ export function audioHint(muted: boolean, volume: number): string {
   const level = muted ? 'muted' : `${Math.round(volume * 100)}%`;
   return `M mute   ·   [ ] volume   ${level}`;
 }
+
+/**
+ * How far the title's backdrop drifts each frame, in pixels.
+ *
+ * An integer pixel step per frame, never a `deltaTime` multiply — the project's rule for every
+ * duration and distance, applied to the one piece of motion a paused screen owns. `renderParallax`
+ * multiplies it by each layer's own factor (0.15 / 0.35 / 0.6), so the far layer actually creeps at
+ * 0.3 px and the near one at 1.2 px: slow enough to read as atmosphere rather than travel.
+ */
+export const TITLE_DRIFT_PX_PER_TICK = 2;
+
+/**
+ * The panel behind the text, as a fraction of the live canvas.
+ *
+ * 🔴 **It exists so the contrast bound stays exactly what `title-contrast.test.ts` measures.** The
+ * sweep's whole premise is that every glyph sits on `SCRIM_ALPHA` of `SCRIM_COLOUR` over an
+ * arbitrary bright pixel. Dimming the full canvas made that trivially true and made the backdrop
+ * unreadable, which is what the owner objected to. A panel keeps the premise and gives it back the
+ * picture — but only if no ink is ever drawn outside the panel, which is why the size is derived
+ * here and `applyLayout` positions the rows inside it rather than the other way round.
+ *
+ * 🔴 **FULL WIDTH, deliberately.** The first version was inset to 0.72 of the width, and its two
+ * vertical edges cut straight down through the boiler art — it read as a rendering fault rather than
+ * a design. A band that runs edge to edge has only horizontal edges, parallel to the frame, which is
+ * the letterbox shape a title card already implies.
+ *
+ * The four rows span 0.34 to 0.72 of the height, so 0.56 covers them with margin either side.
+ */
+export function panelSize(width: number, height: number): { w: number; h: number } {
+  return { w: width, h: Math.round(height * 0.56) };
+}
+
+/**
+ * The hairlines at the band edges, in the heading ink.
+ *
+ * Two 3 px rules turn a flat alpha band into something deliberate, and they are the cheapest
+ * Victorian-industrial cue available without spending a generation — brass on soot, which is
+ * STYLE.md §1 in two lines of code.
+ */
+export const RULE_PX = 3;
+export const RULE_ALPHA = 0.55;

@@ -39,6 +39,45 @@ type Page = import('@playwright/test').Page;
 export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
 
 /**
+ * How much DARKER the canvas must get on the way from the welcome screen to the level menu.
+ *
+ * ## Why a second bound exists at all
+ *
+ * ⚠️ **One `Enter` no longer reaches a level.** The owner's 2026-08-29 decision made the level menu
+ * the only way in, so the production route is title → **menu** → level and a single press lands on a
+ * screen that is *darker* than the title, not brighter. Every `chromium-prod` spec failed on
+ * exactly that: ratio **0.729** against a bound of `> 1.5`. The gate was right and the harness was
+ * out of date.
+ *
+ * ## Why darkening, and why it is not a sleep in disguise
+ *
+ * The menu needs a POSITIVE barrier before the second press, and production ships no debug surface
+ * to ask — pixels are the only signal *(this file's header)*. The menu is a plain dark list over no
+ * art, while the title now draws the parallax backdrop behind its band, so the step down is large
+ * and in the opposite direction to the step that follows it.
+ *
+ * It also cannot be satisfied by the failure it guards: if `TitleScene` were tree-shaken out of the
+ * bundle, the first `Enter` would reach an already-running level, the ratio would sit at ~1.0, and
+ * this poll would time out **red** — the same discriminator the brightening bound carries, pointing
+ * the other way.
+ *
+ * ## The number
+ *
+ * Measured against `dist/` on the production server, 5 runs (1 + `--repeat-each=4`), and the
+ * figures are **identical to twelve decimal places** on every one — the centre patch sits inside the
+ * static band, so the parallax drift does not reach it: title **27.547**, menu **20.082**, level
+ * **60.593**. That is menu/title **0.7289** and level/title **2.200**. `0.85` sits comfortably
+ * ABOVE the observed 0.729 and comfortably BELOW the 1.0 that "no title in the bundle" produces,
+ * so it rests on neither distribution's tail.
+ *
+ * ⚠️ The brightening bound is now measured against a **brighter** title than the 2.53 recorded when
+ * it was chosen (the parallax backdrop replaced a flat scrim), so the observed ratio fell 2.53 →
+ * 2.20. **1.5 still clears both distributions** and is left alone rather than re-tuned toward a
+ * tighter fit it does not need.
+ */
+export const TITLE_MENU_MAX_DARKENING = 0.85;
+
+/**
  * Dismiss the Phase 11 welcome screen in `dist/`, where there is nothing to ask.
  *
  * ## Why this cannot be `gameHarness.dismissTitle`
@@ -49,8 +88,11 @@ export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
  *
  * ## The signature, and why BOTH halves are asserted
  *
- * `TitleScene` draws a full-canvas scrim at 82 % alpha, so the whole frame is much darker while it
- * is up and returns to the lit level once it is not. Nothing else at boot dims the entire canvas.
+ * `TitleScene` draws its text over a dimmed band, so the centre of the frame is much darker while it
+ * is up and returns to the lit level once it is not. Nothing else at boot dims the centre patch.
+ *
+ * ⚠️ **The route is two presses now**, and the middle screen is darker still — see
+ * `TITLE_MENU_MAX_DARKENING`. The barrier between them is a bound, not a sleep.
  *
  * 🔴 Asserting only that the title is GONE afterwards would also pass if `TitleScene` had been
  * tree-shaken out of the production bundle and never appeared at all — a green earned by the
@@ -84,9 +126,19 @@ export async function dismissTitleProduction(page: Page): Promise<void> {
   const before = Math.min(...samples);
 
   await page.locator('canvas').click();
+
+  // 🔴 TWO presses, with a positive barrier between them — title → level MENU → level. Pressing
+  // twice in a row would be a race dressed as a fix: `scene.start` is queued, so the second press
+  // can land before `LevelSelectScene.create()` has bound a key and simply be swallowed.
   await page.keyboard.press('Enter');
 
-  // Poll the pixels, never a sleep: the scene stop and the resume are both queued.
+  // Poll the pixels, never a sleep: the scene stop and the start are both queued.
+  await expect
+    .poll(async () => (await centrePatchLuminance(page)) / before, { timeout: 15_000 })
+    .toBeLessThan(TITLE_MENU_MAX_DARKENING);
+
+  await page.keyboard.press('Enter');
+
   await expect
     .poll(async () => (await centrePatchLuminance(page)) / before, { timeout: 15_000 })
     .toBeGreaterThan(TITLE_SCRIM_MIN_BRIGHTENING);

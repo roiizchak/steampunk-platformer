@@ -153,16 +153,22 @@ describe('attachTitle', () => {
     });
   }
 
-  it('the resume handed to the scene resumes the game this helper paused', () => {
+  /**
+   * ⚠️ This used to be *"the resume handed to the scene resumes the game this helper paused"*, and
+   * it asserted an `onPlay` callback that no longer exists. The owner's 2026-08-29 decision made the
+   * level menu the only way off the welcome screen, and the menu STOPS `Game` rather than resuming
+   * it — so nothing invoked `onPlay` any more, and an exported callback with no caller is the defect
+   * this project names for decision functions. What replaces it is the assertion that the helper
+   * hands over exactly what the scene needs and nothing it does not.
+   */
+  it('the scene is handed the menu route and no dead resume', () => {
     const { scene, plugin } = fakeScene();
+
     attachTitle(scene, noAudio, noop);
-    plugin.calls.length = 0;
 
-    plugin.launched[0]?.onPlay();
-
-    expect(plugin.calls, 'pause and resume are written in one place so they cannot drift').toEqual([
-      'resume',
-    ]);
+    const data = plugin.launched[0];
+    expect(Object.keys(data ?? {}).sort()).toEqual(['audio', 'onLevelSelect']);
+    expect(typeof data?.onLevelSelect).toBe('function');
   });
 
   it('the callbacks reach the scene unchanged, and the audio getter is not called at attach time', () => {
