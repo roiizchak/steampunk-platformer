@@ -107,7 +107,10 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   can fix. A separate number from the art ceiling because it funds a separate deliverable, by owner
   instruction, even though the endpoint is the same `nano-banana-pro` stills the art ceiling covers.
   One 1:1 2K plate is `$0.15`, so `$5` buys **33 takes** against a realistic need of one plus
-  retries. **Running total: `$0.00`.** As with the other two, `GENERATION-LOG.md`'s figure is live
+  retries. **Running total: `$0.30`** — two touch-plate takes on 2026-08-29, `request_id`s
+  `01a04e0b-ec39-7200-97bc-3afbd338ffeb` and `01a04e0e-d45d-7ab2-be31-a7c2f479a495`, **neither
+  adopted**; the shipped controls are grey-box. See
+  [generations/phase-12-touch-plate.md](generations/phase-12-touch-plate.md). As with the other two, `GENERATION-LOG.md`'s figure is live
   and this line is the ceiling it is measured against; they must agree.
 - **The fal audio-spend ceiling is `$5`**, set by owner decision on 2026-08-16 **before Phase 7's
   first generation** — which is the half of 4.2b that no ceiling could fix. It is a separate number
