@@ -1,4 +1,66 @@
-# Session handoff — the HUD banner's placement + the pit rule
+# Session handoff — Phase 11, the welcome screen and the volume repair
+
+> # ⚠️ Phase 11 is OPEN. Four criteria are owner-owned and unrun.
+>
+> Branch `phase-11-welcome`, four commits on top of `main` at `6da76b7`. Everything automated is
+> green; nothing that needs a human at the keyboard has been done.
+
+## Where it stopped
+
+**The volume bug is fixed and the root cause is proved by measurement, not inference.** Phaser
+dispatches on `event.keyCode` (`KeyboardPlugin.js:747`), which is layout-dependent for punctuation
+and stable for letters — which is exactly the split the owner reported (`M` worked, `[` / `]` did
+not). Audio keys now go through a raw DOM listener on `event.code`. **Criterion 11.2 needs the owner
+at the Hebrew layout**; no automated evidence can stand in for it *(C4)*.
+
+**The welcome screen ships**, in both `config.ts` arms, as a parallel scene over a PAUSED `Game`.
+It was redesigned on 2026-08-29 after the owner said the first build *"is not looking good"*:
+parallax backdrop, full-width dimmed band, and ENTER to the level menu as the single way in.
+
+## The traps, and they are not visible in the code
+
+**`gameHarness.dismissTitle` SKIPS the screen through `__phaserGame`.** It does not press the keys a
+player presses, and its docstring says why: walking the real route changes which level loads (menu
+opens on the furthest unlocked, boot resolves the saved one) and when the sim starts. ~40 specs
+depend on both. The player route is covered by exactly one spec, in
+`phase-11-title-routes.spec.ts` — **do not delete it**, it is the only thing standing between a
+broken `LevelSelectScene.play()` and a green suite.
+
+**The `dismissed` latch in `TitleScene` has NO live gate**, deliberately and recorded. The sequence
+it was written against needed `onPlay`, which is gone. Its docstring carries the reasoning; do not
+"fix" the test that no longer gates it by inventing an assertion.
+
+**`polishSeries.installRecorder` waits out the SPAWN's landing shake.** The spawn is a touchdown,
+`landedTick` is 0, and `SHAKE.land` runs three ticks. The recorder was installing on tick 2. That
+race was always there — the welcome screen only changed which side of it we landed on.
+
+**`prodTitle` presses ENTER TWICE**, with a measured darkening bound between the presses as the
+barrier. Production ships no debug surface, so pixels are the only signal.
+
+## What is owed
+
+- **11.2** — the owner's own Hebrew keyboard. The only thing that can confirm the real defect is the
+  one that was fixed.
+- **11.4** (the audible half), **11.7** (routing), **11.11** (lock state and gear totals) — hands-on.
+- **The title backdrop.** Two fal plates generated 2026-08-29 with the owner's authorisation, $0.30,
+  in `_generated/title-backdrop/` (gitignored; request ids are in GENERATION-LOG.md). **Variant B is
+  the usable one — A has the compositing band baked into it, because the prompt described it.**
+  Neither is wired in; wiring one in is a design change (static plate versus the current three-layer
+  parallax) plus the manifest, `dist/` and downscale obligations.
+- **The volume STEP SIZE and its missing feedback** — deliberately not fixed, see the QA log.
+- **A fal ceiling FIGURE.** Spend is $55.50 against a last-stated ceiling of $55. Every overrun is
+  cleared by an explicit owner decision; no new number has ever been named, and the log refuses to
+  invent one.
+
+## Two perf gates flake under full-suite load
+
+`phase-05-perf` 5.11 and `phase-06-perf` 6.9 both failed one full `test:e2e` run and **both pass in
+isolation**. GPU-ratio statistics whose denominator collapses when the box is busy — the shape
+`docs/QA-LOG.md` already records. Two earlier full runs the same day were clean at 183 and 184.
+
+---
+
+# Superseded — the HUD banner's placement + the pit rule
 
 > # ✅ The invisible blocker is FIXED — and this time it was REPRODUCED first.
 >
