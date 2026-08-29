@@ -35,11 +35,27 @@ interface Viewport {
   expectPrompt?: boolean;
 }
 
-/** The whole in-scope matrix, plus the two the rotate prompt exists for. */
+/**
+ * The whole in-scope matrix, plus the two the rotate prompt exists for.
+ *
+ * 🔴 The first three rows are SCREEN sizes; the three marked `chrome` are what a real mobile
+ * browser actually hands the page. `page.setViewportSize()` gives the test the whole screen, and
+ * the accessibility gate's adversarial brief pointed out that no phone ever does: Safari and
+ * Chrome keep a URL bar, and `index.html`'s `#game { height: 100% }` means the page never scrolls,
+ * so **that bar never collapses** — the reduced viewport is the permanent one, not a transient.
+ *
+ * With the old 128 px menu row (44.4 CSS px at the tested 667x375, a margin of 1.0 %) all three of
+ * these were under the floor and live, with no prompt, because everything asked `touchTargetsFit`
+ * about the 160 px play CONTROLS. Two floors, one blind band between them. They are here so the
+ * one-floor repair cannot be undone quietly.
+ */
 const VIEWPORTS: Viewport[] = [
   { name: 'iPhone SE landscape', width: 667, height: 375 },
   { name: 'iPhone 14 landscape', width: 844, height: 390 },
   { name: 'Pixel 7 landscape', width: 892, height: 412 },
+  { name: 'iPhone SE landscape, Safari chrome', width: 667, height: 325 },
+  { name: 'iPhone 14 landscape, safe area + chrome', width: 750, height: 325 },
+  { name: 'Pixel 7 landscape, Chrome chrome', width: 892, height: 356 },
   { name: 'declared minimum', width: 852, height: 480 },
   { name: 'iPad landscape', width: 1024, height: 768 },
   { name: 'iPad portrait', width: 768, height: 1024 },
@@ -164,8 +180,23 @@ test('12.8/12.9 the level menu rows clear the same floors', async ({ page }) => 
   });
 
   const rect = await canvasRect(page);
+  // Derived from the shipped catalog, never a literal: a sixth level must move this number, not
+  // silently pass a gate pinned at five.
+  const catalogLevels = await page.evaluate(
+    () =>
+      (window as unknown as { __phaserGame: { scene: { getScene(k: string): { children: { list: { type: string; name: string }[] } } } } })
+        .__phaserGame.scene.getScene('LevelSelect')
+        .children.list.filter((o) => o.type === 'Zone' && o.name.startsWith('row-')).length,
+  );
+  expect(catalogLevels, 'the level menu drew no rows at all').toBeGreaterThan(1);
   const rows = await measuredTargets(page, 'LevelSelect');
-  expect(rows.length, 'the level menu has no measurable touch targets').toBeGreaterThan(0);
+  // 🔴 The COUNT, not `> 0`. `measuredTargets` drops non-interactive zones, so a build where four
+  // of the five rows lost interactivity passed this half of 12.9 — the *detect greenness
+  // positively, including the count* rule applied on the controls branch and not on this one.
+  expect(
+    rows.length,
+    `the level menu measured ${rows.length} live rows, not one per shipped level`,
+  ).toBe(catalogLevels);
 
   for (const r of rows) {
     expect(r.h, `${r.name} is ${r.h.toFixed(1)} CSS px tall`).toBeGreaterThanOrEqual(TOUCH_MIN_CSS_PX);
