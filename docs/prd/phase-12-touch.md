@@ -125,24 +125,51 @@ watched red, and reverted. Criteria 12.7, 12.15, 12.17, 12.18 and 12.20–12.23 
 absence-, artifact- or process-shaped and cannot be made wiring-resistant — stated rather than
 papered over.
 
-| # | mutation | must red |
-|---|---|---|
-| M1 | delete the `TouchControlsLayer` construction in `UIScene.create()` | 12.2, 12.8, 12.16 |
-| M2 | delete the pending-binding consumption at the end of `create()` | 12.1 (cold boot) |
-| M2b | delete the `touchReady = false` reset on `UIScene`'s SHUTDOWN | 12.6 (level-select return) |
-| M3 | delete the `ui.bindTouchSession(...)` call in `attachHud` | 12.2, 12.4 |
-| M4 | revert `sampleHeldKeys` at `GameScene.ts:264` to its 3-argument form | 12.4 |
-| M5 | delete each terminal route in turn — title, level-select row, completion | 12.1, three times |
-| M6 | delete the scene `POINTER_UP` registration, leaving `POINTER_UP_OUTSIDE` | 12.5 |
-| M7 | swap the cancel/disable order | 12.5 |
-| M8 | drop `!touchTargetsFit` from the disable predicate | 12.12 |
-| M9 | delete each lifecycle listener in turn | 12.5 |
-| M10 | blank `touchLayout`'s function bodies | 12.8, 12.16 |
-| M11 | shift **one** control 200 px toward its neighbour | 12.8 and 12.9 — a uniform offset preserves gaps and reds only 12.8 |
-| M11b | shift **all** controls 200 px off-canvas | 12.8 alone |
-| M12 | remove `TOUCH_ALL_SPECS` from the base `chromium` `testIgnore` | the per-project collection-count assertion |
-| M13 | drop `hasTouch: true` from `chromium-touch-gpu` | 12.11's "all five drawn" precondition |
-| M14 | delete `UIScene`'s SHUTDOWN removal of the session's `game.events` subscriptions | 12.5 |
+| # | mutation | must red | measured |
+|---|---|---|---|
+| M1 | delete the `TouchControlsLayer` construction in `UIScene.create()` | 12.2, 12.8, 12.16 | RED 7/9 |
+| M2 | delete the pending-binding consumption in `TouchSession.activate()` | 12.1 (cold boot) | RED 4/8 |
+| M2b | delete `session.deactivate()` from `attachUiTouch`'s `destroy()` | 12.6 (level-select return) | **GREEN — hole; gate written** → RED 1/5 |
+| M3 | delete the `ui.bindTouchSession(...)` call in `attachHud` | 12.2, 12.4 | RED 7/9 |
+| M4 | revert `sampleHeldKeys` to its 3-argument form | 12.4 | RED 5/9 |
+| M5a | delete the title tap route | 12.1 | RED 1/1 |
+| M5b | delete the level-menu row tap routes | 12.1 | RED 1/1 |
+| M5c | delete the completion tap route | 12.1 | RED 1/1 |
+| M6 | delete the scene `POINTER_UP` registration, leaving `POINTER_UP_OUTSIDE` | 12.5 | RED 2/9 |
+| M7 | swap the cancel/disable order | 12.5 | RED 1/22 |
+| M8 | drop `!touchTargetsFit` from the disable predicate | 12.12 | RED 2/11 |
+| M9 | delete the bound `Game` scene's lifecycle listeners | 12.5 | RED 1/22 |
+| M10 | blank `touchLayout`'s function bodies | 12.8, 12.16 | RED 2/25 |
+| M11 | shift **one** control 200 px toward its neighbour | 12.8 and 12.9 — a uniform offset preserves gaps and reds only 12.8 | RED 8/11 |
+| M11b | shift **all** controls 200 px off-canvas | 12.8 alone | RED 7/11 |
+| M12 | remove `TOUCH_ALL_SPECS` from the base `chromium` `testIgnore` | the per-project collection-count assertion | RED 3/4 |
+| M13 | drop `hasTouch: true` from `chromium-touch-gpu`'s `use` block | 12.11's "all five drawn" precondition | **GREEN — hole; gate written** → RED 1/5 |
+| M13b | drop `hasTouch: true` from `chromium-touch`'s `use` block | the config-shape gate | RED 1/5 |
+| M14 | delete `destroy()`'s removal of the layer's `game.events` subscriptions | 12.5 | RED 1/22 |
+| M15 | make the merge ignore the touch record | 12.4 | RED 4/11 |
+| M16 | let a second `begin()` on a live pointer re-arm an edge | 12.5 | RED 2/10 |
+
+**Two rows reddened nothing, and both were holes rather than mutations to drop.**
+
+🔴 **M2b.** `attachUiTouch`'s teardown had no gate at all. `touch-session.test.ts` drives the session
+against a fake layer and never imports `attachUiTouch`; `touch-draw-path.test.ts` drives the layer
+directly and never imports the session. The seam between them — the one line that stops the session
+writing to a layer about to be destroyed — was visible to neither.
+`tests/unit/ui-touch.test.ts` was written for it and reds under the mutation.
+
+🔴 **M13.** No gate read a project's `use` block. `phase-12-perf.spec.ts` builds both arms itself
+from `browser.newContext({ hasTouch })`, so the project's value never reaches it — and the spec's
+own docstring claimed the opposite, which is corrected in place.
+`tests/unit/playwright-projects.test.ts` now reads the blocks, and **M13b** — the same drop on
+`chromium-touch`, whose specs *do* use the project context — reds it too.
+
+⚠️ **The runner had a defect of its own, and it is the reason the count guard exists.** A lowercase
+drive letter as the child process's `cwd` makes vitest fail to collect with *"Cannot read properties
+of undefined (reading `config`)"* and write a report of **one failed suite and zero tests** — which,
+read as an exit code or a failure count, is indistinguishable from a mutation that reddened
+something. Measured: the identical command selects 10 tests under `C:/…` and 0 under `c:/…`. Nine
+rows were briefly and wrongly recorded as holes before the count was read *(the §5 rule: detect
+greenness positively, **including the test COUNT**)*.
 
 **Regression set:** the full unit suite (`npm test`), `npm run test:sim-isolated`, `npm run build`
 plus `verify-dist`, and the full `npm run test:e2e` — one Playwright run at a time, nothing heavy

@@ -29,10 +29,30 @@
  * events, because a Game Object hears only about a release over itself
  * (`POINTER_UP_EVENT.js:8-28`). Same rule, same reason, as `touchContacts.ts`.
  *
+ * ## 🔴 A route is dead while the rotate prompt is up
+ *
+ * The QA gate's adversarial code review found this, and the accessibility review found it
+ * independently. It was a real, shipped defect: the prompt draws at depth 3000
+ * (`rotatePrompt.ts`), these zones were interactive from creation until `destroy()` with no gate
+ * of any kind, and a `Rectangle` without `setInteractive` swallows no pointers. On a phone held
+ * upright, a tap on "ROTATE YOUR DEVICE" started the level underneath it.
+ *
+ * `rotatePrompt.ts`'s header claimed that could not happen. The claim was true only of the five
+ * play controls, which `touchControlsLayer.refresh()` gates on `touchTargetsFit`, and false of
+ * every tap route — including the level-menu rows, which are **26.0 CSS px** at phone portrait,
+ * 41 % under the floor this phase sets.
+ *
+ * So a route asks the **same** question, from the scene's own `ScaleManager`, on the frame the
+ * press arrives: `touchTargetsFit(touchLayout(gameSize), cssScaleFor(displaySize, gameSize))`. One
+ * predicate, one source, evaluated late — the prompt and the routes cannot disagree about which
+ * side of the 44 CSS px threshold this frame is on, because there is nothing to disagree with.
+ * Every screen carrying a route also carries a prompt (`rotateGuard.ts`), so a gated tap is never
+ * a silent one.
+ *
  * No Phaser import, for the reason `touchControlsLayer.ts`'s header gives.
  */
 
-import type { HitBox } from '../render/touchLayout';
+import { cssScaleFor, type HitBox, touchLayout, touchTargetsFit } from '../render/touchLayout';
 import {
   GAMEOBJECT_POINTER_DOWN,
   INPUT_POINTER_UP,
@@ -55,6 +75,8 @@ export interface TapSceneLike {
   add: { zone(x: number, y: number, width: number, height: number): TouchZoneLike };
   input: EmitterLike;
   events: EmitterLike;
+  /** Read on every press, never cached: the answer changes when the device turns. */
+  scale: { gameSize: { width: number; height: number }; displaySize: { width: number } };
 }
 
 export interface TapRoutes {
@@ -78,9 +100,18 @@ export function attachTapRoutes(
   isTouchDevice: boolean,
   targets: readonly HitBox[],
   onTap: (id: string) => void,
-  depth: number = TAP_ROUTE_DEPTH,
 ): TapRoutes {
   if (!isTouchDevice || targets.length === 0) return NO_ROUTES;
+
+  /** True on exactly the frames `RotatePrompt` covers the screen. Same call, same arguments. */
+  const promptIsUp = (): boolean => {
+    const { width, height } = scene.scale.gameSize;
+    if (!(width > 0 && height > 0)) return false;
+    return !touchTargetsFit(
+      touchLayout(width, height),
+      cssScaleFor(scene.scale.displaySize.width, width),
+    );
+  };
 
   const zones: TouchZoneLike[] = [];
   /** Pointers that have already spent their press on a route. */
@@ -96,7 +127,7 @@ export function attachTapRoutes(
       .zone(target.x, target.y, target.w, target.h)
       .setName(target.id)
       .setOrigin(0, 0)
-      .setDepth(depth)
+      .setDepth(TAP_ROUTE_DEPTH)
       // 🔴 Screen space, not world space. `TitleScene` and `LevelSelectScene` have static
       // cameras so it changes nothing there, but `GameScene`'s camera follows the player — and
       // the completion zone spent one e2e run sitting at the level origin while the panel it
@@ -105,6 +136,10 @@ export function attachTapRoutes(
       .setInteractive();
     zone.on(GAMEOBJECT_POINTER_DOWN, (pointer: PointerLike) => {
       if (!alive || spent.has(pointer.id)) return;
+      // 🔴 The rotate-prompt gate. Asked here rather than cached at creation, because the answer
+      // changes the moment the device turns — and asked from the scene's own ScaleManager so it is
+      // literally the same reading the prompt takes.
+      if (promptIsUp()) return;
       spent.add(pointer.id);
       onTap(target.id);
     });

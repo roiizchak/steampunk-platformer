@@ -24,6 +24,14 @@ import { makeTouchScene, type TouchSceneHarness } from './touchSceneFake';
  * `scene.start('Game')` (`gameHud.ts:49-52`) — is still up. A zone that outlived its panel would sit
  * invisible over the next level, one tap from skipping it. So every zone is registered against both
  * SHUTDOWN and DESTROY of the scene it was drawn on, and `destroy()` is idempotent.
+ *
+ * ## 🔴 And why a route is dead while the rotate prompt is up
+ *
+ * The QA gate's adversarial code review found a shipped defect here: the prompt draws at depth 3000
+ * and these zones were interactive from creation until `destroy()`, with no gate at all. On a phone
+ * held upright, a tap on "ROTATE YOUR DEVICE" started the level underneath it. The five play
+ * controls were never exposed — `touchControlsLayer.refresh()` gates them on `touchTargetsFit` —
+ * which is exactly why the claim in `rotatePrompt.ts`'s header read as true.
  */
 
 const RECTS = [
@@ -119,5 +127,45 @@ describe('attachTapRoutes', () => {
     const h = scene();
     attachTapRoutes(h.scene, true, [], () => {});
     expect(h.zones).toEqual([]);
+  });
+});
+
+describe('a tap route is dead on the frames the rotate prompt covers the screen', () => {
+  /** Phone portrait: 390 CSS px of canvas for 1920 game px, a scale of 0.203. */
+  const PORTRAIT = 390;
+
+  it('ignores a press while the prompt would be up, so the prompt cannot be tapped through', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+
+    // Landscape first, so the assertion below is about the SCALE and not about a route that never
+    // worked at all.
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('a' as never, 1);
+    expect(taps, 'the route never fired even in landscape — this test proves nothing').toEqual(['a']);
+    h.releasePointer(1);
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    h.press('a' as never, 2);
+    expect(
+      taps,
+      'a tap landed on a level row while the rotate prompt was covering it',
+    ).toEqual(['a']);
+  });
+
+  it('comes back the moment the device is turned, without anything being rebuilt', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    h.press('b' as never, 1);
+    h.releasePointer(1);
+    expect(taps).toEqual([]);
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('b' as never, 2);
+    expect(taps, 'the route stayed dead after the device was turned back').toEqual(['b']);
   });
 });

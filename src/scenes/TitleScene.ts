@@ -71,6 +71,7 @@ import {
   SUB_FILL,
   TITLE_FILL,
 } from '../render/titleInk';
+import { attachRotatePrompt } from './rotateGuard';
 import { attachTapRoutes } from './touchRoutes';
 
 export { TITLE_KEY } from './gameTitle';
@@ -252,6 +253,9 @@ export class TitleScene extends Phaser.Scene {
       [{ id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height }],
       () => this.dismiss(this.data$?.onLevelSelect),
     );
+    // A screen with a route needs a prompt: `touchRoutes.ts` makes the route dead while the prompt
+    // would be up, and a gated tap with nothing on screen to explain it is worse than the defect.
+    attachRotatePrompt(this, this.game.device.input.touch);
 
     this.applyLayout();
     // Re-layout rather than re-create, so a spec holding a reference across a resize is still

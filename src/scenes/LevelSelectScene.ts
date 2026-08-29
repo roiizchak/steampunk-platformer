@@ -31,7 +31,7 @@ import { isUnlocked } from '../sim/progress';
 import { updateDebugState } from '../debug/globals';
 import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
 import { touchMenuLayout } from '../render/touchLayout';
-import { RotatePrompt } from './rotatePrompt';
+import { attachRotatePrompt } from './rotateGuard';
 import { attachTapRoutes } from './touchRoutes';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
@@ -53,15 +53,6 @@ interface Row {
 export class LevelSelectScene extends Phaser.Scene {
   private rows: Row[] = [];
   private cursor = 0;
-  /**
-   * Phone portrait, where no row height clears the 44 CSS px floor.
-   *
-   * `UIScene` — which carries the prompt during play — has retired itself by the time this menu
-   * is up, because `Game` is gone. This is the only shipped screen the player can reach with no
-   * `UIScene` behind it, so it is the only one that has to say so itself.
-   */
-  private rotatePrompt?: RotatePrompt;
-
   constructor() {
     super(LEVEL_SELECT_KEY);
   }
@@ -74,7 +65,6 @@ export class LevelSelectScene extends Phaser.Scene {
   init(): void {
     this.rows = [];
     this.cursor = 0;
-    this.rotatePrompt = undefined;
   }
 
   create(): void {
@@ -136,17 +126,11 @@ export class LevelSelectScene extends Phaser.Scene {
       this.paint();
       this.play();
     });
-    this.rotatePrompt = new RotatePrompt(this, touch);
-    this.rotatePrompt.create();
-    this.rotatePrompt.refresh();
-    this.scale.on('resize', this.refreshRotatePrompt, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      // The GLOBAL ScaleManager outlives this scene, so an un-removed listener would run against
-      // destroyed objects on the next resize — the trap `TitleScene` records at its own listener.
-      this.scale.off('resize', this.refreshRotatePrompt, this);
-      this.rotatePrompt?.destroy();
-      this.rotatePrompt = undefined;
-    });
+    // Phone portrait, where no row height clears the 44 CSS px floor. `UIScene` — which carries the
+    // prompt during play — has retired itself by the time this menu is up, because `Game` is gone,
+    // so this screen says it itself. The same call also makes the row taps above dead while the
+    // prompt is up (`touchRoutes.ts`).
+    attachRotatePrompt(this, touch);
     this.paint();
 
     /**
@@ -214,10 +198,6 @@ export class LevelSelectScene extends Phaser.Scene {
       this.play();
     });
     keyboard.addCapture('UP,DOWN,W,S,ENTER');
-  }
-
-  private refreshRotatePrompt(): void {
-    this.rotatePrompt?.refresh();
   }
 
   private move(delta: number): void {
