@@ -36,11 +36,27 @@ import { attachTapRoutes } from './touchRoutes';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
+/**
+ * 🔴 The touch hint gets its own size, and it is not a preference.
+ *
+ * At 22 game px the line reads at **7.6 CSS px** on the smallest in-scope landscape phone — the
+ * smallest text in the game, and the only string that tells a touch player the rows are tappable.
+ * `helpBanner.ts:32` already records `#8f8776` shipping bare as a defect and repairs it there at
+ * 43 px bold; the diagnosis was made in one file and not carried across. 40 px is 13.9 CSS px.
+ */
+const TOUCH_HINT_STYLE = { ...HINT_STYLE, fontSize: '40px' } as const;
 const ROW_STYLE = { fontFamily: 'monospace', fontSize: '34px' } as const;
 
 const ROW_HEIGHT = 68;
 const UNLOCKED_COLOUR = '#d9cdb0';
-const LOCKED_COLOUR = '#5d5748';
+/**
+ * 🔴 Was `#5d5748`, which is **2.64:1** against the config's `#12100e` ground at 11.8 CSS px — not
+ * text, texture. On first launch four of the five rows are locked, so a stranger's first view of
+ * this menu was one readable row and four unreadable ones, with the word `locked` — the only thing
+ * explaining why a tap does nothing — rendered in the ink they cannot read. `#8f8776` is already in
+ * the palette and measures 5.33:1. Found by the UI/UX gate.
+ */
+const LOCKED_COLOUR = '#8f8776';
 const SELECTED_COLOUR = '#ffd873';
 
 interface Row {
@@ -108,8 +124,10 @@ export class LevelSelectScene extends Phaser.Scene {
       .text(
         GAME_WIDTH / 2,
         touch ? GAME_HEIGHT - 50 : GAME_HEIGHT - 140,
-        touch ? 'TAP a level, or UP / DOWN and ENTER' : 'UP / DOWN choose   ·   ENTER play',
-        HINT_STYLE,
+        // A phone has no UP, no DOWN and no ENTER; naming them here was advertising keys the
+        // reader does not have, on the one screen built for the reader who does not have them.
+        touch ? 'TAP a level to play' : 'UP / DOWN choose   ·   ENTER play',
+        touch ? TOUCH_HINT_STYLE : HINT_STYLE,
       )
       .setOrigin(0.5)
       .setScrollFactor(0);

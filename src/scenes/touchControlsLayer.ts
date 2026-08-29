@@ -51,13 +51,32 @@
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
 import {
-  TOUCH_IDS,
   type TouchId,
   type TouchTarget,
   cssScaleFor,
   touchLayout,
   touchTargetsFit,
 } from '../render/touchLayout';
+import { drawMarks, drawPlate, PLATE_ALPHA, PLATE_ALPHA_PRESSED } from './touchMarks';
+import type {
+  PointerLike,
+  TouchFaceLike,
+  TouchGameSceneLike,
+  TouchSceneLike,
+  TouchZoneLike,
+} from './touchTypes';
+
+// Re-exported from their original home so every existing importer keeps working. The interfaces
+// moved to `touchTypes.ts` when the two-ink repair took this file past the 400-line ceiling; they
+// are a clean seam because they name no behaviour, only the slice of Phaser this layer may touch.
+export type {
+  EmitterLike,
+  PointerLike,
+  TouchFaceLike,
+  TouchGameSceneLike,
+  TouchSceneLike,
+  TouchZoneLike,
+} from './touchTypes';
 import {
   GAMEOBJECT_POINTER_DOWN,
   GAME_BLUR,
@@ -82,90 +101,11 @@ import { TouchContacts } from './touchContacts';
  * **budget** for how much of it the touch layer is allowed to touch.
  */
 
-/** All this file ever reads off a pointer. */
-export interface PointerLike {
-  id: number;
-}
-
-/**
- * The `on` / `off` pair, as Phaser's `EventEmitter` exposes it.
- *
- * `(...args: never[]) => void` accepts a handler of any arity: `never` is assignable to every
- * parameter type, so `(p: PointerLike) => void` fits where `unknown[]` would not.
- */
-export interface EmitterLike {
-  on(event: string, fn: (...args: never[]) => void, context?: unknown): unknown;
-  off(event: string, fn?: (...args: never[]) => void, context?: unknown): unknown;
-}
-
-/** A hit target. Interactivity is toggled, never re-created — see `refresh`. */
-export interface TouchZoneLike {
-  setName(name: string): TouchZoneLike;
-  setOrigin(x: number, y?: number): TouchZoneLike;
-  setDepth(depth: number): TouchZoneLike;
-  setPosition(x: number, y: number): TouchZoneLike;
-  setSize(width: number, height: number): TouchZoneLike;
-  /**
-   * 🔴 Required by tap routes drawn on `GameScene`, whose camera SCROLLS with the player.
-   * Without it the completion zone sits in world space at the level origin, thousands of pixels
-   * behind the player by the time the panel appears — drawn, interactive, and unreachable.
-   */
-  setScrollFactor(x: number, y?: number): TouchZoneLike;
-  setInteractive(): TouchZoneLike;
-  disableInteractive(): TouchZoneLike;
-  on(event: string, fn: (...args: never[]) => void): TouchZoneLike;
-  destroy(): void;
-}
-
-/** Anything drawn over a zone: the grey-box plate, its glyph, and later the generated art. */
-export interface TouchFaceLike {
-  setName(name: string): TouchFaceLike;
-  setOrigin(x: number, y?: number): TouchFaceLike;
-  setDepth(depth: number): TouchFaceLike;
-  setPosition(x: number, y: number): TouchFaceLike;
-  setVisible(visible: boolean): TouchFaceLike;
-  destroy(): void;
-}
-
-/** The bound `Game` scene, which this layer only ever listens to. */
-export interface TouchGameSceneLike {
-  events: EmitterLike;
-}
-
-/** The scene the controls are drawn on — `UIScene`, whose camera never moves. */
-export interface TouchSceneLike {
-  add: {
-    zone(x: number, y: number, width: number, height: number): TouchZoneLike;
-    rectangle(
-      x: number,
-      y: number,
-      width: number,
-      height: number,
-      fillColor?: number,
-      fillAlpha?: number,
-    ): TouchFaceLike;
-    text(x: number, y: number, text: string, style?: object): TouchFaceLike;
-  };
-  input: EmitterLike;
-  game: { events: EmitterLike };
-  scale: {
-    gameSize: { width: number; height: number };
-    displaySize: { width: number; height: number };
-  };
-}
-
 /** Above every HUD depth (`hudFade` 1000/1001, the gear counter 1002) — the controls are the top layer. */
 export const TOUCH_FACE_DEPTH = 2000;
 export const TOUCH_ZONE_DEPTH = 2001;
 
-/** The grey-box glyph for each control, until the generated plate replaces it. */
-const GLYPH: Record<TouchId, string> = {
-  left: '<',
-  right: '>',
-  attack: 'A',
-  jump: '^',
-  pause: '||',
-};
+
 
 /** Everything this layer needs from one `Game` scene, rebound on every level entry. */
 export interface TouchBinding {
@@ -192,11 +132,32 @@ export class TouchControlsLayer {
   private isLive = false;
   /** The view the objects are currently placed for. `-1` so the first refresh always places. */
   private placedFor = { w: -1, h: -1 };
+  /**
+   * The pressed state, and why it is not decoration.
+   *
+   * A thumb physically covers a 55.6 CSS px control. With no visual answer, the ONLY confirmation
+   * a press registered is the character reacting — which is fine for LEFT and RIGHT, and useless
+   * for an ATTACK swallowed by hitstop, a JUMP taken by the buffer window, or any press that
+   * missed the zone. In all of those the screen is byte-identical to no touch at all, which is
+   * the definition of an app that reads as broken. Named by the UI/UX gate.
+   */
+  private setPressed(id: TouchId, pressed: boolean): void {
+    const control = this.controls.find((c) => c.id === id);
+    control?.faces[0]?.setAlpha(pressed ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
+  }
+
+  /** Every control back to rest. Runs on every loss path, so no plate can be left lit. */
+  private clearPressed(): void {
+    for (const control of this.controls) control.faces[0]?.setAlpha(PLATE_ALPHA);
+  }
+
   private readonly onRelease = (pointer: PointerLike): void => {
-    this.contacts.release(pointer.id);
+    const id = this.contacts.release(pointer.id);
+    if (id) this.setPressed(id, false);
   };
   private readonly onLoseEverything = (): void => {
     this.contacts.cancelAll();
+    this.clearPressed();
   };
 
   constructor(
@@ -229,6 +190,14 @@ export class TouchControlsLayer {
     // Scene-level, so a release is caught wherever it lands — see the header.
     this.scene.input.on(INPUT_POINTER_UP, this.onRelease, this);
     this.scene.input.on(INPUT_POINTER_UP_OUTSIDE, this.onRelease, this);
+    // ⚠️ KEPT, and flagged rather than removed. `InputManager.onTouchMove` runs
+    // `document.elementFromPoint` per finger per move and fires GAME_OUT when the topmost
+    // element is not the canvas — so on a pillarboxed phone a thumb rolling a few millimetres
+    // past the canvas edge drops the jump the OTHER hand is holding. The QA gate's adversarial
+    // 12.5 brief argues for deleting this line, because a finger that leaves the canvas still
+    // delivers `touchend` and POINTER_UP clears it per pointer. That is persuasive — and
+    // GAME_OUT is named in criterion 12.5's own text, so dropping it narrows an approved
+    // criterion. Recorded for the owner in the QA log instead of decided here.
     this.scene.input.on(INPUT_GAME_OUT, this.onLoseEverything, this);
     // On the GAME emitter. Phaser will not remove these; `destroy()` must.
     this.scene.game.events.on(GAME_BLUR, this.onLoseEverything, this);
@@ -294,7 +263,10 @@ export class TouchControlsLayer {
 
     // 🔴 Cancel FIRST. Disabling a zone removes it from Phaser's `_over` lists, which suppresses the
     // release that would otherwise clear the contact.
-    if (!wanted) this.contacts.cancelAll();
+    if (!wanted) {
+      this.contacts.cancelAll();
+      this.clearPressed();
+    }
 
     for (const control of this.controls) {
       if (wanted) control.zone.setInteractive();
@@ -342,18 +314,8 @@ export class TouchControlsLayer {
     // decision `gearLayer.addGearObject` makes, in one place, so the HUD icon and the thing it
     // counts cannot become two different answers.
     const faces: TouchFaceLike[] = [];
-    const plate = this.scene.add
-      .rectangle(cx, cy, target.w, target.h, 0x6b4b21, 0.55)
-      .setName(target.id)
-      .setDepth(TOUCH_FACE_DEPTH);
-    faces.push(plate);
-    faces.push(
-      this.scene.add
-        .text(cx, cy, GLYPH[target.id], { fontFamily: 'monospace', fontSize: '64px', color: '#f7e3b8' })
-        .setOrigin(0.5, 0.5)
-        .setName(target.id)
-        .setDepth(TOUCH_FACE_DEPTH),
-    );
+    faces.push(drawPlate(this.scene, target, cx, cy));
+    for (const mark of drawMarks(this.scene, target, cx, cy)) faces.push(mark);
 
     const zone = this.scene.add
       .zone(target.x, target.y, target.w, target.h)
@@ -386,6 +348,7 @@ export class TouchControlsLayer {
     if (!this.isLive || !this.binding) return;
     if (!this.contacts.begin(pointer.id, id)) return;
 
+    this.setPressed(id, true);
     if (id === 'jump') latchJumpPress(this.binding.input$);
     else if (id === 'attack') latchAttackPress(this.binding.input$);
     else if (id === 'pause') this.binding.openLevelSelect();
@@ -393,5 +356,3 @@ export class TouchControlsLayer {
   }
 }
 
-/** Exported for the gate: the ids this layer is required to build, in `touchLayout` order. */
-export const TOUCH_CONTROL_IDS = TOUCH_IDS;

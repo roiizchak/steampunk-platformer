@@ -118,7 +118,7 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
  * scene-key sweep could not see it: the string says "playground" in lowercase, inside a longer
  * literal, and the sweep looks for a quoted `Playground`.
  */
-export function helpLine(audio?: AudioSettings): string {
+export function helpLine(audio?: AudioSettings, touch = false): string {
   // Phase 7's audio keys are in the SHIPPED half deliberately. A mute control the player cannot
   // discover is a mute control they do not have, and this banner is the only place the game
   // currently tells anyone what the keys are.
@@ -147,10 +147,21 @@ export function helpLine(audio?: AudioSettings): string {
   // pass one — gets the bare line rather than a `NaN%`.
   const level =
     audio === undefined ? '' : ` ${audio.muted ? 'muted' : `${Math.round(audio.volume * 100)}%`}`;
-  const base =
-    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
-    `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
-    'ESC levels';
+  // 🔴 A touch player has none of these keys, and this banner is the ONLY place the game says what
+  // the controls are. The UI/UX gate's adversarial brief made the consequence concrete: a stranger
+  // on a phone reads a persistent instruction to press ARROWS, SPACE, SHIFT, F, L, M, `[`, `]` and
+  // ESC — none of which exist on their device — while five unlabelled brass plates sit at the
+  // bottom of the screen that nothing anywhere names. Worse, the two CONTRADICTED each other: the
+  // banner said attack was `F / L` while the attack plate showed the letter `A`.
+  //
+  // Every other screen got its touch string in this phase — the title, the level menu and the
+  // completion panel all name TAP. The play scene, the one screen whose controls are not
+  // self-evident, was the one that was missed.
+  const base = touch
+    ? `TAP the plates — move, jump, strike  ·  top right leaves the level${level}`
+    : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
+      `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
+      'ESC levels';
   // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
   // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the
   // long DEV form onto a THIRD wrapped row, which `hud-layout.test.ts` caps against for eating the

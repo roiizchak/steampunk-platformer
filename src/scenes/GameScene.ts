@@ -232,7 +232,7 @@ export class GameScene extends Phaser.Scene {
    * method because `ElementEditorScene` overrides it to describe its own controls.
    */
   protected helpText(): string {
-    return helpLine(this.audio?.settings());
+    return helpLine(this.audio?.settings(), this.game.device.input.touch);
   }
 
   /**

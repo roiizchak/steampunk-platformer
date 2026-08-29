@@ -174,7 +174,7 @@ describe('the chain that carries a press to the banner', () => {
       'attachHud(this, this.world, () => this.helpText()',
     );
     expect(code, 'helpText must ask the manager, not print a constant').toContain(
-      'helpLine(this.audio?.settings())',
+      'helpLine(this.audio?.settings(),',
     );
   });
 });

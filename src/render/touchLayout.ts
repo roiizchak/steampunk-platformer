@@ -87,14 +87,33 @@ export const TOUCH_EDGE_PX = 64;
 /**
  * The level menu's row band, in game pixels.
  *
- * 128 x 0.347 = 44.4 CSS px, just over the floor — the rows are wide, so height is the binding
- * constraint and there is no room to spend. `TOP` clears the `SELECT LEVEL` heading and `BOTTOM`
- * clears the hint line, both of which the touch layout moves out of the band rather than over it.
+ * 🔴 **The row height is `TOUCH_BOX_PX`, and that is the whole point.** It was 128, which is
+ * 44.4 CSS px at 0.347 — over the floor by **0.44 px**, a margin of 1.0 %. The accessibility
+ * gate's adversarial brief found what that costs, and it is not a theoretical margin:
+ *
+ * | posture | viewport | scale | row |
+ * |---|---|---|---|
+ * | iPhone SE landscape, the number the spec tests | 667x375 | 0.3472 | 44.4 ✅ |
+ * | iPhone SE landscape, **Safari's real viewport** | 667x325 | 0.3009 | **38.5 ❌** |
+ * | Pixel 7 landscape, **Chrome's real viewport** | 892x356 | 0.3296 | **42.2 ❌** |
+ *
+ * `page.setViewportSize()` hands the test the whole screen. A real browser keeps a URL bar, and
+ * `index.html`'s `#game { height: 100% }` means the page never scrolls, so that bar **never
+ * collapses** — the reduced viewport is the permanent one, not a transient.
+ *
+ * And the band it fell into was invisible. A 128 px row needs a scale of `44/128 = 0.344`; a
+ * 160 px control needs `44/160 = 0.275`. Everything that asks *"are the targets big enough"*
+ * asked it about the **controls**, so between 0.275 and 0.344 the rows were under the floor,
+ * fully interactive, and no prompt appeared.
+ *
+ * Two floors are one floor too many. The rows are now the same 160 px the controls are, so the
+ * two share a threshold by construction and the blind band cannot exist. The band's own margins
+ * pay for it: five rows at 160 + four gaps at 32 is 928 of the 930 that 90 and 60 leave.
  */
-export const TOUCH_MENU_ROW_H_PX = 128;
+export const TOUCH_MENU_ROW_H_PX = TOUCH_BOX_PX;
 export const TOUCH_MENU_GAP_PX = 32;
-export const TOUCH_MENU_TOP_PX = 150;
-export const TOUCH_MENU_BOTTOM_PX = 120;
+export const TOUCH_MENU_TOP_PX = 90;
+export const TOUCH_MENU_BOTTOM_PX = 60;
 /** Rows are wide targets on purpose: a thumb aiming at a level name has the whole row.  */
 export const TOUCH_MENU_WIDTH_FRAC = 0.62;
 
@@ -230,9 +249,15 @@ export function touchTargetsDisjoint(targets: readonly HitBox[]): boolean {
  * So on a touch device the rows get their own layout, and the keyboard layout is untouched on
  * desktop. The band deliberately leaves the screen title above and the hint line below alone.
  *
- * The row height SHRINKS to fit a longer catalog rather than overflowing the band. That can take a
- * row under the floor — with today's five levels it does not, and `touchTargetsFit` over the
- * result is what says so rather than a comment claiming it.
+ * ⚠️ The row height SHRINKS to fit a longer catalog rather than overflowing the band, and that
+ * CAN take a row under the floor. With the shipped five it does not — the band is sized so
+ * that exactly five rows land at the full `TOUCH_BOX_PX`. A sixth level would push `rowH` to
+ * 138 game px and the rows would be under-floor at every phone scale.
+ *
+ * 🔴 An earlier version of this paragraph said `touchTargetsFit` over the result *"is what says
+ * so rather than a comment claiming it"*. **There was no such production call** — the only one
+ * was in the unit test, against a hardcoded catalog size. `attachTapRoutes` now runs the
+ * predicate over the targets it was actually given, which is what makes the sentence true.
  */
 export function touchMenuLayout(count: number, viewWidth: number, viewHeight: number): HitBox[] {
   positive(viewWidth, 'viewWidth');

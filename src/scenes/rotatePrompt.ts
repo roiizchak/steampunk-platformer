@@ -23,10 +23,24 @@
  * input-enabled game, and a tap meant for "turn your phone" would move the player instead. Both
  * files call `touchTargetsFit`; neither carries its own copy of the rule.
  *
+ * ## 🔴 The copy is sized in CSS pixels, not in game pixels
+ *
+ * The accessibility gate measured the first version and it failed on its own terms. The headline
+ * was `72px` and the subline `40px` — **game** pixels, on a backing store `Scale.FIT` holds at
+ * 1920 wide however small the canvas gets. This prompt appears **only** below a CSS scale of
+ * 0.275, so those render at **14.6** and **8.1 CSS px** at iPhone 14 portrait: the one message
+ * whose entire job is to be read, drawn at half the 16 px floor the same guidelines set for body
+ * text, on the one screen where the player has nothing else to go on.
+ *
+ * Everything else in this phase is sized in game pixels because it is measured against a floor
+ * that game pixels clear. This is the case that inverts — the copy has to be a fixed size on the
+ * *glass*, so its game-pixel size is `cssPx / scale` and moves every time the view does. That is
+ * why `refresh()` re-sizes rather than only re-showing.
+ *
  * No Phaser import, for the reason `touchControlsLayer.ts`'s header gives.
  */
 
-import { GAME_WIDTH } from '../game/constants';
+
 import { cssScaleFor, touchLayout, touchTargetsFit } from '../render/touchLayout';
 import type { TouchFaceLike, TouchSceneLike } from './touchControlsLayer';
 
@@ -35,11 +49,17 @@ export const ROTATE_PROMPT_DEPTH = 3000;
 
 const SCRIM_COLOR = 0x12100e;
 const SCRIM_ALPHA = 0.94;
+/** Read off the glass, not off the backing store. 28 and 18 CSS px, both over the 16 px floor. */
+const HEADLINE_CSS_PX = 28;
+const SUBLINE_CSS_PX = 18;
 const HEADLINE = 'ROTATE YOUR DEVICE';
 const SUBLINE = 'the controls need a landscape screen';
 
 export class RotatePrompt {
   private faces: TouchFaceLike[] = [];
+  /** Held separately from `faces` because only these two are re-sized against the CSS scale. */
+  private headline?: TouchFaceLike;
+  private subline?: TouchFaceLike;
   private isShowing = false;
 
   constructor(
@@ -84,6 +104,8 @@ export class RotatePrompt {
         .setOrigin(0.5, 0.5)
         .setDepth(ROTATE_PROMPT_DEPTH),
     );
+    this.headline = this.faces[1];
+    this.subline = this.faces[2];
     for (const face of this.faces) face.setVisible(false);
   }
 
@@ -97,10 +119,19 @@ export class RotatePrompt {
   refresh(): void {
     if (this.faces.length === 0) return;
     const { width, height } = this.scene.scale.gameSize;
-    const fits = touchTargetsFit(
-      touchLayout(width, height),
-      cssScaleFor(this.scene.scale.displaySize.width, width || GAME_WIDTH),
-    );
+    // No `|| GAME_WIDTH` fallback: `touchLayout` above already refuses a non-positive width, so
+    // the guard defended a line that can never be reached with a bad value. Guard the whole
+    // body instead, which is what the polling caller actually needs.
+    if (!(width > 0 && height > 0)) return;
+    const scale = cssScaleFor(this.scene.scale.displaySize.width, width);
+    const fits = touchTargetsFit(touchLayout(width, height), scale);
+
+    // Re-sized on every refresh, not only on a show: the prompt can be up while the browser
+    // chrome collapses and the canvas grows under it, and 8 CSS px of subline is the defect
+    // this exists to prevent.
+    this.headline?.setFontSize?.(Math.round(HEADLINE_CSS_PX / scale));
+    this.subline?.setFontSize?.(Math.round(SUBLINE_CSS_PX / scale));
+
     if (fits === !this.isShowing) return;
     this.isShowing = !fits;
     for (const face of this.faces) face.setVisible(this.isShowing);
@@ -109,6 +140,8 @@ export class RotatePrompt {
   destroy(): void {
     for (const face of this.faces) face.destroy();
     this.faces = [];
+    this.headline = undefined;
+    this.subline = undefined;
     this.isShowing = false;
   }
 }

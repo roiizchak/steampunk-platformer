@@ -14,14 +14,17 @@ import {
   INPUT_POINTER_UP_OUTSIDE,
 } from '../../src/scenes/engineLiterals';
 import type { TouchHeld } from '../../src/scenes/inputMerge';
-import type {
-  TouchFaceLike,
-  TouchGameSceneLike,
-  TouchSceneLike,
-  TouchZoneLike,
-} from '../../src/scenes/touchControlsLayer';
+import type { TouchGameSceneLike, TouchSceneLike } from '../../src/scenes/touchControlsLayer';
 import type { TapSceneLike } from '../../src/scenes/touchRoutes';
 import type { TouchId } from '../../src/render/touchLayout';
+import {
+  type FaceFake,
+  makeFaceFactory,
+  makeZoneFactory,
+  type ZoneFake,
+} from './touchSceneObjects';
+
+export type { FaceFake, ZoneFake } from './touchSceneObjects';
 
 /**
  * The emitter handler type the layer's `EmitterLike` declares.
@@ -33,34 +36,6 @@ import type { TouchId } from '../../src/render/touchLayout';
  * production layer.
  */
 type Handler = (...args: never[]) => void;
-
-/** An interactive hit zone. `id` is stamped on by the layer via `setName`. */
-export interface ZoneFake {
-  id: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  originX: number;
-  originY: number;
-  depth: number;
-  interactive: boolean;
-  events: string[];
-  handlers: Map<string, Handler>;
-  destroyed: boolean;
-}
-
-/** Anything the player can see: the art plate, or the grey-box rectangle and its glyph. */
-export interface FaceFake {
-  id: string;
-  x: number;
-  y: number;
-  /** Zero for a text glyph, which is sized by its own content. */
-  w: number;
-  h: number;
-  visible: boolean;
-  destroyed: boolean;
-}
 
 export interface TouchSceneHarness {
   // Typed against the layer's own interfaces, so the fake cannot drift into implementing a surface
@@ -97,6 +72,10 @@ export interface TouchSceneHarness {
   fireGameEvent: (name: string) => void;
   fireGameSceneEvent: (name: string) => void;
   fireOwnEvent: (name: string) => void;
+  /** A release delivered as POINTER_UP_OUTSIDE rather than POINTER_UP. */
+  releasePointerOutside: (pointerId: number) => void;
+  /** Any scene-input-plugin event, by name — GAME_OUT among them. */
+  fireSceneInputEvent: (name: string) => void;
 }
 
 const GAME_WIDTH = 1920;
@@ -133,137 +112,12 @@ export function makeTouchScene(): TouchSceneHarness {
     fireGameEvent: () => {},
     fireGameSceneEvent: () => {},
     fireOwnEvent: () => {},
+    releasePointerOutside: () => {},
+    fireSceneInputEvent: () => {},
   };
 
-  const makeZone = (x: number, y: number, w: number, h2: number): ZoneFake & TouchZoneLike => {
-    const z: ZoneFake = {
-      id: '',
-      x,
-      y,
-      w,
-      h: h2,
-      originX: 0.5,
-      originY: 0.5,
-      depth: 0,
-      interactive: false,
-      events: [],
-      handlers: new Map(),
-      destroyed: false,
-    };
-    const api = {
-      ...z,
-      setName(name: string) {
-        z.id = name;
-        api.id = name;
-        return api;
-      },
-      setOrigin(ox: number, oy?: number) {
-        z.originX = ox;
-        z.originY = oy ?? ox;
-        api.originX = z.originX;
-        api.originY = z.originY;
-        return api;
-      },
-      setDepth(d: number) {
-        z.depth = d;
-        api.depth = d;
-        return api;
-      },
-      setPosition(nx: number, ny: number) {
-        z.x = nx;
-        z.y = ny;
-        api.x = nx;
-        api.y = ny;
-        return api;
-      },
-      setSize(nw: number, nh: number) {
-        z.w = nw;
-        z.h = nh;
-        api.w = nw;
-        api.h = nh;
-        return api;
-      },
-      setScrollFactor() {
-        return api;
-      },
-      setInteractive() {
-        z.interactive = true;
-        api.interactive = true;
-        return api;
-      },
-      disableInteractive() {
-        // Snapshot what the layer thinks is held AT THIS INSTANT — see `heldAtDisable`.
-        h.heldAtDisable = h.readHeld();
-        z.interactive = false;
-        api.interactive = false;
-        return api;
-      },
-      on(event: string, fn: Handler) {
-        z.events.push(event);
-        z.handlers.set(event, fn);
-        return api;
-      },
-      destroy() {
-        z.destroyed = true;
-        api.destroyed = true;
-      },
-    } as unknown as ZoneFake & TouchZoneLike;
-    // Keep the recorded object and the API object the same identity for assertions.
-    zones.push(api);
-    return api;
-  };
-
-  const makeFace = (x: number, y: number, w = 0, h2 = 0): FaceFake & TouchFaceLike => {
-    const api = {
-      id: '',
-      x,
-      y,
-      w,
-      h: h2,
-      visible: true,
-      destroyed: false,
-      setName(name: string) {
-        api.id = name;
-        return api;
-      },
-      setOrigin() {
-        return api;
-      },
-      setDepth() {
-        return api;
-      },
-      setPosition(nx: number, ny: number) {
-        api.x = nx;
-        api.y = ny;
-        return api;
-      },
-      setSize(nw: number, nh: number) {
-        api.w = nw;
-        api.h = nh;
-        return api;
-      },
-      setDisplaySize(nw: number, nh: number) {
-        api.w = nw;
-        api.h = nh;
-        return api;
-      },
-      setVisible(v: boolean) {
-        api.visible = v;
-        return api;
-      },
-      setStyle() {
-        return api;
-      },
-      setFontSize() {
-        return api;
-      },
-      destroy() {
-        api.destroyed = true;
-      },
-    } as unknown as FaceFake & TouchFaceLike;
-    faces.push(api);
-    return api;
-  };
+  const makeZone = makeZoneFactory(zones, h);
+  const makeFace = makeFaceFactory(faces);
 
   h.gameScene = {
     events: {
@@ -284,6 +138,7 @@ export function makeTouchScene(): TouchSceneHarness {
       zone: (x: number, y: number, w: number, h2: number) => makeZone(x, y, w, h2),
       rectangle: (x: number, y: number, w: number, h2: number) => makeFace(x, y, w, h2),
       text: (x: number, y: number) => makeFace(x, y),
+      triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
       image: () => {
         throw new Error(
           'add.image was called, but textures.exists() is false in this fake — the layer took the ' +
@@ -338,6 +193,10 @@ export function makeTouchScene(): TouchSceneHarness {
     if (!zone) throw new Error(`no zone for ${id} — the layer never created it`);
     const fn = zone.handlers.get(GAMEOBJECT_POINTER_DOWN);
     if (!fn) throw new Error(`${id} has no ${GAMEOBJECT_POINTER_DOWN} handler`);
+    // 🔴 A disabled zone gets no pointer. Without this the fake let `disableInteractive()` be a
+    // complete no-op in production and every unit case still passed, carried by the `isLive`
+    // belt inside the handler — the belt being the only thing a test could see.
+    if (!zone.interactive) return;
     (fn as (pointer: { id: number }) => void)({ id: pointerId });
   };
 
@@ -365,9 +224,21 @@ export function makeTouchScene(): TouchSceneHarness {
     (fn as () => void)();
   };
 
-  // Referenced so the import is not merely decorative — these are the two names the layer must use
-  // for a release, and the harness would silently accept the wrong one otherwise.
-  void INPUT_POINTER_UP_OUTSIDE;
+  // 🔴 These two used to be `void` statements under a comment claiming they stopped the harness
+  // silently accepting the wrong event name. A `void` expression enforces nothing, and the
+  // comment said the opposite of the truth. They are dispatchers now, so the two loss paths can
+  // be fired and OBSERVED rather than merely found in an array of strings.
+  h.releasePointerOutside = (pointerId) => {
+    const fn = sceneHandlers.get(INPUT_POINTER_UP_OUTSIDE);
+    if (!fn) throw new Error(`the layer never subscribed to ${INPUT_POINTER_UP_OUTSIDE}`);
+    (fn as (pointer: { id: number }) => void)({ id: pointerId });
+  };
+
+  h.fireSceneInputEvent = (name) => {
+    const fn = sceneHandlers.get(name);
+    if (!fn) throw new Error(`the layer never subscribed to ${name} on the scene input plugin`);
+    (fn as () => void)();
+  };
   void INPUT_GAME_OUT;
 
   return h;

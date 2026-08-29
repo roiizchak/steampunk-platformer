@@ -42,17 +42,23 @@
  * every tap route — including the level-menu rows, which are **26.0 CSS px** at phone portrait,
  * 41 % under the floor this phase sets.
  *
- * So a route asks the **same** question, from the scene's own `ScaleManager`, on the frame the
- * press arrives: `touchTargetsFit(touchLayout(gameSize), cssScaleFor(displaySize, gameSize))`. One
- * predicate, one source, evaluated late — the prompt and the routes cannot disagree about which
- * side of the 44 CSS px threshold this frame is on, because there is nothing to disagree with.
- * Every screen carrying a route also carries a prompt (`rotateGuard.ts`), so a gated tap is never
- * a silent one.
+ * So a route asks `touchTargetsFit` on the frame the press arrives, from the scene's own
+ * `ScaleManager`. Every screen carrying a route also carries a prompt (`rotateGuard.ts`), so a
+ * gated tap is never a silent one.
+ *
+ * 🔴 **Over ITS OWN targets, not over the play controls.** The first version asked
+ * `touchTargetsFit(touchLayout(...))` — the five in-play buttons — from every screen, and the
+ * accessibility gate's adversarial brief found both halves of what that costs. A **full-screen**
+ * title or completion zone, which is 334 CSS px wide at 200 % browser zoom and seven times over
+ * any floor, went dead because a button that is not on that screen would have been too small
+ * (WCAG 1.4.4). And a **level row** was judged by a 160 px threshold while being 128 px, so
+ * between scale 0.275 and 0.344 it was under-floor, live, and unannounced. Asking about the
+ * targets in hand answers both: a route is dead exactly when the things it draws are too small.
  *
  * No Phaser import, for the reason `touchControlsLayer.ts`'s header gives.
  */
 
-import { cssScaleFor, type HitBox, touchLayout, touchTargetsFit } from '../render/touchLayout';
+import { cssScaleFor, type HitBox, touchTargetsFit } from '../render/touchLayout';
 import {
   GAMEOBJECT_POINTER_DOWN,
   INPUT_POINTER_UP,
@@ -105,12 +111,9 @@ export function attachTapRoutes(
 
   /** True on exactly the frames `RotatePrompt` covers the screen. Same call, same arguments. */
   const promptIsUp = (): boolean => {
-    const { width, height } = scene.scale.gameSize;
-    if (!(width > 0 && height > 0)) return false;
-    return !touchTargetsFit(
-      touchLayout(width, height),
-      cssScaleFor(scene.scale.displaySize.width, width),
-    );
+    const { width } = scene.scale.gameSize;
+    if (!(width > 0)) return false;
+    return !touchTargetsFit(targets, cssScaleFor(scene.scale.displaySize.width, width));
   };
 
   const zones: TouchZoneLike[] = [];
