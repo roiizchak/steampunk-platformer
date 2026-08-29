@@ -148,8 +148,14 @@ papered over.
 | M14 | delete `destroy()`'s removal of the layer's `game.events` subscriptions | 12.5 | RED 1/22 |
 | M15 | make the merge ignore the touch record | 12.4 | RED 4/11 |
 | M16 | let a second `begin()` on a live pointer re-arm an edge | 12.5 | RED 2/10 |
+| M17 | delete the rotate-prompt gate from a tap route's `pointerdown` | 12.9, 12.10 | RED 2/10 |
+| M18 | make the keyboard read drop `walkHeld` | 12.4 | RED 3/21 |
+| M18b | copy-paste the `left` read into the `right` read | 12.4 | RED 3/21 |
+| M19 | drop `SCENE_SLEEP` from the lifecycle registration loop | 12.5 | RED 2/29 |
+| M20 | wire `GAME_HIDDEN` to a no-op handler | 12.5 | RED 1/29 |
+| M21 | make the plate opaque, hiding the level under every control | 12.14 | **GREEN — hole; gate written** → RED 1/31 |
 
-**Two rows reddened nothing, and both were holes rather than mutations to drop.**
+**Three rows reddened nothing, and all three were holes rather than mutations to drop.**
 
 🔴 **M2b.** `attachUiTouch`'s teardown had no gate at all. `touch-session.test.ts` drives the session
 against a fake layer and never imports `attachUiTouch`; `touch-draw-path.test.ts` drives the layer

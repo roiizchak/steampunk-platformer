@@ -16,12 +16,310 @@ than reinterpreted.
 <!-- gate-verdicts -->
 | # | Criterion | Verdict | Evidence |
 |---|---|---|---|
+| 12.1 | Touch-only journey, real contacts at measured coordinates | **PASS** | `phase-12-journey.spec.ts`. M5a/M5b/M5c each red it 1/1. |
+| 12.2 | A jump contact fires at a NAMED tick | **PASS** | `phase-12-touch.spec.ts` 12.2. Bound ≤2 ticks, measured inside the page. |
+| 12.3 | Multi-touch, raw dispatch | **PASS** | 12.3, two live contacts, `activePointers: 4` verified against `Config.js`. |
+| 12.4 | Touch and keyboard merge, GameScene calls it live | **PASS — one hole found and closed** | § 12.4. `readHeldKeys` extracted and gated; M18/M18b red. Two open findings recorded. |
+| 12.5 | Contact identity and every loss path, registrations asserted | **PASS — two holes found and closed** | § 12.5. Exact-set assertion + six loss paths fired; M19/M20 red. Three recorded. |
+| 12.6 | A level transition rebinds idempotently | **PASS** | `touch-draw-path.test.ts` rebind case; M2b red after its gate was written. |
+| 12.7 | Nothing drawn or interactive on a desktop pointer | **PASS** | 12.7 in a `hasTouch:false` context; Phase 2 suite unregressed. |
+| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **PASS** | `phase-12-viewport.spec.ts`, 10 viewports. M11 red 8/11, M11b 7/11. |
+| 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. |
+| 12.10 | The prompt appears iff a target falls under 44 CSS px | **PASS** | Viewport spec portrait rows; M8 red 2/11. |
+| 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
+| 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
+| 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **PASS for the grey-box — art UNRUN** | § 12.14. Four measured defects repaired. The generated plate is the owner's decision. |
+| 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
+| 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
+| 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
+| 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 27 rows; 3 holes found, all closed. |
+| 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
+| 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
+| 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
+| 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
+| 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
+
+**Two criteria are NOT MET and two are UNRUN, so the phase is reported FAILING.** 12.11's statistic
+cannot detect the regression it names and 12.17 has no artifact to check; 12.13 and 12.24 are the
+owner's and cannot be closed from here. Every other row passed, several only after a repair.
+
+---|---|---|---|
 | 12.19 | Every new gate watched failing under the mutation it names | **PASS** | § The mutation matrix. 22 rows, each applied, watched, reverted; 2 holes found and closed. |
 | 12.20 | `dist/` carries no dev-only scene key, debug symbol or dev prose | **PASS** | § Regression evidence. `verify-dist ok`, 28 DEV bodies folded out, 5 levels + 12 audio byte-identical. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` line | **PASS** | § Regression evidence. Sweep over the lint's own glob returns nothing above 400; largest is 400. No exemption taken. |
 
 ---
 
+## The agent gate — twelve briefs, and what they cost
+
+Six agent-owned criteria, **two briefs each** *(A7)*, brief 1's findings withheld from brief 2. Every
+finding is applied below or recorded with a reason. Nothing was silently dropped *(C11)*.
+
+⚠️ **Every agent claim below was re-verified locally before being acted on.** *A subagent's summary is
+a claim, not evidence.*
+
+### 12.4 — the merge (`qa-expert`)
+
+🔴 **`walkHeld: false` survived every gate in the repository.** Brief 2 built the mutation and traced
+it: `npm test`, `npm run test:e2e`, `npm run build` and `verify-dist` all green. SHIFT is a shipped
+control `gameDev.ts` advertises on the help banner, `walkMax / runMax` is **0.400** — a 60 % speed
+change — and the mutation also makes the `walk` player state unreachable via `tick.ts`, which makes
+`brass-courier/walk` dead art.
+
+Verified locally: nothing in the repo executed `sampleHeldKeys`. The two files naming `gameInput.ts`
+read it as **source text**; `input-merge.test.ts` deliberately does not import it (and says why); no
+e2e spec anywhere presses Shift. **Applied** — `readHeldKeys` is now in the engine-free half with a
+parametrised gate over all four fields, plus a case asserting each field reads its own list. M18 and
+M18b both red.
+
+**Recorded, not applied:**
+
+- **`input$` is early-bound while its two siblings are providers.** Correct today, because
+  `this.input$ = createSnapshot()` runs once in `create()` before the binding is built — but a future
+  respawn that reassigns the field would kill touch jump and attack while touch movement kept
+  working, because movement travels the late-bound path. *Reason: changing it is a design change to a
+  Codex-approved binding shape, not a defect repair.*
+- **`left` is never pressed in any e2e spec**; `attack` and `pause` are only tapped to assert they do
+  nothing. *Reason: the chain is proved behaviourally for `right` and `jump`; two more contact specs
+  are worth adding but are not what makes 12.4 true.*
+- **No gate catches a TYPE-ONLY Phaser import in `src/scenes/inputMerge.ts`.** `test:sim-isolated`
+  runs no `tsc`, and esbuild erases `import type` before resolution. A **value** import does red it.
+  *Reason: the narrower invariant is genuinely enforced; the wider one is convention, and saying so
+  is the fix.*
+
+### 12.5 — contact identity (`qa-expert`)
+
+🔴 **Three of the four Game-scene lifecycle registrations were unasserted.** The gate said
+`toContain(SCENE_PAUSE)`. Verified locally with a repo-wide grep: `SCENE_SLEEP`, `SCENE_SHUTDOWN` and
+`SCENE_DESTROY` appeared in no test outside `engine-literals.test.ts`, which pins the *string value*
+and not the *subscription*. The teardown gate does not backstop it — it asserts the array reaches
+length 0, and the fake's `off` is a silent no-op for a name never registered, so three registrations
+and four removals still end at zero. **Applied**: an exact-set assertion. M19 reds it 2/29.
+
+🔴 **Seven of the nine subscriptions were asserted by name only.** Only `POINTER_UP` and `BLUR` were
+ever invoked by a test. Wiring the right event name to the wrong handler — the ordinary copy-paste
+error in a block of five near-identical `on()` calls — passed everything. `fireGameSceneEvent`
+already existed in the harness and was called by **nothing**. **Applied**: six loss paths are now
+fired and observed, plus `POINTER_UP_OUTSIDE`, a different branch of Phaser's release dispatch that
+had never been driven at all. M20 reds it.
+
+**Recorded, not applied:**
+
+- 🔴 **`GAME_OUT` drops EVERY contact, and on a pillarboxed phone a thumb drifting a few millimetres
+  past the canvas edge fires it.** `InputManager.onTouchMove` runs `document.elementFromPoint` per
+  finger per move and calls `setCanvasOut` when the topmost element is not the canvas — so the jump
+  the *other* hand is holding is cancelled. The brief's fix is to delete the subscription, since a
+  finger leaving the canvas still delivers `touchend` and `POINTER_UP` clears it per pointer. **This
+  is persuasive and it is the owner's call**: `GAME_OUT` is named in criterion 12.5's own text, and
+  narrowing an approved criterion is a STOP-and-ask. Flagged in place at the subscription.
+- **The cancel-before-disable rationale is factually wrong about Phaser.** Three files say
+  `disableInteractive()` removes the object from `_over`, *"which suppresses the later object-level
+  release"*. `processUpEvents` hit-tests into `_temp`, never `_over`, and emits `POINTER_UP`
+  unconditionally. The ORDER is still correct and worth keeping; the reason given for it is not the
+  real one. *Reason: a prose correction across three files, recorded here so it is not lost.*
+- **`POINTER_UP_OUTSIDE` is unreachable for touch.** `Pointer.touchend` sets `upElement` to the
+  element the touch STARTED on, which is always the canvas. Live only for a mouse on a hybrid laptop.
+- **`bind()` silently disowns a finger that is still down.** A player who held RIGHT through the exit
+  starts the next level standing still until they lift and re-press. *Reason: a design decision —
+  keep contacts across a rebind, or not — rather than a defect.*
+- **`UIScene` tears down on SHUTDOWN only, and `Systems.destroy()` never emits SHUTDOWN.** Reachable
+  only at page teardown today. *Reason: latent; the one-line `DESTROY` subscription belongs with the
+  `GAME_OUT` decision above.*
+
+### 12.9 — target size (`accessibility-tester`)
+
+🔴 **BLOCKER, applied. The menu rows were under the floor on every real phone in landscape, with no
+prompt.** Two target sets had two different thresholds — a 160 px control needs a scale of 0.275, a
+128 px row needs 0.344 — and *everything* that asked "are the targets big enough" asked it about the
+controls. Between those two numbers the rows were under-floor, fully interactive and unannounced.
+
+| posture | viewport | scale | row |
+|---|---|---|---|
+| iPhone SE landscape, the number the spec tested | 667x375 | 0.3472 | 44.4 ✅ |
+| iPhone SE landscape, **Safari's real viewport** | 667x325 | 0.3009 | **38.5 ❌** |
+| Pixel 7 landscape, **Chrome's real viewport** | 892x356 | 0.3296 | **42.2 ❌** |
+
+`page.setViewportSize()` hands the test the whole screen. A real browser keeps a URL bar, and
+`index.html`'s `#game { height: 100% }` means the page never scrolls, so **that bar never collapses**
+— the reduced viewport is permanent, not transient. The old margin was **0.44 CSS px, 1.0 %**.
+
+**Applied, both halves.** `TOUCH_MENU_ROW_H_PX` is now `TOUCH_BOX_PX`, so the two target sets share
+one threshold by construction and the blind band cannot exist; the band's margins pay for it — five
+rows at 160 plus four gaps at 32 is 928 of the 930 that 90 and 60 leave. And `attachTapRoutes` runs
+`touchTargetsFit` over **its own targets** rather than over the play controls, which also closes a
+second finding: a full-screen title zone, 334 CSS px wide at 200 % browser zoom and seven times any
+floor, went dead because a button not on that screen would have been too small (WCAG 1.4.4). Three
+chrome-reduced viewports are now in the matrix.
+
+Also applied: the locked-row ink (**2.64:1** at 11.8 CSS px — and four of five rows are locked on
+first launch, with the word `locked`, the only thing explaining why a tap does nothing, in the ink
+the player cannot read), and the hint line (7.6 CSS px, naming UP / DOWN / ENTER to a reader with no
+keyboard).
+
+**Recorded, not applied:**
+
+- 🔴 **WCAG 1.3.4 Orientation (AA): the rotate prompt has no override.** A user with rotation lock on,
+  a mounted device, or who simply cannot rotate, has no path into the game. 1.3.4 permits a single
+  orientation only where it is **essential**, and that determination has to be *made and recorded*.
+  **This log is that record**: a 160 px control is **32.5 CSS px** at 390x844, the canvas is 219 px
+  tall, and no button size fixes it — a thumb-sized control would eat a third of the visible game. The
+  claim is that landscape is essential for this game. It is the owner's to accept or reject.
+- **Split-screen and Slide Over are landscape and still say "rotate your device".** iPad 1/3 Split
+  View is 375x834 at scale 0.195; the remedy is to resize the window, which the copy never mentions.
+  *Reason: real, a one-line copy branch, and outside the phone/tablet postures the phase scoped.*
+- **Four constants are shared between production and the assertion** — `TOUCH_MIN_CSS_PX`,
+  `TOUCH_MIN_GAP_CSS_PX`, `GAME_WIDTH`, `GAME_HEIGHT`. The measurement itself is genuinely
+  non-circular (bounds off the live display list, denominator off `getBoundingClientRect`), but
+  editing `44` to `20` would make production and the gate permissive together. *Reason: this wants a
+  prose-pin like `tuning-prose.test.ts`, not an invention at the end of a gate.*
+- **`measuredTargets` assumes origin (0,0) and unit scale rather than reading `getBounds()`.** True
+  today because every zone sets it; the criterion's own word is "bounds".
+- **The gap floor is unreachable in production.** It turns over at scale 0.250, always below the size
+  floor of 0.275, so `touchTargetsFit`'s second loop can never be the failing term for the shipped
+  layout. Asserted, never binding.
+- **Android's 48 dp guideline is stricter than the cited 44 px**, and `Pixel 7 landscape` is in the
+  matrix. At the new 160 px row height every in-scope Android posture clears 48 dp.
+- **`TOUCH_EDGE_PX` is 22.2 CSS px, inside the iOS home-indicator and Android gesture-nav strip.**
+  Untested and unrecorded until now. *Reason: needs a real device — it is 12.13's and 12.24's.*
+
+### 12.11 — the frame budget (`performance-engineer`)
+
+🔴 **NOT MET, and the reason is the statistic.** Both briefs reached it independently.
+
+At 240 Hz the frame period is 4.1667 ms. A frame either makes its deadline or costs a whole period,
+so served rate is `R / (1 + p)` and red at 0.9 needs **p ≥ 11.1 %**. A *constant* per-frame cost —
+which is exactly what extra display-list entries are — never produces a partial `p`: below the
+headroom the ratio is **1.000**, above it **0.500**, and nothing lands between. The 10 % bound is
+therefore never load-bearing; 0.60, 0.75 and 0.95 would all behave identically.
+
+| substrate | frame budget | 2.7 ms is | the gate says |
+|---|---|---|---|
+| this box, 240 Hz RTX 4080 | 4.167 ms | 65 % of it | 100.0 % |
+| the owner's 60 Hz laptop | 16.667 ms | 16 % of it | 100.0 % |
+| a mid-range phone | 16.667 ms | a drop to ~30 fps | 100.0 % |
+
+That is *owner plays on 60 Hz, dev box is 240* in its exact recorded form. **The mutation matrix has
+no row that injects a per-frame cost and watches this bound go red, and on this analysis none could.**
+
+**Applied** — three real defects in the surrounding gate, each verified locally:
+
+- `assertRealGpu` had **two sentinels that both passed**: `'no-webgl-context'` (Phaser fell back to
+  the CPU Canvas renderer, the exact case the helper exists to refuse) and
+  `'no-debug-renderer-info'`. Neither contains any of the four software-renderer substrings.
+- The precondition asserted **zones, not faces**. A `Zone` renders nothing, so deleting the
+  `setVisible(wanted)` loop leaves five interactive zones, a passing precondition, and an arm drawing
+  zero extra pixels — the criterion's own named failure mode passing its own guard.
+- The ratio had **no absolute floor**. Halve the frame rate in both arms and it stays 1.0. This is
+  Phase 7's G32 finding: `audioCues` left in both arms moved each median 2 ms and the delta stayed
+  0.000.
+
+**The replacement is named, not invented**: `tests/e2e/gpuTimer.ts`'s `installGpuTimer` with a paired
+**absolute** per-frame delta in milliseconds against a 16.667 ms budget — the shape of
+`phase-08-gpu-delta.spec.ts`, which was red-proved on a held-out set. Not built this session, because
+choosing its bound needs a selection set and a held-out set and neither exists yet.
+
+**Recorded:** the two arms **share a GPU** — both contexts stay alive and rendering, and Playwright
+ships `--disable-backgrounding-occluded-windows` — so system load is `2·base + C` in both samples and
+a GPU-bound cost divides out exactly. The arms are interleaved but **not counterbalanced**: window
+z-order and focus are fixed and perfectly correlated with arm. And the controls **ship only to touch
+devices**, so this gate runs on the one platform the feature is absent from; there is no mobile
+timing evidence anywhere in this repo.
+
+### 12.14 — readability (`ui-ux-tester`)
+
+Both briefs measured rather than judged, and four defects were **applied**.
+
+🔴 **The marks are drawn now, not typed.** Brief 1 parsed the real outlines out of `cour.ttf` and
+`consola.ttf` — what iOS Safari and Chrome/Windows resolve `monospace` to — and measured what reached
+the glass at 0.347:
+
+| mark | ink, CSS px | share of the 55.6 px plate |
+|---|---|---|
+| `<` `>` | 10.7 x 11.2 | 3.9 % of area |
+| `A` | 13.0 x 12.7 | 5.5 % |
+| **`^`** | **8.4 x 5.9** | **1.2 %**, floating 5.0 CSS px above centre |
+| two pipes | two **0.9 px** hairlines, 26.7 px apart | not a pause icon |
+
+`^` is the jump button, and `setOrigin(0.5, 0.5)` centres a text object's *box* while the circumflex
+sits high — so the mark floated in the top half of an otherwise empty plate. Scaling the font fixes
+the size and not the shape, and a black-triangle or crossed-swords codepoint trades a small mark for
+a possible tofu box on phone fonts this project cannot test. **A drawn shape has neither failure.**
+
+🔴 **Two inks, from this repo's own method.** The plate was one fill at alpha 0.55 and the glyph had
+no stroke: **2.65:1** over `far.png`'s brightest pixel, **1.00:1** over a mid-grey, glyph **2.13:1**,
+against 1.4.11's 3:1. A single ink cannot pass, because every fixed colour has a background it
+vanishes against. `hud.ts` solved this for the gear counter and wrote the method down; the marks
+reuse the same pair, which is what makes `contrast-floor.test.ts`'s measured **3.80:1** floor apply.
+
+🔴 **And the alpha stays at 0.55, because the first repair got that wrong.** Raising it to 0.86 made
+the fill a fill — and brief 2 measured the cost from the shipped level data, sampling the player
+standing on every solid surface in all five `.tmj` files every 96 px: **175 of 878 positions (19.9 %)
+have a hazard, an enemy or the goal drawn under a control plate.** A `brass-sentry` that is actively
+shooting sits behind the pause plate for nine consecutive positions on level-01; on level-04 the goal
+sits under the jump plate for nine more. At 0.55 that content is dim and readable; at 0.86 it is
+gone. Now pinned by a gate (M21 red), with the figure and the method in the test.
+
+🔴 **The play scene told a phone player to press eight keys it does not have.** `helpLine` was the
+only instructional surface in the game with no touch branch, while five unlabelled plates sat at the
+bottom of the screen that nothing named — and the two contradicted each other, the banner saying
+attack was `F / L` while the plate showed the letter `A`.
+
+**Recorded, not applied:**
+
+- 🔴 **The pause glyph promises pause and delivers abandon-the-run.** It routes to `openLevelSelect`,
+  a hard `scene.start` with no confirmation and no checkpoint, so a player 90 % through level 5 who
+  taps it to answer a message loses the run. It is also the control most likely to be hit while
+  adjusting grip. *Reason: either a real pause or a relabel, and both are the owner's call — ESC is
+  at least a key labelled ESCAPE.*
+- **The rotate prompt's scrim is the same colour as the page background**, so a portrait phone shows
+  a uniformly black screen with two small lines and no visible canvas boundary — it reads as a page
+  that failed to load. *Reason: a panel behind the copy is a design change; the legibility half is
+  fixed.*
+- **The completion prompt reuses `#8f8776` over a 0.72 scrim** for a measured worst case of 2.25:1.
+  `titleInk.ts` already records this fill shipping bare as a defect. *Reason: `hudFade.ts` is Phase 8
+  surface, outside this phase's scope.*
+- **Level ids are filenames** — `1. level-01 · best 0 / 7`. There are no level names in the catalog.
+
+### 12.16 — the draw path (`code-reviewer`)
+
+🔴 **`touchTargetsDisjoint` had zero production consumers.** Verified locally. Blanking it to
+`return true` reddened nothing behavioural and left the game byte-identical — the `spriteFeedback.ts`
+shape this criterion exists to forbid. It was redundant too: `separation` returns 0 for overlapping
+boxes and `0 * scale < 8` is false at every scale, so `touchTargetsFit` already refuses them.
+**Deleted**, with the reasoning left where it stood.
+
+**Also applied:** `TOUCH_CONTROL_IDS`, a re-export alias whose only reference was its own declaration,
+under a comment claiming a consumer that did not exist; the fake's `press()` now refuses a disabled
+zone, without which `disableInteractive()` could be a complete no-op in production and every unit
+case still passed, carried by the `isLive` belt inside the handler; the two `void` statements under a
+comment claiming they stopped the harness accepting a wrong event name — a `void` expression enforces
+nothing, and the comment stated the opposite of the truth — are real dispatchers now; faces record
+depth, alpha, angle and stroke; the zone fake's dead shadow object is gone; and three re-baselined
+PNGs under `docs/evidence/` were restored from `main`, because a full e2e run overwrites Phase 10's
+approved evidence and `99c754e` had committed a Phase 12 build over it.
+
+**Recorded, not applied:**
+
+- **Every `setDepth()` in the new code is ungated.** The load-bearing one is `ROTATE_PROMPT_DEPTH`:
+  the viewport spec proves the controls go non-interactive under the prompt but never that the prompt
+  draws **over** them. The fake now records depth, so the gate is one line — *reason: it belongs with
+  a prompt-layering assertion rather than bolted onto a passing test at the end of a gate.*
+- **The fake's `off` ignores `fn` and `context`**, so a teardown that removed the *wrong* function
+  reference still reads as clean. *Reason: a real weakness in the M14 gate; the leak it guards is
+  behaviourally covered by the destroy case.*
+- **`tools/gen/promptTouch.mjs` is orphaned** — no npm script, no importer — and its header names
+  `buildTouchAtlas.mjs` five times as its consumer. **That file was never written.** *Reason:
+  deleting a file is a STOP-and-ask, and the tool is the record of what the two takes asked for.*
+- **A `rotate-prompt.test.ts` case cannot go red**: it filters faces the first prompt already left in
+  the array, against a `>=` bound a hardcoded scrim satisfies.
+- **Six file:line citations in new prose were invalidated by this same diff**, including
+  `gameInput.ts:359-362`, which is the justifying evidence for the whole `inputMerge` extraction and
+  now points at the `if (!enabled)` branch. That one is corrected; the rest are recorded.
+- **Test-only production API**: `TouchContacts.size` and `NO_KEYBOARD_HELD`.
+
+---
 ## The mutation matrix
 
 Every row applied, verified applied by *"content changed AND the original count dropped by one"*,
@@ -29,7 +327,7 @@ gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
 
-**Two rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
+**Three rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
 drop* — so both produced a new gate rather than an edited matrix.
 
 - **M2b** — deleting `session.deactivate()` from `attachUiTouch`'s `destroy()` left the whole suite
@@ -40,6 +338,11 @@ drop* — so both produced a new gate rather than an edited matrix.
   layer hands the *next* `Game` scene's binding to the corpse, which subscribes four lifecycle
   handlers that can never reach anything drawn. `tests/unit/ui-touch.test.ts` — 5 tests — asserts
   that after teardown, binding a fresh `Game` scene registers nothing on it. **RED 1/5** under M2b.
+- **M21** — `PLATE_ALPHA = 1` reddened nothing, so the 19.9 %-occlusion measurement that chose 0.55
+  could have been undone by one character with the suite green. Gated now, with the figure and its
+  method in the test. The gate needed a fake that could see it: `add.rectangle`'s `fillAlpha`
+  argument was dropped on the floor, so every plate reported fully opaque and the assertion would
+  have measured the fake's own default rather than the layer's choice.
 - **M13** — no gate read a project's `use` block at all. `phase-12-perf.spec.ts` builds both arms
   itself from `browser.newContext({ hasTouch })`, so `chromium-touch-gpu`'s value never reaches it —
   and the spec's own docstring claimed the opposite. The claim is corrected in place rather than
