@@ -20,6 +20,7 @@ import type {
   TouchSceneLike,
   TouchZoneLike,
 } from '../../src/scenes/touchControlsLayer';
+import type { TapSceneLike } from '../../src/scenes/touchRoutes';
 import type { TouchId } from '../../src/render/touchLayout';
 
 /**
@@ -54,6 +55,9 @@ export interface FaceFake {
   id: string;
   x: number;
   y: number;
+  /** Zero for a text glyph, which is sized by its own content. */
+  w: number;
+  h: number;
   visible: boolean;
   destroyed: boolean;
 }
@@ -61,7 +65,10 @@ export interface FaceFake {
 export interface TouchSceneHarness {
   // Typed against the layer's own interfaces, so the fake cannot drift into implementing a surface
   // the production code does not have — or miss one it does.
-  scene: TouchSceneLike;
+  // Both, because one fake drives the controls layer AND the tap routes — and the two name
+  // DIFFERENT slices of a scene on purpose. The layer never touches its own scene emitter; the
+  // routes do, because that is how they learn they are going away.
+  scene: TouchSceneLike & TapSceneLike;
   gameScene: TouchGameSceneLike;
   zones: ZoneFake[];
   faces: FaceFake[];
@@ -71,6 +78,8 @@ export interface TouchSceneHarness {
   gameSceneEvents: string[];
   /** Event names subscribed on the GAME emitter — the ones Phaser will not tear down. */
   gameEvents: string[];
+  /** Event names subscribed on the drawing scene's OWN emitter — how a tap route tears itself down. */
+  ownEvents: string[];
   playerInputEnabled: boolean;
   gameStatusRunning: boolean;
   levelSelectOpened: number;
@@ -87,6 +96,7 @@ export interface TouchSceneHarness {
   releasePointer: (pointerId: number) => void;
   fireGameEvent: (name: string) => void;
   fireGameSceneEvent: (name: string) => void;
+  fireOwnEvent: (name: string) => void;
 }
 
 const GAME_WIDTH = 1920;
@@ -98,6 +108,8 @@ export function makeTouchScene(): TouchSceneHarness {
   const sceneEvents: string[] = [];
   const gameSceneEvents: string[] = [];
   const gameEvents: string[] = [];
+  const ownEvents: string[] = [];
+  const ownHandlers = new Map<string, Handler>();
   const sceneHandlers = new Map<string, Handler>();
   const gameHandlers = new Map<string, Handler>();
   const gameSceneHandlers = new Map<string, Handler>();
@@ -110,6 +122,7 @@ export function makeTouchScene(): TouchSceneHarness {
     sceneEvents,
     gameSceneEvents,
     gameEvents,
+    ownEvents,
     playerInputEnabled: true,
     gameStatusRunning: true,
     levelSelectOpened: 0,
@@ -119,6 +132,7 @@ export function makeTouchScene(): TouchSceneHarness {
     releasePointer: () => {},
     fireGameEvent: () => {},
     fireGameSceneEvent: () => {},
+    fireOwnEvent: () => {},
   };
 
   const makeZone = (x: number, y: number, w: number, h2: number): ZoneFake & TouchZoneLike => {
@@ -196,11 +210,13 @@ export function makeTouchScene(): TouchSceneHarness {
     return api;
   };
 
-  const makeFace = (x: number, y: number): FaceFake & TouchFaceLike => {
+  const makeFace = (x: number, y: number, w = 0, h2 = 0): FaceFake & TouchFaceLike => {
     const api = {
       id: '',
       x,
       y,
+      w,
+      h: h2,
       visible: true,
       destroyed: false,
       setName(name: string) {
@@ -218,10 +234,14 @@ export function makeTouchScene(): TouchSceneHarness {
         api.y = ny;
         return api;
       },
-      setSize() {
+      setSize(nw: number, nh: number) {
+        api.w = nw;
+        api.h = nh;
         return api;
       },
-      setDisplaySize() {
+      setDisplaySize(nw: number, nh: number) {
+        api.w = nw;
+        api.h = nh;
         return api;
       },
       setVisible(v: boolean) {
@@ -259,7 +279,7 @@ export function makeTouchScene(): TouchSceneHarness {
   h.scene = {
     add: {
       zone: (x: number, y: number, w: number, h2: number) => makeZone(x, y, w, h2),
-      rectangle: (x: number, y: number) => makeFace(x, y),
+      rectangle: (x: number, y: number, w: number, h2: number) => makeFace(x, y, w, h2),
       text: (x: number, y: number) => makeFace(x, y),
       image: () => {
         throw new Error(
@@ -281,8 +301,15 @@ export function makeTouchScene(): TouchSceneHarness {
       },
     },
     events: {
-      on() {},
-      off() {},
+      on(event: string, fn: Handler) {
+        ownEvents.push(event);
+        ownHandlers.set(event, fn);
+      },
+      off(event: string) {
+        const i = ownEvents.indexOf(event);
+        if (i >= 0) ownEvents.splice(i, 1);
+        ownHandlers.delete(event);
+      },
     },
     game: {
       events: {
@@ -326,6 +353,12 @@ export function makeTouchScene(): TouchSceneHarness {
   h.fireGameSceneEvent = (name) => {
     const fn = gameSceneHandlers.get(name);
     if (!fn) throw new Error(`the layer never subscribed to ${name} on the Game scene`);
+    (fn as () => void)();
+  };
+
+  h.fireOwnEvent = (name) => {
+    const fn = ownHandlers.get(name);
+    if (!fn) throw new Error(`nothing subscribed to ${name} on the drawing scene`);
     (fn as () => void)();
   };
 

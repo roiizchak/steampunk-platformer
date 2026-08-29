@@ -71,6 +71,7 @@ import {
   SUB_FILL,
   TITLE_FILL,
 } from '../render/titleInk';
+import { attachTapRoutes } from './touchRoutes';
 
 export { TITLE_KEY } from './gameTitle';
 
@@ -236,9 +237,21 @@ export class TitleScene extends Phaser.Scene {
     // 🔴 ONE way in, and it is the level menu — owner's decision, 2026-08-29. `ENTER` used to start
     // a level directly with `L` as a second route to the menu; two doors to the same place is a
     // choice the player has no basis to make on the first screen they see.
-    make('ENTER   choose a level', CHOICE_STYLE);
+    // The copy change is required, not cosmetic. This screen advertised a key only, so a phone
+    // player was told to press ENTER and given no way in even once the tap worked.
+    make('ENTER or TAP   choose a level', CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
     this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
+
+    // One zone over the whole view: this screen has a single action, so anywhere is the target.
+    // No field and no explicit teardown — `attachTapRoutes` registers against this scene's own
+    // SHUTDOWN and DESTROY, which is the same lifetime the objects above have.
+    attachTapRoutes(
+      this,
+      this.game.device.input.touch,
+      [{ id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height }],
+      () => this.dismiss(this.data$?.onLevelSelect),
+    );
 
     this.applyLayout();
     // Re-layout rather than re-create, so a spec holding a reference across a resize is still

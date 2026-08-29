@@ -49,13 +49,24 @@ export const TOUCH_IDS = ['left', 'right', 'attack', 'jump', 'pause'] as const;
 
 export type TouchId = (typeof TOUCH_IDS)[number];
 
-/** A hit box in GAME pixels, `x`/`y` at the top-left corner. */
-export interface TouchTarget {
-  id: TouchId;
+/**
+ * A hit box in GAME pixels, `x`/`y` at the top-left corner.
+ *
+ * The predicates below take this rather than `TouchTarget`, so the level menu's rows and the
+ * terminal screens' zones are measured by the same two rules as the five play controls — the
+ * accessibility floor is a property of a touch target, not of which screen it happens to be on.
+ */
+export interface HitBox {
+  id: string;
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+/** One of the five play controls. */
+export interface TouchTarget extends HitBox {
+  id: TouchId;
 }
 
 /**
@@ -72,6 +83,20 @@ export const TOUCH_GAP_PX = 32;
 
 /** Inset from the view edge. Two thirds of a tile; clear of the 24 px HUD margin. */
 export const TOUCH_EDGE_PX = 64;
+
+/**
+ * The level menu's row band, in game pixels.
+ *
+ * 128 x 0.347 = 44.4 CSS px, just over the floor — the rows are wide, so height is the binding
+ * constraint and there is no room to spend. `TOP` clears the `SELECT LEVEL` heading and `BOTTOM`
+ * clears the hint line, both of which the touch layout moves out of the band rather than over it.
+ */
+export const TOUCH_MENU_ROW_H_PX = 128;
+export const TOUCH_MENU_GAP_PX = 32;
+export const TOUCH_MENU_TOP_PX = 150;
+export const TOUCH_MENU_BOTTOM_PX = 120;
+/** Rows are wide targets on purpose: a thumb aiming at a level name has the whole row.  */
+export const TOUCH_MENU_WIDTH_FRAC = 0.62;
 
 /**
  * The accessibility floors, in CSS pixels, cited rather than invented: `ui-ux-pro-max`'s
@@ -137,12 +162,12 @@ export function cssScaleFor(canvasCssWidth: number, gameWidth: number = GAME_WID
 }
 
 /** Do two boxes share any area? Touching exactly along an edge is NOT overlapping. */
-function overlaps(a: TouchTarget, b: TouchTarget): boolean {
+function overlaps(a: HitBox, b: HitBox): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
 /** The clear distance between two non-overlapping boxes, in game pixels. 0 if they touch or overlap. */
-function separation(a: TouchTarget, b: TouchTarget): number {
+function separation(a: HitBox, b: HitBox): number {
   const dx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
   const dy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
   return Math.max(dx, dy);
@@ -161,7 +186,7 @@ function separation(a: TouchTarget, b: TouchTarget): number {
  * An **empty** list is false, not vacuously true: otherwise deleting every control satisfies the
  * accessibility criterion, which is the deletion the gate exists to catch.
  */
-export function touchTargetsFit(targets: readonly TouchTarget[], cssScale: number): boolean {
+export function touchTargetsFit(targets: readonly HitBox[], cssScale: number): boolean {
   if (targets.length === 0) return false;
   if (!Number.isFinite(cssScale) || cssScale <= 0) return false;
 
@@ -183,7 +208,7 @@ export function touchTargetsFit(targets: readonly TouchTarget[], cssScale: numbe
  * Scale-free on purpose — overlap is a property of the layout, not of the screen it lands on. Empty
  * is false for the same reason as above.
  */
-export function touchTargetsDisjoint(targets: readonly TouchTarget[]): boolean {
+export function touchTargetsDisjoint(targets: readonly HitBox[]): boolean {
   if (targets.length === 0) return false;
   for (let i = 0; i < targets.length; i += 1) {
     for (let j = i + 1; j < targets.length; j += 1) {
@@ -191,4 +216,44 @@ export function touchTargetsDisjoint(targets: readonly TouchTarget[]): boolean {
     }
   }
   return true;
+}
+
+/**
+ * **The level menu, laid out for thumbs.**
+ *
+ * 🔴 `LevelSelectScene`'s keyboard layout puts rows on a `ROW_HEIGHT` of 68 game pixels, which is
+ * **23.6 CSS px** at the worst in-scope scale of 0.347 — under half the floor this file sets for
+ * every other target. Widening each row's hit area to 44 CSS px in place would overlap its
+ * neighbours, so the rule and the layout would contradict each other. Named by the Codex plan
+ * review, round 3.
+ *
+ * So on a touch device the rows get their own layout, and the keyboard layout is untouched on
+ * desktop. The band deliberately leaves the screen title above and the hint line below alone.
+ *
+ * The row height SHRINKS to fit a longer catalog rather than overflowing the band. That can take a
+ * row under the floor — with today's five levels it does not, and `touchTargetsFit` over the
+ * result is what says so rather than a comment claiming it.
+ */
+export function touchMenuLayout(count: number, viewWidth: number, viewHeight: number): HitBox[] {
+  positive(viewWidth, 'viewWidth');
+  positive(viewHeight, 'viewHeight');
+  if (!Number.isInteger(count) || count <= 0) return [];
+
+  const s = viewHeight / GAME_HEIGHT;
+  const gap = TOUCH_MENU_GAP_PX * s;
+  const bandTop = TOUCH_MENU_TOP_PX * s;
+  const bandHeight = viewHeight - bandTop - TOUCH_MENU_BOTTOM_PX * s;
+  const rowH = Math.min(TOUCH_MENU_ROW_H_PX * s, (bandHeight - (count - 1) * gap) / count);
+  const total = count * rowH + (count - 1) * gap;
+  const top = bandTop + Math.max(0, (bandHeight - total) / 2);
+  const w = viewWidth * TOUCH_MENU_WIDTH_FRAC;
+  const x = (viewWidth - w) / 2;
+
+  return Array.from({ length: count }, (_, i) => ({
+    id: `row-${i}`,
+    x,
+    y: top + i * (rowH + gap),
+    w,
+    h: rowH,
+  }));
 }

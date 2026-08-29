@@ -54,6 +54,34 @@
         MISSED the defect — both its viewports are deliberately non-16:9 and it measured centring
         inside the overflowing box. Two review briefs caught the wrong pointer.
       */
+      /*
+        Phase 12. Four touch rules, and NONE of them targets `canvas` or sets geometry, so the two
+        invariants above still hold: the ScaleManager owns every canvas property, and the canvas is
+        centred exactly once.
+
+          - `touch-action: none` — without it the browser claims the gesture first. A thumb dragging
+            on the LEFT button pans or pinch-zooms the page, and the pointer events the game needs
+            are cancelled mid-drag. This is criterion 12.13.
+          - `overscroll-behavior: none` — kills pull-to-refresh, which a downward thumb flick from
+            the top of the screen triggers and which reloads the game mid-level.
+          - `user-select: none` — a long press on the canvas otherwise raises the text-selection
+            handles over the controls.
+          - `-webkit-tap-highlight-color: transparent` — removes the grey flash iOS paints over a
+            tapped element, which would strobe on every jump.
+
+        Deliberately NOT here: `user-scalable=no` on the viewport meta. Disabling zoom outright is
+        an accessibility anti-pattern (ux-guidelines.csv, Layout/'Disable zoom'), and `touch-action`
+        already stops pinch inside the game without taking it away from the rest of the page.
+      */
+      html,
+      body,
+      #game {
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+      }
       #game {
         width: 100%;
         height: 100%;

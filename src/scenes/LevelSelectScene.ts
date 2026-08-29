@@ -30,6 +30,9 @@ import { parseLevel } from '../game/tilemap';
 import { isUnlocked } from '../sim/progress';
 import { updateDebugState } from '../debug/globals';
 import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
+import { touchMenuLayout } from '../render/touchLayout';
+import { RotatePrompt } from './rotatePrompt';
+import { attachTapRoutes } from './touchRoutes';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
@@ -50,6 +53,14 @@ interface Row {
 export class LevelSelectScene extends Phaser.Scene {
   private rows: Row[] = [];
   private cursor = 0;
+  /**
+   * Phone portrait, where no row height clears the 44 CSS px floor.
+   *
+   * `UIScene` — which carries the prompt during play — has retired itself by the time this menu
+   * is up, because `Game` is gone. This is the only shipped screen the player can reach with no
+   * `UIScene` behind it, so it is the only one that has to say so itself.
+   */
+  private rotatePrompt?: RotatePrompt;
 
   constructor() {
     super(LEVEL_SELECT_KEY);
@@ -63,6 +74,7 @@ export class LevelSelectScene extends Phaser.Scene {
   init(): void {
     this.rows = [];
     this.cursor = 0;
+    this.rotatePrompt = undefined;
   }
 
   create(): void {
@@ -71,8 +83,16 @@ export class LevelSelectScene extends Phaser.Scene {
     const save = readProgress(safeLocalStorage());
     const done = completedIds(save);
 
+    // 🔴 `ROW_HEIGHT` is 68 game px, which is 23.6 CSS px at the worst in-scope scale of 0.347 —
+    // under half the floor this phase sets for every other target, and widening each row's hit
+    // area in place would overlap its neighbours. So a touch device gets its own row band from
+    // `touchMenuLayout`, and the heading and hint move out of that band rather than over it. The
+    // keyboard layout on desktop is byte for byte what it was.
+    const touch = this.game.device.input.touch;
+    const band = touch ? touchMenuLayout(order.length, GAME_WIDTH, GAME_HEIGHT) : [];
+
     this.add
-      .text(GAME_WIDTH / 2, 160, 'SELECT LEVEL', TITLE_STYLE)
+      .text(GAME_WIDTH / 2, touch ? 80 : 160, 'SELECT LEVEL', TITLE_STYLE)
       .setOrigin(0.5)
       .setScrollFactor(0);
 
@@ -80,8 +100,10 @@ export class LevelSelectScene extends Phaser.Scene {
     this.rows = order.map((id, index) => {
       const unlocked = isUnlocked(id, done, order);
       const label = this.rowLabel(id, unlocked, save, index);
+      const row = band[index];
+      const y = row ? row.y + row.h / 2 : top + index * ROW_HEIGHT;
       const text = this.add
-        .text(GAME_WIDTH / 2, top + index * ROW_HEIGHT, label, ROW_STYLE)
+        .text(GAME_WIDTH / 2, y, label, ROW_STYLE)
         .setOrigin(0.5)
         .setScrollFactor(0);
       return { id, unlocked, label, text };
@@ -93,11 +115,38 @@ export class LevelSelectScene extends Phaser.Scene {
     this.cursor = lastPlayable < 0 ? 0 : lastPlayable;
 
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 140, 'UP / DOWN choose   ·   ENTER play', HINT_STYLE)
+      .text(
+        GAME_WIDTH / 2,
+        touch ? GAME_HEIGHT - 50 : GAME_HEIGHT - 140,
+        touch ? 'TAP a level, or UP / DOWN and ENTER' : 'UP / DOWN choose   ·   ENTER play',
+        HINT_STYLE,
+      )
       .setOrigin(0.5)
       .setScrollFactor(0);
 
     this.bindKeys();
+    // Tapping a row moves the cursor onto it and plays it — the same two steps ENTER takes, so a
+    // LOCKED row repaints and refuses exactly as it does for the keyboard. Letting a tap bypass
+    // `play()`'s refusal would hand the player level-01 while the menu showed level-04 selected:
+    // `resolveEntryLevel` silently substitutes `order[0]` for a locked id.
+    attachTapRoutes(this, touch, band, (id) => {
+      const index = Number(id.slice('row-'.length));
+      if (!Number.isInteger(index) || index < 0 || index >= this.rows.length) return;
+      this.cursor = index;
+      this.paint();
+      this.play();
+    });
+    this.rotatePrompt = new RotatePrompt(this, touch);
+    this.rotatePrompt.create();
+    this.rotatePrompt.refresh();
+    this.scale.on('resize', this.refreshRotatePrompt, this);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      // The GLOBAL ScaleManager outlives this scene, so an un-removed listener would run against
+      // destroyed objects on the next resize — the trap `TitleScene` records at its own listener.
+      this.scale.off('resize', this.refreshRotatePrompt, this);
+      this.rotatePrompt?.destroy();
+      this.rotatePrompt = undefined;
+    });
     this.paint();
 
     /**
@@ -165,6 +214,10 @@ export class LevelSelectScene extends Phaser.Scene {
       this.play();
     });
     keyboard.addCapture('UP,DOWN,W,S,ENTER');
+  }
+
+  private refreshRotatePrompt(): void {
+    this.rotatePrompt?.refresh();
   }
 
   private move(delta: number): void {

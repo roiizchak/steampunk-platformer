@@ -7,9 +7,12 @@ import {
   TOUCH_GAP_PX,
   TOUCH_IDS,
   TOUCH_MIN_CSS_PX,
+  TOUCH_MENU_BOTTOM_PX,
+  TOUCH_MENU_TOP_PX,
   TOUCH_MIN_GAP_CSS_PX,
   cssScaleFor,
   touchLayout,
+  touchMenuLayout,
   touchTargetsDisjoint,
   touchTargetsFit,
 } from '../../src/render/touchLayout';
@@ -190,5 +193,55 @@ describe('touchTargetsDisjoint', () => {
 
   it('refuses to call an empty target list disjoint', () => {
     expect(touchTargetsDisjoint([])).toBe(false);
+  });
+});
+
+describe('touchMenuLayout', () => {
+  // 🔴 `LevelSelectScene`'s keyboard `ROW_HEIGHT` is 68 game px = 23.6 CSS px at 0.347, under half
+  // the floor. This layout is what replaces it on a touch device; these are its two claims.
+  const WORST_SCALE = 667 / GAME_WIDTH;
+  const CATALOG_LEVELS = 5;
+
+  it('gives every row a target that clears the floor at the worst in-scope viewport', () => {
+    const rows = touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT);
+    expect(rows).toHaveLength(CATALOG_LEVELS);
+    expect(touchTargetsFit(rows, WORST_SCALE), 'a level row is too small or too close to hit').toBe(
+      true,
+    );
+  });
+
+  it('keeps the rows disjoint, which widening the keyboard rows in place could not', () => {
+    expect(touchTargetsDisjoint(touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT))).toBe(true);
+  });
+
+  it('stays inside the band, leaving the heading above and the hint below', () => {
+    const rows = touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT);
+    for (const row of rows) {
+      expect(row.y, `${row.id} runs over the heading`).toBeGreaterThanOrEqual(TOUCH_MENU_TOP_PX);
+      expect(row.y + row.h, `${row.id} runs over the hint line`).toBeLessThanOrEqual(
+        GAME_HEIGHT - TOUCH_MENU_BOTTOM_PX,
+      );
+    }
+  });
+
+  it('shrinks the rows to fit a longer catalog rather than overflowing the band', () => {
+    // The honest failure direction: a twelve-level catalog gets rows that FIT the screen and are
+    // then correctly reported too small, rather than rows drawn off the bottom of it.
+    const many = touchMenuLayout(12, GAME_WIDTH, GAME_HEIGHT);
+    expect(many).toHaveLength(12);
+    expect(many.at(-1)!.y + many.at(-1)!.h).toBeLessThanOrEqual(GAME_HEIGHT - TOUCH_MENU_BOTTOM_PX);
+    expect(touchTargetsDisjoint(many)).toBe(true);
+  });
+
+  it('scales off the view instead of the design size', () => {
+    const half = touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    const full = touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT);
+    expect(half[0].h * 2).toBeCloseTo(full[0].h, 6);
+    expect(half[0].y * 2).toBeCloseTo(full[0].y, 6);
+  });
+
+  it('returns nothing for a catalog with no levels, rather than one row of NaN', () => {
+    expect(touchMenuLayout(0, GAME_WIDTH, GAME_HEIGHT)).toEqual([]);
+    expect(touchMenuLayout(-1, GAME_WIDTH, GAME_HEIGHT)).toEqual([]);
   });
 });

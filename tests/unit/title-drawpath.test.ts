@@ -129,7 +129,7 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   const LINES: ReadonlyArray<readonly [string, string]> = [
     ['STEAMPUNK PLATFORMER', 'TITLE_STYLE'],
     ['a short climb through the works', 'SUB_STYLE'],
-    ['ENTER   choose a level', 'CHOICE_STYLE'],
+    ['ENTER or TAP   choose a level', 'CHOICE_STYLE'],
   ];
 
   for (const [text, style] of LINES) {

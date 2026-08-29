@@ -37,6 +37,16 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
   },
+  /**
+   * Four simultaneous touch contacts.
+   *
+   * Phaser reserves one pointer for the mouse and creates `activePointers` touch pointers *in
+   * addition* to it (`Config.js:279`, `InputManager.js:155, 178, 469`), so the default of 1 can
+   * track exactly one finger — and criterion 12.3 is a thumb holding RIGHT while the other hand
+   * jumps. Four covers every simultaneous GAMEPLAY action; pause immediately leaves gameplay and
+   * has no simultaneous-use case. The cost is three extra `Pointer` instances.
+   */
+  input: { activePointers: 4 },
   // loader.maxRetries is left at Phaser 4's default of 2, so a 404 is attempted THREE times
   // before `loaderror` fires. Deliberate: retries are consistent with the no-timeout decision
   // (vault 1.4) and the failure direction stays safe. The consequence is that any test of the

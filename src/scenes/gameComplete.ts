@@ -43,6 +43,7 @@ import type { World } from '../sim/types';
 import { LEVEL_SELECT_KEY, levelOrder } from './gameLevelPick';
 import type { LevelCompleteInfo } from './hudFade';
 import type { UIScene } from './UIScene';
+import { attachTapRoutes } from './touchRoutes';
 
 /** The scene key the last level's continue goes to. Defined in `gameLevelPick.ts`, re-exported here
  * because this file's `bindContinue` is what routes to it. */
@@ -99,7 +100,7 @@ function panelText(best: number, world: World, total: number, next: string | nul
     title: next === null ? 'ALL LEVELS COMPLETE' : 'LEVEL COMPLETE',
     gears: `${world.gearsCollected} / ${total} gears`,
     best: `best ${best} / ${total}`,
-    prompt: next === null ? 'ENTER — level select' : `ENTER — ${next}`,
+    prompt: next === null ? 'TAP or ENTER — level select' : `TAP or ENTER — ${next}`,
     // ⚠️ `prompt` names the SPECIFIC next level rather than saying "next level", because criterion
     // 8.6's mutation is "hardcode the next id and confirm the spec names the specific next
     // `levelId`". A generic string is satisfied by a flow that always advances to level-02.
@@ -116,25 +117,55 @@ function panelText(best: number, world: World, total: number, next: string | nul
  * `emitOnRepeat` does not enter into it — a keyboard event listener does not repeat the way a held
  * `Key` object does.
  */
-function bindContinue(scene: Phaser.Scene, next: string | null): void {
+function advanceTo(scene: Phaser.Scene, next: string | null): void {
+  if (next === null) {
+    scene.scene.start(LEVEL_SELECT_KEY);
+    return;
+  }
+  // `start`, not `restart`: the level id travels in the data payload and `GameScene.init(data)`
+  // reads it. A `restart()` would re-enter with the payload the scene was last started with,
+  // which is the level just finished.
+  scene.scene.start('Game', { levelId: next });
+}
+
+/**
+ * Arm ENTER, re-arming itself on any other key.
+ *
+ * Split out of `bindContinue` when the tap route landed: the re-arm used to recurse into
+ * `bindContinue`, which would now build a SECOND zone on every irrelevant keypress.
+ */
+function armContinueKey(scene: Phaser.Scene, onAdvance: () => void): void {
   scene.input.keyboard?.once(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, function advance(
     event: KeyboardEvent,
   ) {
     if (event.code !== 'Enter' && event.code !== 'NumpadEnter') {
-      // Not our key. Re-arm, because `once` has already removed the listener and the player is still
-      // sitting on a screen whose only exit is this binding.
-      bindContinue(scene, next);
+      // Not our key. Re-arm, because `once` has already removed the listener and the player is
+      // still sitting on a screen whose only exit is this binding.
+      armContinueKey(scene, onAdvance);
       return;
     }
-    if (next === null) {
-      scene.scene.start(LEVEL_SELECT_KEY);
-      return;
-    }
-    // `start`, not `restart`: the level id travels in the data payload and `GameScene.init(data)`
-    // reads it. A `restart()` would re-enter with the payload the scene was last started with, which
-    // is the level just finished.
-    scene.scene.start('Game', { levelId: next });
+    onAdvance();
   });
+}
+
+function bindContinue(scene: Phaser.Scene, next: string | null): void {
+  const go = (): void => {
+    taps.destroy();
+    advanceTo(scene, next);
+  };
+  // ⚠️ The zone is on the GAME scene, not on the `UIScene` that DRAWS the panel: `UIScene`
+  // survives the level-to-level `scene.start('Game')` (`gameHud.ts:49-52`), so a zone parented
+  // to it would outlive the panel it belongs to and sit invisible over the next level, one stray
+  // tap from skipping it. `Game`'s own SHUTDOWN fires on that same start, and `go` destroys the
+  // route before advancing in any case.
+  const { width, height } = scene.scale.gameSize;
+  const taps = attachTapRoutes(
+    scene,
+    scene.game.device.input.touch,
+    [{ id: 'continue', x: 0, y: 0, w: width, h: height }],
+    go,
+  );
+  armContinueKey(scene, go);
 }
 
 /**

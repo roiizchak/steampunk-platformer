@@ -53,8 +53,9 @@ import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from '.
 import { attachGearFlyers, type GearFlyers } from './hudGearFlyers';
 import { attachGearPop, type GearPop } from './hudGearPop';
 import type { World } from '../sim/types';
-import { TouchControlsLayer, type TouchBinding } from './touchControlsLayer';
+import type { TouchBinding } from './touchControlsLayer';
 import { TouchSession } from './touchSession';
+import { attachUiTouch, type UiTouchOverlay } from './uiTouch';
 import type { TouchHeld } from './inputMerge';
 
 /**
@@ -105,20 +106,14 @@ export class UIScene extends Phaser.Scene {
   private flyers?: GearFlyers;
 
   /**
-   * The on-screen touch controls, and the seam that tells them which `Game` scene they drive.
+   * The seam that tells the touch controls which `Game` scene they drive.
    *
-   * They live on THIS scene, not on `GameScene`, because `GameScene`'s camera is displaced to
-   * `(-10, -8)` for shake headroom (`gameEffects.ts:156-158`) — a screen-anchored object on its
-   * display list needs a per-frame `- cam.x/y` correction, the discipline `helpBannerLayer.ts:174,
-   * 255` implements and whose absence once cost a 1.33 px false red. This camera never moves.
-   *
-   * 🔴 The cost, planned for rather than discovered: this scene deliberately survives `Game` being
-   * PAUSED (see `update()` below) — that is how the HUD stays up under the welcome screen — so
-   * without the `isGameRunning` term the controls would be live under the title card, driving a
-   * paused sim.
+   * Constructed with the scene, not in `create()`, because `attachHud` binds before `create()`
+   * runs — `touchSession.ts` has the queue analysis. The objects it drives are built by
+   * `attachUiTouch`, which also carries why they belong on this scene and not on `GameScene`.
    */
   readonly touch = new TouchSession();
-  private touchLayer?: TouchControlsLayer;
+  private touchUi?: UiTouchOverlay;
 
   constructor() {
     super('UI');
@@ -127,26 +122,17 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.flyers = attachGearFlyers(this);
     this.build();
-    // Touch only. `Phaser.Device.Input.touch` is set from `ontouchstart` or
-    // `navigator.maxTouchPoints` (`src/device/Input.js:39-41`). A desktop gets NO objects — not
-    // hidden ones, not disabled ones: an invisible interactive object still swallows pointers.
-    this.touchLayer = new TouchControlsLayer(this, this.game.device.input.touch);
-    this.touchLayer.create();
-    // Always, even with nothing pending — `touchSession.ts` for why there is one path here.
-    this.touch.activate(this.touchLayer);
+    this.touchUi = attachUiTouch(this, this.game.device.input.touch, this.touch);
     // Re-layout rather than re-create: the objects keep their identity, so an e2e spec holding a
     // reference across a resize is still looking at the thing on screen.
     this.scale.on('resize', this.applyLayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.applyLayout, this);
       this.built = false;
-      // 🔴 M2b / M14. Phaser preserves this scene INSTANCE across a shutdown
-      // (`Systems.js:760-788`), and cleans only `InputPlugin`'s own listeners
-      // (`InputPlugin.js:3098-3142`) — the layer's `game.events` BLUR/HIDDEN subscriptions are
-      // ours to remove. Deactivate FIRST, so nothing writes to a layer mid-destruction.
-      this.touch.deactivate();
-      this.touchLayer?.destroy();
-      this.touchLayer = undefined;
+      // 🔴 M2b / M14. Phaser preserves this scene INSTANCE across a shutdown and removes only
+      // `InputPlugin`'s own listeners — `attachUiTouch`'s `destroy` has the detail.
+      this.touchUi?.destroy();
+      this.touchUi = undefined;
       // Phase 8. `destroy()` kills the tweens first — a tween still running against a destroyed
       // target throws inside Phaser's update loop, and a throw there stops every scene after it.
       this.levelComplete(null);
@@ -240,7 +226,7 @@ export class UIScene extends Phaser.Scene {
     // Re-placed and re-gated here rather than from an event, for the reason the retirement check
     // below is a per-frame condition: there is no ordering to get wrong because there is no
     // ordering. Cheap — the layer re-places its objects only when the view size actually changed.
-    this.touch.refresh();
+    this.touchUi?.refresh();
     if (status === undefined || status >= Phaser.Scenes.SLEEPING) {
       this.scene.stop();
     }
