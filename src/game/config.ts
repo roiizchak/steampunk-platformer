@@ -5,6 +5,7 @@ import { ElementEditorScene } from '../scenes/ElementEditorScene';
 import { GymScene } from '../scenes/GymScene';
 import { LevelSelectScene } from '../scenes/LevelSelectScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
+import { TitleScene } from '../scenes/TitleScene';
 import { UIScene } from '../scenes/UIScene';
 import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
 import { devSeam } from '../debug/devSeam';
@@ -63,6 +64,6 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
       // `devSeam`'s header — this is the shape the criterion 10.2 gate owner named (brief B,
       // finding 11) for the four guards previously reported UNCOVERED.
       (devSeam('__DEVSEAM_config_devSceneRoster__'),
-      [BootScene, GameScene, UIScene, LevelSelectScene, PlaygroundScene, ElementEditorScene, GymScene])
-    : [BootScene, GameScene, UIScene, LevelSelectScene],
+      [BootScene, GameScene, UIScene, LevelSelectScene, PlaygroundScene, ElementEditorScene, GymScene, TitleScene])
+    : [BootScene, GameScene, UIScene, LevelSelectScene, TitleScene],
 };

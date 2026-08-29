@@ -52,6 +52,81 @@ export async function bootToGame(page: Page, search = ''): Promise<void> {
   // Focus the page before sending keys. Without it the keystrokes have no target and every
   // movement assertion in every spec would fail for a reason unrelated to movement.
   await page.locator('canvas').click();
+
+  // Phase 11: the welcome screen is a PARALLEL scene over a paused `Game`, so `sceneKey` is still
+  // `'Game'` and every assertion above holds unchanged — but the sim is frozen until it is
+  // dismissed. One place, so the ~31 specs that boot through here keep driving a running game.
+  await dismissTitle(page);
+}
+
+/**
+ * Dismiss the Phase 11 welcome screen and wait until the simulation is genuinely running again.
+ *
+ * ## 🔴 "Title is gone" is NOT a sufficient barrier
+ *
+ * `GameScene` is PAUSED while the title is up, so its published `tick` stops advancing. On the first
+ * resumed frame `update()` can receive a **sub-tick delta** — this box runs ~240 Hz, so ~4.17 ms
+ * against a 16.67 ms tick — and `drainTicks` floors that to **zero** ticks
+ * (`src/game/frameClock.ts`). So the scene can be inactive while `tick` is still exactly what it was.
+ * `phase-01-boot.spec.ts` reads a snapshot immediately after this and asserts `tick > 0`, which is
+ * how that shows up: a confusing ordinary failure, while `globalSetup` passes because `ready` is
+ * true. Codex plan review round 4.
+ *
+ * So this captures the tick first and waits for it to MOVE. That is the only observation that proves
+ * the game is running rather than merely uncovered.
+ *
+ * A no-op when no title is up — the latch in `gameTitle.ts` shows it once per page load, so a
+ * mid-spec `Game` restart does not reopen it and this returns immediately.
+ */
+export async function dismissTitle(page: Page): Promise<void> {
+  // `__phaserGame` is reached by a local cast, never a second `declare global` — two declarations of
+  // one property is a TS2717 build failure the moment they differ. See `debugView.ts`'s header.
+  type SceneHandle = { scene: { isActive(key: string): boolean } };
+  const titleActive = (): Promise<boolean> =>
+    page.evaluate(() =>
+      Boolean((window as unknown as { __phaserGame?: SceneHandle }).__phaserGame?.scene.isActive('Title')),
+    );
+
+  if (!(await titleActive())) {
+    return;
+  }
+
+  const before = await page.evaluate(() => window.__game?.tick ?? 0);
+  await page.locator('canvas').click();
+
+  /**
+   * 🔴 **SKIPS the screen through the dev surface — it does not press the keys a player presses.**
+   *
+   * Since 2026-08-29 the welcome screen's only exit is the level menu, so driving it the way a player
+   * does means title → menu → level. That was tried, and it moved two things ~40 specs depend on:
+   *
+   *  - **which level loads.** The menu opens on the furthest UNLOCKED row; boot uses
+   *    `resolveEntryLevel`, which prefers the SAVED level. They agree on an empty save and diverge
+   *    the moment a spec seeds progress — `phase-08-complete` failed with
+   *    `Expected "ENTER — level-02", Received "ENTER — level-03"`.
+   *  - **when the simulation starts.** Going through the menu restarts `Game`, so it is already
+   *    running by the time a spec installs a probe. `phase-09-polish` failed with *"the camera was
+   *    not at its unshaken base at install"* — scroll 1.15 instead of 0.
+   *
+   * Both are real behaviour changes for a PLAYER and neither is one these specs are about. So the
+   * harness says what it means: skip the welcome screen, leave everything else exactly as boot left
+   * it. The player-facing route is covered on its own by `phase-11-title-routes.spec.ts`.
+   */
+  await page.evaluate(() => {
+    const handle = (window as unknown as {
+      __phaserGame?: { scene: { stop(key: string): void; resume(key: string): void } };
+    }).__phaserGame;
+    handle?.scene.stop('Title');
+    handle?.scene.resume('Game');
+  });
+
+  await page.waitForFunction(
+    (t) =>
+      !(window as unknown as { __phaserGame?: SceneHandle }).__phaserGame?.scene.isActive('Title') &&
+      (window.__game?.tick ?? 0) > (t as number),
+    before,
+    { timeout: BOOT_TIMEOUT },
+  );
 }
 
 export async function readPlayer(page: Page): Promise<DebugPlayer> {

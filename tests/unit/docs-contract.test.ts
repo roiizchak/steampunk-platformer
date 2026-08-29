@@ -143,7 +143,7 @@ function unqualifiedAgentNouns(text: string): string[] {
 
 describe('phase documents are executable instructions', () => {
   it('all ten phase documents were found', () => {
-    expect(PHASES.map(([name]) => name)).toHaveLength(10);
+    expect(PHASES.map(([name]) => name)).toHaveLength(11);
   });
 
   it('PRD.md defines the owner roster the gates are checked against', () => {

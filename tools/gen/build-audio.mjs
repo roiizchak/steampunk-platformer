@@ -98,6 +98,69 @@ const MIX_DB = {
  */
 const TARGET_STACK_DBFS = -3.0;
 
+/**
+ * Make-up gain applied to the two beds, and ONLY to them — 2026-08-29.
+ *
+ * 🔴 **The owner played the game and could barely hear it**, at volume 50, with their speakers at
+ * 100 %. Measured with `ffmpeg -af volumedetect` against the shipped masters and the gains this file
+ * had solved: `bed-music` reached the player at **−48.6 dBFS RMS** and `bed-ambience` at
+ * **−45.2**, together about **−43.6**. Games and music master to roughly −16 to −20. The constant
+ * background of this game was about a twentieth of normal amplitude.
+ *
+ * ## The cause is a UNIT MISMATCH in `MIX_DB`, not a bad number in it
+ *
+ * `MIX_DB` is documented as *"relative loudness per cue, in dB"*, and for the ten WAV cues it is
+ * applied to a **peak-normalised** signal — so `-13` means "peaks 13 dB below the reference". The two
+ * beds are OGG, `decodeWav` cannot read them, and `normalise` therefore falls back to **1**: their
+ * weight is applied to whatever level the file happens to sit at. Same column, two different
+ * meanings.
+ *
+ * The beds happen to be quiet and very dynamic — a measured **19 dB crest factor** — so a `-13`
+ * "relative loudness" lands about 19 dB lower in the terms a listener hears than the same number
+ * does on a peak-normalised one-shot. The table said 13 and 15 dB down. They were 32 and 34 down.
+ *
+ * ## Why this is a make-up constant and not a corrected `normalise`
+ *
+ * Peak-normalising the beds is the obvious repair and it is **not enough**: measured, it is worth
+ * +5.5 dB on `bed-music` and **+0.0** on `bed-ambience`, which already peaks at full scale. With a
+ * 19 dB crest a bed cannot reach a normal RMS by peak-normalising at all — its peaks would pass
+ * 0 dBFS first. Beds are mixed by RMS; one-shots are mixed by peak. This constant is that
+ * distinction, made explicit.
+ *
+ * ## Why the beds can afford it and the one-shots cannot
+ *
+ * Criterion 7.2 decodes the real files in a browser and measures the real worst-case stack — the
+ * authority, unlike the constant-block model below. On 2026-08-29 it measured **−4.45 dBFS**
+ * against its own −1.0 ceiling, and in that stack the two beds contributed **5.4 %** of the summed
+ * peak: `bed-music` −29.49 dBFS and `bed-ambience` −25.77, against one-shots running −10.8 to −22.
+ * The beds' own peaks also fall at 96.2 s and 17.8 s into 120 s loops, nowhere near a one-shot's
+ * onset. So lifting the beds moves the stack very little, and lifting the one-shots would move it a
+ * lot.
+ *
+ * ⚠️ **The figure is confirmed by re-running 7.2, never by arithmetic.** A naive peak-sum says the
+ * stack sits at +3.92 dBFS; the browser says −4.45. `sumPeakDbfs` adds WAVEFORMS sample by sample,
+ * and the peaks do not align — an 8.4 dB difference. Any future change to this number is measured
+ * the same way or it is guessed.
+ */
+const BED_MAKEUP_DB = 11;
+const BED_MAKEUP = 10 ** (BED_MAKEUP_DB / 20);
+
+/**
+ * The beds' own RMS, linear, as measured from the shipped masters.
+ *
+ * ```
+ * ffmpeg -i _generated/audio/bed-music-<id>.ogg    -af volumedetect -f null -   # mean -24.6 dBFS
+ * ffmpeg -i _generated/audio/bed-ambience-<id>.ogg -af volumedetect -f null -   # mean -19.2 dBFS
+ * ```
+ *
+ * Recorded rather than computed, because Node cannot decode OGG — the same limit that caused the
+ * unit mismatch `BED_MAKEUP_DB` documents. Re-measure with the commands above if a bed is re-shot.
+ */
+const BED_RMS = {
+  'bed-music': 10 ** (-24.6 / 20),
+  'bed-ambience': 10 ** (-19.2 / 20),
+};
+
 // `WORST_CASE_STACK` is imported from `audioGate.mjs` — see its docstring for what is in it and
 // why. It used to be declared here AND in the e2e gate, with nothing keeping the two in step.
 
@@ -167,7 +230,19 @@ function main() {
   const weighted = WORST_CASE_STACK.map((key) => {
     const weight = 10 ** (MIX_DB[key] / 20);
     if (cues[key].channels === null) {
-      return [new Float32Array(stackFrames).fill(weight)];
+      // Beds: a constant block at their role weight, their make-up, and their MEASURED level.
+      //
+      // ⚠️ **This used to fill the block at FULL SCALE**, under a comment calling that a deliberate
+      // over-statement in the safe direction. It is not safe once the beds carry a make-up gain: at
+      // full scale the two blocks dominate the sum, the solved scalar collapses, and the make-up is
+      // paid for by attenuating every one-shot. Measured on 2026-08-29: it pulled `footstep` from
+      // 0.2983 to 0.2019 and still gave the beds only +8.6 dB of the +12 they were granted.
+      //
+      // A continuous source's contribution to a COINCIDENT peak is its instantaneous level, and the
+      // expected value of that is its RMS — not its peak, which assumes an alignment that criterion
+      // 7.2 exists to check for real, in a browser, against the real files. That gate is the
+      // authority; this block only has to stop the solver being absurd.
+      return [new Float32Array(stackFrames).fill(weight * BED_MAKEUP * BED_RMS[key])];
     }
     const normalise = 1 / 10 ** (cues[key].peak / 20);
     return cues[key].channels.map((channel) => {
@@ -190,7 +265,10 @@ function main() {
       url: cues[key].url,
       // Rounded to four places: the difference is inaudible and an unrounded float in a committed
       // JSON file re-writes itself on every build, which makes every diff noise.
-      gain: Number(Math.min(1, normalise * weight * headroom).toFixed(4)),
+      // The beds carry the RMS make-up; the one-shots do not. See `BED_MAKEUP_DB`.
+      gain: Number(
+        Math.min(1, normalise * weight * headroom * (key.startsWith('bed-') ? BED_MAKEUP : 1)).toFixed(4),
+      ),
       loop: key.startsWith('bed-'),
     };
   });

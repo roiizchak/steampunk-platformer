@@ -1,0 +1,348 @@
+/**
+ * The volume keys reach the game whatever the keyboard layout — Phase 11, criterion 11.3 / 11.5.
+ *
+ * ## The defect this reproduces
+ *
+ * The owner reported `M` (mute) working while `[` and `]` did nothing at all, on a Hebrew/English
+ * keyboard. Phaser indexes registered keys by the **legacy `event.keyCode`**
+ * (`KeyboardPlugin.js:747` — `var code = event.keyCode; var key = keys[code];`), and `keyCode` is
+ * layout-dependent for punctuation while letters keep a stable value. So a layout that reassigns the
+ * bracket virtual-key silently removes the volume controls and leaves mute alone.
+ *
+ * Measured against the running game on 2026-08-28, before the fix:
+ *
+ * | `code` | `keyCode` | volume changed? |
+ * |---|---|---|
+ * | `BracketLeft` ✓ | `0` | **no** |
+ * | `BracketLeft` ✓ | `186` | **no** |
+ * | `Backslash` ✗ | `219` | **yes** |
+ *
+ * ## Why this is a browser test and not only a unit test
+ *
+ * `tests/unit/audio-key-map.test.ts` proves the map. It cannot prove the listener is registered or
+ * that Phaser delivers to it — a perfect map with no consumer passes every unit assertion and does
+ * nothing on screen. Codex plan review round 1 finding 2. **This file is the half that goes red on
+ * the un-fixed code**: revert `gameInput.ts` to `addKey(OPEN_BRACKET)` and the foreign-keyCode test
+ * below fails, because the browser never routes that press anywhere.
+ *
+ * ## 🔴 Dispatch keydown AND keyup, always
+ *
+ * A synthetic keydown with no matching keyup leaves Phaser's `Key.isDown` true forever, and
+ * `emitOnRepeat: false` then suppresses every later press of that keycode — including real ones.
+ * That contaminated the first run of this experiment and made a working build look broken. Any test
+ * that fires raw keyboard events must release them.
+ *
+ * ## 🔴 Seed the volume BEFORE navigating
+ *
+ * `createAudio()` copies storage into a private `settings` object at boot, and `nudgeVolume` mutates
+ * that in-memory copy without ever re-reading `localStorage` (`audio.ts:261-264`). Writing a
+ * baseline *after* boot establishes nothing. Codex plan review round 3, finding 3.
+ */
+
+import { expect, test } from '@playwright/test';
+import { bootToGame } from './gameHarness';
+import { storedSettings } from './audioHelpers';
+import './debugView';
+
+const KEY = 'steampunk.audio';
+
+/** Seed the persisted settings before any page script runs, so `createAudio` reads this at boot. */
+async function seedVolume(page: import('@playwright/test').Page, volume: number): Promise<void> {
+  await page.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key as string, value as string),
+    [KEY, JSON.stringify({ muted: false, volume })] as const,
+  );
+}
+
+/**
+ * Fire a matched keydown/keyup pair carrying an explicit `code` and `keyCode`.
+ *
+ * This is how a non-US layout is modelled without needing one installed: the physical key is the
+ * same, the legacy number attached to it is not.
+ */
+async function fireKey(
+  page: import('@playwright/test').Page,
+  code: string,
+  keyCode: number,
+  repeat = false,
+): Promise<void> {
+  await page.evaluate(
+    ([c, k, rp]) => {
+      const make = (type: string): KeyboardEvent =>
+        new KeyboardEvent(type, {
+          code: c as string,
+          keyCode: k as number,
+          which: k as number,
+          repeat: rp as boolean,
+          bubbles: true,
+          cancelable: true,
+        });
+      window.dispatchEvent(make('keydown'));
+      // Release it. See this file's header — an unreleased key poisons every later press.
+      window.dispatchEvent(make('keyup'));
+    },
+    [code, keyCode, repeat] as const,
+  );
+  // A few frames of settling before reading `localStorage`.
+  //
+  // ⚠️ This used to explain itself by saying *"Phaser drains its key queue in the scene's update"*.
+  // **It does not** — `KeyboardManager` emits `MANAGER_PROCESS` synchronously from inside its own
+  // DOM handler (`KeyboardManager.js:194`), so the plugin has already drained before this
+  // `page.evaluate` returns. The frames are settling time for the storage write and the CDP round
+  // trip, which is a real reason; the mechanism named was false. Codex implementation review round 4,
+  // finding 5.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      }),
+  );
+}
+
+test.describe('Phase 11 — 11.3 the volume keys are layout-independent', () => {
+  /**
+   * 🔴 **The reproduction.** Red on the un-fixed build, green on the fixed one.
+   *
+   * `186` stands for "whatever number this layout puts on the bracket key". The point is only that
+   * it is not 219, which is the single number the old binding could see.
+   */
+  test('the physical bracket key works when its legacy keyCode is not 219', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireKey(page, 'BracketLeft', 186);
+
+    expect(
+      (await storedSettings(page))?.volume,
+      'the bracket key must be read by POSITION, not by a layout-assigned keyCode',
+    ).toBe(0.4);
+  });
+
+  test('a keyCode of zero is no obstacle either', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireKey(page, 'BracketRight', 0);
+
+    expect((await storedSettings(page))?.volume).toBe(0.6);
+  });
+
+  /**
+   * The complement, and the half that proves the fix did not simply widen the net. Before the fix a
+   * press carrying `code: 'Backslash'` with keyCode 219 DID change the volume — the binding was
+   * matching a number, so any key that carried it won. It must not any more.
+   */
+  test('a different physical key carrying keyCode 219 no longer changes the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireKey(page, 'Backslash', 219);
+
+    expect(
+      (await storedSettings(page))?.volume,
+      'only the bracket POSITION may change the volume',
+    ).toBe(0.5);
+  });
+
+  test('mute still works, and by position', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireKey(page, 'KeyM', 0);
+
+    expect((await storedSettings(page))?.muted).toBe(true);
+  });
+});
+
+test.describe('Phase 11 — 11.5 a held key is one press', () => {
+  /**
+   * The `Key` objects this binding used to be got `emitOnRepeat: false` for free. A raw `keydown`
+   * listener inherits nothing, and the OS repeats a held key ~30 times a second — so without the
+   * `event.repeat` guard, resting a finger on `[` would race the volume to zero and write
+   * `localStorage` thirty times a second. Codex plan review round 1, finding 1.
+   */
+  test('an auto-repeat event does not move the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireKey(page, 'BracketLeft', 219, true);
+
+    expect(
+      (await storedSettings(page))?.volume,
+      'a repeat event is the OS talking, not the player pressing again',
+    ).toBe(0.5);
+  });
+
+  test('one real press is exactly one step', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.keyboard.press('BracketLeft');
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        }),
+    );
+
+    expect((await storedSettings(page))?.volume).toBe(0.4);
+  });
+});
+
+test.describe('Phase 11 — the dispatch GATE, not only the interpretation', () => {
+  /**
+   * 🔴 The half the first fix missed. `audioKeyMap.ts` made the meaning of a press layout-independent
+   * by reading `event.code` — but the listener it fed was `keyboard.on('keydown')`, which is
+   * `ANY_KEY_DOWN`, and Phaser emits that **conditionally** (`KeyboardPlugin.js:797`):
+   *
+   * ```js
+   * var key = keys[event.keyCode];
+   * repeat = key.isDown;
+   * if (!event.cancelled && (!key || !repeat)) { ... emit(ANY_KEY_DOWN) }
+   * ```
+   *
+   * So the gate deciding whether the listener runs at all was STILL keyed on `event.keyCode`. On a
+   * layout that puts `[` on a registered code — `L` (76) is an attack key, `SHIFT` (16) the walk
+   * modifier — holding that key and tapping `[` suppressed the event outright.
+   *
+   * Red on the `ANY_KEY_DOWN` listener, green on the DOM one. Found by the criterion 11.14
+   * adversarial brief.
+   */
+  test('a bracket press lands even while a key sharing its keyCode is held down', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    // `L` is a registered attack key at keyCode 76. Hold it, then press a `[` that this layout puts
+    // on the same number.
+    await page.keyboard.down('l');
+    await fireKey(page, 'BracketLeft', 76);
+    await page.keyboard.up('l');
+
+    await expect
+      .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
+      .toBe(0.4);
+  });
+
+  /**
+   * The cost of moving to a DOM listener, paid rather than discovered later. During IME composition
+   * a browser fires `keydown` with `keyCode === 229` while `event.code` stays the physical key. The
+   * old `addKey(219)` binding was inert for those because 229 was never registered; a code-based
+   * listener is not, so a CJK user composing text would walk the volume on every keystroke.
+   */
+  test('an IME composition keystroke does not move the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.evaluate(() => {
+      const make = (type: string): KeyboardEvent =>
+        new KeyboardEvent(type, { code: 'BracketLeft', keyCode: 229, isComposing: true, bubbles: true });
+      window.dispatchEvent(make('keydown'));
+      window.dispatchEvent(make('keyup'));
+    });
+    // A real press after it, so this cannot pass by the whole path being broken.
+    await fireKey(page, 'BracketLeft', 219);
+
+    await expect
+      .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
+      .toBe(0.4);
+  });
+});
+
+test.describe('Phase 11 — the duplicate-event bailout the plugin used to provide', () => {
+  /**
+   * 🔴 `KeyboardPlugin.js:776` skips an event whose `keyCode`, `timeStamp` and `type` all match the
+   * one before it — *"on some systems, the exact same event will fire multiple times"*. Moving to a
+   * DOM listener gave that up, and a duplicate is **not** an `event.repeat`, so on such a system one
+   * press applied two volume steps. Codex implementation review round 2, finding 1; this gate is
+   * round 3, finding 3, which pointed out the guard had no test at all.
+   *
+   * `timeStamp` is read-only, so it is redefined on the instance — the only way to author a
+   * duplicate deliberately rather than waiting for a machine that produces them.
+   */
+  async function fireAt(page: import('@playwright/test').Page, type: string, at: number): Promise<void> {
+    await page.evaluate(
+      ([t, stamp]) => {
+        const ev = new KeyboardEvent(t as string, {
+          code: 'BracketLeft',
+          keyCode: 219,
+          which: 219,
+          bubbles: true,
+          cancelable: true,
+        });
+        Object.defineProperty(ev, 'timeStamp', { value: stamp as number });
+        window.dispatchEvent(ev);
+      },
+      [type, at] as const,
+    );
+  }
+
+  test('the exact same event twice is one volume step', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await fireAt(page, 'keydown', 4242);
+    await fireAt(page, 'keydown', 4242);
+
+    // 0.4 is one step. 0.3 would be the duplicate being honoured.
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+  });
+
+  test('but a RELEASE between them makes the second press real', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    // Two genuine presses that happen to share a millisecond. Phaser accepts both, because its
+    // triplet includes `type` and is updated on keyup — so the bailout must forget on release, or a
+    // fast player loses a press.
+    await fireAt(page, 'keydown', 5150);
+    await fireAt(page, 'keyup', 5150);
+    await fireAt(page, 'keydown', 5150);
+
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.3);
+  });
+});
+
+test.describe('Phase 11 — the listener honours what Phaser decided about the event', () => {
+  /**
+   * 🔴 `event.cancelled` is the field Phaser adds while draining its queue (`KeyboardPlugin.js:751`),
+   * and it is the marker this listener requires: `undefined` means Phaser never queued the event at
+   * all — some other handler prevented it before `KeyboardManager` saw it (`KeyboardManager.js:188`)
+   * — while `0` means queued and accepted.
+   *
+   * Codex implementation review round 4, finding 4: the branch had no gate, because every other test
+   * in this file supplies an event Phaser happily accepts.
+   *
+   * The event is dispatched at `document.body` so the CAPTURE phase reaches `window` first, which is
+   * the only way to get a `preventDefault` in front of Phaser's own bubble-phase listener.
+   */
+  test('an event Phaser never queued does not move the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.evaluate(() => {
+      const veto = (e: Event): void => e.preventDefault();
+      window.addEventListener('keydown', veto, true);
+      const ev = new KeyboardEvent('keydown', {
+        code: 'BracketLeft',
+        keyCode: 219,
+        which: 219,
+        bubbles: true,
+        cancelable: true,
+      });
+      document.body.dispatchEvent(ev);
+      window.removeEventListener('keydown', veto, true);
+    });
+    await page.evaluate(
+      () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+    );
+
+    expect(
+      (await storedSettings(page))?.volume,
+      'Phaser refused this event; so must we',
+    ).toBe(0.5);
+
+    // And a normal press still works, so the assertion above is not passing on a dead path.
+    await fireKey(page, 'BracketLeft', 219);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+  });
+});

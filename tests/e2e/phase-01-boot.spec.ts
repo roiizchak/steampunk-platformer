@@ -20,6 +20,7 @@ import { expect, test, type Page } from '@playwright/test';
 // Moved to ./debugView.ts in Phase 2: a second spec declaring the same global with a different
 // shape is a TS2717 build failure, and two hand-maintained copies of one contract drift.
 import type { GameDebugView } from './debugView';
+import { dismissTitle } from './gameHarness';
 // Fixtures and page-driving helpers extracted to a sibling module when this file crossed 400
 // lines — DATA and SETUP only, every `test()`/`expect` verifying a criterion stays here. Not
 // named `*.spec.ts` so Playwright's testMatch does not collect it as an empty spec. See
@@ -58,6 +59,7 @@ test.describe('Phase 1 — Boot', () => {
 
     await page.goto('/');
     await waitForTerminalState(page, REFUSAL_TIMEOUT);
+    await dismissTitle(page); // Phase 11: Game is PAUSED under the title until this. See the helper.
 
     const canvas = page.locator('#game canvas');
     await expect(canvas).toBeVisible();

@@ -44,6 +44,7 @@
  */
 
 import { expect, type Page } from '@playwright/test';
+import { dismissTitleProduction } from './prodTitle';
 
 import vercel from '../../vercel.json' with { type: 'json' };
 
@@ -151,6 +152,8 @@ export async function gotoProduction(page: Page, query = ''): Promise<void> {
         'and then died — a page every "no debug surface" assertion passes vacuously.',
     );
   }
+
+  await dismissTitleProduction(page);
 }
 
 /**

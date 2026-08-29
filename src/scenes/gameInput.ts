@@ -3,6 +3,7 @@ import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
 import type { AudioManager } from '../game/audio';
+import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 
 /**
  * The keyboard half of `GameScene`: binding keys to `Phaser.Input.Keyboard.Key` objects and
@@ -64,7 +65,7 @@ export function bindPlayerKeys(
     return NO_KEYS;
   }
 
-  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, M, K, ESC, OPEN_BRACKET, CLOSED_BRACKET } =
+  const { LEFT, RIGHT, A, D, SPACE, UP, W, P, O, G, SHIFT, F, L, N, K, ESC } =
     Phaser.Input.Keyboard.KeyCodes;
 
   // `emitOnRepeat: false` is the load-bearing argument. The OS repeats a held key ~30 times a
@@ -108,29 +109,187 @@ export function bindPlayerKeys(
   // `audio` is passed as a getter rather than a manager, because `bindPlayerKeys` runs during
   // `create()` and the binding must not capture whatever the field held at that instant.
   //
-  // 🔴 **Gated on `isPlayerInputEnabled`, and the brackets are why.** `ElementEditorScene` extends
-  // `GameScene`, so it inherits these bindings — and it already binds `[` and `]` to "select the
-  // previous/next collision strip". Ungated, one press would both move the selection AND change the
-  // volume, persisting a change the user never asked for to `localStorage`. The editor sets
-  // `playerInputEnabled = false`, which is exactly the "is the keyboard driving the game" flag this
-  // question needs, so the collision resolves through a mechanism that already exists rather than
-  // through a second one invented here. Muting still SURVIVES into the editor; only the keys stop.
+  // 🔴 **A raw `keydown` on `event.code`, NOT three `addKey` bindings — Phase 11.** These were
+  // `addKey(M)` / `addKey(OPEN_BRACKET)` / `addKey(CLOSED_BRACKET)`, and the brackets were dead on
+  // the owner's Hebrew/English keyboard while `M` kept working. Phaser indexes registered keys by
+  // the legacy `event.keyCode` (`KeyboardPlugin.js:747`), which a layout may reassign for
+  // punctuation but not for letters. Measured, not guessed: a press carrying the WRONG `code` and
+  // keyCode 219 changed the volume, while the RIGHT `code` carrying keyCode 186 did nothing at all.
+  // `audioKeyMap.ts` holds the evidence table and the layout-independent map.
   if (audio) {
-    // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
-    // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
-    // the mute key depend on `create()`'s statement order. Here a manager that is not yet built is
-    // simply a press that does nothing, which is the right failure for a key the player may hit
-    // during a scene transition.
-    const audioKey = (code: number, act: (manager: AudioManager) => void) =>
-      addKey(code).on('down', () => {
-        const manager = audio();
-        if (isPlayerInputEnabled() && manager) {
-          act(manager);
-        }
-      });
-    audioKey(M, (manager) => manager.toggleMute());
-    audioKey(OPEN_BRACKET, (manager) => manager.nudgeVolume(-1));
-    audioKey(CLOSED_BRACKET, (manager) => manager.nudgeVolume(1));
+    /**
+     * 🔴 **On the DOM target, NOT `keyboard.on('keydown')` — the second half of the same bug.**
+     *
+     * Phase 11's first fix made the INTERPRETATION layout-independent by reading `event.code`. It
+     * left the **gate in front of the listener** keyed on `event.keyCode`. `KeyboardPlugin`'s
+     * `ANY_KEY_DOWN` is conditional (`KeyboardPlugin.js:797`):
+     *
+     * ```js
+     * var key = keys[event.keyCode];
+     * repeat = key.isDown;                       // not `&& event.repeat`
+     * if (!event.cancelled && (!key || !repeat)) { ... this.emit(ANY_KEY_DOWN, event); }
+     * ```
+     *
+     * So if the player's layout puts `[` on a keyCode this function has REGISTERED — the shipped set
+     * is 37, 39, 65, 68, 32, 38, 87, 16, 70, 76, 27 — then holding that key (`L` is an attack key,
+     * `SHIFT` is the walk modifier) and tapping `[` suppresses the event entirely. The volume key
+     * goes dead intermittently, only while another key is held, only on that layout: the exact shape
+     * of the defect this phase exists to close. Found by the criterion 11.14 adversarial brief, which
+     * asked how the fix could still be wrong rather than whether it was applied.
+     *
+     * ⚠️ **The DOM listener does not inherit the plugin's gating, and that gating is load-bearing.**
+     * `KeyboardPlugin.isActive()` is what makes a PAUSED `Game` deaf under the welcome screen;
+     * without it, BOTH this listener and `TitleScene`'s fire on one press and step the volume twice.
+     *
+     * 🔴 So the plugin's OWN predicate is called, not a re-derivation of it. This first read
+     * `scene.sys.isActive()` with a comment claiming that was "exactly that gate" — **it is not**:
+     * `KeyboardPlugin.isActive()` is `this.enabled && sys.canInput()`, which also honours the
+     * plugin's `enabled` flag and accepts the pre-RUNNING statuses `isActive()` rejects. A disabled
+     * `KeyboardManager` is checked beside it for the same reason. Codex implementation review,
+     * finding 4: an approximation of an engine predicate is a second definition that agrees on the
+     * happy path.
+     *
+     * 🔴 **`event.defaultPrevented` is deliberately NOT checked, though `KeyboardManager.js:188`
+     * checks it.** Copying that clause looked like faithfulness and was a regression: `addKey(code,
+     * **true**, false)` enables capture for every key this function registers, so Phaser calls
+     * `preventDefault()` on them itself. **Measured, not reasoned** — a probe on the real page
+     * reported `defaultPrevented: true` for a keyCode-76 event with every other gate open. The
+     * collision spec went red the moment the clause was added, which is the whole reason C1 asks for
+     * a gate to be watched failing before it is trusted: the clause would have silently restored the
+     * exact defect this phase exists to close. The manager checks it to avoid double-handling an
+     * event another listener consumed; a capture flag is not consumption.
+     *
+     * 🔴 **`event.cancelled` is the marker that DOES work, and it is checked.**
+     *
+     * Round 2 recorded two of the plugin's rejections as unreproducible, on the reasoning that
+     * Phaser's queue drain happens after this listener. **That reasoning was backwards**, and round 3
+     * caught it: `KeyboardManager` emits `MANAGER_PROCESS` synchronously from inside its own DOM
+     * handler (`KeyboardManager.js:194`), so `KeyboardPlugin.update()` has already run by the time a
+     * listener registered later in `create()` sees the event.
+     *
+     * Measured on the real page rather than argued a second time: a `BracketLeft` event reaches this
+     * listener with `cancelled: 0`, **a number**, alongside `defaultPrevented: false`; the captured
+     * `KeyL` event reaches it with `cancelled: 0` and `defaultPrevented: true`. So the two are
+     * genuinely different signals, and `cancelled` is the one that means what we need:
+     *
+     * | `event.cancelled` | meaning |
+     * |---|---|
+     * | `undefined` | Phaser never queued it — rejected before the plugin, or the plugin is inactive |
+     * | `0` | queued and accepted, whatever `preventDefault` a capture flag caused |
+     * | `1` / `-1` | `stopImmediatePropagation()` / `stopPropagation()` — deliberately stopped |
+     *
+     * Requiring exactly `0` reproduces both rejections without touching `defaultPrevented`, and it
+     * leaves the keyCode-collision fix intact: the plugin sets `cancelled` **before** it looks up
+     * `keys[keyCode]`, so a suppressed `ANY_KEY_DOWN` still leaves a `0` behind.
+     *
+     * `TitleScene` needs none of this: it registers no keys at all, so `keys[code]` is always
+     * undefined there and `ANY_KEY_DOWN` always fires.
+     */
+    const target: EventTarget = keyboard.manager?.target ?? window;
+
+    /**
+     * Phaser's duplicate-event bailout, reproduced.
+     *
+     * `KeyboardPlugin.js:776` skips an event whose `keyCode`, `timeStamp` and `type` all match the
+     * one before it, with the comment *"on some systems, the exact same event will fire multiple
+     * times"*. Leaving the plugin gave that up, and a duplicate is **not** an `event.repeat` — so on
+     * such a system one press would apply two volume steps. Round 2, finding 1.
+     *
+     * Keyed on `code` rather than `keyCode`, because `code` is what this listener dispatches on and
+     * is therefore the thing that must not be honoured twice.
+     *
+     * 🔴 **And the keyUP resets it**, which the first version missed. Phaser's triplet includes
+     * `event.type` and is updated for keyups too, so two legitimate presses that happen to share a
+     * millisecond — separated by a release — are accepted there and would have been swallowed here.
+     * A timestamp is not a press identifier; the release between them is. Round 3, finding 3.
+     */
+    let prevCode = '';
+    let prevTime = -1;
+    const forgetPrevious = (): void => {
+      prevCode = '';
+      prevTime = -1;
+    };
+
+    const onAudioKey = (event: KeyboardEvent): void => {
+      // 🔴 `event.repeat` is the guard, and it replaces something we gave up above. The `Key`
+      // objects these bindings used to be got `emitOnRepeat: false` from `addKey(code, true, false)`
+      // for free; a raw `keydown` listener inherits nothing, and the OS repeats a held key ~30 times
+      // a second. Without this, holding `]` walks the volume to an end stop and writes
+      // `localStorage` thirty times a second, and holding `M` toggles mute continuously.
+      // `LevelSelectScene.bindKeys()` carries the same native-`repeat` guard, for a related reason.
+      //
+      // 🔴 `isPlayerInputEnabled()` stays, and pausing under the title screen is NOT a substitute
+      // for it. `ElementEditorScene` extends `GameScene`, so it inherits this listener, and it
+      // already binds `[` and `]` to "select the previous/next collision strip". It sets
+      // `playerInputEnabled = false`, which is exactly the "is the keyboard driving the game"
+      // question this collision needs asked. Muting still SURVIVES into the editor; only the keys
+      // stop. The title screen's own listener deliberately does NOT carry this guard — see
+      // `TitleScene`.
+      // 🔴 `isComposing` is new with the DOM listener and is not decoration. During IME
+      // composition a browser fires `keydown` with `keyCode === 229` while `event.code` stays the
+      // physical key — so a CJK user composing text with the canvas focused would walk the volume
+      // and write `localStorage` on every keystroke. The old `addKey(219)` binding was inert for
+      // those because 229 was unregistered; this listener is not, so it says so.
+      if (event.repeat || event.isComposing) {
+        return;
+      }
+      // The plugin's own gate, plus the two the manager applies before it.
+      if (!keyboard.isActive() || keyboard.manager?.enabled === false) {
+        return;
+      }
+      if (!isPlayerInputEnabled()) {
+        return;
+      }
+      // Phaser queued it and nobody stopped it. `undefined` means the plugin never saw it.
+      //
+      // The cast is the honest shape: `cancelled` is a field PHASER adds to the DOM event
+      // (`KeyboardPlugin.js:751`), not part of the `KeyboardEvent` interface, so no lib.dom type
+      // describes it.
+      if ((event as KeyboardEvent & { cancelled?: number }).cancelled !== 0) {
+        return;
+      }
+      if (event.code === prevCode && event.timeStamp === prevTime) {
+        return;
+      }
+      prevCode = event.code;
+      prevTime = event.timeStamp;
+
+      const action = audioActionForCode(event.code);
+      // 🔴 The manager is resolved and null-checked PER PRESS, not at bind time. The caller used to
+      // decide whether to pass a getter at all by testing `this.audio`, which made the existence of
+      // the mute key depend on `create()`'s statement order. Here a manager that is not yet built is
+      // simply a press that does nothing, which is the right failure for a key the player may hit
+      // during a scene transition.
+      const manager = audio();
+      if (!action || !manager) {
+        return;
+      }
+      applyAudioAction(manager, action);
+    };
+    target.addEventListener('keydown', onAudioKey as EventListener);
+    target.addEventListener('keyup', forgetPrevious);
+    // The plugin used to own this teardown. A raw DOM listener outlives its scene unless the scene
+    // removes it — the same trap `TitleScene` handles for the global `ScaleManager`.
+    /**
+     * 🔴 BOTH lifecycle events, and **each one cancels the other**.
+     *
+     * DESTROY as well as SHUTDOWN because `SceneManager.remove()` calls `sys.destroy()` without
+     * emitting SHUTDOWN first (`SceneManager.js:429`), so a removed scene would otherwise leak this
+     * listener and the closure retaining it *(Codex review round 1, finding 5)*.
+     *
+     * ⚠️ And each unregisters the other, because `Systems.shutdown()` does **not** clear the scene's
+     * own emitter. Registering two independent `once` handlers meant SHUTDOWN fired, removed the DOM
+     * listener, and left its DESTROY twin behind — one more dead closure per restart, for the life of
+     * the page *(round 2, finding 2)*. A leak this small is still a leak that grows.
+     */
+    const drop = (): void => {
+      target.removeEventListener('keydown', onAudioKey as EventListener);
+      target.removeEventListener('keyup', forgetPrevious);
+      scene.events.off(Phaser.Scenes.Events.SHUTDOWN, drop);
+      scene.events.off(Phaser.Scenes.Events.DESTROY, drop);
+    };
+    scene.events.once(Phaser.Scenes.Events.SHUTDOWN, drop);
+    scene.events.once(Phaser.Scenes.Events.DESTROY, drop);
   }
 
   if (openLevelSelect) {

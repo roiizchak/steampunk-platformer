@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { publishWorldState, updateDebugState } from '../debug/globals';
-import { GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../game/constants';
+import { RENDER_SCALE } from '../game/constants';
 import { drainTicks } from '../game/frameClock';
 import type { LevelData } from '../game/tilemap';
-import { cameraSetup, followLerpForFrame } from '../render/cameraRig';
+import { followLerpForFrame } from '../render/cameraRig';
+import { applyCameraRig } from './gameCamera';
+import { attachTitle } from './gameTitle';
 import { playerRenderDesc } from '../render/playerView';
 import type { Point } from '../render/interpolate';
 import {
@@ -202,13 +204,11 @@ export class GameScene extends Phaser.Scene {
     // `attachDevOverlays` so this call folds away entirely in production — see `gameDev.ts`.
     this.dev = attachDevOverlays(this, this.world);
 
-    // Bounds, zoom and smoothing from `cameraRig`; Phaser owns the clamping (criterion 3.4).
-    const camera = this.cameras.main;
-    const cam = cameraSetup(level, GAME_WIDTH, GAME_HEIGHT);
-    camera.setBounds(cam.bounds.x, cam.bounds.y, cam.bounds.w, cam.bounds.h);
-    camera.setZoom(cam.zoom);
-    camera.startFollow(this.playerSprite, false, cam.lerpX, cam.lerpY);
+    // Bounds/zoom/follow (criterion 3.4). Stays BEFORE `attachEffects` — see `gameCamera.ts`.
+    applyCameraRig(this, level, this.playerSprite);
     this.effects = attachEffects(this, this.world, this.playerSprite);
+    // Phase 11's welcome screen: parallel, and it PAUSES this scene. Once per page load.
+    attachTitle(this, () => this.audio, () => openLevelSelect(this));
 
     // The positive terminal condition, set here rather than in Boot: Boot now routes onward, so
     // "the gate passed" and "the game is running" are different facts. If this scene fails to

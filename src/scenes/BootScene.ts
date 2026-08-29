@@ -14,6 +14,7 @@ import { CRISP_IMAGE_RENDERING } from '../game/constants';
 import { SMOOTH_IMAGE_RENDERING, isIntegerScale } from '../render/canvasScaling';
 import { verifyLevels } from './bootLevels';
 import { LEVEL_SELECT_KEY } from './gameLevelPick';
+import { TITLE_KEY } from './TitleScene';
 
 /**
  * Boot: load every expected asset, verify it actually arrived, pin the filtering decision,
@@ -59,6 +60,9 @@ export class BootScene extends Phaser.Scene {
     // Phase 8: the level menu SHIPS, so it is stopped on the same unconditional side as Game and UI.
     // A restart with the menu open would otherwise leave it drawn over the reload.
     this.scene.stop(LEVEL_SELECT_KEY);
+    // Phase 11: the welcome screen ships too, and it PAUSES Game rather than replacing it — so a
+    // restart with the title up would leave it drawn over the reload with a paused game beneath.
+    this.scene.stop(TITLE_KEY);
     // Phase 7, and it belongs HERE for the same reason those two stops do. `this.sound` is one
     // manager for the whole game and is not cleaned up on scene shutdown, so a looping bed survives
     // a restart and a second one starts on top of it — criterion 7.5. A `GameScene` SHUTDOWN handler
@@ -214,6 +218,9 @@ export class BootScene extends Phaser.Scene {
     // menu — press ESC, then restart Boot — would otherwise draw five level rows over "BOOT REFUSED",
     // which is the same cosmetic refusal the HUD stop above exists to prevent.
     this.scene.stop(LEVEL_SELECT_KEY);
+    // Phase 11, and NOT in the DEV block below for the same reason: the welcome screen ships. It
+    // draws a full-width scrim, so a refusal reached underneath it would be completely invisible.
+    this.scene.stop(TITLE_KEY);
     // The dev scenes, guarded so their keys do not survive into `dist/`. In production neither is
     // registered, so stopping them is already a no-op — the guard costs nothing and keeps the
     // production bundle free of any mention of a scene that cannot exist there. Phase 3 added

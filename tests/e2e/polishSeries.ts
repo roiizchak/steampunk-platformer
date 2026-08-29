@@ -18,6 +18,8 @@
 
 import { expect, type Page } from '@playwright/test';
 
+import { SHAKE } from '../../src/render/screenShake';
+
 /** One deduped tick, read in one synchronous callback. `ox`/`oy` are the camera's offset from its
  * unshaken base — `gameEffects.applyShake` writes `camera.x`/`.y`. `frozenUntil` is the sim's live
  * freeze DEADLINE, which is why a freeze between two samples is still visible from either side. */
@@ -83,6 +85,35 @@ export const TAIL_TICKS = 14;
  * route for anything the closed surface does not carry. **No ninth field was added.**
  */
 export async function installRecorder(page: Page): Promise<void> {
+  /**
+   * 🔴 **The SPAWN is a touchdown, and it arms `SHAKE.land`.** The player is grounded with
+   * `landedTick: 0` on the very first tick, so `gameEffects.arm` fires the landing shake at boot
+   * and `applyShake` writes `camera.x`/`.y` for its three ticks. Install inside that window and
+   * every `ox`/`oy` in the series is measured against a camera that was never at its base — which
+   * is what the precondition below refuses, correctly.
+   *
+   * ⚠️ **This was a RACE, not a regression, and it was always here.** Measured 2026-08-29: the
+   * recorder was installing at **tick 2**, one tick inside a three-tick shake. It happened to land
+   * past the shake before the welcome screen existed and inside it afterwards, because
+   * `dismissTitle` returns at a slightly different point in the sim's life — so the failure looked
+   * like the title screen's fault and was not. The bound is derived from the SHAKE table rather than
+   * written as a number, so a longer `land` cannot silently reopen it.
+   *
+   * Strictly greater: at exactly `landedTick + durationTicks` the expiring tick's `applyShake` may
+   * not have run yet for the frame being drawn.
+   */
+  await page.waitForFunction(
+    (ticks) => {
+      const w = window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } };
+      const scene = w.__phaserGame.scene.getScene('Game') as {
+        simWorld: { player: { landedTick: number } };
+      };
+      return (window.__game?.tick ?? -1) > scene.simWorld.player.landedTick + (ticks as number);
+    },
+    SHAKE.land.durationTicks,
+    { timeout: RUN_TIMEOUT },
+  );
+
   await page.evaluate(() => {
     type G = { __phaserGame: { scene: { getScene(k: string): unknown } } };
     const w = window as unknown as G & { __rec?: unknown[]; __view?: unknown; __recRaf?: number };
