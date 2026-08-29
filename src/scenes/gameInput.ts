@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
-import { applyHeld, type TouchHeld } from './inputMerge';
+import { applyHeld, readHeldKeys, type TouchHeld } from './inputMerge';
 import type { AudioManager } from '../game/audio';
 import { AUDIO_CHANGED, applyAudioAction, audioActionForCode } from './audioKeyMap';
 
@@ -354,8 +354,9 @@ export function sampleHeldKeys(
    * This frame's touch levels, or nothing on a device that has none.
    *
    * 🔴 It arrives HERE rather than being written straight into the snapshot by the touch layer,
-   * because the four assignments below **overwrite** — a second writer would be erased on the very
-   * next frame. There is one merge, in `inputMerge.ts`, and this is its only caller.
+   * because `applyHeld` **overwrites** all four level fields every frame (`inputMerge.ts`, the
+   * assignments in `applyHeld` itself) — a second writer would be erased on the very next frame.
+   * There is one merge and this is its only caller.
    */
   touch?: Readonly<TouchHeld> | null,
 ): void {
@@ -369,14 +370,5 @@ export function sampleHeldKeys(
     return;
   }
 
-  applyHeld(
-    input$,
-    {
-      left: held.left.some((key) => key.isDown),
-      right: held.right.some((key) => key.isDown),
-      jumpHeld: held.jump.some((key) => key.isDown),
-      walkHeld: held.walk.some((key) => key.isDown),
-    },
-    touch,
-  );
+  applyHeld(input$, readHeldKeys(held), touch);
 }

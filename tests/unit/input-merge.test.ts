@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSnapshot } from '../../src/sim/input';
-import { NO_KEYBOARD_HELD, NO_TOUCH_HELD, applyHeld } from '../../src/scenes/inputMerge';
+import {
+  NO_KEYBOARD_HELD,
+  NO_TOUCH_HELD,
+  applyHeld,
+  type HeldKeys,
+  readHeldKeys,
+} from '../../src/scenes/inputMerge';
 
 /**
  * The one place keyboard held-state and touch held-state become the sim's four LEVEL fields.
@@ -119,5 +125,61 @@ describe('the neutral records', () => {
     // would arm every future frame for every consumer, and nothing else here would look wrong.
     expect(Object.isFrozen(NO_KEYBOARD_HELD)).toBe(true);
     expect(Object.isFrozen(NO_TOUCH_HELD)).toBe(true);
+  });
+});
+
+/**
+ * 🔴 The half of the merge nothing could see.
+ *
+ * The QA gate's adversarial 12.4 brief found that `walkHeld: false` survives `npm test`,
+ * `npm run test:e2e`, `npm run build` and `verify-dist` — SHIFT is a shipped control the help
+ * banner advertises, `walkMax / runMax` is 0.400, and the mutation also makes the `walk` player
+ * state unreachable and `brass-courier/walk` dead art. Nothing in the repo executed the read: the
+ * two files naming `gameInput.ts` read it as source text, and no e2e spec presses Shift.
+ *
+ * Parametrised over all four fields rather than written out for one, because the defect was
+ * exactly a per-field hole: `right` was covered and `left`, `jumpHeld` and `walkHeld` were not.
+ */
+describe('readHeldKeys', () => {
+  const down = { isDown: true };
+  const up = { isDown: false };
+  const none: HeldKeys = { left: [], right: [], jump: [], walk: [] };
+
+  const CASES = [
+    ['left', 'left'],
+    ['right', 'right'],
+    ['jump', 'jumpHeld'],
+    ['walk', 'walkHeld'],
+  ] as const;
+
+  for (const [source, field] of CASES) {
+    it(`reads ${field} from the ${source} keys, and lets it go again`, () => {
+      expect(readHeldKeys({ ...none, [source]: [up] })[field]).toBe(false);
+      expect(readHeldKeys({ ...none, [source]: [down] })[field]).toBe(true);
+      // Held is not latched: the same read on the next frame, with the key up, must clear.
+      expect(readHeldKeys({ ...none, [source]: [up, up] })[field]).toBe(false);
+    });
+
+    it(`treats the ${source} bindings as ANY-of, so a second key for one action works`, () => {
+      expect(readHeldKeys({ ...none, [source]: [up, down] })[field]).toBe(true);
+    });
+  }
+
+  it('reads each field from its OWN key list — no two fields share a source', () => {
+    // The mutation this catches is a copy-paste between two of the four reads, which a per-field
+    // test in isolation cannot see: each one would still pass against its own list.
+    for (const [source, field] of CASES) {
+      const read = readHeldKeys({ ...none, [source]: [down] });
+      expect(Object.entries(read).filter(([, v]) => v).map(([k]) => k)).toEqual([field]);
+    }
+  });
+
+  it('is all-false when nothing is bound at all', () => {
+    expect(readHeldKeys(none)).toEqual({
+      left: false,
+      right: false,
+      jumpHeld: false,
+      walkHeld: false,
+    });
   });
 });

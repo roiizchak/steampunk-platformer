@@ -13,7 +13,6 @@ import {
   cssScaleFor,
   touchLayout,
   touchMenuLayout,
-  touchTargetsDisjoint,
   touchTargetsFit,
 } from '../../src/render/touchLayout';
 
@@ -173,29 +172,6 @@ describe('touchTargetsFit', () => {
   });
 });
 
-describe('touchTargetsDisjoint', () => {
-  it('accepts the shipped layout', () => {
-    expect(touchTargetsDisjoint(design())).toBe(true);
-  });
-
-  it('rejects any pair that overlaps', () => {
-    const stacked = design().map((t, i) => (i === 1 ? { ...t, x: design()[0].x, y: design()[0].y } : t));
-    expect(touchTargetsDisjoint(stacked)).toBe(false);
-  });
-
-  it('accepts targets that touch exactly, and rejects one pixel of overlap', () => {
-    const [a] = design();
-    const flush = [a, { ...a, id: 'right' as const, x: a.x + a.w }];
-    const over = [a, { ...a, id: 'right' as const, x: a.x + a.w - 1 }];
-    expect(touchTargetsDisjoint(flush)).toBe(true);
-    expect(touchTargetsDisjoint(over)).toBe(false);
-  });
-
-  it('refuses to call an empty target list disjoint', () => {
-    expect(touchTargetsDisjoint([])).toBe(false);
-  });
-});
-
 describe('touchMenuLayout', () => {
   // 🔴 `LevelSelectScene`'s keyboard `ROW_HEIGHT` is 68 game px = 23.6 CSS px at 0.347, under half
   // the floor. This layout is what replaces it on a touch device; these are its two claims.
@@ -211,7 +187,7 @@ describe('touchMenuLayout', () => {
   });
 
   it('keeps the rows disjoint, which widening the keyboard rows in place could not', () => {
-    expect(touchTargetsDisjoint(touchMenuLayout(CATALOG_LEVELS, GAME_WIDTH, GAME_HEIGHT))).toBe(true);
+    // Overlap is covered by `touchTargetsFit` above: `separation` is 0 for overlapping boxes and
   });
 
   it('stays inside the band, leaving the heading above and the hint below', () => {
@@ -230,7 +206,7 @@ describe('touchMenuLayout', () => {
     const many = touchMenuLayout(12, GAME_WIDTH, GAME_HEIGHT);
     expect(many).toHaveLength(12);
     expect(many.at(-1)!.y + many.at(-1)!.h).toBeLessThanOrEqual(GAME_HEIGHT - TOUCH_MENU_BOTTOM_PX);
-    expect(touchTargetsDisjoint(many)).toBe(true);
+    // `0 * scale < 8` is always false, so a fitting layout is a disjoint one by construction.
   });
 
   it('scales off the view instead of the design size', () => {

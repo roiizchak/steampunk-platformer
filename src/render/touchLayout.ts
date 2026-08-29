@@ -180,10 +180,19 @@ export function cssScaleFor(canvasCssWidth: number, gameWidth: number = GAME_WID
   return canvasCssWidth / gameWidth;
 }
 
-/** Do two boxes share any area? Touching exactly along an edge is NOT overlapping. */
-function overlaps(a: HitBox, b: HitBox): boolean {
-  return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-}
+/**
+ * 🔴 `overlaps` and `touchTargetsDisjoint` are gone, and the reason is criterion 12.16 itself.
+ *
+ * `touchTargetsDisjoint` had **zero production consumers** — only its own unit test. Blanking it
+ * to `return true` reddened nothing behavioural and left the game byte-identical on screen, which
+ * is precisely the `spriteFeedback.ts` shape this project forbids. Found by the code review, twice
+ * independently.
+ *
+ * It was also redundant. `touchTargetsFit`'s gap loop already refuses any overlapping pair:
+ * `separation` returns 0 when two boxes overlap, and `0 * scale < 8` is false for no scale. A
+ * layout that fits is a disjoint layout by construction, so the rule is enforced by the predicate
+ * production actually calls rather than by a second one nothing did.
+ */
 
 /** The clear distance between two non-overlapping boxes, in game pixels. 0 if they touch or overlap. */
 function separation(a: HitBox, b: HitBox): number {
@@ -216,22 +225,6 @@ export function touchTargetsFit(targets: readonly HitBox[], cssScale: number): b
   for (let i = 0; i < targets.length; i += 1) {
     for (let j = i + 1; j < targets.length; j += 1) {
       if (separation(targets[i], targets[j]) * cssScale < TOUCH_MIN_GAP_CSS_PX) return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Does any pair of targets share area?
- *
- * Scale-free on purpose — overlap is a property of the layout, not of the screen it lands on. Empty
- * is false for the same reason as above.
- */
-export function touchTargetsDisjoint(targets: readonly HitBox[]): boolean {
-  if (targets.length === 0) return false;
-  for (let i = 0; i < targets.length; i += 1) {
-    for (let j = i + 1; j < targets.length; j += 1) {
-      if (overlaps(targets[i], targets[j])) return false;
     }
   }
   return true;

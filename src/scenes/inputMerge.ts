@@ -91,3 +91,41 @@ export function applyHeld(
   // No touch source, by design — see `TouchHeld`.
   input.walkHeld = keyboard.walkHeld;
 }
+
+/**
+ * The four keyboard levels, read off a set of key-like objects.
+ *
+ * 🔴 Extracted here because nothing could see it. The QA gate's adversarial 12.4 brief found a
+ * mutation that survives every gate in the repo: change `walkHeld` to `false` in `sampleHeldKeys`
+ * and `npm test`, `npm run test:e2e`, `npm run build` and `verify-dist` are all green — while
+ * SHIFT, a shipped control the help banner advertises, stops working. `walkMax / runMax` is 0.400,
+ * so it is a 60 % speed change, and it also makes the `walk` player state unreachable, which makes
+ * `brass-courier/walk` dead art.
+ *
+ * Nothing in the repo executed `sampleHeldKeys`: the two test files that name `gameInput.ts` read
+ * it as SOURCE TEXT, `input-merge.test.ts` deliberately does not import it, and no e2e spec
+ * anywhere presses Shift. The read was the one part of the merge with no consumer gate.
+ *
+ * `KeyLike` is structural on purpose — a Phaser `Key` satisfies it, and so does `{ isDown: true }`,
+ * which is what lets this be tested in a suite that runs with Phaser uninstalled.
+ */
+export interface KeyLike {
+  isDown: boolean;
+}
+
+export interface HeldKeys {
+  left: readonly KeyLike[];
+  right: readonly KeyLike[];
+  jump: readonly KeyLike[];
+  walk: readonly KeyLike[];
+}
+
+export function readHeldKeys(held: HeldKeys): KeyboardHeld {
+  const any = (keys: readonly KeyLike[]): boolean => keys.some((key) => key.isDown);
+  return {
+    left: any(held.left),
+    right: any(held.right),
+    jumpHeld: any(held.jump),
+    walkHeld: any(held.walk),
+  };
+}

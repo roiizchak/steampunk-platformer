@@ -10,7 +10,10 @@ import {
   INPUT_GAME_OUT,
   INPUT_POINTER_UP,
   INPUT_POINTER_UP_OUTSIDE,
+  SCENE_DESTROY,
   SCENE_PAUSE,
+  SCENE_SHUTDOWN,
+  SCENE_SLEEP,
 } from '../../src/scenes/engineLiterals';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
@@ -230,14 +233,62 @@ describe('TouchControlsLayer goes quiet when it must', () => {
 });
 
 describe('TouchControlsLayer lifecycle', () => {
-  it('subscribes to every loss path', () => {
+  it('subscribes to EVERY loss path, and to exactly those', () => {
+    // 🔴 This used to assert `toContain(SCENE_PAUSE)` and nothing else about the four-event array.
+    // The QA gate's 12.5 brief found what that missed: deleting SCENE_SLEEP, SCENE_SHUTDOWN or
+    // SCENE_DESTROY from the registration loop left the whole suite green, because the teardown
+    // gate asserts the array reaches length 0 and the fake's `off` is a no-op for a name that was
+    // never registered — three registrations and four removals still end at zero. An exact set is
+    // the only assertion that can see a missing one.
     const { scene } = live();
-    // On the bound GAME scene, not on UIScene: UIScene never sees Game pause.
-    expect(scene.gameSceneEvents, 'the Game scene lifecycle is unwatched').toContain(SCENE_PAUSE);
+    expect([...scene.gameSceneEvents].sort(), 'the Game scene lifecycle is not fully watched').toEqual(
+      [SCENE_DESTROY, SCENE_PAUSE, SCENE_SHUTDOWN, SCENE_SLEEP].sort(),
+    );
     // On the GAME's emitter, which Phaser will not tear down for us.
     expect(scene.gameEvents).toEqual(expect.arrayContaining([GAME_BLUR, GAME_HIDDEN]));
     expect(scene.sceneEvents).toContain(INPUT_GAME_OUT);
     expect(scene.zones[0].events).toContain(GAMEOBJECT_POINTER_DOWN);
+  });
+
+  /**
+   * 🔴 Every loss path FIRED, not merely found in an array of strings.
+   *
+   * The 12.5 brief's second finding: of the nine subscriptions, only two were ever invoked by a
+   * test. For the other seven the assertion was *"this string appears in the array"*, so wiring
+   * the right event name to the wrong handler — the ordinary copy-paste error in a block of five
+   * near-identical `on()` calls — passed every gate. `fireGameSceneEvent` already existed in the
+   * harness and was called by nothing.
+   */
+  const LOSS_PATHS = [
+    ['the bound Game scene pausing', SCENE_PAUSE, 'gameScene'],
+    ['the bound Game scene sleeping', SCENE_SLEEP, 'gameScene'],
+    ['the bound Game scene shutting down', SCENE_SHUTDOWN, 'gameScene'],
+    ['the bound Game scene being destroyed', SCENE_DESTROY, 'gameScene'],
+    ['the tab being hidden', GAME_HIDDEN, 'game'],
+    ['the pointer leaving the canvas', INPUT_GAME_OUT, 'sceneInput'],
+  ] as const;
+
+  for (const [what, event, emitter] of LOSS_PATHS) {
+    it(`drops a held contact on ${what}`, () => {
+      const { scene, layer } = live();
+      scene.press('right', 1);
+      expect(layer.held().right, 'the contact never armed — this case proves nothing').toBe(true);
+
+      if (emitter === 'gameScene') scene.fireGameSceneEvent(event);
+      else if (emitter === 'game') scene.fireGameEvent(event);
+      else scene.fireSceneInputEvent(event);
+
+      expect(layer.held().right, `${event} did not clear the contact`).toBe(false);
+    });
+  }
+
+  it('clears a contact released OUTSIDE the canvas, not only one released over it', () => {
+    // POINTER_UP and POINTER_UP_OUTSIDE are two different branches of Phaser's release dispatch
+    // (`POINTER_UP_EVENT.js:8-28`). Only the first had ever been driven by a test.
+    const { scene, layer } = live();
+    scene.press('right', 1);
+    scene.releasePointerOutside(1);
+    expect(layer.held().right).toBe(false);
   });
 
   it('drops contacts when the game loses focus with a thumb down', () => {
