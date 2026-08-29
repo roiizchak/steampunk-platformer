@@ -23,7 +23,7 @@ than reinterpreted.
 | 12.5 | Contact identity and every loss path, registrations asserted | **PASS — two holes found and closed** | § 12.5. Exact-set assertion + six loss paths fired; M19/M20 red. Three recorded. |
 | 12.6 | A level transition rebinds idempotently | **PASS** | `touch-draw-path.test.ts` rebind case; M2b red after its gate was written. |
 | 12.7 | Nothing drawn or interactive on a desktop pointer | **PASS** | 12.7 in a `hasTouch:false` context; Phase 2 suite unregressed. |
-| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **PASS — after a Codex repair** | `phase-12-viewport.spec.ts`, 10 viewports. M11 red 8/11, M11b 7/11. The two full-screen zones were unmeasured; § 12.8 below. |
+| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **NOT MET — owner decision needed** | The five controls and the five menu rows pass at 10 viewports (M11 red 8/11, M11b 7/11, M29 2/21). The **completion zone is deliberately 64 px outside the canvas** and cannot satisfy the criterion as written. § 12.8. |
 | 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
 | 12.10 | The prompt appears iff a target falls under 44 CSS px | **PASS** | Viewport spec portrait rows; M8 red 2/11. |
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
@@ -34,22 +34,45 @@ than reinterpreted.
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 30 rows; 4 holes found, all closed. M22–M24 cover the Codex repairs. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 35 rows; 5 holes found, all closed. M22–M29 cover the two Codex reviews. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Three criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
+**Four criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
 statistic cannot detect the regression it names; 12.17 and 12.14 both have no adopted artifact to
-check; 12.13 and 12.24 are the owner's and cannot be closed from here; 12.23 is the Codex
-implementation review, which returned `REVISE` and is re-running on the repaired diff. Every other
-row passed, several only after a repair.
+check; **12.8 needs an owner decision** (below); 12.13 and 12.24 are the owner's and cannot be closed
+from here; 12.23 is the Codex implementation review, which returned `REVISE` twice and is re-running
+on the repaired diff. Every other row passed, several only after a repair.
 
 🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder
 that stands where the art would be. The measurement is real and is kept below; the verdict is not.
+
+### 🔴 12.8 — the completion zone cannot satisfy the criterion as written, and that is an owner call
+
+12.8 says every live target's measured bounds *"lie fully inside the measured canvas CSS rect"*. The
+five play controls, the five level-menu rows and the title zone all do, at ten viewports. The
+**completion zone does not, on purpose**: `gameComplete.ts:161-168` sizes it to the view **plus 64 px
+on every side**, because `GameScene`'s camera is displaced to `(-10, -8)` for shake headroom and a
+shake in progress moves it further — a zone sized exactly to the view leaves a live strip of screen
+along two edges that a tap falls through.
+
+⚠️ **The first repair asserted COVERAGE instead of containment for the two full-screen zones, and
+the Codex re-review was right to call that a weakening rather than a fix.** Quietly redefining what
+an approved criterion measures is the same move as editing a locked hash to clear a red test. The
+measurement stays — both zones are measured now, and neither leaves a reachable strip of canvas — but
+the verdict is **NOT MET** until the owner decides between:
+
+1. **Amend 12.8** so containment applies to discrete targets and whole-screen route zones are
+   measured for coverage. This is what the code does and what the comment argues for.
+2. **Size the completion zone to the view exactly** and accept the edge strip during a shake, or
+   correct it per frame the way `helpBannerLayer.ts:174, 255` does for its own anchoring.
+
+Recommendation: **1**. The zone is not a button a thumb has to find; it is *anywhere*, and 64 px of
+overhang is the cheapest correct answer to a camera that moves.
 
 ---
 
@@ -330,7 +353,7 @@ gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
 
-**Four rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
+**Five rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
 drop* — so each produced a new gate rather than an edited matrix.
 
 - **M2b** — deleting `session.deactivate()` from `attachUiTouch`'s `destroy()` left the whole suite
@@ -362,10 +385,31 @@ drop* — so each produced a new gate rather than an edited matrix.
   dropped. Gated with a 40 game px target at desktop scale (20.0 CSS px, against 160.0 for the play
   controls), so only the second term can refuse it. **RED 1/12.**
 
-### The three rows the Codex implementation review added
+- **M25** — and this one is the sharpest lesson in the phase, because the hole was in a gate **I had
+  just written for a defect Codex had just found**, and it stayed green through two separate
+  reasons before it could go red:
+  1. **Two awaited `contactDown` calls are not two simultaneous fingers.** Each is its own CDP round
+     trip, so the first is fully processed — `scene.start` included — before the second is
+     dispatched. `contactsDown()` fires both inside one `page.evaluate`, which is where Phaser's
+     input queue drains them in a single frame.
+  2. **A fresh save unlocks only level-01.** `play()` refused the second row before the latch was
+     ever consulted, so the gate was measuring a refusal, not a latch. The spec seeds a save with
+     level-01 completed and **asserts two rows are unlocked** before it touches anything.
+
+  With both corrected and the latch deleted, the defect reproduces exactly as described: two fingers,
+  two queued `scene.start` ops, and the player lands on **level-02**. **RED 1/10.** *A gate must be
+  watched failing* is not a formality — the first two versions of this one would have shipped a
+  green tick over a live defect.
+
+### The rows the two Codex implementation reviews added
 
 **M22** drops the PROMPT term and reds the tap-through case (1/11); **M23** makes the pressed plate
-opaque and reds the pressed-alpha case (1/3); **M24** is the hole above. M21's gate moved with the
+opaque and reds the pressed-alpha case (1/3); **M24** and **M25** are the holes above. **M26**
+unlights a plate a second finger is still holding (1/4); **M27** sets the pressed alpha to **0.86**,
+the one value § 12.14 measured as erasing the content underneath, which the first repair's `< 0.9`
+bound still admitted (1/4); **M28** hides `hasTouch: false` behind a block comment claiming `true`
+(1/5); **M29** stacks the level rows at half pitch (2/21), which is what gives the previously
+assertion-free *"keeps the rows disjoint"* test something it can fail on. M21's gate moved with the
 plate-ink cases when `touch-draw-path.test.ts` crossed 400 lines, and was re-run there: **RED 2/3**.
 
 ### ⚠️ The runner's own defect, which is the whole argument for the count guard

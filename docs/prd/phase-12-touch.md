@@ -157,8 +157,13 @@ papered over.
 | M22 | drop the PROMPT term from the tap gate, re-opening the tap-through | 12.10, 12.12 | RED 1/11 |
 | M23 | make the PRESSED plate opaque, hiding the level under the thumb | 12.14 | RED 1/3 |
 | M24 | drop the TARGETS term from the tap gate, so a too-small route stays live | 12.9 | **GREEN — hole; gate written** → RED 1/12 |
+| M25 | drop the `LevelSelect` start latch, so two fingers start two levels | 12.5 | **GREEN twice — the gate itself was decoration** → RED 1/10 |
+| M26 | unlight the plate on any release, ignoring the other finger | 12.5, 12.14 | RED 1/4 |
+| M27 | set the pressed alpha to **0.86**, the value measured to erase the level | 12.14 | RED 1/4 |
+| M28 | hide `hasTouch: false` behind a block comment claiming `true` | the project-selection gate | RED 1/5 |
+| M29 | stack the level rows at half pitch, so every pair overlaps | 12.8, 12.9 | RED 2/21 |
 
-**Four rows reddened nothing, and all four were holes rather than mutations to drop.**
+**Five rows reddened nothing, and all five were holes rather than mutations to drop.**
 
 🔴 **M2b.** `attachUiTouch`'s teardown had no gate at all. `touch-session.test.ts` drives the session
 against a fake layer and never imports `attachUiTouch`; `touch-draw-path.test.ts` drives the layer
