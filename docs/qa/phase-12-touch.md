@@ -34,7 +34,7 @@ than reinterpreted.
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 29 rows; 3 holes found, all closed. M22/M23 cover the Codex repairs. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 30 rows; 4 holes found, all closed. M22–M24 cover the Codex repairs. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
@@ -328,8 +328,8 @@ gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
 
-**Three rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
-drop* — so both produced a new gate rather than an edited matrix.
+**Four rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
+drop* — so each produced a new gate rather than an edited matrix.
 
 - **M2b** — deleting `session.deactivate()` from `attachUiTouch`'s `destroy()` left the whole suite
   green. `touch-session.test.ts` drives the session against a fake layer and never imports
@@ -350,6 +350,21 @@ drop* — so both produced a new gate rather than an edited matrix.
   deleted, because the precondition it sits under is still load-bearing for a different question.
   `tests/unit/playwright-projects.test.ts` now reads the blocks directly. **M13b** — the same drop on
   `chromium-touch`, whose specs *do* use the project context — reds it too. **RED 1/5** each.
+
+- **M24** — deleting the SECOND term of `promptIsUp()` in `touchRoutes.ts` left the whole suite
+  green, which would have made the two-term predicate the Codex implementation review asked for a
+  one-term predicate wearing a two-term comment. The term is genuinely unreachable through the three
+  shipped screens — no caller passes a target under `TOUCH_BOX_PX` — and that is the argument *for*
+  a gate rather than against the term: the contract is *`attachTapRoutes` refuses a target too small
+  to aim at*, and a fourth caller with a smaller one must not have to discover the guard was quietly
+  dropped. Gated with a 40 game px target at desktop scale (20.0 CSS px, against 160.0 for the play
+  controls), so only the second term can refuse it. **RED 1/12.**
+
+### The three rows the Codex implementation review added
+
+**M22** drops the PROMPT term and reds the tap-through case (1/11); **M23** makes the pressed plate
+opaque and reds the pressed-alpha case (1/3); **M24** is the hole above. M21's gate moved with the
+plate-ink cases when `touch-draw-path.test.ts` crossed 400 lines, and was re-run there: **RED 2/3**.
 
 ### ⚠️ The runner's own defect, which is the whole argument for the count guard
 

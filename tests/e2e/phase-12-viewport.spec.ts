@@ -229,7 +229,17 @@ test('12.8/12.9 the title zone is a real target, and it covers the canvas', asyn
   await installTouchDriver(page);
   await page.goto('/');
   await page.waitForFunction(() => window.__game?.ready === true, undefined, { timeout: 30_000 });
-  await page.waitForFunction(() => window.__game?.sceneKey === 'Title', undefined, { timeout: 20_000 });
+  // ⚠️ `isActive`, not `__game.sceneKey`. The title plate is a PARALLEL scene over `Game`, so
+  // `sceneKey` reads 'Game' the whole time it is up — the same reading `phase-12-journey.spec.ts:83`
+  // takes, for the same reason. A `sceneKey === 'Title'` wait simply times out.
+  await page.waitForFunction(
+    () =>
+      (window as unknown as { __phaserGame?: { scene: { isActive(k: string): boolean } } }).__phaserGame?.scene.isActive(
+        'Title',
+      ) === true,
+    undefined,
+    { timeout: 20_000 },
+  );
 
   const rect = await canvasRect(page);
   const targets = await measuredTargets(page, 'Title');

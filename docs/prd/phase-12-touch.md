@@ -153,7 +153,10 @@ papered over.
 | M18b | copy-paste the `left` read into the `right` read | 12.4 | RED 3/21 |
 | M19 | drop `SCENE_SLEEP` from the lifecycle registration loop | 12.5 | RED 2/29 |
 | M20 | wire `GAME_HIDDEN` to a no-op handler | 12.5 | RED 1/29 |
-| M21 | make the plate opaque, hiding the level under every control | 12.14 | **GREEN — hole; gate written** → RED 1/31 |
+| M21 | make the plate opaque, hiding the level under every control | 12.14 | **GREEN — hole; gate written** → RED 2/3, after the plate-ink cases became their own file |
+| M22 | drop the PROMPT term from the tap gate, re-opening the tap-through | 12.10, 12.12 | RED 1/11 |
+| M23 | make the PRESSED plate opaque, hiding the level under the thumb | 12.14 | RED 1/3 |
+| M24 | drop the TARGETS term from the tap gate, so a too-small route stays live | 12.9 | **GREEN — hole; gate written** → RED 1/12 |
 
 **Three rows reddened nothing, and all three were holes rather than mutations to drop.**
 
