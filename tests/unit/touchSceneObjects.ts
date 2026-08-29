@@ -119,8 +119,12 @@ export function makeZoneFactory(
 
 export function makeFaceFactory(
   faces: FaceFake[],
-): (x: number, y: number, w?: number, h2?: number) => FaceFake & TouchFaceLike {
-  return (x: number, y: number, w = 0, h2 = 0): FaceFake & TouchFaceLike => {
+): (x: number, y: number, w?: number, h2?: number, fillAlpha?: number) => FaceFake & TouchFaceLike {
+  // 🔴 `fillAlpha` is recorded from the CONSTRUCTOR, not left at 1 until something calls
+  // `setAlpha`. Production sets a plate's translucency in the `add.rectangle` call, so a fake
+  // that ignored the argument reported every plate fully opaque — and the gate that pins the
+  // plate's alpha would have measured the fake's default instead of the layer's choice.
+  return (x: number, y: number, w = 0, h2 = 0, fillAlpha = 1): FaceFake & TouchFaceLike => {
   const api = {
     id: '',
     x,
@@ -130,7 +134,7 @@ export function makeFaceFactory(
     visible: true,
     destroyed: false,
     depth: 0,
-    alpha: 1,
+    alpha: fillAlpha,
     angle: 0,
     strokeWidth: 0,
     strokeColor: 0,

@@ -136,7 +136,8 @@ export function makeTouchScene(): TouchSceneHarness {
   h.scene = {
     add: {
       zone: (x: number, y: number, w: number, h2: number) => makeZone(x, y, w, h2),
-      rectangle: (x: number, y: number, w: number, h2: number) => makeFace(x, y, w, h2),
+      rectangle: (x: number, y: number, w: number, h2: number, _fill?: number, a?: number) =>
+        makeFace(x, y, w, h2, a),
       text: (x: number, y: number) => makeFace(x, y),
       triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
       image: () => {
