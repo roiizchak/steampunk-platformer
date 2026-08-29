@@ -142,9 +142,49 @@ describe('the mix is inside the budget it was solved against', () => {
     }
   });
 
-  it('both beds are quieter than every cue — they are the only always-on sources', () => {
-    const loudestBed = Math.max(...BEDS.map((row) => row.gain));
-    const quietestCue = Math.min(...CUES.map((row) => row.gain));
-    expect(loudestBed).toBeLessThan(quietestCue);
+  /**
+   * 🔴 **Compared as LOUDNESS, not as raw gain — and the difference is a shipped bug.**
+   *
+   * This read `max(bed.gain) < min(cue.gain)` until 2026-08-29, which compares two numbers that do
+   * not mean the same thing. A cue's gain multiplies a **peak-normalised** signal; a bed's gain
+   * multiplies the raw OGG, because Node cannot decode it and `normalise` falls back to 1. So the
+   * assertion held while `bed-music` was reaching the player at −48.6 dBFS RMS — not "quieter than
+   * every cue" but **inaudible**, which is what the owner reported after playing.
+   *
+   * The claim is right and the statistic was wrong, so the statistic is replaced rather than the
+   * bound moved. A bed's post-gain **RMS** against a one-shot's post-gain **peak** is the comparison
+   * that orders the thing this test is named after — and it still fails the moment a bed is mixed
+   * above the action, which is the defect it exists to catch.
+   */
+  it('both beds sit below every cue in what a listener HEARS, not in raw gain', () => {
+    // Measured from the shipped masters with `ffmpeg -af volumedetect`; see `BED_MAKEUP_DB` in
+    // tools/gen/build-audio.mjs for the commands and why this cannot be computed in Node.
+    const BED_DBFS: Record<string, { peak: number; rms: number }> = {
+      'bed-music': { peak: -5.5, rms: -24.6 },
+      'bed-ambience': { peak: 0.0, rms: -19.2 },
+    };
+    const db = (linear: number): number => 20 * Math.log10(linear);
+
+    // A one-shot is peak-normalised by `build-audio`, so its shipped PEAK is exactly its gain in dB.
+    const quietestCuePeak = Math.min(...CUES.map((row) => db(row.gain)));
+
+    // 🔴 **Peak against peak.** The first version of this compared a bed's RMS to a cue's peak,
+    // which is the same unit mismatch it was written to catch, pointing the other way: at
+    // `BED_MAKEUP_DB = 26` the beds reached gain 1.0 and 0.91 — plainly mixed over the action — and
+    // the assertion still passed, because a bed's RMS sits 19 dB under its own peak. Watched, 2026-08-29.
+    const loudestBedPeak = Math.max(...BEDS.map((row) => BED_DBFS[row.key]!.peak + db(row.gain)));
+    expect(
+      loudestBedPeak,
+      `loudest bed ${loudestBedPeak.toFixed(1)} dBFS peak vs quietest cue ${quietestCuePeak.toFixed(1)} dBFS peak`,
+    ).toBeLessThan(quietestCuePeak);
+
+    // 🔴 And a FLOOR in RMS, which is the unit audibility lives in and which the old assertion
+    // had no way to express: a bed may sit below the action and still be inaudible. −40 dBFS RMS was
+    // the shipped state the owner played and could not hear.
+    const loudestBedRms = Math.max(...BEDS.map((row) => BED_DBFS[row.key]!.rms + db(row.gain)));
+    expect(
+      loudestBedRms,
+      `loudest bed ${loudestBedRms.toFixed(1)} dBFS RMS — below the action is not the same as inaudible`,
+    ).toBeGreaterThan(-40);
   });
 });

@@ -239,67 +239,67 @@
     {
       "key": "sfx-death",
       "url": "assets/audio/death.wav",
-      "gain": 0.2824,
+      "gain": 0.3187,
       "loop": false
     },
     {
       "key": "sfx-kill",
       "url": "assets/audio/kill.wav",
-      "gain": 0.2824,
+      "gain": 0.3187,
       "loop": false
     },
     {
       "key": "sfx-hurt",
       "url": "assets/audio/hurt.wav",
-      "gain": 0.2824,
+      "gain": 0.3187,
       "loop": false
     },
     {
       "key": "sfx-hit",
       "url": "assets/audio/hit.wav",
-      "gain": 0.1999,
+      "gain": 0.2256,
       "loop": false
     },
     {
       "key": "sfx-jump",
       "url": "assets/audio/jump.wav",
-      "gain": 0.2533,
+      "gain": 0.2859,
       "loop": false
     },
     {
       "key": "sfx-land",
       "url": "assets/audio/land.wav",
-      "gain": 0.3737,
+      "gain": 0.4218,
       "loop": false
     },
     {
       "key": "sfx-attack",
       "url": "assets/audio/attack.wav",
-      "gain": 0.4578,
+      "gain": 0.5167,
       "loop": false
     },
     {
       "key": "sfx-pickup",
       "url": "assets/audio/pickup.wav",
-      "gain": 0.22,
+      "gain": 0.2483,
       "loop": false
     },
     {
       "key": "sfx-footstep",
       "url": "assets/audio/footstep.wav",
-      "gain": 0.2983,
+      "gain": 0.3367,
       "loop": false
     },
     {
       "key": "bed-music",
       "url": "assets/audio/bed-music.ogg",
-      "gain": 0.0632,
+      "gain": 0.2532,
       "loop": true
     },
     {
       "key": "bed-ambience",
       "url": "assets/audio/bed-ambience.ogg",
-      "gain": 0.0502,
+      "gain": 0.2011,
       "loop": true
     },
     {
