@@ -40,8 +40,14 @@ import {
  *
  * 🔴 The touch arm asserts **all five controls are drawn and interactive** before timing starts.
  * Without it, a build where the controls silently failed to appear would report the budget
- * unregressed for the most persuasive possible wrong reason — and `hasTouch` missing from this
- * project's `use` block is exactly how that would happen.
+ * unregressed for the most persuasive possible wrong reason.
+ *
+ * ⚠️ **This spec does NOT gate `chromium-touch-gpu`'s `hasTouch`, and an earlier version of this
+ * comment claimed it did.** M13 dropped `hasTouch: true` from the project's `use` block and this
+ * spec stayed **green** — because the two arms below are built here, from
+ * `browser.newContext({ hasTouch })`, so the project's value never reaches either of them. What
+ * gates it is `tests/unit/playwright-projects.test.ts`, which reads the `use` blocks directly. The
+ * precondition above is still load-bearing; it just answers a different question than the config.
  */
 
 /** Long enough to average out a compile hiccup, short enough that six of them fit in a test. */

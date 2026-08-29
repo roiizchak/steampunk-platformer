@@ -187,6 +187,20 @@ const PATTERNS_FOUND = [
   touchGpuMatch,
 ].filter((p) => p !== null).length;
 
+/**
+ * Whether a project's `use` block declares `hasTouch: true`.
+ *
+ * 🔴 This gate exists because M13 found a hole. Phaser draws the controls only when
+ * `game.device.input.touch` is set — from `ontouchstart` or `navigator.maxTouchPoints`
+ * (`src/device/Input.js:39-41`), both of which Playwright sets from `hasTouch`. Dropping it from a
+ * touch project turns every Phase 12 behaviour spec into a test of a game with no controls. Nothing
+ * caught that: `phase-12-perf.spec.ts` builds its own contexts with an explicit `hasTouch` on each
+ * arm, so the project's value never reaches it, and no other gate read the `use` block at all.
+ */
+function declaresTouch(block: string): boolean {
+  return /(^|[\s,{])hasTouch:\s*true(,|\s|})/.test(block);
+}
+
 /** Build a live RegExp from the extracted literal so selection can actually be evaluated. */
 function toRegExp(literal: string): RegExp {
   const end = literal.lastIndexOf('/');
@@ -201,6 +215,21 @@ describe('playwright project selection', () => {
         'and every assertion in this file is now vacuous. Fix the extraction, do not delete the test.',
     ).toBe(10);
     expect(specNames.length, 'no e2e spec files were globbed at all').toBeGreaterThan(20);
+  });
+
+  it('both touch projects declare hasTouch, which is what makes Phaser draw the controls at all', () => {
+    expect(
+      declaresTouch(touch),
+      'chromium-touch does not set hasTouch — its specs test a game with no controls',
+    ).toBe(true);
+    expect(
+      declaresTouch(touchGpu),
+      'chromium-touch-gpu does not set hasTouch — a future perf spec that does not build its own ' +
+        'context would time an arm with nothing drawn',
+    ).toBe(true);
+    // The vacuity guard for the guard: a `use` block the extractor could not find would answer
+    // `false` above, not silently `true`, so a passing assertion means a block was read.
+    expect(declaresTouch(chromium), 'the desktop project must NOT claim touch').toBe(false);
   });
 
   it("chromium's testIgnore is EXACTLY the other projects' testMatch patterns", () => {
