@@ -58,7 +58,7 @@ export const TITLE_FILL = '#f0d79a';
  */
 export const SUB_FILL = '#9cc6d8';
 
-/** `ENTER begin` / `L choose a level`. Unchanged — 7.07:1. */
+/** The one choice line, `ENTER choose a level`. Unchanged — 7.07:1. */
 export const CHOICE_FILL = '#d9cdb0';
 
 /**
@@ -132,14 +132,33 @@ export function audioHint(muted: boolean, volume: number): string {
 }
 
 /**
- * How far the title's backdrop drifts each frame, in pixels.
+ * How far the title's backdrop drifts each 60 Hz TICK, in pixels.
  *
- * An integer pixel step per frame, never a `deltaTime` multiply — the project's rule for every
- * duration and distance, applied to the one piece of motion a paused screen owns. `renderParallax`
- * multiplies it by each layer's own factor (0.15 / 0.35 / 0.6), so the far layer actually creeps at
- * 0.3 px and the near one at 1.2 px: slow enough to read as atmosphere rather than travel.
+ * An integer pixel step per tick, never a `deltaTime` multiply. `renderParallax` multiplies it by
+ * each layer's own factor (0.15 / 0.35 / 0.6), so the far layer creeps at 0.3 px and the near one at
+ * 1.2 px: slow enough to read as atmosphere rather than travel.
+ *
+ * ⚠️ **This constant was named `PER_TICK` while `TitleScene.update` added it once per rendered
+ * FRAME**, with a comment claiming that satisfied the project's duration rule. It did not — a frame
+ * is not a tick. On the owner's 60 Hz screen the backdrop drifted at a quarter of the speed it does
+ * on this 240 Hz box, and under SwiftShader's ~18 fps it crawled. The scene now drains whole ticks
+ * through `frameClock.drainTicks`, the same seam `GameScene` uses, so the name is true and the
+ * motion is the same everywhere. Codex implementation review of the redesign, finding 1.
  */
 export const TITLE_DRIFT_PX_PER_TICK = 2;
+
+/**
+ * Where each of the four text rows sits, as a fraction of the live canvas height, in the order the
+ * scene creates them — the same order as `TITLE_INKS`.
+ *
+ * 🔴 **It lives here so the contrast sweep can check its own premise.** That sweep's whole claim is
+ * that every glyph sits on `SCRIM_ALPHA` of `SCRIM_COLOUR`, which holds only while every row is
+ * drawn INSIDE the panel. With the rows written as a literal inside `applyLayout`, shrinking
+ * `panelSize` to 0.30 would have pushed the heading and the hint out onto the raw backdrop —
+ * invalidating every contrast figure — and left the unit sweep, both pixel ratios and the whole e2e
+ * suite green. Codex implementation review of the redesign, finding 3.
+ */
+export const TITLE_ROWS: readonly number[] = [0.34, 0.45, 0.61, 0.72];
 
 /**
  * The panel behind the text, as a fraction of the live canvas.

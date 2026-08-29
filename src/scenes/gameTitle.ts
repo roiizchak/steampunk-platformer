@@ -18,20 +18,19 @@
  * So the rule is a module-scope latch, which is exactly "once per page load": it survives every
  * scene restart, and a real reload gets a fresh module. Nothing else is consulted.
  *
- * ## ⚠️ One interleaving is knowingly NOT defended *(C11)*
+ * ## ⚠️ An interleaving that was recorded as undefended, and is now GONE
  *
- * Codex implementation review round 3, finding 2. Queue a `Game.restart()` while the title is up,
- * then press ENTER before the next SceneManager pass, and the queue ends
- * `[stop Title, resume Game, pause Game]` — the resume from `onPlay` lands before the pause this
- * helper appends during the new `create()`, leaving `Game` PAUSED with no title over it.
+ * Codex implementation review round 3, finding 2, recorded this *(C11)*: queue a `Game.restart()`
+ * while the title is up, press ENTER before the next SceneManager pass, and the queue ends
+ * `[stop Title, resume Game, pause Game]` — the resume landing before the pause this helper appends
+ * during the new `create()`, leaving `Game` PAUSED with no title over it.
  *
- * It is not reachable from shipped code: nothing in `src/` calls `scene.restart()`, every (re)start
- * of `Game` is an explicit `scene.start('Game', …)` from Boot, the level menu, the completion path
- * or a dev scene, and none of those can be in flight while a key is dismissing the title. A spec
- * cannot construct it accidentally either: `titleHarness.restartGame()` waits on a SHUTDOWN observer
- * before returning, so no keypress can be queued mid-restart. Recorded rather than defended, because
- * the only fix that would close it — moving the pause/resume pair into the title's own lifecycle —
- * trades a queue race nobody can reach for a different one everybody would.
+ * **The resume in that sequence came from `onPlay`, and `onPlay` no longer exists.** The owner's
+ * 2026-08-29 decision made the level menu the only way off this screen, and the menu STOPS `Game`
+ * rather than resuming it, so there is no resume for a pause to race. The note is kept rather than
+ * deleted because it is the reason this helper still owns the pause and the title does not: moving
+ * the pair into the title's own lifecycle would trade a race nobody can reach for one everybody
+ * would.
  *
  * ## 🔴 A restart while the title is still up must re-pause
  *

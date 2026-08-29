@@ -63,10 +63,13 @@ export const TITLE_SCRIM_MIN_BRIGHTENING = 1.5;
  *
  * ## The number
  *
- * Measured against `dist/` on the production server, 5 runs (1 + `--repeat-each=4`), and the
- * figures are **identical to twelve decimal places** on every one — the centre patch sits inside the
- * static band, so the parallax drift does not reach it: title **27.547**, menu **20.082**, level
- * **60.593**. That is menu/title **0.7289** and level/title **2.200**. `0.85` sits comfortably
+ * Measured against `dist/` on the production server, 5 runs (1 + `--repeat-each=4`): title
+ * **27.547**, menu **20.082**, level **60.593** — **identical to twelve decimal places** on every
+ * run. That stability is observed, not explained; the earlier claim here that *"the centre patch
+ * sits inside the static band, so the parallax drift does not reach it"* was a guess, and a wrong
+ * one — the band is 82 % alpha, so the drifting layers do show through it. Codex implementation
+ * review of the redesign, round 3. **The bound does not rest on the explanation**: it is a ratio
+ * between two screens, and it is watched red rather than argued. That is menu/title **0.7289** and level/title **2.200**. `0.85` sits comfortably
  * ABOVE the observed 0.729 and comfortably BELOW the 1.0 that "no title in the bundle" produces,
  * so it rests on neither distribution's tail.
  *
@@ -156,8 +159,10 @@ export async function dismissTitleProduction(page: Page): Promise<void> {
  * `playwright.config.ts` warns in detail that a busy box reads as a broken game and is
  * indistinguishable from the defect these specs exist to catch.
  *
- * The scrim covers the entire canvas, so a patch is exactly as good a discriminator as the frame and
- * costs about a thousandth as much. Measured either side of the change: the ratio is unmoved.
+ * The dimmed band spans the full width across the centre of the canvas, so a centre patch is exactly
+ * as good a discriminator as the frame and costs about a thousandth as much. (It said *"the scrim
+ * covers the entire canvas"* until the 2026-08-29 redesign replaced the full-canvas scrim with a
+ * band over a parallax backdrop — still true of the patch, no longer true of the frame.) Measured either side of the change: the ratio is unmoved.
  */
 async function centrePatchLuminance(page: Page): Promise<number> {
   const box = await page.locator('canvas').boundingBox();

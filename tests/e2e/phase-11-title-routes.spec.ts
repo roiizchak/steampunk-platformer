@@ -17,7 +17,7 @@ import {
   sceneActive,
 } from './titleHarness';
 import type { SceneHandle } from './titleHarness';
-import { dismissTitle } from './gameHarness';
+import { BOOT_TIMEOUT, dismissTitle } from './gameHarness';
 import './debugView';
 
 test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the ones that must not exist', () => {
@@ -92,14 +92,27 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
   }
 
   /**
-   * 🔴 **Two dismissing keys in ONE input batch.** Phaser drains its whole key queue in a single
-   * `KeyboardPlugin.update()` pass, so `L` and `ENTER` in the same frame both reached `dismiss`. The
-   * queue that produced was `[stop Title, stop Game, start LevelSelect, stop Title, resume Game]` —
-   * and `Systems.resume()` cannot tell a stopped scene from a paused one, because `shutdown()` sets
-   * the same `active = false` flag `pause` does. It would step a torn-down `Game` under the menu.
-   * Closed by a `dismissed` latch; found by the criterion 11.14 review reading the engine.
+   * Two dismissal keys in ONE input batch. Phaser drains its whole key queue in a single
+   * `KeyboardPlugin.update()` pass, so both reach `dismiss` before a frame is drawn, and the
+   * end state must still be the menu over a stopped `Game`.
+   *
+   * ⚠️ **This is NOT a gate on the `dismissed` latch, and it used to claim it was.** Two things
+   * were wrong with that claim and only the first was Codex's finding 4: it fired `L` and `ENTER`,
+   * and `L` stopped dismissing anything when the owner made the menu the only way in — one live key
+   * and one dead one. Fixing that to `SPACE` + `ENTER` was not enough. **Deleting the latch leaves
+   * this green too**, watched on 2026-08-29: `dismiss` twice is `scene.stop()` on an
+   * already-stopping `Title` and `scene.start('LevelSelect')` twice, which restarts the menu to the
+   * same state. The sequence the latch was written against — `[stop Title, stop Game, start
+   * LevelSelect, stop Title, resume Game]`, resurrecting a torn-down `Game` — **needed `onPlay`**,
+   * and `onPlay` is gone.
+   *
+   * So the latch stays as defence and this test keeps the claim it can actually prove. A gate that
+   * cannot go red for the defect it names is decoration, and the fix for one is not to keep the name.
+   * Recorded in `docs/qa/phase-11-welcome.md`.
    */
-  test('L and ENTER in the same frame do not resurrect the stopped Game', async ({ page }) => {
+  test('two dismissal keys in one batch still land in the menu, not in a running Game', async ({
+    page,
+  }) => {
     await bootToTitle(page);
 
     await page.evaluate(() => {
@@ -108,7 +121,7 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
           window.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true, cancelable: true }));
         }
       };
-      fire('KeyL');
+      fire('Space');
       fire('Enter');
     });
 
@@ -120,6 +133,92 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
     const status = await gameStatus(page);
     expect(typeof status, 'type before value').toBe('number');
     expect(status, 'a resumed Game would be stepped against a dead display list').not.toBe(RUNNING);
+  });
+
+  /**
+   * 🔴 **The whole player route, walked, with a save that makes the answer non-trivial.**
+   *
+   * `gameHarness.dismissTitle` SKIPS this screen through `__phaserGame` — deliberately, for the
+   * reasons in its docstring — so all ~40 specs that boot through it observe the `Game` the BOOT
+   * created and resumed, never the one the MENU starts. Nothing else covered the difference.
+   *
+   * The concrete hole that leaves, named by the Codex implementation review of the redesign
+   * (finding 2): `LevelSelectScene.play()` could start `level-01` unconditionally. The saved-level
+   * specs would pass — they never reach the menu. Production would pass — it runs a fresh profile,
+   * where the furthest unlocked level IS level-01. Only a returning player would notice, and only
+   * by being dropped into the wrong level.
+   *
+   * So this seeds two completed levels, reads the row the menu actually HIGHLIGHTED, and asserts the
+   * level that loads is that one. It compares the menu against itself rather than against this
+   * spec's model of the unlock rule, so it cannot rot into a second, disagreeing copy of it.
+   */
+  test('the real route — title, menu, the level the menu highlighted', async ({ page }) => {
+    await page.addInitScript(
+      ([k, v]) => window.localStorage.setItem(k as string, v as string),
+      [
+        'steampunk.progress',
+        '{"version":1,"lastLevel":"level-01","levels":{' +
+          '"level-01":{"completed":true,"bestGears":4},' +
+          '"level-02":{"completed":true,"bestGears":2}}}',
+      ] as const,
+    );
+    await bootToTitle(page);
+
+    // Boot resolved the SAVED level; the menu will open on the furthest UNLOCKED one. They differ
+    // here on purpose — otherwise a menu that ignored its cursor would still look right.
+    const booted = (await page.evaluate(() => window.__game))?.levelId;
+    expect(typeof booted, 'type before value').toBe('string');
+
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+      () =>
+        (window as unknown as { __phaserGame: SceneHandle }).__phaserGame.scene.isActive('LevelSelect'),
+      undefined,
+      { timeout: 5_000 },
+    );
+
+    /**
+     * 🔴 **The row the menu DREW as selected, not the one its cursor points at.**
+     *
+     * Reading `rows[cursor]` catches `play()` ignoring the cursor — and nothing else. `paint()`
+     * could put the `>` marker and the selected colour on a different row entirely, and a test that
+     * called the cursor row "highlighted" would agree with itself and pass while the player watched
+     * one row light up and another load. Codex implementation review of the redesign, round 2,
+     * finding 2. The marker is the player-visible fact, so the marker is what is read.
+     */
+    const highlighted = await page.evaluate(() => {
+      const scene = (window as unknown as {
+        __phaserGame: { scene: { getScene(k: string): unknown } };
+      }).__phaserGame.scene.getScene('LevelSelect') as {
+        rows: { id: string; unlocked: boolean; text: { text: string } }[];
+      };
+      const marked = scene.rows.filter((row) => row.text.text.startsWith('> '));
+      return {
+        marked: marked.length,
+        id: marked[0]?.id,
+        unlocked: marked[0]?.unlocked,
+      };
+    });
+    expect(highlighted.marked, 'exactly one row may be drawn selected').toBe(1);
+    expect(typeof highlighted?.id, 'the menu drew no highlighted row').toBe('string');
+    expect(highlighted?.unlocked, 'the menu opened on a LOCKED row').toBe(true);
+    expect(highlighted?.id, 'a fresh-profile menu would not exercise the cursor at all').not.toBe(
+      booted,
+    );
+
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+      (id) => window.__game?.levelId === id && (window.__game?.tick ?? 0) > 0,
+      highlighted?.id,
+      { timeout: BOOT_TIMEOUT },
+    );
+
+    const view = await page.evaluate(() => window.__game);
+    expect(view?.sceneKey, 'the menu must hand the world back to Game').toBe('Game');
+    expect(view?.levelId, 'the menu started a level other than the one it highlighted').toBe(
+      highlighted?.id,
+    );
+    expect(await sceneActive(page, 'LevelSelect'), 'the menu must be gone').toBe(false);
   });
 });
 

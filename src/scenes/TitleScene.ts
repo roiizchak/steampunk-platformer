@@ -38,14 +38,18 @@
  * A paused scene still RENDERS, which is exactly what a title card over a frozen first level wants.
  * `UIScene` deliberately survives PAUSED too — it retires only at SLEEPING — so the HUD stays put.
  *
- * ## Keys, and why level select is not on ENTER
+ * ## Keys — one way in
  *
- * `Enter` / `Space` begin play; **`L`** opens the level menu. `L` rather than a second ENTER binding
- * because `scene.start` is **queued**: `LevelSelectScene.create()` would run with ENTER still
- * physically held, its brand-new `Key` has `isDown === false`, and the OS auto-repeat ~500 ms later
- * reads as a fresh press — the menu would open and immediately launch a level. That is the exact
- * trap `LevelSelectScene.bindKeys()`'s own comment documents. `L` is an attack key during play,
- * which is harmless only because `Game` is paused while this is up.
+ * `Enter`, `NumpadEnter` and `Space` all open the LEVEL MENU. Nothing on this screen starts a level
+ * directly, by the owner's 2026-08-29 decision.
+ *
+ * ⚠️ **This paragraph used to argue that level select could not be on ENTER**, because `scene.start`
+ * is queued: `LevelSelectScene.create()` runs with ENTER still physically held, its brand-new `Key`
+ * has `isDown === false`, and the OS auto-repeat ~500 ms later reads as a fresh press — so the menu
+ * would open and immediately launch a level. **The trap is real and the conclusion was wrong.**
+ * `LevelSelectScene.bindKeys()` closes it on its own side, with a native-`repeat` guard its comment
+ * documents, which is why ENTER can be the single door. `L` was the second door that argument bought
+ * and it is no longer bound here at all.
  *
  * Every binding carries the native `event.repeat` guard for the same family of reasons.
  */
@@ -56,8 +60,9 @@ import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 import type { AudioActionResult } from './audioKeyMap';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
 import { createParallax, renderParallax } from './gameParallax';
+import { drainTicks } from '../game/frameClock';
 import type { ParallaxImage } from './gameParallax';
-import { RULE_ALPHA, RULE_PX, TITLE_DRIFT_PX_PER_TICK, panelSize } from '../render/titleInk';
+import { RULE_ALPHA, RULE_PX, TITLE_DRIFT_PX_PER_TICK, TITLE_ROWS, panelSize } from '../render/titleInk';
 import type { AudioManager } from '../game/audio';
 import {
   audioHint,
@@ -115,18 +120,25 @@ export class TitleScene extends Phaser.Scene {
   /**
    * `null` means "launched with no data at all", which `attachTitle` never does and a second
    * launcher might. `create()` refuses to draw in that state rather than putting up a screen whose
-   * ENTER key stops the scene and resumes nothing — see `TitleSceneData.onPlay`.
+   * ENTER key stops the scene and goes nowhere — see `TitleSceneData.onLevelSelect`.
    */
   private data$: TitleSceneData | null = null;
   /**
-   * 🔴 **Dismissal is once, and the flag is why.** Phaser drains its whole key queue in a single
-   * `KeyboardPlugin.update()` pass, so `L` and `ENTER` arriving in the same frame both reach
-   * `dismiss`. The queue that produces is `[stop Title, stop Game, start LevelSelect, stop Title,
-   * resume Game]` — and that last op is **not** a no-op: `Systems.shutdown()` sets
-   * `settings.active = false`, which is the same thing `pause` sets, so `Systems.resume()` cannot
-   * tell a paused scene from a stopped one. It would flip the torn-down `Game` back to `RUNNING`
-   * and `SceneManager.update` would step it against a dead display list while `LevelSelect` owns
-   * the screen. Found by the criterion 11.14 review, reading the engine rather than the diff.
+   * Dismissal is once.
+   *
+   * Phaser drains its whole key queue in a single `KeyboardPlugin.update()` pass, so two dismissal
+   * keys arriving in the same frame both reach `dismiss`.
+   *
+   * ⚠️ **This is defence, and it no longer has a gate — read the reason before deleting it.**
+   * It was written against `[stop Title, stop Game, start LevelSelect, stop Title, resume Game]`,
+   * where the last op is not a no-op: `Systems.shutdown()` sets the same `settings.active = false`
+   * that `pause` sets, so `Systems.resume()` cannot tell a stopped scene from a paused one and
+   * would step a torn-down `Game` under the menu. **That sequence needed `onPlay`**, which the
+   * owner's 2026-08-29 decision removed. Measured the same day: with the flag deleted, a two-key
+   * batch is `scene.stop()` on an already-stopping `Title` and `scene.start('LevelSelect')` twice,
+   * which restarts the menu to the same state — nothing observable changes, and no e2e assertion
+   * moves. Kept because a second route back to a resume is cheap to add and expensive to notice;
+   * the honesty is in saying so rather than shipping a test that cannot fail.
    */
   private dismissed = false;
   private items: Phaser.GameObjects.Text[] = [];
@@ -148,6 +160,8 @@ export class TitleScene extends Phaser.Scene {
   private parallax: ParallaxImage[] = [];
   /** Ticks since the screen opened, for the backdrop drift. Integer counts, never a delta multiply. */
   private drift = 0;
+  /** Milliseconds not yet worth a whole tick, carried across frames. See `update`. */
+  private accumulatorMs = 0;
   private hint?: Phaser.GameObjects.Text;
   /**
    * Seeded from the PERSISTED settings, which is the same store `createAudio()` copies at boot —
@@ -172,6 +186,9 @@ export class TitleScene extends Phaser.Scene {
     this.parallax = [];
     this.rules = [];
     this.drift = 0;
+    // The fractional clock phase is per-run too: leaving it would hand a restarted screen the
+    // previous run's leftover milliseconds. Codex implementation review of the redesign, round 2.
+    this.accumulatorMs = 0;
     this.dismissed = false;
     this.audioState = readAudioSettings(safeLocalStorage());
   }
@@ -255,21 +272,24 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /**
-   * Drift the backdrop.
+   * Drift the backdrop — **once per 60 Hz tick, not once per rendered frame**.
    *
-   * Phaser hands `update` a wall-clock delta and this screen deliberately ignores it: the drift is an
-   * integer count of frames times an integer pixel step, so the same number of frames always moves it
-   * the same distance. That is the project's rule for durations and distances, applied to the one
-   * piece of motion a paused screen owns.
+   * ⚠️ This used to add `TITLE_DRIFT_PX_PER_TICK` on every `update`, under a comment arguing that
+   * counting frames satisfied the project's duration rule. It does not: `update` fires at the
+   * display's rate, so the same screen drifted 4x faster on this 240 Hz box than on the owner's
+   * 60 Hz one. The delta goes through `drainTicks` — the same seam `GameScene` uses, carrying its
+   * remainder and capping a stalled tab — and the drift advances by whole ticks.
    *
-   * `renderParallax` is the same function `gameFrameDraw.ts` calls, taking a scroll in world pixels
-   * — so each layer's own factor still decides how fast it moves relative to the others.
+   * `renderParallax` is the same function `gameFrameDraw.ts` calls, taking a scroll in world pixels,
+   * so each layer's own factor still decides how fast it moves relative to the others.
    */
-  override update(): void {
+  override update(_time: number, delta: number): void {
     if (this.parallax.length === 0) {
       return;
     }
-    this.drift += TITLE_DRIFT_PX_PER_TICK;
+    const drained = drainTicks(this.accumulatorMs, delta);
+    this.accumulatorMs = drained.remainderMs;
+    this.drift += drained.ticks * TITLE_DRIFT_PX_PER_TICK;
     renderParallax(this.parallax, this.drift);
   }
 
@@ -289,9 +309,11 @@ export class TitleScene extends Phaser.Scene {
     });
     // Fractions of the height, so the arrangement survives any viewport the scale manager hands us.
     // FOUR rows now, not five — the second choice line went when ENTER became the only way in.
+    // The fractions live in `titleInk.ts` so `title-contrast.test.ts` can prove they land inside
+    // the panel its whole contrast premise depends on.
     // Re-spread rather than left as [0.3, 0.4, 0.56, 0.64] with a hole at 0.82, which would have
     // bunched everything into the top two thirds of the panel.
-    const rows = [0.34, 0.45, 0.61, 0.72];
+    const rows = TITLE_ROWS;
     this.items.forEach((item, index) => {
       item.setPosition(width / 2, height * (rows[index] ?? 0.5));
     });
@@ -365,7 +387,7 @@ export class TitleScene extends Phaser.Scene {
    * A comment naming a mechanism no gate can test is the kind this project treats as worse than
    * none. Criterion 11.14 review.
    *
-   * What *is* load-bearing is the `dismissed` latch — see the field's own note.
+   * The `dismissed` latch below is defence with no live gate — see the field's own note.
    */
   private dismiss(then?: () => void): void {
     if (this.dismissed) {
