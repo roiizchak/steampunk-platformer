@@ -204,4 +204,22 @@ describe('a FULL-SCREEN route is dead under the prompt too, however big its own 
       'a tap meant for ROTATE YOUR DEVICE dismissed the screen underneath it',
     ).toEqual(['title']);
   });
+
+  it('refuses a tap on a target too small to hit, even with the play controls fitting', () => {
+    // 🔴 M24: without this case, deleting the SECOND term of the gate reddened nothing, and the
+    // predicate would have been a one-term one wearing a two-term comment. No shipped caller
+    // produces a target under `TOUCH_BOX_PX`, so the term is unreachable through the three screens
+    // that exist today — which is exactly why it needs a gate of its own rather than a consumer:
+    // the contract is *this function refuses an unhittable target*, and a fourth caller with a
+    // smaller one must not have to discover that the guard was quietly dropped.
+    const h = scene();
+    const taps: string[] = [];
+    // 40 game px is 20.0 CSS px at desktop scale — under the 44 px floor while `touchLayout`'s own
+    // 160 px controls are at 160.0 and comfortably over it. Only the second term can refuse this.
+    attachTapRoutes(h.scene, true, [{ id: 'tiny', x: 0, y: 0, w: 40, h: 40 }], (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('tiny' as never, 1);
+    expect(taps, 'a 20 CSS px target took a tap it is too small to be aimed at').toEqual([]);
+  });
 });
