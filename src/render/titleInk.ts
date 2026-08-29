@@ -135,20 +135,16 @@ export function audioHint(muted: boolean, volume: number): string {
 }
 
 /**
- * How far the title's backdrop drifts each 60 Hz TICK, in pixels.
+ * The catalog key of the generated title plate — `assets/backgrounds/title.png`.
  *
- * An integer pixel step per tick, never a `deltaTime` multiply. `renderParallax` multiplies it by
- * each layer's own factor (0.15 / 0.35 / 0.6), so the far layer creeps at 0.3 px and the near one at
- * 1.2 px: slow enough to read as atmosphere rather than travel.
- *
- * ⚠️ **This constant was named `PER_TICK` while `TitleScene.update` added it once per rendered
- * FRAME**, with a comment claiming that satisfied the project's duration rule. It did not — a frame
- * is not a tick. On the owner's 60 Hz screen the backdrop drifted at a quarter of the speed it does
- * on this 240 Hz box, and under SwiftShader's ~18 fps it crawled. The scene now drains whole ticks
- * through `frameClock.drainTicks`, the same seam `GameScene` uses, so the name is true and the
- * motion is the same everywhere. Codex implementation review of the redesign, finding 1.
+ * ⚠️ **A `TITLE_DRIFT_PX_PER_TICK` used to stand here**, with three parallax layers behind the
+ * band and a gate pinning its drift to `frameClock.drainTicks`. The owner chose the generated
+ * backdrop on 2026-08-29 (variant B, the rooftop canyon; variant A had the compositing band painted
+ * into it, because the prompt described it). A single plate cannot drift — it does not tile, so
+ * scrolling would expose its own edge — so the constant and its gate are gone rather than left
+ * guarding motion that no longer exists.
  */
-export const TITLE_DRIFT_PX_PER_TICK = 2;
+export const TITLE_BACKDROP_KEY = 'title-backdrop';
 
 /**
  * Where each of the four text rows sits, as a fraction of the live canvas height, in the order the

@@ -23,6 +23,10 @@
       "url": "assets/backgrounds/near.png"
     },
     {
+      "key": "title-backdrop",
+      "url": "assets/backgrounds/title.png"
+    },
+    {
       "key": "hud-health",
       "url": "assets/hud/health-assembly.png"
     },

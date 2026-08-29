@@ -100,6 +100,7 @@ against one line before shooting any clip *(criterion 4.27)*.
 | collect → scoreboard tween art | — | 6 | ⬜ |
 | hazard tile (spikes) | cell 12 of `tiles-industrial` | **session `hud-and-pits`** | ✅ shipped — generated on its own (`01a046c7`) and pasted into cell 12 rather than re-shooting the sheet, which would have re-rolled the walkway, brass cap and brick that `ground-tiles.test.ts` pins. Replaced a cool silver picket that read as decoration and violated STYLE.md §5 rule 2 |
 | audio cues | — | 7 | ⬜ — needs the catalog schema extended |
+| **title backdrop** | `title-backdrop` | **11** | ✅ shipped, 1920 × 1080 — a **single static plate**, not a parallax set. The welcome screen composites its own 0.82 band over the middle; the plate must therefore contain no band of its own, which is exactly what killed variant A (GENERATION-LOG.md). Generated 2752 × 1536, Lanczos-downscaled to the view size |
 
 **`hud-health` is shipped but nothing draws it.** That is deliberate and worth stating: the HUD is a
 Phase 6 deliverable in a parallel `UIScene`, and the asset was generated in Phase 4 because it comes

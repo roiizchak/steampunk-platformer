@@ -202,41 +202,34 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   });
 
   /**
-   * 🔴 The drift is a TICK count, and only `drainTicks` makes that true.
+   * 🔴 The generated plate is DRAWN, sized to the live canvas, and sits under the band.
    *
-   * `update` fires once per rendered frame, so adding the step directly moved the backdrop four
-   * times faster on a 240 Hz box than on the owner's 60 Hz one while the constant's name said
-   * otherwise. Source text is the right shape here: the scene value-imports Phaser, so it cannot be
-   * instantiated in this suite, and what is being pinned is which seam it goes through.
-   * Codex implementation review of the redesign, finding 1.
+   * ⚠️ **This replaced a drift gate, it did not lose one.** Until 2026-08-29 the backdrop was three
+   * parallax layers and this test pinned their drift to `frameClock.drainTicks` — the fix for a real
+   * defect, where a constant named `PER_TICK` was added once per rendered FRAME and the screen moved
+   * four times faster on a 240 Hz box than on the owner's 60 Hz one. The owner then chose the
+   * generated backdrop, a single plate cannot drift without exposing its own edge, and the drift,
+   * its constant and that gate all went together. A gate is retired with the thing it guarded or it
+   * becomes decoration; what replaces it guards the draw path that exists now.
    */
-  it('the backdrop drifts by whole ticks, not by frames', () => {
-    expect(source, 'update() must take the delta it is handed').toMatch(
-      /override update[(]_time: number, delta: number[)]/,
+  it('the title plate is drawn from the catalog key, under the band, at the live canvas size', () => {
+    expect(source, 'the plate must be added from the shared key, not a string literal').toMatch(
+      /\.image\(0, 0, TITLE_BACKDROP_KEY\)/,
     );
-    expect(source, 'and drain it through the frameClock seam').toMatch(/drainTicks[(]this[.]accumulatorMs, delta[)]/);
-    expect(source, 'the step is multiplied by whole ticks').toMatch(
-      /drift [+]= drained[.]ticks [*] TITLE_DRIFT_PX_PER_TICK/,
+    // Under the band (drawn at default depth) and above the opaque floor at -200. Both numbers
+    // matter: at depth 0 the floor painted straight over the art, which is how the first redesign
+    // shipped a screen that looked exactly like the flat one it replaced.
+    expect(source, 'the plate sits between the opaque floor and the band').toMatch(
+      /\.setDepth\(-100\)/,
     );
-    // 🔴 The REMAINDER, separately. `this.accumulatorMs = 0` leaves every assertion above
-    // green and stops the backdrop dead on any display whose per-frame delta never reaches a whole
-    // tick — which is every frame at 240 Hz. Codex implementation review of the redesign, round 2,
-    // finding 1: the per-frame reversion this test was watched red against does not cover it.
-    expect(source, 'the leftover milliseconds must be carried, not dropped').toMatch(
-      /this[.]accumulatorMs = drained[.]remainderMs/,
+    expect(source, 'the opaque floor stays below it').toMatch(/\.setDepth\(-200\)/);
+    // 🔴 And it must be RESIZED, or it draws at its own 1920x1080 and leaves bare ground on any
+    // other canvas. `setSize` would be the wrong call on an Image — that is a TileSprite's API.
+    expect(source, 'the plate must follow the live canvas size').toMatch(
+      /backdropImage\?\.setDisplaySize\(width, height\)/,
     );
-    // And the phase is per-run: `init` resets it beside `drift`, or a restart inherits it.
-    expect(source, 'init must reset the accumulator').toMatch(/this[.]accumulatorMs = 0;/);
-    // 🔴 **The SINK, not just the arithmetic.** Every assertion above is satisfied by a scene
-    // that computes a perfect tick count and draws nothing with it — deleting the `renderParallax`
-    // call leaves them all green and the backdrop frozen. Codex implementation review of the
-    // redesign, round 3, finding 1: a draw-path gate that stops before the draw is not one.
-    expect(source, 'the drift must reach renderParallax').toMatch(
-      /renderParallax[(]this[.]parallax, this[.]drift[)]/,
-    );
-    expect(source, 'a per-frame add would leave the constant lying about itself').not.toMatch(
-      /drift [+]= TITLE_DRIFT_PX_PER_TICK/,
-    );
+    // The parallax rig is gone from this scene entirely; a leftover import would still typecheck.
+    expect(source, 'no parallax may remain in the title scene').not.toMatch(/[Pp]arallax/);
   });
 
   /**

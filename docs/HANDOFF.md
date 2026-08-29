@@ -1,30 +1,31 @@
 # Session handoff — Phase 11, the welcome screen and the volume repair
 
-> # ⚠️ Phase 11 is OPEN — and 11.4 is a measured FAILURE, not an unrun criterion.
+> # ✅ Phase 11 is COMPLETE — every criterion has a verdict and every verdict is a pass.
 >
-> 🔴 **The game is about 25 dB too quiet.** The owner tested at volume 50 and can barely hear it.
-> Measured: the two always-on beds are heard at −48.6 and −45.2 dBFS RMS against a normal target of
-> −16 to −20. See `docs/qa/phase-11-welcome.md` § The game is too quiet — including the hypothesis
-> that measurement killed, so nobody re-runs it.
+> The owner walked all four hands-on criteria on 2026-08-29 and **broke one of them by playing**:
+> at volume 50 the game was barely audible. That is now fixed, measured, and gated. Merged to `main`.
 >
-> ✅ **11.2 is CLOSED** — the owner played the game on 2026-08-29 and confirmed the volume keys
-> respond on **both the Hebrew and the English layout**. That is the observation the whole phase
-> existed to earn, and no gate here could have produced it.
->
-> Branch `phase-11-welcome`, four commits on top of `main` at `6da76b7`. Everything automated is
-> green; nothing that needs a human at the keyboard has been done.
+> Three things in this phase were found by a human at the keyboard and by nothing else: the volume
+> keys answering on **both** the Hebrew and the English layout, the first build reading as *"not
+> looking good"*, and the loudness defect. **No gate in this repo could have produced any of them.**
 
-## Where it stopped
+## What shipped
 
-**The volume bug is fixed and the root cause is proved by measurement, not inference.** Phaser
-dispatches on `event.keyCode` (`KeyboardPlugin.js:747`), which is layout-dependent for punctuation
-and stable for letters — which is exactly the split the owner reported (`M` worked, `[` / `]` did
-not). Audio keys now go through a raw DOM listener on `event.code`. **Criterion 11.2 needs the owner
-at the Hebrew layout**; no automated evidence can stand in for it *(C4)*.
+**The volume bug, root-caused by measurement.** Phaser dispatches on `event.keyCode`
+(`KeyboardPlugin.js:747`) — layout-dependent for punctuation, stable for letters, which is exactly
+the split the owner reported (`M` worked, `[` / `]` did not). Audio keys now go through a raw DOM
+listener on `event.code`, with its own `event.repeat` guard in **two** places, because the shared
+mapper cannot share one.
 
-**The welcome screen ships**, in both `config.ts` arms, as a parallel scene over a PAUSED `Game`.
-It was redesigned on 2026-08-29 after the owner said the first build *"is not looking good"*:
-parallax backdrop, full-width dimmed band, and ENTER to the level menu as the single way in.
+**The welcome screen**, in both `config.ts` arms, as a parallel scene over a PAUSED `Game`. Redesigned
+2026-08-29 after the owner said the first build *"is not looking good"*: a single static fal plate,
+a full-width dimmed band, and ENTER to the level menu as the only way in.
+
+**The mix repair — the defect the gate could not see.** `MIX_DB` was applied to peak-normalised
+signals for the ten WAV cues and to the raw file for the two OGG beds, because Node cannot decode
+OGG and `normalise` falls back to 1. With a 19 dB crest factor a `-13` landed ~19 dB lower on a bed
+than on a one-shot. Beds are now mixed by measured RMS: **+12.05 dB**, −43.6 → −31.6 dBFS RMS
+together, criterion 7.2 re-measured at −3.33 against its −1.0 ceiling.
 
 ## The traps, and they are not visible in the code
 
@@ -46,32 +47,32 @@ race was always there — the welcome screen only changed which side of it we la
 **`prodTitle` presses ENTER TWICE**, with a measured darkening bound between the presses as the
 barrier. Production ships no debug surface, so pixels are the only signal.
 
-## What is owed
+🔴 **The audio gate that let a 25 dB defect ship was `max(bed.gain) < min(cue.gain)`** — the
+same unit mismatch as the bug, so it was green the whole time. It is replaced, not re-bounded, and
+**my first replacement was also wrong** in the other direction. Both mistakes are written into
+`tests/unit/shipped-audio.test.ts`'s own docstring before you touch it.
 
-- **11.4 — FAILING.** The loudness defect above. The fix re-solves every gain in the shipped
-  `index.json` and moves the number criterion 7.2 was measured against, so it is a STOP-and-ask.
-  ⚠️ **Start by making the solver reproducible** — a re-solve computes `bed-music` at 0.1089 against
-  the shipped 0.0632, almost certainly the trim and fade it skips.
-- ✅ **11.7 and 11.11 are CLOSED** — *"the press enter is working"*, and both halves of the menu
-  reported separately: lock state, then *"The gear's total is ok"*.
+⚠️ **The title plate must not contain a band.** The screen composites its own 0.82 scrim over the
+middle third. Variant A was unusable because the prompt mentioned the compositing and the model drew
+it. Describe what the IMAGE contains, never what will be laid over it.
 
-**Every criterion in the gate now passes except 11.4.** The phase is failing on one measured defect,
-not on unrun work.
-- **The title backdrop.** Two fal plates generated 2026-08-29 with the owner's authorisation, $0.30,
-  in `_generated/title-backdrop/` (gitignored; request ids are in GENERATION-LOG.md). **Variant B is
-  the usable one — A has the compositing band baked into it, because the prompt described it.**
-  Neither is wired in; wiring one in is a design change (static plate versus the current three-layer
-  parallax) plus the manifest, `dist/` and downscale obligations.
+## What is still owed — carried forward, not part of this phase
+
 - **The volume STEP SIZE and its missing feedback** — deliberately not fixed, see the QA log.
+  `stepVolume(1, +1)` is a genuine no-op on a fresh save, and one step down is ~1 dB.
 - **A fal ceiling FIGURE.** Spend is $55.50 against a last-stated ceiling of $55. Every overrun is
   cleared by an explicit owner decision; no new number has ever been named, and the log refuses to
   invent one.
+- **No cancel route out of `LevelSelectScene`** — accepted in the plan, still true.
 
 ## Two perf gates flake under full-suite load
 
 `phase-05-perf` 5.11 and `phase-06-perf` 6.9 both failed one full `test:e2e` run and **both pass in
 isolation**. GPU-ratio statistics whose denominator collapses when the box is busy — the shape
-`docs/QA-LOG.md` already records. Two earlier full runs the same day were clean at 183 and 184.
+`docs/QA-LOG.md` already records. The final run before the merge failed `phase-09-polish` 9.1 and
+`phase-10-production`'s dev-seam budget instead; both passed alone, 4 and 6 specs, at the same
+sitting. **The full suite's wall-clock-bounded specs read a busy box as a broken game** — the rule
+in CLAUDE.md §5 is not advisory.
 
 ---
 

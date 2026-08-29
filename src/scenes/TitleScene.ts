@@ -59,10 +59,8 @@ import { TITLE_KEY } from './gameTitle';
 import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 import type { AudioActionResult } from './audioKeyMap';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
-import { createParallax, renderParallax } from './gameParallax';
-import { drainTicks } from '../game/frameClock';
-import type { ParallaxImage } from './gameParallax';
-import { RULE_ALPHA, RULE_PX, TITLE_DRIFT_PX_PER_TICK, TITLE_ROWS, panelSize } from '../render/titleInk';
+import { TITLE_BACKDROP_KEY } from '../render/titleInk';
+import { RULE_ALPHA, RULE_PX, TITLE_ROWS, panelSize } from '../render/titleInk';
 import type { AudioManager } from '../game/audio';
 import {
   audioHint,
@@ -157,11 +155,16 @@ export class TitleScene extends Phaser.Scene {
   private rules: Phaser.GameObjects.Rectangle[] = [];
   /** An opaque floor, so the PAUSED level underneath is never visible through a transparent layer. */
   private backdrop?: Phaser.GameObjects.Rectangle;
-  private parallax: ParallaxImage[] = [];
-  /** Ticks since the screen opened, for the backdrop drift. Integer counts, never a delta multiply. */
-  private drift = 0;
-  /** Milliseconds not yet worth a whole tick, carried across frames. See `update`. */
-  private accumulatorMs = 0;
+  /**
+   * The generated title plate, drawn once and never moved.
+   *
+   * ⚠️ **This was three drifting parallax layers until 2026-08-29**, with a tick-drained drift and
+   * a gate pinning it to `frameClock`. The owner chose the generated backdrop, and a single plate
+   * cannot drift: it does not tile, so scrolling it would expose its own edge. The stillness is the
+   * trade, taken deliberately — a title card is not a level, and motion was never what was asked
+   * for. The drift, its constant and its gate were removed rather than left guarding nothing.
+   */
+  private backdropImage?: Phaser.GameObjects.Image;
   private hint?: Phaser.GameObjects.Text;
   /**
    * Seeded from the PERSISTED settings, which is the same store `createAudio()` copies at boot —
@@ -183,12 +186,7 @@ export class TitleScene extends Phaser.Scene {
     // draw rather than trapping the player behind a paused game.
     this.data$ = typeof data?.onLevelSelect === 'function' && data ? data : null;
     this.items = [];
-    this.parallax = [];
     this.rules = [];
-    this.drift = 0;
-    // The fractional clock phase is per-run too: leaving it would hand a restarted screen the
-    // previous run's leftover milliseconds. Codex implementation review of the redesign, round 2.
-    this.accumulatorMs = 0;
     this.dismissed = false;
     this.audioState = readAudioSettings(safeLocalStorage());
   }
@@ -203,23 +201,25 @@ export class TitleScene extends Phaser.Scene {
      * The backdrop, in three parts and in this order.
      *
      * 1. An OPAQUE rectangle, because `Game` is paused underneath rather than stopped and would show
-     *    through any gap the parallax art leaves. "No platforms, no player, no HUD" is the owner's
+     *    through any gap the plate leaves. "No platforms, no player, no HUD" is the owner's
      *    requirement, and only an opaque floor guarantees it.
-     * 2. The same three parallax layers the game draws, from `gameParallax.ts` — the identical
-     *    builder, so a texture key that stopped existing breaks the title and the level together
-     *    rather than silently drawing nothing here.
+     * 2. The generated title plate — one image, drawn at the live canvas size.
      * 3. Nothing else. No tiles, no sprites: this is a composed screen, not a frozen level.
      */
-    // 🔴 BELOW the parallax, which `createParallax` puts at depth -100..-98. The first version left
-    // this at the default depth 0 and painted an opaque rectangle straight over all three layers —
-    // the screen rendered as a flat dark field and looked exactly like the version it replaced.
+    // 🔴 BELOW the plate at depth -100. The first version left this at the default depth 0 and
+    // painted an opaque rectangle straight over the art — the screen rendered as a flat dark field
+    // and looked exactly like the version it replaced.
     this.backdrop = this.add
       .rectangle(0, 0, 10, 10, SCRIM_COLOUR, 1)
       .setOrigin(0)
       .setScrollFactor(0)
       .setDepth(-200);
-    this.parallax = createParallax(this);
-    // The panel goes ON TOP of the parallax and UNDER the text — the only thing that dims anything.
+    this.backdropImage = this.add
+      .image(0, 0, TITLE_BACKDROP_KEY)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(-100);
+    // The panel goes ON TOP of the plate and UNDER the text — the only thing that dims anything.
     this.panel = this.add.rectangle(0, 0, 10, 10, SCRIM_COLOUR, SCRIM_ALPHA).setOrigin(0.5).setScrollFactor(0);
     this.rules = [0, 1].map(() =>
       this.add.rectangle(0, 0, 10, RULE_PX, TITLE_FILL_HEX, RULE_ALPHA).setOrigin(0.5).setScrollFactor(0),
@@ -262,7 +262,7 @@ export class TitleScene extends Phaser.Scene {
       this.panel = undefined;
       this.rules = [];
       this.backdrop = undefined;
-      this.parallax = [];
+      this.backdropImage = undefined;
       this.hint = undefined;
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, teardown);
@@ -271,35 +271,13 @@ export class TitleScene extends Phaser.Scene {
     this.bindKeys();
   }
 
-  /**
-   * Drift the backdrop — **once per 60 Hz tick, not once per rendered frame**.
-   *
-   * ⚠️ This used to add `TITLE_DRIFT_PX_PER_TICK` on every `update`, under a comment arguing that
-   * counting frames satisfied the project's duration rule. It does not: `update` fires at the
-   * display's rate, so the same screen drifted 4x faster on this 240 Hz box than on the owner's
-   * 60 Hz one. The delta goes through `drainTicks` — the same seam `GameScene` uses, carrying its
-   * remainder and capping a stalled tab — and the drift advances by whole ticks.
-   *
-   * `renderParallax` is the same function `gameFrameDraw.ts` calls, taking a scroll in world pixels,
-   * so each layer's own factor still decides how fast it moves relative to the others.
-   */
-  override update(_time: number, delta: number): void {
-    if (this.parallax.length === 0) {
-      return;
-    }
-    const drained = drainTicks(this.accumulatorMs, delta);
-    this.accumulatorMs = drained.remainderMs;
-    this.drift += drained.ticks * TITLE_DRIFT_PX_PER_TICK;
-    renderParallax(this.parallax, this.drift);
-  }
-
   /** Centre everything against the LIVE size, never a literal (vault 6.2). */
   private applyLayout(): void {
     const { width, height } = this.scale.gameSize;
     this.backdrop?.setSize(width, height);
-    for (const { image } of this.parallax) {
-      image.setSize(width, height);
-    }
+    // `setDisplaySize`, not `setSize`: the plate is 1920x1080 and the canvas is too at the design
+    // size, but `Scale.FIT` is not the only path here — a resize spec drives the layout directly.
+    this.backdropImage?.setDisplaySize(width, height);
     // The panel is sized FROM the text it has to cover, so no ink can ever land outside it — which is
     // what keeps `title-contrast.test.ts`'s bound true rather than approximately true.
     const { w, h } = panelSize(width, height);

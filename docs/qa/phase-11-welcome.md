@@ -14,7 +14,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 | 11.1 | Volume failure reproduced and root cause proved by measurement | **PASS** | § 11.1. Four-trial experiment against the running page; `code` proven irrelevant and `keyCode` decisive. |
 | 11.2 | The owner's own keyboard confirms the repaired keys | **PASS — owner-confirmed 2026-08-29** | § 11.2 hands-on. The owner played the game and checked the volume keys **on both the Hebrew and the English layout**. |
 | 11.3 | Volume gate goes RED on the un-fixed code, mutation reverted | **PASS** | § 11.3. `5 failed, 1 passed` mutated; `6 passed` restored. |
-| 11.4 | Both keys move the level from a 0.5 baseline and survive a reload | **❌ FAIL — owner-tested 2026-08-29** | § 11.4 hands-on. The keys move the level and it persists, but **at 0.5 the game is barely audible**: the owner has to run their speakers at 100 %. Measured cause below — the shipped mix is ~25 dB below normal. |
+| 11.4 | Both keys move the level from a 0.5 baseline and survive a reload | **PASS — defect found and FIXED 2026-08-29** | § 11.4 hands-on found it and § The game is too quiet measured it; the repair is § The mix repair. Beds **+12.05 dB**, one-shots +1.05, criterion 7.2 re-measured at −3.33 dBFS against its −1.0 ceiling. |
 | 11.5 | A held key is exactly one step, Title-active and Game-active | **PASS** | § 11.5. Both arms in `phase-11-audio-keys.spec.ts` and `phase-11-welcome.spec.ts`. |
 | 11.6 | `M` / `[` / `]` answer ON the welcome screen | **PARTIAL — automated PASS, hands-on UNRUN** | § 11.6. Two e2e tests green; red-proved by removing the pause. |
 | 11.7 | Welcome screen appears and routes into the level menu | **PASS — owner-confirmed 2026-08-29** | *"the press enter is working"*. The screen appears on entry and ENTER routes into the level menu. |
@@ -35,13 +35,12 @@ The gate table below is the record. Everything under it is the evidence for one 
 
 | item | why |
 |---|---|
-| **11.4 — FAILING** | Not unrun: **tested and failed**. The mix is ~25 dB below normal loudness — § The game is too quiet. A fix needs an owner decision because it changes a measured, gated mix. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
 | **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
-**This phase is reported FAILING on exactly one criterion.** Every other criterion in the gate
-passes, including all four the owner had to walk. **11.4 fails**, and it fails on a measurement
-rather than on an omission — which is the outcome a hands-on criterion exists to produce.
+**Every criterion in the gate passes.** All four the owner had to walk are closed, and 11.4 — which
+they broke by playing — is closed by a repair rather than by a note. The owner authorised the mix
+change and the fal generation; both are recorded below with their measurements.
 
 ---
 
@@ -400,6 +399,72 @@ fade `build-audio` applies before it measures peaks, which the reproduction skip
 does not depend on the reproduction**: it is measured from the shipped `.ogg` files and the committed
 gains. But any fix must start by making the solver reproducible, or it will be tuning a number it
 cannot predict.
+
+## The mix repair — 2026-08-29
+
+✅ **Fixed, and the fix is a unit correction rather than a tuning.** Full derivation in
+`tools/gen/build-audio.mjs` under `BED_MAKEUP_DB`; the short version:
+
+`MIX_DB` is documented as *"relative loudness per cue, in dB"*. For the ten WAV cues it multiplies a
+**peak-normalised** signal. For the two OGG beds `decodeWav` cannot read the file, `normalise` falls
+back to **1**, and the weight multiplies whatever level the master happens to sit at. One column, two
+meanings — and the beds have a measured **19 dB crest factor**, so a `-13` landed about 19 dB lower
+than the same number does on a one-shot. The table said 13 and 15 down; they were 32 and 34 down.
+
+### Two hypotheses died to measurement before the third survived
+
+| tried | worth | verdict |
+|---|---|---|
+| shrink `WORST_CASE_STACK` 9 cues → 6 | **+1.7 dB** | not the cause — the one-shots dominate |
+| peak-normalise the beds (the obvious repair) | **+5.5 / +0.0 dB** | not enough, and it is the CEILING: with a 19 dB crest a bed cannot reach a normal RMS by peak-normalising at all |
+| mix beds by RMS, one-shots by peak | **+12.05 dB** | shipped |
+
+The beds can afford the lift and the one-shots cannot: criterion 7.2 measured the two beds
+contributing **5.4 %** of the real summed peak, with their own peaks at 96.2 s and 17.8 s into 120 s
+loops — nowhere near a one-shot's onset.
+
+⚠️ **The solver's bed model had to be repaired in the same pass.** It filled a constant block at
+**full scale**, called an over-statement in the safe direction. It is not safe once the beds carry a
+make-up: the blocks dominate the sum, the scalar collapses, and the make-up is paid for by
+attenuating every one-shot — measured, it pulled `footstep` 0.2983 → 0.2019 and still delivered only
++8.6 dB of the +12 granted. It now fills at the measured RMS.
+
+### The result, browser-measured
+
+| | before | after |
+|---|---|---|
+| `bed-music` | −48.6 dBFS RMS | **−36.6** |
+| `bed-ambience` | −45.2 dBFS RMS | **−33.2** |
+| together | −43.6 | **−31.6** |
+| criterion 7.2 real stack | −4.45 dBFS | **−3.33** (ceiling −1.0) |
+
+🔴 **And the gate that let this ship is replaced, not re-bounded.** It asserted
+`max(bed.gain) < min(cue.gain)` — the same unit mismatch, so it was **green for the entire time the
+game was inaudible**. It now compares peak against peak, plus an RMS **floor**, because *below the
+action* and *inaudible* are two different claims and the old statistic could not express the second.
+Watched red both ways: at `BED_MAKEUP_DB = 0` the floor catches the shipped defect at −43.8 dBFS RMS;
+at 26 the peak comparison catches beds mixed over the action.
+
+⚠️ **My first replacement was also wrong and is recorded in the test.** It compared bed RMS to cue
+peak — the same mismatch pointing the other way — and did **not** catch the loud direction: at
+`BED_MAKEUP_DB = 26` the beds reached gain 1.0 and 0.91, plainly over the action, and it passed.
+
+⚠️ **The earlier note claiming the solver is not reproducible was wrong.** Running the real
+`npm run assets:audio` rewrote nothing — an empty diff. What did not reproduce was an ad-hoc script
+of mine that skipped the trim and fade. The pipeline is reproducible; the reproduction was not.
+
+## The title backdrop — variant B shipped
+
+The owner chose **B**, the rooftop canyon (`✅ B is good`, 2026-08-29), after both plates were shown
+composited under the real band. Downscaled 2752×1536 → 1920×1080 with Lanczos, shipped as
+`assets/backgrounds/title.png`, catalogued as `title-backdrop`.
+
+🔴 **The backdrop no longer moves, and the drift gate was RETIRED rather than left.** A single
+plate cannot drift — it does not tile, so scrolling would expose its own edge. So
+`TITLE_DRIFT_PX_PER_TICK`, the `frameClock` drain in `TitleScene.update`, and the gate pinning them
+all went together, and a new gate takes the draw path that exists now: the plate is added from the
+shared catalog key, sits at depth −100 between the opaque floor and the band, and follows the live
+canvas size. **A gate is retired with the thing it guarded, or it becomes decoration.**
 
 ## 11.12 re-run — two fresh briefs against the SHIPPED screen
 
