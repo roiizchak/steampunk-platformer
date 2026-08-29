@@ -127,8 +127,11 @@ export const TITLE_INKS: ReadonlyArray<{ role: string; fill: string; designPx: n
  * finding 4. `title-contrast.test.ts` now asserts the two arguments actually reach the string.
  */
 export function audioHint(muted: boolean, volume: number): string {
+  // ⚠️ The two keys are separated. Written as `[ ] volume`, the pair rendered as two adjacent
+  // brackets with nothing between them — an empty checkbox or a missing glyph, not "press `[` to
+  // lower and `]` to raise". Criterion 11.12 brief A, finding 1, against the shipped screen.
   const level = muted ? 'muted' : `${Math.round(volume * 100)}%`;
-  return `M mute   ·   [ ] volume   ${level}`;
+  return `M mute   ·   [ / ] volume   ${level}`;
 }
 
 /**
@@ -158,7 +161,27 @@ export const TITLE_DRIFT_PX_PER_TICK = 2;
  * invalidating every contrast figure — and left the unit sweep, both pixel ratios and the whole e2e
  * suite green. Codex implementation review of the redesign, finding 3.
  */
-export const TITLE_ROWS: readonly number[] = [0.34, 0.45, 0.61, 0.72];
+export const TITLE_ROWS: readonly number[] = [0.34, 0.455, 0.569, 0.683];
+
+/**
+ * ⚠️ **These were `[0.34, 0.45, 0.61, 0.72]`, and BOTH criterion 11.12 briefs found the same
+ * defect in them independently** — the strongest signal a brief pair can give.
+ *
+ * The gaps were **0.11 / 0.16 / 0.11**: the middle one 45 % wider than its neighbours, leaving a
+ * visible empty band between the subtitle and the choice line that reads as a row having gone
+ * missing. Which is exactly what happened — the second choice line went when ENTER became the only
+ * way in — and the first re-spread shrank the hole rather than closing it, under a comment claiming
+ * it had been avoided.
+ *
+ * Brief A found the matching half: the OUTER margins were asymmetric too. The band spans 0.22 to
+ * 0.78; measured to the glyph box rather than the row centre, the heading cleared the top rule by
+ * 0.087 of the height while the hint cleared the bottom rule by 0.050 — the hint crowding a rule the
+ * title had nearly twice the room from.
+ *
+ * The values above solve both at once, against the four `designPx` in {@link TITLE_INKS}: equal
+ * gaps of 0.1143, and equal optical margins of **0.0867** at top and bottom. Derived, not nudged —
+ * from `r₁ - h₁/2 - 0.22 = 0.78 - (r₄ + h₄/2)` with the three gaps equal.
+ */
 
 /**
  * The panel behind the text, as a fraction of the live canvas.

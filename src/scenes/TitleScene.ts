@@ -308,11 +308,9 @@ export class TitleScene extends Phaser.Scene {
       rule.setPosition(width / 2, height / 2 + (i === 0 ? -h / 2 : h / 2)).setSize(w, RULE_PX);
     });
     // Fractions of the height, so the arrangement survives any viewport the scale manager hands us.
-    // FOUR rows now, not five — the second choice line went when ENTER became the only way in.
-    // The fractions live in `titleInk.ts` so `title-contrast.test.ts` can prove they land inside
-    // the panel its whole contrast premise depends on.
-    // Re-spread rather than left as [0.3, 0.4, 0.56, 0.64] with a hole at 0.82, which would have
-    // bunched everything into the top two thirds of the panel.
+    // FOUR rows, and they live in `titleInk.ts` — both because a unit test can then prove they land
+    // inside the panel the contrast premise depends on, and because the two re-spreads they have
+    // been through are worth reading before touching them. See `TITLE_ROWS`.
     const rows = TITLE_ROWS;
     this.items.forEach((item, index) => {
       item.setPosition(width / 2, height * (rows[index] ?? 0.5));

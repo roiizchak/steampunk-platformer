@@ -22,7 +22,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 | 11.9 | ESC and DEV scene keys cannot leak past the title | **PASS** | § 11.9. Red-proved by the same mutation. |
 | 11.10 | Title shows once per page load, incl. a restart while it is up | **PASS** | § 11.10. Three tests, including the re-pause case. |
 | 11.11 | Level select still shows correct lock state and gear totals | **UNRUN — owner-owned** | § What is NOT closed. |
-| 11.12 | Title readable and correctly laid out at 1920×1080 and on resize | **PARTIAL** | Two briefs ran against the FIRST design and their findings are applied (§ 11.12). The 2026-08-29 redesign replaced the screen they looked at, so the visual half is **unrun against what ships**. |
+| 11.12 | Title readable and correctly laid out at 1920×1080 and on resize | **PASS** | Two briefs against the first design, and **two more against the shipped one** — § 11.12 and § 11.12 re-run. 11 findings: 5 applied, 4 recorded, **2 refuted by measurement**. |
 | 11.13 | `sceneKey`/`ready`/`bootError` unmoved; surface still eight fields | **PASS** | § 11.13. Two e2e tests. |
 | 11.14 | The diff reviewed adversarially, two briefs | **PASS** | Two briefs ran, findings applied (§ 11.14). The redesign diff on top of them went through the Codex implementation review, [reviews/phase-11-impl.md](../reviews/phase-11-impl.md) Review B. |
 | 11.15 | Full e2e suite green at the expected COUNT | **PASS** | `npm run test:e2e` — **184 passed, 0 failed**, exit 0, 26.4 min. Count read positively: 183 before the redesign's new route spec, 184 after. |
@@ -36,11 +36,10 @@ The gate table below is the record. Everything under it is the evidence for one 
 | item | why |
 |---|---|
 | **11.2, 11.4 (audible half), 11.7 (routing), 11.11** | `play`-owned. Per *(C4)* and the `playtest-finds-what-gates-cannot` rule, a hands-on criterion is **never** reported done on automated evidence. 11.2 in particular needs the **Hebrew layout**, which is the only thing that can confirm the real-world defect is the one that was fixed. |
-| **11.12** | Its two briefs ran, but against the design the owner then replaced. The visual half needs re-running against the shipped screen. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
-| **The `playToExit` production spec** | Fails on this branch — and **also on `main` at `6da76b7`**. Pre-existing, not introduced here. See § The production flake. |
+| **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
-**This phase is therefore reported FAILING, not done.** Eight criteria are unrun or partial.
+**This phase is therefore reported FAILING, not done.** Four criteria are owner-owned and unrun.
 
 ---
 
@@ -328,6 +327,73 @@ Two briefs *(A7)*. What they found, each cited in place in the code it changed:
   deleting the title's guard left the whole suite green.
 - **`prodTitle.ts` contained two docstrings contradicting each other** about which frame is asserted
   first. The code was right and the prose was wrong — corrected rather than the other way round.
+
+## 11.12 re-run — two fresh briefs against the SHIPPED screen
+
+The first pair looked at a flat scrim. The owner replaced that design, so the visual half was re-run
+against what actually ships: four captures at 1920×1080, 1280×720, 2560×1080 and 852×480, in
+`docs/evidence/phase-11/`. Two briefs *(A7)*, launched in parallel so brief 1's findings could not
+reach brief 2 — the withholding is structural, not a promise.
+
+**Eleven findings. Five applied, four recorded, two refuted by measurement.**
+
+### The one both briefs found independently — applied
+
+`TITLE_ROWS` was `[0.34, 0.45, 0.61, 0.72]`: gaps of **0.11 / 0.16 / 0.11**, the middle one 45 %
+wider than its neighbours. Both briefs described the same thing without either seeing the other's
+report — *"reads as a visible empty band"*, *"looks like a row is missing, not like four rows spread
+by hand"*. It **was** a missing row: the second choice line went when ENTER became the only way in,
+and the first re-spread shrank the hole rather than closing it, under a comment claiming it had been
+avoided. Brief A found the matching half: measured to the glyph box, the heading cleared the top rule
+by 0.087 of the height and the hint cleared the bottom rule by **0.050**.
+
+Now `[0.34, 0.455, 0.569, 0.683]` — equal 0.1143 gaps and equal 0.0867 optical margins, **derived**
+from the four `designPx` and the band's extent rather than nudged by eye. The geometry gate proves
+every glyph box still lands inside the band.
+
+### Applied
+
+- **The volume hint read as an empty checkbox.** `[ ] volume` rendered as two adjacent brackets with
+  nothing between them — indistinguishable from a missing glyph, on the one screen that teaches the
+  keys this phase exists to repair. Now `[ / ] volume`.
+- **No capture at the width the code calls smallest supported.** `titleInk.ts` derives its CSS-px
+  table against an 852 px window and the narrowest evidence was 1280. Captured.
+
+### Recorded, not applied *(C11)*
+
+- **The band's horizontal edges cut through mechanical shapes** (brief B) — the top edge through the
+  coiled hose upper-right, the bottom through the boiler lower-left. B argues this is the owner's
+  original complaint rotated 90°. **Not applied, and it is a judgement call rather than a
+  measurement:** edges parallel to the frame read as a letterbox, which is an idiom a title card
+  already implies; the rejected vertical edges had no such reading. Feathering them would also break
+  the contrast sweep's premise — every glyph on a uniform `SCRIM_ALPHA` composite — at exactly the
+  rows nearest the edges. **Offered to the owner rather than decided here.**
+- **No pointer input** (brief B) — the screen is shaped like a clickable card and a click does
+  nothing. Real, and **not cheap**: `bootToTitle` and `dismissTitle` both call
+  `page.locator('canvas').click()` to focus the page before sending keys, so a `pointerdown`
+  dismissal would fire on the focus click and every title spec would lose the screen before its first
+  assertion. Owed forward with that constraint attached.
+- **Volume-up is a no-op at the default 100 %, and the hint cannot say so** (brief B). Already an
+  open item — see § The second defect. B's fix (flash "already max") is a real improvement and
+  belongs with the step-size decision, not smuggled in beside it.
+- **The top hairline is translucent and bright backdrop features show through it** (brief A).
+  Measured: at the rule row, **67 of 1920 columns** deviate more than 30 lum from the line's mean of
+  146 — and they are *brighter*, not the dark scratch the brief described. The mechanism is right and
+  is deliberate: `RULE_ALPHA` 0.55 is what keeps the hairline a hairline. Left alone.
+
+### 🔴 Refuted by measurement — a brief's summary is a claim, not evidence
+
+- **"A flat, undetailed strip at the left edge reads as a parallax seam"** (brief A, x 0–220).
+  Column-luminance standard deviation over the full height, sampled every 2 px × 6 px:
+  **x 0–220 → 38.1**, x 220–440 → 24.2, x 440–660 → 31.7, x 900–1120 → 38.4, x 1700–1920 → 30.1.
+  The band called featureless has the **highest** variance of the five. Not a defect.
+- **"At wide aspect ratios the parallax visibly tiles and mirrors"** (brief B, rated MEDIUM-HIGH and
+  called *"the single strongest piece of evidence"* against the art direction). `Scale.FIT`
+  pillarboxes: in `title-2560x1080.png`, columns 0–319 and 2240–2559 hold a uniform page background
+  at luminance **16.4**, and the game occupies exactly 1920 px between them — the same frame as the
+  1920 capture, not a wider one. **The parallax does not extend at wider aspects at all**, so it
+  cannot repeat there. The "duplicate windows and hose loops" are the building's own repeated
+  architecture, present identically in the 16:9 capture.
 
 ## The redesign — 2026-08-29, and the owner's decision behind it
 
