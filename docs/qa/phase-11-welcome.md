@@ -21,7 +21,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 | 11.8 | The simulation does not advance under the title | **PASS** | § 11.8. 40-frame in-page sample; red-proved by removing `pause()`. |
 | 11.9 | ESC and DEV scene keys cannot leak past the title | **PASS** | § 11.9. Red-proved by the same mutation. |
 | 11.10 | Title shows once per page load, incl. a restart while it is up | **PASS** | § 11.10. Three tests, including the re-pause case. |
-| 11.11 | Level select still shows correct lock state and gear totals | **PARTIAL — lock state owner-confirmed 2026-08-29** | *"the menu is about the lock and unlock levels"*. **The GEAR TOTALS half was not reported and is not assumed.** |
+| 11.11 | Level select still shows correct lock state and gear totals | **PASS — owner-confirmed 2026-08-29** | Lock state: *"the menu is about the lock and unlock levels"*. Gear totals: *"The gear's total is ok"*. Both halves reported, separately. |
 | 11.12 | Title readable and correctly laid out at 1920×1080 and on resize | **PASS** | Two briefs against the first design, and **two more against the shipped one** — § 11.12 and § 11.12 re-run. 11 findings: 5 applied, 4 recorded, **2 refuted by measurement**. |
 | 11.13 | `sceneKey`/`ready`/`bootError` unmoved; surface still eight fields | **PASS** | § 11.13. Two e2e tests. |
 | 11.14 | The diff reviewed adversarially, two briefs | **PASS** | Two briefs ran, findings applied (§ 11.14). The redesign diff on top of them went through the Codex implementation review, [reviews/phase-11-impl.md](../reviews/phase-11-impl.md) Review B. |
@@ -36,11 +36,12 @@ The gate table below is the record. Everything under it is the evidence for one 
 | item | why |
 |---|---|
 | **11.4 — FAILING** | Not unrun: **tested and failed**. The mix is ~25 dB below normal loudness — § The game is too quiet. A fix needs an owner decision because it changes a measured, gated mix. |
-| **11.11 — half reported** | Lock state confirmed; **gear totals not reported**, and not assumed from silence. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
 | **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
-**This phase is therefore reported FAILING, not done.** 11.4 is a measured FAILURE, and 11.11 is half-reported.
+**This phase is reported FAILING on exactly one criterion.** Every other criterion in the gate
+passes, including all four the owner had to walk. **11.4 fails**, and it fails on a measurement
+rather than on an omission — which is the outcome a hands-on criterion exists to produce.
 
 ---
 

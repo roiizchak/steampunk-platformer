@@ -52,8 +52,11 @@ barrier. Production ships no debug surface, so pixels are the only signal.
   `index.json` and moves the number criterion 7.2 was measured against, so it is a STOP-and-ask.
   ⚠️ **Start by making the solver reproducible** — a re-solve computes `bed-music` at 0.1089 against
   the shipped 0.0632, almost certainly the trim and fade it skips.
-- **11.11 — half reported.** Lock state confirmed by the owner; **gear totals not reported**.
-- ✅ **11.7 is CLOSED** — *"the press enter is working"*.
+- ✅ **11.7 and 11.11 are CLOSED** — *"the press enter is working"*, and both halves of the menu
+  reported separately: lock state, then *"The gear's total is ok"*.
+
+**Every criterion in the gate now passes except 11.4.** The phase is failing on one measured defect,
+not on unrun work.
 - **The title backdrop.** Two fal plates generated 2026-08-29 with the owner's authorisation, $0.30,
   in `_generated/title-backdrop/` (gitignored; request ids are in GENERATION-LOG.md). **Variant B is
   the usable one — A has the compositing band baked into it, because the prompt described it.**
