@@ -246,7 +246,7 @@ test.describe('Phase 11 — the audio listener does not survive its own scene', 
     await page.keyboard.press('BracketLeft');
 
     // 0.4 is one step. 0.3 would be two listeners, which is the defect.
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
 
   /**
@@ -271,6 +271,6 @@ test.describe('Phase 11 — the audio listener does not survive its own scene', 
     // A real press after it, so this cannot pass by the whole path being dead.
     await page.keyboard.press('BracketLeft');
 
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
 });

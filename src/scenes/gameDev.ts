@@ -35,6 +35,7 @@ import type { PinProbe } from './devPinProbe';
 import { createMotionProbe, type MotionProbe } from './devMotionProbe';
 import { spawnDevEnemies, spawnDevFleet } from './devSpawn';
 import type { World } from '../sim/types';
+import type { AudioSettings } from '../game/audioSettings';
 
 /**
  * DEV-only spawn constants for criteria 5.11 and 5.7 — the two things combat itself cannot produce
@@ -117,7 +118,7 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
  * scene-key sweep could not see it: the string says "playground" in lowercase, inside a longer
  * literal, and the sweep looks for a quoted `Playground`.
  */
-export function helpLine(): string {
+export function helpLine(audio?: AudioSettings): string {
   // Phase 7's audio keys are in the SHIPPED half deliberately. A mute control the player cannot
   // discover is a mute control they do not have, and this banner is the only place the game
   // currently tells anyone what the keys are.
@@ -134,9 +135,21 @@ export function helpLine(): string {
   // a unit. The DEV suffix below deliberately keeps ordinary spaces — `verify-dist.mjs` sweeps
   // `dist/` for the literal phrases `'p play'`, `'o editor'` and `' gym'`, and rewriting them here
   // would make that sweep unable to match, which is a gate narrowed by a change somewhere else.
+  //
+  // 🔴 **The volume's VALUE is printed beside its keys — and it is the only readout in play.**
+  // Nothing in the game showed it. At the top of the ladder `]` cannot do anything, so a player who
+  // tried the key this banner advertises got silence with no way to tell "already at maximum" from
+  // "still broken" — which is the reading the owner reported before the dispatch bug was even found.
+  // The value is joined with a non-breaking space for the reason the paragraph above gives: a level
+  // that wraps away from `volume` is a number adrift from the thing it measures.
+  //
+  // `audio` is optional so a caller with no manager — `ElementEditorScene`'s own override does not
+  // pass one — gets the bare line rather than a `NaN%`.
+  const level =
+    audio === undefined ? '' : ` ${audio.muted ? 'muted' : `${Math.round(audio.volume * 100)}%`}`;
   const base =
     'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
-    'SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume  ·  ' +
+    `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
     'ESC levels';
   // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
   // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the

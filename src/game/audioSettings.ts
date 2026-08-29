@@ -47,14 +47,43 @@ export interface AudioSettings {
  */
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = { muted: false, volume: 1 };
 
-/** Ten presses from silent to full. */
-export const VOLUME_STEP = 0.1;
+/**
+ * The volume ladder — ten stops, and they are NOT ten equal tenths.
+ *
+ * ## 🔴 Why a table and not `volume ± 0.1`
+ *
+ * It was `VOLUME_STEP = 0.1`, and the owner reported the result plainly: the keys worked and barely
+ * did anything. **Loudness is logarithmic and gain is not**, so an even step in gain is a wildly
+ * uneven step in what a player hears. Measured across the old ladder:
+ *
+ * | press | gain | change heard |
+ * |---|---|---|
+ * | 1.0 → 0.9 | −0.10 | **−0.92 dB** — at the edge of audible |
+ * | 0.5 → 0.4 | −0.10 | −1.94 dB |
+ * | 0.2 → 0.1 | −0.10 | **−6.02 dB** — six times the first step, for the same key |
+ *
+ * So the control was nearly inert where players live — near the top — and lurched at the bottom.
+ * The stops below are spaced **~3 dB** apart, which is an even and clearly audible step everywhere on
+ * the ladder, and they are rounded to two places so the persisted number stays readable and stable
+ * across a reload *(criterion 7.4)*.
+ *
+ * ⚠️ **The percentages a player sees are therefore uneven — 100, 71, 50, 35 — and that is
+ * correct rather than a rounding artefact.** The number is a fraction of full scale; the ear hears
+ * the ratio between consecutive stops, and that ratio is constant. A ladder whose printed numbers
+ * are even is exactly the one that failed.
+ *
+ * Ascending, so `stepVolume` can walk it in either direction with one comparison.
+ */
+export const VOLUME_LADDER: readonly number[] = [0, 0.06, 0.09, 0.13, 0.18, 0.25, 0.35, 0.5, 0.71, 1];
 
 /** The slice of `Storage` this module needs. Narrow on purpose, so a fake is three lines. */
 export interface SettingsStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
 }
+
+/** Smaller than the gap between any two stops by four orders of magnitude. */
+const LADDER_EPSILON = 1e-6;
 
 function clampVolume(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -108,15 +137,32 @@ export function writeAudioSettings(storage: SettingsStorage | null, settings: Au
 }
 
 /**
- * Move the volume one step, clamped.
+ * Move to the next stop up or down the ladder, clamped at both ends.
  *
- * Rounded to two places because repeated float addition drifts: ten `+0.1` steps from zero reach
- * `0.9999999999999999`, which is inaudibly different from 1 and *visibly* different to an assertion.
- * Criterion 7.4 compares a persisted number across a reload, and a gate that flakes on float dust
- * is a gate nobody trusts.
+ * 🔴 **Strictly above / strictly below, never "nearest stop then ±1".** A stored volume need not
+ * be on the ladder at all — a save written before the ladder existed, or a hand-edited
+ * `localStorage` — and nearest-then-step can move the wrong way: from `0.36`, the nearest stop is
+ * `0.35`, so a press of `[` would return `0.25` and skip straight past a stop that was already
+ * below the player. Walking to the first stop strictly on the requested side is monotone from any
+ * starting value, on or off the ladder.
+ *
+ * The epsilon is float dust, not tolerance: every stop is a two-place literal and every stored
+ * value is one of them, so the only thing it absorbs is `0.35`-as-parsed differing from
+ * `0.35`-as-written in the last bit.
  */
 export function stepVolume(volume: number, direction: 1 | -1): number {
-  return clampVolume(Math.round((volume + direction * VOLUME_STEP) * 100) / 100);
+  const current = clampVolume(volume);
+  if (direction === 1) {
+    return VOLUME_LADDER.find((stop) => stop > current + LADDER_EPSILON) ?? 1;
+  }
+  // No `findLast`: it needs lib ES2023, and this project pins neither the lib nor a polyfill.
+  let below = 0;
+  for (const stop of VOLUME_LADDER) {
+    if (stop < current - LADDER_EPSILON) {
+      below = stop;
+    }
+  }
+  return below;
 }
 
 /**

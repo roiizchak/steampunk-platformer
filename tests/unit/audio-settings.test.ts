@@ -26,7 +26,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AUDIO_SETTINGS_KEY,
   DEFAULT_AUDIO_SETTINGS,
-  VOLUME_STEP,
+  VOLUME_LADDER,
   readAudioSettings,
   stepVolume,
   writeAudioSettings,
@@ -115,9 +115,9 @@ describe('writeAudioSettings', () => {
 });
 
 describe('stepVolume', () => {
-  it('moves by one step in each direction', () => {
-    expect(stepVolume(0.5, 1)).toBeCloseTo(0.5 + VOLUME_STEP, 5);
-    expect(stepVolume(0.5, -1)).toBeCloseTo(0.5 - VOLUME_STEP, 5);
+  it('moves to the next stop in each direction', () => {
+    expect(stepVolume(0.5, 1)).toBe(0.71);
+    expect(stepVolume(0.5, -1)).toBe(0.35);
   });
 
   it('clamps at both ends instead of running past them', () => {
@@ -126,12 +126,70 @@ describe('stepVolume', () => {
   });
 
   it('lands exactly on 0 and 1 rather than near them', () => {
-    // Repeated float addition drifts, and a volume of 0.9999999 is indistinguishable from 1 by ear
-    // but not by an assertion — which makes criterion 7.4's persistence check flaky for no reason.
+    // A volume of 0.9999999 is indistinguishable from 1 by ear but not by an assertion — which
+    // makes criterion 7.4's persistence check flaky for no reason. Reading the stops out of a table
+    // rather than accumulating them is what makes this true by construction.
     let volume = 0;
     for (let i = 0; i < 40; i += 1) volume = stepVolume(volume, 1);
     expect(volume).toBe(1);
     for (let i = 0; i < 40; i += 1) volume = stepVolume(volume, -1);
     expect(volume).toBe(0);
+  });
+
+  it('walks the whole ladder and visits every stop exactly once', () => {
+    const climbed: number[] = [];
+    let volume = 0;
+    for (let i = 0; i < VOLUME_LADDER.length - 1; i += 1) {
+      volume = stepVolume(volume, 1);
+      climbed.push(volume);
+    }
+    expect(climbed, 'a press must never skip a stop or repeat one').toEqual(
+      VOLUME_LADDER.slice(1),
+    );
+  });
+
+  /**
+   * 🔴 The gate the OLD ladder fails, and the whole reason this one exists.
+   *
+   * The complaint was not "the keys do nothing" — they worked. It was that a press near the top
+   * changed nothing audible while a press near the bottom lurched. That is a statement about the
+   * RATIO between consecutive stops, so that is what is asserted; a bound on the gain difference
+   * cannot express it and is the statistic that shipped the defect.
+   *
+   * Watched red against the old ladder: ten linear tenths measure 6.02 dB from 0.1 to 0.2 and 0.92
+   * dB from 0.9 to 1.0 \u2014 both ends failing this range, from opposite directions.
+   */
+  it('every audible step is the same size TO THE EAR, not to the number', () => {
+    const audible = VOLUME_LADDER.filter((stop) => stop > 0);
+    const stepsDb = audible
+      .slice(1)
+      .map((stop, i) => 20 * Math.log10(stop / audible[i]!));
+
+    for (const [i, db] of stepsDb.entries()) {
+      expect(db, `step ${i} of the ladder is ${db.toFixed(2)} dB`).toBeGreaterThan(2.5);
+      expect(db, `step ${i} of the ladder is ${db.toFixed(2)} dB`).toBeLessThan(3.6);
+    }
+    // And the ladder has to cover a useful range, or an even step is even and useless.
+    expect(20 * Math.log10(audible[0]! / 1), 'the quietest audible stop').toBeLessThan(-20);
+  });
+
+  /**
+   * A stored volume need not be ON the ladder: a save written before the ladder existed, or a
+   * hand-edited `localStorage`. Nearest-stop-then-step would move the wrong way from 0.36 — nearest
+   * is 0.35, so `[` would return 0.25 and skip a stop that was already below the player.
+   */
+  it.each([
+    [0.36, 0.35, 0.5],
+    [0.4, 0.35, 0.5],
+    [0.9, 0.71, 1],
+    [0.01, 0, 0.06],
+  ])('an off-ladder %s steps down to %s and up to %s', (from, down, up) => {
+    expect(stepVolume(from, -1)).toBe(down);
+    expect(stepVolume(from, 1)).toBe(up);
+  });
+
+  it('a volume outside 0–1 is clamped before it is stepped', () => {
+    expect(stepVolume(5, -1)).toBe(0.71);
+    expect(stepVolume(-5, 1)).toBe(0.06);
   });
 });

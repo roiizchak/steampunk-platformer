@@ -3,7 +3,7 @@ import { devSeam } from '../debug/devSeam';
 import { latchAttackPress, latchJumpPress } from '../sim/input';
 import type { InputSnapshot } from '../sim/types';
 import type { AudioManager } from '../game/audio';
-import { applyAudioAction, audioActionForCode } from './audioKeyMap';
+import { AUDIO_CHANGED, applyAudioAction, audioActionForCode } from './audioKeyMap';
 
 /**
  * The keyboard half of `GameScene`: binding keys to `Phaser.Input.Keyboard.Key` objects and
@@ -265,6 +265,10 @@ export function bindPlayerKeys(
         return;
       }
       applyAudioAction(manager, action);
+      scene.events.emit(AUDIO_CHANGED);
+      // 🔴 The banner is the only readout of the volume in play, and it draws from a provider it
+      // re-reads on this event. Without the emit the number moves and nothing on screen does — the
+      // same silent no-op this change exists to remove, just one layer further down.
     };
     target.addEventListener('keydown', onAudioKey as EventListener);
     target.addEventListener('keyup', forgetPrevious);

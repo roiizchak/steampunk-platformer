@@ -65,6 +65,7 @@ describe('applyAudioAction', () => {
           calls.push(`nudgeVolume(${direction})`);
           return 0.5;
         },
+        settings: () => ({ muted: false, volume: 0.5 }),
         destroy: () => {},
       },
     };

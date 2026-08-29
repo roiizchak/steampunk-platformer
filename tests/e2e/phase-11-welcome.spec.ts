@@ -136,7 +136,7 @@ test.describe('Phase 11 — 11.6 the audio keys answer on the welcome screen', (
     await bootToTitle(page);
 
     await page.keyboard.press('BracketLeft');
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
 
   test('mute works while the title is up', async ({ page }) => {
@@ -207,6 +207,6 @@ test.describe('Phase 11 — 11.5 the title has its own repeat guard, and it is n
     // Then a real press, so the assertion cannot pass by nothing working at all.
     await fireKey(page, 'BracketLeft', false);
 
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
 });

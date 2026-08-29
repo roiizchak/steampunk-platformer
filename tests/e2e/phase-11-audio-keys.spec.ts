@@ -42,6 +42,7 @@
 import { expect, test } from '@playwright/test';
 import { bootToGame } from './gameHarness';
 import { storedSettings } from './audioHelpers';
+import { readBanner } from './bannerHelpers';
 import './debugView';
 
 const KEY = 'steampunk.audio';
@@ -115,7 +116,7 @@ test.describe('Phase 11 — 11.3 the volume keys are layout-independent', () => 
     expect(
       (await storedSettings(page))?.volume,
       'the bracket key must be read by POSITION, not by a layout-assigned keyCode',
-    ).toBe(0.4);
+    ).toBe(0.35);
   });
 
   test('a keyCode of zero is no obstacle either', async ({ page }) => {
@@ -124,7 +125,7 @@ test.describe('Phase 11 — 11.3 the volume keys are layout-independent', () => 
 
     await fireKey(page, 'BracketRight', 0);
 
-    expect((await storedSettings(page))?.volume).toBe(0.6);
+    expect((await storedSettings(page))?.volume).toBe(0.71);
   });
 
   /**
@@ -185,7 +186,7 @@ test.describe('Phase 11 — 11.5 a held key is one press', () => {
         }),
     );
 
-    expect((await storedSettings(page))?.volume).toBe(0.4);
+    expect((await storedSettings(page))?.volume).toBe(0.35);
   });
 });
 
@@ -220,7 +221,7 @@ test.describe('Phase 11 — the dispatch GATE, not only the interpretation', () 
 
     await expect
       .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
-      .toBe(0.4);
+      .toBe(0.35);
   });
 
   /**
@@ -244,7 +245,7 @@ test.describe('Phase 11 — the dispatch GATE, not only the interpretation', () 
 
     await expect
       .poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 })
-      .toBe(0.4);
+      .toBe(0.35);
   });
 });
 
@@ -283,8 +284,8 @@ test.describe('Phase 11 — the duplicate-event bailout the plugin used to provi
     await fireAt(page, 'keydown', 4242);
     await fireAt(page, 'keydown', 4242);
 
-    // 0.4 is one step. 0.3 would be the duplicate being honoured.
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    // 0.35 is one step down the ladder. 0.25 would be the duplicate being honoured.
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
 
   test('but a RELEASE between them makes the second press real', async ({ page }) => {
@@ -298,7 +299,7 @@ test.describe('Phase 11 — the duplicate-event bailout the plugin used to provi
     await fireAt(page, 'keyup', 5150);
     await fireAt(page, 'keydown', 5150);
 
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.3);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.25);
   });
 });
 
@@ -343,6 +344,50 @@ test.describe('Phase 11 — the listener honours what Phaser decided about the e
 
     // And a normal press still works, so the assertion above is not passing on a dead path.
     await fireKey(page, 'BracketLeft', 219);
-    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
+  });
+});
+
+/**
+ * The readout — the half of this defect that survived the dispatch fix.
+ *
+ * 🔴 **The unit gate for this runs against a FAKE scene, and a fake cannot prove Phaser
+ * delivers the event.** `volume-readout.test.ts` drives the layer's own branch logic and asserts
+ * source text for the emit, because `gameInput.ts` value-imports the engine and cannot be driven in
+ * Node at all. What it CANNOT show is that a real `Phaser.Events.EventEmitter` on a real scene
+ * carries `AUDIO_CHANGED` from the DOM listener to a real `Text` object. That is this test, and it
+ * is the only place the whole chain exists at once.
+ */
+test.describe('Phase 11 — the volume has a readout in play, and it moves', () => {
+  test('the controls banner prints the level, and a press changes what it prints', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    const before = await readBanner(page);
+    expect(before.text, 'the banner must print the level beside the keys it advertises').toContain(
+      '50%',
+    );
+
+    await page.keyboard.press('BracketLeft');
+
+    // Polled, not read once: the emit is synchronous but the Text object is re-laid-out on the
+    // scene's next update, and a single read can land between the two.
+    await expect
+      .poll(async () => (await readBanner(page)).text, { timeout: 5_000 })
+      .toContain('35%');
+    // And the OLD value is gone — a banner that appended rather than replaced would satisfy the
+    // assertion above while showing the player two contradictory numbers.
+    expect((await readBanner(page)).text).not.toContain('50%');
+  });
+
+  test('muting says so instead of printing a number', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.keyboard.press('m');
+
+    await expect
+      .poll(async () => (await readBanner(page)).text, { timeout: 5_000 })
+      .toContain('muted');
   });
 });

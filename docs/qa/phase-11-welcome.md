@@ -35,7 +35,7 @@ The gate table below is the record. Everything under it is the evidence for one 
 
 | item | why |
 |---|---|
-| **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
+| **The volume STEP SIZE** | **Fixed 2026-08-29 on owner instruction.** § The second defect — fixed.  |
 | **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
 **Every criterion in the gate passes.** All four the owner had to walk are closed, and 11.4 — which
@@ -188,18 +188,85 @@ field was added and none was needed.
 `applyCameraRig` takes the sprite as a **third argument** because `GameScene.playerSprite` is
 private — a two-argument signature was specified first and could not have compiled.
 
-## The second defect — real, and deliberately not fixed *(C11)*
+## The second defect — fixed 2026-08-29, on the owner's instruction
 
-Independent of the layout, and true on any keyboard:
+Recorded first as a deliberate non-fix *(C11)*, then fixed when the owner said *"yeah, fix it."*
+What was wrong, independent of the layout and true on any keyboard:
 
 - `stepVolume(1, +1)` clamps back to `1`, so **volume-up is a genuine no-op on a fresh save**.
 - One step down from 1.0 is 0.9 linear gain — about **0.9 dB**, at the edge of audibility.
-- There is **no HUD feedback** for either.
+- There is **no readout** for either, anywhere in the game.
 
-So even with dispatch repaired, a player at default volume who presses `]` and then `[` may
-reasonably report that nothing happens. This is a **separate defect** from the one this phase fixed,
-it is not fixed here, and it is a candidate for the next phase. Recorded rather than silently
-bundled, because bundling it would have made the dispatch fix impossible to evaluate on its own.
+### The step size was an even step in the WRONG UNIT
+
+`VOLUME_STEP = 0.1` moves the gain by a tenth. Loudness is logarithmic, so an even step in gain is a
+wildly uneven step in what a player hears — measured across the old ladder:
+
+| press | gain change | change heard |
+|---|---|---|
+| 1.0 → 0.9 | −0.1 | **−0.92 dB** — at the edge of audible |
+| 0.5 → 0.4 | −0.1 | −1.94 dB |
+| 0.2 → 0.1 | −0.1 | **−6.02 dB** — six and a half times the first, from the same key |
+
+So the control was nearly inert where players live and lurched at the bottom. `VOLUME_STEP` is
+replaced by `VOLUME_LADDER`, ten stops spaced **~3 dB** apart:
+`0 · 0.06 · 0.09 · 0.13 · 0.18 · 0.25 · 0.35 · 0.5 · 0.71 · 1`.
+
+⚠️ **The percentages a player now sees are uneven — 100, 71, 50, 35 — and that is the point, not a
+rounding artefact.** The printed number is a fraction of full scale; the ear hears the *ratio*
+between consecutive stops, and that ratio is what is now constant. A ladder whose printed numbers
+are even is exactly the one that failed.
+
+`stepVolume` walks to the first stop **strictly** above or below the current value rather than
+snapping to the nearest and adding one — a stored value need not be on the ladder at all (an old
+save, a hand-edited `localStorage`), and nearest-then-step moves the wrong way from `0.36`.
+
+### The readout — and the ordering bug it shipped with
+
+The controls banner now prints the level beside the keys that move it: `[ ] volume 50%`, or
+`[ ] volume muted`. It is the only readout in play, and at the top of the ladder it is the *whole*
+answer to the first complaint — `]` cannot do anything at 100 %, and now the screen says so.
+
+The chain is: `gameInput`'s listener emits `AUDIO_CHANGED` on the owning scene → `HelpBannerLayer`
+marks itself dirty → its next layout re-reads a content **provider** instead of a string captured at
+construction. An event rather than a callback argument because `GameScene.ts` sits one line under the
+hard 400-line ceiling and cannot afford the threading.
+
+🔴 **The first attempt shipped a real defect and an e2e test caught it.** `refresh()` set the text
+itself, which is correct only if the text was right at `create()` — and it is not: `attachHud` runs
+**before** `createAudio` in `GameScene.create()`, so there is no manager to ask and the banner would
+have carried no level at all until the player pressed a key. The unit gates were all green, because
+they drive a fake whose provider is ready immediately. Re-reading the provider on every **layout**
+fixes it without reordering `create()`, and a unit case now covers exactly that ordering.
+
+### Gates, each watched red *(C1)* and confirmed reverted *(C12)*
+
+| gate | mutation | result |
+|---|---|---|
+| the ladder is even to the EAR | restore the ten linear tenths | `step 0 of the ladder is 6.02 dB: expected 6.020599913279624 to be less than 3.6` |
+| every stop is visited once | — | fails with the linear ladder too (7 of 36 red) |
+| the banner re-reads its provider | delete `banner.setText(this.content())` from `layout()` | 3 failed / 8 passed |
+| the event is what makes it re-read | delete the `on(AUDIO_CHANGED)` | 3 failed / 8 passed |
+| the listener is dropped on shutdown | delete the `off(AUDIO_CHANGED)` | 1 failed / 10 passed |
+| the press announces itself | delete `scene.events.emit(AUDIO_CHANGED)` | 1 failed / 9 passed |
+| `helpLine` reads its argument | return a fixed `100%` | 5 failed / 5 passed |
+| the scene hands over a provider | capture the string at `create()` | 1 failed / 9 passed |
+
+**And the readout has an e2e gate of its own**, because every unit gate above runs against a fake
+scene: `phase-11-audio-keys.spec.ts` boots the real game at 0.5, reads the drawn banner, presses `[`,
+and requires the text to reach `35%` **and stop containing `50%`** — an append rather than a replace
+would satisfy the first half while showing the player two contradictory numbers.
+
+### Verification
+
+`npm test` 2808 passed / 192 files · `npm run build` clean, `verify-dist ok` · `npm run test:e2e`
+**185 passed, 1 failed**, the failure being `phase-06-perf` 6.9.
+
+⚠️ **6.9 failed in isolation too, so it was A/B'd rather than called a flake.** Same session, same
+box: branch **0.2330 ms** (fail), `main` stashed **0.0323 ms** (pass), branch again **−0.0189 ms**
+(pass) — against a 0.2 ms bound. The absolute GPU numbers moved by an order of magnitude between
+runs in *both* arms, which is the noise shape `QA-LOG.md` already records for this gate. The change
+adds no per-frame work: `setText` fires only when the banner is dirty, which this spec never makes it.
 
 ## The production barrier's bound — measured, not chosen *(C1, and the held-out rule)*
 
@@ -616,5 +683,5 @@ describing the removed route.
 `title-contrast.test.ts` reached 404 lines applying these and was split at the seam its own prose
 already named — `tests/unit/title-drawpath.test.ts`.
 
-**Owed forward:** the volume step size and its missing feedback; the pre-existing `playToExit`
-production flake; and the five owner-owned criteria.
+**Owed forward:** the pre-existing `playToExit` production flake. The five owner-owned criteria are
+closed, and so is the volume step size — see § The second defect.

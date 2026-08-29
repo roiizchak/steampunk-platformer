@@ -65,6 +65,14 @@ export interface AudioManager {
   toggleMute(): boolean;
   /** Nudge master volume one step and persist it. Returns the new volume. */
   nudgeVolume(direction: 1 | -1): number;
+  /**
+   * What the player currently has — a COPY of our own flag, never a WebAudio readback.
+   *
+   * The header above says why that distinction is load-bearing: on a context that has not resumed,
+   * reading `sound.volume` returns the value before the scheduled write. This module's `settings`
+   * object is the truth, and the copy stops a caller mutating it from outside.
+   */
+  settings(): AudioSettings;
   /** Stop and REMOVE both beds, and unsubscribe the exact unlock handler. Idempotent. */
   destroy(): void;
 }
@@ -263,6 +271,10 @@ function stallPerCue(): void {
       apply();
       writeAudioSettings(storage, settings);
       return settings.volume;
+    },
+
+    settings() {
+      return { ...settings };
     },
 
     destroy() {
