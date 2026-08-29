@@ -41,8 +41,18 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
   /**
    * The DEV half of 11.9. `P` / `O` / `G` are bound only in the dev build and are deliberately NOT
    * gated on `isPlayerInputEnabled`; the pause is the only thing stopping them.
+   *
+   * 🔴 **The scene each key would open is named and asserted absent.** This first checked only that
+   * the title was still up and `__game.sceneKey` still read `'Game'` — and `GymScene` extends
+   * `Phaser.Scene` directly and publishes nothing to the debug surface, so a leaked `G` would have
+   * left BOTH assertions true while the gym ran underneath. An assertion that cannot see the leak it
+   * names is decoration. Codex implementation review round 4, finding 3.
    */
-  for (const key of ['p', 'o', 'g']) {
+  for (const [key, leaked] of [
+    ['p', 'Playground'],
+    ['o', 'ElementEditor'],
+    ['g', 'Gym'],
+  ] as const) {
     test(`DEV key ${key.toUpperCase()} cannot leak past the title`, async ({ page }) => {
       await bootToTitle(page);
 
@@ -51,6 +61,7 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
         () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
       );
 
+      expect(await sceneActive(page, leaked), `${leaked} must not have started`).toBe(false);
       expect(await sceneActive(page, TITLE), 'the title is still up').toBe(true);
       expect((await page.evaluate(() => window.__game))?.sceneKey, 'still Game-owned').toBe('Game');
     });

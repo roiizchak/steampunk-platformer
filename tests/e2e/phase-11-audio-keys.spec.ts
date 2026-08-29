@@ -83,8 +83,14 @@ async function fireKey(
     },
     [code, keyCode, repeat] as const,
   );
-  // One animation frame is not enough: Phaser drains its key queue in the scene's update, so give
-  // the loop a few frames to actually process the event before reading the result.
+  // A few frames of settling before reading `localStorage`.
+  //
+  // ⚠️ This used to explain itself by saying *"Phaser drains its key queue in the scene's update"*.
+  // **It does not** — `KeyboardManager` emits `MANAGER_PROCESS` synchronously from inside its own
+  // DOM handler (`KeyboardManager.js:194`), so the plugin has already drained before this
+  // `page.evaluate` returns. The frames are settling time for the storage write and the CDP round
+  // trip, which is a real reason; the mechanism named was false. Codex implementation review round 4,
+  // finding 5.
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
@@ -293,5 +299,50 @@ test.describe('Phase 11 — the duplicate-event bailout the plugin used to provi
     await fireAt(page, 'keydown', 5150);
 
     await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.3);
+  });
+});
+
+test.describe('Phase 11 — the listener honours what Phaser decided about the event', () => {
+  /**
+   * 🔴 `event.cancelled` is the field Phaser adds while draining its queue (`KeyboardPlugin.js:751`),
+   * and it is the marker this listener requires: `undefined` means Phaser never queued the event at
+   * all — some other handler prevented it before `KeyboardManager` saw it (`KeyboardManager.js:188`)
+   * — while `0` means queued and accepted.
+   *
+   * Codex implementation review round 4, finding 4: the branch had no gate, because every other test
+   * in this file supplies an event Phaser happily accepts.
+   *
+   * The event is dispatched at `document.body` so the CAPTURE phase reaches `window` first, which is
+   * the only way to get a `preventDefault` in front of Phaser's own bubble-phase listener.
+   */
+  test('an event Phaser never queued does not move the volume', async ({ page }) => {
+    await seedVolume(page, 0.5);
+    await bootToGame(page);
+
+    await page.evaluate(() => {
+      const veto = (e: Event): void => e.preventDefault();
+      window.addEventListener('keydown', veto, true);
+      const ev = new KeyboardEvent('keydown', {
+        code: 'BracketLeft',
+        keyCode: 219,
+        which: 219,
+        bubbles: true,
+        cancelable: true,
+      });
+      document.body.dispatchEvent(ev);
+      window.removeEventListener('keydown', veto, true);
+    });
+    await page.evaluate(
+      () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+    );
+
+    expect(
+      (await storedSettings(page))?.volume,
+      'Phaser refused this event; so must we',
+    ).toBe(0.5);
+
+    // And a normal press still works, so the assertion above is not passing on a dead path.
+    await fireKey(page, 'BracketLeft', 219);
+    await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.4);
   });
 });

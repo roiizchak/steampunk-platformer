@@ -216,8 +216,28 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   it('the glob resolved the scene', () => {
     expect(source.length, 'TitleScene.ts read empty — the glob path is wrong').toBeGreaterThan(1000);
     expect(source).toContain('export class TitleScene');
-    // Non-vacuity for the stripper itself: it must remove prose without eating the code.
+    // Non-vacuity for the stripper: it must remove prose without eating the code.
     expect(source, 'stripComments ate the file').toContain('applyLayout');
+  });
+
+  /**
+   * 🔴 The stripper gets its own fixture.
+   *
+   * Restoring the whole-line-only version left every assertion below green, because the real file
+   * happens to contain no commented-out draw — so the gate proved nothing about the thing it was
+   * added for. Codex implementation review round 4, finding 2. A committed fixture is the §5 answer:
+   * *"a gate that cannot go red is decoration"*.
+   */
+  it('stripComments removes trailing comments and keeps a URL intact', () => {
+    expect(
+      stripComments("void 0; // make('L   choose a level', CHOICE_STYLE)"),
+      'a trailing comment must not satisfy a line assertion',
+    ).not.toContain('CHOICE_STYLE');
+    expect(stripComments('/* make(x) */ const a = 1;'), 'block comments go too').toBe(' const a = 1;');
+    expect(stripComments("const u = 'https://example.com/x';"), 'a URL is not a comment').toContain(
+      'https://example.com/x',
+    );
+    expect(stripComments('const a = 1;\n// whole line\nconst b = 2;')).not.toContain('whole line');
   });
 
   /**
@@ -226,9 +246,12 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
    * object — the styles would still be "passed to a make() call" while the screen drew nothing.
    * Codex implementation review round 2, finding 4. So the helper's own body is pinned first.
    */
-  it('make() is a wrapper around this.add.text, not a name', () => {
-    expect(source, 'make no longer reaches the display list').toMatch(
-      /const make = [^;]*this[.]add[.]text[(]/,
+  it('make() passes its OWN arguments to this.add.text', () => {
+    // 🔴 Not just "the factory is named in the body". `this.add.text(0, 0, '', {})` satisfies that
+    // and draws a blank screen with every ink unspent — Codex implementation review round 4,
+    // finding 1. The parameters have to be the ones that arrive.
+    expect(source, 'make no longer spends its arguments').toMatch(
+      /const make = [^;]*this[.]add[.]text[(]0, 0, text, style[)]/,
     );
   });
 
