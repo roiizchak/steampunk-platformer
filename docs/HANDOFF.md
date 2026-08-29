@@ -1,6 +1,11 @@
 # Session handoff — Phase 11, the welcome screen and the volume repair
 
-> # ⚠️ Phase 11 is OPEN. Three criteria are owner-owned and unrun.
+> # ⚠️ Phase 11 is OPEN — and 11.4 is a measured FAILURE, not an unrun criterion.
+>
+> 🔴 **The game is about 25 dB too quiet.** The owner tested at volume 50 and can barely hear it.
+> Measured: the two always-on beds are heard at −48.6 and −45.2 dBFS RMS against a normal target of
+> −16 to −20. See `docs/qa/phase-11-welcome.md` § The game is too quiet — including the hypothesis
+> that measurement killed, so nobody re-runs it.
 >
 > ✅ **11.2 is CLOSED** — the owner played the game on 2026-08-29 and confirmed the volume keys
 > respond on **both the Hebrew and the English layout**. That is the observation the whole phase
@@ -43,7 +48,12 @@ barrier. Production ships no debug surface, so pixels are the only signal.
 
 ## What is owed
 
-- **11.4** (the audible half), **11.7** (routing), **11.11** (lock state and gear totals) — hands-on.
+- **11.4 — FAILING.** The loudness defect above. The fix re-solves every gain in the shipped
+  `index.json` and moves the number criterion 7.2 was measured against, so it is a STOP-and-ask.
+  ⚠️ **Start by making the solver reproducible** — a re-solve computes `bed-music` at 0.1089 against
+  the shipped 0.0632, almost certainly the trim and fade it skips.
+- **11.11 — half reported.** Lock state confirmed by the owner; **gear totals not reported**.
+- ✅ **11.7 is CLOSED** — *"the press enter is working"*.
 - **The title backdrop.** Two fal plates generated 2026-08-29 with the owner's authorisation, $0.30,
   in `_generated/title-backdrop/` (gitignored; request ids are in GENERATION-LOG.md). **Variant B is
   the usable one — A has the compositing band baked into it, because the prompt described it.**

@@ -14,14 +14,14 @@ The gate table below is the record. Everything under it is the evidence for one 
 | 11.1 | Volume failure reproduced and root cause proved by measurement | **PASS** | § 11.1. Four-trial experiment against the running page; `code` proven irrelevant and `keyCode` decisive. |
 | 11.2 | The owner's own keyboard confirms the repaired keys | **PASS — owner-confirmed 2026-08-29** | § 11.2 hands-on. The owner played the game and checked the volume keys **on both the Hebrew and the English layout**. |
 | 11.3 | Volume gate goes RED on the un-fixed code, mutation reverted | **PASS** | § 11.3. `5 failed, 1 passed` mutated; `6 passed` restored. |
-| 11.4 | Both keys move the level from a 0.5 baseline and survive a reload | **PARTIAL — automated half PASS, hands-on UNRUN** | § 11.4. Persistence and both directions proven in-browser; the audible half is owner-owned. |
+| 11.4 | Both keys move the level from a 0.5 baseline and survive a reload | **❌ FAIL — owner-tested 2026-08-29** | § 11.4 hands-on. The keys move the level and it persists, but **at 0.5 the game is barely audible**: the owner has to run their speakers at 100 %. Measured cause below — the shipped mix is ~25 dB below normal. |
 | 11.5 | A held key is exactly one step, Title-active and Game-active | **PASS** | § 11.5. Both arms in `phase-11-audio-keys.spec.ts` and `phase-11-welcome.spec.ts`. |
 | 11.6 | `M` / `[` / `]` answer ON the welcome screen | **PARTIAL — automated PASS, hands-on UNRUN** | § 11.6. Two e2e tests green; red-proved by removing the pause. |
-| 11.7 | Welcome screen appears and routes into the level menu | **PARTIAL — appearance PASS, routing hands-on UNRUN** | § What is NOT closed. |
+| 11.7 | Welcome screen appears and routes into the level menu | **PASS — owner-confirmed 2026-08-29** | *"the press enter is working"*. The screen appears on entry and ENTER routes into the level menu. |
 | 11.8 | The simulation does not advance under the title | **PASS** | § 11.8. 40-frame in-page sample; red-proved by removing `pause()`. |
 | 11.9 | ESC and DEV scene keys cannot leak past the title | **PASS** | § 11.9. Red-proved by the same mutation. |
 | 11.10 | Title shows once per page load, incl. a restart while it is up | **PASS** | § 11.10. Three tests, including the re-pause case. |
-| 11.11 | Level select still shows correct lock state and gear totals | **UNRUN — owner-owned** | § What is NOT closed. |
+| 11.11 | Level select still shows correct lock state and gear totals | **PARTIAL — lock state owner-confirmed 2026-08-29** | *"the menu is about the lock and unlock levels"*. **The GEAR TOTALS half was not reported and is not assumed.** |
 | 11.12 | Title readable and correctly laid out at 1920×1080 and on resize | **PASS** | Two briefs against the first design, and **two more against the shipped one** — § 11.12 and § 11.12 re-run. 11 findings: 5 applied, 4 recorded, **2 refuted by measurement**. |
 | 11.13 | `sceneKey`/`ready`/`bootError` unmoved; surface still eight fields | **PASS** | § 11.13. Two e2e tests. |
 | 11.14 | The diff reviewed adversarially, two briefs | **PASS** | Two briefs ran, findings applied (§ 11.14). The redesign diff on top of them went through the Codex implementation review, [reviews/phase-11-impl.md](../reviews/phase-11-impl.md) Review B. |
@@ -35,11 +35,12 @@ The gate table below is the record. Everything under it is the evidence for one 
 
 | item | why |
 |---|---|
-| **11.4 (audible half), 11.7 (routing), 11.11** | `play`-owned. Per *(C4)* and the `playtest-finds-what-gates-cannot` rule, a hands-on criterion is **never** reported done on automated evidence. **11.2 is now CLOSED** — see § 11.2 hands-on. |
+| **11.4 — FAILING** | Not unrun: **tested and failed**. The mix is ~25 dB below normal loudness — § The game is too quiet. A fix needs an owner decision because it changes a measured, gated mix. |
+| **11.11 — half reported** | Lock state confirmed; **gear totals not reported**, and not assumed from silence. |
 | **The volume STEP SIZE** | Deliberately not fixed. See § The second defect. |
 | **The `playToExit` production spec** | **Flaky, and pre-existing.** It fails on `main` at `6da76b7` as well. On 2026-08-29, after the prod harness was repaired for the two-press route, `chromium-prod` ran **6/6 green three times in a row** and then failed this one spec on a fourth run — a wall-clock budget, not a defect this phase introduced. See § The production flake. |
 
-**This phase is therefore reported FAILING, not done.** Three criteria are owner-owned and unrun.
+**This phase is therefore reported FAILING, not done.** 11.4 is a measured FAILURE, and 11.11 is half-reported.
 
 ---
 
@@ -346,6 +347,58 @@ It also confirms the **root cause** rather than merely the symptom. The fix move
 the owner originally reported — to `event.code`, a physical key position. A fix aimed at the wrong
 cause could have made the keys work on one layout; working on **both** is the discriminating
 observation.
+
+## 🔴 The game is too quiet — measured, 2026-08-29
+
+The owner set the volume to 50 % and reported: *"my speaker set is not very audible. I can barely
+hear it unless I put my speaker set to 100%."* That is criterion 11.4's audible half, and it
+**fails**. It is not a preference — the numbers say so.
+
+### The measurement, end to end from shipped artifacts
+
+`ffmpeg -af volumedetect` on the two masters, and the gains committed in `public/assets/index.json`:
+
+| | content RMS | shipped gain | = heard at master 1.0 |
+|---|---|---|---|
+| `bed-music` | −24.6 dBFS | 0.0632 (−24.0 dB) | **−48.6 dBFS RMS** |
+| `bed-ambience` | −19.2 dBFS | 0.0502 (−26.0 dB) | **−45.2 dBFS RMS** |
+| both together | | | **≈ −43.6 dBFS RMS** |
+
+At the master 0.5 the owner tested, another −6 dB: **≈ −49.6 dBFS RMS**. Games and music master to
+roughly **−16 to −20 dBFS RMS**. The constant background of this game is about **25 dB below normal**
+— not "a little quiet", about a twentieth of normal amplitude. Needing the speakers at 100 % is
+exactly what these figures predict.
+
+### Where it comes from, and the hypothesis that measurement KILLED
+
+Two compounding attenuations: the mix weights put the beds 13 and 15 dB down *(a defensible design
+decision — they are the only always-on sources)*, and the solved headroom scalar takes ~11 dB off
+**everything** so that `WORST_CASE_STACK` — ten one-shots plus both beds, all starting on the same
+frame — lands at −3 dBFS.
+
+⚠️ **The obvious suspect was wrong, and re-solving proved it rather than arguing it.** The beds are
+modelled in that stack as a **constant block at full scale** for the stack's whole length, which
+`build-audio.mjs` itself flags as an over-statement. It looked like the beds were being punished by a
+pessimism about themselves. They are not: re-solving with the beds at their measured peak, and again
+at their measured RMS, moves the headroom by only **~0.7 dB**. The one-shots dominate the stack.
+
+🔴 **The real cause is that the mix is normalised to a peak nobody ever hears.** Ten one-shots
+aligned on one frame is a moment that does not occur in play; every real listening moment sits 10–20
+dB below it, and the whole game is attenuated to protect it.
+
+### Not fixed here, and why
+
+The fix changes `MIX_DB` / `TARGET_STACK_DBFS` / `WORST_CASE_STACK` in `tools/gen/build-audio.mjs`,
+re-solves every gain in the shipped `index.json`, and moves the number **criterion 7.2** was measured
+against. That is a measured, gated decision from Phase 7 and it is outside Phase 11's scope, so it is
+a **STOP-and-ask**, not a repair to slip in beside a keyboard fix.
+
+⚠️ **A reproduction of the solver does NOT currently reproduce the shipped gains** — it computes
+`bed-music` at 0.1089 against the shipped 0.0632. The difference is almost certainly the trim and
+fade `build-audio` applies before it measures peaks, which the reproduction skips. **The table above
+does not depend on the reproduction**: it is measured from the shipped `.ogg` files and the committed
+gains. But any fix must start by making the solver reproducible, or it will be tuning a number it
+cannot predict.
 
 ## 11.12 re-run — two fresh briefs against the SHIPPED screen
 
