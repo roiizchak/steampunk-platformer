@@ -58,12 +58,29 @@ it. Describe what the IMAGE contains, never what will be laid over it.
 
 ## What is still owed — carried forward, not part of this phase
 
-- **The volume STEP SIZE and its missing feedback** — deliberately not fixed, see the QA log.
-  `stepVolume(1, +1)` is a genuine no-op on a fresh save, and one step down is ~1 dB.
 - **A fal ceiling FIGURE.** Spend is $55.50 against a last-stated ceiling of $55. Every overrun is
   cleared by an explicit owner decision; no new number has ever been named, and the log refuses to
   invent one.
 - **No cancel route out of `LevelSelectScene`** — accepted in the plan, still true.
+
+## The step size and the readout — fixed after the phase closed
+
+The owner said *"yeah, fix it"* on 2026-08-29, so the deliberate non-fix became a fix. Two things:
+
+**`VOLUME_STEP = 0.1` was an even step in the wrong unit.** Loudness is logarithmic; a tenth of gain
+is 0.92 dB at the top of the range and 6.02 dB at the bottom, from the same key. It is now
+`VOLUME_LADDER` — ten stops ~3 dB apart. ⚠️ **The printed percentages are deliberately uneven**
+(100, 71, 50, 35…) because the *ratio* is what the ear hears; a ladder whose numbers look even is
+the one that failed.
+
+**The controls banner now prints the level**, which is the only readout in play and the whole answer
+to *"`]` does nothing at 100 %"*. `gameInput` emits `AUDIO_CHANGED`; `HelpBannerLayer` marks itself
+dirty and its next **layout** re-reads a content provider.
+
+🔴 **Re-reading on layout rather than on the event is load-bearing, and the first version got it
+wrong.** `attachHud` runs **before** `createAudio` in `GameScene.create()`, so a layer that only
+re-read on the audio event drew a banner with no level in it until the player pressed a key — with
+every unit gate green, because the fake's provider is ready immediately. An e2e test caught it.
 
 ## Two perf gates flake under full-suite load
 

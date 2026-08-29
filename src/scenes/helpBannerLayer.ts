@@ -63,6 +63,7 @@ import {
   helpBannerLayout,
 } from '../render/helpBanner';
 import { SCENE_SHUTDOWN, SCENE_UPDATE } from './engineLiterals';
+import { AUDIO_CHANGED } from './audioKeyMap';
 
 /**
  * What the layer needs from the HUD, as the narrowest shape that expresses it.
@@ -96,7 +97,16 @@ export class HelpBannerLayer {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly hud: HudCounterSource,
-    private readonly content: string,
+    /**
+     * The banner's text, as a FUNCTION rather than a string.
+     *
+     * 🔴 It was a string, captured once in `attachHud`. That was fine while the line was a fixed
+     * list of keys and wrong the moment it started printing the volume: the text would have shown
+     * whatever the level was when the scene was created, forever, and every press would have moved
+     * a number nobody could see. A provider is re-read on `AUDIO_CHANGED`; nothing else about the
+     * layer's lifecycle changes.
+     */
+    private readonly content: () => string,
   ) {}
 
   /**
@@ -107,7 +117,7 @@ export class HelpBannerLayer {
    */
   create(): void {
     this.banner = this.scene.add
-      .text(0, 0, this.content, {
+      .text(0, 0, this.content(), {
         fontFamily: 'monospace',
         fontSize: `${HELP_FONT_PX}px`,
         fontStyle: HELP_FONT_STYLE,
@@ -132,6 +142,7 @@ export class HelpBannerLayer {
       .setVisible(false);
 
     this.scene.events.on(SCENE_UPDATE, this.onUpdate, this);
+    this.scene.events.on(AUDIO_CHANGED, this.markDirty, this);
     this.scene.scale.on('resize', this.markDirty, this);
     this.scene.events.once(SCENE_SHUTDOWN, this.destroy, this);
   }
@@ -179,6 +190,20 @@ export class HelpBannerLayer {
   private layout(): void {
     const banner = this.banner;
     if (banner === null) return;
+
+    /**
+     * 🔴 The content is re-read HERE, on every layout, rather than captured at `create()`.
+     *
+     * The line prints the current volume, and `attachHud` runs **before** `createAudio` in
+     * `GameScene.create()` — so at construction there is no manager to ask and the level would have
+     * been missing from the banner for the whole session. Setting it here rather than reordering
+     * `create()` keeps the fix local to the thing that draws: the first layout happens on the
+     * owning scene's first update, by which time every field exists.
+     *
+     * It costs one string build per layout, and a layout runs only when `dirty` — a resize, or an
+     * audio key. Not per frame.
+     */
+    banner.setText(this.content());
 
     const { counter, layout } = this.hud.hudObjects();
     // 🔴 `active`, not truthiness. `UIScene`'s SHUTDOWN handler resets only `built` and leaves
@@ -243,6 +268,7 @@ export class HelpBannerLayer {
   /** Drop the listeners with the scene, or a restarted scene accumulates a set per entry. */
   destroy(): void {
     this.scene.events.off(SCENE_UPDATE, this.onUpdate, this);
+    this.scene.events.off(AUDIO_CHANGED, this.markDirty, this);
     this.scene.scale.off('resize', this.markDirty, this);
     this.banner?.destroy();
     this.banner = null;

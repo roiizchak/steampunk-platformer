@@ -84,6 +84,20 @@ export type AudioActionResult =
  * screen — route through here, so the two can never drift into meaning different things by the same
  * name. `import type` only: this module still reaches no engine at runtime.
  */
+/**
+ * Emitted on the OWNING scene after any audio key is applied, so whatever is drawing the current
+ * level can re-read it.
+ *
+ * 🔴 **An event rather than a callback argument, and the reason is a line budget.**
+ * `GameScene.ts` sits one line under the hard 400-line ceiling, and threading a callback from there
+ * through `bindPlayerKeys` costs more than it has. It is also the better shape: the banner is not the
+ * only thing that could ever want to know, and the listener already owns the scene it fires on.
+ *
+ * Declared here, beside the action it reports, so the emitter and the subscriber cannot drift onto
+ * two spellings of the same string.
+ */
+export const AUDIO_CHANGED = 'audio-changed';
+
 export function applyAudioAction(manager: AudioManager, action: AudioAction): AudioActionResult {
   switch (action) {
     case 'mute':

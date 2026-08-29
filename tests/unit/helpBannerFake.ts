@@ -17,6 +17,7 @@
 import type Phaser from 'phaser';
 
 import { HelpBannerLayer } from '../../src/scenes/helpBannerLayer';
+import { AUDIO_CHANGED } from '../../src/scenes/audioKeyMap';
 import { SCENE_SHUTDOWN, SCENE_UPDATE } from '../../src/scenes/engineLiterals';
 import { hudLayout, type HudLayout } from '../../src/render/hud';
 
@@ -47,6 +48,8 @@ interface Harness {
   emitUpdate: () => void;
   emitResize: () => void;
   emitShutdown: () => void;
+  /** Fire `AUDIO_CHANGED`, the event that makes the layer re-read its content provider. */
+  emitAudioChanged: () => void;
   setGameSize: (w: number, h: number) => void;
   /** The owning scene's camera. Mutable, so the offset case can move it. */
   camera: { x: number; y: number };
@@ -54,6 +57,7 @@ interface Harness {
   resizeOrder: string[];
   updateListeners: number;
   resizeListeners: number;
+  audioListeners: number;
 }
 
 /**
@@ -65,7 +69,11 @@ interface Harness {
  * built, and only then does the fake HUD subscribe. A harness that subscribed the HUD first would
  * make a broken read-during-resize implementation look correct.
  */
-export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
+export function build(
+  /** A string for the cases that never change it; a provider for the ones that do. */
+  content: string | (() => string) = 'ARROWS move  ·  SPACE jump',
+): Harness {
+  const provider = typeof content === 'function' ? content : (): string => content;
   let gameW = 1920;
   let gameH = 1080;
 
@@ -75,6 +83,7 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
   // and every one of them throws on `this`. That is a harness defect, not a product one — but it
   // presents as six red tests with a plausible-looking stack, so it is worth the two extra fields.
   const updateHandlers: { fn: () => void; ctx: unknown }[] = [];
+  const audioHandlers: { fn: () => void; ctx: unknown }[] = [];
   const resizeHandlers: { fn: () => void; ctx: unknown }[] = [];
   const shutdownHandlers: { fn: () => void; ctx: unknown }[] = [];
 
@@ -95,6 +104,13 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
 
   const text = {
     setScrollFactor: () => text,
+    // Modelled because the layer re-reads its content provider on `AUDIO_CHANGED`. Phaser's own
+    // `setText` marks the object dirty and re-wraps on the next render; the fake only has to record
+    // what was set, because the layer's own re-layout is what the assertions drive.
+    setText: (c: string) => {
+      banner.content = c;
+      return text;
+    },
     setDepth: (d: number) => {
       banner.depth = d;
       return text;
@@ -181,6 +197,7 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
     events: {
       on: (event: string, fn: () => void, ctx: unknown) => {
         if (event === SCENE_UPDATE) updateHandlers.push({ fn, ctx });
+        if (event === AUDIO_CHANGED) audioHandlers.push({ fn, ctx });
       },
       once: (event: string, fn: () => void, ctx: unknown) => {
         if (event === SCENE_SHUTDOWN) shutdownHandlers.push({ fn, ctx });
@@ -189,6 +206,10 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
         if (event === SCENE_UPDATE) {
           const i = updateHandlers.findIndex((h) => h.fn === fn);
           if (i >= 0) updateHandlers.splice(i, 1);
+        }
+        if (event === AUDIO_CHANGED) {
+          const i = audioHandlers.findIndex((h) => h.fn === fn);
+          if (i >= 0) audioHandlers.splice(i, 1);
         }
       },
     },
@@ -215,7 +236,7 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
       }) as { counter: Phaser.GameObjects.Text; layout: HudLayout },
   };
 
-  const layer = new HelpBannerLayer(scene, hud, content);
+  const layer = new HelpBannerLayer(scene, hud, provider);
   layer.create();
   // ⚠️ AFTER the layer, matching the real registration order. See this function's header.
   resizeHandlers.push({ fn: applyHudLayout, ctx: hud });
@@ -233,6 +254,7 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
     camera,
     resizeOrder,
     emitUpdate: () => [...updateHandlers].forEach((h) => h.fn.call(h.ctx)),
+    emitAudioChanged: () => [...audioHandlers].forEach((h) => h.fn.call(h.ctx)),
     emitResize: () => [...resizeHandlers].forEach((h) => h.fn.call(h.ctx)),
     emitShutdown: () => [...shutdownHandlers].forEach((h) => h.fn.call(h.ctx)),
     setGameSize: (w: number, h: number) => {
@@ -244,6 +266,9 @@ export function build(content = 'ARROWS move  ·  SPACE jump'): Harness {
     },
     get resizeListeners() {
       return resizeHandlers.length;
+    },
+    get audioListeners() {
+      return audioHandlers.length;
     },
   };
 }

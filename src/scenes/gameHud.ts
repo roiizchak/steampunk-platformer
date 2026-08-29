@@ -37,7 +37,12 @@ export interface HudAttachment {
  * for the restart path — an e2e spec re-entering `BootScene` runs `create()` again, and launching a
  * scene that is already running stacks a second copy of every HUD object.
  */
-export function attachHud(scene: Phaser.Scene, world: World, helpText: string): HudAttachment {
+export function attachHud(
+  scene: Phaser.Scene,
+  world: World,
+  /** A PROVIDER, not a string — the banner re-reads it whenever the volume moves. */
+  helpText: () => string,
+): HudAttachment {
   const gears = new GearLayer(scene, world);
   gears.create();
 
