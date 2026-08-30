@@ -1,3 +1,16 @@
+# Session handoff — Phase 12, touch and responsive support
+
+> ## 👉 Resuming Phase 12? Read [handoff/next-session-prompt-phase-12.md](handoff/next-session-prompt-phase-12.md) first.
+>
+> Branch `phase-12-touch`, **not merged**. Thirteen Codex implementation-review rounds applied.
+> 2993 unit tests, 216 e2e across five projects, build + verify-dist clean, 75 mutation rows and
+> 23 holes found and closed. **Reported FAILING**: 12.8, 12.10, 12.11 and 12.17 are NOT MET;
+> 12.13, 12.14, 12.23 and 12.24 are UNRUN. Four jobs are left and the prompt above lists them:
+> re-shoot the wrench cell, build 12.11's replacement gate, bring the owner the three wording
+> disputes, and put a Vercel preview on the owner's phone for 12.13 and 12.24.
+
+---
+
 # Session handoff — Phase 11, the welcome screen and the volume repair
 
 > # ✅ Phase 11 is COMPLETE — every criterion has a verdict and every verdict is a pass.
