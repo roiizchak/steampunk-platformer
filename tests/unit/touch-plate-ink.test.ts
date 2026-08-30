@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createSnapshot } from '../../src/sim/input';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
-import { touchLayout, TOUCH_IDS } from '../../src/render/touchLayout';
+import { touchLayout, TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
 
@@ -165,10 +165,18 @@ describe('the generated faces, once the plate is cut', () => {
   it('gives the art the SAME translucency the drawn plate was measured at', () => {
     // 🔴 The 19.9 % occlusion measurement is about a thumb-sized opaque disc over the level. That
     // is a property of the BOX, not of what is drawn in it, so adopting art may not quietly undo it.
+    // ⚠️ `< 0.7` is a BOUND, and a bound admits a drift the measurement never sanctioned:
+    // 0.69 would satisfy it while no one had ever looked through a 0.69 plate at a spike. The
+    // drawn plate's gate pins the exact measured 0.55 for that reason, and the art path — which is
+    // what actually ships — was the looser of the two. Codex round-6. Same number, same anchor.
+    const MEASURED_RESTING = 0.55;
     const { scene, layer } = withArt();
     const face = (id: string) => scene.faces.filter((f) => f.id === id)[0];
     for (const id of TOUCH_IDS) {
-      expect(face(id).alpha, `the ${id} face is opaque, hiding the level behind it`).toBeLessThan(0.7);
+      expect(
+        face(id).alpha,
+        `the ${id} face rests at ${face(id).alpha}, not the measured ${MEASURED_RESTING}`,
+      ).toBe(MEASURED_RESTING);
     }
     // And the pressed state still answers a thumb, through the same one code path.
     const rest = face('right').alpha;
@@ -188,6 +196,30 @@ describe('the generated faces, once the plate is cut', () => {
       const face = scene.faces.filter((f) => f.id === box.id)[0];
       expect([face.w, face.h], `the ${box.id} face is not the size of its box`).toEqual([box.w, box.h]);
     }
+  });
+
+  it('RE-sizes each face when the view changes, not only when it is first drawn', () => {
+    // 🔴 At the design size the box IS 160 — the source size — so the case above passes
+    // whether `refresh()` re-sizes anything or not, and M39 reddened it only because the fake
+    // reported 0 x 0. Codex round-6. Half the view halves every box, and a face that keeps its
+    // source size is then twice the target it sits in: it swallows its neighbour's gap.
+    const { scene, layer } = withArt();
+    scene.scene.scale.gameSize.width = GAME_WIDTH / 2;
+    scene.scene.scale.gameSize.height = GAME_HEIGHT / 2;
+    layer.refresh();
+
+    const boxes = touchLayout(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    expect(boxes[0]!.w, 'the halved view did not halve the box, so this proves nothing').toBe(
+      TOUCH_BOX_PX / 2,
+    );
+    for (const box of boxes) {
+      const face = scene.faces.filter((f) => f.id === box.id)[0]!;
+      expect([face.w, face.h], `the ${box.id} face kept its old size across a resize`).toEqual([
+        box.w,
+        box.h,
+      ]);
+    }
+    layer.destroy();
   });
 });
 

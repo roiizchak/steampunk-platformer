@@ -78,6 +78,9 @@ export interface TouchSceneHarness {
   fireSceneInputEvent: (name: string) => void;
 }
 
+/** The size `buildTouchAtlas.mjs` writes every face at, pinned on the bytes by `shipped-touch`. */
+const TOUCH_FACE_SOURCE_PX = 160;
+
 const GAME_WIDTH = 1920;
 const GAME_HEIGHT = 1080;
 
@@ -154,7 +157,12 @@ export function makeTouchScene(options: { art?: boolean } = {}): TouchSceneHarne
               'art path when no art is loaded, which would draw a green box in the shipped game.',
           );
         }
-        const face = makeFace(x, y);
+        // 🔴 The face comes in at the SOURCE PNG's size, not at zero. A fake that reported
+        // 0 x 0 makes every "the face is the size of its box" assertion red for the wrong reason
+        // — and makes M39's red an artefact of the fake rather than evidence about production.
+        // 160 is what `buildTouchAtlas.mjs` writes, pinned on the shipped bytes by
+        // `shipped-touch.test.ts`.
+        const face = makeFace(x, y, TOUCH_FACE_SOURCE_PX, TOUCH_FACE_SOURCE_PX);
         face.textureKey = key;
         return face;
       },
