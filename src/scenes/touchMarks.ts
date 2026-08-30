@@ -137,8 +137,11 @@ export function drawFace(
 ): TouchFaceLike[] {
   const artKey = `touch-${target.id}`;
   if (scene.textures.exists(artKey)) {
+    // ⚠️ No `setDisplaySize` here. `create()` ends in `refresh()`, whose `placedFor` starts
+    // at 0 x 0 and therefore always takes the size branch on the first call — so a second call here
+    // is a line no mutation can redden, which is the same defect as a decision function with no
+    // consumer. Measured: deleting it left every gate green (M39). Sizing lives in `refresh()`.
     const face = scene.add.image(cx, cy, artKey).setName(target.id).setDepth(TOUCH_FACE_DEPTH);
-    face.setDisplaySize?.(target.w, target.h);
     face.setAlpha(PLATE_ALPHA);
     return [face];
   }
