@@ -187,8 +187,24 @@ papered over.
 | M51 | dim only the WALK engraving, leaving every highlight outside it | 12.14 | RED 1/7 |
 | M53 | sweep every `.png` in the output directory, not just the touch faces | 12.19 | **GREEN — the sweep was inline and ungated** → RED 1/5 |
 | M54 | revert the CLI entry guard to the `%20` comparison that never matched | 12.19 | **GREEN — nothing ran the CLI** → RED 1/2 |
+| M55 | do not thicken the engraving, leaving only the hairline keyline | 12.14 | **GREEN — nothing pinned the thickening** → RED 1/6 |
+| M56 | paint the keyline over the mark as well as around it | 12.14 | RED 1/6 |
+| M57 | paint the keyline over transparent pixels too | 12.14 | **GREEN twice — the fixture could not reach the guard** → RED 1/6 |
 
-**Nine rows reddened nothing, and all nine were holes rather than mutations to drop.**
+**Twelve rows reddened nothing, and all twelve were holes rather than mutations to drop.**
+
+🔴 **M57, green through two fixtures, and the reason is worth keeping.** The transparency guard in
+`keylineMarks` can only fire when the engraving reaches the edge of its disc — with a blob safely at
+the centre of a full-width disc, no transparent pixel is ever within `KEYLINE_PX` of dark ink, so
+removing the guard changes nothing and the assertion passes either way. Shrinking the disc was not
+enough (the mark region's corners fell outside it, but nothing dark was near them). The fixture that
+works is a bar running the **full width** of a small disc. A test can be about the right property
+and still be unable to observe it, and only the mutation says which.
+
+🔴 **And M55's other half: the region guard beside it was genuinely dead.** `halo` is grown from a
+mask only ever set inside the mark, through a `grow` that refuses to leave it, so a second `inMark`
+test in the paint loop could never fire. It was deleted rather than kept as a condition no mutation
+can reach — the same call as `drawFace`'s redundant `setDisplaySize`.
 
 🔴 **M51, and why M46 was not enough.** M46 flattens every face to one alpha, which proves
 only that a flat face fails. The failure the criterion describes is narrower and was live in the
