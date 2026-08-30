@@ -166,6 +166,13 @@ papered over.
 | M31 | give `RotatePrompt` the play controls only, so a small route is silently dead | 12.10 | RED 1/9 |
 | M32 | stop re-placing the prompt on a design-size change | 12.19 | RED 1/10 |
 | M33 | drop the zero-scale guard, so a collapsed canvas emits an `Infinity` font size | 12.19 | RED 1/10 |
+| M34 | drop the touch source from `walkHeld`, so a phone always runs again | 12.4 | RED 1/23 |
+| M35 | clear the walk latch on a loss path, un-choosing the player's gait | 12.5 | RED 2/31 |
+| M36 | unlight the walk plate the moment the finger leaves | 12.14 | RED 1/31 |
+| M37 | hang every control on the same face, so one button is drawn six times | 12.17 | RED 1/7 |
+| M38 | draw the art fully opaque, undoing the occlusion measurement | 12.14 | RED 1/7 |
+| M39 | leave the art at its source size instead of the box the layout chose | 12.8 | RED 1/7 |
+| M40 | copy one shipped face over another | 12.17 | RED 1/4, on the shipped bytes |
 
 **Five rows reddened nothing, and all five were holes rather than mutations to drop.**
 
