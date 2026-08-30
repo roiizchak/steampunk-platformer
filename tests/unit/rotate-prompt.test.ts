@@ -79,6 +79,22 @@ describe('RotatePrompt', () => {
     for (const f of h.faces) expect(f.visible, 'part of the prompt is invisible').toBe(true);
   });
 
+  it('shows for a screen whose OWN targets are too small, with the play controls fitting', () => {
+    // 🔴 The Codex round-3 finding, and it is not hypothetical. `RotatePrompt` asked only about the
+    // play controls while `attachTapRoutes` asked about those AND the route's own targets, so a
+    // screen whose own targets went under the floor had its route silently killed with nothing on
+    // screen to explain it — and `touchMenuLayout`'s rows go under the floor the moment the catalog
+    // holds a sixth level. One shared `rotatePromptWanted` call is the fix; this is the case that
+    // can tell the two apart, because the play controls fit at full size and only the targets do
+    // not.
+    const h = scene(GAME_WIDTH);
+    expect(fitsAt(GAME_WIDTH), 'the play controls must FIT here, or this proves nothing').toBe(true);
+    const prompt = new RotatePrompt(h.scene, true, [{ id: 'tiny', x: 0, y: 0, w: 40, h: 40 }]);
+    prompt.create();
+    prompt.refresh();
+    expect(prompt.showing, 'a 40 CSS px route was killed with no prompt to explain it').toBe(true);
+  });
+
   it('covers the whole view, so nothing behind it can be aimed at', () => {
     const h = scene(PORTRAIT_CSS_WIDTH);
     live(h);
