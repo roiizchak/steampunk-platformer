@@ -34,7 +34,7 @@ than reinterpreted.
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 35 rows; 5 holes found, all closed. M22–M29 cover the two Codex reviews. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 37 rows; 5 holes found, all closed. M22–M31 cover the three Codex rounds. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
@@ -438,9 +438,9 @@ than left standing.
 | gate | result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **202 files, 2951 tests, 0 failed** (2923 before this phase's gate repairs) |
-| `npm run test:sim-isolated` | **202 files, 2951 tests, 0 failed** with Phaser uninstalled — 2938 passed, 13 skipped. Same file and test COUNT as the normal run, which is what makes the skips a deliberate arm and not a silent deselection. |
-| `npm run test:e2e` | **213 tests, 0 failed**, in two runs alone on the box: 185 passed before a one-hour SHELL timeout killed the process mid-suite (not a test failure — every remaining line reported `0ms`), then `chromium-touch` + `chromium-touch-gpu` + `chromium-prod` re-run alone, **33 passed**. An earlier full pass at **212 passed / 0 failed** in 28.7 min is the timing reference. ⚠️ The run before the Codex repairs landed reported three failures: the new title-zone test (a real defect — it waited on `__game.sceneKey === 'Title'`, and the title plate is a PARALLEL scene, so that read never changes), plus `phase-06-perf` and `phase-10-production`, neither of which reproduced once the box was not also running a timing-out spec. Recorded rather than dropped. |
+| `npm test` | **202 files, 2952 tests, 0 failed** (2923 before this phase's gate repairs) |
+| `npm run test:sim-isolated` | **202 files, 2952 tests, 0 failed** with Phaser uninstalled — 2939 passed, 13 skipped. Same file and test COUNT as the normal run, which is what makes the skips a deliberate arm and not a silent deselection. |
+| e2e | **214 passed, 0 failed**, across all six projects, run one at a time with nothing beside them: `chromium` + `chromium-gpu` **173** (24.4 min), `chromium-touch` + `chromium-touch-gpu` + `chromium-prod` **34** (5.0 min), `chromium-dpr2` **7** (43 s). Split because a single `npm run test:e2e` exceeds the shell's one-hour ceiling on this box — a timeout, never a failure, and the project counts add to the whole. ⚠️ The run before the Codex repairs landed reported three failures: the new title-zone test (a real defect — it waited on `__game.sceneKey === 'Title'`, and the title plate is a PARALLEL scene, so that read never changes), plus `phase-06-perf` and `phase-10-production`, neither of which reproduced once the box was not also running a timing-out spec. Recorded rather than dropped. |
 | `npm run build` | `dev-seam gate ok: 28 sentinel-marked DEV bodies folded out`; `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical, no DEV-only scene key or debug surface` |
 | 400-line sweep | nothing over 400 across `src/**/*.ts`, `tools/**/*.mjs`, `tests/**/*.ts`, root `*.config.ts`. Largest: `tools/gen/levelBuilder.mjs`, `tests/unit/audio-cue-edges.test.ts`, `tests/e2e/phase-01-boot.spec.ts` and `tests/e2e/effectBudget.ts` at exactly 400; `src/scenes/GameScene.ts` 399. Four splits were taken this phase rather than an exemption — `touchMarks.ts`, `touchTypes.ts`, `touchSceneObjects.ts` and `touch-plate-ink.test.ts`. |
 

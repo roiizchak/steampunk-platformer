@@ -162,6 +162,8 @@ papered over.
 | M27 | set the pressed alpha to **0.86**, the value measured to erase the level | 12.14 | RED 1/4 |
 | M28 | hide `hasTouch: false` behind a block comment claiming `true` | the project-selection gate | RED 1/5 |
 | M29 | stack the level rows at half pitch, so every pair overlaps | 12.8, 12.9 | RED 2/21 |
+| M30 | make the `LevelSelect` start latch a field initialiser again | 12.6 | RED 1/11 |
+| M31 | give `RotatePrompt` the play controls only, so a small route is silently dead | 12.10 | RED 1/9 |
 
 **Five rows reddened nothing, and all five were holes rather than mutations to drop.**
 
