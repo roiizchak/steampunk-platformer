@@ -184,8 +184,24 @@ papered over.
 | M48 | toggle walk for every pointer, not on the 0 -> 1 transition | 12.5 | RED 1/8 |
 | M49 | open the level menu for every pointer that lands on pause | 12.5 | RED 1/8 |
 | M50 | drop a cell descriptor, as the circular count guard allowed | 12.17 | RED 1/7 |
+| M51 | dim only the WALK engraving, leaving every highlight outside it | 12.14 | RED 1/7 |
+| M53 | sweep every `.png` in the output directory, not just the touch faces | 12.19 | **GREEN — the sweep was inline and ungated** → RED 1/5 |
+| M54 | revert the CLI entry guard to the `%20` comparison that never matched | 12.19 | **GREEN — nothing ran the CLI** → RED 1/2 |
 
-**Seven rows reddened nothing, and all seven were holes rather than mutations to drop.**
+**Nine rows reddened nothing, and all nine were holes rather than mutations to drop.**
+
+🔴 **M51, and why M46 was not enough.** M46 flattens every face to one alpha, which proves
+only that a flat face fails. The failure the criterion describes is narrower and was live in the
+shipped bytes: a mark that has faded into its plate while the face still carries a bright decorative
+highlight somewhere else. The whole-face statistic scored `walk` at 3.67:1 on such a highlight while
+its own bars measured **1.12:1** — 725 near-black pixels and not one pale one. M51 dims only the
+central engraving; the gate now measures the mark mask and reds.
+
+⚠️ **Three rows are unreachable as TOOL edits and are byte mutations instead** — M45, M46
+and M51. `shipped-touch.test.ts` reads the **committed PNGs**, so no edit to `buildTouchAtlas.mjs`
+can redden it without re-running the builder; that is the point of gating shipped bytes *(vault
+3.1)*, not a hole. The tool's own logic is gated separately, behaviourally, by
+`touch-atlas-cli.test.ts` (M53, M54) and by `shipped-touch.test.ts`'s cell-descriptor case (M50).
 
 🔴 **M46 and M47, and the difference between them.** M46 was first written against
 `buildTouchAtlas.mjs` and went GREEN, which is not a hole: the gate reads the **committed PNGs**, so
