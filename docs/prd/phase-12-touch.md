@@ -171,10 +171,25 @@ papered over.
 | M36 | unlight the walk plate the moment the finger leaves | 12.14 | RED 1/31 |
 | M37 | hang every control on the same face, so one button is drawn six times | 12.17 | RED 1/7 |
 | M38 | draw the art fully opaque, undoing the occlusion measurement | 12.14 | RED 1/7 |
-| M39 | leave the art at its source size instead of the box the layout chose | 12.8 | RED 1/7 |
+| M39 | leave a re-placed face at its old size when the design size moves | 12.8 | **GREEN twice** → RED 2/9 |
 | M40 | copy one shipped face over another | 12.17 | RED 1/4, on the shipped bytes |
+| M41 | do not restore the gait onto a freshly activated layer | 12.5 | RED 1/10 |
+| M41b | the same, in the browser, across a real level-select round trip | 12.5, 12.6 | RED 1/3 |
+| M42 | clear the walk latch on shutdown, as if it belonged to the layer | 12.5 | RED 2/10 |
+| M43 | leave the retired layer's walk callback wired to the live session | 12.5 | RED 1/10 |
+| M44 | rest the art at 0.69 — inside the old bound, away from the measured 0.55 | 12.14 | RED 1/8 |
+| M45 | copy one face's central MARK onto another, leaving both discs alone | 12.17 | RED 1/4, at 0.0 % |
 
-**Five rows reddened nothing, and all five were holes rather than mutations to drop.**
+**Six rows reddened nothing, and all six were holes rather than mutations to drop.**
+
+🔴 **M39, twice.** The first version deleted `setDisplaySize` from `drawFace` and reddened
+nothing, because the image fake reported **0 × 0** and every size assertion was already failing
+to be about production. Giving the fake its native 160 did not fix it either: at 1920 × 1080 the
+box **is** 160, so create and source agree and only a resize was ever measured against a different
+number — and a phone is never at the design size. Two new cases (a first draw at half the view, and
+a resize) plus the discovery that `create()` ends in `refresh()`, which always takes the size branch
+on its first call — making `drawFace`'s own call a line no mutation could reach. It was deleted;
+the sizing lives in `refresh()`, where M39 now reds both cases.
 
 🔴 **M2b.** `attachUiTouch`'s teardown had no gate at all. `touch-session.test.ts` drives the session
 against a fake layer and never imports `attachUiTouch`; `touch-draw-path.test.ts` drives the layer

@@ -40,7 +40,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Six shipped 160x160 PNGs, six distinct marks | **PASS** | `tests/unit/shipped-touch.test.ts`, on the shipped bytes. Its first statistic — alpha masks — was decoration at 99.6 % agreement and was replaced, not re-bounded. Watched red by copying one face over another (0.0 %). § 12.17. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 46 rows; 5 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 52 rows; 6 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
