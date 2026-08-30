@@ -11,5 +11,9 @@ export const INK_DARK_MAX: number;
 /** What the plate's alpha is multiplied by, so that the DRAWN alpha times this is `PLATE_ALPHA`. */
 export const PLATE_ALPHA_BAKED: number;
 
-export function keylineMarks(face: RgbaImage): { image: RgbaImage; mark: Uint8Array };
+export function keylineMarks(face: RgbaImage): {
+  image: RgbaImage;
+  mark: Uint8Array;
+  seeds: Uint8Array;
+};
 export function bakePlateAlpha(face: RgbaImage, mark: Uint8Array): RgbaImage;

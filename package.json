@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc --noEmit -p tsconfig.build.json",
     "assets:anchors": "node tools/gen/anchorAudit.mjs",
-    "assets:touch": "node tools/gen/buildTouchAtlas.mjs"
+    "assets:touch": "node tools/gen/buildTouchAtlas.mjs",
+    "assets:touch:adopt": "node tools/gen/buildTouchAtlas.mjs --adopt"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",

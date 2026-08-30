@@ -147,7 +147,7 @@ export const PLATE_ALPHA_BAKED = 0.55 / 0.85;
  * the CUT face, and `tests/fixtures/touch-cut/` commits that input so a test can recompute it.
  *
  * @param {import('./png.d.mts').RgbaImage} face
- * @returns {{ image: import('./png.d.mts').RgbaImage, mark: Uint8Array }}
+ * @returns {{ image: import('./png.d.mts').RgbaImage, mark: Uint8Array, seeds: Uint8Array }}
  */
 export function keylineMarks(face) {
   const { width, height } = face;
@@ -164,6 +164,10 @@ export function keylineMarks(face) {
       if (luma < INK_DARK_MAX) dark[p] = 1;
     }
   }
+  // The engraving BEFORE either dilation — the semantic strokes, which the halo then merges.
+  // `shipped-touch-contrast.test.ts` measures per stroke and needs a topology the halo did not
+  // invent: `walk`'s two bars are two components here and one after the keyline. Codex round-13.
+  const seeds = new Uint8Array(dark);
   dark = grow(dark, width, height, BOLD_PX, inMark);
   for (let p = 0; p < dark.length; p += 1) {
     if (!dark[p]) continue;
@@ -200,7 +204,7 @@ export function keylineMarks(face) {
       data[i + 3] = 255;
     }
   }
-  return { image: { width, height, data }, mark: dark };
+  return { image: { width, height, data }, mark: dark, seeds };
 }
 
 /**

@@ -83,9 +83,14 @@ export function shippedFace(key: string): ReturnType<typeof readPng> {
  * each; the 2048 px plate they come from is 3.8 MB and gitignored), and `buildTouchAtlas.mjs`
  * writes them on the same run that writes `public/assets/ui/`.
  */
-export function cutFace(key: string): { cut: ReturnType<typeof readPng>; mark: Uint8Array } {
+export function cutFace(key: string): {
+  cut: ReturnType<typeof readPng>;
+  mark: Uint8Array;
+  seeds: Uint8Array;
+} {
   const cut = readPng(`${TOUCH_CUT_DIR}/${key}.png`);
-  return { cut, mark: keylineMarks(cut).mark };
+  const { mark, seeds } = keylineMarks(cut);
+  return { cut, mark, seeds };
 }
 
 /**
@@ -127,5 +132,57 @@ export function markComponents(
       }
     }
   }
+  return { labels, count };
+}
+
+/**
+ * Every mark pixel, labelled by the SEED stroke it belongs to.
+ *
+ * 🔴 **The halo invents topology, so the halo cannot define the strokes.** Labelling the
+ * finished mask made `walk`'s two bars one component — their keylines touch — and an 11-pixel
+ * bridge was then enough to keep 927 erased pale pixels inside a component that still scored
+ * 3.318:1. Codex round-13. The components come from `keylineMarks`'s pre-dilation `seeds`, which is
+ * the engraving the plate actually drew, and every mark pixel is assigned to the nearest seed by a
+ * breadth-first sweep across the mark itself.
+ *
+ * Returns -1 for anything that is not a mark pixel, and asserts nothing is left unreached.
+ */
+export function strokeLabels(
+  mark: Uint8Array,
+  seeds: Uint8Array,
+  width: number,
+): { labels: Int32Array; count: number } {
+  const { labels: seedLabels, count } = markComponents(seeds, width);
+  const labels = new Int32Array(mark.length).fill(-1);
+  let frontier: number[] = [];
+  for (let p = 0; p < mark.length; p += 1) {
+    if (seedLabels[p]! < 0) continue;
+    labels[p] = seedLabels[p]!;
+    frontier.push(p);
+  }
+  while (frontier.length > 0) {
+    const next: number[] = [];
+    for (const q of frontier) {
+      const x = q % width;
+      const y = (q - x) / width;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width) continue;
+          const r = ny * width + nx;
+          if (r >= mark.length || !mark[r] || labels[r]! >= 0) continue;
+          labels[r] = labels[q]!;
+          next.push(r);
+        }
+      }
+    }
+    frontier = next;
+  }
+  let orphans = 0;
+  for (let p = 0; p < mark.length; p += 1) {
+    if (mark[p] && labels[p]! < 0) orphans += 1;
+  }
+  expect(orphans, 'mark pixels that no engraving stroke reaches').toBe(0);
   return { labels, count };
 }

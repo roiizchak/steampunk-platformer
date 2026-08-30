@@ -186,6 +186,23 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     expect(filled, `${filled} transparent pixels were painted in`).toBe(0);
     expect(at(after, 0, 0)[3]).toBe(0);
   });
+
+  it('does not CLAIM a transparent pixel as mark either', () => {
+    // 🔴 The guard above skips the paint; it has to clear the BIT too, and for two rounds it
+    // did not. `grow` sets bits outside the disc, so the returned mask claimed 44 transparent
+    // pixels on this fixture — and the contrast gate counts exactly those bits as the engraving's
+    // coverage at true size. Deleting the repair left the picture identical and no assertion
+    // noticed, which is the C1/C2 failure this project has a rule about. Codex round-13, M69.
+    const before = faceWithMarkAtDiscEdge();
+    const { image, mark } = keylineMarks(before);
+    const after = image as Face;
+    let ghosts = 0;
+    for (let p = 0; p < mark.length; p += 1) {
+      if (mark[p] && after.data[p * 4 + 3] !== 255) ghosts += 1;
+    }
+    expect(ghosts, `${ghosts} mark bits sit on pixels the face does not draw`).toBe(0);
+    expect([...mark].filter((bit) => bit === 1).length, 'the fixture has no mark at all').toBeGreaterThan(0);
+  });
 });
 
 describe('bakePlateAlpha fades the brass and not the ink', () => {
