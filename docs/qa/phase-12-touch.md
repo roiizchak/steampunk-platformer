@@ -35,12 +35,12 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, **recaptured after the round-7 contrast repair**. The measurable half now passes on the shipped bytes: **mark-masked contrast at TRUE ON-SCREEN SIZE: 3.31:1** for all six, at rest and pressed, over every background luminance, against 1.4.11's 3:1. ⚠️ **Two earlier versions of this row were false and both were caught by review.** The first cited 3.47:1 over the WHOLE FACE — `walk` passed on a decorative highlight while its own bars measured 1.12:1 (round 8). The second cited 3.64:1 on the mark but on 160 px SOURCE TEXELS; at the 48 CSS px the smallest in-scope viewport actually presents, a 3.3× downscale the canvas deliberately smooths, the 1 px keyline averaged away and the marks fell to 1.63–2.85:1 (round 9). The engraving is now thickened as well as keylined, both inside the mark region only, and the gate composites, box-filters to 48 px and measures there. Watched red at 2.43:1 flat (M46), at the mark alone (M51), and with the thickening removed (M55). What remains is whether a wrench READS as a wrench at 55.6 CSS px, which is the agent's call and the owner's. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, **recaptured after the round-7 contrast repair**. The measurable half now passes on the shipped bytes: **mark-masked contrast at TRUE ON-SCREEN SIZE: 3.32:1** at rest and **3.85:1** pressed, for all six, over every background luminance, against 1.4.11's 3:1. ⚠️ **Two earlier versions of this row were false and both were caught by review.** The first cited 3.47:1 over the WHOLE FACE — `walk` passed on a decorative highlight while its own bars measured 1.12:1 (round 8). The second cited 3.64:1 on the mark but on 160 px SOURCE TEXELS; at the 48 CSS px the smallest in-scope viewport actually presents, a 3.3× downscale the canvas deliberately smooths, the 1 px keyline averaged away and the marks fell to 1.63–2.85:1 (round 9). The engraving is now thickened as well as keylined, both inside the mark region only, and the gate composites, box-filters to 48 px and measures there. Watched red at 2.43:1 flat (M46), at the mark alone (M51), and with the thickening removed (M55). ⚠️ A third correction, from round 10: the gate rolled its OWN box filter, which partitioned the source differently from `resize.mjs` — it now measures through the shared `downscale`. What remains is whether a wrench READS as a wrench at 48 CSS px, which is the agent's call and the owner's. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 63 rows; 12 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one and M55–M57 the round-9 one. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 65 rows; 14 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one and M58–M59 the round-10 one. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
@@ -79,6 +79,22 @@ the test does not test is the move this project forbids.
    $0.15 take at minimum, a new cut, and every contrast and mark measurement re-founded.
 
 Until you pick, 12.17 is **NOT MET**.
+
+#### And two bounds I removed rather than defend
+
+The Codex round-10 review was right that two numbers in the gates were mine and not the criteria's,
+and that a test quietly requiring more than the approved rule is the STOP-and-ask CLAUDE.md § 3
+names. Both are now relaxed to what the rule actually says, with the measurements kept in the tests'
+prose so the drift stays visible. Say the word if you want either adopted as a real floor:
+
+| what | was | now | measured today |
+|---|---|---|---|
+| mark distinctness, `shipped-touch.test.ts` | 15 % of mark pixels differing | **> 0** — the criterion says *distinct* and names no share | 70.4 %–82.9 % across all fifteen pairs |
+| engraving thickening, `touch-atlas-ink.test.ts` | 1.3× dark-pixel growth | **> 1** — 12.14 asks for a readable mark, and readability is measured on the shipped bytes | ~1.78× on the fixture |
+
+Both still catch the failures their mutations build — a mark cut from the wrong cell scores 0 (M45),
+a copied face scores 0 (M40), a missing `grow` scores exactly 1.0 (M55) — and the readability claim
+itself now rests on the true-size contrast gate, which is a measurement rather than a judgement.
 
 🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder

@@ -35,9 +35,10 @@
  *
  * ⚠️ **The numbers moved twice more.** Splitting the alpha made `SOLID` separate ink from
  * plate rather than face from field, so this now compares the MARKS themselves; then the keyline and
- * bolden passes changed the marks. Measured on the shipped six as they stand: **70.4 % to 82.9 %**
- * (closest `attack`/`pause`, furthest `left`/`attack`). The bound stays at 15 %, four and a half
- * times inside the closest honest pair.
+ * bolden passes changed the marks again. Measured on the shipped six as they stand: **70.4 % to
+ * 82.9 %** (closest `attack`/`pause`, furthest `left`/`attack`). The BOUND, however, is now zero —
+ * see `MIN_DIFFERING_SHARE`: the criterion says *distinct* and names no share, and a 15 % floor was
+ * this file requiring more than the rule it enforces.
  *
  * ## And the part no automated gate covers
  *
@@ -52,7 +53,9 @@ import { describe, expect, it } from 'vitest';
 import catalog from '../../public/assets/index.json';
 import { TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
 import { ART_ALPHA, ART_ALPHA_PRESSED, PLATE_ALPHA } from '../../src/scenes/touchMarks';
+import { INK_DARK_MAX, INK_LIGHT_MIN } from '../../tools/gen/touchInk.mjs';
 import { readPng } from '../../tools/gen/png.mjs';
+import { downscale } from '../../tools/gen/resize.mjs';
 import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
 
 /** Every control's texture key, in the form `touchControlsLayer.build` asks the texture manager for. */
@@ -83,11 +86,19 @@ function ratio(a: number, b: number): number {
 const INK_DELTA = 60;
 
 /**
- * How much of two faces' MARKS must differ in colour. **15 %**, against a measured closest honest
- * pair of 36.3 % (`right` vs `jump`, two triangles) and a furthest of 60.5 %. A copied glyph
- * scores 0.
+ * How much of two faces' MARKS must differ in colour.
+ *
+ * ⚠️ **Zero, deliberately, and that is a weaker gate than I first wrote.** 12.17 says the marks are
+ * *distinct*; it names no share. A 15 % floor is a judgement about how distinct, and enforcing it
+ * would be a test quietly requiring more than the approved rule — the thing CLAUDE.md § 3 calls a
+ * STOP-and-ask. Codex round-10.
+ *
+ * The measured figures are kept in the header above so the drift is visible, and adopting an
+ * explicit floor is written up as an owner decision in `docs/qa/phase-12-touch.md` § 12.17b. What
+ * this still catches is the failure the criterion names and the mutations build: a mark cut from
+ * the wrong cell (M45) or a whole face copied (M40) scores exactly 0.
  */
-const MIN_DIFFERING_SHARE = 0.15;
+const MIN_DIFFERING_SHARE = 0;
 
 /**
  * The share of the face the mark occupies, and the only part this compares.
@@ -168,24 +179,53 @@ describe('the shipped touch faces', () => {
     }
   });
 
-  it('bakes the plate so that DRAWN at ART_ALPHA it lands on exactly PLATE_ALPHA', () => {
-    // 🔴 The number the 19.9 %-occlusion argument is about, checked where it now lives.
-    // Splitting the alpha moved the plate's translucency out of `setAlpha` and into the BYTES, and
-    // the contract is that the two multiply back to the measured 0.55. `touchMarks.ts` holds the
-    // other half; neither file can drift without this failing.
+  it('bakes EVERY brass pixel, not just the commonest one', () => {
+    // 🔴 The number the 19.9 %-occlusion argument is about, checked on every pixel it applies to.
+    // ⚠️ **The first version read only the MODAL translucent alpha, and that is not the claim.**
+    // Making 11 203 outer brass pixels of `pause` fully opaque took solid coverage from 31.9 % to
+    // 75.7 % — a plate that hides the level it is drawn over — while the modal stayed 165 and the
+    // contrast and distinctness gates stayed green. Codex round-10.
+    //
+    // The invariant is per pixel and has two halves: a pixel at an INK luminance is opaque, and
+    // every other non-transparent pixel draws at `PLATE_ALPHA`. Between them they say the whole of
+    // what `bakePlateAlpha` is for, and neither can be satisfied by an average.
+    const baked = Math.round((255 * PLATE_ALPHA) / ART_ALPHA);
     for (const key of KEYS) {
       const png = readPng(`public/${entry(key).url}`);
-      const counts = new Map<number, number>();
-      for (let i = 3; i < png.data.length; i += 4) {
-        const a = png.data[i]!;
-        if (a > 0 && a < SOLID) counts.set(a, (counts.get(a) ?? 0) + 1);
+      const inset = Math.round((png.width * (1 - MARK_FRACTION)) / 2);
+      let brass = 0;
+      let ink = 0;
+      for (let y = 0; y < png.height; y += 1) {
+        for (let x = 0; x < png.width; x += 1) {
+          const i = (y * png.width + x) * 4;
+          const a = png.data[i + 3]!;
+          if (a === 0) continue;
+          const luma = png.data[i]! * 0.299 + png.data[i + 1]! * 0.587 + png.data[i + 2]! * 0.114;
+          if (luma < INK_DARK_MAX || luma > INK_LIGHT_MIN) {
+            // ⚠️ Inside the MARK region only. The disc's own keyed rim is a narrow alpha ramp, and
+            // some of its pixels are dark enough to read as ink — 643-660 of them per face,
+            // measured, every one of them outside this square and none inside it. Demanding they be
+            // opaque would demand a hard-cut edge, which is a different and worse artefact.
+            if (x < inset || x >= png.width - inset || y < inset || y >= png.height - inset) continue;
+            ink += 1;
+            expect(a, `${key} has mark ink at alpha ${a} — a faded engraving`).toBe(255);
+          } else {
+            brass += 1;
+            // ±1 for the rounding `bakePlateAlpha` does when it writes a byte. Measured: the
+            // brightest brass pixel on every shipped face is exactly 165.
+            expect(
+              a,
+              `${key} has brass at alpha ${a}, above the baked ${baked} — it would hide the level`,
+            ).toBeLessThanOrEqual(baked + 1);
+          }
+        }
       }
-      const modal = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
-      const effective = (modal[0] / 255) * ART_ALPHA;
-      expect(
-        effective,
-        `${key}'s plate draws at ${effective.toFixed(3)}, not the measured ${PLATE_ALPHA}`,
-      ).toBeCloseTo(PLATE_ALPHA, 2);
+      expect(ink, `${key} has no ink at all`).toBeGreaterThan(0);
+      expect(brass, `${key} has no brass at all`).toBeGreaterThan(0);
+      expect((baked / 255) * ART_ALPHA, 'the baked plate does not draw at PLATE_ALPHA').toBeCloseTo(
+        PLATE_ALPHA,
+        2,
+      );
     }
   });
 
@@ -197,7 +237,8 @@ describe('the shipped touch faces', () => {
     // its own mutation is the failure this project has a rule about. Codex round-8.
     //
     // The repair is `keylineMarks()`: every dark engraving gets a 1 px pale keyline, so a reader
-    // takes whichever ink contrasts. All six now measure **3.64:1** at rest and 4.12:1 pressed, on
+    // takes whichever ink contrasts. Measured through this repository's own `downscale`, all six now read **3.32:1**
+    // at rest and **3.85:1** pressed, on
     // the mark mask itself. Before the alpha split they were 2.43-2.47:1 (M46); before the keyline,
     // `walk`'s mark was 1.12:1 (M51).
     //
@@ -214,42 +255,50 @@ describe('the shipped touch faces', () => {
           y < png.height - inset &&
           png.data[(y * png.width + x) * 4 + 3]! >= SOLID;
 
+        // Where the engraving is, at the SAME resolution and through the SAME partitioning as the
+        // composite below — `downscale` is this repository's own box filter, and rolling a second
+        // one by hand made the two disagree on which source columns fall in the first cell.
+        // Codex round-10. The alpha channel carries the coverage: 255 where mark, 0 elsewhere.
+        const coverage = new Uint8ClampedArray(png.width * png.height * 4);
+        for (let y = 0; y < png.height; y += 1) {
+          for (let x = 0; x < png.width; x += 1) {
+            coverage[(y * png.width + x) * 4 + 3] = isMark(x, y) ? 255 : 0;
+          }
+        }
+        const marks = downscale(
+          { width: png.width, height: png.height, data: coverage },
+          TRUE_SIZE_PX,
+          TRUE_SIZE_PX,
+        );
+
         let worst = Infinity;
         let markPixels = 0;
         for (let bg = 0; bg <= 255; bg += 5) {
           const back = luminance(bg, bg, bg);
-          // Composite over this background, then BOX-FILTER to the size a phone actually shows.
-          const sum = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX * 3);
-          const count = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX);
-          const markShare = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX);
-          for (let y = 0; y < png.height; y += 1) {
-            for (let x = 0; x < png.width; x += 1) {
-              const i = (y * png.width + x) * 4;
-              const a = (png.data[i + 3]! / 255) * alpha;
-              const oy = Math.min(TRUE_SIZE_PX - 1, Math.floor((y * TRUE_SIZE_PX) / png.height));
-              const ox = Math.min(TRUE_SIZE_PX - 1, Math.floor((x * TRUE_SIZE_PX) / png.width));
-              const k = oy * TRUE_SIZE_PX + ox;
-              sum[k * 3] += png.data[i]! * a + bg * (1 - a);
-              sum[k * 3 + 1] += png.data[i + 1]! * a + bg * (1 - a);
-              sum[k * 3 + 2] += png.data[i + 2]! * a + bg * (1 - a);
-              count[k] += 1;
-              if (isMark(x, y)) markShare[k] += 1;
-            }
+          // Composite over this background at full size, then downscale the composite.
+          const over = new Uint8ClampedArray(png.width * png.height * 4);
+          for (let i = 0; i < png.data.length; i += 4) {
+            const a = (png.data[i + 3]! / 255) * alpha;
+            over[i] = png.data[i]! * a + bg * (1 - a);
+            over[i + 1] = png.data[i + 1]! * a + bg * (1 - a);
+            over[i + 2] = png.data[i + 2]! * a + bg * (1 - a);
+            over[i + 3] = 255;
           }
+          const shown = downscale(
+            { width: png.width, height: png.height, data: over },
+            TRUE_SIZE_PX,
+            TRUE_SIZE_PX,
+          );
+
           let best = 0;
           markPixels = 0;
-          for (let k = 0; k < count.length; k += 1) {
-            if (count[k] === 0) continue;
+          for (let k = 0; k < TRUE_SIZE_PX * TRUE_SIZE_PX; k += 1) {
             // An output pixel counts as MARK only if the engraving is most of what fell into it.
             // Anything less is a blend of mark and plate, and is not what a reader is looking at.
-            if (markShare[k]! < count[k]! * 0.5) continue;
+            if (marks.data[k * 4 + 3]! < 128) continue;
             markPixels += 1;
             const r = ratio(
-              luminance(
-                sum[k * 3]! / count[k]!,
-                sum[k * 3 + 1]! / count[k]!,
-                sum[k * 3 + 2]! / count[k]!,
-              ),
+              luminance(shown.data[k * 4]!, shown.data[k * 4 + 1]!, shown.data[k * 4 + 2]!),
               back,
             );
             if (r > best) best = r;

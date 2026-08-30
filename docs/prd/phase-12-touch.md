@@ -190,8 +190,18 @@ papered over.
 | M55 | do not thicken the engraving, leaving only the hairline keyline | 12.14 | **GREEN — nothing pinned the thickening** → RED 1/6 |
 | M56 | paint the keyline over the mark as well as around it | 12.14 | RED 1/6 |
 | M57 | paint the keyline over transparent pixels too | 12.14 | **GREEN twice — the fixture could not reach the guard** → RED 1/6 |
+| M58 | make the OUTER brass opaque, leaving the modal alpha where it was | 12.14 | RED 1/7, at alpha 255 against a baked 165 |
+| M59 | fade the whole `walk` engraving except 32 pixels | 12.14, 12.17 | RED 2/7 |
 
-**Twelve rows reddened nothing, and all twelve were holes rather than mutations to drop.**
+**Fourteen rows reddened nothing, and all fourteen were holes rather than mutations to drop.**
+
+🔴 **M58 and M59 are the two shapes a "measured" gate lets through.** The plate-alpha check read only
+the MODAL translucent alpha, so making 9 717 outer brass pixels fully opaque — a plate that hides the
+level it is drawn over — left it green, with contrast and distinctness unchanged. And the contrast
+check kept the single best output pixel and asked only that one survive, so an engraving faded to 32
+remaining pixels still scored over 3:1. Both were found by the Codex round-10 review, both are now
+per-pixel invariants: every ink pixel inside the mark region is opaque, and every brass pixel
+anywhere draws at or below `PLATE_ALPHA`.
 
 🔴 **M57, green through two fixtures, and the reason is worth keeping.** The transparency guard in
 `keylineMarks` can only fire when the engraving reaches the edge of its disc — with a blob safely at

@@ -25,17 +25,17 @@
  *
  * Splitting the alpha was necessary and not sufficient — see `BOLD_PX` for the half that measured
  * the marks at the size a player is actually shown them. With both repairs in place, all six marks
- * measure **3.31:1** at 48 CSS px over every background, with 20-31 % of the face opaque and the
+ * measure **3.32:1** at rest and **3.85:1** pressed, at 48 CSS px over every background, with 20-31 % of the face opaque and the
  * translucent disc 49-59 %.
  */
-const INK_DARK_MAX = 32;
-const INK_LIGHT_MIN = 208;
+export const INK_DARK_MAX = 32;
+export const INK_LIGHT_MIN = 208;
 
 /**
  * How far the pale keyline is grown around the dark engraving, in shipped pixels.
  *
  * 3 px of a 160 px face is 0.9 CSS px at the worst in-scope scale, which is the point: paired with
- * `BOLD_PX` it is the leanest width at which every mark reaches the 3.31:1 plateau AFTER the
+ * `BOLD_PX` it is the leanest width at which every mark reaches the 3.32:1 plateau AFTER the
  * downscale. At a 2 px keyline `walk` is 2.10-2.88:1 and at 1 px it is 1.63:1. The colour is
  * `MARK_INK` from `touchMarks.ts`, the pale half of the pair `contrast-floor.test.ts` measures.
  */
@@ -54,7 +54,7 @@ const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
  *
  * So the dark engraving is thickened before it is keylined, both inside the mark region only.
  * Swept at the true size over every background: `BOLD_PX` 2 with `KEYLINE_PX` 3 puts all six marks
- * on **3.31:1**, which is the plateau this ink pair can reach — 3 and 4 do not raise it, and 1 or a
+ * on **3.32:1**, which is the plateau this ink pair can reach — 3 and 4 do not raise it, and 1 or a
  * 2 px keyline leave `walk` at 2.72-2.91. Leanest pair that reaches the plateau; 20 % of the face
  * ends up opaque and the translucent disc stays 59 %.
  */

@@ -5,5 +5,9 @@
 
 import type { RgbaImage } from './png.d.mts';
 
+/** Luminance below which a pixel is dark ink, and above which it is pale ink. */
+export const INK_DARK_MAX: number;
+export const INK_LIGHT_MIN: number;
+
 export function keylineMarks(face: RgbaImage): RgbaImage;
 export function bakePlateAlpha(face: RgbaImage): RgbaImage;

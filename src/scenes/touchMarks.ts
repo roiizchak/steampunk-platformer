@@ -121,10 +121,12 @@ export const PLATE_ALPHA_PRESSED = 0.72;
  * 0.55 gave the best ink only **2.43-2.47:1** against WCAG 1.4.11's 3:1. Found by the Codex round-7
  * review; verified locally before anything moved.
  *
- * `buildTouchAtlas.mjs` therefore multiplies the BRASS pixels' alpha by `0.55 / 0.85` and leaves
- * the ink alone. Drawn at 0.85 the plate lands back on exactly `PLATE_ALPHA` — the occlusion
- * measurement is untouched — while the ink is read at **3.47:1**. Pressed at 1.0 the plate is
- * 0.647 (still under the 0.73 the occlusion argument allows) and the ink is **4.12:1**.
+ * `touchInk.mjs` therefore multiplies the BRASS pixels' alpha by `0.55 / 0.85` and leaves
+ * the ink alone, and thickens and keylines the engraving because at the 48 CSS px a phone actually
+ * shows a face a 1 px feature averages into the plate. Drawn at 0.85 the plate lands back on
+ * exactly `PLATE_ALPHA` — the occlusion
+ * measurement is untouched — while the mark is read at **3.32:1**. Pressed at 1.0 the plate is
+ * 0.647 (still under the 0.73 the occlusion argument allows) and the mark is **3.85:1**.
  */
 export const ART_ALPHA = 0.85;
 export const ART_ALPHA_PRESSED = 1;

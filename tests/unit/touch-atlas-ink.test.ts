@@ -137,12 +137,15 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     const grown = darkCount(after);
     const original = darkCount(before);
     expect(original, 'the fixture has no engraving to thicken').toBeGreaterThan(0);
-    // A 12 x 12 blob grown by 2 px is 16 x 16 — a little under 1.8x. Bound well inside that, and
-    // above 1.0, which is what a missing `grow` scores.
+    // ⚠️ **Any growth at all, not a ratio.** A 12 x 12 blob grown by 2 px measures about 1.78x
+    // here, and the first version demanded 1.3 — a number no criterion approves and one that legal
+    // art could false-red on. 12.14 asks for a readable mark at true size, which is measured on the
+    // shipped bytes and not here. What THIS owes is that the thickening happens at all: a missing
+    // `grow` scores exactly 1.0. Codex round-10.
     expect(
       grown / original,
-      `the engraving grew ${(grown / original).toFixed(2)}x — a hairline, not a mark`,
-    ).toBeGreaterThan(1.3);
+      `the engraving grew ${(grown / original).toFixed(2)}x — it was not thickened at all`,
+    ).toBeGreaterThan(1);
   });
 
   it('leaves every pixel outside the central mark region alone', () => {
