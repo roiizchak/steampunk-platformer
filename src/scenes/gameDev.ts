@@ -158,7 +158,7 @@ export function helpLine(audio?: AudioSettings, touch = false): string {
   // completion panel all name TAP. The play scene, the one screen whose controls are not
   // self-evident, was the one that was missed.
   const base = touch
-    ? `TAP the plates — move, jump, strike  ·  top left walks, top right leaves${level}`
+    ? `TAP to move, jump, strike  ·  gait and menu, top right${level}`
     : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
       `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
       'ESC levels';

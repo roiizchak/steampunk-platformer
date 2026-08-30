@@ -67,15 +67,39 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
   { key: 'touch-jump', subject: 'an upward-pointing solid triangle', row: 0, col: 2 },
   {
     key: 'touch-attack',
-    subject: 'a crossed spanner and riveting hammer, forming an X',
+    subject:
+      'a single adjustable spanner seen from the side, its open jaws pointing to the upper right',
     row: 1,
     col: 0,
   },
-  { key: 'touch-pause', subject: 'two thick vertical bars, side by side', row: 1, col: 1 },
+  {
+    key: 'touch-pause',
+    subject: 'a cogwheel with six square teeth and a round hole through its centre',
+    row: 1,
+    col: 1,
+  },
+  {
+    key: 'touch-walk',
+    subject: 'two horizontal bars stacked one above the other, the upper bar half the length of the lower',
+    row: 1,
+    col: 2,
+  },
 ]);
 
-/** The empty cell, asserted empty by the atlas builder rather than assumed. */
-export const TOUCH_PLATE_EMPTY = Object.freeze({ row: 1, col: 2 });
+/**
+ * ✅ **There is no empty cell any more, and that is the repair.**
+ *
+ * Both takes failed the same way: the model added a button to fill the sheet — six in take 1, seven
+ * in take 2 — and no amount of naming the empty corner stopped it, because *'do not draw a sixth'*
+ * is a negation and STYLE.md §6 says negations do the opposite. The layout with nothing to fill is
+ * the repair that addresses the cause instead of the symptom, and it is available now for a reason
+ * that has nothing to do with the prompt: **the game grew a sixth control.** The owner asked for a
+ * walk/run toggle, so the grid holds six real faces and the model has no free space to invent into.
+ *
+ * The other two changes are the owner's as well: the attack face is the courier's own **wrench**
+ * rather than crossed tools, and pause is a **gear** rather than two bars.
+ */
+export const TOUCH_PLATE_EMPTY = null;
 
 export const TOUCH_PLATE_COLS = 3;
 export const TOUCH_PLATE_ROWS = 2;
@@ -99,26 +123,24 @@ export function touchPlatePrompt(template) {
   ).join('\n');
 
   return [
-    'A sheet of five separate round push-buttons for a video game touchscreen interface, arranged ' +
-      'in two rows and laid out flat on a plain coloured backing sheet, viewed straight on from ' +
-      'directly above.',
+    'A sheet of six separate round push-buttons for a video game touchscreen interface, arranged ' +
+      'in two rows of three and laid out flat on a plain coloured backing sheet, viewed straight ' +
+      'on from directly above.',
     '',
-    'LAYOUT, STATED AS EXACT GEOMETRY. The image contains five buttons in total: three along the ' +
-      'top and two along the bottom. Reading across, the top row holds buttons 1, 2 and 3 and the ' +
-      'bottom row holds buttons 4 and 5. There is no third row and there is no button below or to ' +
-      'the right of button 5 — that whole corner of the image is empty backing sheet.',
+    'LAYOUT, STATED AS EXACT GEOMETRY. The image contains six buttons in total: three along the ' +
+      'top and three along the bottom, in two tidy rows of equal length. Reading across, the top ' +
+      'row holds buttons 1, 2 and 3 and the bottom row holds buttons 4, 5 and 6. Every part of ' +
+      'the image outside those six circles is backing sheet.',
     '',
     'BUTTON CENTRES, measured from the top-left corner of the image as fractions of its width and ' +
-      'height: button 1 at one sixth across and one quarter down; button 2 at one half across and ' +
-      'one quarter down; button 3 at five sixths across and one quarter down; button 4 at one sixth ' +
-      'across and three quarters down; button 5 at one half across and three quarters down. Every ' +
-      'button is a circle whose diameter is one quarter of the width of the image, so each one is ' +
-      'surrounded on all sides by a wide clear margin of backing sheet and no two of them come ' +
-      'close to touching.',
+      'height: buttons 1, 2 and 3 sit one quarter of the way down, at one sixth, one half and ' +
+      'five sixths across; buttons 4, 5 and 6 sit three quarters of the way down, at one sixth, ' +
+      'one half and five sixths across. Every button is a circle whose diameter is one quarter of ' +
+      'the width of the image, so each one is surrounded on all sides by a wide clear margin of ' +
+      'backing sheet and no two of them come close to touching.',
     '',
     `BACKING SHEET: ${TOUCH_PLATE_CHROMA}, perfectly flat and evenly lit, filling every part of the ` +
-      'image that is not a button — the margins, the space between the buttons, and the whole of ' +
-      'the empty bottom-right corner where no button stands.',
+      'image that is not a button — the margins and the space between the buttons.',
     '',
     'EACH BUTTON: a circular Victorian brass control, cast and polished, with a raised riveted ' +
       'bezel around the rim, a slightly domed face, visible patina in the recesses and a warm amber ' +
@@ -131,8 +153,8 @@ export function touchPlatePrompt(template) {
     '',
     // The locked block ends in a full stop; this extends the same sentence rather than starting a
     // new one after it.
-    `${forbid.replace(/\.$/, '')}, drop shadows cast onto the backing sheet, gradients or vignetting in the backing ` +
-      'sheet, buttons overlapping or touching, a sixth button, a frame or border around the sheet, ' +
-      'labels or numbers beside the buttons, a hand or finger.',
+    `${forbid.replace(/[.]$/, '')}, drop shadows cast onto the backing sheet, gradients or vignetting in the backing ` +
+      'sheet, buttons overlapping or touching, a seventh button, a third row, a frame or border ' +
+      'around the sheet, labels or numbers beside the buttons, a hand or finger.',
   ].join('\n');
 }

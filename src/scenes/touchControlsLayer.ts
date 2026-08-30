@@ -57,7 +57,7 @@ import {
   touchLayout,
   touchTargetsFit,
 } from '../render/touchLayout';
-import { drawMarks, drawPlate, PLATE_ALPHA, PLATE_ALPHA_PRESSED } from './touchMarks';
+import { drawFace, PLATE_ALPHA, PLATE_ALPHA_PRESSED } from './touchMarks';
 import type {
   PointerLike,
   TouchFaceLike,
@@ -329,12 +329,8 @@ export class TouchControlsLayer {
     const cx = target.x + target.w / 2;
     const cy = target.y + target.h / 2;
 
-    // Grey-box until the generated plate lands. `textures.exists` is the same greybox-or-sprite
-    // decision `gearLayer.addGearObject` makes, in one place, so the HUD icon and the thing it
-    // counts cannot become two different answers.
-    const faces: TouchFaceLike[] = [];
-    faces.push(drawPlate(this.scene, target, cx, cy));
-    for (const mark of drawMarks(this.scene, target, cx, cy)) faces.push(mark);
+    // The generated brass face if it shipped, the drawn one if it did not. See `drawFace`.
+    const faces = drawFace(this.scene, target, cx, cy);
 
     const zone = this.scene.add
       .zone(target.x, target.y, target.w, target.h)

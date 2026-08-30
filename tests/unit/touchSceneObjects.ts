@@ -42,6 +42,8 @@ export interface FaceFake {
   strokeWidth: number;
   strokeColor: number;
   fontSize: number;
+  /** The texture an `add.image` face was built from. Empty for every drawn shape. */
+  textureKey: string;
 }
 
 /** The emitter handler type the layer's `EmitterLike` declares. See `touchSceneFake.ts`. */
@@ -72,6 +74,11 @@ export function makeZoneFactory(
     setOrigin(ox: number, oy?: number) {
       api.originX = ox;
       api.originY = oy ?? ox;
+      return api;
+    },
+    setDisplaySize(nw: number, nh: number) {
+      api.w = nw;
+      api.h = nh;
       return api;
     },
     setDepth(d: number) {
@@ -139,6 +146,7 @@ export function makeFaceFactory(
     strokeWidth: 0,
     strokeColor: 0,
     fontSize: 0,
+    textureKey: '',
     setName(name: string) {
       api.id = name;
       return api;

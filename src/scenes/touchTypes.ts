@@ -57,6 +57,8 @@ export interface TouchFaceLike {
   setFontSize?(size: number): TouchFaceLike;
   /** `Rectangle` only. The rotate prompt's scrim re-sizes to a changed design size. */
   setSize?(width: number, height: number): TouchFaceLike;
+  /** `Image` only. A 160 px face drawn into a box `touchLayout` scaled off the view. */
+  setDisplaySize?(width: number, height: number): TouchFaceLike;
   /** The pressed state. A control that does not visibly answer a thumb reads as a broken app. */
   setAlpha(alpha: number): TouchFaceLike;
   /** `Rectangle` only — the two strokes of the attack cross. */
@@ -96,7 +98,11 @@ export interface TouchSceneLike {
     ): TouchFaceLike;
     /** The gear's body and hub, and the wrench's ring. A shape a rectangle cannot fake. */
     circle(x: number, y: number, radius: number, fillColor?: number, fillAlpha?: number): TouchFaceLike;
+    /** The generated brass face, once the plate has been cut. See `touchControlsLayer.build`. */
+    image(x: number, y: number, key: string): TouchFaceLike;
   };
+  /** Whether a generated face reached the texture manager. The greybox-or-art decision. */
+  textures: { exists(key: string): boolean };
   input: EmitterLike;
   game: { events: EmitterLike };
   scale: {

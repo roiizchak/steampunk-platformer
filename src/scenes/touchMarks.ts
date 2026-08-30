@@ -113,6 +113,38 @@ export const PLATE_STROKE_PX = 6;
  */
 export const PLATE_ALPHA_PRESSED = 0.72;
 
+/**
+ * One control's drawn objects: the generated brass face if it shipped, the grey box if it did not.
+ *
+ * ✅ `textures.exists` is the same greybox-or-sprite decision `gearLayer.addGearObject` makes, in
+ * one place, so a half-landed art path cannot become two different answers on one screen. The plate
+ * PNGs come from `tools/gen/buildTouchAtlas.mjs`; `tests/unit/shipped-touch.test.ts` measures them.
+ *
+ * 🔴 **The art carries the SAME ALPHA.** Every measurement this phase made about a plate is a
+ * measurement of how much of the level a thumb-sized opaque disc hides — 19.9 % of standing
+ * positions have a hazard, an enemy or the goal behind one — and that is a property of the BOX, not
+ * of what is drawn in it. So the image gets `PLATE_ALPHA`, the pressed state gets
+ * `PLATE_ALPHA_PRESSED`, and `setPressed` needs no branch for which path was taken.
+ *
+ * ⚠️ `setDisplaySize`, not a scale factor: `touchLayout` sizes the box off the VIEW, so the face
+ * is told the box's size rather than a ratio to the source PNG's 160 px.
+ */
+export function drawFace(
+  scene: TouchSceneLike,
+  target: TouchTarget,
+  cx: number,
+  cy: number,
+): TouchFaceLike[] {
+  const artKey = `touch-${target.id}`;
+  if (scene.textures.exists(artKey)) {
+    const face = scene.add.image(cx, cy, artKey).setName(target.id).setDepth(TOUCH_FACE_DEPTH);
+    face.setDisplaySize?.(target.w, target.h);
+    face.setAlpha(PLATE_ALPHA);
+    return [face];
+  }
+  return [drawPlate(scene, target, cx, cy), ...drawMarks(scene, target, cx, cy)];
+}
+
 /** The plate itself: brass fill for a bright background, a pale keyline for a dark one. */
 export function drawPlate(
   scene: TouchSceneLike,

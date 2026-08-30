@@ -156,7 +156,14 @@ export function touchLayout(viewWidth: number, viewHeight: number): TouchTarget[
   const at = (id: TouchId, x: number, y: number): TouchTarget => ({ id, x, y, w: box, h: box });
 
   // Movement under the left thumb, actions under the right, and the two that are not part of a
-  // running fight — pause and the walk/run toggle — in the top corners, out of both thumbs' way.
+  // running fight — pause and the walk/run toggle — along the top RIGHT, out of both thumbs' way.
+  //
+  // 🔴 Not the top LEFT, which is where the walk plate went first and where **the HUD already
+  // lives**: `gearLayer` puts the portrait and the gear gauge in that corner, and a screenshot at
+  // Pixel 7 landscape showed the plate underneath them. Nothing in this file could have caught it
+  // — `touchTargetsFit` measures the six controls against each other and knows nothing about the
+  // HUD, and every one of the 28 touch e2e tests stayed green. Found by looking at the game.
+  //
   // The order matches TOUCH_IDS so a caller can zip the two lists.
   return [
     at('left', edge, bottom),
@@ -164,7 +171,7 @@ export function touchLayout(viewWidth: number, viewHeight: number): TouchTarget[
     at('attack', rightmost - box - gap, bottom),
     at('jump', rightmost, bottom),
     at('pause', rightmost, edge),
-    at('walk', edge, edge),
+    at('walk', rightmost - box - gap, edge),
   ];
 }
 

@@ -81,7 +81,12 @@ export interface TouchSceneHarness {
 const GAME_WIDTH = 1920;
 const GAME_HEIGHT = 1080;
 
-export function makeTouchScene(): TouchSceneHarness {
+export function makeTouchScene(options: { art?: boolean } = {}): TouchSceneHarness {
+  // ⚠️ **`art` is opt-in, and every existing case keeps the greybox.** The plate's alpha, its
+  // contrast, its occlusion share and the drawn marks are all measured against the drawn path, and
+  // silently flipping the default would have re-pointed those gates at a different object without
+  // changing one assertion. The art cases ask for it by name.
+  const hasArt = options.art === true;
   const zones: ZoneFake[] = [];
   const faces: FaceFake[] = [];
   const sceneEvents: string[] = [];
@@ -142,14 +147,19 @@ export function makeTouchScene(): TouchSceneHarness {
       triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
       circle: (x: number, y: number, r: number, _fill?: number, a?: number) =>
         makeFace(x, y, r * 2, r * 2, a),
-      image: () => {
-        throw new Error(
-          'add.image was called, but textures.exists() is false in this fake — the layer took the ' +
-            'art path when no art is loaded, which would draw a green box in the shipped game.',
-        );
+      image: (x: number, y: number, key: string) => {
+        if (!hasArt) {
+          throw new Error(
+            'add.image was called, but textures.exists() is false in this fake — the layer took the ' +
+              'art path when no art is loaded, which would draw a green box in the shipped game.',
+          );
+        }
+        const face = makeFace(x, y);
+        face.textureKey = key;
+        return face;
       },
     },
-    textures: { exists: () => false },
+    textures: { exists: () => hasArt },
     input: {
       on(event: string, fn: Handler) {
         sceneEvents.push(event);

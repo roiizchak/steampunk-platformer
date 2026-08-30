@@ -37,6 +37,30 @@
     {
       "key": "goal-gate",
       "url": "assets/objects/gate.png"
+    },
+    {
+      "key": "touch-left",
+      "url": "assets/ui/touch-left.png"
+    },
+    {
+      "key": "touch-right",
+      "url": "assets/ui/touch-right.png"
+    },
+    {
+      "key": "touch-jump",
+      "url": "assets/ui/touch-jump.png"
+    },
+    {
+      "key": "touch-attack",
+      "url": "assets/ui/touch-attack.png"
+    },
+    {
+      "key": "touch-pause",
+      "url": "assets/ui/touch-pause.png"
+    },
+    {
+      "key": "touch-walk",
+      "url": "assets/ui/touch-walk.png"
     }
   ],
   "levels": [

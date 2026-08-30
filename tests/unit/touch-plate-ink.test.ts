@@ -9,7 +9,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createSnapshot } from '../../src/sim/input';
-import { TOUCH_IDS } from '../../src/render/touchLayout';
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { touchLayout, TOUCH_IDS } from '../../src/render/touchLayout';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
 
@@ -127,3 +128,66 @@ describe('the plate stays translucent, because the level is behind it', () => {
     for (const mark of marks) expect(mark.alpha).toBe(1);
   });
 });
+
+describe('the generated faces, once the plate is cut', () => {
+  /** The same layer, with the six brass faces present in the texture manager. */
+  function withArt() {
+    const scene = makeTouchScene({ art: true });
+    const layer = new TouchControlsLayer(scene.scene, true);
+    scene.readHeld = () => layer.held();
+    layer.create();
+    layer.bind({
+      input$: createSnapshot(),
+      gameScene: scene.gameScene,
+      isGameRunning: () => scene.gameStatusRunning,
+      isPlayerInputEnabled: () => scene.playerInputEnabled,
+      openLevelSelect: () => {
+        scene.levelSelectOpened += 1;
+      },
+    });
+    layer.refresh();
+    return { scene, layer };
+  }
+
+  it('draws ONE image per control, from that control’s own key', () => {
+    const { scene } = withArt();
+    const art = scene.faces.filter((f) => f.textureKey !== '');
+    expect(art.map((f) => f.textureKey).sort(), 'a control took the wrong face, or none').toEqual(
+      TOUCH_IDS.map((id) => `touch-${id}`).sort(),
+    );
+    // 🔴 And the mapping is per CONTROL, not just per key: a build that loaded all six and hung
+    // them on the wrong plates satisfies the assertion above and puts a gear on the jump button.
+    for (const face of art) expect(face.textureKey).toBe(`touch-${face.id}`);
+    // Nothing drawn beside them — the art path replaces the grey box, it does not sit under it.
+    expect(scene.faces.length, 'the drawn plate is still there under the art').toBe(TOUCH_IDS.length);
+  });
+
+  it('gives the art the SAME translucency the drawn plate was measured at', () => {
+    // 🔴 The 19.9 % occlusion measurement is about a thumb-sized opaque disc over the level. That
+    // is a property of the BOX, not of what is drawn in it, so adopting art may not quietly undo it.
+    const { scene, layer } = withArt();
+    const face = (id: string) => scene.faces.filter((f) => f.id === id)[0];
+    for (const id of TOUCH_IDS) {
+      expect(face(id).alpha, `the ${id} face is opaque, hiding the level behind it`).toBeLessThan(0.7);
+    }
+    // And the pressed state still answers a thumb, through the same one code path.
+    const rest = face('right').alpha;
+    scene.press('right', 1);
+    expect(face('right').alpha, 'the art does not answer a thumb at all').toBeGreaterThan(rest);
+    scene.releasePointer(1);
+    expect(face('right').alpha).toBe(rest);
+    layer.destroy();
+  });
+
+  it('sizes each face to the box touchLayout chose, not to the source PNG', () => {
+    // The layout scales off the VIEW; a face left at its 160 px source size would be right only at
+    // 1920 x 1080 and wrong on every phone the moment the design size ever moves.
+    const { scene } = withArt();
+    const boxes = touchLayout(GAME_WIDTH, GAME_HEIGHT);
+    for (const box of boxes) {
+      const face = scene.faces.filter((f) => f.id === box.id)[0];
+      expect([face.w, face.h], `the ${box.id} face is not the size of its box`).toEqual([box.w, box.h]);
+    }
+  });
+});
+
