@@ -147,18 +147,19 @@ export function helpLine(audio?: AudioSettings, touch = false): string {
   // pass one — gets the bare line rather than a `NaN%`.
   const level =
     audio === undefined ? '' : ` ${audio.muted ? 'muted' : `${Math.round(audio.volume * 100)}%`}`;
-  // 🔴 A touch player has none of these keys, and this banner is the ONLY place the game says what
-  // the controls are. The UI/UX gate's adversarial brief made the consequence concrete: a stranger
-  // on a phone reads a persistent instruction to press ARROWS, SPACE, SHIFT, F, L, M, `[`, `]` and
-  // ESC — none of which exist on their device — while five unlabelled brass plates sit at the
-  // bottom of the screen that nothing anywhere names. Worse, the two CONTRADICTED each other: the
-  // banner said attack was `F / L` while the attack plate showed the letter `A`.
+  // 🔴 A touch player has none of these keys, and a persistent instruction to press ARROWS,
+  // SPACE, SHIFT, F, L, M, `[`, `]` and ESC — none of which exist on their device — is worse than
+  // no banner at all. Worse still, the two once CONTRADICTED each other: the banner said attack was
+  // `F / L` while the attack plate showed the letter `A`.
   //
-  // Every other screen got its touch string in this phase — the title, the level menu and the
-  // completion panel all name TAP. The play scene, the one screen whose controls are not
-  // self-evident, was the one that was missed.
+  // ✅ **And the touch banner does not describe the buttons either — owner decision, 2026-08-30.**
+  // The interim version named each plate (*"TAP to move, jump, strike"*), which was the right
+  // answer while the plates were unlabelled grey boxes. They are not: the generated faces carry an
+  // arrow, a wrench, a gear. A caption explaining an arrow is clutter across the top of a 412 px
+  // screen, and it competed with the HUD for the only row either can use. What remains on touch is
+  // the state a symbol cannot show — the volume — and nothing else.
   const base = touch
-    ? `TAP to move, jump, strike  ·  gait and menu, top right${level}`
+    ? level.trim()
     : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
       `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
       'ESC levels';

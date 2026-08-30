@@ -240,7 +240,14 @@ export class TitleScene extends Phaser.Scene {
     // choice the player has no basis to make on the first screen they see.
     // The copy change is required, not cosmetic. This screen advertised a key only, so a phone
     // player was told to press ENTER and given no way in even once the tap worked.
-    make('ENTER or TAP   choose a level', CHOICE_STYLE);
+    //
+    // ✅ **And a phone is told about the TAP ALONE — owner decision, 2026-08-30.** `ENTER or TAP`
+    // named both routes on both devices, which reads as a choice on the one device that has only
+    // one of them. A player holding a phone has no ENTER key and no reason to be told about one.
+    const choice = this.game.device.input.touch
+      ? 'TAP   choose a level'
+      : 'ENTER   choose a level';
+    make(choice, CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
     this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
 

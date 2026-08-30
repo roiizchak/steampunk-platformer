@@ -84,7 +84,9 @@ export function onLevelCompleted(ctx: CompletionContext): void {
   // function runs on `levelCompleted`, twenty ticks after the player reached the door and one tick
   // after the courier finished fading out — so the exit's flourish played over an empty doorway.
   // `GameScene.update()` fires it on the `goalReached` arrival edge instead.
-  ctx.ui?.levelComplete(panelText(save.levels[levelId]?.bestGears ?? 0, world, total, next));
+  ctx.ui?.levelComplete(
+    panelText(save.levels[levelId]?.bestGears ?? 0, world, total, next, scene.game.device.input.touch),
+  );
   bindContinue(scene, next);
 }
 
@@ -95,12 +97,21 @@ export function onLevelCompleted(ctx: CompletionContext): void {
  * number that was persisted — including the monotonic `max` and the clamp to the level's gear count.
  * Composing it independently would be a second place that decides what "best" means.
  */
-function panelText(best: number, world: World, total: number, next: string | null): LevelCompleteInfo {
+function panelText(
+  best: number,
+  world: World,
+  total: number,
+  next: string | null,
+  touch: boolean,
+): LevelCompleteInfo {
   return {
     title: next === null ? 'ALL LEVELS COMPLETE' : 'LEVEL COMPLETE',
     gears: `${world.gearsCollected} / ${total} gears`,
     best: `best ${best} / ${total}`,
-    prompt: next === null ? 'TAP or ENTER — level select' : `TAP or ENTER — ${next}`,
+    // ✅ The device's own route, not both — owner decision, 2026-08-30. A phone has no ENTER key.
+    // ⚠️ The SPECIFIC next level id stays in the string either way: criterion 8.6's mutation
+    // depends on it, and `phase-08-complete.spec.ts` asserts the exact text.
+    prompt: `${touch ? 'TAP' : 'ENTER'} — ${next ?? 'level select'}`,
     // ⚠️ `prompt` names the SPECIFIC next level rather than saying "next level", because criterion
     // 8.6's mutation is "hardcode the next id and confirm the spec names the specific next
     // `levelId`". A generic string is satisfied by a flow that always advances to level-02.

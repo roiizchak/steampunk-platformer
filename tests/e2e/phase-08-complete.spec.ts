@@ -174,7 +174,10 @@ test.describe('Phase 8 — the level-complete flow (8.6)', () => {
     expect(overlay.lines[0]!.text).toContain('LEVEL COMPLETE');
     expect(overlay.lines[1]!.text).toMatch(/^\d+ \/ \d+ gears$/);
     expect(overlay.lines[2]!.text).toMatch(/^best \d+ \/ \d+$/);
-    expect(overlay.lines[3]!.text, 'the prompt must name the specific next level').toBe('TAP or ENTER — level-02');
+    // ✅ `ENTER`, not `TAP or ENTER`: this project runs without touch, and the panel names the route
+    // THIS device has — owner decision, 2026-08-30. The SPECIFIC next level id is what 8.6's mutation
+    // turns on, and it is still here.
+    expect(overlay.lines[3]!.text, 'the prompt must name the specific next level').toBe('ENTER — level-02');
 
     // **fade** — dimmed, but not opaque: the finished level stays visible behind the panel.
     expect(overlay.fadeRenders, 'the fade rectangle would not be drawn').toBe(true);
