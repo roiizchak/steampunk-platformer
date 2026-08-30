@@ -36,19 +36,27 @@ interface Face {
   data: Uint8ClampedArray;
 }
 
-/** A brass disc with one dark blob in the middle, and one dark blob out on the rim. */
-function syntheticFace(): Face {
+/**
+ * A brass disc carrying one dark blob, over a transparent field.
+ *
+ * 🔴 **The disc is deliberately SMALL — radius 0.28 of the face — so that the corners of the
+ * central mark region fall OUTSIDE it.** With a full-width disc every pixel the keyline can reach is
+ * already opaque, so the transparency guard is unreachable and the test asserting it cannot fail
+ * (measured: M57 stayed green). A real face can be shaped this way, and the first fixture could not
+ * tell the difference.
+ *
+ * @param radius as a fraction of the face's width.
+ */
+function syntheticFace(radius = 0.28): Face {
   const data = new Uint8ClampedArray(SIZE * SIZE * 4);
   const centre = SIZE / 2;
   for (let y = 0; y < SIZE; y += 1) {
     for (let x = 0; x < SIZE; x += 1) {
       const i = (y * SIZE + x) * 4;
       const r = Math.hypot(x - centre + 0.5, y - centre + 0.5);
-      if (r > SIZE / 2 - 2) continue; // outside the disc: keyed away
+      if (r > SIZE * radius) continue; // outside the disc: keyed away
       const inBlob = Math.abs(x - centre) < 6 && Math.abs(y - centre) < 6;
-      // The rim blob sits at 0.90 of the radius — well outside the central 50 % square.
-      const inRim = Math.abs(x - centre) < 3 && Math.abs(y - (centre + SIZE * 0.45)) < 3;
-      const ink = inBlob || inRim ? DARK : BRASS;
+      const ink = inBlob ? DARK : BRASS;
       data[i] = ink[0];
       data[i + 1] = ink[1];
       data[i + 2] = ink[2];
@@ -84,8 +92,14 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
   it('leaves every pixel outside the central mark region alone', () => {
     // 🔴 The round-9 finding. Keylining every dark pixel anywhere repainted the outer rim too —
     // ornament on the half of the face the acceptance gate does not measure, while the mark it does
-    // measure stayed thin. The rim blob here is the case that catches it.
-    const before = syntheticFace();
+    // measure stayed thin. A dark blob out on the rim is the case that catches it.
+    const before = syntheticFace(0.48);
+    for (let d = -3; d <= 3; d += 1) {
+      const i = ((Math.round(SIZE * 0.88) + d) * SIZE + SIZE / 2) * 4;
+      before.data[i] = DARK[0];
+      before.data[i + 1] = DARK[1];
+      before.data[i + 2] = DARK[2];
+    }
     const after = keylineMarks(before) as Face;
     const inset = Math.round((SIZE * 0.5) / 2);
     let changed = 0;
@@ -99,11 +113,19 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     expect(changed, `${changed} pixels outside the mark region were repainted`).toBe(0);
   });
 
-  it('does not paint over transparent pixels, so the disc keeps its shape', () => {
-    const out = keylineMarks(syntheticFace()) as Face;
-    // The corners are outside the disc and must still be nothing at all.
-    expect(at(out, 0, 0)[3]).toBe(0);
-    expect(at(out, SIZE - 1, SIZE - 1)[3]).toBe(0);
+  it('does not paint over transparent pixels, so the button stays round', () => {
+    // 🔴 The mark region's CORNERS are outside this disc — that is what the small radius is for.
+    // Without the transparency guard the keyline fills them and the plate grows square corners
+    // inside its own bounding box. With a full-width disc the guard is unreachable and this
+    // assertion cannot fail, which is exactly how M57 stayed green.
+    const before = syntheticFace();
+    const after = keylineMarks(before) as Face;
+    let filled = 0;
+    for (let i = 3; i < before.data.length; i += 4) {
+      if (before.data[i] === 0 && after.data[i] !== 0) filled += 1;
+    }
+    expect(filled, `${filled} transparent pixels were painted in`).toBe(0);
+    expect(at(after, 0, 0)[3]).toBe(0);
   });
 });
 

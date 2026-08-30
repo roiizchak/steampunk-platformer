@@ -159,10 +159,15 @@ export function keylineMarks(face) {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const p = y * width + x;
-      if (dark[p]) continue;
+      if (dark[p] || !halo[p]) continue;
       const i = p * 4;
+      // ⚠️ The alpha guard is load-bearing and the region guard is not. `halo` is grown from a
+      // mask that was only ever set inside the mark, through a `grow` that refuses to leave it, so
+      // a second `inMark` test here can never fire — measured, M55 stayed green through it, and a
+      // condition no mutation can reach is the same defect as a decision function with no consumer.
+      // A transparent pixel CAN be in the halo, though, whenever the mark region reaches the edge
+      // of the disc: without this the keyline fills the corners and the button stops being round.
       if (data[i + 3] === 0) continue;
-      if (!inMark(x, y) || !halo[p]) continue;
       data[i] = KEYLINE_RGB[0];
       data[i + 1] = KEYLINE_RGB[1];
       data[i + 2] = KEYLINE_RGB[2];
