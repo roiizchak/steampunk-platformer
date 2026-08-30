@@ -66,6 +66,34 @@ function syntheticFace(radius = 0.28): Face {
   return { width: SIZE, height: SIZE, data };
 }
 
+/**
+ * A face whose engraving REACHES the edge of its disc, inside the mark region.
+ *
+ * 🔴 The only shape in which the keyline can reach a transparent pixel at all, and therefore the
+ * only shape in which the transparency guard is reachable. With a blob at the centre of a full disc
+ * nothing transparent is ever within `KEYLINE_PX`, the guard is unreachable, and the test asserting
+ * it passes whether the guard exists or not — measured, M57 stayed green through two fixtures.
+ */
+function faceWithMarkAtDiscEdge(): Face {
+  const data = new Uint8ClampedArray(SIZE * SIZE * 4);
+  const centre = SIZE / 2;
+  const radius = SIZE * 0.2;
+  for (let y = 0; y < SIZE; y += 1) {
+    for (let x = 0; x < SIZE; x += 1) {
+      const i = (y * SIZE + x) * 4;
+      if (Math.hypot(x - centre + 0.5, y - centre + 0.5) > radius) continue;
+      // A bar running the full width of the disc: its ends sit ON the boundary, so the keyline
+      // grown around them lands on pixels that are outside the disc and therefore transparent.
+      const ink = Math.abs(y - centre) < 4 ? DARK : BRASS;
+      data[i] = ink[0];
+      data[i + 1] = ink[1];
+      data[i + 2] = ink[2];
+      data[i + 3] = 255;
+    }
+  }
+  return { width: SIZE, height: SIZE, data };
+}
+
 function at(face: Face, x: number, y: number): number[] {
   const i = (y * face.width + x) * 4;
   return [face.data[i]!, face.data[i + 1]!, face.data[i + 2]!, face.data[i + 3]!];
@@ -142,11 +170,11 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
   });
 
   it('does not paint over transparent pixels, so the button stays round', () => {
-    // 🔴 The mark region's CORNERS are outside this disc — that is what the small radius is for.
-    // Without the transparency guard the keyline fills them and the plate grows square corners
-    // inside its own bounding box. With a full-width disc the guard is unreachable and this
-    // assertion cannot fail, which is exactly how M57 stayed green.
-    const before = syntheticFace();
+    // 🔴 The engraving here runs the full width of its disc, so the keyline grown around its ends
+    // lands outside the disc. Without the guard those pixels are painted in and the button stops
+    // being round. With a blob safely at the centre nothing transparent is ever in reach and the
+    // assertion cannot fail, which is exactly how M57 stayed green through two earlier fixtures.
+    const before = faceWithMarkAtDiscEdge();
     const after = keylineMarks(before) as Face;
     let filled = 0;
     for (let i = 3; i < before.data.length; i += 4) {
