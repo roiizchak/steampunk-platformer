@@ -382,7 +382,7 @@ drop* — so each produced a new gate rather than an edited matrix.
   shipped screens — no caller passes a target under `TOUCH_BOX_PX` — and that is the argument *for*
   a gate rather than against the term: the contract is *`attachTapRoutes` refuses a target too small
   to aim at*, and a fourth caller with a smaller one must not have to discover the guard was quietly
-  dropped. Gated with a 40 game px target at desktop scale (20.0 CSS px, against 160.0 for the play
+  dropped. Gated with a 40 game px target at desktop scale (**40.0** CSS px at a scale of 1, against 160.0 for the play
   controls), so only the second term can refuse it. **RED 1/12.**
 
 - **M25** — and this one is the sharpest lesson in the phase, because the hole was in a gate **I had

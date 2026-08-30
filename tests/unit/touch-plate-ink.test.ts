@@ -76,17 +76,28 @@ describe('the plate stays translucent, because the level is behind it', () => {
     const atRest = plate();
     scene.press('right', 1);
     expect(plate(), 'the plate does not answer a thumb at all').toBeGreaterThan(atRest);
-    // 🔴 The bound is COMPUTED from the resting alpha, not written down beside it. A literal
-    // `< 0.9` was the first repair's, and the Codex re-review was right that it still admitted
-    // **0.86** — the one value § 12.14 measured as erasing the content underneath. What a plate
-    // leaves visible is `1 - alpha`, and 0.55's 0.45 is the figure the occlusion measurement
-    // cleared, so the rule is a share of that: a pressed plate keeps at least 60 % of it.
+    // 🔴 The bound stands on a PINNED measurement, not on the live production value. The Codex
+    // round-3 review caught the second version deriving its bound from `atRest` — an active oracle,
+    // so `PLATE_ALPHA = 0.69` with a pressed 0.80 satisfied it while neither number had ever been
+    // measured. `MEASURED_RESTING` is the value § 12.14's occlusion sweep actually cleared, written
+    // down here so the resting alpha cannot move the pressed bound with it.
+    //
+    // ⚠️ **60 % is a stated margin, not a measurement, and saying so is the point.** The two
+    // measured anchors are 0.55 (content dim but readable) and 0.86 (content gone). Nothing was
+    // measured between them, so the rule is: keep at least 60 % of the residual transparency the
+    // readable value had. That refuses 0.86 and 0.78 alike, and it is honest about which half of it
+    // is evidence.
+    const MEASURED_RESTING = 0.55;
     const RESIDUAL_SHARE = 0.6;
+    expect(atRest, 'the resting alpha moved away from the measured value the bound stands on').toBe(
+      MEASURED_RESTING,
+    );
+    const floor = RESIDUAL_SHARE * (1 - MEASURED_RESTING);
     expect(
       1 - plate(),
       `the pressed plate leaves ${(1 - plate()).toFixed(2)} of the level visible against ` +
-        `${(RESIDUAL_SHARE * (1 - atRest)).toFixed(3)} required — 0.86 was measured to erase it`,
-    ).toBeGreaterThanOrEqual(RESIDUAL_SHARE * (1 - atRest));
+        `${floor.toFixed(3)} required — 0.86 was measured to erase it`,
+    ).toBeGreaterThanOrEqual(floor);
     scene.releasePointer(1);
     expect(plate(), 'the plate stayed lit after the finger left').toBe(atRest);
   });

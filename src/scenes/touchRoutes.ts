@@ -21,13 +21,22 @@
  * DESTROY tear down, and `destroy()` is idempotent so an explicit call and a lifecycle event cannot
  * fight.
  *
- * ## One press per contact
+ * ## One press per contact — per CONTACT, which is not the same as per action
  *
- * A route's action is usually `scene.start`. A second finger landing while the first is still down
- * must not run it twice, and a finger already down must not re-fire by sliding. So a pointer is
- * spent when it lands and returned when it lifts — and the release is read from the SCENE-level
- * events, because a Game Object hears only about a release over itself
- * (`POINTER_UP_EVENT.js:8-28`). Same rule, same reason, as `touchContacts.ts`.
+ * A pointer is spent when it lands and returned when it lifts, so a finger already down cannot
+ * re-fire by sliding. The release is read from the SCENE-level events, because a Game Object hears
+ * only about a release over itself (`POINTER_UP_EVENT.js:8-28`). Same rule, same reason, as
+ * `touchContacts.ts`.
+ *
+ * ⚠️ **This module does NOT stop two FINGERS running an action twice, and the header used to claim
+ * it did.** The Codex implementation review found the claim false and the defect real: `spent` is
+ * keyed by pointer id on purpose — a lifted finger has to be able to tap again, which is how a
+ * player picks a second row after a locked one refused — so two fingers landing in one frame
+ * produce two callbacks. **Arbitration belongs to the caller**, and every caller has it:
+ * `TitleScene.dismiss` latches on `dismissed`, `gameComplete`'s `go` destroys the routes before
+ * advancing, and `LevelSelectScene.play` latches on `started` (reset in `init()`, not as a field
+ * initialiser — Phaser reuses the scene instance, and a field initialiser left the menu dead on the
+ * second visit).
  *
  * ## 🔴 A route is dead while the rotate prompt is up
  *
@@ -42,9 +51,12 @@
  * every tap route — including the level-menu rows, which are **26.0 CSS px** at phone portrait,
  * 41 % under the floor this phase sets.
  *
- * So a route asks `touchTargetsFit` on the frame the press arrives, from the scene's own
- * `ScaleManager`. Every screen carrying a route also carries a prompt (`rotateGuard.ts`), so a
- * gated tap is never a silent one.
+ * So a route asks `rotatePromptWanted` on the frame the press arrives, from the scene's own
+ * `ScaleManager` — **the same function `RotatePrompt.refresh()` calls, with the same targets**. That
+ * shared call is what makes "a gated tap is never a silent one" true. It was not, before: the
+ * prompt asked only about the play controls while the route asked about both terms, so a screen
+ * whose own targets went under the floor — which a sixth catalog level does to the menu rows — had
+ * its route killed with nothing on screen to explain it. Found by the Codex review, round 3.
  *
  * 🔴 **Two terms, and it took three attempts to see why.** Gating on the play controls alone
  * killed a full-screen title zone at 200 % browser zoom (WCAG 1.4.4). Gating on the route's own
@@ -56,7 +68,7 @@
  * No Phaser import, for the reason `touchControlsLayer.ts`'s header gives.
  */
 
-import { cssScaleFor, type HitBox, touchLayout, touchTargetsFit } from '../render/touchLayout';
+import { type HitBox, rotatePromptWanted } from '../render/touchLayout';
 import {
   GAMEOBJECT_POINTER_DOWN,
   INPUT_POINTER_UP,
@@ -110,34 +122,19 @@ export function attachTapRoutes(
   /**
    * May this route be touched right now?
    *
-   * ⚠️ **This is NOT "exactly the frames `RotatePrompt` covers the screen"** — it used to say that
-   * and the Codex re-review was right that it is false. The first term is `RotatePrompt`'s own
-   * predicate, so the two can never disagree about a prompt. The second term is broader: a route
-   * whose own targets are unhittable is refused whether or not a prompt is up. That second case is
-   * unreachable through the three shipped screens — none passes a target under `TOUCH_BOX_PX` — so
-   * 12.10's "iff" holds for everything that ships, and the term exists so a fourth caller with a
-   * smaller target is refused rather than silently accepted.
+   * 🔴 **`rotatePromptWanted` is the ONE definition, and `RotatePrompt` calls the same one with the
+   * same targets.** It used to be two predicates that agreed on one term and diverged on the other,
+   * which is how a route could be dead with nothing on screen to explain it — the Codex round-3
+   * finding. Sharing the function is what makes 12.10's *iff* true by construction rather than by
+   * an argument about which callers exist today.
    */
-  const promptIsUp = (): boolean => {
-    const { width, height } = scene.scale.gameSize;
-    if (!(width > 0 && height > 0)) return false;
-    const scale = cssScaleFor(scene.scale.displaySize.width, width);
-    // 🔴 BOTH terms, and the Codex implementation review is why.
-    //
-    // The first repair gated a route on the play controls, which killed a FULL-SCREEN title zone
-    // at 200 % browser zoom because a button that is not on that screen would have been too small
-    // (WCAG 1.4.4). The second gated it on the route's own targets — and re-opened the defect the
-    // first one closed, because `RotatePrompt` decides visibility from the play controls: on a
-    // portrait phone the prompt is up while a 390 x 219 CSS px title zone is comfortably over
-    // every floor, so a tap on "ROTATE YOUR DEVICE" dismissed the title underneath it.
-    //
-    // Neither predicate alone is the question. The question is *may this route be touched right
-    // now*, and the answer is no if a prompt is covering it OR if its own targets are too small to
-    // hit. The first term is literally `RotatePrompt.refresh()`'s own call, so the two cannot
-    // disagree about whether a prompt is up.
-    if (!touchTargetsFit(touchLayout(width, height), scale)) return true;
-    return !touchTargetsFit(targets, scale);
-  };
+  const promptIsUp = (): boolean =>
+    rotatePromptWanted(
+      scene.scale.gameSize.width,
+      scene.scale.gameSize.height,
+      scene.scale.displaySize.width,
+      targets,
+    );
 
   const zones: TouchZoneLike[] = [];
   /** Pointers that have already spent their press on a route. */

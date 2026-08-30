@@ -26,11 +26,21 @@
 
 import Phaser from 'phaser';
 
+import type { HitBox } from '../render/touchLayout';
 import { RotatePrompt } from './rotatePrompt';
 
-/** Attach a rotate prompt to a scene for that scene's lifetime. Safe on a device with no touch. */
-export function attachRotatePrompt(scene: Phaser.Scene, isTouchDevice: boolean): void {
-  const prompt = new RotatePrompt(scene, isTouchDevice);
+/**
+ * Attach a rotate prompt to a scene for that scene's lifetime. Safe on a device with no touch.
+ *
+ * `targets` is the tap route this screen carries, so the prompt and the route share one predicate.
+ * Omit it only for a screen with no route of its own.
+ */
+export function attachRotatePrompt(
+  scene: Phaser.Scene,
+  isTouchDevice: boolean,
+  targets: readonly HitBox[] = [],
+): void {
+  const prompt = new RotatePrompt(scene, isTouchDevice, targets);
   prompt.create();
   prompt.refresh();
 

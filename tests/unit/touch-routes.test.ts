@@ -232,12 +232,15 @@ describe('a FULL-SCREEN route is dead under the prompt too, however big its own 
     // smaller one must not have to discover that the guard was quietly dropped.
     const h = scene();
     const taps: string[] = [];
-    // 40 game px is 20.0 CSS px at desktop scale — under the 44 px floor while `touchLayout`'s own
-    // 160 px controls are at 160.0 and comfortably over it. Only the second term can refuse this.
+    // The harness sets `displaySize.width` to `GAME_WIDTH` below, so the CSS scale is **1** and a
+    // 40 game px box is **40 CSS px** — under the 44 px floor, while `touchLayout`'s own 160 px
+    // controls are at 160.0 and comfortably over it. Only the targets term can refuse this.
+    // (This comment said 20.0 CSS px, which is the figure for a scale of 0.5. Corrected after the
+    // Codex round-3 review; the assertion was always right, the arithmetic beside it was not.)
     attachTapRoutes(h.scene, true, [{ id: 'tiny', x: 0, y: 0, w: 40, h: 40 }], (id) => taps.push(id));
 
     h.scene.scale.displaySize.width = GAME_WIDTH;
     h.press('tiny' as never, 1);
-    expect(taps, 'a 20 CSS px target took a tap it is too small to be aimed at').toEqual([]);
+    expect(taps, 'a 40 CSS px target took a tap it is too small to be aimed at').toEqual([]);
   });
 });

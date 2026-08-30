@@ -96,14 +96,20 @@ export const PLATE_STROKE_PX = 6;
  * moment the player is moving through it. The pressed state has to be *visibly different*, not
  * *opaque*.
  *
- * ⚠️ **The number is DERIVED, and the first repair's 0.78 was not.** The re-review was right that
+ * ⚠️ **The number is bounded by a measurement, and the first repair's 0.78 was not.** The re-review was right that
  * a bound of "< 0.9" still admitted **0.86** — the exact value measured to erase the content
  * underneath — and that nothing established 0.78 as safe either. What a plate leaves visible is its
  * residual transparency `1 - alpha`, and the resting value's is the measured-readable one: 0.45.
  * The rule is therefore stated against that measurement rather than against a taste: **a pressed
  * plate keeps at least 60 % of the resting state's residual transparency**, `1 - a >= 0.6 * 0.45`,
  * so `a <= 0.73`. 0.72 clears it, is a plain step up from 0.55, and reds at 0.78 and at 0.86 alike.
- * Pinned by `touch-plate-ink.test.ts`, which computes the bound rather than repeating the literal.
+ *
+ * ⚠️ **60 % is a stated margin, not a measurement.** The two measured anchors are 0.55 (dim but
+ * readable) and 0.86 (gone); nothing was measured between them, and pretending otherwise would be
+ * the same move as the `<0.9` bound this replaced. `touch-plate-ink.test.ts` pins the measured 0.55
+ * as a literal and derives the bound from THAT — not from the live `PLATE_ALPHA`, which the Codex
+ * round-3 review pointed out is an active oracle that would validate any pair of unmeasured
+ * numbers.
  */
 export const PLATE_ALPHA_PRESSED = 0.72;
 

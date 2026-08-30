@@ -247,15 +247,15 @@ export class TitleScene extends Phaser.Scene {
     // One zone over the whole view: this screen has a single action, so anywhere is the target.
     // No field and no explicit teardown — `attachTapRoutes` registers against this scene's own
     // SHUTDOWN and DESTROY, which is the same lifetime the objects above have.
-    attachTapRoutes(
-      this,
-      this.game.device.input.touch,
-      [{ id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height }],
-      () => this.dismiss(this.data$?.onLevelSelect),
+    const titleTargets = [
+      { id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height },
+    ];
+    attachTapRoutes(this, this.game.device.input.touch, titleTargets, () =>
+      this.dismiss(this.data$?.onLevelSelect),
     );
     // A screen with a route needs a prompt: `touchRoutes.ts` makes the route dead while the prompt
     // would be up, and a gated tap with nothing on screen to explain it is worse than the defect.
-    attachRotatePrompt(this, this.game.device.input.touch);
+    attachRotatePrompt(this, this.game.device.input.touch, titleTargets);
 
     this.applyLayout();
     // Re-layout rather than re-create, so a spec holding a reference across a resize is still

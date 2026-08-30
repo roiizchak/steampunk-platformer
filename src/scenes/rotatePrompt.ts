@@ -41,7 +41,7 @@
  */
 
 
-import { cssScaleFor, touchLayout, touchTargetsFit } from '../render/touchLayout';
+import { cssScaleFor, type HitBox, rotatePromptWanted } from '../render/touchLayout';
 import type { TouchFaceLike, TouchSceneLike } from './touchControlsLayer';
 
 /** Above the controls (2000/2001) — this covers them, and covering them is the point. */
@@ -65,6 +65,15 @@ export class RotatePrompt {
   constructor(
     private readonly scene: TouchSceneLike,
     private readonly isTouchDevice: boolean,
+    /**
+     * The targets THIS screen carries, if it carries any of its own.
+     *
+     * 🔴 Empty means "the play controls only", which is what `UIScene` wants. A screen with its own
+     * tap route passes that route's targets, so the prompt and the route ask `rotatePromptWanted`
+     * the identical question — the Codex round-3 finding: without this the level menu's rows going
+     * under-floor (a sixth catalog level does it) killed the route with no prompt to explain it.
+     */
+    private readonly targets: readonly HitBox[] = [],
   ) {}
 
   get showing(): boolean {
@@ -124,7 +133,8 @@ export class RotatePrompt {
     // body instead, which is what the polling caller actually needs.
     if (!(width > 0 && height > 0)) return;
     const scale = cssScaleFor(this.scene.scale.displaySize.width, width);
-    const fits = touchTargetsFit(touchLayout(width, height), scale);
+    // ONE definition, shared with `touchRoutes.ts`. See `rotatePromptWanted`.
+    const fits = !rotatePromptWanted(width, height, this.scene.scale.displaySize.width, this.targets);
 
     // Re-sized on every refresh, not only on a show: the prompt can be up while the browser
     // chrome collapses and the canvas grows under it, and 8 CSS px of subline is the defect

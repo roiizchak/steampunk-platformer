@@ -252,6 +252,34 @@ export function touchTargetsFit(targets: readonly HitBox[], cssScale: number): b
  * was in the unit test, against a hardcoded catalog size. `attachTapRoutes` now runs the
  * predicate over the targets it was actually given, which is what makes the sentence true.
  */
+/**
+ * **Is the rotate prompt up for a screen carrying `targets`?** The one definition, so the prompt and
+ * the tap route it covers cannot disagree.
+ *
+ * 🔴 They did. `RotatePrompt` asked only about the play controls while `attachTapRoutes` asked about
+ * both those and the route's own targets, so a screen whose OWN targets were under the floor had its
+ * route silently killed with nothing on screen to explain it. That is not hypothetical: a sixth
+ * catalog level pushes `touchMenuLayout`'s rows to 138 game px, under-floor at every phone scale
+ * (see the note above), and the level menu would simply stop responding. Found by the Codex
+ * implementation review, round 3.
+ *
+ * Two terms, and both are needed. The play-controls term is what makes the prompt appear on a
+ * portrait phone at all, where a full-screen title zone is comfortably over the floor. The targets
+ * term is what makes the prompt appear for a screen whose own targets are too small, where the play
+ * controls would have fitted.
+ */
+export function rotatePromptWanted(
+  viewWidth: number,
+  viewHeight: number,
+  canvasCssWidth: number,
+  targets: readonly HitBox[],
+): boolean {
+  if (!(viewWidth > 0 && viewHeight > 0)) return false;
+  const scale = cssScaleFor(canvasCssWidth, viewWidth);
+  if (!touchTargetsFit(touchLayout(viewWidth, viewHeight), scale)) return true;
+  return !touchTargetsFit(targets, scale);
+}
+
 export function touchMenuLayout(count: number, viewWidth: number, viewHeight: number): HitBox[] {
   positive(viewWidth, 'viewWidth');
   positive(viewHeight, 'viewHeight');

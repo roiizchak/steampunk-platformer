@@ -81,6 +81,13 @@ export class LevelSelectScene extends Phaser.Scene {
   init(): void {
     this.rows = [];
     this.cursor = 0;
+    // 🔴 `started` belongs here for exactly the reason the paragraph above gives, and the Codex
+    // round-3 review caught that the latch was declared as a FIELD INITIALISER instead. Phaser
+    // preserves the scene instance across a shutdown (`Systems.js:760-788`), so a field initialiser
+    // runs once for the life of the game: after one level was chosen, coming back through ESC found
+    // `started === true` and every tap AND every ENTER returned early. The menu was dead until
+    // reload — a repair for a two-finger race that broke the one-finger case.
+    this.started = false;
   }
 
   create(): void {
@@ -148,7 +155,7 @@ export class LevelSelectScene extends Phaser.Scene {
     // prompt during play — has retired itself by the time this menu is up, because `Game` is gone,
     // so this screen says it itself. The same call also makes the row taps above dead while the
     // prompt is up (`touchRoutes.ts`).
-    attachRotatePrompt(this, touch);
+    attachRotatePrompt(this, touch, band);
     this.paint();
 
     /**
@@ -240,7 +247,7 @@ export class LevelSelectScene extends Phaser.Scene {
    * the two rules agreeing *and* keeps the reason visible: the row is drawn `locked`, and pressing
    * ENTER on it does nothing.
    */
-  /** One start per visit. See `play()`. */
+  /** One start per visit — reset in `init()`, never only here. See `play()`. */
   private started = false;
 
   private play(): void {
