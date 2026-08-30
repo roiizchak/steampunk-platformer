@@ -36,6 +36,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { keyOut } from './chromaKey.mjs';
+import { bakePlateAlpha, keylineMarks } from './touchInk.mjs';
 import { components, removeSpecks, trimHalo } from './chromaComponents.mjs';
 import { decodePng, encodePng, readBytes } from './png.mjs';
 import { crop, downscale } from './resize.mjs';
@@ -71,124 +72,6 @@ const ASPECT_TOLERANCE = 0.02;
 
 /** A keyed cell must be one connected blob of at least this share of the cell, or it is refused. */
 const MIN_FACE_SHARE = 0.15;
-
-/**
- * 🔴 **The translucency is baked per pixel, because one flat alpha cannot carry both jobs.**
- *
- * The plate has to be see-through: 175 of 878 standing positions (19.9 %) across the five shipped
- * levels have a hazard, an enemy or the goal drawn under a control, which is why `PLATE_ALPHA` is
- * 0.55 and why raising it to 0.86 was reverted. The MARK has to be readable: WCAG 1.4.11's 3:1.
- *
- * Fading both together satisfies the first and fails the second — measured on the shipped six over
- * every possible background luminance, the best ink reached only **2.43-2.47:1**. Found by the
- * Codex round-7 review and confirmed locally before anything was changed.
- *
- * So the ink keeps its alpha and only the brass is faded. Ink is the two ENDS of the luminance
- * range — the engraved dark line and the pale highlight — which is the same two-ink method
- * `hud.ts` uses and `contrast-floor.test.ts` measures: a reader takes whichever contrasts. The
- * thresholds are the widest pair that still clears the floor with margin; at 16/224 the worst case
- * falls off a cliff to 2.88:1, so 32/208 sits two steps clear of it.
- *
- * Measured after baking: **3.47:1** at rest and **4.12:1** pressed, over every background, with
- * 16.9 % of the disc opaque.
- */
-const INK_DARK_MAX = 32;
-const INK_LIGHT_MIN = 208;
-
-/**
- * How far the pale keyline is grown around the dark engraving, in shipped pixels.
- *
- * 2 px of a 160 px face is 0.7 CSS px at the worst in-scope scale — a hairline, and deliberately
- * so: the keyline is there to give a reader a SECOND ink, not to redraw the mark. Its colour is
- * `MARK_INK` from `touchMarks.ts`, the pale half of the pair `contrast-floor.test.ts` measures.
- */
-const KEYLINE_PX = 1;
-const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
-
-/**
- * What the plate's alpha is multiplied by, so that the DRAWN alpha times this is `PLATE_ALPHA`.
- *
- * `0.55 / 0.85` — the face rests at 0.85 and presses to 1.0, which keeps alpha as the press
- * signal (the drawn grey box's mechanism) while leaving the ink enough of it to be read.
- * `touchMarks.ts` owns the two drawn alphas and states the same arithmetic.
- */
-const PLATE_ALPHA_BAKED = 0.55 / 0.85;
-
-/**
- * 🔴 **The engraving is ONE ink, and one ink cannot pass a swept background.**
- *
- * Baking the alpha split was necessary and not sufficient. Measured over the mark itself — the
- * central opaque pixels, not the whole face — the shipped `walk` bars bottomed out at **1.12:1**:
- * every one of their 725 ink pixels is near-black, so on a dark background they simply vanish. The
- * other five scraped 3.38-3.47:1 on as few as **four** pale pixels, which is a contrast claim
- * resting on an accident of the model's shading.
- *
- * Found by the Codex round-8 review, which measured the whole-face statistic passing at 3.57-3.70
- * on a decorative brass highlight OUTSIDE the mark while the mark was unreadable — a statistic
- * that cannot order its own mutation, which is the failure this project has a rule about.
- *
- * The repair is `hud.ts`'s method, applied to pixels instead of to shapes: every dark mark gets a
- * pale keyline, so a reader takes whichever ink contrasts with what is behind it. That is the same
- * `MARK_INK` / `SHADOW_INK` pair `contrast-floor.test.ts` measures at 3.80:1, and it is what the
- * grey-box marks always had.
- *
- * @param {import('./png.d.mts').RgbaImage} face
- * @returns {import('./png.d.mts').RgbaImage}
- */
-export function keylineMarks(face) {
-  const { width, height } = face;
-  const data = new Uint8Array(face.data);
-  const dark = new Uint8Array(width * height);
-  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
-    if (data[i + 3] === 0) continue;
-    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    if (luma < INK_DARK_MAX) dark[p] = 1;
-  }
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const p = y * width + x;
-      if (dark[p]) continue;
-      const i = p * 4;
-      if (data[i + 3] === 0) continue;
-      let near = false;
-      for (let dy = -KEYLINE_PX; dy <= KEYLINE_PX && !near; dy += 1) {
-        for (let dx = -KEYLINE_PX; dx <= KEYLINE_PX; dx += 1) {
-          const yy = y + dy;
-          const xx = x + dx;
-          if (yy < 0 || xx < 0 || yy >= height || xx >= width) continue;
-          if (dark[yy * width + xx]) {
-            near = true;
-            break;
-          }
-        }
-      }
-      if (!near) continue;
-      data[i] = KEYLINE_RGB[0];
-      data[i + 1] = KEYLINE_RGB[1];
-      data[i + 2] = KEYLINE_RGB[2];
-      data[i + 3] = 255;
-    }
-  }
-  return { width, height, data };
-}
-
-/**
- * Fade the brass and leave the ink alone.
- *
- * @param {import('./png.d.mts').RgbaImage} face
- * @returns {import('./png.d.mts').RgbaImage}
- */
-export function bakePlateAlpha(face) {
-  const data = new Uint8Array(face.data);
-  for (let i = 0; i < data.length; i += 4) {
-    const a = data[i + 3];
-    if (a === 0) continue;
-    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    if (luma < INK_DARK_MAX || luma > INK_LIGHT_MIN) continue;
-    data[i + 3] = Math.round(a * PLATE_ALPHA_BAKED);
-  }
-  return { width: face.width, height: face.height, data };
-}
 
 /**
  * Cut, key, validate and downscale one cell.

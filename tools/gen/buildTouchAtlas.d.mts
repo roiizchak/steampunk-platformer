@@ -13,8 +13,6 @@ export const TOUCH_FACE_PX: number;
 export const TOUCH_OUT_DIR: string;
 
 export function faceFromCell(cell: RgbaImage, key: string): RgbaImage;
-export function keylineMarks(face: RgbaImage): RgbaImage;
-export function bakePlateAlpha(face: RgbaImage): RgbaImage;
 export function cutPlate(bytes: Uint8Array): {
   cells: Map<string, RgbaImage>;
   width: number;

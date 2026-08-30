@@ -29,15 +29,22 @@
  *
  * So the comparison is masked to the **central 50 %** — the 80 x 80 square the mark is engraved in —
  * and the mutation copies that square between two faces, leaving both discs alone. Measured across
- * all fifteen pairs: **36.3 % to 60.5 %** (closest `right`/`jump`, two triangles; furthest
- * `pause`/`walk`), against 19.9 %-40.0 % unmasked. The bound is **15 %**, less than half the closest
- * honest pair, and a copied glyph scores 0. Codex round-6.
+ * all fifteen pairs at the time: **36.3 % to 60.5 %** (closest `right`/`jump`, two triangles),
+ * against 19.9 %-40.0 % unmasked. The bound is **15 %**, less than half the closest honest pair,
+ * and a copied glyph scores 0. Codex round-6.
+ *
+ * ⚠️ **The numbers moved twice more.** Splitting the alpha made `SOLID` separate ink from
+ * plate rather than face from field, so this now compares the MARKS themselves; then the keyline and
+ * bolden passes changed the marks. Measured on the shipped six as they stand: **70.4 % to 82.9 %**
+ * (closest `attack`/`pause`, furthest `left`/`attack`). The bound stays at 15 %, four and a half
+ * times inside the closest honest pair.
  *
  * ## And the part no automated gate covers
  *
- * Whether a wrench READS as a wrench at 55.6 CSS px is `ui-ux-tester`'s call under 12.14 and the
- * owner's under 12.24. Stated plainly rather than approximated with a number that would mean
- * nothing *(vault 9.3)*.
+ * Contrast at true size IS measured here, because it is measurable. Whether a wrench READS as a
+ * wrench at 48 CSS px is not: that is `ui-ux-tester`'s call under 12.14 and the owner's under
+ * 12.24, stated plainly rather than approximated with a number that would mean nothing
+ * *(vault 9.3)*.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -90,6 +97,15 @@ const MIN_DIFFERING_SHARE = 0.15;
  * plate. Half the side is the square `buildTouchAtlas.mjs`'s centre-crop puts the engraving in.
  */
 const MARK_FRACTION = 0.5;
+
+/**
+ * The width, in CSS pixels, that a 160 game px face occupies at the smallest viewport in scope.
+ *
+ * `160 * 325 / 1080` — iPhone SE landscape as a real browser gives it, with the URL bar Safari
+ * never collapses because `index.html`'s `#game { height: 100% }` means the page cannot scroll.
+ * `touchLayout.ts` documents that reduced viewport and `touchTargetsFit` is measured against it.
+ */
+const TRUE_SIZE_PX = Math.round((TOUCH_BOX_PX * 325) / 1080);
 
 interface CatalogImage {
   key: string;
@@ -145,12 +161,10 @@ describe('the shipped touch faces', () => {
       expect(clear, `${key} has no fully transparent pixel — it was never keyed`).toBeGreaterThan(0);
       expect(ink, `${key} has no opaque pixel — the mark faded with the plate`).toBeGreaterThan(0);
       expect(plate, `${key} has no translucent pixel — nothing shows through it`).toBeGreaterThan(0);
-      // And the plate has to be the BULK of the disc, or "translucent" is a rounding error. The
-      // disc is what the 19.9 %-occlusion argument is about; the mark sits inside it.
-      expect(
-        plate / (plate + ink),
-        `${key}'s disc is ${((ink / (plate + ink)) * 100).toFixed(1)}% opaque`,
-      ).toBeGreaterThan(0.5);
+      // ⚠️ Presence, and no share. `plate / (plate + ink) > 0.5` was a second invented
+      // threshold: the 19.9 %-occlusion measurement establishes an ALPHA, not a pixel-share rule,
+      // and legal art could false-red on it. Codex round-9. What the disc actually has to do is
+      // measured where it is measurable — the byte-times-constant product below.
     }
   });
 
@@ -193,33 +207,59 @@ describe('the shipped touch faces', () => {
       for (const key of KEYS) {
         const png = readPng(`public/${entry(key).url}`);
         const inset = Math.round((png.width * (1 - MARK_FRACTION)) / 2);
+        const isMark = (x: number, y: number): boolean =>
+          x >= inset &&
+          x < png.width - inset &&
+          y >= inset &&
+          y < png.height - inset &&
+          png.data[(y * png.width + x) * 4 + 3]! >= SOLID;
+
         let worst = Infinity;
-        let marked = 0;
+        let markPixels = 0;
         for (let bg = 0; bg <= 255; bg += 5) {
           const back = luminance(bg, bg, bg);
-          let best = 0;
-          marked = 0;
-          for (let y = inset; y < png.height - inset; y += 1) {
-            for (let x = inset; x < png.width - inset; x += 1) {
+          // Composite over this background, then BOX-FILTER to the size a phone actually shows.
+          const sum = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX * 3);
+          const count = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX);
+          const markShare = new Float64Array(TRUE_SIZE_PX * TRUE_SIZE_PX);
+          for (let y = 0; y < png.height; y += 1) {
+            for (let x = 0; x < png.width; x += 1) {
               const i = (y * png.width + x) * 4;
-              // The MARK: opaque, and inside the square the engraving occupies. Nothing else.
-              if (png.data[i + 3]! < SOLID) continue;
-              marked += 1;
-              const a = alpha;
-              const over = (c: number): number => c * a + bg * (1 - a);
-              const r = ratio(
-                luminance(over(png.data[i]!), over(png.data[i + 1]!), over(png.data[i + 2]!)),
-                back,
-              );
-              if (r > best) best = r;
+              const a = (png.data[i + 3]! / 255) * alpha;
+              const oy = Math.min(TRUE_SIZE_PX - 1, Math.floor((y * TRUE_SIZE_PX) / png.height));
+              const ox = Math.min(TRUE_SIZE_PX - 1, Math.floor((x * TRUE_SIZE_PX) / png.width));
+              const k = oy * TRUE_SIZE_PX + ox;
+              sum[k * 3] += png.data[i]! * a + bg * (1 - a);
+              sum[k * 3 + 1] += png.data[i + 1]! * a + bg * (1 - a);
+              sum[k * 3 + 2] += png.data[i + 2]! * a + bg * (1 - a);
+              count[k] += 1;
+              if (isMark(x, y)) markShare[k] += 1;
             }
+          }
+          let best = 0;
+          markPixels = 0;
+          for (let k = 0; k < count.length; k += 1) {
+            if (count[k] === 0) continue;
+            // An output pixel counts as MARK only if the engraving is most of what fell into it.
+            // Anything less is a blend of mark and plate, and is not what a reader is looking at.
+            if (markShare[k]! < count[k]! * 0.5) continue;
+            markPixels += 1;
+            const r = ratio(
+              luminance(
+                sum[k * 3]! / count[k]!,
+                sum[k * 3 + 1]! / count[k]!,
+                sum[k * 3 + 2]! / count[k]!,
+              ),
+              back,
+            );
+            if (r > best) best = r;
           }
           if (best < worst) worst = best;
         }
-        expect(marked, `${key} has no opaque mark pixels to measure`).toBeGreaterThan(100);
+        expect(markPixels, `${key}'s mark does not survive the downscale at all`).toBeGreaterThan(0);
         expect(
           worst,
-          `${key}'s MARK at alpha ${alpha} reaches only ${worst.toFixed(2)}:1 against its worst background`,
+          `${key}'s MARK at alpha ${alpha} reaches only ${worst.toFixed(2)}:1 at ${TRUE_SIZE_PX} CSS px`,
         ).toBeGreaterThan(3);
       }
     }
