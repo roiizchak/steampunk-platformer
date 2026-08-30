@@ -277,6 +277,11 @@ export function rotatePromptWanted(
   if (!(viewWidth > 0 && viewHeight > 0)) return false;
   const scale = cssScaleFor(canvasCssWidth, viewWidth);
   if (!touchTargetsFit(touchLayout(viewWidth, viewHeight), scale)) return true;
+  // ⚠️ An EMPTY list is "this screen has no route of its own", not "this screen's targets do not
+  // fit". `touchTargetsFit([])` is false — correctly, since a caller asking whether nothing fits has
+  // asked the wrong question — so without this guard `UIScene`, which passes no targets, would show
+  // the prompt on every frame at every viewport. Caught by two existing cases going red.
+  if (targets.length === 0) return false;
   return !touchTargetsFit(targets, scale);
 }
 
