@@ -37,11 +37,34 @@ export interface TouchLayerLike {
   bind(binding: TouchBinding | null): void;
   refresh(): void;
   held(): TouchHeld;
+  /** Restore the gait a previous layer was left in, and light the plate to match. */
+  setWalking(walking: boolean): void;
+  /** Called when the player taps the walk plate, so the session outlives the layer that heard it. */
+  onWalkChange: ((walking: boolean) => void) | null;
 }
 
 export class TouchSession {
   private layer: TouchLayerLike | null = null;
   private pending: TouchBinding | null = null;
+  /**
+   * The walk/run latch, held HERE and not on the layer.
+   *
+   * 🔴 The layer does not live long enough. `UIScene`'s SHUTDOWN destroys it and the next
+   * activation builds a fresh one, so a latch stored on the layer was reset by any level-select
+   * round trip: the player chose to walk, went to the menu, came back running, and the plate was
+   * dark. `TouchSession` is a FIELD on `UIScene` and Phaser preserves the scene instance across a
+   * shutdown (`Systems.js:760-788`), so it is the thing that survives.
+   *
+   * ⚠️ That is the same lifetime mistake `LevelSelectScene.started` made in the other
+   * direction, two rounds apart. Found by the Codex round-6 review; the test that was supposed to
+   * cover it called `held()` on the destroyed layer, which proves the FIELD and not the persistence.
+   */
+  private walkOn = false;
+
+  /** The gait the player last chose. Survives every layer this session ever activates. */
+  get walking(): boolean {
+    return this.walkOn;
+  }
 
   /** Point the controls at a `Game` scene. Safe at any time, including before `create()`. */
   bind(binding: TouchBinding | null): void {
@@ -52,11 +75,18 @@ export class TouchSession {
   /** `UIScene.create()` has built a layer. Always binds — `null` included — so nothing is stale. */
   activate(layer: TouchLayerLike): void {
     this.layer = layer;
+    layer.onWalkChange = (walking: boolean): void => {
+      this.walkOn = walking;
+    };
+    // Restore BEFORE binding, so the first frame the new layer draws is already in the right gait.
+    layer.setWalking(this.walkOn);
     layer.bind(this.pending);
   }
 
   /** `UIScene`'s SHUTDOWN. The layer is about to be destroyed; stop writing to it. */
   deactivate(): void {
+    // ⚠️ `walkOn` is deliberately NOT cleared: it is the player's choice, not the layer's.
+    if (this.layer) this.layer.onWalkChange = null;
     this.layer = null;
     this.pending = null;
   }

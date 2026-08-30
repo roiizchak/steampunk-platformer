@@ -127,8 +127,24 @@ interface Control {
 
 export class TouchControlsLayer {
   private readonly contacts = new TouchContacts();
-  /** The walk/run latch. Not a contact — see `held()`. */
+  /**
+   * The walk/run latch, MIRRORED from `TouchSession`, which is where it lives.
+   *
+   * 🔴 This layer does not live long enough to own it: `UIScene`'s SHUTDOWN destroys it and the
+   * next activation builds a fresh one, so a latch owned here was silently reset by every
+   * level-select round trip. `touchSession.ts` has the detail.
+   */
   private walking = false;
+
+  /** Set by `TouchSession.activate`. Null until then, and nulled on deactivate. */
+  onWalkChange: ((walking: boolean) => void) | null = null;
+
+  /** Flip the gait: redraw the plate, then tell the session, which is what outlives this layer. */
+  setWalking(walking: boolean): void {
+    this.walking = walking;
+    this.setPressed('walk', this.contacts.isHeld('walk'));
+    this.onWalkChange?.(walking);
+  }
   private controls: Control[] = [];
   private binding: TouchBinding | null = null;
   private isLive = false;
@@ -266,6 +282,11 @@ export class TouchControlsLayer {
         control.zone.setPosition(target.x, target.y).setSize(target.w, target.h);
         for (const face of control.faces) {
           face.setPosition(target.x + target.w / 2, target.y + target.h / 2);
+          // ⚠️ And re-SIZED. A generated face is one image drawn at the box's size, so a design
+          // size that moved would have left it at the old one — re-placed and wrong. The drawn
+          // grey box has no `setDisplaySize` and is unaffected. Codex round 6; latent under FIT,
+          // which is exactly what the same defect in `RotatePrompt` was.
+          face.setDisplaySize?.(target.w, target.h);
         }
       }
     }
@@ -363,11 +384,15 @@ export class TouchControlsLayer {
     if (!this.isLive || !this.binding) return;
     if (!this.contacts.begin(pointer.id, id)) return;
 
+    // 🔴 The walk latch flips BEFORE the plate is redrawn, and the order is the whole bug the
+    // Codex round-6 review found: `litFor('walk')` reads `walking`, so redrawing first showed the
+    // state the player was leaving — the first press engaged walk and drew the plate unlit, the
+    // next disengaged it and left it lit until the finger came off.
+    if (id === 'walk') this.setWalking(!this.walking);
     this.setPressed(id, true);
     if (id === 'jump') latchJumpPress(this.binding.input$);
     else if (id === 'attack') latchAttackPress(this.binding.input$);
     else if (id === 'pause') this.binding.openLevelSelect();
-    else if (id === 'walk') this.walking = !this.walking;
     // `left` and `right` are levels; `TouchContacts` already holds them and `applyHeld` reads them.
   }
 

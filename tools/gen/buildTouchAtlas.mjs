@@ -33,6 +33,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { keyOut } from './chromaKey.mjs';
 import { components, removeSpecks, trimHalo } from './chromaComponents.mjs';
@@ -184,12 +185,24 @@ function main() {
     fs.writeFileSync(out, encodePng(image.width, image.height, image.data));
     console.log(`${out}  ${image.width} x ${image.height}`);
   }
+
+  // ⚠️ Say so out loud, and count. A build tool that can exit 0 having written nothing is the
+  // exact failure this file just had.
+  if (cells.size !== TOUCH_PLATE_CELLS.length) {
+    throw new Error(`wrote ${cells.size} faces, expected ${TOUCH_PLATE_CELLS.length}`);
+  }
   console.log(
     `\ncut ${cells.size} faces from a MEASURED ${width} x ${height} plate ` +
       `(${TOUCH_PLATE_COLS} x ${TOUCH_PLATE_SHEET_ROWS} grid, rows 0-1 used)`,
   );
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\//, ''))) {
+// 🔴 `fileURLToPath`, never `new URL(...).pathname`. A URL keeps the space in
+// "Steampunk Platformer" percent-encoded as `%20`, so the comparison was `.../Steampunk%20Platformer/...`
+// against `.../Steampunk Platformer/...` — never equal, and `main()` never ran. `npm run assets:touch`
+// printed nothing and exited 0, which is indistinguishable from success; the six faces in
+// `public/assets/ui/` were cut by calling `cutPlate` by hand. Found by the Codex round-6 review, and
+// confirmed by the fact that this script had never once produced its own output.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main();
 }

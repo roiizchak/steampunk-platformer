@@ -27,11 +27,21 @@ import { TouchSession, type TouchLayerLike } from '../../src/scenes/touchSession
  */
 
 /** Records what the layer was asked to do, and can be told to look destroyed. */
-function fakeLayer(): TouchLayerLike & { bound: (TouchBinding | null)[]; refreshes: number; heldValue: TouchHeld } {
+function fakeLayer(): TouchLayerLike & {
+  bound: (TouchBinding | null)[];
+  refreshes: number;
+  heldValue: TouchHeld;
+  walkSet: boolean[];
+} {
   const layer = {
     bound: [] as (TouchBinding | null)[],
     refreshes: 0,
     heldValue: { ...NO_TOUCH_HELD, right: true },
+    walkSet: [] as boolean[],
+    onWalkChange: null as ((walking: boolean) => void) | null,
+    setWalking(walking: boolean) {
+      layer.walkSet.push(walking);
+    },
     bind(binding: TouchBinding | null) {
       layer.bound.push(binding);
     },
@@ -131,6 +141,38 @@ describe('TouchSession', () => {
 
     session.deactivate();
     expect(session.held(), 'a retired layer still fed the sim').toEqual(NO_TOUCH_HELD);
+  });
+
+  it('carries the walk latch onto a layer built AFTER the one that heard the tap', () => {
+    // 🔴 M41. The player chooses to walk, opens the level menu, and comes back. `UIScene`'s SHUTDOWN
+    // destroys the layer, and Phaser preserves the scene INSTANCE (`Systems.js:760-788`) — so the
+    // latch has to live on the session or the player silently resumes running with a dark plate.
+    // ⚠️ The test this replaces asked the DESTROYED layer what it was holding, which proves the
+    // field and not the persistence. Found by the Codex round-6 review.
+    const session = new TouchSession();
+    const first = fakeLayer();
+    session.activate(first);
+    expect(first.walkSet, 'a fresh session must start the layer running').toEqual([false]);
+
+    // The tap: the layer flips its own plate and tells the session.
+    first.onWalkChange?.(true);
+    expect(session.walking).toBe(true);
+
+    session.deactivate();
+    const second = fakeLayer();
+    session.activate(second);
+    expect(second.walkSet, 'the replacement layer came up running').toEqual([true]);
+  });
+
+  it('stops listening to a retired layer, so a late callback cannot rewrite the gait', () => {
+    const session = new TouchSession();
+    const layer = fakeLayer();
+    session.activate(layer);
+    layer.onWalkChange?.(true);
+    session.deactivate();
+
+    expect(layer.onWalkChange, 'the destroyed layer still holds a live callback').toBeNull();
+    expect(session.walking, 'deactivate cleared the player’s own choice').toBe(true);
   });
 
   it('forwards a refresh to the live layer', () => {
