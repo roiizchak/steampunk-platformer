@@ -29,11 +29,11 @@ than reinterpreted.
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET** | § 12.14. **No art was adopted**, so the criterion's subject does not exist. The grey-box faces were measured and four defects repaired; that is evidence, not a pass. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced: `docs/evidence/phase-12-touch-art.png`. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
-| 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
-| 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
+| 12.17 | Six shipped 160x160 PNGs, six distinct marks | **PASS** | `tests/unit/shipped-touch.test.ts`, on the shipped bytes. Its first statistic — alpha masks — was decoration at 99.6 % agreement and was replaced, not re-bounded. Watched red by copying one face over another (0.0 %). § 12.17. |
+| 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
 | 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 39 rows; 5 holes found, all closed. M22–M33 cover the four Codex rounds. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |

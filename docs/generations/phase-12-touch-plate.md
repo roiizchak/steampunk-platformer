@@ -1,10 +1,10 @@
 # Phase 12 — the touch-control plate
 
-**2 generations · $0.30 of the `$5` touch-UI ceiling · `fal-ai/nano-banana-pro` · NEITHER ADOPTED.**
+**3 generations · $0.45 of the `$5` touch-UI ceiling · `fal-ai/nano-banana-pro` · TAKE 3 ADOPTED.**
 
-One plate carrying all five button faces on a chroma field, to be cut locally into five 160 × 160
-PNGs by `tools/gen/buildTouchAtlas.mjs`. **The game ships the grey-box faces**; both takes are kept
-as evidence and the decision is the owner's.
+One plate carrying every button face on a chroma field, cut locally into 160 × 160 PNGs by
+`tools/gen/buildTouchAtlas.mjs` (`npm run assets:touch`). Takes 1 and 2 are kept as evidence; **take
+3 ships**, in `public/assets/ui/`.
 
 ## The required columns
 
@@ -12,6 +12,7 @@ as evidence and the decision is the owner's.
 |---|---|---|---|---|---|---|---|
 | 1 | `01a04e0b-ec39-7200-97bc-3afbd338ffeb` | `fal-ai/nano-banana-pro` | `20260804` | `aspect_ratio 1:1` · `resolution 2K` · `output_format png` · `num_images 1` | **2048 × 2048** | $0.15 | ❌ six buttons, 3 / 2 / 1 |
 | 2 | `01a04e0e-d45d-7ab2-be31-a7c2f479a495` | `fal-ai/nano-banana-pro` | `20260804` | same, prompt repaired | **2048 × 2048** | $0.15 | ❌ seven buttons, 3 / 2 / 2 |
+| 3 | `01a05115-d226-72b2-ae41-8998a11940cf` | `fal-ai/nano-banana-pro` | `20260804` | same, prompt rewritten for **six** faces | **2048 × 2048** | $0.15 | ✅ **ADOPTED** — nine buttons in a clean 3 × 3; the six asked for, plus a duplicate row |
 
 Files, prompts and job records: `_generated/phase-12-touch/`.
 
@@ -80,3 +81,48 @@ keeps a half-finished art path from being adopted silently.
 Recommendation: **3**, then 1 as the fallback. The failure in both takes is the same one — the model
 adds buttons to fill space — and a layout with no space to fill is the repair that addresses the
 cause rather than the symptom.
+
+---
+
+## Take 3 — adopted, and the repair was not a prompt trick
+
+The recommendation above was option 3: *give the model a layout with no space to fill*. What made
+that possible was not a better sentence. **The game grew a sixth control.** The owner asked for a
+walk/run toggle — `walkHeld` had no touch source at all, so a phone player always ran — and the
+grid could then hold six REAL faces instead of five plus a negation. The owner also replaced two
+marks: attack is the courier's own **wrench** rather than crossed tools, and pause is a **gear**.
+
+So the prompt asks for six buttons in two rows of three, names six centres, and forbids *a seventh*
+rather than *a sixth*.
+
+⚠️ **It still added content — and this time that did not matter.** The model drew **nine** buttons in
+a clean 3 × 3: the six that were asked for, in the rows they were asked for, plus a verbatim
+duplicate of the second row. That is a different failure from takes 1 and 2, where an INVENTED face
+shifted the layout and made *'the fourth thing found'* mean nothing. A repeated row leaves every cell
+where the prompt put it, so `buildTouchAtlas.mjs` splits 3 × 3, reads rows 0 and 1 by position, and
+ignores row 2. `TOUCH_PLATE_SHEET_ROWS` is the one place that decision lives.
+
+### What the cut checks, per cell
+
+Decode and measure first — never infer dimensions from the aspect label *(`FAL-MODELS.md:115-122`)*
+— then assert 1:1, centre-crop to a divisible size (**2048 % 3 = 2**, so `splitGrid` would have
+thrown), assert divisibility, split, and per cell: key out, **exactly one component**, a plausible
+fill share, and **no foreground pixel on a crop edge** (a face flush to a boundary was cut by the
+split and is refused, never downscaled).
+
+### The gate on the shipped bytes
+
+`tests/unit/shipped-touch.test.ts`. 🔴 Its first statistic compared **alpha masks** and was
+decoration: every face is the same round brass disc and the mark is *engraved into* it, not cut out,
+so the masks agreed on **99.6 %** and no bound above that could fail for anything the model might
+draw. Replaced rather than re-bounded — the share of pixels differing in COLOUR by more than 60
+(sum over RGB) measures **19.9 %** (`left`/`jump`, two triangles) to **40.0 %** (`right`/`walk`)
+across all fifteen pairs. Bound at **5 %**, four times inside the closest honest pair; a duplicated
+face scores **0.0 %**, which is how it was watched red.
+
+### And one defect no gate could see
+
+The walk plate went to the top **left** first — where the HUD portrait and gear gauge already live.
+`touchTargetsFit` measures the six controls against each other and knows nothing about the HUD, and
+all 28 touch e2e tests were green over the overlap. Found by taking a screenshot and looking at it.
+Moved beside pause at the top right.
