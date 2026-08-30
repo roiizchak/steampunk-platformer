@@ -189,9 +189,11 @@ export function cssScaleFor(canvasCssWidth: number, gameWidth: number = GAME_WID
  * independently.
  *
  * It was also redundant. `touchTargetsFit`'s gap loop already refuses any overlapping pair:
- * `separation` returns 0 when two boxes overlap, and `0 * scale < 8` is false for no scale. A
- * layout that fits is a disjoint layout by construction, so the rule is enforced by the predicate
- * production actually calls rather than by a second one nothing did.
+ * `separation` returns 0 when two boxes overlap, and `0 * scale < 8` is **true** at every scale, so
+ * the gap loop rejects the pair. A layout that fits is a disjoint layout by construction, and the
+ * rule is enforced by the predicate production actually calls rather than by a second one nothing
+ * did. (This paragraph said *false*, which inverts the reasoning on the way to the right
+ * conclusion. Corrected after the Codex round-4 review — the fourth place it had to be fixed.)
  */
 
 /** The clear distance between two non-overlapping boxes, in game pixels. 0 if they touch or overlap. */

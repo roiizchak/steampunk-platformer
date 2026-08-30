@@ -117,15 +117,40 @@ describe('RotatePrompt', () => {
     expect(prompt.showing, 'back to portrait and the prompt did not return').toBe(true);
   });
 
-  it('re-places itself when the design size changes, not only when the CSS size does', () => {
+  it('re-places the SAME prompt when the design size changes', () => {
+    // ⚠️ **This test used to build a SECOND prompt at the new size**, which exercised `create()`
+    // and then searched an array still holding the first prompt's full-size scrim — so it passed
+    // whether or not `refresh()` re-placed anything, and `refresh()` did not. Both halves were the
+    // Codex round-4 finding. The gate now refreshes the prompt it already made and asserts EXACT
+    // geometry on those objects.
     const h = scene(PORTRAIT_CSS_WIDTH);
-    live(h);
-    h.scene.scale.gameSize = { width: GAME_WIDTH / 2, height: GAME_HEIGHT / 2 };
-    const prompt = new RotatePrompt(h.scene, true);
-    prompt.create();
+    const prompt = live(h);
+    const w = GAME_WIDTH / 2;
+    const ht = GAME_HEIGHT / 2;
+    h.scene.scale.gameSize = { width: w, height: ht };
     prompt.refresh();
-    const scrim = h.faces.filter((f) => f.w >= GAME_WIDTH / 2 && f.h >= GAME_HEIGHT / 2);
-    expect(scrim.length, 'the scrim is sized from a literal, not from the live view').toBeGreaterThan(0);
+
+    const scrim = h.faces[0];
+    expect([scrim.w, scrim.h], 'the scrim kept the size it was built at').toEqual([w, ht]);
+    expect([scrim.x, scrim.y], 'the scrim left the origin').toEqual([0, 0]);
+    // The two lines are centred on the live view, not on the size they were created at.
+    expect(h.faces[1].x, 'the headline is off-centre after a design-size change').toBe(w / 2);
+    expect(h.faces[2].x, 'the subline is off-centre after a design-size change').toBe(w / 2);
+    expect(h.faces[1].y, 'the headline did not follow the new height').toBe(ht / 2 - 48);
+    expect(h.faces[2].y, 'the subline did not follow the new height').toBe(ht / 2 + 56);
+  });
+
+  it('keeps a finite font size when the canvas measures zero', () => {
+    // 🔴 `cssScaleFor` returns 0 for a collapsed or unmeasured canvas, on purpose. `28 / 0` is
+    // `Infinity`, and that is what reached Phaser's text renderer. Codex round 4.
+    const h = scene(PORTRAIT_CSS_WIDTH);
+    const prompt = live(h);
+    const before = h.faces[1].fontSize;
+    h.scene.scale.displaySize = { width: 0, height: 0 };
+    prompt.refresh();
+    expect(Number.isFinite(h.faces[1].fontSize), 'an Infinity font size reached the renderer').toBe(true);
+    expect(h.faces[1].fontSize, 'the last finite size was not kept').toBe(before);
+    expect(prompt.showing, 'a collapsed canvas must still show the prompt').toBe(true);
   });
 
   it('destroys every object it made', () => {

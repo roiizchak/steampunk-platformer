@@ -52,11 +52,17 @@ const SCRIM_ALPHA = 0.94;
 /** Read off the glass, not off the backing store. 28 and 18 CSS px, both over the 16 px floor. */
 const HEADLINE_CSS_PX = 28;
 const SUBLINE_CSS_PX = 18;
+
+/** Where the two lines sit either side of centre, in game px. Named so `create` and `place` agree. */
+const HEADLINE_OFFSET_PX = 48;
+const SUBLINE_OFFSET_PX = 56;
 const HEADLINE = 'ROTATE YOUR DEVICE';
 const SUBLINE = 'the controls need a landscape screen';
 
 export class RotatePrompt {
   private faces: TouchFaceLike[] = [];
+  /** The scrim, held separately because it is the one face that re-sizes. */
+  private scrim?: TouchFaceLike;
   /** Held separately from `faces` because only these two are re-sized against the CSS scale. */
   private headline?: TouchFaceLike;
   private subline?: TouchFaceLike;
@@ -97,7 +103,7 @@ export class RotatePrompt {
         .setOrigin(0, 0)
         .setDepth(ROTATE_PROMPT_DEPTH),
       this.scene.add
-        .text(width / 2, height / 2 - 48, HEADLINE, {
+        .text(width / 2, height / 2 - HEADLINE_OFFSET_PX, HEADLINE, {
           fontFamily: 'monospace',
           fontSize: '72px',
           color: '#f7e3b8',
@@ -105,7 +111,7 @@ export class RotatePrompt {
         .setOrigin(0.5, 0.5)
         .setDepth(ROTATE_PROMPT_DEPTH),
       this.scene.add
-        .text(width / 2, height / 2 + 56, SUBLINE, {
+        .text(width / 2, height / 2 + SUBLINE_OFFSET_PX, SUBLINE, {
           fontFamily: 'monospace',
           fontSize: '40px',
           color: '#b9a07a',
@@ -115,7 +121,25 @@ export class RotatePrompt {
     );
     this.headline = this.faces[1];
     this.subline = this.faces[2];
+    this.scrim = this.faces[0];
     for (const face of this.faces) face.setVisible(false);
+  }
+
+  /**
+   * Re-place every object against the live design size.
+   *
+   * 🔴 `refresh()` used to re-size only the FONTS, while a unit case called *"re-places itself when
+   * the design size changes"* proved nothing: it built a SECOND prompt at the new size, so it
+   * exercised `create()` and left the first prompt's stale scrim in the array it searched. The
+   * Codex round-4 review found both halves — the missing behaviour and the gate that could not see
+   * it. Under `Phaser.Scale.FIT` the design size does not move today; the claim is made true rather
+   * than withdrawn, because the file makes it.
+   */
+  private place(width: number, height: number): void {
+    this.scrim?.setSize?.(width, height);
+    this.scrim?.setPosition(0, 0);
+    this.headline?.setPosition(width / 2, height / 2 - HEADLINE_OFFSET_PX);
+    this.subline?.setPosition(width / 2, height / 2 + SUBLINE_OFFSET_PX);
   }
 
   /**
@@ -136,11 +160,21 @@ export class RotatePrompt {
     // ONE definition, shared with `touchRoutes.ts`. See `rotatePromptWanted`.
     const fits = !rotatePromptWanted(width, height, this.scene.scale.displaySize.width, this.targets);
 
+    this.place(width, height);
+
     // Re-sized on every refresh, not only on a show: the prompt can be up while the browser
     // chrome collapses and the canvas grows under it, and 8 CSS px of subline is the defect
     // this exists to prevent.
-    this.headline?.setFontSize?.(Math.round(HEADLINE_CSS_PX / scale));
-    this.subline?.setFontSize?.(Math.round(SUBLINE_CSS_PX / scale));
+    //
+    // ⚠️ **Only when the scale is positive.** `cssScaleFor` returns 0 for a collapsed or
+    // unmeasured canvas — deliberately, and the guard above lets that through because a zero CSS
+    // width still has a valid design size. `Math.round(28 / 0)` is `Infinity`, which is what would
+    // then reach Phaser's text renderer. Keep the last finite size instead; the prompt's VISIBILITY
+    // is decided above and is unaffected. Codex round 4.
+    if (scale > 0) {
+      this.headline?.setFontSize?.(Math.round(HEADLINE_CSS_PX / scale));
+      this.subline?.setFontSize?.(Math.round(SUBLINE_CSS_PX / scale));
+    }
 
     if (fits === !this.isShowing) return;
     this.isShowing = !fits;

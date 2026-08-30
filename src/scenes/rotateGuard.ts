@@ -33,7 +33,13 @@ import { RotatePrompt } from './rotatePrompt';
  * Attach a rotate prompt to a scene for that scene's lifetime. Safe on a device with no touch.
  *
  * `targets` is the tap route this screen carries, so the prompt and the route share one predicate.
- * Omit it only for a screen with no route of its own.
+ *
+ * ⚠️ **The invariant is narrower than "every routed screen", and the header used to overstate it.**
+ * `TitleScene` and `LevelSelectScene` pass the identical arrays they hand `attachTapRoutes`. The
+ * completion route does NOT: its zone lives on the `Game` scene (`gameComplete.ts:161-168`) while
+ * the prompt over it belongs to `UIScene`, which passes an empty list (`uiTouch.ts`). That zone is
+ * the whole view plus 64 px, so its own targets can never be the term that fails — the play-controls
+ * term is the only one that can fire there, and it does. Codex round 4 caught the overstatement.
  */
 export function attachRotatePrompt(
   scene: Phaser.Scene,

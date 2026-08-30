@@ -55,6 +55,8 @@ export interface TouchFaceLike {
   setStrokeStyle?(width: number, color: number): TouchFaceLike;
   /** `Text` only. The rotate prompt resizes its copy against the live CSS scale. */
   setFontSize?(size: number): TouchFaceLike;
+  /** `Rectangle` only. The rotate prompt's scrim re-sizes to a changed design size. */
+  setSize?(width: number, height: number): TouchFaceLike;
   /** The pressed state. A control that does not visibly answer a thumb reads as a broken app. */
   setAlpha(alpha: number): TouchFaceLike;
   /** `Rectangle` only — the two strokes of the attack cross. */
