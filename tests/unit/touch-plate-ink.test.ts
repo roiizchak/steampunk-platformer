@@ -131,8 +131,13 @@ describe('the plate stays translucent, because the level is behind it', () => {
 
 describe('the generated faces, once the plate is cut', () => {
   /** The same layer, with the six brass faces present in the texture manager. */
-  function withArt() {
+  function withArt(view?: { width: number; height: number }) {
     const scene = makeTouchScene({ art: true });
+    // The view is set BEFORE create() when one is given, so the first draw is the one measured.
+    if (view) {
+      scene.scene.scale.gameSize.width = view.width;
+      scene.scene.scale.gameSize.height = view.height;
+    }
     const layer = new TouchControlsLayer(scene.scene, true);
     scene.readHeld = () => layer.held();
     layer.create();
@@ -195,6 +200,21 @@ describe('the generated faces, once the plate is cut', () => {
     for (const box of boxes) {
       const face = scene.faces.filter((f) => f.id === box.id)[0];
       expect([face.w, face.h], `the ${box.id} face is not the size of its box`).toEqual([box.w, box.h]);
+    }
+  });
+
+  it('sizes each face on the FIRST draw, at a view that is not the design size', () => {
+    // 🔴 The case above cannot fail at 1920 x 1080: the box is 160 there, which is exactly
+    // the source PNG's size, so `setDisplaySize` deleting reddens nothing — measured, M39 went
+    // GREEN. A phone is never at the design size, and this is the only case that says so.
+    const { scene } = withArt({ width: GAME_WIDTH / 2, height: GAME_HEIGHT / 2 });
+    const boxes = touchLayout(GAME_WIDTH / 2, GAME_HEIGHT / 2);
+    for (const box of boxes) {
+      const face = scene.faces.filter((f) => f.id === box.id)[0]!;
+      expect(
+        [face.w, face.h],
+        `the ${box.id} face drew at its source size, not at the box the layout chose`,
+      ).toEqual([box.w, box.h]);
     }
   });
 
