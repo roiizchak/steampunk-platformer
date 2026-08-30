@@ -107,7 +107,7 @@ function isKeyline(face: Face, x: number, y: number): boolean {
 
 describe('keylineMarks gives a dark engraving a second ink', () => {
   it('paints a pale keyline immediately outside the mark', () => {
-    const out = keylineMarks(syntheticFace()) as Face;
+    const out = keylineMarks(syntheticFace()).image as Face;
     const centre = SIZE / 2;
     // The blob was 12 px wide; BOLD_PX 2 thickens it, KEYLINE_PX 3 rings that. Somewhere in the
     // band just outside the original blob there has to be keyline colour, and inside it none.
@@ -124,7 +124,7 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     // as "an anti-aliasing artefact, not a contrast mechanism". So the dark ink is grown before it
     // is keylined, and this is what says so: without it M55 reddened nothing.
     const before = syntheticFace();
-    const after = keylineMarks(before) as Face;
+    const after = keylineMarks(before).image as Face;
     const darkCount = (face: Face): number => {
       let n = 0;
       for (let i = 0; i < face.data.length; i += 4) {
@@ -159,7 +159,7 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
       before.data[i + 1] = DARK[1];
       before.data[i + 2] = DARK[2];
     }
-    const after = keylineMarks(before) as Face;
+    const after = keylineMarks(before).image as Face;
     const inset = Math.round((SIZE * 0.5) / 2);
     let changed = 0;
     for (let y = 0; y < SIZE; y += 1) {
@@ -178,7 +178,7 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     // being round. With a blob safely at the centre nothing transparent is ever in reach and the
     // assertion cannot fail, which is exactly how M57 stayed green through two earlier fixtures.
     const before = faceWithMarkAtDiscEdge();
-    const after = keylineMarks(before) as Face;
+    const after = keylineMarks(before).image as Face;
     let filled = 0;
     for (let i = 3; i < before.data.length; i += 4) {
       if (before.data[i] === 0 && after.data[i] !== 0) filled += 1;
@@ -190,7 +190,8 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
 
 describe('bakePlateAlpha fades the brass and not the ink', () => {
   it('splits one flat face into a translucent plate and opaque ink', () => {
-    const out = bakePlateAlpha(keylineMarks(syntheticFace())) as Face;
+    const { image, mark } = keylineMarks(syntheticFace());
+    const out = bakePlateAlpha(image, mark) as Face;
     const centre = SIZE / 2;
     expect(at(out, centre, centre)[3], 'the engraving faded with the plate').toBe(255);
 
@@ -201,7 +202,7 @@ describe('bakePlateAlpha fades the brass and not the ink', () => {
   });
 
   it('leaves a fully transparent pixel transparent', () => {
-    const out = bakePlateAlpha(syntheticFace()) as Face;
+    const out = bakePlateAlpha(syntheticFace(), new Uint8Array(SIZE * SIZE)) as Face;
     expect(at(out, 0, 0)[3]).toBe(0);
   });
 });

@@ -63,6 +63,20 @@ export const TOUCH_FACE_PX = 160;
 export const TOUCH_OUT_DIR = 'public/assets/ui';
 
 /**
+ * Where the CUT faces go — the downscaled cell as the plate gave it, before `keylineMarks` and
+ * `bakePlateAlpha`.
+ *
+ * 🔴 **Committed, and the reason is that every shipped-bytes gate was otherwise reading its own
+ * oracle off the mutated file.** The alpha invariant decided what was "ink" by luminance and the
+ * contrast gate decided where the "mark" was by opacity — both discovered from the very bytes
+ * under test, so a mutation that erased the engraving and left two ink cells standing simply moved
+ * the mask with it and scored 3.09:1. Codex round-11. The plate itself is 3.8 MB and gitignored;
+ * these six 160 px faces are ~30 KB each and are the smallest thing that says, independently of
+ * the result, what the result was supposed to be.
+ */
+export const TOUCH_CUT_DIR = 'tests/fixtures/touch-cut';
+
+/**
  * Aspect tolerance for a plate that asked for 1:1.
  *
  * Refuse rather than crop a plate that is not the shape the prompt asked for: a 16:9 sheet cut into
@@ -80,7 +94,7 @@ const MIN_FACE_SHARE = 0.15;
  * @param {string} key
  * @returns {import('./png.d.mts').RgbaImage}
  */
-export function faceFromCell(cell, key) {
+export function cutFace(cell, key) {
   const keyed = removeSpecks(trimHalo(keyOut(cell)));
 
   // 🔴 One component per cell is necessary and NOT sufficient, which is why the edge check below
@@ -128,7 +142,7 @@ export function faceFromCell(cell, key) {
     side,
     side,
   );
-  return bakePlateAlpha(keylineMarks(downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX)));
+  return downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX);
 }
 
 /**
@@ -168,7 +182,7 @@ export function cutPlate(bytes) {
   for (const cell of TOUCH_PLATE_CELLS) {
     const image = grid[cell.row * TOUCH_PLATE_COLS + cell.col];
     if (!image) throw new Error(`${cell.key}: no cell at row ${cell.row}, column ${cell.col}`);
-    cells.set(cell.key, faceFromCell(image, cell.key));
+    cells.set(cell.key, cutFace(image, cell.key));
   }
   return { cells, width, height };
 }
@@ -211,15 +225,25 @@ function main() {
   }
 
   fs.mkdirSync(TOUCH_OUT_DIR, { recursive: true });
-  for (const [key, image] of cells) {
+  fs.mkdirSync(TOUCH_CUT_DIR, { recursive: true });
+  for (const [key, cut] of cells) {
+    // The CUT face — everything the plate gave us, before either ink pass. Committed, because it
+    // is the only independent statement of where the engraving is: `shipped-touch.test.ts` re-runs
+    // the two pure passes over it and demands the shipped bytes back. See TOUCH_CUT_DIR.
+    fs.writeFileSync(path.join(TOUCH_CUT_DIR, `${key}.png`), encodePng(cut.width, cut.height, cut.data));
+
+    const { image: inked, mark } = keylineMarks(cut);
+    const image = bakePlateAlpha(inked, mark);
     const out = path.join(TOUCH_OUT_DIR, `${key}.png`);
     fs.writeFileSync(out, encodePng(image.width, image.height, image.data));
     console.log(`${out}  ${image.width} x ${image.height}`);
   }
 
-  for (const file of staleFaces(fs.readdirSync(TOUCH_OUT_DIR), cells)) {
-    fs.rmSync(path.join(TOUCH_OUT_DIR, file));
-    console.log(`removed stale ${file}`);
+  for (const dir of [TOUCH_OUT_DIR, TOUCH_CUT_DIR]) {
+    for (const file of staleFaces(fs.readdirSync(dir), cells)) {
+      fs.rmSync(path.join(dir, file));
+      console.log(`removed stale ${path.join(dir, file)}`);
+    }
   }
   console.log(
     `\ncut ${cells.size} faces from a MEASURED ${width} x ${height} plate ` +

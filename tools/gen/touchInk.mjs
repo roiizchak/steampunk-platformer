@@ -17,26 +17,34 @@
  * every possible background luminance, the best ink reached only **2.43-2.47:1**. Found by the
  * Codex round-7 review and confirmed locally before anything was changed.
  *
- * So the ink keeps its alpha and only the brass is faded. Ink is the two ENDS of the luminance
- * range — the engraved dark line and the pale highlight — which is the same two-ink method
- * `hud.ts` uses and `contrast-floor.test.ts` measures: a reader takes whichever contrasts. The
- * thresholds are the widest pair that still clears the floor with margin; at 16/224 the worst case
- * falls off a cliff to 2.88:1, so 32/208 sits two steps clear of it.
+ * So the MARK keeps its alpha and everything else is faded. The mark is what `keylineMarks` wrote
+ * — a dark engraving found at `INK_DARK_MAX`, thickened, and haloed in the pale half of the pair —
+ * which is `hud.ts`'s two-ink method, the one `contrast-floor.test.ts` measures: a reader takes
+ * whichever ink contrasts with what is behind it.
+ *
+ * ⚠️ **It used to be every extreme-luminance pixel anywhere, and that exempted 2 657-2 976
+ * pixels a face that are not the mark at all** — the disc's own dark bezel shading, shipping fully
+ * opaque, occluding the level for no readability gain, and classified by no gate as either ink or
+ * plate. Codex round-11. Keyed on the mask, the invariant is exact in both directions: a mark pixel
+ * draws at `ART_ALPHA`, everything else at `PLATE_ALPHA`, and `shipped-touch.test.ts` checks that
+ * per pixel against the two alphas the SCENE draws with.
  *
  * Splitting the alpha was necessary and not sufficient — see `BOLD_PX` for the half that measured
  * the marks at the size a player is actually shown them. With both repairs in place, all six marks
- * measure **3.32:1** at rest and **3.85:1** pressed, at 48 CSS px over every background, with 20-31 % of the face opaque and the
- * translucent disc 49-59 %.
+ * measure **3.32:1** at rest and **3.85:1** pressed, at 48 CSS px over every background, with the
+ * mark 10.4-20.5 % of the face and the translucent disc 59.8-68.4 %.
  */
 export const INK_DARK_MAX = 32;
-export const INK_LIGHT_MIN = 208;
 
 /**
  * How far the pale keyline is grown around the dark engraving, in shipped pixels.
  *
  * 3 px of a 160 px face is 0.9 CSS px at the worst in-scope scale, which is the point: paired with
  * `BOLD_PX` it is the leanest width at which every mark reaches the 3.32:1 plateau AFTER the
- * downscale. At a 2 px keyline `walk` is 2.10-2.88:1 and at 1 px it is 1.63:1. The colour is
+ * downscale. Re-measured through the mark mask with `BOLD_PX` at 2: a 2 px keyline leaves `walk`
+ * at 2.92:1 and a 1 px one at 1.93:1, against 3.32:1 for all six at 3 px. (⚠️ The 2.10-2.88 and
+ * 1.63 this line used to quote were taken before the mask and the bezel fade changed what is being
+ * measured — two experiments reported as one. Codex round-11.) The colour is
  * `MARK_INK` from `touchMarks.ts`, the pale half of the pair `contrast-floor.test.ts` measures.
  */
 const KEYLINE_PX = 3;
@@ -53,10 +61,14 @@ const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
  * (`canvasScaling.ts`). A 1 px feature simply averages away. Codex round-9.
  *
  * So the dark engraving is thickened before it is keylined, both inside the mark region only.
- * Swept at the true size over every background: `BOLD_PX` 2 with `KEYLINE_PX` 3 puts all six marks
- * on **3.32:1**, which is the plateau this ink pair can reach — 3 and 4 do not raise it, and 1 or a
- * 2 px keyline leave `walk` at 2.72-2.91. Leanest pair that reaches the plateau; 20 % of the face
- * ends up opaque and the translucent disc stays 59 %.
+ *
+ * ⚠️ **The contrast figure no longer chooses this number, and saying that it did was wrong.**
+ * Swept at true size through the mark mask, `BOLD_PX` 1, 2, 3 and 4 all measure **3.32:1** — the
+ * keyline is what carries the ratio (`KEYLINE_PX`: 1 px is 1.93, 2 px is 2.92, 3 px is 3.32).
+ * Re-measured for Codex round-11, after the mask became the measurement window. What the thickening
+ * buys is that the engraving still reads as a SHAPE at 48 CSS px rather than as a pale outline
+ * around nothing, which is a judgement — 12.14's `ui-ux-tester` call and the owner's under 12.24 —
+ * and is recorded here as one instead of borrowed from a number that does not order it.
  */
 const BOLD_PX = 2;
 
@@ -107,7 +119,7 @@ function grow(mask, width, height, radius, allowed) {
  * signal (the drawn grey box's mechanism) while leaving the ink enough of it to be read.
  * `touchMarks.ts` owns the two drawn alphas and states the same arithmetic.
  */
-const PLATE_ALPHA_BAKED = 0.55 / 0.85;
+export const PLATE_ALPHA_BAKED = 0.55 / 0.85;
 
 /**
  * 🔴 **The engraving is ONE ink, and one ink cannot pass a swept background.**
@@ -127,8 +139,15 @@ const PLATE_ALPHA_BAKED = 0.55 / 0.85;
  * `MARK_INK` / `SHADOW_INK` pair `contrast-floor.test.ts` measures at 3.80:1, and it is what the
  * grey-box marks always had.
  *
+ * ⚠️ **Returns the MASK as well as the picture, and that is not a convenience.** Every gate over
+ * the shipped bytes used to decide for itself which pixels were the mark — by luminance, or by
+ * opacity — reading its own oracle off the very file under test. A mutation that erased the
+ * engraving and left two ink cells standing therefore moved the mask with it and scored 3.09:1.
+ * Codex round-11. This mask is the pipeline's own statement of where the mark is, computed from
+ * the CUT face, and `tests/fixtures/touch-cut/` commits that input so a test can recompute it.
+ *
  * @param {import('./png.d.mts').RgbaImage} face
- * @returns {import('./png.d.mts').RgbaImage}
+ * @returns {{ image: import('./png.d.mts').RgbaImage, mark: Uint8Array }}
  */
 export function keylineMarks(face) {
   const { width, height } = face;
@@ -168,28 +187,34 @@ export function keylineMarks(face) {
       // A transparent pixel CAN be in the halo, though, whenever the mark region reaches the edge
       // of the disc: without this the keyline fills the corners and the button stops being round.
       if (data[i + 3] === 0) continue;
+      dark[p] = 1;
       data[i] = KEYLINE_RGB[0];
       data[i + 1] = KEYLINE_RGB[1];
       data[i + 2] = KEYLINE_RGB[2];
       data[i + 3] = 255;
     }
   }
-  return { width, height, data };
+  return { image: { width, height, data }, mark: dark };
 }
 
 /**
- * Fade the brass and leave the ink alone.
+ * Fade the plate and leave the mark alone.
+ *
+ * 🔴 **Keyed on the MARK MASK, not on luminance, and the difference is 2 657-2 976 pixels a
+ * face.** Exempting every extreme-luminance pixel exempted the disc's own dark bezel shading too —
+ * thousands of pixels outside the engraving that shipped fully opaque, occluding the level for no
+ * readability gain, and that no shipped-bytes gate classified as anything at all. Codex round-11.
+ * The exemption exists so the ENGRAVING survives the fade; nothing else needs it.
  *
  * @param {import('./png.d.mts').RgbaImage} face
+ * @param {Uint8Array} mark
  * @returns {import('./png.d.mts').RgbaImage}
  */
-export function bakePlateAlpha(face) {
+export function bakePlateAlpha(face, mark) {
   const data = new Uint8Array(face.data);
   for (let i = 0; i < data.length; i += 4) {
     const a = data[i + 3];
-    if (a === 0) continue;
-    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    if (luma < INK_DARK_MAX || luma > INK_LIGHT_MIN) continue;
+    if (a === 0 || mark[i / 4]) continue;
     data[i + 3] = Math.round(a * PLATE_ALPHA_BAKED);
   }
   return { width: face.width, height: face.height, data };

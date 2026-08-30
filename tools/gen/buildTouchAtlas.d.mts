@@ -11,8 +11,9 @@ export const TOUCH_PLATE_SOURCE: string;
 export const TOUCH_PLATE_SHEET_ROWS: number;
 export const TOUCH_FACE_PX: number;
 export const TOUCH_OUT_DIR: string;
+export const TOUCH_CUT_DIR: string;
 
-export function faceFromCell(cell: RgbaImage, key: string): RgbaImage;
+export function cutFace(cell: RgbaImage, key: string): RgbaImage;
 export function cutPlate(bytes: Uint8Array): {
   cells: Map<string, RgbaImage>;
   width: number;
