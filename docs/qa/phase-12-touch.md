@@ -366,8 +366,13 @@ approved evidence and `99c754e` had committed a Phase 12 build over it.
 - **`tools/gen/promptTouch.mjs` is orphaned** — no npm script, no importer — and its header names
   `buildTouchAtlas.mjs` five times as its consumer. **That file was never written.** *Reason:
   deleting a file is a STOP-and-ask, and the tool is the record of what the two takes asked for.*
-- **A `rotate-prompt.test.ts` case cannot go red**: it filters faces the first prompt already left in
-  the array, against a `>=` bound a hardcoded scrim satisfies.
+- ~~**A `rotate-prompt.test.ts` case cannot go red**: it filters faces the first prompt already left
+  in the array, against a `>=` bound a hardcoded scrim satisfies.~~ **REPAIRED**, after the Codex
+  round-4 review found the missing behaviour behind it: `refresh()` re-sized only the fonts, so the
+  case was decoration over a defect rather than only over nothing. `RotatePrompt.place()` re-sizes
+  the scrim and re-centres both lines, the case refreshes the SAME prompt, and it asserts each line
+  moved by half the change in its dimension — a delta, not the private `48`/`56` offsets, which
+  would pin tuning no criterion approves. **M32 red 1/10.**
 - **Six file:line citations in new prose were invalidated by this same diff**, including
   `gameInput.ts:359-362`, which is the justifying evidence for the whole `inputMerge` extraction and
   now points at the `if (!enabled)` branch. That one is corrected; the rest are recorded.
@@ -466,7 +471,7 @@ than left standing.
 | gate | result |
 |---|---|
 | `npm run typecheck` | clean |
-| `npm test` | **202 files, 2952 tests, 0 failed** (2923 before this phase's gate repairs) |
+| `npm test` | **202 files, 2953 tests, 0 failed** (2923 before this phase's gate repairs) |
 | `npm run test:sim-isolated` | **202 files, 2952 tests, 0 failed** with Phaser uninstalled — 2939 passed, 13 skipped. Same file and test COUNT as the normal run, which is what makes the skips a deliberate arm and not a silent deselection. |
 | e2e | **214 passed, 0 failed**, across all six projects, run one at a time with nothing beside them: `chromium` + `chromium-gpu` **173** (24.4 min), `chromium-touch` + `chromium-touch-gpu` + `chromium-prod` **34** (5.0 min), `chromium-dpr2` **7** (43 s). Split because a single `npm run test:e2e` exceeds the shell's one-hour ceiling on this box — a timeout, never a failure, and the project counts add to the whole. ⚠️ The run before the Codex repairs landed reported three failures: the new title-zone test (a real defect — it waited on `__game.sceneKey === 'Title'`, and the title plate is a PARALLEL scene, so that read never changes), plus `phase-06-perf` and `phase-10-production`, neither of which reproduced once the box was not also running a timing-out spec. Recorded rather than dropped. |
 | `npm run build` | `dev-seam gate ok: 28 sentinel-marked DEV bodies folded out`; `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical, no DEV-only scene key or debug surface` |

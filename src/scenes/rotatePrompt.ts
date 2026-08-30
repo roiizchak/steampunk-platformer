@@ -63,6 +63,9 @@ export class RotatePrompt {
   private faces: TouchFaceLike[] = [];
   /** The scrim, held separately because it is the one face that re-sizes. */
   private scrim?: TouchFaceLike;
+  /** The design size the objects are currently laid out for. See `place()`. */
+  private placedW = 0;
+  private placedH = 0;
   /** Held separately from `faces` because only these two are re-sized against the CSS scale. */
   private headline?: TouchFaceLike;
   private subline?: TouchFaceLike;
@@ -136,6 +139,14 @@ export class RotatePrompt {
    * than withdrawn, because the file makes it.
    */
   private place(width: number, height: number): void {
+    // ⚠️ Only when it actually moved. `UIScene.update()` polls `refresh()` EVERY FRAME, and
+    // `Rectangle.setSize` rebuilds geometry, path data and display origin on every call
+    // (`node_modules/phaser/src/gameobjects/shape/rectangle/Rectangle.js:133`) — so an unconditional
+    // `place()` ships continuous work on every touch device, at 60 Hz, while the prompt is hidden.
+    // 12.11 cannot measure that cost, which is the reason not to create it. Codex round 5.
+    if (width === this.placedW && height === this.placedH) return;
+    this.placedW = width;
+    this.placedH = height;
     this.scrim?.setSize?.(width, height);
     this.scrim?.setPosition(0, 0);
     this.headline?.setPosition(width / 2, height / 2 - HEADLINE_OFFSET_PX);

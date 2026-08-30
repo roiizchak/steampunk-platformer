@@ -125,6 +125,7 @@ describe('RotatePrompt', () => {
     // geometry on those objects.
     const h = scene(PORTRAIT_CSS_WIDTH);
     const prompt = live(h);
+    const before = [1, 2].map((i) => ({ x: h.faces[i].x, y: h.faces[i].y }));
     const w = GAME_WIDTH / 2;
     const ht = GAME_HEIGHT / 2;
     h.scene.scale.gameSize = { width: w, height: ht };
@@ -133,11 +134,16 @@ describe('RotatePrompt', () => {
     const scrim = h.faces[0];
     expect([scrim.w, scrim.h], 'the scrim kept the size it was built at').toEqual([w, ht]);
     expect([scrim.x, scrim.y], 'the scrim left the origin').toEqual([0, 0]);
-    // The two lines are centred on the live view, not on the size they were created at.
-    expect(h.faces[1].x, 'the headline is off-centre after a design-size change').toBe(w / 2);
-    expect(h.faces[2].x, 'the subline is off-centre after a design-size change').toBe(w / 2);
-    expect(h.faces[1].y, 'the headline did not follow the new height').toBe(ht / 2 - 48);
-    expect(h.faces[2].y, 'the subline did not follow the new height').toBe(ht / 2 + 56);
+    // ⚠️ The DELTA, not the offsets. Pinning `-48` and `+56` would false-red a legal change to the
+    // line spacing that kept the prompt centred, responsive and readable — a test enforcing more
+    // than any criterion says, which is the widening this project forbids. Codex round 5. Halving
+    // the view must move each line by half the change in the dimension it is centred on; whatever
+    // constant separates them is not this gate's business.
+    for (const [i, was] of before.entries()) {
+      const face = h.faces[i + 1];
+      expect(face.x - was.x, 'a line did not follow the new width').toBe((w - GAME_WIDTH) / 2);
+      expect(face.y - was.y, 'a line did not follow the new height').toBe((ht - GAME_HEIGHT) / 2);
+    }
   });
 
   it('keeps a finite font size when the canvas measures zero', () => {
