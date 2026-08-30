@@ -196,14 +196,31 @@ papered over.
 | M61 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone | 12.17 | **GREEN — the bound was one-sided** → RED 2/8 |
 | M62 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and opaque | 12.17 | **GREEN — classified as neither ink nor plate** → RED 2/8 |
 | M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for |
+| M64 | swap the `left` and `right` COLUMNS in `TOUCH_PLATE_CELLS` and re-cut | 12.17 | **GREEN — both oracles moved together** → RED 1/8 |
+| M65 | skip the pale halo below the face midpoint, and re-cut | 12.14 | **GREEN at 3.318:1 — one best pixel for a whole glyph** → RED 1/8, `pause` stroke 3 at 1.21:1 |
 
-**Seventeen rows reddened nothing, and all seventeen were holes rather than mutations to drop.**
+**Nineteen rows reddened nothing, and all nineteen were holes rather than mutations to drop.**
+
+🔴 **M64 is the limit of what a committed oracle can defend, and it is worth stating.** The cut
+fixtures are written by the same run that writes the shipped PNGs, so they cannot answer for the
+CELL BINDING: swap two columns, re-cut, and every gate follows the change — reproduction exact,
+contrast and distinctness unmoved — while the left button ships a right-pointing arrow. The
+key/row/col table is pinned as a literal in `shipped-touch.test.ts`, which is the one statement in
+the repository that cannot move with the art. Codex round-12.
+
+🔴 **M65 is round-8's hole one level down.** Masking the contrast measurement to the mark stopped a
+decorative highlight carrying the pass; keeping ONE best pixel for the whole mark still let half a
+glyph go dark. Measured: with the pale halo skipped below the midpoint, `walk` loses 938 keyline
+pixels, its lower bar is invisible on a dark background, and the per-face statistic reported
+**3.318:1** — green. Per connected stroke, `pause`'s third stroke measures 1.21:1.
 
 🔴 **M60, M61 and M62 are one defect three times: every gate was reading its oracle off the file it
 was judging.** The alpha invariant decided what was "ink" by luminance and the contrast gate decided
 where the "mark" was by opacity — both discovered from the mutated bytes, so damage that removed
-pixels from the mask was invisible to the mask. Codex round-11. The pipeline's own mark mask is
-committed now (`tests/fixtures/touch-cut/`), every gate takes it from there, and a reproduction gate
+pixels from the mask was invisible to the mask. Codex round-11. The CUT FACE is committed now
+(`tests/fixtures/touch-cut/` — the downscaled cell before either ink pass; the mask itself is not
+committed, production derives it from that input), every gate takes the mask from there, and a
+reproduction gate
 recomputes the whole pipeline over it and demands the shipped bytes back. **M63 is the reason the
 property gates stay**: a pipeline change that is faithfully re-cut leaves the reproduction gate green
 and reds the per-pixel alpha invariant.

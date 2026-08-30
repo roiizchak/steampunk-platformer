@@ -115,5 +115,18 @@ locally before being acted on, and one did not survive that check).
 | 4 | MEDIUM | **"True on-screen size" is a proxy presented as runtime evidence** — production uses the browser's `image-rendering: auto` at fractional scale, and nothing proves it uses this repository's box filter | **Applied as a label, not as a measurement.** The QA row now says the figure is a box-filter proxy and names what is still open. Measuring rendered screenshot pixels in a 667 × 325 browser arm is the stronger form and is not done; it is recorded as the agent's call under 12.14. |
 | 5 | LOW | The prose sweep is incomplete — obsolete alpha shares, "1 px keyline", contradictory keyline figures, a stale modal-alpha explanation, obsolete 91.4–96.2 % distinctness | **Applied**, and re-measuring for it found one more: `BOLD_PX` 1, 2, 3 and 4 all reach 3.32:1 now, so the claim that the contrast figure chose 2 is withdrawn and the choice is recorded as a judgement. |
 
+## Round 12 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **The cut fixture is rewritten alongside the defendant, and the cell binding is ungated.** Swap the `left`/`right` columns and re-cut: both oracles update, reproduction stays exact, contrast and distinctness are unmoved, and the left control ships a right arrow | **Applied in part.** The key/row/col table is pinned as a literal — the one statement that cannot move with the art. M64 red 1/8. **Recorded, not applied:** making the fixture write a separate adoption command. It adds a workflow step and no gate; the pin is what orders the mutation, and the fixture must track the plate when the plate legitimately changes. |
+| 2 | HIGH | **The contrast gate keeps one best mark pixel for a whole face, so half a glyph can go dark.** Skipping the pale halo below the midpoint removes 938 keyline pixels from `walk` and the statistic still reports 3.318:1 | **Applied.** Confirmed locally at exactly **3.318:1** under the mutation. Per connected stroke now, and every stroke must survive the downscale. No size threshold was needed: 1–4 components per face, 914–4 136 source pixels, 80–400 surviving cells, every one at 3.32:1 / 3.85:1. M65 red 1/8, `pause` stroke 3 at 1.21:1. |
+| 3 | MEDIUM | `keylineMarks()` returns transparent pixels as mark pixels — `grow` sets the bits and the paint loop skips them without clearing | **Applied.** 44 pixels on the fixture; the contrast gate was counting them as coverage. The bit is cleared. Shipped bytes unchanged — the paint always skipped them — and the builder still reproduces all six byte for byte. |
+| 4 | MEDIUM | 12.19 cannot remain PASS while those two mutations have no red gate | **Applied by closing them, not by downgrading.** Both are built, watched red and reverted; the matrix is 71 rows and 19 holes. |
+| 5 | LOW | Two false comments: the PRD says the mark MASK is committed (only the cut face is), and the contrast test still says "1 px pale keyline" | **Applied.** The first is corrected in place; the second was already gone in the rewritten contrast spec, which states `KEYLINE_PX` 3 with the 1 px and 2 px measurements beside it. |
+
+Codex withdrew its round-11 finding 4 (the box-filter proxy): the label plus the row staying UNRUN
+is *"now adequate… I do not count that labeling as a defect."*
+
 **Nothing was silently dropped** *(C11)*. Two findings are recorded-not-applied with the reason above;
 one did not survive local verification and is recorded as unconfirmed.
