@@ -89,6 +89,34 @@ describe('keylineMarks gives a dark engraving a second ink', () => {
     expect(isKeyline(out, centre, centre), 'the keyline was painted OVER the mark').toBe(false);
   });
 
+  it('THICKENS the engraving, because a hairline does not survive the downscale', () => {
+    // 🔴 A 160 px face is presented at 48 CSS px on the smallest viewport in scope, and a fractional
+    // canvas scale smooths that resample. A 1 px feature averages into the plate — measured, the
+    // marks read 1.63-2.85:1 that way, and `contrast-floor.test.ts` already refuses a 1 px stroke
+    // as "an anti-aliasing artefact, not a contrast mechanism". So the dark ink is grown before it
+    // is keylined, and this is what says so: without it M55 reddened nothing.
+    const before = syntheticFace();
+    const after = keylineMarks(before) as Face;
+    const darkCount = (face: Face): number => {
+      let n = 0;
+      for (let i = 0; i < face.data.length; i += 4) {
+        if (face.data[i + 3] === 0) continue;
+        const luma = face.data[i]! * 0.299 + face.data[i + 1]! * 0.587 + face.data[i + 2]! * 0.114;
+        if (luma < 32) n += 1;
+      }
+      return n;
+    };
+    const grown = darkCount(after);
+    const original = darkCount(before);
+    expect(original, 'the fixture has no engraving to thicken').toBeGreaterThan(0);
+    // A 12 x 12 blob grown by 2 px is 16 x 16 — a little under 1.8x. Bound well inside that, and
+    // above 1.0, which is what a missing `grow` scores.
+    expect(
+      grown / original,
+      `the engraving grew ${(grown / original).toFixed(2)}x — a hairline, not a mark`,
+    ).toBeGreaterThan(1.3);
+  });
+
   it('leaves every pixel outside the central mark region alone', () => {
     // 🔴 The round-9 finding. Keylining every dark pixel anywhere repainted the outer rim too —
     // ornament on the half of the face the acceptance gate does not measure, while the mark it does
