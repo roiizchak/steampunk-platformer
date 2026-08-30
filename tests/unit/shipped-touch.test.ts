@@ -238,6 +238,23 @@ describe('the shipped touch faces', () => {
     // against themselves. Codex round-7. This is the other end: the cells the prompt asks for have
     // to be exactly the controls the layout draws, named the same way.
     expect(TOUCH_PLATE_CELLS.map((cell) => cell.key).sort()).toEqual([...KEYS].sort());
+    // 🔴 **And WHICH cell, pinned as a literal.** Keys-exist plus positions-unique says
+    // nothing about the binding: swap the `left` and `right` columns and re-run `assets:touch` and
+    // every gate here follows the change — the cut fixtures are rewritten in the same run as the
+    // shipped PNGs, so the reproduction gate is exact, contrast and distinctness are unmoved, and
+    // the left button ships a right-pointing arrow. Codex round-12, M64. This table is the other
+    // end of that contract and is the only thing in the repository that cannot move with it.
+    expect(
+      TOUCH_PLATE_CELLS.map((cell) => `${cell.key} ${cell.row},${cell.col}`),
+      'a control reads a different cell of the plate than the one it was generated into',
+    ).toEqual([
+      'touch-left 0,0',
+      'touch-right 0,1',
+      'touch-jump 0,2',
+      'touch-attack 1,0',
+      'touch-pause 1,1',
+      'touch-walk 1,2',
+    ]);
     // And no two controls may read the same cell, which is how one mark ships twice.
     const positions = TOUCH_PLATE_CELLS.map((cell) => cell.row * TOUCH_PLATE_COLS + cell.col);
     expect(new Set(positions).size, 'two controls read the same cell of the plate').toBe(

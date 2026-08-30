@@ -168,7 +168,13 @@ export function keylineMarks(face) {
   for (let p = 0; p < dark.length; p += 1) {
     if (!dark[p]) continue;
     const i = p * 4;
-    if (data[i + 3] === 0) continue;
+    // ⚠️ Clear the bit, do not just skip the paint. `grow` sets bits outside the disc, and a
+    // returned mask that claims 44 transparent pixels are mark is a coverage claim the picture does
+    // not support — the contrast gate counts exactly these bits as the engraving. Codex round-12.
+    if (data[i + 3] === 0) {
+      dark[p] = 0;
+      continue;
+    }
     data[i] = SHADOW_RGB[0];
     data[i + 1] = SHADOW_RGB[1];
     data[i + 2] = SHADOW_RGB[2];

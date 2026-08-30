@@ -87,3 +87,45 @@ export function cutFace(key: string): { cut: ReturnType<typeof readPng>; mark: U
   const cut = readPng(`${TOUCH_CUT_DIR}/${key}.png`);
   return { cut, mark: keylineMarks(cut).mark };
 }
+
+/**
+ * The mark mask, split into its connected strokes (8-connected).
+ *
+ * 🔴 **A per-face contrast figure hides half a glyph.** One `best` pixel for the whole
+ * engraving let `walk`'s lower bar lose its pale halo — 938 keyline pixels, invisible on a dark
+ * background — while the surviving upper bar still reported 3.318:1. Codex round-12. Each stroke
+ * answers for itself, and there is no size threshold: the six shipped faces have 1 to 4 components
+ * of 914-4 136 source pixels each, surviving as 80-400 output cells at 48 px.
+ */
+export function markComponents(
+  mark: Uint8Array,
+  width: number,
+): { labels: Int32Array; count: number } {
+  const labels = new Int32Array(mark.length).fill(-1);
+  let count = 0;
+  for (let p = 0; p < mark.length; p += 1) {
+    if (!mark[p] || labels[p]! >= 0) continue;
+    const id = count;
+    count += 1;
+    labels[p] = id;
+    const stack = [p];
+    while (stack.length > 0) {
+      const q = stack.pop()!;
+      const x = q % width;
+      const y = (q - x) / width;
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny * width + nx >= mark.length) continue;
+          const r = ny * width + nx;
+          if (mark[r] && labels[r]! < 0) {
+            labels[r] = id;
+            stack.push(r);
+          }
+        }
+      }
+    }
+  }
+  return { labels, count };
+}
