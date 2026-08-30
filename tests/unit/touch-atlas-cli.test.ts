@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { isCliEntry } from '../../tools/gen/buildTouchAtlas.mjs';
+import { isCliEntry, staleFaces } from '../../tools/gen/buildTouchAtlas.mjs';
 
 /** A directory with a space in it, which is this repository's own situation. */
 const DIR = 'C:/Claude/Steampunk Platformer/tools/gen';
@@ -31,5 +31,31 @@ describe('the atlas builder knows when it is being run', () => {
     expect(isCliEntry(`${DIR}/promptTouch.mjs`, URL_WITH_SPACE)).toBe(false);
     expect(isCliEntry(undefined, URL_WITH_SPACE)).toBe(false);
     expect(isCliEntry('', URL_WITH_SPACE)).toBe(false);
+  });
+});
+
+describe('the atlas builder sweeps only what it owns', () => {
+  const produced = new Set(['touch-left', 'touch-right']);
+
+  it('removes a face this run did not produce', () => {
+    // The stale-file case: a control dropped from the cells leaves its PNG behind, committed, and
+    // `shipped-touch.test.ts` then reads it as though this run had made it.
+    expect(staleFaces(['touch-left.png', 'touch-right.png', 'touch-walk.png'], produced)).toEqual([
+      'touch-walk.png',
+    ]);
+  });
+
+  it('does NOT remove a file that was never a touch face', () => {
+    // 🔴 Without the `touch-` test this deletes every `.png` in `public/assets/ui/`. Dormant
+    // while the directory holds only faces, destructive the moment any other UI image lands there
+    // — and `npm run assets:touch` would do it silently. Codex round-8; M53 reds here.
+    expect(
+      staleFaces(['touch-left.png', 'touch-right.png', 'hud-frame.png', 'logo.png'], produced),
+      'the sweep ate a file that is not a touch face',
+    ).toEqual([]);
+  });
+
+  it('ignores anything that is not a PNG', () => {
+    expect(staleFaces(['touch-left.png', 'touch-notes.md', 'touch-old.webp'], produced)).toEqual([]);
   });
 });

@@ -334,21 +334,34 @@ function main() {
     console.log(`${out}  ${image.width} x ${image.height}`);
   }
 
-  // ⚠️ And sweep. A key dropped from the cells leaves its PNG on disk from an earlier run,
-  // committed, and every gate downstream reads that stale file as though this run had made it.
-  for (const file of fs.readdirSync(TOUCH_OUT_DIR)) {
-    // ⚠️ `touch-` FIRST. Without the prefix test this sweeps every PNG in the directory, and
-    // the first unrelated UI image put there would be destroyed by `npm run assets:touch`. Dormant
-    // today because the directory holds only faces; caught by the Codex round-8 review anyway.
-    const key = file.startsWith('touch-') && file.endsWith('.png') ? file.slice(0, -4) : null;
-    if (key !== null && !cells.has(key)) {
-      fs.rmSync(path.join(TOUCH_OUT_DIR, file));
-      console.log(`removed stale ${file}`);
-    }
+  for (const file of staleFaces(fs.readdirSync(TOUCH_OUT_DIR), cells)) {
+    fs.rmSync(path.join(TOUCH_OUT_DIR, file));
+    console.log(`removed stale ${file}`);
   }
   console.log(
     `\ncut ${cells.size} faces from a MEASURED ${width} x ${height} plate ` +
       `(${TOUCH_PLATE_COLS} x ${TOUCH_PLATE_SHEET_ROWS} grid, rows 0-1 used)`,
+  );
+}
+
+/**
+ * Which files in the output directory this run did NOT produce and should therefore delete.
+ *
+ * ⚠️ A key dropped from the cells leaves its PNG on disk from an earlier run, committed, and
+ * every gate downstream reads that stale file as though this run had made it. Sweeping is the fix.
+ *
+ * 🔴 **`touch-` FIRST, and pure so it can be driven.** Without the prefix test this deletes
+ * every `.png` in the directory — dormant today because the directory holds only faces, destructive
+ * the moment an unrelated UI image lands there. It was inline in `main()` with no gate, so the
+ * mutation that dropped the prefix stayed green (M53). Codex round-8.
+ *
+ * @param {string[]} files
+ * @param {{ has(key: string): boolean }} produced
+ * @returns {string[]}
+ */
+export function staleFaces(files, produced) {
+  return files.filter(
+    (file) => file.startsWith('touch-') && file.endsWith('.png') && !produced.has(file.slice(0, -4)),
   );
 }
 

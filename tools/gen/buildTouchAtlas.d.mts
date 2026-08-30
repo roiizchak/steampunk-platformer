@@ -20,4 +20,8 @@ export function cutPlate(bytes: Uint8Array): {
   width: number;
   height: number;
 };
+export function staleFaces(
+  files: string[],
+  produced: { has(key: string): boolean },
+): string[];
 export function isCliEntry(argv1: string | undefined, moduleUrl: string): boolean;
