@@ -6,7 +6,7 @@
  * referenced by no test at all, and the builder's own count guard compared them against themselves.
  */
 
-/** One cell of the plate, and the control it becomes. `key` is the texture key without a prefix. */
+/** One cell of the plate, and the control it becomes. `key` is the full texture key, `touch-left`. */
 export interface TouchPlateCell {
   key: string;
   row: number;

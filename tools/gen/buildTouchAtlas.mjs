@@ -96,6 +96,16 @@ const INK_DARK_MAX = 32;
 const INK_LIGHT_MIN = 208;
 
 /**
+ * How far the pale keyline is grown around the dark engraving, in shipped pixels.
+ *
+ * 2 px of a 160 px face is 0.7 CSS px at the worst in-scope scale — a hairline, and deliberately
+ * so: the keyline is there to give a reader a SECOND ink, not to redraw the mark. Its colour is
+ * `MARK_INK` from `touchMarks.ts`, the pale half of the pair `contrast-floor.test.ts` measures.
+ */
+const KEYLINE_PX = 1;
+const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
+
+/**
  * What the plate's alpha is multiplied by, so that the DRAWN alpha times this is `PLATE_ALPHA`.
  *
  * `0.55 / 0.85` — the face rests at 0.85 and presses to 1.0, which keeps alpha as the press
@@ -103,6 +113,64 @@ const INK_LIGHT_MIN = 208;
  * `touchMarks.ts` owns the two drawn alphas and states the same arithmetic.
  */
 const PLATE_ALPHA_BAKED = 0.55 / 0.85;
+
+/**
+ * 🔴 **The engraving is ONE ink, and one ink cannot pass a swept background.**
+ *
+ * Baking the alpha split was necessary and not sufficient. Measured over the mark itself — the
+ * central opaque pixels, not the whole face — the shipped `walk` bars bottomed out at **1.12:1**:
+ * every one of their 725 ink pixels is near-black, so on a dark background they simply vanish. The
+ * other five scraped 3.38-3.47:1 on as few as **four** pale pixels, which is a contrast claim
+ * resting on an accident of the model's shading.
+ *
+ * Found by the Codex round-8 review, which measured the whole-face statistic passing at 3.57-3.70
+ * on a decorative brass highlight OUTSIDE the mark while the mark was unreadable — a statistic
+ * that cannot order its own mutation, which is the failure this project has a rule about.
+ *
+ * The repair is `hud.ts`'s method, applied to pixels instead of to shapes: every dark mark gets a
+ * pale keyline, so a reader takes whichever ink contrasts with what is behind it. That is the same
+ * `MARK_INK` / `SHADOW_INK` pair `contrast-floor.test.ts` measures at 3.80:1, and it is what the
+ * grey-box marks always had.
+ *
+ * @param {import('./png.d.mts').RgbaImage} face
+ * @returns {import('./png.d.mts').RgbaImage}
+ */
+export function keylineMarks(face) {
+  const { width, height } = face;
+  const data = new Uint8Array(face.data);
+  const dark = new Uint8Array(width * height);
+  for (let i = 0, p = 0; i < data.length; i += 4, p += 1) {
+    if (data[i + 3] === 0) continue;
+    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    if (luma < INK_DARK_MAX) dark[p] = 1;
+  }
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const p = y * width + x;
+      if (dark[p]) continue;
+      const i = p * 4;
+      if (data[i + 3] === 0) continue;
+      let near = false;
+      for (let dy = -KEYLINE_PX; dy <= KEYLINE_PX && !near; dy += 1) {
+        for (let dx = -KEYLINE_PX; dx <= KEYLINE_PX; dx += 1) {
+          const yy = y + dy;
+          const xx = x + dx;
+          if (yy < 0 || xx < 0 || yy >= height || xx >= width) continue;
+          if (dark[yy * width + xx]) {
+            near = true;
+            break;
+          }
+        }
+      }
+      if (!near) continue;
+      data[i] = KEYLINE_RGB[0];
+      data[i + 1] = KEYLINE_RGB[1];
+      data[i + 2] = KEYLINE_RGB[2];
+      data[i + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
 
 /**
  * Fade the brass and leave the ink alone.
@@ -177,7 +245,7 @@ export function faceFromCell(cell, key) {
     side,
     side,
   );
-  return bakePlateAlpha(downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX));
+  return bakePlateAlpha(keylineMarks(downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX)));
 }
 
 /**
@@ -269,7 +337,10 @@ function main() {
   // ⚠️ And sweep. A key dropped from the cells leaves its PNG on disk from an earlier run,
   // committed, and every gate downstream reads that stale file as though this run had made it.
   for (const file of fs.readdirSync(TOUCH_OUT_DIR)) {
-    const key = file.endsWith('.png') ? file.slice(0, -4) : null;
+    // ⚠️ `touch-` FIRST. Without the prefix test this sweeps every PNG in the directory, and
+    // the first unrelated UI image put there would be destroyed by `npm run assets:touch`. Dormant
+    // today because the directory holds only faces; caught by the Codex round-8 review anyway.
+    const key = file.startsWith('touch-') && file.endsWith('.png') ? file.slice(0, -4) : null;
     if (key !== null && !cells.has(key)) {
       fs.rmSync(path.join(TOUCH_OUT_DIR, file));
       console.log(`removed stale ${file}`);
@@ -281,12 +352,29 @@ function main() {
   );
 }
 
-// 🔴 `fileURLToPath`, never `new URL(...).pathname`. A URL keeps the space in
-// "Steampunk Platformer" percent-encoded as `%20`, so the comparison was `.../Steampunk%20Platformer/...`
-// against `.../Steampunk Platformer/...` — never equal, and `main()` never ran. `npm run assets:touch`
-// printed nothing and exited 0, which is indistinguishable from success; the six faces in
-// `public/assets/ui/` were cut by calling `cutPlate` by hand. Found by the Codex round-6 review, and
-// confirmed by the fact that this script had never once produced its own output.
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+/**
+ * Is this module being RUN, rather than imported?
+ *
+ * 🔴 `fileURLToPath`, never `new URL(...).pathname`. A URL keeps the space in "Steampunk
+ * Platformer" percent-encoded as `%20`, so the comparison was `.../Steampunk%20Platformer/...`
+ * against `.../Steampunk Platformer/...` — never equal, and `main()` never ran. `npm run
+ * assets:touch` printed nothing and exited 0, which is indistinguishable from success; the six
+ * faces in `public/assets/ui/` were cut by calling `cutPlate` by hand. Found by the Codex round-6
+ * review, and confirmed by the fact that this script had never once produced its own output.
+ *
+ * ⚠️ Exported so it can be DRIVEN. The repair had no gate of its own — reverting it to the
+ * broken comparison left unit, build and e2e verification green, because nothing runs the CLI.
+ * Codex round-8. `touch-atlas-cli.test.ts` passes it a path with a space in it, which is the whole
+ * bug in one argument.
+ *
+ * @param {string | undefined} argv1
+ * @param {string} moduleUrl
+ * @returns {boolean}
+ */
+export function isCliEntry(argv1, moduleUrl) {
+  return Boolean(argv1) && path.resolve(/** @type {string} */ (argv1)) === fileURLToPath(moduleUrl);
+}
+
+if (isCliEntry(process.argv[1], import.meta.url)) {
   main();
 }

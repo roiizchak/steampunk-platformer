@@ -130,11 +130,16 @@ export async function drawnFaces(page: Page, sceneKey: string): Promise<{ name: 
 /**
  * The EFFECTIVE alpha of a named face — what the player's eye is actually given.
  *
- * ⚠️ `visible` alone cannot tell a lit plate from a dark one. Both paths a face can take
- * carry their state in alpha: the art image rests at `PLATE_ALPHA` and presses to
- * `PLATE_ALPHA_PRESSED`, and the drawn plate does the same with a fill. So "is the walk plate lit"
- * is a question about this number and about nothing else. `null` when no such face is drawn, which
- * is a different answer from `0` and must not be collapsed into one.
+ * ⚠️ **This is Phaser's OBJECT alpha, not the composited alpha of any one pixel.** The two
+ * differ for a generated face, whose plate is also faded in the bytes — what the screen shows is
+ * the product. What this reads is the one number the layer sets, which is exactly what a lit/unlit
+ * question needs: `visible` alone cannot tell a lit plate from a dark one, because both paths carry
+ * their state in that number (`ART_ALPHA` -> `ART_ALPHA_PRESSED` for art, `PLATE_ALPHA` ->
+ * `PLATE_ALPHA_PRESSED` for the drawn box). Comparisons here are therefore relative — lit against
+ * that face's own rest — and never against a constant.
+ *
+ * `null` when no such face is drawn, which is a different answer from `0` and must not be collapsed
+ * into one.
  */
 export async function faceAlpha(page: Page, sceneKey: string, name: string): Promise<number | null> {
   return page.evaluate(

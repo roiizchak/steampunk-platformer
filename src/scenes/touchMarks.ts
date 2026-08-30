@@ -151,11 +151,16 @@ export function alphasFor(
  * one place, so a half-landed art path cannot become two different answers on one screen. The plate
  * PNGs come from `tools/gen/buildTouchAtlas.mjs`; `tests/unit/shipped-touch.test.ts` measures them.
  *
- * 🔴 **The art carries the SAME ALPHA.** Every measurement this phase made about a plate is a
- * measurement of how much of the level a thumb-sized opaque disc hides — 19.9 % of standing
- * positions have a hazard, an enemy or the goal behind one — and that is a property of the BOX, not
- * of what is drawn in it. So the image gets `PLATE_ALPHA`, the pressed state gets
- * `PLATE_ALPHA_PRESSED`, and `setPressed` needs no branch for which path was taken.
+ * 🔴 **The art carries the same EFFECTIVE plate alpha, by a different route.** Every
+ * measurement this phase made about a plate is a measurement of how much of the level a thumb-sized
+ * opaque disc hides — 19.9 % of standing positions have a hazard, an enemy or the goal behind one
+ * — and that is a property of the BOX, not of what is drawn in it.
+ *
+ * The drawn grey box gets `PLATE_ALPHA` / `PLATE_ALPHA_PRESSED` on the object. The generated face
+ * cannot: one flat alpha over a flat image fades the MARK with the brass, and measured over a swept
+ * background the ink then reaches only 2.43-2.47:1 against WCAG's 3:1. So its plate is faded in the
+ * BYTES and it is drawn at `ART_ALPHA` / `ART_ALPHA_PRESSED`, which multiply back to 0.55 at rest.
+ * `alphasFor` is the one place that chooses, and it chooses per control.
  *
  * ⚠️ `setDisplaySize`, not a scale factor: `touchLayout` sizes the box off the VIEW, so the face
  * is told the box's size rather than a ratio to the source PNG's 160 px.

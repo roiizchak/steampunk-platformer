@@ -127,7 +127,6 @@ describe('the shipped touch faces', () => {
       const png = readPng(`public/${entry(key).url}`);
       expect(png.sourceHadAlphaChannel, `${key} has no alpha channel at all`).toBe(true);
 
-      const n = png.width * png.height;
       let clear = 0;
       let ink = 0;
       let plate = 0;
@@ -137,11 +136,21 @@ describe('the shipped touch faces', () => {
         else if (a >= SOLID) ink += 1;
         else plate += 1;
       }
-      expect(clear / n, `${key}: ${((clear / n) * 100).toFixed(1)}% keyed away`).toBeGreaterThan(0.1);
-      expect(clear / n, `${key}: the key ate ${((clear / n) * 100).toFixed(1)}% of the face`).toBeLessThan(0.35);
-      expect(ink / n, `${key} has ${((ink / n) * 100).toFixed(1)}% opaque ink — no readable mark`).toBeGreaterThan(0.05);
-      expect(ink / n, `${key} is ${((ink / n) * 100).toFixed(1)}% opaque — the plate stopped being see-through`).toBeLessThan(0.3);
-      expect(plate / n, `${key} has no translucent plate at all`).toBeGreaterThan(0.5);
+      // ⚠️ **Presence, not coverage.** The first version demanded 10-35 % clear, 5-30 % ink
+      // and over 50 % plate — percentages no criterion approves, which would false-red a legal
+      // face with a 4.9 % mark or a plate filling more of its canvas. A test may not enforce more
+      // than the rule says *(Codex round-8)*. What 12.14 and 12.17 actually need is that all three
+      // bands EXIST: the key worked, the plate is translucent, the mark is not. How readable that
+      // mark is, is the contrast gate's question, and how distinct it is, is the marks gate's.
+      expect(clear, `${key} has no fully transparent pixel — it was never keyed`).toBeGreaterThan(0);
+      expect(ink, `${key} has no opaque pixel — the mark faded with the plate`).toBeGreaterThan(0);
+      expect(plate, `${key} has no translucent pixel — nothing shows through it`).toBeGreaterThan(0);
+      // And the plate has to be the BULK of the disc, or "translucent" is a rounding error. The
+      // disc is what the 19.9 %-occlusion argument is about; the mark sits inside it.
+      expect(
+        plate / (plate + ink),
+        `${key}'s disc is ${((ink / (plate + ink)) * 100).toFixed(1)}% opaque`,
+      ).toBeGreaterThan(0.5);
     }
   });
 
@@ -167,37 +176,51 @@ describe('the shipped touch faces', () => {
   });
 
   it('reaches the 3:1 contrast floor over EVERY background, at rest and pressed', () => {
-    // 🔴 The measurement that says the repair worked, and the one that condemned what came
-    // before it. Faded flat at 0.55 the best ink reached **2.43-2.47:1** over the worst background
-    // — under WCAG 1.4.11's 3:1 — because the mark faded with the plate it sits on. Codex round-7
-    // measured it; this reproduces it from the shipped bytes rather than taking the report.
+    // 🔴 **Measured on the MARK, and the first version was not.** Scanning the whole face and
+    // keeping the best pixel let a decorative brass highlight OUTSIDE the engraving carry the pass:
+    // `walk` scored 3.67:1 that way while its own bars — 725 near-black pixels and not one pale one
+    // — bottomed out at **1.12:1**, invisible on a dark background. A statistic that cannot order
+    // its own mutation is the failure this project has a rule about. Codex round-8.
+    //
+    // The repair is `keylineMarks()`: every dark engraving gets a 1 px pale keyline, so a reader
+    // takes whichever ink contrasts. All six now measure **3.64:1** at rest and 4.12:1 pressed, on
+    // the mark mask itself. Before the alpha split they were 2.43-2.47:1 (M46); before the keyline,
+    // `walk`'s mark was 1.12:1 (M51).
     //
     // ⚠️ `max(ink : background)` over a SWEPT background, which is `contrast-floor.test.ts`'s
-    // method and the reason it applies here: a reader separates a mark from its background by
-    // whichever ink contrasts, and no single colour wins against every background.
-    for (const [alpha, floor] of [
-      [ART_ALPHA, 3],
-      [ART_ALPHA_PRESSED, 3],
-    ] as const) {
+    // method and the reason it applies here: no single colour wins against every background.
+    for (const alpha of [ART_ALPHA, ART_ALPHA_PRESSED]) {
       for (const key of KEYS) {
         const png = readPng(`public/${entry(key).url}`);
+        const inset = Math.round((png.width * (1 - MARK_FRACTION)) / 2);
         let worst = Infinity;
+        let marked = 0;
         for (let bg = 0; bg <= 255; bg += 5) {
           const back = luminance(bg, bg, bg);
           let best = 0;
-          for (let i = 0; i < png.data.length; i += 4) {
-            const a = (png.data[i + 3]! / 255) * alpha;
-            if (a < 0.05) continue;
-            const over = (c: number): number => c * a + bg * (1 - a);
-            const r = ratio(luminance(over(png.data[i]!), over(png.data[i + 1]!), over(png.data[i + 2]!)), back);
-            if (r > best) best = r;
+          marked = 0;
+          for (let y = inset; y < png.height - inset; y += 1) {
+            for (let x = inset; x < png.width - inset; x += 1) {
+              const i = (y * png.width + x) * 4;
+              // The MARK: opaque, and inside the square the engraving occupies. Nothing else.
+              if (png.data[i + 3]! < SOLID) continue;
+              marked += 1;
+              const a = alpha;
+              const over = (c: number): number => c * a + bg * (1 - a);
+              const r = ratio(
+                luminance(over(png.data[i]!), over(png.data[i + 1]!), over(png.data[i + 2]!)),
+                back,
+              );
+              if (r > best) best = r;
+            }
           }
           if (best < worst) worst = best;
         }
+        expect(marked, `${key} has no opaque mark pixels to measure`).toBeGreaterThan(100);
         expect(
           worst,
-          `${key} at alpha ${alpha} reaches only ${worst.toFixed(2)}:1 against its worst background`,
-        ).toBeGreaterThan(floor);
+          `${key}'s MARK at alpha ${alpha} reaches only ${worst.toFixed(2)}:1 against its worst background`,
+        ).toBeGreaterThan(3);
       }
     }
   });
