@@ -148,11 +148,21 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     // `setVisible(wanted)` loop in `refresh()` and every zone is still there and still
     // interactive, while the timed arm draws zero extra pixels: the criterion's own named failure
     // mode, passing its own precondition. The pixels are the FACES. Found by both 12.11 briefs.
+    //
+    // ⚠️ **This was `> drawn.length` and the adopted art broke it, correctly.** The grey box drew a
+    // plate plus several marks per control, so "more faces than zones" happened to hold; one
+    // generated image per control makes the two counts EQUAL, and the bound false-redded a build
+    // that draws strictly better pixels. The claim was never about a ratio — it is *every control
+    // has something visible* — so it is asserted per control, by name, which the count could not do
+    // either: six visible faces all belonging to one plate passed the old form.
     const visibleFaces = (await drawnFaces(withControls, 'UI')).filter((f) => f.visible);
-    expect(
-      visibleFaces.length,
-      'the touch arm has hit areas but nothing drawn — it would time an empty frame',
-    ).toBeGreaterThan(drawn.length);
+    const facesFor = new Set(visibleFaces.map((f) => f.name));
+    for (const id of TOUCH_IDS) {
+      expect(
+        facesFor.has(id),
+        `${id} has a hit area and nothing drawn — the timed arm would draw an empty frame there`,
+      ).toBe(true);
+    }
     for (const z of drawn) {
       expect(z.interactive, `${z.name} is not live in the timed arm`).toBe(true);
     }
