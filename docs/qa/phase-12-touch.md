@@ -4,10 +4,16 @@ Branch `phase-12-touch`, off `main` at `7f339ad`. Executed 2026-08-29.
 
 The gate table below is the record. Everything under it is the evidence for one row.
 
-⚠️ **This phase ships GREY-BOX controls.** Two fal generations were bought and **neither was
-adopted**; the decision is the owner's and is set out in `docs/generations/phase-12-touch-plate.md`.
-Criterion 12.17 asks for five shipped PNGs and is therefore **NOT MET** — recorded as failing rather
-than reinterpreted.
+✅ **This phase ships the GENERATED faces.** Three fal plates were bought at $0.15 each and
+**take 3 is adopted** — six 160 × 160 PNGs in `public/assets/ui/`, cut by
+`tools/gen/buildTouchAtlas.mjs`, catalogued in `public/assets/index.json` and gated on the shipped
+bytes by `tests/unit/shipped-touch.test.ts`. The takes and their `request_id`s are in
+`docs/generations/phase-12-touch-plate.md`; $0.45 of the $5 touch-UI ceiling.
+
+⚠️ **The header above used to say the opposite** — *"ships GREY-BOX controls, two
+generations, neither adopted, 12.17 NOT MET for five PNGs"* — three revisions after the art
+landed and the row said PASS. A log whose summary contradicts its own table is worse than one that
+says nothing, and a reader checks the summary first. Found by the Codex round-6 review.
 
 ---
 
@@ -41,11 +47,11 @@ than reinterpreted.
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Five criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
-statistic cannot detect the regression it names; 12.17 and 12.14 both have no adopted artifact to
-check; **12.8 and 12.10 each need an owner decision** (below); 12.13 and 12.24 are the owner's and cannot be closed
-from here; 12.23 is the Codex implementation review, which returned `REVISE` twice and is re-running
-on the repaired diff. Every other row passed, several only after a repair.
+**Three criteria are NOT MET and four are UNRUN, so the phase is reported FAILING.** 12.11's
+statistic cannot detect the regression it names; **12.8 and 12.10 each need an owner decision**
+(below); 12.13, 12.14 and 12.24 are hands-on and the owner's, and cannot be closed from here; 12.23
+is the Codex implementation review, still running rounds on the repaired diff. Every other row
+passed, several only after a repair.
 
 🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder

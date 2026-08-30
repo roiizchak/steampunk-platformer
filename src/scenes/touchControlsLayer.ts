@@ -49,7 +49,6 @@
  */
 
 import { latchAttackPress, latchJumpPress } from '../sim/input';
-import type { InputSnapshot } from '../sim/types';
 import {
   type TouchId,
   type TouchTarget,
@@ -60,11 +59,12 @@ import {
 import { drawFace, PLATE_ALPHA, PLATE_ALPHA_PRESSED } from './touchMarks';
 import type {
   PointerLike,
+  TouchBinding,
   TouchFaceLike,
-  TouchGameSceneLike,
   TouchSceneLike,
   TouchZoneLike,
 } from './touchTypes';
+import { TOUCH_ZONE_DEPTH } from './touchTypes';
 
 // Re-exported from their original home so every existing importer keeps working. The interfaces
 // moved to `touchTypes.ts` when the two-ink repair took this file past the 400-line ceiling; they
@@ -72,11 +72,13 @@ import type {
 export type {
   EmitterLike,
   PointerLike,
+  TouchBinding,
   TouchFaceLike,
   TouchGameSceneLike,
   TouchSceneLike,
   TouchZoneLike,
 } from './touchTypes';
+export { TOUCH_FACE_DEPTH, TOUCH_ZONE_DEPTH } from './touchTypes';
 import {
   GAMEOBJECT_POINTER_DOWN,
   GAME_BLUR,
@@ -100,24 +102,6 @@ import { TouchContacts } from './touchContacts';
  * signature is assignable to a narrower one. Nothing here re-declares Phaser's API; it is a
  * **budget** for how much of it the touch layer is allowed to touch.
  */
-
-/** Above every HUD depth (`hudFade` 1000/1001, the gear counter 1002) — the controls are the top layer. */
-export const TOUCH_FACE_DEPTH = 2000;
-export const TOUCH_ZONE_DEPTH = 2001;
-
-
-
-/** Everything this layer needs from one `Game` scene, rebound on every level entry. */
-export interface TouchBinding {
-  input$: InputSnapshot;
-  /** The scene whose PAUSE / SLEEP / SHUTDOWN / DESTROY must drop every contact. */
-  gameScene: TouchGameSceneLike;
-  /** Is the bound `Game` scene RUNNING? Polled — `UIScene` already reads this for its own retirement. */
-  isGameRunning: () => boolean;
-  /** `GameScene.playerInputEnabled` is `protected`, so it arrives as a provider. */
-  isPlayerInputEnabled: () => boolean;
-  openLevelSelect: () => void;
-}
 
 interface Control {
   id: TouchId;

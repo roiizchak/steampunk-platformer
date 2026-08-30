@@ -1,3 +1,5 @@
+import type { InputSnapshot } from '../sim/types';
+
 /**
  * **The slice of Phaser the touch layer is allowed to touch, as structural interfaces.**
  *
@@ -6,7 +8,9 @@
  * lets `npm run test:sim-isolated` run the whole suite with Phaser uninstalled.
  *
  * Split out of `touchControlsLayer.ts` at the 400-line ceiling. `touchControlsLayer.ts` re-exports
- * every name here, so no importer had to change.
+ * every name here, so no importer had to change. The walk control and the walk latch took it past
+ * the ceiling a second time; `TouchBinding` and the two depths followed the interfaces here, for
+ * the same reason — they name no behaviour, only the shape of what the layer is handed.
  */
 
 /** All this file ever reads off a pointer. */
@@ -109,4 +113,21 @@ export interface TouchSceneLike {
     gameSize: { width: number; height: number };
     displaySize: { width: number; height: number };
   };
+}
+
+
+/** Above every HUD depth (`hudFade` 1000/1001, the gear counter 1002) — the controls are the top layer. */
+export const TOUCH_FACE_DEPTH = 2000;
+export const TOUCH_ZONE_DEPTH = 2001;
+
+/** Everything the layer needs from one `Game` scene, rebound on every level entry. */
+export interface TouchBinding {
+  input$: InputSnapshot;
+  /** The scene whose PAUSE / SLEEP / SHUTDOWN / DESTROY must drop every contact. */
+  gameScene: TouchGameSceneLike;
+  /** Is the bound `Game` scene RUNNING? Polled — `UIScene` already reads this for its own retirement. */
+  isGameRunning: () => boolean;
+  /** `GameScene.playerInputEnabled` is `protected`, so it arrives as a provider. */
+  isPlayerInputEnabled: () => boolean;
+  openLevelSelect: () => void;
 }

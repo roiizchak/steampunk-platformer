@@ -158,8 +158,14 @@ export function helpLine(audio?: AudioSettings, touch = false): string {
   // arrow, a wrench, a gear. A caption explaining an arrow is clutter across the top of a 412 px
   // screen, and it competed with the HUD for the only row either can use. What remains on touch is
   // the state a symbol cannot show — the volume — and nothing else.
+  // ⚠️ And it is LABELLED. The interim touch line printed the bare value — `100%`, or worse
+  // `muted` alone — which names no quantity at all: a player reads a percentage across the top of
+  // the screen and has no way to know it is not health, progress or a load. The keyboard line gets
+  // the word from its `[ ] volume` keys; the touch line has to carry it. Codex round-6.
   const base = touch
-    ? level.trim()
+    ? level.trim() === ''
+      ? ''
+      : `VOLUME ${level.trim().toUpperCase()}`
     : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
       `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
       'ESC levels';

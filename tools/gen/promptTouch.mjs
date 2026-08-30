@@ -1,13 +1,13 @@
 /**
  * The prompt for the touch-control plate — Phase 12.
  *
- * One 1:1 2K image carrying all five button faces in a 3x2 grid on a flat chroma field, cut locally
+ * One 1:1 2K image carrying all six button faces in a 3x2 grid on a flat chroma field, cut locally
  * by `buildTouchAtlas.mjs`. One generation, $0.15, charged to the touch-UI ceiling in
  * PRD § Global Constraints and not to the art ceiling.
  *
- * ## Why one plate and not five images
+ * ## Why one plate and not six images
  *
- * Five separate generations cost five times as much and — more importantly — give five separately
+ * Six separate generations cost six times as much and — more importantly — give six separately
  * drifting interpretations of "brass". The buttons sit next to each other on screen, so a mismatch
  * between them is the most visible failure available. One image, one lighting decision, one patina.
  *
@@ -23,7 +23,7 @@
  * STYLE.md §6's lesson, and vault 4.2: *"do not negate it — remove the space it would occupy"*.
  * "No gap between the buttons" is a phrase about gaps; a model that reads it half-attentively draws
  * gaps. So the grid, the margin and the separation are named as things that are THERE — a flat green
- * field with five islands on it — and the DO-NOT-INCLUDE block names the concrete artefacts to
+ * field with six islands on it — and the DO-NOT-INCLUDE block names the concrete artefacts to
  * discard element by element.
  *
  * The gutter is not decoration. `buildTouchAtlas.mjs` splits the plate by known geometry and then
@@ -33,7 +33,7 @@
  * ## 🔴 Take 1 drew SIX buttons in a 3 / 2 / 1 stack, and this is the one repair it gets
  *
  * `request_id 01a04e0b-ec39-7200-97bc-3afbd338ffeb`, $0.15. The prompt said *"a 3 by 2 grid of
- * equal square cells"*, *"five of the six cells hold one button"* and *"a sixth button"* under DO
+ * equal square cells"*, *"each of the six cells holds one button"* and *"a seventh button"* under DO
  * NOT INCLUDE, and the model still laid three buttons across the top, two across the middle and a
  * sixth alone on a third row — a duplicate of the attack face.
  *
@@ -43,7 +43,7 @@
  * and the negation ("a sixth button") did nothing, as §6 predicts negations do.
  *
  * So the repair states **where each button centre is**, as a fraction of the image, and states the
- * count as a positive fact to be checked rather than as a prohibition. Five positions named leaves
+ * count as a positive fact to be checked rather than as a prohibition. Six positions named leaves
  * no room for a sixth to go.
  *
  * ⚠️ Per the plan: ONE repair, then STOP and ask. Never a silent re-roll — a model that needs
@@ -54,7 +54,7 @@
 import { templateBlock } from './prompt.mjs';
 
 /**
- * The five faces, in READING order — the order `buildTouchAtlas.mjs` maps cells to keys by.
+ * The six faces, in READING order — the order `buildTouchAtlas.mjs` maps cells to keys by.
  *
  * 🔴 Mapping is by CELL POSITION, never by detection order. `detectFrames` projects opacity into
  * row and column bands (`sheets.mjs:69-167`), so "the fourth thing found" is a property of the

@@ -41,7 +41,7 @@
 import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 
 /**
- * The five actions, in draw order. `pause` is deliberately in this list even though it writes no
+ * The six actions, in draw order. `pause` is deliberately in this list even though it writes no
  * sim field: it is a touch target, it must clear the same size floor, and it must not overlap the
  * others.
  */
@@ -53,7 +53,7 @@ export type TouchId = (typeof TOUCH_IDS)[number];
  * A hit box in GAME pixels, `x`/`y` at the top-left corner.
  *
  * The predicates below take this rather than `TouchTarget`, so the level menu's rows and the
- * terminal screens' zones are measured by the same two rules as the five play controls — the
+ * terminal screens' zones are measured by the same two rules as the six play controls — the
  * accessibility floor is a property of a touch target, not of which screen it happens to be on.
  */
 export interface HitBox {
@@ -64,7 +64,7 @@ export interface HitBox {
   h: number;
 }
 
-/** One of the five play controls. */
+/** One of the six play controls. */
 export interface TouchTarget extends HitBox {
   id: TouchId;
 }
@@ -134,7 +134,7 @@ function positive(value: number, what: string): number {
 }
 
 /**
- * Lay the five controls out for a view of this size.
+ * Lay the six controls out for a view of this size.
  *
  * Scaled off the view rather than hardcoded at the design size *(vault 6.2)*. Under FIT production
  * always passes 1920 x 1080, so this scaling never runs in the shipped game today — which is exactly

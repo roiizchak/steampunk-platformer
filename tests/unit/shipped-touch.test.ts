@@ -20,10 +20,18 @@
  * for any two faces the model could plausibly draw. The statistic, not the threshold, was wrong
  * *(a statistic that does not order its own mutation cannot be fixed by moving the bound)*.
  *
- * Measured on the shipped six, the share of pixels differing in COLOUR by more than 60 (sum over
- * RGB) runs **19.9 % to 40.0 %** across all fifteen pairs — closest `left`/`jump`, two triangles,
- * furthest `right`/`walk`. The bound is **5 %**: four times inside the closest honest pair, and a
- * duplicated face scores 0.
+ * ## And the second version still counted the plate it was trying to see past
+ *
+ * ⚠️ Comparing whole faces makes the shared brass disc most of the frame, so the statistic is
+ * diluted by exactly the part that is the same on purpose — and the mutation that ordered it,
+ * `cp touch-left.png touch-jump.png`, is a whole FILE, which is not the failure the criterion
+ * describes. The failure is *one mark cut from the wrong cell*, and it leaves the disc untouched.
+ *
+ * So the comparison is masked to the **central 50 %** — the 80 x 80 square the mark is engraved in —
+ * and the mutation copies that square between two faces, leaving both discs alone. Measured across
+ * all fifteen pairs: **36.3 % to 60.5 %** (closest `right`/`jump`, two triangles; furthest
+ * `pause`/`walk`), against 19.9 %-40.0 % unmasked. The bound is **15 %**, less than half the closest
+ * honest pair, and a copied glyph scores 0. Codex round-6.
  *
  * ## And the part no automated gate covers
  *
@@ -48,10 +56,20 @@ const SOLID = 200;
 const INK_DELTA = 60;
 
 /**
- * How much of two faces must differ in colour. **5 %**, against a measured closest honest pair of
- * 19.9 % (`left` vs `jump`, two triangles) and a furthest of 40.0 %. A duplicated face scores 0.
+ * How much of two faces' MARKS must differ in colour. **15 %**, against a measured closest honest
+ * pair of 36.3 % (`right` vs `jump`, two triangles) and a furthest of 60.5 %. A copied glyph
+ * scores 0.
  */
-const MIN_DIFFERING_SHARE = 0.05;
+const MIN_DIFFERING_SHARE = 0.15;
+
+/**
+ * The share of the face the mark occupies, and the only part this compares.
+ *
+ * The disc is the same on every button by design; counting it dilutes every pair by the same
+ * amount and hides the one failure that matters — a mark cut from the wrong cell onto the right
+ * plate. Half the side is the square `buildTouchAtlas.mjs`'s centre-crop puts the engraving in.
+ */
+const MARK_FRACTION = 0.5;
 
 interface CatalogImage {
   key: string;
@@ -94,8 +112,15 @@ describe('the shipped touch faces', () => {
     }
   });
 
-  it('ships six DIFFERENT marks, not one mark six times', () => {
-    const faces = KEYS.map((key) => ({ key, px: readPng(`public/${entry(key).url}`).data }));
+  it('ships six DIFFERENT MARKS, not one mark six times', () => {
+    const faces = KEYS.map((key) => {
+      const png = readPng(`public/${entry(key).url}`);
+      return { key, px: png.data, w: png.width, h: png.height };
+    });
+    // The mark square, in pixels, from the shipped size rather than from a literal.
+    const inset = Math.round((faces[0]!.w * (1 - MARK_FRACTION)) / 2);
+    const right = faces[0]!.w - inset;
+    const bottom = faces[0]!.h - inset;
     for (let i = 0; i < faces.length; i += 1) {
       for (let j = i + 1; j < faces.length; j += 1) {
         const a = faces[i]!;
@@ -103,21 +128,24 @@ describe('the shipped touch faces', () => {
         expect(a.px.length, 'two faces are different sizes').toBe(b.px.length);
         let differing = 0;
         let counted = 0;
-        for (let p = 0; p < a.px.length; p += 4) {
-          // Skip pixels transparent in BOTH — the shared corners outside the disc say nothing about
-          // which button this is, and counting them would dilute every pair by the same amount.
-          if (a.px[p + 3]! < SOLID && b.px[p + 3]! < SOLID) continue;
-          counted += 1;
-          const d =
-            Math.abs(a.px[p]! - b.px[p]!) +
-            Math.abs(a.px[p + 1]! - b.px[p + 1]!) +
-            Math.abs(a.px[p + 2]! - b.px[p + 2]!);
-          if (d > INK_DELTA) differing += 1;
+        for (let y = inset; y < bottom; y += 1) {
+          for (let x = inset; x < right; x += 1) {
+            const p = (y * a.w + x) * 4;
+            // Skip pixels transparent in BOTH — they say nothing about which button this is.
+            if (a.px[p + 3]! < SOLID && b.px[p + 3]! < SOLID) continue;
+            counted += 1;
+            const d =
+              Math.abs(a.px[p]! - b.px[p]!) +
+              Math.abs(a.px[p + 1]! - b.px[p + 1]!) +
+              Math.abs(a.px[p + 2]! - b.px[p + 2]!);
+            if (d > INK_DELTA) differing += 1;
+          }
         }
+        expect(counted, `${a.key} and ${b.key} have no opaque mark pixels at all`).toBeGreaterThan(0);
         const share = differing / counted;
         expect(
           share,
-          `${a.key} and ${b.key} differ on only ${(share * 100).toFixed(1)}% of their ink — the same button twice`,
+          `${a.key} and ${b.key} differ on only ${(share * 100).toFixed(1)}% of their MARK — one glyph on two plates`,
         ).toBeGreaterThan(MIN_DIFFERING_SHARE);
       }
     }
