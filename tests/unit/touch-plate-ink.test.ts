@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { createSnapshot } from '../../src/sim/input';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { touchLayout, TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
-import { ART_ALPHA, PLATE_ALPHA } from '../../src/scenes/touchMarks';
+import { ART_ALPHA } from '../../src/scenes/touchMarks';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
 
@@ -184,10 +184,10 @@ describe('the generated faces, once the plate is cut', () => {
     // the baked value actually is. A fake scene has no pixels and cannot be asked.
     const { scene, layer } = withArt();
     const face = (id: string) => scene.faces.filter((f) => f.id === id)[0];
-    expect(ART_ALPHA * (PLATE_ALPHA / ART_ALPHA), 'the two halves stopped multiplying to 0.55').toBeCloseTo(
-      PLATE_ALPHA,
-      6,
-    );
+    // ⚠️ No arithmetic identity here. `ART_ALPHA * (PLATE_ALPHA / ART_ALPHA)` is `PLATE_ALPHA`
+    // for every value of either, so it cannot fail — measured, M47 stayed GREEN through it. The
+    // product is checked where one of the two factors is a BYTE and not a constant:
+    // `shipped-touch.test.ts`, against the modal plate alpha in the shipped PNGs.
     for (const id of TOUCH_IDS) {
       expect(
         face(id).alpha,
