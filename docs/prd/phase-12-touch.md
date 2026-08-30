@@ -198,8 +198,23 @@ papered over.
 | M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for |
 | M64 | swap the `left` and `right` COLUMNS in `TOUCH_PLATE_CELLS` and re-cut | 12.17 | **GREEN — both oracles moved together** → RED 1/8 |
 | M65 | skip the pale halo below the face midpoint, and re-cut | 12.14 | **GREEN at 3.318:1 — one best pixel for a whole glyph** → RED 1/8, `pause` stroke 3 at 1.21:1 |
+| M66 | mirror the COLUMNS in the builder's grid selection, leaving the descriptors alone | 12.17 | **GREEN — the pinned table is only half the contract** → RED 1/2 |
+| M67 | M65 plus an 11-pixel pale bridge, so the damaged glyph stays one component | 12.14 | **GREEN — the halo defined the strokes** → RED 1/1 |
+| M68 | collapse every label in `markComponents` to zero | 12.14 | **GREEN — the split had no gate of its own** → RED 3/5 |
+| M69 | keep the mark bit on a transparent pixel, skipping only the paint | 12.14 | **GREEN, and the picture is byte-identical** → RED 1/8 |
 
-**Nineteen rows reddened nothing, and all nineteen were holes rather than mutations to drop.**
+**Twenty-three rows reddened nothing, and all twenty-three were holes rather than mutations to drop.**
+
+🔴 **M66 and M68 are the same lesson as the burst of zero particles: a decision function needs its
+own gate.** The cell binding was pinned as a table and nothing drove the code that reads it; the
+stroke split was exercised only through damaged art, so gutting the splitter — every label collapsed
+to zero — restored the exact statistic it replaced and all six faces passed under it. Codex
+round-13.
+
+🔴 **M69 is the cheapest kind of invisible defect.** The transparent guard skipped the paint and kept
+the bit, so the mask claimed 44 pixels the face does not draw and the contrast gate counted them as
+coverage. Deleting the repair leaves the six PNGs **byte-identical** — which is why nothing noticed
+for two rounds.
 
 🔴 **M64 is the limit of what a committed oracle can defend, and it is worth stating.** The cut
 fixtures are written by the same run that writes the shipped PNGs, so they cannot answer for the

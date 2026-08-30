@@ -128,5 +128,24 @@ locally before being acted on, and one did not survive that check).
 Codex withdrew its round-11 finding 4 (the box-filter proxy): the label plus the row staying UNRUN
 is *"now adequate… I do not count that labeling as a defect."*
 
+## Round 13 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **M64 pins the descriptor, not its production consumer.** Nothing drives `cutPlate()`; mutate `grid[row * COLS + col]` instead of the table and both oracles are rewritten in the same run while the left button ships a right arrow | **Applied.** `touch-atlas-cut.test.ts` builds a plate whose six cells are individually identifiable and asserts which cell came out under which key. M66 red 1/2. |
+| 2 | HIGH | **"Per connected stroke" uses topology created by the transform being judged.** The halo merges `walk`'s two bars into one component, and an 11-pixel bridge keeps 927 erased pale pixels inside a component still scoring 3.318:1 | **Applied.** `keylineMarks` returns its pre-dilation `seeds`; `strokeLabels` assigns every mark pixel to the nearest seed. M67 red 1/1. **⚠️ And the finer split found a shortfall in the ART** — see below. |
+| 3 | HIGH | **The component-labelling decision cannot go red.** No direct test, no second consumer; collapsing every label to zero restores the statistic round 12 replaced, under which all six faces pass | **Applied.** `touch-strokes.test.ts` drives both helpers on the failing shape — two engravings whose halos merge. M68 red 3/5. |
+| 4 | MEDIUM | **The transparent-mask repair is ungated.** Delete `dark[p] = 0` and the picture is unchanged, the mask again claims 44 transparent pixels, and nothing notices — a C1/C2 failure | **Applied.** The boundary fixture now asserts every mark bit sits on a pixel the face draws. M69 red 1/8, with the six PNGs byte-identical under the mutation, which is why it hid for two rounds. |
+| 5 | MEDIUM | **Declining the separate adoption path is unsafe** — the ordinary builder still overwrites the supposed independent fixture and the shipped output together | **Applied — my round-12 refusal reversed.** Codex's second argument is better than its first: a change to `keyOut`, the crop or the downscale re-baselined the oracle silently. Cutting from the plate is `--adopt` now (`npm run assets:touch:adopt`); the default path reads the committed cuts. Both reproduce the six PNGs byte for byte. ⚠️ It removes a re-baselining route rather than adding a gate, and the shift-the-committed-cut mutation it was offered for is still only caught by a person looking at the art — 12.14 and 12.24, both open. |
+| 6 | MEDIUM | 12.19's PASS is unsupported while four mutations lack red gates | **Applied by closing them.** M66–M69 built, watched red, reverted. Matrix at 75 rows, 23 holes. |
+
+**⚠️ The round-13 split found a real shortfall in the shipped art, and it is recorded rather than
+excused.** Separating `attack` by its pre-halo engraving isolates four small fragments of the
+wrench's shading; the smallest — an 11-pixel seed — measures **2.86:1**, not 3. No parameter fixes
+it (`KEYLINE_PX` 4 leaves it at 2.86; `BOLD_PX` 3 and 4 make it 1.93 and 1.37), because at 48 CSS px
+it is roughly three output pixels of mostly dark. Inventing a minimum stroke size to exclude it would
+be a test excusing more than 12.14 says, so it is named in `KNOWN_SHORTFALL`, pinned at 2.8 so it
+cannot quietly worsen, and put to the owner in the QA log: accept, or re-shoot the wrench cell.
+
 **Nothing was silently dropped** *(C11)*. Two findings are recorded-not-applied with the reason above;
 one did not survive local verification and is recorded as unconfirmed.
