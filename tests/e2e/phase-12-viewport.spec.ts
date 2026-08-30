@@ -216,7 +216,7 @@ test('12.8/12.9 the level menu rows clear the same floors', async ({ page }) => 
 
 test('12.8/12.9 the title zone is a real target, and it covers the canvas', async ({ page }) => {
   // 🔴 Codex's implementation review, verified: 12.8/12.9 name the TITLE and COMPLETION zones as
-  // well as the five controls and the menu rows, and only the last two were being measured. The
+  // well as the six controls and the menu rows, and only the last two were being measured. The
   // measurement is here rather than a verdict correction, because it is one navigation.
   //
   // ⚠️ **Coverage, not containment, and that is deliberate.** A full-screen route zone is sized to

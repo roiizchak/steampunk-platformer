@@ -73,6 +73,56 @@ const ASPECT_TOLERANCE = 0.02;
 const MIN_FACE_SHARE = 0.15;
 
 /**
+ * 🔴 **The translucency is baked per pixel, because one flat alpha cannot carry both jobs.**
+ *
+ * The plate has to be see-through: 175 of 878 standing positions (19.9 %) across the five shipped
+ * levels have a hazard, an enemy or the goal drawn under a control, which is why `PLATE_ALPHA` is
+ * 0.55 and why raising it to 0.86 was reverted. The MARK has to be readable: WCAG 1.4.11's 3:1.
+ *
+ * Fading both together satisfies the first and fails the second — measured on the shipped six over
+ * every possible background luminance, the best ink reached only **2.43-2.47:1**. Found by the
+ * Codex round-7 review and confirmed locally before anything was changed.
+ *
+ * So the ink keeps its alpha and only the brass is faded. Ink is the two ENDS of the luminance
+ * range — the engraved dark line and the pale highlight — which is the same two-ink method
+ * `hud.ts` uses and `contrast-floor.test.ts` measures: a reader takes whichever contrasts. The
+ * thresholds are the widest pair that still clears the floor with margin; at 16/224 the worst case
+ * falls off a cliff to 2.88:1, so 32/208 sits two steps clear of it.
+ *
+ * Measured after baking: **3.47:1** at rest and **4.12:1** pressed, over every background, with
+ * 16.9 % of the disc opaque.
+ */
+const INK_DARK_MAX = 32;
+const INK_LIGHT_MIN = 208;
+
+/**
+ * What the plate's alpha is multiplied by, so that the DRAWN alpha times this is `PLATE_ALPHA`.
+ *
+ * `0.55 / 0.85` — the face rests at 0.85 and presses to 1.0, which keeps alpha as the press
+ * signal (the drawn grey box's mechanism) while leaving the ink enough of it to be read.
+ * `touchMarks.ts` owns the two drawn alphas and states the same arithmetic.
+ */
+const PLATE_ALPHA_BAKED = 0.55 / 0.85;
+
+/**
+ * Fade the brass and leave the ink alone.
+ *
+ * @param {import('./png.d.mts').RgbaImage} face
+ * @returns {import('./png.d.mts').RgbaImage}
+ */
+export function bakePlateAlpha(face) {
+  const data = new Uint8Array(face.data);
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a === 0) continue;
+    const luma = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+    if (luma < INK_DARK_MAX || luma > INK_LIGHT_MIN) continue;
+    data[i + 3] = Math.round(a * PLATE_ALPHA_BAKED);
+  }
+  return { width: face.width, height: face.height, data };
+}
+
+/**
  * Cut, key, validate and downscale one cell.
  *
  * @param {import('./png.d.mts').RgbaImage} cell
@@ -127,7 +177,7 @@ export function faceFromCell(cell, key) {
     side,
     side,
   );
-  return downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX);
+  return bakePlateAlpha(downscale(square, TOUCH_FACE_PX, TOUCH_FACE_PX));
 }
 
 /**
@@ -172,12 +222,42 @@ export function cutPlate(bytes) {
   return { cells, width, height };
 }
 
+/**
+ * The keys the GAME will ask the texture manager for, read from the catalog it loads.
+ *
+ * 🔴 Independent of `TOUCH_PLATE_CELLS`, and that is the entire point. The first version of
+ * the count guard compared `cells.size` with the length of the array that built `cells` — delete a
+ * descriptor and five equals five, the sixth PNG stays on disk from an earlier run, and
+ * `shipped-touch.test.ts` happily reads that stale committed file. Codex round-7. The catalog is
+ * the other end of the contract: a face that is not in it is a file the game will never load.
+ *
+ * @returns {string[]}
+ */
+function catalogTouchKeys() {
+  const catalog = JSON.parse(fs.readFileSync('public/assets/index.json', 'utf8'));
+  return catalog.images
+    .map((/** @type {{key: string}} */ image) => image.key)
+    .filter((/** @type {string} */ key) => key.startsWith('touch-'))
+    .sort();
+}
+
 function main() {
   const source = path.resolve(TOUCH_PLATE_SOURCE);
   if (!fs.existsSync(source)) {
     throw new Error(`no plate at ${TOUCH_PLATE_SOURCE} — generate it first, see docs/generations/`);
   }
   const { cells, width, height } = cutPlate(readBytes(source));
+
+  // The contract, checked BEFORE anything is written: what this run produced against what the game
+  // will look for. Neither side is derived from the other.
+  const produced = [...cells.keys()].sort();
+  const wanted = catalogTouchKeys();
+  if (produced.join(',') !== wanted.join(',')) {
+    throw new Error(
+      `cut [${produced.join(', ')}] but the catalog asks for [${wanted.join(', ')}] — ` +
+        'add or remove the index.json rows and the cell descriptors together',
+    );
+  }
 
   fs.mkdirSync(TOUCH_OUT_DIR, { recursive: true });
   for (const [key, image] of cells) {
@@ -186,10 +266,14 @@ function main() {
     console.log(`${out}  ${image.width} x ${image.height}`);
   }
 
-  // ⚠️ Say so out loud, and count. A build tool that can exit 0 having written nothing is the
-  // exact failure this file just had.
-  if (cells.size !== TOUCH_PLATE_CELLS.length) {
-    throw new Error(`wrote ${cells.size} faces, expected ${TOUCH_PLATE_CELLS.length}`);
+  // ⚠️ And sweep. A key dropped from the cells leaves its PNG on disk from an earlier run,
+  // committed, and every gate downstream reads that stale file as though this run had made it.
+  for (const file of fs.readdirSync(TOUCH_OUT_DIR)) {
+    const key = file.endsWith('.png') ? file.slice(0, -4) : null;
+    if (key !== null && !cells.has(key)) {
+      fs.rmSync(path.join(TOUCH_OUT_DIR, file));
+      console.log(`removed stale ${file}`);
+    }
   }
   console.log(
     `\ncut ${cells.size} faces from a MEASURED ${width} x ${height} plate ` +

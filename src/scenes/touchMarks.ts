@@ -114,6 +114,37 @@ export const PLATE_STROKE_PX = 6;
 export const PLATE_ALPHA_PRESSED = 0.72;
 
 /**
+ * 🔴 **The generated face rests at 0.85, not at 0.55, and its plate is faded in the BYTES.**
+ *
+ * One flat alpha over a flat image cannot be both see-through enough for the level behind it and
+ * opaque enough for the mark on it: measured over every background luminance, the whole face at
+ * 0.55 gave the best ink only **2.43-2.47:1** against WCAG 1.4.11's 3:1. Found by the Codex round-7
+ * review; verified locally before anything moved.
+ *
+ * `buildTouchAtlas.mjs` therefore multiplies the BRASS pixels' alpha by `0.55 / 0.85` and leaves
+ * the ink alone. Drawn at 0.85 the plate lands back on exactly `PLATE_ALPHA` — the occlusion
+ * measurement is untouched — while the ink is read at **3.47:1**. Pressed at 1.0 the plate is
+ * 0.647 (still under the 0.73 the occlusion argument allows) and the ink is **4.12:1**.
+ */
+export const ART_ALPHA = 0.85;
+export const ART_ALPHA_PRESSED = 1;
+
+/**
+ * Which alpha pair one control draws with, decided by which path it took.
+ *
+ * The layer asks per control rather than per layer: a build with five faces present and one missing
+ * draws five images and one grey box, and each has to answer with its own numbers.
+ */
+export function alphasFor(
+  scene: TouchSceneLike,
+  id: string,
+): { rest: number; lit: number } {
+  return scene.textures.exists(`touch-${id}`)
+    ? { rest: ART_ALPHA, lit: ART_ALPHA_PRESSED }
+    : { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED };
+}
+
+/**
  * One control's drawn objects: the generated brass face if it shipped, the grey box if it did not.
  *
  * ✅ `textures.exists` is the same greybox-or-sprite decision `gearLayer.addGearObject` makes, in
@@ -137,12 +168,13 @@ export function drawFace(
 ): TouchFaceLike[] {
   const artKey = `touch-${target.id}`;
   if (scene.textures.exists(artKey)) {
-    // ⚠️ No `setDisplaySize` here. `create()` ends in `refresh()`, whose `placedFor` starts
-    // at 0 x 0 and therefore always takes the size branch on the first call — so a second call here
-    // is a line no mutation can redden, which is the same defect as a decision function with no
-    // consumer. Measured: deleting it left every gate green (M39). Sizing lives in `refresh()`.
+    // ⚠️ No `setDisplaySize` here. `drawFace`'s only caller is `TouchControlsLayer`, and a
+    // face cannot become visible before `refresh()` has run — `placedFor` starts at -1 x -1, so the
+    // first `refresh()` always takes the size branch. A second call here is a line no mutation can
+    // redden, the same defect as a decision function with no consumer. Measured: deleting it left
+    // every gate green (M39). Sizing lives in `refresh()`, where M39 now reds two cases.
     const face = scene.add.image(cx, cy, artKey).setName(target.id).setDepth(TOUCH_FACE_DEPTH);
-    face.setAlpha(PLATE_ALPHA);
+    face.setAlpha(ART_ALPHA);
     return [face];
   }
   return [drawPlate(scene, target, cx, cy), ...drawMarks(scene, target, cx, cy)];

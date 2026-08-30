@@ -4,7 +4,7 @@
  * 🔴 Everything outside `GameScene` is keyboard-only, and a grep says so: `TitleScene.bindKeys`
  * takes `Enter` / `NumpadEnter` / `Space`, `LevelSelectScene.bindKeys` takes `UP W DOWN S ENTER`,
  * and `gameComplete.armContinueKey` takes `ANY_KEY_DOWN` filtered to `Enter`. So a phone player cannot
- * start the game, cannot choose a level and cannot continue past one — and shipping the five in-play
+ * start the game, cannot choose a level and cannot continue past one — and shipping the six in-play
  * controls alone would produce a build that still cannot be played, with a criterion *"the owner
  * played it on a phone"* that could only be passed by reaching for a keyboard. The Codex plan
  * review's first BLOCKER, round 1.
@@ -46,7 +46,7 @@
  * of any kind, and a `Rectangle` without `setInteractive` swallows no pointers. On a phone held
  * upright, a tap on "ROTATE YOUR DEVICE" started the level underneath it.
  *
- * `rotatePrompt.ts`'s header claimed that could not happen. The claim was true only of the five
+ * `rotatePrompt.ts`'s header claimed that could not happen. The claim was true only of the six
  * play controls, which `touchControlsLayer.refresh()` gates on `touchTargetsFit`, and false of
  * every tap route — including the level-menu rows, which are **26.0 CSS px** at phone portrait,
  * 41 % under the floor this phase sets.

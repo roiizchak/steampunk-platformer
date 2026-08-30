@@ -44,13 +44,33 @@ import { describe, expect, it } from 'vitest';
 
 import catalog from '../../public/assets/index.json';
 import { TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
+import { ART_ALPHA, ART_ALPHA_PRESSED, PLATE_ALPHA } from '../../src/scenes/touchMarks';
 import { readPng } from '../../tools/gen/png.mjs';
+import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
 
 /** Every control's texture key, in the form `touchControlsLayer.build` asks the texture manager for. */
 const KEYS = TOUCH_IDS.map((id) => `touch-${id}`);
 
-/** Alpha at or above this counts as ink. Well clear of the key's soft edge either way. */
+/**
+ * Alpha at or above this counts as INK rather than plate.
+ *
+ * The baked plate sits at 165 (`0.55 / 0.85` of full) and the ink at 255, so 200 separates them
+ * with 35 either side — wider than any anti-aliased step between them.
+ */
 const SOLID = 200;
+
+/** WCAG relative luminance, sRGB. The same formula `contrast-floor.test.ts` uses. */
+function luminance(r: number, g: number, b: number): number {
+  const ch = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+function ratio(a: number, b: number): number {
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
 
 /** Sum-over-RGB distance at which two pixels are a different colour rather than the same patina. */
 const INK_DELTA = 60;
@@ -95,20 +115,90 @@ describe('the shipped touch faces', () => {
     }
   });
 
-  it('carries real transparency, so a face is a button and not a green square', () => {
+  it('ships THREE alpha bands: a keyed field, a translucent plate and opaque ink', () => {
+    // 🔴 The whole of the round-7 contrast repair is in this shape, and nothing else can see
+    // it. `buildTouchAtlas.mjs` fades only the BRASS, so a shipped face has to be three things at
+    // once: corners keyed to nothing, a disc that the level shows through, and a mark that does not
+    // fade with it. A face baked flat satisfies none of them and looks identical in a screenshot.
+    //
+    // ⚠️ An alpha CHANNEL is not transparency *(vault 4.12)* — a fully opaque RGBA file has
+    // one. Measured on the shipped six: clear 19.8-21.5 %, plate 65.9-67.7 %, ink 11.2-14.4 %.
     for (const key of KEYS) {
       const png = readPng(`public/${entry(key).url}`);
       expect(png.sourceHadAlphaChannel, `${key} has no alpha channel at all`).toBe(true);
 
-      // ⚠️ An alpha CHANNEL is not transparency *(vault 4.12)* — a fully opaque RGBA file has one.
-      // The chroma field has to be gone, and a round button in a square frame leaves the corners
-      // transparent, so a face with no transparent pixel is a face that was never keyed.
+      const n = png.width * png.height;
       let clear = 0;
-      for (let i = 3; i < png.data.length; i += 4) if (png.data[i] < SOLID) clear += 1;
-      const share = clear / (png.width * png.height);
-      expect(share, `${key} is ${(share * 100).toFixed(1)}% transparent`).toBeGreaterThan(0.05);
-      // And it must not be MOSTLY gone either — that is a face the key ate.
-      expect(share, `${key} keyed away ${(share * 100).toFixed(1)}% of itself`).toBeLessThan(0.6);
+      let ink = 0;
+      let plate = 0;
+      for (let i = 3; i < png.data.length; i += 4) {
+        const a = png.data[i]!;
+        if (a === 0) clear += 1;
+        else if (a >= SOLID) ink += 1;
+        else plate += 1;
+      }
+      expect(clear / n, `${key}: ${((clear / n) * 100).toFixed(1)}% keyed away`).toBeGreaterThan(0.1);
+      expect(clear / n, `${key}: the key ate ${((clear / n) * 100).toFixed(1)}% of the face`).toBeLessThan(0.35);
+      expect(ink / n, `${key} has ${((ink / n) * 100).toFixed(1)}% opaque ink — no readable mark`).toBeGreaterThan(0.05);
+      expect(ink / n, `${key} is ${((ink / n) * 100).toFixed(1)}% opaque — the plate stopped being see-through`).toBeLessThan(0.3);
+      expect(plate / n, `${key} has no translucent plate at all`).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('bakes the plate so that DRAWN at ART_ALPHA it lands on exactly PLATE_ALPHA', () => {
+    // 🔴 The number the 19.9 %-occlusion argument is about, checked where it now lives.
+    // Splitting the alpha moved the plate's translucency out of `setAlpha` and into the BYTES, and
+    // the contract is that the two multiply back to the measured 0.55. `touchMarks.ts` holds the
+    // other half; neither file can drift without this failing.
+    for (const key of KEYS) {
+      const png = readPng(`public/${entry(key).url}`);
+      const counts = new Map<number, number>();
+      for (let i = 3; i < png.data.length; i += 4) {
+        const a = png.data[i]!;
+        if (a > 0 && a < SOLID) counts.set(a, (counts.get(a) ?? 0) + 1);
+      }
+      const modal = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]!;
+      const effective = (modal[0] / 255) * ART_ALPHA;
+      expect(
+        effective,
+        `${key}'s plate draws at ${effective.toFixed(3)}, not the measured ${PLATE_ALPHA}`,
+      ).toBeCloseTo(PLATE_ALPHA, 2);
+    }
+  });
+
+  it('reaches the 3:1 contrast floor over EVERY background, at rest and pressed', () => {
+    // 🔴 The measurement that says the repair worked, and the one that condemned what came
+    // before it. Faded flat at 0.55 the best ink reached **2.43-2.47:1** over the worst background
+    // — under WCAG 1.4.11's 3:1 — because the mark faded with the plate it sits on. Codex round-7
+    // measured it; this reproduces it from the shipped bytes rather than taking the report.
+    //
+    // ⚠️ `max(ink : background)` over a SWEPT background, which is `contrast-floor.test.ts`'s
+    // method and the reason it applies here: a reader separates a mark from its background by
+    // whichever ink contrasts, and no single colour wins against every background.
+    for (const [alpha, floor] of [
+      [ART_ALPHA, 3],
+      [ART_ALPHA_PRESSED, 3],
+    ] as const) {
+      for (const key of KEYS) {
+        const png = readPng(`public/${entry(key).url}`);
+        let worst = Infinity;
+        for (let bg = 0; bg <= 255; bg += 5) {
+          const back = luminance(bg, bg, bg);
+          let best = 0;
+          for (let i = 0; i < png.data.length; i += 4) {
+            const a = (png.data[i + 3]! / 255) * alpha;
+            if (a < 0.05) continue;
+            const over = (c: number): number => c * a + bg * (1 - a);
+            const r = ratio(luminance(over(png.data[i]!), over(png.data[i + 1]!), over(png.data[i + 2]!)), back);
+            if (r > best) best = r;
+          }
+          if (best < worst) worst = best;
+        }
+        expect(
+          worst,
+          `${key} at alpha ${alpha} reaches only ${worst.toFixed(2)}:1 against its worst background`,
+        ).toBeGreaterThan(floor);
+      }
     }
   });
 
@@ -149,6 +239,19 @@ describe('the shipped touch faces', () => {
         ).toBeGreaterThan(MIN_DIFFERING_SHARE);
       }
     }
+  });
+
+  it('cuts one cell per control, from a grid position and not from a detection order', () => {
+    // 🔴 Nothing referenced `TOUCH_PLATE_CELLS` at all — the descriptors that decide which
+    // cell becomes which button were unpinned, and the builder's own count guard compared them
+    // against themselves. Codex round-7. This is the other end: the cells the prompt asks for have
+    // to be exactly the controls the layout draws, named the same way.
+    expect(TOUCH_PLATE_CELLS.map((cell) => cell.key).sort()).toEqual([...KEYS].sort());
+    // And no two controls may read the same cell, which is how one mark ships twice.
+    const positions = TOUCH_PLATE_CELLS.map((cell) => cell.row * TOUCH_PLATE_COLS + cell.col);
+    expect(new Set(positions).size, 'two controls read the same cell of the plate').toBe(
+      TOUCH_PLATE_CELLS.length,
+    );
   });
 
   it('binds every face to its own key, in the catalog the game loads from', () => {

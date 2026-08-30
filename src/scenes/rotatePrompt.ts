@@ -19,7 +19,7 @@
  *
  * 🔴 `!touchTargetsFit` is part of the controls' DISABLE predicate too, not only their draw
  * predicate — `touchControlsLayer.refresh()` and `touch-draw-path.test.ts`'s M8 case. Were it only
- * a draw decision, the five hit areas would stay live *underneath* this overlay on a running,
+ * a draw decision, the six hit areas would stay live *underneath* this overlay on a running,
  * input-enabled game, and a tap meant for "turn your phone" would move the player instead. Both
  * files call `touchTargetsFit`; neither carries its own copy of the rule.
  *

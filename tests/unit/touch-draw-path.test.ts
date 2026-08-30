@@ -8,14 +8,13 @@ import {
   GAME_BLUR,
   GAME_HIDDEN,
   INPUT_GAME_OUT,
-  INPUT_POINTER_UP,
-  INPUT_POINTER_UP_OUTSIDE,
   SCENE_DESTROY,
   SCENE_PAUSE,
   SCENE_SHUTDOWN,
   SCENE_SLEEP,
 } from '../../src/scenes/engineLiterals';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
+import { live } from './touchLive';
 import { makeTouchScene } from './touchSceneFake';
 
 /**
@@ -36,25 +35,6 @@ import { makeTouchScene } from './touchSceneFake';
 
 const layoutAt = (w = GAME_WIDTH, h = GAME_HEIGHT) => touchLayout(w, h);
 
-/** A layer that has been created and bound, on a touch device, with the game running. */
-function live() {
-  const scene = makeTouchScene();
-  const input$ = createSnapshot();
-  const layer = new TouchControlsLayer(scene.scene, true);
-  scene.readHeld = () => layer.held();
-  layer.create();
-  layer.bind({
-    input$,
-    gameScene: scene.gameScene,
-    isGameRunning: () => scene.gameStatusRunning,
-    isPlayerInputEnabled: () => scene.playerInputEnabled,
-    openLevelSelect: () => {
-      scene.levelSelectOpened += 1;
-    },
-  });
-  layer.refresh();
-  return { scene, input$, layer };
-}
 
 describe('TouchControlsLayer draws what touchLayout decides', () => {
   it('creates one interactive hit zone per action and no others', () => {
@@ -112,60 +92,6 @@ describe('TouchControlsLayer draws what touchLayout decides', () => {
       const got = scene.zones.find((z) => z.id === want.id)!;
       expect([got.id, got.x, got.y]).toEqual([want.id, want.x, want.y]);
     }
-  });
-});
-
-describe('TouchControlsLayer feeds the sim through the existing doors', () => {
-  it('latches the jump EDGE on a press, and holds the jump LEVEL while down', () => {
-    const { scene, input$, layer } = live();
-    scene.press('jump', 1);
-    expect(input$.jumpPressed, 'the jump edge was not latched').toBe(true);
-    expect(layer.held().jump, 'the jump level is not held while the finger is down').toBe(true);
-    // Step 6's early-release jump cut reads the LEVEL; step 7 reads the EDGE. Both, or the jump has
-    // no variable height and the buffered press never fires.
-    scene.releasePointer(1);
-    expect(layer.held().jump).toBe(false);
-  });
-
-  it('latches the attack edge and holds nothing', () => {
-    const { scene, input$, layer } = live();
-    scene.press('attack', 1);
-    expect(input$.attackPressed).toBe(true);
-    expect(layer.held()).toEqual({ left: false, right: false, jump: false, walk: false });
-  });
-
-  it('holds a movement level without ever touching an edge', () => {
-    const { scene, input$, layer } = live();
-    scene.press('right', 1);
-    expect(layer.held().right).toBe(true);
-    expect([input$.jumpPressed, input$.attackPressed], 'moving armed an edge').toEqual([false, false]);
-  });
-
-  it('opens the level menu from the pause control, and writes no sim field', () => {
-    const { scene, input$ } = live();
-    scene.press('pause', 1);
-    expect(scene.levelSelectOpened).toBe(1);
-    expect(input$).toEqual(createSnapshot());
-  });
-
-  it('releases a contact that lifts anywhere on the canvas, not just over its own zone', () => {
-    // 🔴 Mutation M6. Phaser dispatches the scene-level `pointerup` wherever a pointer is released;
-    // the ZONE only hears about a release that happens over itself. Press right, slide onto empty
-    // canvas, lift — without the scene subscription the player runs right forever.
-    const { scene, layer } = live();
-    expect(scene.sceneEvents).toContain(INPUT_POINTER_UP);
-    expect(scene.sceneEvents).toContain(INPUT_POINTER_UP_OUTSIDE);
-    scene.press('right', 1);
-    scene.releasePointer(1);
-    expect(layer.held().right).toBe(false);
-  });
-
-  it('ignores a press while player input is disabled', () => {
-    const { scene, input$, layer } = live();
-    scene.playerInputEnabled = false;
-    layer.refresh();
-    scene.press('jump', 1);
-    expect([input$.jumpPressed, layer.held().jump]).toEqual([false, false]);
   });
 });
 

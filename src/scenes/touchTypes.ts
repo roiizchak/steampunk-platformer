@@ -8,7 +8,12 @@ import type { InputSnapshot } from '../sim/types';
  * lets `npm run test:sim-isolated` run the whole suite with Phaser uninstalled.
  *
  * Split out of `touchControlsLayer.ts` at the 400-line ceiling. `touchControlsLayer.ts` re-exports
- * every name here, so no importer had to change. The walk control and the walk latch took it past
+ * every name here, so no importer had to change.
+ *
+ * Every method below is one the touch layer actually calls. A real `Phaser.Scene`, `Zone`,
+ * `Rectangle`, `Text` and `EventEmitter` satisfy these already — Phaser's own signatures are wider,
+ * and a wider signature is assignable to a narrower one. Nothing here re-declares Phaser's API; it
+ * is a **budget** for how much of it the touch layer is allowed to touch. The walk control and the walk latch took it past
  * the ceiling a second time; `TouchBinding` and the two depths followed the interfaces here, for
  * the same reason — they name no behaviour, only the shape of what the layer is handed.
  */

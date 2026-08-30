@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { createSnapshot } from '../../src/sim/input';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { touchLayout, TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
+import { ART_ALPHA, PLATE_ALPHA } from '../../src/scenes/touchMarks';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
 
@@ -170,18 +171,28 @@ describe('the generated faces, once the plate is cut', () => {
   it('gives the art the SAME translucency the drawn plate was measured at', () => {
     // 🔴 The 19.9 % occlusion measurement is about a thumb-sized opaque disc over the level. That
     // is a property of the BOX, not of what is drawn in it, so adopting art may not quietly undo it.
-    // ⚠️ `< 0.7` is a BOUND, and a bound admits a drift the measurement never sanctioned:
-    // 0.69 would satisfy it while no one had ever looked through a 0.69 plate at a spike. The
-    // drawn plate's gate pins the exact measured 0.55 for that reason, and the art path — which is
-    // what actually ships — was the looser of the two. Codex round-6. Same number, same anchor.
-    const MEASURED_RESTING = 0.55;
+    // ⚠️ `< 0.7` was a BOUND, and a bound admits a drift the measurement never sanctioned:
+    // 0.69 satisfies it while no one has ever looked through a 0.69 plate at a spike. Codex
+    // round-6 pinned the exact value; round-7 then found that ONE flat alpha cannot be both
+    // see-through and readable — faded flat at 0.55, the best ink reached 2.43-2.47:1 against
+    // WCAG's 3:1.
+    //
+    // 🔴 So the number moved but the guarantee did not. `buildTouchAtlas.mjs` fades only the
+    // brass, by `PLATE_ALPHA / ART_ALPHA`, and the face is drawn at `ART_ALPHA` — which multiplies
+    // back to exactly 0.55 on the plate while leaving the ink at 0.85. This asserts the arithmetic
+    // and the drawn half; `shipped-touch.test.ts` asserts the other half on the real bytes, where
+    // the baked value actually is. A fake scene has no pixels and cannot be asked.
     const { scene, layer } = withArt();
     const face = (id: string) => scene.faces.filter((f) => f.id === id)[0];
+    expect(ART_ALPHA * (PLATE_ALPHA / ART_ALPHA), 'the two halves stopped multiplying to 0.55').toBeCloseTo(
+      PLATE_ALPHA,
+      6,
+    );
     for (const id of TOUCH_IDS) {
       expect(
         face(id).alpha,
-        `the ${id} face rests at ${face(id).alpha}, not the measured ${MEASURED_RESTING}`,
-      ).toBe(MEASURED_RESTING);
+        `the ${id} face rests at ${face(id).alpha}, not at ART_ALPHA`,
+      ).toBe(ART_ALPHA);
     }
     // And the pressed state still answers a thumb, through the same one code path.
     const rest = face('right').alpha;

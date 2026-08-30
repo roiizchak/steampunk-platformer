@@ -2,7 +2,7 @@
  * **The level menu's tap route — two cases the play-control spec could not hold.**
  *
  * Split out of `phase-12-touch.spec.ts` at the 400-line ceiling, and the seam is real: both cases
- * here are about `LevelSelectScene`'s route and its scene lifetime, not about the five controls.
+ * here are about `LevelSelectScene`'s route and its scene lifetime, not about the six controls.
  * Both came out of the Codex implementation review, and both were watched red (M25, M30).
  *
  * ⚠️ The file name is deliberate: `playwright.config.ts` partitions on `phase-12-[a-z0-9-]+`,
@@ -163,11 +163,20 @@ test.describe('the level menu answers a finger, once, every visit', () => {
       DEFAULT_TUNING.walkMax * 1.5,
     );
 
+    // 🔴 Both sides, and against the plate's OWN resting value. An upper bound alone is
+    // satisfied by a dead RIGHT control (0 px/tick reads as "walking"), and `> 0` is satisfied by a
+    // plate that never lights at all, since a resting art face is already 0.55 opaque. Codex
+    // round-7: a bound that the broken case also passes is not a bound.
+    const walkAtRest = await faceAlpha(page, 'UI', 'walk');
+    expect(walkAtRest, 'there is no walk plate to read').toBeGreaterThan(0);
+
     await tapControl(page, 'UI', 'walk', 42);
     const litBefore = await faceAlpha(page, 'UI', 'walk');
-    expect(litBefore, 'the walk plate did not light when it was tapped').toBeGreaterThan(0);
+    expect(litBefore, 'the walk plate did not light when it was tapped').toBeGreaterThan(walkAtRest!);
     const walking = await held();
-    expect(walking, 'tapping walk did not change the gait').toBeLessThan(DEFAULT_TUNING.walkMax * 1.1);
+    const atWalkSpeed = (vx: number): boolean =>
+      vx > DEFAULT_TUNING.walkMax * 0.9 && vx < DEFAULT_TUNING.walkMax * 1.1;
+    expect(atWalkSpeed(walking), `tapping walk left the player at ${walking}, not walkMax`).toBe(true);
 
     // The round trip that used to reset it: ESC to the menu, tap the first row back into a level.
     await page.keyboard.press('Escape');
@@ -181,10 +190,11 @@ test.describe('the level menu answers a finger, once, every visit', () => {
     await page.waitForFunction(() => window.__game?.sceneKey === 'Game', undefined, { timeout: 20_000 });
     await waitTicks(page, 30);
 
+    const afterMenu = await held();
     expect(
-      await held(),
-      'the player came back from the level menu running, having chosen to walk',
-    ).toBeLessThan(DEFAULT_TUNING.walkMax * 1.1);
+      atWalkSpeed(afterMenu),
+      `the player came back from the level menu at ${afterMenu}, having chosen to walk`,
+    ).toBe(true);
     expect(
       await faceAlpha(page, 'UI', 'walk'),
       'the gait survived but the plate came back dark, so the player cannot see which gait they are in',

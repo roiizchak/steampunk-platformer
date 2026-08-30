@@ -2,7 +2,8 @@
  * The prompt for the touch-control plate — Phase 12.
  *
  * One 1:1 2K image carrying all six button faces in a 3x2 grid on a flat chroma field, cut locally
- * by `buildTouchAtlas.mjs`. One generation, $0.15, charged to the touch-UI ceiling in
+ * by `buildTouchAtlas.mjs`. $0.15 a take; **three takes were bought and take 3 is adopted**,
+ * $0.45 in all, charged to the touch-UI ceiling in
  * PRD § Global Constraints and not to the art ceiling.
  *
  * ## Why one plate and not six images

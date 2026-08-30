@@ -37,12 +37,12 @@ test.afterEach(async ({ page }) => {
   await liftEveryContact(page).catch(() => {});
 });
 
-test.describe('the five controls exist and are hittable', () => {
+test.describe('the six controls exist and are hittable', () => {
   test('12.2a all five are drawn, interactive, and none is a duplicate', async ({ page }) => {
     await bootToTouchPlay(page);
     const zones = await drawnZones(page, UI);
     const names = zones.map((z) => z.name).sort();
-    expect(names, 'the shipped controls are not the five the layout names').toEqual(
+    expect(names, 'the shipped controls are not the six the layout names').toEqual(
       [...TOUCH_IDS].sort(),
     );
     for (const z of zones) {

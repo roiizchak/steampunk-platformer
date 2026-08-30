@@ -1,7 +1,7 @@
 /**
  * **The on-screen touch controls.** No Phaser import at all, not even a type — see below.
  *
- * `src/render/touchLayout.ts` decides where the five controls go; this file puts them there, turns
+ * `src/render/touchLayout.ts` decides where the six controls go; this file puts them there, turns
  * fingers into sim intents, and takes them away again when they must not be pressable.
  *
  * ## Why `import type` only
@@ -56,7 +56,7 @@ import {
   touchLayout,
   touchTargetsFit,
 } from '../render/touchLayout';
-import { drawFace, PLATE_ALPHA, PLATE_ALPHA_PRESSED } from './touchMarks';
+import { alphasFor, drawFace } from './touchMarks';
 import type {
   PointerLike,
   TouchBinding,
@@ -93,15 +93,6 @@ import {
 } from './engineLiterals';
 import type { TouchHeld } from './inputMerge';
 import { TouchContacts } from './touchContacts';
-
-/**
- * ## The Phaser surface, as structure rather than as an import
- *
- * Every method below is one this file actually calls. A real `Phaser.Scene`, `Zone`, `Rectangle`,
- * `Text` and `EventEmitter` satisfy these already — Phaser's own signatures are wider, and a wider
- * signature is assignable to a narrower one. Nothing here re-declares Phaser's API; it is a
- * **budget** for how much of it the touch layer is allowed to touch.
- */
 
 interface Control {
   id: TouchId;
@@ -145,7 +136,9 @@ export class TouchControlsLayer {
    */
   private setPressed(id: TouchId, pressed: boolean): void {
     const control = this.controls.find((c) => c.id === id);
-    control?.faces[0]?.setAlpha(this.litFor(id, pressed) ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
+    if (!control) return;
+    const alpha = alphasFor(this.scene, id);
+    control.faces[0]?.setAlpha(this.litFor(id, pressed) ? alpha.lit : alpha.rest);
   }
 
   /** Every control back to rest. Runs on every loss path, so no plate can be left lit. */
@@ -153,7 +146,8 @@ export class TouchControlsLayer {
     // ⚠️ Through `litFor`, so the walk plate keeps its latched look. A loss path lifts every
     // FINGER; it does not un-choose a gait.
     for (const control of this.controls) {
-      control.faces[0]?.setAlpha(this.litFor(control.id, false) ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
+      const alpha = alphasFor(this.scene, control.id);
+      control.faces[0]?.setAlpha(this.litFor(control.id, false) ? alpha.lit : alpha.rest);
     }
   }
 
@@ -257,7 +251,7 @@ export class TouchControlsLayer {
     const { width, height } = this.scene.scale.gameSize;
     const targets = this.plan();
     // Re-place only on a real size change. `refresh()` runs every frame — it is how the live
-    // predicate is re-evaluated without a second source of truth — and moving five objects to the
+    // predicate is re-evaluated without a second source of truth — and moving six objects to the
     // coordinates they are already at, 60 times a second, is work with no observable effect.
     if (width !== this.placedFor.w || height !== this.placedFor.h) {
       this.placedFor = { w: width, h: height };
@@ -347,7 +341,7 @@ export class TouchControlsLayer {
     // 🔴 Built HIDDEN, to match `isLive`, which starts false.
     //
     // `refresh()` early-outs when the wanted state equals the current one, so a face created visible
-    // while `isLive` was false would never be told to hide — and on a phone held upright the five
+    // while `isLive` was false would never be told to hide — and on a phone held upright the six
     // controls stayed drawn under the rotate prompt, non-interactive but plainly there. Caught by
     // `phase-12-viewport.spec.ts`, not by a unit test: every unit case reached the live state, where
     // the flag and the objects agree again.
@@ -360,30 +354,38 @@ export class TouchControlsLayer {
    * A finger landed on a control.
    *
    * Guarded on `isLive` as well as on `disableInteractive` — belt and braces, and the belt is what a
-   * test can see. `contacts.begin` returning false means this pointer already owns another control
-   * (it slid across), so it arms nothing: a slide from RIGHT onto JUMP must neither fire a jump nor
-   * stop the player running right.
+   * test can see. `begin` returning false means this pointer already owns another control (it slid
+   * across), so it arms nothing: a slide from RIGHT onto JUMP fires no jump and does not stop the
+   * player running right.
    */
   private onPress(id: TouchId, pointer: PointerLike): void {
     if (!this.isLive || !this.binding) return;
+    // 🔴 Read BEFORE `begin`: that is what makes it the 0 -> 1 transition rather than "is a
+    // finger down". `begin` is true for every new POINTER — right for a movement plate and a
+    // repeatable swing, wrong for a TOGGLE and a ROUTE. Two fingers on walk toggled it on and
+    // straight back off; two on pause queued the level menu twice, which is 12.5d one screen
+    // earlier. Codex round-7.
+    const firstHolder = !this.contacts.isHeld(id);
     if (!this.contacts.begin(pointer.id, id)) return;
 
     // 🔴 The walk latch flips BEFORE the plate is redrawn, and the order is the whole bug the
     // Codex round-6 review found: `litFor('walk')` reads `walking`, so redrawing first showed the
     // state the player was leaving — the first press engaged walk and drew the plate unlit, the
     // next disengaged it and left it lit until the finger came off.
-    if (id === 'walk') this.setWalking(!this.walking);
+    if (id === 'walk' && firstHolder) this.setWalking(!this.walking);
     this.setPressed(id, true);
+    // ⚠️ Jump and attack are deliberately NOT gated: they are repeatable, and a thumb
+    // resting on attack while the other taps it is asking for two swings.
     if (id === 'jump') latchJumpPress(this.binding.input$);
     else if (id === 'attack') latchAttackPress(this.binding.input$);
-    else if (id === 'pause') this.binding.openLevelSelect();
+    else if (id === 'pause' && firstHolder) this.binding.openLevelSelect();
     // `left` and `right` are levels; `TouchContacts` already holds them and `applyHeld` reads them.
   }
 
   /**
    * The lit state of one plate, which is not the same question as "is a finger on it".
    *
-   * For five controls it is: lit while held. For `walk` it is the LATCH, so the plate stays lit
+   * For the other five it is: lit while held. For `walk` it is the LATCH, so the plate stays lit
    * after the finger leaves — which is the whole point of a toggle, and the only place the game
    * tells the player which gait they are in.
    */
