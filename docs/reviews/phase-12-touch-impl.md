@@ -30,5 +30,80 @@ locally before being acted on, and one did not survive that check).
 | 6 | MEDIUM | The `hasTouch` scan still accepts `hasTouch: false /* hasTouch: true */` | **Applied.** Both comment forms stripped. M28 red 1/5. |
 | 7 | MEDIUM | `touch-layout.test.ts` has an assertion-free test; `0 * scale < 8` is stated backwards in three places; the PRD says "three" zero-red rows while the table says four | **Applied, all three.** The disjointness test has an independent pairwise assertion (M29 red 2/21), the comparison reads *true* in all three places, and the count is five now. |
 
+## Round 3 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | **BLOCKER** | `LevelSelectScene`'s two-finger latch was a **field initialiser**, and Phaser preserves the scene instance across a shutdown (`Systems.js:760-788`) — so after one level was chosen the latch stayed set and the menu was dead on every later visit, to touch **and** to ENTER, until reload | **Applied.** Reproduced locally. A repair for a rare two-finger race that broke the ordinary one-finger case. Reset in `init()`; gated by 12.6b. |
+| 2 | HIGH | 12.5d demanded level-01, enforcing a first-contact-wins rule 12.5 does not state | **Applied.** It counts `scene.start` calls now and accepts either unlocked row. |
+| 3 | HIGH | The prompt asked only about the play controls while the route asked both terms — a sixth catalog level would have killed the menu route with **no prompt shown** | **Applied.** `rotatePromptWanted()` is one shared definition called with the same targets by `RotatePrompt` and `attachTapRoutes`, so 12.10's "iff" holds by construction. |
+| 4 | MEDIUM | The pressed-alpha bound derived from the live `PLATE_ALPHA` — an active oracle that would validate any pair of unmeasured numbers | **Applied.** It pins the measured 0.55. |
+| 5 | LOW | Three false comments (this module does not arbitrate between fingers; a gated tap was not always explained; 40 game px at scale 1 is 40 CSS px, not 20) | **Applied**, all three. |
+
+## Round 4 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | `refresh()` re-sized only the **fonts**, while the case named *"re-places itself when the design size changes"* built a SECOND prompt and searched an array still holding the first one's stale scrim — it passed either way | **Applied.** The behaviour is implemented and the gate asserts exact geometry on the objects it refreshed. |
+| 2 | MEDIUM | `cssScaleFor` returns 0 for a collapsed canvas by design, and `Math.round(28 / 0)` is `Infinity` | **Applied.** Guarded; the last finite size is kept and visibility is unaffected. |
+| 3 | LOW | Two more comment errors — the fourth `0 * scale < 8` site, and a claim that the completion route shares its targets | **Applied.** That zone is the view plus 64 px, so only the play-controls term can fire there. |
+| 4 | MEDIUM | The level-menu cases belong in their own spec | **Applied.** `phase-12-menu.spec.ts`, at the 400-line ceiling; the partition picks it up with no config edit, which is what the partition test asserts. |
+
+## Round 5 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | The round-4 repair shipped **continuous work on every touch device**: `UIScene` polls `refresh()` every frame and `Rectangle.setSize` rebuilds geometry, path data and display origin on every call — and 12.11 cannot measure it, because the prompt is hidden while it times | **Applied.** Re-placed only when the design size actually changed. The gate asserts the **delta**, not the private -48/+56 offsets, so a legal change to line spacing that kept the prompt centred cannot false-red. |
+| 2 | HIGH | 12.11's "all five drawn" precondition counted **faces against zones** — true by accident only while the grey box drew a plate plus marks per control | **Applied.** One generated image per control makes the counts equal and the bound false-redded a build drawing strictly better pixels. The claim was never a ratio, so it is asserted per control **by name** — also stronger: six visible faces all belonging to one plate passed the old form. |
+| 3 | MEDIUM | 12.10's approved wording is an "iff" over *every* live target; the shipped code implements D1's rotate-on-phone-portrait | **Recorded.** 12.10 is **NOT MET** pending an owner call, written up in the QA log rather than reworded. |
+
+## Round 6 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | **BLOCKER** | The walk latch lived on `TouchControlsLayer.walking`, and `UIScene`'s SHUTDOWN destroys that layer — choosing to walk, opening the level menu and coming back silently resumed **running**, with a dark plate. The test meant to cover it asked the DESTROYED layer what it held, which proves the field and not the persistence | **Applied.** The latch moves to `TouchSession`, a field on `UIScene`, which survives. `activate()` restores the gait onto every replacement layer **before** binding; `deactivate()` unwires the callback and deliberately keeps the choice. M41–M43. |
+| 2 | HIGH | `buildTouchAtlas.mjs`'s CLI guard used `new URL().pathname`, which keeps the space in "Steampunk Platformer" as `%20` — so `main()` had **never once run** and the shipped faces were cut by hand | **Applied.** `fileURLToPath`. |
+| 3 | MEDIUM | The walk latch flipped after the redraw | **Applied.** Before. |
+| 4 | MEDIUM | `drawFace`'s `setDisplaySize` had no reachable consumer — M39 stayed green twice | **Applied.** Verified unreachable (`create()` ends in `refresh()`) and deleted; M39 repointed at `refresh()`. |
+
+## Round 7 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **One flat alpha cannot be both see-through and readable.** Drawn at `PLATE_ALPHA` the whole generated face fades together and the best ink reaches only **2.43–2.47:1** against WCAG 1.4.11's 3:1. The grey box never had this problem — its marks were opaque over a translucent plate | **Applied.** The split is baked into the bytes: brass keeps `PLATE_ALPHA / ART_ALPHA` of its alpha, ink keeps all of it. Ink is the two **ends** of the luminance range (`< 32` or `> 208`), the two-ink method `hud.ts` uses; at 16/224 the worst case falls to 2.88:1, so 32/208 sits two steps clear. Three new gates on the shipped bytes. |
+| 2 | HIGH | Two fingers on `walk` toggled it on and straight back off; two on `pause` opened the level menu twice | **Applied.** `begin()` is true per POINTER — right for a movement plate and a repeatable swing, wrong for a toggle and a route. Gated on the 0→1 transition; jump and attack deliberately stay per-pointer. |
+| 3 | MEDIUM | The builder's count guard was circular (`cells.size` against the array that built it) and left stale PNGs behind | **Applied.** Produced keys are checked against the **catalog**, and the directory is swept. |
+| 4 | MEDIUM | `TOUCH_PLATE_CELLS` had no test at all; 12.6c's bounds were one-sided | **Applied**, both. |
+| 5 | LOW | Prose still said five controls, two takes, $0.30 | **Applied.** Six, three takes, $0.45. |
+
+## Round 8 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **The contrast gate passed on a highlight outside the mark.** Scanning the whole face and keeping the best pixel let a decorative brass highlight carry the pass: `walk` scored 3.67:1 that way while its own bars — 725 near-black pixels and not one pale one — bottomed out at **1.12:1**. Invisible on a dark background | **Applied.** `keylineMarks()` gives every dark engraving a pale keyline in `MARK_INK`, and the gate measures the **mark mask** — opaque pixels inside the central 50 %, nothing else — with a count assertion so an empty mask cannot pass silently. |
+| 2 | MEDIUM | The stale-PNG sweep deleted **every** `.png` in the directory, not just `touch-*` — dormant today, destructive the moment another UI image lands there | **Applied.** Prefix-guarded. |
+| 3 | MEDIUM | The CLI entry guard had no gate at all — reverting it left everything green | **Applied.** `isCliEntry` is exported and driven by `touch-atlas-cli.test.ts` with a path containing a space, which is the whole round-6 bug in one argument. M53/M54. |
+| 4 | MEDIUM | The alpha-band test demanded coverage percentages no criterion approves, which would false-red a legal face | **Applied.** Narrowed to presence of all three bands plus a translucent-bulk disc; readability belongs to the contrast gate, distinctness to the marks gate. |
+| 5 | LOW | Three prose errors — the art does not carry "the SAME ALPHA", `faceAlpha` is Phaser's object alpha, cell keys are prefixed | **Applied.** |
+
+## Round 9 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **A hairline is not a contrast mechanism, and this repo already said so.** Round 8's 3.64:1 was measured on 160 px SOURCE TEXELS; the smallest in-scope viewport shows a face at **48 CSS px**, a 3.3× downscale a fractional canvas scale deliberately SMOOTHS — the 1 px keyline averaged away and the marks fell to **1.63–2.85:1**, `walk` worst. `contrast-floor.test.ts` already refuses a 1 px stroke as *"an anti-aliasing artefact, not a contrast mechanism"* | **Applied.** The engraving is thickened (`BOLD_PX 2`) as well as keylined (`KEYLINE_PX 3`), both restricted to the central mark region — the first version keylined every dark pixel anywhere, repainting the outer rim while the measured mark stayed thin. The gate measures at true size too. |
+| 2 | MEDIUM | Two invented thresholds — `plate/(plate+ink) > 0.5` and `marked > 100` | **Applied.** Removed: the occlusion measurement establishes an alpha, not a pixel share, and one pixel is enough to prove a mask non-empty. |
+| 3 | MEDIUM | `buildTouchAtlas.mjs` crossed 400 lines | **Applied.** The two pure pixel passes split into `tools/gen/touchInk.mjs`, driven by `touch-atlas-ink.test.ts` on a synthetic face. |
+| 4 | MEDIUM | Deleting the `keylineMarks()` call could redden nothing — the shipped bytes already carried the keyline | **Applied.** M55–M57; two of the three were green until the fixture could reach the guard (a bar running the full width of a small disc), and a genuinely dead region guard beside it was deleted. |
+
+## Round 10 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **A modal alpha is an average.** The plate-alpha gate read only the MODAL translucent alpha, so making 9 717 outer brass pixels of `pause` fully opaque — a plate that hides the level it is drawn over — left it green, with contrast and distinctness unchanged | **Applied.** A per-pixel invariant: ink inside the mark region is 255, every other non-transparent pixel is within ±1 of the baked 165. M58 red 1/7. ⚠️ The ink half is restricted to the mark region because 643–660 pixels per face at ink luminance live in the disc's keyed rim ramp — measured, every one of them outside the mark region and none inside. |
+| 2 | HIGH | **A best pixel is an average too.** The contrast gate kept the single best output pixel, so fading `walk`'s engraving down to 32 remaining pixels still scored over 3:1 | **Applied.** The mark must survive the downscale. M59 red 2/7. |
+| 3 | MEDIUM | The true-size gate rolled its own box filter, partitioning the source differently from `resize.mjs` | **Applied.** It measures through the shared `downscale`; the figures move to **3.32:1 at rest** and **3.85:1 pressed**. |
+| 4 | MEDIUM | Two bounds in the gates are mine and not the criteria's — a test quietly enforcing more than an approved rule is the STOP-and-ask CLAUDE.md § 3 names | **Applied.** `MIN_DIFFERING_SHARE` 0.15 → 0 and the 1.3× thickening ratio → > 1, both with today's measurements (70.4–82.9 %, ~1.78×) kept in the tests' prose and written up as owner decisions in the QA log. |
+| 5 | LOW | Stale figures in four files | **Applied.** Swept. |
+
 **Nothing was silently dropped** *(C11)*. Two findings are recorded-not-applied with the reason above;
 one did not survive local verification and is recorded as unconfirmed.
