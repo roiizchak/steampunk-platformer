@@ -128,6 +128,28 @@ export async function drawnFaces(page: Page, sceneKey: string): Promise<{ name: 
 }
 
 /**
+ * The EFFECTIVE alpha of a named face — what the player's eye is actually given.
+ *
+ * ⚠️ `visible` alone cannot tell a lit plate from a dark one. Both paths a face can take
+ * carry their state in alpha: the art image rests at `PLATE_ALPHA` and presses to
+ * `PLATE_ALPHA_PRESSED`, and the drawn plate does the same with a fill. So "is the walk plate lit"
+ * is a question about this number and about nothing else. `null` when no such face is drawn, which
+ * is a different answer from `0` and must not be collapsed into one.
+ */
+export async function faceAlpha(page: Page, sceneKey: string, name: string): Promise<number | null> {
+  return page.evaluate(
+    ([key, wanted]) => {
+      type Obj = { type: string; name: string; visible: boolean; alpha: number };
+      type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
+      const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
+      const face = (scene?.children?.list ?? []).find((o) => o.type !== 'Zone' && o.name === wanted);
+      return face ? (face.visible ? face.alpha : 0) : null;
+    },
+    [sceneKey, name] as const,
+  );
+}
+
+/**
  * Is the rotate prompt on screen?
  *
  * Read from the drawn `Text` objects, not from a flag the production code exports — a flag would be

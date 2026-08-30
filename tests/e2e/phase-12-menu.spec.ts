@@ -12,6 +12,7 @@
 
 import { expect, test } from '@playwright/test';
 
+import { DEFAULT_TUNING } from '../../src/sim/playerTuning';
 import { PROGRESS_KEY } from '../../src/game/save';
 import { waitTicks } from './gameHarness';
 import {
@@ -19,11 +20,14 @@ import {
   canvasRect,
   centreOf,
   contactDown,
+  faceAlpha,
   contactsDown,
   contactUp,
+  drawnZone,
   drawnZones,
   installTouchDriver,
   liftEveryContact,
+  tapControl,
 } from './touchHarness';
 
 test.beforeEach(async ({ page }) => {
@@ -127,6 +131,64 @@ test.describe('the level menu answers a finger, once, every visit', () => {
       [(await page.evaluate(() => window.__game?.levelId)) ?? ''],
       'the level reached is not one of the two rows that were tapped',
     ).toEqual([expect.stringMatching(/^level-0[12]$/)]);
+  });
+
+  test('12.6c the walk latch survives a level-select round trip', async ({ page }) => {
+    // 🔴 The Codex round-6 BLOCKER, and the SAME lifetime mistake as 12.6b in the other
+    // direction. The latch lived on `TouchControlsLayer.walking`; `UIScene`'s SHUTDOWN destroys that
+    // layer and the next one comes up with `walking = false`. So a player who chose to walk, opened
+    // the menu and came back silently resumed RUNNING with a dark plate.
+    // ⚠️ The unit test that was meant to cover this called `held()` on the already-destroyed
+    // object, which proves the field and not the persistence. This drives the real destruction path.
+    await bootToTouchPlay(page);
+
+    const held = async (): Promise<number> => {
+      // Hold RIGHT long enough to reach the cap for whichever gait is in force. `runMax` is 4.7
+      // ticks from a standstill (`playerTuning.ts:71`); 45 is well clear for either.
+      const rect = await canvasRect(page);
+      const right = centreOf(rect, await drawnZone(page, 'UI', 'right'));
+      await contactDown(page, 41, right.x, right.y);
+      await waitTicks(page, 45);
+      const vx = await page.evaluate(() => {
+        const player = window.__game?.player as { vx: number } | null | undefined;
+        return Math.abs(player?.vx ?? 0);
+      });
+      await contactUp(page, 41);
+      await waitTicks(page, 30);
+      return vx;
+    };
+
+    const running = await held();
+    expect(running, 'the game never reached run speed, so the walk case proves nothing').toBeGreaterThan(
+      DEFAULT_TUNING.walkMax * 1.5,
+    );
+
+    await tapControl(page, 'UI', 'walk', 42);
+    const litBefore = await faceAlpha(page, 'UI', 'walk');
+    expect(litBefore, 'the walk plate did not light when it was tapped').toBeGreaterThan(0);
+    const walking = await held();
+    expect(walking, 'tapping walk did not change the gait').toBeLessThan(DEFAULT_TUNING.walkMax * 1.1);
+
+    // The round trip that used to reset it: ESC to the menu, tap the first row back into a level.
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, { timeout: 10_000 });
+    const rect = await canvasRect(page);
+    const rows = (await drawnZones(page, 'LevelSelect')).filter((z) => z.name.startsWith('row-'));
+    expect(rows.length, 'the level menu drew no rows').toBeGreaterThan(0);
+    const at = centreOf(rect, rows[0]);
+    await contactDown(page, 43, at.x, at.y);
+    await contactUp(page, 43);
+    await page.waitForFunction(() => window.__game?.sceneKey === 'Game', undefined, { timeout: 20_000 });
+    await waitTicks(page, 30);
+
+    expect(
+      await held(),
+      'the player came back from the level menu running, having chosen to walk',
+    ).toBeLessThan(DEFAULT_TUNING.walkMax * 1.1);
+    expect(
+      await faceAlpha(page, 'UI', 'walk'),
+      'the gait survived but the plate came back dark, so the player cannot see which gait they are in',
+    ).toBe(litBefore);
   });
 
   test('12.6b the level menu still works on a SECOND visit', async ({ page }) => {
