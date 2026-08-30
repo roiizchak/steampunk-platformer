@@ -35,23 +35,50 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced: `docs/evidence/phase-12-touch-art.png`. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, **recaptured after the round-7 contrast repair**. The measurable half now passes on the shipped bytes: best-ink contrast **3.47:1** at rest and **4.12:1** pressed over every background luminance, against 1.4.11's 3:1, gated in `shipped-touch.test.ts` and watched red at 2.43:1 (M46). What remains is whether a wrench READS as a wrench at 55.6 CSS px, which is the agent's call and the owner's. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
-| 12.17 | Six shipped 160x160 PNGs, six distinct marks | **PASS** | `tests/unit/shipped-touch.test.ts`, on the shipped bytes. Its first statistic — alpha masks — was decoration at 99.6 % agreement and was replaced, not re-bounded. Watched red by copying one face over another (0.0 %). § 12.17. |
+| 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 52 rows; 6 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 57 rows; 7 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review and M46–M50 the round-7 one. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Three criteria are NOT MET and four are UNRUN, so the phase is reported FAILING.** 12.11's
-statistic cannot detect the regression it names; **12.8 and 12.10 each need an owner decision**
-(below); 12.13, 12.14 and 12.24 are hands-on and the owner's, and cannot be closed from here; 12.23
+**Four criteria are NOT MET and four are UNRUN, so the phase is reported FAILING.** 12.11's
+statistic cannot detect the regression it names; **12.8, 12.10 and 12.17 each need an owner
+decision** (below); 12.13, 12.14 and 12.24 are hands-on and the owner's, and cannot be closed from here; 12.23
 is the Codex implementation review, still running rounds on the repaired diff. Every other row
 passed, several only after a repair.
+
+### 🔴 12.17b — the criterion says five distinct SILHOUETTES, and the art has one
+
+12.17 as approved reads *"five 160x160 PNGs, alpha present, five **distinct silhouettes**, each
+bound to its own key"* (`docs/prd/phase-12-touch.md:114`). Two words in it no longer describe the
+thing being checked, and the Codex round-7 review was right that reporting PASS against a sentence
+the test does not test is the move this project forbids.
+
+- **five → six.** The owner asked for a walk/run control on 2026-08-30, after the criterion was
+  written. That half is not a reinterpretation; it is the owner's own change, and every gate,
+  mutation and document already counts six.
+- **silhouettes → marks.** This half is real. The adopted plate draws six buttons as one round
+  brass disc with a different engraving on each, so the *outlines* are deliberately identical and
+  the criterion cannot be satisfied by the art that shipped. `shipped-touch.test.ts` measures the
+  MARKS instead — masked to the central 50 %, 91.4 %-96.2 % differing across all fifteen pairs,
+  a copied glyph scoring 0 (M45), a copied file scoring 0 (M40).
+
+**Amending the criterion to fit the art is not mine to do.** The options:
+
+1. **Amend 12.17** to *"six 160x160 PNGs, alpha present, six distinct **marks**, each bound to its
+   own key"*, which is what is built, gated and mutated today. Recommended: a shared plate with
+   distinct engravings is the STYLE.md brass-and-glass idiom, and a per-button silhouette would mean
+   six differently-shaped buttons, which is a different design.
+2. **Hold 12.17 as written** and re-shoot the plate so each control has its own outline — another
+   $0.15 take at minimum, a new cut, and every contrast and mark measurement re-founded.
+
+Until you pick, 12.17 is **NOT MET**.
 
 🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder

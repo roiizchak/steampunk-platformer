@@ -179,8 +179,22 @@ papered over.
 | M43 | leave the retired layer's walk callback wired to the live session | 12.5 | RED 1/10 |
 | M44 | rest the art at 0.69 — inside the old bound, away from the measured 0.55 | 12.14 | RED 1/8 |
 | M45 | copy one face's central MARK onto another, leaving both discs alone | 12.17 | RED 1/4, at 0.0 % |
+| M46 | ship the faces faded FLAT — ink at the plate's alpha, as before the contrast repair | 12.14, 12.17 | RED 3/7, the ink at **2.43:1** |
+| M47 | draw the generated face at `PLATE_ALPHA`, double-fading the baked plate | 12.14 | **GREEN — the assertion was an identity** → RED 2/7 |
+| M48 | toggle walk for every pointer, not on the 0 -> 1 transition | 12.5 | RED 1/8 |
+| M49 | open the level menu for every pointer that lands on pause | 12.5 | RED 1/8 |
+| M50 | drop a cell descriptor, as the circular count guard allowed | 12.17 | RED 1/7 |
 
-**Six rows reddened nothing, and all six were holes rather than mutations to drop.**
+**Seven rows reddened nothing, and all seven were holes rather than mutations to drop.**
+
+🔴 **M46 and M47, and the difference between them.** M46 was first written against
+`buildTouchAtlas.mjs` and went GREEN, which is not a hole: the gate reads the **committed PNGs**, so
+no edit to the tool can reach it without re-running the tool. That is the point of gating shipped
+bytes *(vault 3.1)*, and the mutation was rewritten as a byte edit — flatten every face to one alpha
+— which reds three tests and reproduces the exact 2.43:1 the review reported. M47 was a real hole:
+`touch-plate-ink.test.ts` asserted `ART_ALPHA * (PLATE_ALPHA / ART_ALPHA)` is `PLATE_ALPHA`, an
+algebraic identity that holds for every value of either constant. The product is now checked where
+one factor is a BYTE — the modal plate alpha in the shipped PNGs — and M47 reds two tests.
 
 🔴 **M39, twice.** The first version deleted `setDisplaySize` from `drawFace` and reddened
 nothing, because the image fake reported **0 × 0** and every size assertion was already failing
