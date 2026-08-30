@@ -25,7 +25,7 @@ than reinterpreted.
 | 12.7 | Nothing drawn or interactive on a desktop pointer | **PASS** | 12.7 in a `hasTouch:false` context; Phase 2 suite unregressed. |
 | 12.8 | Measured bounds inside the canvas, pairwise disjoint | **NOT MET — owner decision needed** | The five controls and the five menu rows pass at 10 viewports (M11 red 8/11, M11b 7/11, M29 2/21). The **completion zone is deliberately 64 px outside the canvas** and cannot satisfy the criterion as written. § 12.8. |
 | 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
-| 12.10 | The prompt appears iff a target falls under 44 CSS px | **PASS** | Viewport spec portrait rows; M8 red 2/11. |
+| 12.10 | The prompt appears iff a target falls under 44 CSS px | **NOT MET — owner decision needed** | The prompt and every route now share ONE predicate (M31 red 1/9), so they cannot disagree. But that predicate includes the PLAY controls, so a portrait phone shows the prompt on the title screen whose own target is 390 × 219 CSS px — which is decision **D1**, and not what 12.10's wording says. § 12.10. |
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
@@ -34,22 +34,46 @@ than reinterpreted.
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Five shipped 160x160 PNGs, five distinct silhouettes | **NOT MET** | No art was adopted. `docs/generations/phase-12-touch-plate.md`. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 2 rows, $0.30 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 37 rows; 5 holes found, all closed. M22–M31 cover the three Codex rounds. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 39 rows; 5 holes found, all closed. M22–M33 cover the four Codex rounds. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Four criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
+**Five criteria are NOT MET and three are UNRUN, so the phase is reported FAILING.** 12.11's
 statistic cannot detect the regression it names; 12.17 and 12.14 both have no adopted artifact to
-check; **12.8 needs an owner decision** (below); 12.13 and 12.24 are the owner's and cannot be closed
+check; **12.8 and 12.10 each need an owner decision** (below); 12.13 and 12.24 are the owner's and cannot be closed
 from here; 12.23 is the Codex implementation review, which returned `REVISE` twice and is re-running
 on the repaired diff. Every other row passed, several only after a repair.
 
 🔴 **12.14 was recorded as “PASS for the grey-box — art UNRUN” and the Codex implementation review
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder
 that stands where the art would be. The measurement is real and is kept below; the verdict is not.
+
+### 🔴 12.10 — the prompt is right and the criterion's wording is wrong, and that is an owner call
+
+12.10 says the prompt appears **iff** a live measured target falls under 44 CSS px. On a portrait
+phone at the title screen, the only live target is the full-screen title zone at **390 × 219 CSS
+px** — over every floor — and the prompt appears anyway, because `rotatePromptWanted` also weighs the
+five play controls, which would be 32.5 CSS px.
+
+**That is decision D1 working as intended.** The game is unplayable in portrait; a player who taps
+past the title only to meet the prompt one screen later has been told to rotate a screen too late.
+And the route under the prompt has to be dead while the prompt covers it, which was the round-1
+BLOCKER. Both halves come from the same predicate, and `M22`/`M31` red on either being dropped.
+
+So the code is what D1 asks for and 12.10's *iff* is the sentence that is wrong. **Withdrawing the
+behaviour to satisfy the wording would be a product regression; quietly rewording the criterion is
+the move this project forbids.** NOT MET until the owner picks:
+
+1. **Amend 12.10** to *"the prompt appears iff any target that would have to be hittable on this
+   screen — the screen's own route and the play controls — falls under 44 CSS px"*. That is what
+   ships, what D1 asks for, and what the shared predicate computes.
+2. **Narrow the prompt to each screen's own targets**, accepting that a portrait phone reaches the
+   level menu before anything says to rotate.
+
+Recommendation: **1**.
 
 ### 🔴 12.8 — the completion zone cannot satisfy the criterion as written, and that is an owner call
 
@@ -172,10 +196,14 @@ controls. Between those two numbers the rows were under-floor, fully interactive
 **Applied, both halves.** `TOUCH_MENU_ROW_H_PX` is now `TOUCH_BOX_PX`, so the two target sets share
 one threshold by construction and the blind band cannot exist; the band's margins pay for it — five
 rows at 160 plus four gaps at 32 is 928 of the 930 that 90 and 60 leave. And `attachTapRoutes` runs
-`touchTargetsFit` over **its own targets** rather than over the play controls, which also closes a
-second finding: a full-screen title zone, 334 CSS px wide at 200 % browser zoom and seven times any
-floor, went dead because a button not on that screen would have been too small (WCAG 1.4.4). Three
+`rotatePromptWanted` — which weighs its own targets **as well as** the play controls. Three
 chrome-reduced viewports are now in the matrix.
+
+⚠️ **An earlier version of this paragraph claimed the 200 % browser-zoom title case was repaired by
+gating on the route's own targets alone. It was not, and the claim is withdrawn.** That version
+re-opened the tap-through the round-1 BLOCKER named; the two-term predicate is what shipped, and it
+still blocks a large title zone whenever the play controls would be too small. That is deliberate
+— see § 12.10 — but it is not what the sentence said.
 
 Also applied: the locked-row ink (**2.64:1** at 11.8 CSS px — and four of five rows are locked on
 first launch, with the word `locked`, the only thing explaining why a tap does nothing, in the ink

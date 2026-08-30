@@ -164,6 +164,8 @@ papered over.
 | M29 | stack the level rows at half pitch, so every pair overlaps | 12.8, 12.9 | RED 2/21 |
 | M30 | make the `LevelSelect` start latch a field initialiser again | 12.6 | RED 1/11 |
 | M31 | give `RotatePrompt` the play controls only, so a small route is silently dead | 12.10 | RED 1/9 |
+| M32 | stop re-placing the prompt on a design-size change | 12.19 | RED 1/10 |
+| M33 | drop the zero-scale guard, so a collapsed canvas emits an `Infinity` font size | 12.19 | RED 1/10 |
 
 **Five rows reddened nothing, and all five were holes rather than mutations to drop.**
 
