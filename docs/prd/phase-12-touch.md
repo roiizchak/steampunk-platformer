@@ -192,8 +192,21 @@ papered over.
 | M57 | paint the keyline over transparent pixels too | 12.14 | **GREEN twice — the fixture could not reach the guard** → RED 1/6 |
 | M58 | make the OUTER brass opaque, leaving the modal alpha where it was | 12.14 | RED 1/7, at alpha 255 against a baked 165 |
 | M59 | fade the whole `walk` engraving except 32 pixels | 12.14, 12.17 | RED 2/7 |
+| M60 | erase `walk`'s 4 112 mark pixels to baked brass, keeping two 4x4 ink cells | 12.14, 12.17 | **GREEN — the mask shrank with the damage** → RED 3/8 |
+| M61 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone | 12.17 | **GREEN — the bound was one-sided** → RED 2/8 |
+| M62 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and opaque | 12.17 | **GREEN — classified as neither ink nor plate** → RED 2/8 |
+| M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for |
 
-**Fourteen rows reddened nothing, and all fourteen were holes rather than mutations to drop.**
+**Seventeen rows reddened nothing, and all seventeen were holes rather than mutations to drop.**
+
+🔴 **M60, M61 and M62 are one defect three times: every gate was reading its oracle off the file it
+was judging.** The alpha invariant decided what was "ink" by luminance and the contrast gate decided
+where the "mark" was by opacity — both discovered from the mutated bytes, so damage that removed
+pixels from the mask was invisible to the mask. Codex round-11. The pipeline's own mark mask is
+committed now (`tests/fixtures/touch-cut/`), every gate takes it from there, and a reproduction gate
+recomputes the whole pipeline over it and demands the shipped bytes back. **M63 is the reason the
+property gates stay**: a pipeline change that is faithfully re-cut leaves the reproduction gate green
+and reds the per-pixel alpha invariant.
 
 🔴 **M58 and M59 are the two shapes a "measured" gate lets through.** The plate-alpha check read only
 the MODAL translucent alpha, so making 9 717 outer brass pixels fully opaque — a plate that hides the

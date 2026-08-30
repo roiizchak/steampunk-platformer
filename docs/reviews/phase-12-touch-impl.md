@@ -105,5 +105,15 @@ locally before being acted on, and one did not survive that check).
 | 4 | MEDIUM | Two bounds in the gates are mine and not the criteria's — a test quietly enforcing more than an approved rule is the STOP-and-ask CLAUDE.md § 3 names | **Applied.** `MIN_DIFFERING_SHARE` 0.15 → 0 and the 1.3× thickening ratio → > 1, both with today's measurements (70.4–82.9 %, ~1.78×) kept in the tests' prose and written up as owner decisions in the QA log. |
 | 5 | LOW | Stale figures in four files | **Applied.** Swept. |
 
+## Round 11 — `VERDICT: REVISE`
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | HIGH | **M59 does not prove the mark survived.** The contrast gate derives its mark mask from the already-mutated output, so replacing 4 104 of `walk`'s mark pixels with baked brass while preserving two 4 x 4 ink cells leaves two true-size mark pixels, scores 3.09:1, violates no alpha invariant, and raises "distinctness" to 99.6 % | **Applied.** Reproduced. The mask comes from the committed cut face now, and a reproduction gate recomputes the whole pipeline over it and demands the shipped bytes back. M60 red 3/8. |
+| 2 | HIGH | **The ±1 brass invariant has no lower bound** — it asserts only `alpha <= baked + 1`, so setting all 11 956 moderate-luminance pixels of `pause` to alpha 1 (a plate that has effectively disappeared) violates nothing | **Applied.** Two-sided and exact: every non-mark pixel must be `round(cutAlpha * PLATE_ALPHA / ART_ALPHA)`, tied to the two alphas the SCENE draws with. M61 red 2/8. |
+| 3 | HIGH | **The central-region narrowing leaves outside pixels unclassified** — an extreme-luminance pixel outside the mark square is checked as neither ink nor plate, 2 657–2 976 of them a face, so repainting arbitrary outer regions dark and opaque evades M58 | **Applied, and it changed the art.** `bakePlateAlpha` is keyed on the mark mask instead of on luminance, so the disc's own dark bezel fades with the rest of the plate; every pixel outside the mark now measures at or below the baked 165. M62 red 2/8. |
+| 4 | MEDIUM | **"True on-screen size" is a proxy presented as runtime evidence** — production uses the browser's `image-rendering: auto` at fractional scale, and nothing proves it uses this repository's box filter | **Applied as a label, not as a measurement.** The QA row now says the figure is a box-filter proxy and names what is still open. Measuring rendered screenshot pixels in a 667 × 325 browser arm is the stronger form and is not done; it is recorded as the agent's call under 12.14. |
+| 5 | LOW | The prose sweep is incomplete — obsolete alpha shares, "1 px keyline", contradictory keyline figures, a stale modal-alpha explanation, obsolete 91.4–96.2 % distinctness | **Applied**, and re-measuring for it found one more: `BOLD_PX` 1, 2, 3 and 4 all reach 3.32:1 now, so the claim that the contrast figure chose 2 is withdrawn and the choice is recorded as a judgement. |
+
 **Nothing was silently dropped** *(C11)*. Two findings are recorded-not-applied with the reason above;
 one did not survive local verification and is recorded as unconfirmed.
