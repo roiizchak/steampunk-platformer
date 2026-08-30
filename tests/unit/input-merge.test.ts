@@ -183,3 +183,29 @@ describe('readHeldKeys', () => {
     });
   });
 });
+
+describe('the walk latch reaches the sim', () => {
+  it('ORs the touch latch with SHIFT, so neither source silently wins', () => {
+    // ✅ Owner request. `walkHeld` had no touch source at all — stated in the plan rather than
+    // discovered, but still a gap: `walkMax / runMax` is 0.400, a 60 % speed change, and without a
+    // touch source the `walk` player state is unreachable on a phone, which makes
+    // `brass-courier/walk` dead art on every touch device.
+    for (const [key, touch, want] of [
+      [false, false, false],
+      [true, false, true],
+      [false, true, true],
+      [true, true, true],
+    ] as const) {
+      const input = createSnapshot();
+      applyHeld(input, { ...NO_KEYBOARD_HELD, walkHeld: key }, { ...NO_TOUCH_HELD, walk: touch });
+      expect(input.walkHeld, `SHIFT ${key} + plate ${touch}`).toBe(want);
+    }
+  });
+
+  it('leaves walkHeld false when there is no touch source at all', () => {
+    const input = createSnapshot();
+    applyHeld(input, NO_KEYBOARD_HELD, null);
+    expect(input.walkHeld).toBe(false);
+  });
+});
+

@@ -127,6 +127,8 @@ interface Control {
 
 export class TouchControlsLayer {
   private readonly contacts = new TouchContacts();
+  /** The walk/run latch. Not a contact — see `held()`. */
+  private walking = false;
   private controls: Control[] = [];
   private binding: TouchBinding | null = null;
   private isLive = false;
@@ -143,12 +145,16 @@ export class TouchControlsLayer {
    */
   private setPressed(id: TouchId, pressed: boolean): void {
     const control = this.controls.find((c) => c.id === id);
-    control?.faces[0]?.setAlpha(pressed ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
+    control?.faces[0]?.setAlpha(this.litFor(id, pressed) ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
   }
 
   /** Every control back to rest. Runs on every loss path, so no plate can be left lit. */
   private clearPressed(): void {
-    for (const control of this.controls) control.faces[0]?.setAlpha(PLATE_ALPHA);
+    // ⚠️ Through `litFor`, so the walk plate keeps its latched look. A loss path lifts every
+    // FINGER; it does not un-choose a gait.
+    for (const control of this.controls) {
+      control.faces[0]?.setAlpha(this.litFor(control.id, false) ? PLATE_ALPHA_PRESSED : PLATE_ALPHA);
+    }
   }
 
   private readonly onRelease = (pointer: PointerLike): void => {
@@ -176,7 +182,15 @@ export class TouchControlsLayer {
   }
 
   held(): TouchHeld {
-    return this.contacts.snapshot();
+    // 🔴 The latch is merged here, not in `TouchContacts`. `walk` is not a finger: it survives the
+    // release that clears every contact, and it must survive BLUR, HIDDEN and a level transition
+    // too — a player who chose to walk has not changed their mind because the tab lost focus.
+    return { ...this.contacts.snapshot(), walk: this.walking };
+  }
+
+  /** Is the walk latch engaged? Read by the gate; the plate's lit state is the player's copy. */
+  get walkLatched(): boolean {
+    return this.walking;
   }
 
   /**
@@ -357,7 +371,19 @@ export class TouchControlsLayer {
     if (id === 'jump') latchJumpPress(this.binding.input$);
     else if (id === 'attack') latchAttackPress(this.binding.input$);
     else if (id === 'pause') this.binding.openLevelSelect();
+    else if (id === 'walk') this.walking = !this.walking;
     // `left` and `right` are levels; `TouchContacts` already holds them and `applyHeld` reads them.
+  }
+
+  /**
+   * The lit state of one plate, which is not the same question as "is a finger on it".
+   *
+   * For five controls it is: lit while held. For `walk` it is the LATCH, so the plate stays lit
+   * after the finger leaves — which is the whole point of a toggle, and the only place the game
+   * tells the player which gait they are in.
+   */
+  private litFor(id: TouchId, held: boolean): boolean {
+    return id === 'walk' ? this.walking : held;
   }
 }
 

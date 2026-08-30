@@ -42,15 +42,25 @@ export interface KeyboardHeld {
 /**
  * What the on-screen controls are holding this frame.
  *
- * Three fields, not four: **there is no walk button**, so a touch player always runs. Stated here
- * rather than left to be discovered from an absence — a `walkHeld` in this record would imply a
- * control that does not exist. Attack is absent for a different reason: it is an edge, and edges do
- * not travel through this file at all.
+ * 🔴 **`walk` is a LATCH, not a contact, and it is the one field here that is not a finger.** The
+ * other three are true while a thumb is down. Holding a sixth button to walk would need a thumb the
+ * player does not have — SHIFT is free on a keyboard and is not on a phone — so the walk control
+ * toggles, and the plate stays lit while it is engaged. That lit plate is the only place the game
+ * says which gait it is in, which is why the toggle and its feedback landed together.
+ *
+ * ⚠️ This interface used to say *"there is no walk button, so a touch player always runs"*, which
+ * was true and was a gap: SHIFT is a shipped control the help banner advertises, `walkMax / runMax`
+ * is 0.400 — a 60 % speed change — and without it the `walk` player state is unreachable on a
+ * phone, which makes `brass-courier/walk` dead art on every touch device. Owner request.
+ *
+ * Attack is absent for a different reason: it is an edge, and edges do not travel through this file
+ * at all.
  */
 export interface TouchHeld {
   left: boolean;
   right: boolean;
   jump: boolean;
+  walk: boolean;
 }
 
 /**
@@ -71,6 +81,7 @@ export const NO_TOUCH_HELD: Readonly<TouchHeld> = Object.freeze({
   left: false,
   right: false,
   jump: false,
+  walk: false,
 });
 
 /**
@@ -87,8 +98,9 @@ export function applyHeld(
   input.left = keyboard.left || t.left;
   input.right = keyboard.right || t.right;
   input.jumpHeld = keyboard.jumpHeld || t.jump;
-  // No touch source, by design — see `TouchHeld`.
-  input.walkHeld = keyboard.walkHeld;
+  // ✅ There IS a touch source now: the walk plate is a latch, not a contact. Same OR as the other
+  // three, so SHIFT and the plate agree rather than one silently winning.
+  input.walkHeld = keyboard.walkHeld || t.walk;
 }
 
 /**

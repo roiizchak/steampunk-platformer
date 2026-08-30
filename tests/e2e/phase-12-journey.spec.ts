@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { drawnOverlay } from './completeHelpers';
 import { readPlayer } from './gameHarness';
 import { TOUCH_MIN_CSS_PX } from '../../src/render/touchLayout';
@@ -198,7 +199,9 @@ test('12.1 the whole journey, driven only by touch', async ({ page }) => {
   // 12.6 rides along here: a level transition must rebind the session rather than stack a second
   // copy of everything or leave the controls pointing at the finished level's snapshot.
   const nextZones = await drawnZones(page, 'UI');
-  expect(nextZones.length, 'the level transition duplicated or dropped the controls').toBe(5);
+  expect(nextZones.length, 'the level transition duplicated or dropped the controls').toBe(
+    TOUCH_IDS.length,
+  );
   for (const z of nextZones) {
     expect(z.interactive, `${z.name} is dead on the second level`).toBe(true);
   }

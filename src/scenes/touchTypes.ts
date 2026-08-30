@@ -94,6 +94,8 @@ export interface TouchSceneLike {
       fillColor?: number,
       fillAlpha?: number,
     ): TouchFaceLike;
+    /** The gear's body and hub, and the wrench's ring. A shape a rectangle cannot fake. */
+    circle(x: number, y: number, radius: number, fillColor?: number, fillAlpha?: number): TouchFaceLike;
   };
   input: EmitterLike;
   game: { events: EmitterLike };

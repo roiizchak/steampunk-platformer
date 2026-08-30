@@ -131,7 +131,7 @@ describe('TouchControlsLayer feeds the sim through the existing doors', () => {
     const { scene, input$, layer } = live();
     scene.press('attack', 1);
     expect(input$.attackPressed).toBe(true);
-    expect(layer.held()).toEqual({ left: false, right: false, jump: false });
+    expect(layer.held()).toEqual({ left: false, right: false, jump: false, walk: false });
   });
 
   it('holds a movement level without ever touching an edge', () => {
@@ -196,8 +196,51 @@ describe('TouchControlsLayer goes quiet when it must', () => {
       left: false,
       right: false,
       jump: false,
+      // ⚠️ `walk` is a LATCH, not a contact — it is false here because it was never engaged, not
+      // because cancelling cleared it. The case below is the one that asserts a loss path leaves it
+      // alone.
+      walk: false,
     });
     expect(layer.held().right).toBe(false);
+  });
+
+  it('keeps the walk LATCH through a loss path that clears every contact', () => {
+    // ✅ Owner request, and the reason it is a latch rather than a held button: SHIFT is free on a
+    // keyboard and there is no spare thumb on a phone. A latch that a lost focus, a pause or a level
+    // transition silently cancelled would put the player back into a run they did not ask for — and
+    // the plate would go dark, which is the only place the game says which gait it is in.
+    const { scene, layer } = live();
+    scene.press('walk', 1);
+    scene.releasePointer(1);
+    expect(layer.held().walk, 'the toggle did not engage').toBe(true);
+    expect(layer.walkLatched).toBe(true);
+
+    scene.press('right', 2);
+    scene.playerInputEnabled = false;
+    layer.refresh();
+    expect(layer.held().right, 'a contact survived the loss path').toBe(false);
+    expect(layer.held().walk, 'a loss path un-chose the gait the player picked').toBe(true);
+
+    // And tapping it again turns it off, which is what makes it a toggle rather than a one-way trip.
+    scene.playerInputEnabled = true;
+    layer.refresh();
+    scene.press('walk', 3);
+    expect(layer.held().walk, 'the toggle would not turn off').toBe(false);
+  });
+
+  it('leaves the walk plate LIT while the latch is engaged, and only that plate', () => {
+    const { scene, layer } = live();
+    const alphaOf = (id: string): number =>
+      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === id)[0].alpha;
+    const rest = alphaOf('walk');
+    scene.press('walk', 1);
+    scene.releasePointer(1);
+    expect(alphaOf('walk'), 'the walk plate went dark the moment the finger left').toBeGreaterThan(rest);
+    expect(alphaOf('jump'), 'an unrelated plate lit up').toBe(rest);
+
+    // A loss path lifts every FINGER; it does not un-choose a gait, so the plate must stay lit.
+    layer.destroy();
+    expect(layer.held().walk, 'destroy cancelled the latch').toBe(true);
   });
 
   it('hides and disables when the game pauses under the welcome screen', () => {

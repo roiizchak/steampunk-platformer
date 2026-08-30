@@ -45,7 +45,7 @@ import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
  * sim field: it is a touch target, it must clear the same size floor, and it must not overlap the
  * others.
  */
-export const TOUCH_IDS = ['left', 'right', 'attack', 'jump', 'pause'] as const;
+export const TOUCH_IDS = ['left', 'right', 'attack', 'jump', 'pause', 'walk'] as const;
 
 export type TouchId = (typeof TOUCH_IDS)[number];
 
@@ -155,14 +155,16 @@ export function touchLayout(viewWidth: number, viewHeight: number): TouchTarget[
 
   const at = (id: TouchId, x: number, y: number): TouchTarget => ({ id, x, y, w: box, h: box });
 
-  // Movement under the left thumb, actions under the right, pause out of both thumbs' way. The
-  // order matches TOUCH_IDS so a caller can zip the two lists.
+  // Movement under the left thumb, actions under the right, and the two that are not part of a
+  // running fight — pause and the walk/run toggle — in the top corners, out of both thumbs' way.
+  // The order matches TOUCH_IDS so a caller can zip the two lists.
   return [
     at('left', edge, bottom),
     at('right', edge + box + gap, bottom),
     at('attack', rightmost - box - gap, bottom),
     at('jump', rightmost, bottom),
     at('pause', rightmost, edge),
+    at('walk', edge, edge),
   ];
 }
 

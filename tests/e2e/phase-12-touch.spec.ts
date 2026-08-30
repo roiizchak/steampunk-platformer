@@ -256,6 +256,52 @@ test.describe('the controls stop being touchable when they must not be touched',
 
 });
 
+test.describe('the walk latch', () => {
+  test('12.4b the walk plate actually slows the player, and stays latched', async ({ page }) => {
+    // ✅ Owner request, and the gate that makes it real rather than drawn. `walkHeld` had NO touch
+    // source: a phone player always ran, `walkMax / runMax` is 0.400, and the `walk` player state
+    // — and so `brass-courier/walk` — was unreachable on every touch device.
+    //
+    // 🔴 Measured as DISTANCE PER TICK from the sim, not as a state name: a build that set the
+    // flag and changed no speed would pass a state assertion and fail a player.
+    await bootToTouchPlay(page);
+    const rect = await canvasRect(page);
+    const right = centreOf(rect, await drawnZone(page, UI, 'right'));
+    const walk = centreOf(rect, await drawnZone(page, UI, 'walk'));
+
+    const travel = async (id: number): Promise<number> => {
+      const from = (await readPlayer(page)).x;
+      await contactDown(page, id, right.x, right.y);
+      await waitTicks(page, 40);
+      const to = (await readPlayer(page)).x;
+      await contactUp(page, id);
+      await waitTicks(page, 20);
+      return to - from;
+    };
+
+    const running = await travel(41);
+    expect(running, 'the player did not move at all, so this measures nothing').toBeGreaterThan(8);
+
+    await contactDown(page, 42, walk.x, walk.y);
+    await contactUp(page, 42);
+    // The finger is GONE and the latch has to survive it — that is the difference between a toggle
+    // and a button nobody has a spare thumb for.
+    const walking = await travel(43);
+    expect(walking, 'the player stopped instead of walking').toBeGreaterThan(0);
+    expect(
+      walking,
+      `walking covered ${walking.toFixed(1)} px in 40 ticks against ${running.toFixed(1)} running — ` +
+        'the plate set a flag the sim does not read',
+    ).toBeLessThan(running * 0.8);
+
+    // And off again.
+    await contactDown(page, 44, walk.x, walk.y);
+    await contactUp(page, 44);
+    const again = await travel(45);
+    expect(again, 'the toggle would not turn off').toBeGreaterThan(running * 0.8);
+  });
+});
+
 test.describe('desktop is untouched', () => {
   test('12.7 a browser with no touch draws no control at all', async ({ browser }) => {
     // 🔴 Not "hidden" and not "disabled" — ABSENT. An invisible interactive object still swallows

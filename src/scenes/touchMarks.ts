@@ -173,6 +173,15 @@ export function drawMarks(
     out.push(face);
   };
 
+  const disc = (x: number, y: number, radius: number, fill: number): void => {
+    out.push(
+      scene.add
+        .circle(x, y, radius, fill, 1)
+        .setName(target.id)
+        .setDepth(TOUCH_FACE_DEPTH),
+    );
+  };
+
   const o = COUNTER_STROKE_PX;
   const shadow = SHADOW_INK;
   const ink = MARK_INK;
@@ -184,14 +193,55 @@ export function drawMarks(
     // The shadow copy is drawn first and nudged, so the light mark sits inside a dark keyline.
     out[0].setPosition(o, o);
   } else if (target.id === 'attack') {
-    for (const angle of [45, -45]) {
-      rect(cx + o, cy + o, r * 2, bar, shadow, angle);
-      rect(cx, cy, r * 2, bar, ink, angle);
+    // ✅ **A wrench — the courier's own tool**, at the owner's request. It was two crossed bars,
+    // which reads as "attack" and as nothing in this game in particular; the character carries a
+    // wrench, so the button carries the same wrench.
+    //
+    // Drawn along the up-right diagonal from unit heading `d`, in the two inks the plate needs:
+    // handle, open jaw with a notch cut out of it in the counter ink, and a ring at the other end.
+    // At the worst in-scope scale the plate is 55.6 CSS px, so the shapes are deliberately few and
+    // fat — a finely detailed wrench is a smudge at that size.
+    const d = Math.SQRT1_2;
+    for (const [ox, tone] of [
+      [o, shadow],
+      [0, ink],
+    ] as const) {
+      rect(cx + ox, cy + ox, r * 1.9, bar, tone, -45);
+      // The open jaw: a fat block at the head end.
+      rect(cx + d * r * 0.9 + ox, cy - d * r * 0.9 + ox, bar * 2, bar * 1.9, tone, -45);
+      // The ring at the handle end.
+      disc(cx - d * r * 0.9 + ox, cy + d * r * 0.9 + ox, bar * 0.95, tone);
     }
+    // The two holes, cut in the counter ink so the shape reads as a WRENCH and not as a mallet:
+    // the notch between the jaws, and the eye of the ring.
+    rect(cx + d * r * 1.25, cy - d * r * 1.25, bar * 1.35, bar * 0.85, shadow, -45);
+    disc(cx - d * r * 0.9, cy + d * r * 0.9, bar * 0.42, shadow);
+  } else if (target.id === 'pause') {
+    // ✅ **A gear**, at the owner's request — it was two bars, the universal pause glyph, on a
+    // button that opens the level menu rather than pausing. A gear is what this game's settings
+    // look like and it is the one shape in the whole style guide that needs no explaining.
+    const teeth = 6;
+    for (const [ox, tone] of [
+      [o, shadow],
+      [0, ink],
+    ] as const) {
+      disc(cx + ox, cy + ox, r * 0.72, tone);
+      for (let i = 0; i < teeth; i += 1) {
+        const a = (i * 180) / teeth;
+        rect(cx + ox, cy + ox, r * 1.9, bar * 1.15, tone, a);
+      }
+    }
+    // The hub, in the counter ink: without it a toothed disc reads as a sun.
+    disc(cx, cy, r * 0.3, shadow);
   } else {
-    for (const side of [-1, 1]) {
-      rect(cx + side * bar + o, cy + o, bar, r * 1.8, shadow, 0);
-      rect(cx + side * bar, cy, bar, r * 1.8, ink, 0);
+    // The walk/run latch. Two bars, short over long — a gait selector rather than a glyph, because
+    // the STATE is carried by the plate staying lit and the mark only has to name the control.
+    for (const [ox, tone] of [
+      [o, shadow],
+      [0, ink],
+    ] as const) {
+      rect(cx + ox, cy - bar * 0.9 + ox, r * 0.9, bar, tone, 0);
+      rect(cx + ox, cy + bar * 0.9 + ox, r * 1.8, bar, tone, 0);
     }
   }
   return out;

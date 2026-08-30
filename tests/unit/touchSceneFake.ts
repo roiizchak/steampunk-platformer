@@ -106,7 +106,7 @@ export function makeTouchScene(): TouchSceneHarness {
     gameStatusRunning: true,
     levelSelectOpened: 0,
     heldAtDisable: null,
-    readHeld: () => ({ left: false, right: false, jump: false }),
+    readHeld: () => ({ left: false, right: false, jump: false, walk: false }),
     press: () => {},
     releasePointer: () => {},
     fireGameEvent: () => {},
@@ -140,6 +140,8 @@ export function makeTouchScene(): TouchSceneHarness {
         makeFace(x, y, w, h2, a),
       text: (x: number, y: number) => makeFace(x, y),
       triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
+      circle: (x: number, y: number, r: number, _fill?: number, a?: number) =>
+        makeFace(x, y, r * 2, r * 2, a),
       image: () => {
         throw new Error(
           'add.image was called, but textures.exists() is false in this fake — the layer took the ' +

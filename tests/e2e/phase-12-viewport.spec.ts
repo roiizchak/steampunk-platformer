@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { TOUCH_MIN_CSS_PX, TOUCH_MIN_GAP_CSS_PX } from '../../src/render/touchLayout';
+import { TOUCH_IDS, TOUCH_MIN_CSS_PX, TOUCH_MIN_GAP_CSS_PX } from '../../src/render/touchLayout';
 import {
   bootToTouchPlay,
   canvasRect,
@@ -75,7 +75,7 @@ for (const vp of VIEWPORTS) {
 
     const rect = await canvasRect(page);
     const zones = await drawnZones(page, 'UI');
-    expect(zones.length, 'the controls were never built on a touch device').toBe(5);
+    expect(zones.length, 'the controls were never built on a touch device').toBe(TOUCH_IDS.length);
 
     if (vp.expectPrompt) {
       // 12.10 — the prompt appears IFF a live target would fall under the floor, and the controls
@@ -103,7 +103,7 @@ for (const vp of VIEWPORTS) {
     ).toBe(false);
 
     const targets = await measuredTargets(page, 'UI');
-    expect(targets.length, 'no live target survived to be measured').toBe(5);
+    expect(targets.length, 'no live target survived to be measured').toBe(TOUCH_IDS.length);
 
     for (const t of targets) {
       // Type before value, every field, every time.

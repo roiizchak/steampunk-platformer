@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { assertRealGpu } from './realGpu';
 import {
   bootToTouchPlay,
@@ -23,7 +24,7 @@ import {
  * ## The statistic is FRAMES SERVED, not a percentile
  *
  * A percentile is blind to exactly the failure this phase could cause. The controls are ten DRAWN
- * objects and five non-drawing zones; if they cost anything it is a small, constant, per-frame cost —
+ * objects and one non-drawing zone per control; if they cost anything it is a small, constant, per-frame cost —
  * and at ~240 fps against a 60 Hz sim, a p95 taken over the same window moved by 0.3 ms while a
  * 30 ms stall went unseen (the Phase 9 lesson). Frames served over a fixed wall-clock window counts
  * every frame, so a per-frame cost shows up as fewer of them.
@@ -68,7 +69,7 @@ import {
  *
  * ## The precondition that makes the arms mean anything
  *
- * 🔴 The touch arm asserts **all five controls are drawn and interactive** before timing starts.
+ * 🔴 The touch arm asserts **every control is drawn and interactive** before timing starts.
  * Without it, a build where the controls silently failed to appear would report the budget
  * unregressed for the most persuasive possible wrong reason.
  *
@@ -140,7 +141,7 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     // 🔴 The precondition. Time nothing until the thing being measured is on screen.
     const drawn = await drawnZones(withControls, 'UI');
     expect(drawn.length, 'the touch arm has no controls, so it is not the arm it claims to be').toBe(
-      5,
+      TOUCH_IDS.length,
     );
     // 🔴 Zones are HITTABILITY. A `Zone` renders nothing — `touchMeasure.ts` says so in as many
     // words — so the assertion above cannot tell a drawn arm from an undrawn one. Delete the
