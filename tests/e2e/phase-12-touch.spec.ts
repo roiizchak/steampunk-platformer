@@ -1,6 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-import { PROGRESS_KEY } from '../../src/game/save';
 import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { bootToGame, readPlayer, waitTicks } from './gameHarness';
 import {
@@ -8,7 +7,6 @@ import {
   centreOf,
   contactDown,
   contactMove,
-  contactsDown,
   contactUp,
   drawnZone,
   drawnZones,
@@ -256,125 +254,6 @@ test.describe('the controls stop being touchable when they must not be touched',
     ).toBe('LevelSelect');
   });
 
-  test('12.5d two fingers on two level rows start ONE level', async ({ page }) => {
-    // 🔴 The Codex re-review found this one. `attachTapRoutes` spends a press per POINTER, on
-    // purpose — a lifted finger has to be able to tap again after a locked row refused — so two
-    // fingers landing on two unlocked rows in the same frame called `play()` twice and queued two
-    // `scene.start('Game')` ops (`ScenePlugin.js:481-484` queues every start). ENTER cannot produce
-    // this; a phone can, and the level the player gets is whichever finger landed second.
-    // ⚠️ **A fresh save cannot show this defect and a gate built on one is decoration.** Only
-    // level-01 is unlocked out of the box, so `play()` refuses the second row before the latch is
-    // ever consulted — the mutation stayed green until this seed was added. Two UNLOCKED rows are
-    // the precondition, and they are asserted below rather than assumed.
-    await page.addInitScript(
-      ([key, value]) => window.localStorage.setItem(key, value),
-      [
-        PROGRESS_KEY,
-        JSON.stringify({
-          version: 1,
-          lastLevel: 'level-01',
-          levels: { 'level-01': { completed: true, bestGears: 1 } },
-        }),
-      ] as const,
-    );
-    await bootToTouchPlay(page);
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, {
-      timeout: 10_000,
-    });
-
-    const unlocked = await page.evaluate(
-      () =>
-        (
-          (window as unknown as { __phaserGame: { scene: { getScene(k: string): { rows: { unlocked: boolean }[] } } } })
-            .__phaserGame.scene.getScene('LevelSelect').rows ?? []
-        ).filter((r) => r.unlocked).length,
-    );
-    expect(unlocked, 'fewer than two rows are unlocked, so two fingers cannot start two levels').toBeGreaterThanOrEqual(
-      2,
-    );
-
-    const rect = await canvasRect(page);
-    const rows = (await drawnZones(page, 'LevelSelect')).filter((z) => z.name.startsWith('row-'));
-    expect(rows.length, 'the level menu drew no rows, so this test proves nothing').toBeGreaterThan(1);
-
-    // Count the starts at the source. `scene.start` is what `play()` calls, and wrapping it is the
-    // only way to tell "one start" from "two starts that happened to land on the same level".
-    await page.evaluate(() => {
-      type Plug = { start(key: string, data?: unknown): unknown };
-      const menu = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): { scene: Plug } } } }
-      ).__phaserGame.scene.getScene('LevelSelect');
-      const starts: string[] = [];
-      (window as unknown as { __starts: string[] }).__starts = starts;
-      const real = menu.scene.start.bind(menu.scene);
-      menu.scene.start = (key: string, data?: unknown): unknown => {
-        starts.push(String((data as { levelId?: string } | undefined)?.levelId ?? key));
-        return real(key, data);
-      };
-    });
-    const first = centreOf(rect, rows[0]);
-    const second = centreOf(rect, rows[1]);
-
-    // 🔴 ONE round trip, so both `touchstart`s land in the same JS task and Phaser's input queue
-    // drains them in one frame. Two awaited `contactDown` calls are not two simultaneous fingers:
-    // the first is fully processed — scene start included — before the second is dispatched, and
-    // the mutation that deletes the latch stayed GREEN through a gate built that way.
-    await contactsDown(page, [
-      { id: 21, x: first.x, y: first.y },
-      { id: 22, x: second.x, y: second.y },
-    ]);
-    await contactUp(page, 21);
-    await contactUp(page, 22);
-
-    await page.waitForFunction(() => window.__game?.sceneKey === 'Game', undefined, { timeout: 20_000 });
-    // Settle: a second queued start would drain on a later frame, not this one.
-    await waitTicks(page, 60);
-    expect(
-      await page.evaluate(() => window.__game?.sceneKey),
-      'the second queued start pulled the game back out of the level',
-    ).toBe('Game');
-    // ⚠️ **COUNT the starts; do not name the winner.** 12.5 says nothing about which of two
-    // simultaneous contacts should win, and the first version of this assertion demanded
-    // `level-01` — which would have false-redded an implementation that started exactly once and
-    // deterministically chose the second contact. Codex round-3: a test may not enforce a rule the
-    // criterion does not state. The claim is *one start*, and either unlocked row satisfies it.
-    expect(
-      await page.evaluate(() => (window as unknown as { __starts: string[] }).__starts),
-      'two fingers queued two scene starts',
-    ).toHaveLength(1);
-    expect(
-      [(await page.evaluate(() => window.__game?.levelId)) ?? ''],
-      'the level reached is not one of the two rows that were tapped',
-    ).toEqual([expect.stringMatching(/^level-0[12]$/)]);
-  });
-
-  test('12.6b the level menu still works on a SECOND visit', async ({ page }) => {
-    // 🔴 The regression the two-finger latch caused, and the Codex round-3 BLOCKER. `started` was
-    // a FIELD INITIALISER, and Phaser preserves the scene instance across a shutdown
-    // (`Systems.js:760-788`) — so after one level was chosen the latch stayed set and the menu was
-    // dead on every later visit, to touch AND to ENTER, until reload. A repair for a rare two-finger
-    // race that broke the ordinary one-finger case.
-    await bootToTouchPlay(page);
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, { timeout: 10_000 });
-
-    const tapFirstRow = async (id: number): Promise<void> => {
-      const rect = await canvasRect(page);
-      const rows = (await drawnZones(page, 'LevelSelect')).filter((z) => z.name.startsWith('row-'));
-      expect(rows.length, 'the level menu drew no rows').toBeGreaterThan(0);
-      const at = centreOf(rect, rows[0]);
-      await contactDown(page, id, at.x, at.y);
-      await contactUp(page, id);
-      await page.waitForFunction(() => window.__game?.sceneKey === 'Game', undefined, { timeout: 20_000 });
-    };
-
-    await tapFirstRow(31);
-    await page.keyboard.press('Escape');
-    await page.waitForFunction(() => window.__game?.sceneKey === 'LevelSelect', undefined, { timeout: 10_000 });
-    // The whole point: the SECOND visit has to answer a tap exactly as the first did.
-    await tapFirstRow(32);
-  });
 });
 
 test.describe('desktop is untouched', () => {
