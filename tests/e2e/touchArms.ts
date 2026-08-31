@@ -70,6 +70,19 @@ export async function assertArmsDiffer(touch: Page, bare: Page, label: string): 
     await drawnZones(bare, 'UI'),
     `${label}: the bare arm has touch controls, so the two arms are the same arm`,
   ).toEqual([]);
+
+  // 🔴 And NO FACES either. Zones are hittability and faces are pixels — the distinction this
+  // whole helper is built on — so "the bare arm has no zones" leaves the case where it draws six
+  // control images that nothing can tap. The delta would then be zero for the honest reason that
+  // both arms draw the controls, and the gate would report the feature costs nothing. Found by
+  // Codex mid-round-17, on the extraction that was meant to close exactly this class of hole.
+  const bareFaces = await drawnFaces(bare, 'UI');
+  const drawnBare = bareFaces.filter((f) => f.drawn && f.alpha > 0 && f.w > 0 && f.h > 0);
+  expect(
+    drawnBare.map((f) => f.name),
+    `${label}: the bare arm DRAWS control faces, so both arms pay for the controls and the delta ` +
+      'cannot see them',
+  ).toEqual([]);
 }
 
 export interface Arms {
