@@ -184,10 +184,8 @@ export function touchPlatePrompt(template) {
     //
     // Stated positively per STYLE.md section 6: `FLAT_GLYPH` is the same sentence the single-cell
     // path uses, so there is one description of what a glyph is and not two that agree today.
-    'EACH BUTTON: a circular Victorian brass control, cast and polished, with a raised riveted ' +
-      'bezel around the rim, a slightly domed face, visible patina in the recesses and a warm amber ' +
-      'highlight along the upper-left edge. Every button is the same size, the same brass and the ' +
-      'same lighting as every other.',
+    `EACH BUTTON: ${BUTTON_BODY}. Every button is the same size, the same metal, the same ` +
+      'scrollwork and the same lighting as every other.',
     '',
     FLAT_GLYPH,
     faces,
@@ -201,6 +199,31 @@ export function touchPlatePrompt(template) {
       'around the sheet, labels or numbers beside the buttons, a hand or finger.',
   ].join('\n');
 }
+
+/**
+ * **What a button is made of — one sentence, both prompts.**
+ *
+ * Owner decision 2026-08-31: *"I want new designs for all the buttons, in the style of the gate
+ * asset."* The gate (`public/assets/objects/gate.png`) is burnished copper pipework, an embossed
+ * brass arch and dense rivets on dark iron — rich, saturated and high contrast. The buttons it sits
+ * beside were pale washed-out beige discs with a thin bezel, which is the same family only in the
+ * sense that both are brownish.
+ *
+ * ⚠️ **The glyph stays DARK on a bright face, and that is deliberate.** A bright-brass mark on dark
+ * iron would look more like the gate's own inner panel, and it would invert the assumption the ink
+ * pipeline is built on: `touchInk.mjs` finds the mark with `luma < INK_DARK_MAX` inside the central
+ * half, and `keylineMarks`, `bakePlateAlpha`, six-way mark distinctness and the per-stroke contrast
+ * sweep all read that mask. Inverting the art would mean re-deriving six gates to buy a second
+ * option on the same look. The body gets the gate's material and lighting; the mark keeps its
+ * polarity.
+ */
+const BUTTON_BODY =
+  'a circular Victorian control cast in burnished copper and brass, richly saturated and lit for ' +
+  'high contrast: a heavy raised rim of polished copper carrying an embossed band of Victorian ' +
+  'scrollwork, a ring of closely spaced domed brass rivets set just inside that rim, a slightly ' +
+  'domed inner face of warm brushed brass, dark blue-green verdigris patina settled deep in every ' +
+  'recess and around every rivet, and a bright amber lamplight highlight along the upper-left edge ' +
+  'falling away to a deep shadowed lower-right';
 
 /**
  * The GLYPH clause for a single-button re-shoot, and the one sentence it does not inherit.
@@ -256,10 +279,8 @@ export function touchButtonPrompt(template, cell) {
     `BACKING SHEET: ${TOUCH_PLATE_CHROMA}, perfectly flat and evenly lit, filling every part of the ` +
       'image that is not the button.',
     '',
-    'THE BUTTON: a circular Victorian brass control, cast and polished, with a raised riveted ' +
-      'bezel around the rim, a slightly domed face, visible patina in the recesses and a warm amber ' +
-      'highlight along the upper-left edge. Keep the brass, the bezel, the patina and the lighting ' +
-      'exactly as they are in the reference image; change only the engraved glyph.',
+    `THE BUTTON: ${BUTTON_BODY}. Keep the metal, the rim, the scrollwork, the rivets, the patina ` +
+      'and the lighting exactly as they are in the reference image; change only the engraved glyph.',
     '',
     FLAT_GLYPH,
     `${cell.subject}, centred on the button face.`,

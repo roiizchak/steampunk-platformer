@@ -108,4 +108,29 @@ describe('touchButtonPrompt asks for ONE control, and not for shading', () => {
       true,
     );
   });
+
+  it('describes the BODY with one sentence too, and it is the gate asset material', () => {
+    // 🔴 The two prompts carried two near-identical copies of what a button is made of — the exact
+    // "two that agree today" shape the glyph clause was consolidated out of one round earlier. The
+    // redesign is the moment that matters: a body sentence changed in one prompt and not the other
+    // would put the whole-plate faces and every later single-cell re-shoot in different families,
+    // and the family gate would then correctly refuse the re-shoot for a defect in the prompt.
+    //
+    // Owner decision 2026-08-31: the buttons take the gate asset's material — burnished copper,
+    // embossed scrollwork, domed rivets, verdigris in the recesses — in place of the pale washed-out
+    // beige disc that shipped.
+    const plate = touchPlatePrompt(template);
+    const cell = touchButtonPrompt(template, TOUCH_PLATE_CELLS[0]!);
+    const body = 'burnished copper and brass, richly saturated and lit for high contrast';
+    expect(plate).toContain(body);
+    expect(cell).toContain(body);
+    for (const mark of ['embossed band of Victorian scrollwork', 'domed brass rivets', 'verdigris']) {
+      expect(plate, `the plate prompt lost "${mark}"`).toContain(mark);
+      expect(cell, `the single-cell prompt lost "${mark}"`).toContain(mark);
+    }
+    // And the pale disc it replaces is gone from both, not merely added to.
+    for (const prompt of [plate, cell]) {
+      expect(prompt).not.toContain('cast and polished, with a raised riveted');
+    }
+  });
 });
