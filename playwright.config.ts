@@ -274,7 +274,7 @@ export default defineConfig({
      * The Phase 12 frame budget, on the substrate that argument requires.
      *
      * 🔴 `hasTouch: true` here as well, and it is not a copy-paste. The controls render only on a
-     * touch device, so without it the "all five drawn" precondition fails before timing starts and
+     * touch device, so without it the "every control drawn" precondition fails before timing starts and
      * the arm being measured is a game with no controls in it — which would report the budget
      * unregressed for the most persuasive possible wrong reason. Named by the Codex plan review,
      * round 2, alongside the ignore-list finding above.

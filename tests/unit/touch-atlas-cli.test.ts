@@ -132,6 +132,12 @@ describe('the default build reads the cut faces and does not rewrite them', () =
       const bytes = readBytes(join(TOUCH_CUT_DIR, file));
       writeFileSync(join(dirs.cutDir, file), bytes);
       before.set(file, bytes);
+      // 🔴 Seed `outDir` TOO, and this is the repair. Staging only the cut directory left the
+      // shipped side empty, so a mutation that swept the other five faces out of `outDir` had
+      // nothing to delete and passed — the single-cell mode's whole promise, ungated. Codex round
+      // 14, finding 11. The bytes differ from the shipped faces (these are cuts, not inked faces)
+      // and that is fine: the claim is that five files SURVIVE untouched, not what they contain.
+      writeFileSync(join(dirs.outDir, file), bytes);
     }
     return { dirs, before };
   }
@@ -146,6 +152,10 @@ describe('the default build reads the cut faces and does not rewrite them', () =
     const written = main([], dirs);
 
     expect(written.length, 'one inked face per control').toBe(before.size);
+    expect(
+      readdirSync(dirs.outDir).sort(),
+      'the default build did not write one face per control',
+    ).toHaveLength(before.size);
     for (const p of written) {
       expect(
         p.startsWith(dirs.outDir),
@@ -163,7 +173,7 @@ describe('the default build reads the cut faces and does not rewrite them', () =
   it('CUTS in --cell mode, writing one key into both directories and sweeping neither', () => {
     // The positive half. Without a mode that does write `cutDir`, the assertion above passes on a
     // builder that can no longer cut at all.
-    const { dirs } = stage();
+    const { dirs, before } = stage();
     const source = join(dirs.outDir, '..', 'candidate.png');
     writeFileSync(source, syntheticCell(120));
 
@@ -173,7 +183,62 @@ describe('the default build reads the cut faces and does not rewrite them', () =
       join(dirs.cutDir, 'touch-attack.png'),
       join(dirs.outDir, 'touch-attack.png'),
     ]);
-    // 🔴 No sweep. A sweep here would delete the five faces the single-cell mode exists to spare.
-    expect(readdirSync(dirs.cutDir).sort(), 'the other five cuts were swept away').toHaveLength(6);
+    // 🔴 No sweep, in EITHER directory, and both are checked. The `outDir` half was unstaged and
+    // therefore untested: a mutation sweeping the five shipped faces the single-cell mode exists to
+    // spare passed a green suite. Codex round 14, finding 11.
+    for (const [dir, what] of [
+      [dirs.cutDir, 'cut'],
+      [dirs.outDir, 'shipped'],
+    ] as const) {
+      expect(readdirSync(dir).sort(), `the other five ${what} faces were swept away`).toHaveLength(6);
+    }
+    // And the five that were not asked for are byte-for-byte what they were.
+    for (const [file, bytes] of before) {
+      if (file === 'touch-attack.png') continue;
+      expect(
+        readBytes(join(dirs.outDir, file)),
+        `${file} changed — --cell touched a face it was not given`,
+      ).toEqual(bytes);
+      expect(
+        readBytes(join(dirs.cutDir, file)),
+        `${file}'s cut changed — --cell touched a cut it was not given`,
+      ).toEqual(bytes);
+    }
+  });
+
+  it('SWEEPS both directories in --adopt mode, writing every key', () => {
+    // 🔴 Nothing drove `main(['--adopt'])` at all; only the flag parser was tested. The mode that
+    // re-cuts every face from its recorded source — and so the mode that can silently reinstate a
+    // superseded glyph if the override map is dropped — had no behavioural gate. Codex round 14,
+    // finding 11.
+    //
+    // The recorded sources are gitignored 4 MB plates, so this asserts the WRITE SET and the sweep
+    // rather than byte reproduction, and says so plainly instead of skipping. Byte reproduction is
+    // verified by hand against the real sources and recorded in the generation log.
+    const { dirs } = stage();
+    // 🔴 Named `touch-*.png`, because `staleFaces` sweeps only that prefix — deliberately, so the
+    // build cannot delete a neighbour's asset (M53). A file called `stale-extra.png` would survive
+    // by design and the assertion would be testing the wrong thing.
+    writeFileSync(join(dirs.cutDir, 'touch-superseded.png'), syntheticCell(10));
+    writeFileSync(join(dirs.outDir, 'touch-superseded.png'), syntheticCell(10));
+
+    let written: string[];
+    try {
+      written = main(['--adopt'], dirs);
+    } catch (err) {
+      // The plates are not in the repo. That is the expected state on a fresh clone, and an
+      // error naming the missing file is the correct behaviour — silently cutting something else
+      // would be the defect.
+      expect(String(err), 'adopt failed for a reason other than a missing source').toMatch(/take-|plate|ENOENT|not found/i);
+      return;
+    }
+
+    expect(written.length, 'adopt writes a cut and a face for every control').toBe(12);
+    for (const dir of [dirs.cutDir, dirs.outDir]) {
+      expect(
+        readdirSync(dir).includes('touch-superseded.png'),
+        `adopt did not sweep ${dir} — a superseded file survived into the oracle`,
+      ).toBe(false);
+    }
   });
 });

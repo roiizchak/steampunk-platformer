@@ -8,11 +8,12 @@ import {
   MAX_TOUCH_ARM_CPU_MS,
   MAX_TOUCH_ARM_GPU_MS,
   MAX_TOUCH_CPU_DELTA_MS,
-  MAX_TOUCH_CPU_PAIR_MS,
+  MIN_TOUCH_ARM_CPU_MS,
   MAX_TOUCH_GPU_DELTA_MS,
   PAIRS,
   median,
   pairedDeltas,
+  withinBudget,
   sampleArm,
   wakeLoop,
 } from './touchPerf';
@@ -145,12 +146,18 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       // that draws strictly better pixels. The claim was never about a ratio — it is *every control
       // has something visible* — so it is asserted per control, by name, which the count could not
       // do either: six visible faces all belonging to one plate passed the old form.
-      const visibleFaces = (await drawnFaces(withControls, 'UI')).filter((f) => f.visible);
-      const facesFor = new Set(visibleFaces.map((f) => f.name));
+      // 🔴 `drawn`, not `visible` — Phaser's `willRender(camera)`, plus a positive alpha and a
+      // nonzero drawn size. A face at alpha 0 or zero display size reports `visible: true` and puts
+      // no pixels on screen, so the old form could have passed on an arm drawing no controls at all.
+      // Codex round 14, finding 7.
+      const faces = await drawnFaces(withControls, 'UI');
       for (const id of TOUCH_IDS) {
+        const face = faces.find((f) => f.name === id);
+        expect(face, `${label}: ${id} has a hit area and no face object at all`).toBeDefined();
         expect(
-          facesFor.has(id),
-          `${label}: ${id} has a hit area and nothing drawn — the timed arm would draw an empty frame there`,
+          face!.drawn && face!.alpha > 0 && face!.w > 0 && face!.h > 0,
+          `${label}: ${id} puts no pixels on screen — drawn=${face!.drawn} alpha=${face!.alpha} ` +
+            `${face!.w}x${face!.h}. The timed arm would draw an empty frame there.`,
         ).toBe(true);
       }
       for (const z of drawn) {
@@ -264,32 +271,39 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     // episode on record: a clean paired delta of -0.243 ms when one arm's median stopped being a
     // measurement (`phase-08-perf.spec.ts`). The lower side is an instrument-validity check, not a
     // performance claim.
-    // 🔴 The main-thread pair bound is `MAX_TOUCH_CPU_PAIR_MS`, not `MAX_TOUCH_CPU_DELTA_MS`, and
-    // the held-out sweep is why: `workMedianMs` is a median over Chrome's 0.1 ms `performance.now()`
-    // grid of a quantity that is itself only 0.8-0.9 ms, so +/-0.5 ms per pair is +/-5 quanta of
-    // nine. One pair read exactly -0.5000 ms while the median of the same four read -0.1000. The
-    // criterion-bearing main-thread claim is the median assertion below; this one is a collapse
-    // guard. See `touchPerf.ts` for the sixteen recorded pairs.
+    // 🔴 ONE budget decision, shared with both red proofs. Each proof asserts `!ok` from this exact
+    // function on amplified data; this asserts `ok` on clean data. Written out separately, the two
+    // could not disagree visibly — replacing these expectations with unconditional passes used to
+    // leave both "red proofs" green, which made them proofs of themselves. Codex round 14, finding 3.
+    //
+    // Two-sided on purpose: a one-sided upper bound reads an arm-specific timer collapse as
+    // excellent performance, and this repository has that episode on record at -0.243 ms
+    // (`phase-08-perf.spec.ts`). The lower side is instrument validity, not a performance claim.
     for (const [deltas, bound, unit] of [
       [gpuPer, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser'],
-      [cpuPer, MAX_TOUCH_CPU_PAIR_MS, 'main-thread'],
+      [cpuPer, MAX_TOUCH_CPU_DELTA_MS, 'main-thread'],
     ] as const) {
-      for (const [i, d] of deltas.entries()) {
-        expect(
-          Math.abs(d),
-          `pair ${i}: the controls moved ${unit} time by ${d.toFixed(4)} ms, outside +/-${bound} ms` +
-            (d < 0 ? ' — a delta this negative is an arm-specific collapse, not a result' : ''),
-        ).toBeLessThan(bound);
-      }
+      const verdict = withinBudget(deltas, bound, unit);
+      expect(verdict.ok, `the controls moved ${unit} time outside the budget — ${verdict.why}`).toBe(
+        true,
+      );
     }
-    expect(
-      Math.abs(gpuDelta),
-      `the controls cost ${gpuDelta.toFixed(4)} ms of rasteriser time per frame, against ` +
-        `+/-${MAX_TOUCH_GPU_DELTA_MS} ms (3 % of the 60 Hz budget)`,
-    ).toBeLessThan(MAX_TOUCH_GPU_DELTA_MS);
-    expect(
-      Math.abs(cpuDelta),
-      `the controls cost ${cpuDelta.toFixed(4)} ms of main-thread time per frame, against ` +
-        `+/-${MAX_TOUCH_CPU_DELTA_MS} ms`,
-    ).toBeLessThan(MAX_TOUCH_CPU_DELTA_MS);
+
+    // 🔴 The collapse check is ABSOLUTE and per arm, because a delta cannot see one. The per-pair
+    // main-thread band that used to sit here could not either: the arms measure 0.8-0.9 ms, so an
+    // arm falling to zero yields a ~0.9 ms delta and passed a 2 ms "collapse guard" comfortably.
+    // Codex round 14, finding 9.
+    for (const [vals, name] of [
+      [cpuWith, 'touch'],
+      [cpuWithout, 'bare'],
+    ] as const) {
+      const m = median(vals);
+      expect(
+        m,
+        `the ${name} arm reports ${m.toFixed(4)} ms of main-thread work per frame — below ` +
+          `${MIN_TOUCH_ARM_CPU_MS} ms is not a measurement, it is an arm that stopped measuring`,
+      ).toBeGreaterThan(MIN_TOUCH_ARM_CPU_MS);
+    }
+
+    // (the median and per-pair checks are both inside `withinBudget` above)
 });

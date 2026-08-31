@@ -71,20 +71,27 @@ export const MAX_TOUCH_GPU_DELTA_MS = 0.5;
  *
  * *A perf bound is chosen on one set of runs and confirmed on a HELD-OUT set*, and the held-out set
  * disagreed. The response is not to move the number: the MEDIAN of four pairs has about half the
- * spread and carries the criterion, and the per-pair check becomes `MAX_TOUCH_CPU_PAIR_MS` — a
- * collapse guard rather than a performance claim.
+ * spread and carries the criterion, and the collapse it cannot see is checked directly instead,
+ * as `MIN_TOUCH_ARM_CPU_MS` on each arm's own median.
  */
 export const MAX_TOUCH_CPU_DELTA_MS = 0.5;
 
 /**
- * The per-pair main-thread guard: a COLLAPSE detector, and deliberately not a tolerance.
+ * A LOWER floor on each arm's own main-thread median — an instrument-validity check.
  *
- * 2 ms is more than twice the whole per-frame main-thread cost either arm measures, so no ordinary
- * window drift reaches it, and anything that does means one arm stopped being a measurement — the
- * failure `phase-08-perf.spec.ts` records at -0.243 ms and the reason both bounds here are
- * two-sided. The performance claim lives in `MAX_TOUCH_CPU_DELTA_MS` on the median.
+ * 🔴 **This replaces a per-pair delta band that could not do the job it claimed.** The per-pair
+ * main-thread check was `|delta| < 2 ms`, described as a collapse guard. It is not one: the arms
+ * measure 0.8-0.9 ms, so an arm collapsing all the way to **zero** produces a delta of about 0.9 ms
+ * and passes a 2 ms band comfortably. Calling a post-data band a collapse detector when the collapse
+ * it names cannot reach it is the decoration this repository keeps finding. Codex round 14,
+ * finding 9.
+ *
+ * A collapse is an ABSOLUTE property of one arm, so it is checked as one: each arm must report at
+ * least this much per-frame main-thread work. Chrome's `performance.now()` grid is 0.1 ms and the
+ * arms sit at 8-9 quanta, so 0.2 ms is two quanta — far below any real measurement here, and
+ * unreachable by an arm that stopped measuring.
  */
-export const MAX_TOUCH_CPU_PAIR_MS = 2;
+export const MIN_TOUCH_ARM_CPU_MS = 0.2;
 
 /**
  * An absolute ceiling on the touch arm's OWN median, not a difference.
@@ -264,4 +271,34 @@ export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisi
     // asserting `hidden > 0` reds instead of reading a no-op as an equalised pair of arms.
     return seen === 2 ? { hidden, stillVisible } : { hidden: -1, stillVisible: -1 };
   });
+}
+
+/**
+ * The ONE budget decision, so the clean gate and the red proofs cannot disagree about it.
+ *
+ * 🔴 **They did.** The clean verdict was written out in `phase-12-perf.spec.ts` and each red proof
+ * asserted its own opposite inequality against the same constant — so replacing the clean gate's
+ * expectations with unconditional passes left both "red proofs" green, and they proved only that
+ * *they* could measure a difference, never that the gate they are about could fail. Codex round 14,
+ * finding 3. *A gate that cannot go red is decoration*, and a red proof that does not exercise the
+ * gate is not a proof of it.
+ *
+ * Both directions now route through this function: the clean gate asserts `ok`, each red proof
+ * asserts `!ok`. Delete the bound and every one of them changes verdict together.
+ */
+export function withinBudget(
+  perPair: number[],
+  bound: number,
+  label: string,
+): { ok: boolean; why: string } {
+  const mid = median(perPair);
+  const outliers = perPair.filter((d) => Math.abs(d) >= bound);
+  const ok = Math.abs(mid) < bound && outliers.length === 0;
+  return {
+    ok,
+    why:
+      `${label}: median ${mid.toFixed(4)} ms against +/-${bound} ms` +
+      (outliers.length > 0 ? `, ${outliers.length} pair(s) outside the band` : '') +
+      ` — pairs ${perPair.map((v) => v.toFixed(4)).join(', ')}`,
+  };
 }

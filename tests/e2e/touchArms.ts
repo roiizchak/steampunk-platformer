@@ -43,25 +43,34 @@ export interface Arms {
  * @param label carried into the GPU-renderer refusal messages so a failure names its block.
  */
 export async function makeArms(browser: Browser, touchFirst: boolean, label: string): Promise<Arms> {
-  // 🔴 The creation order IS the variable. Awaiting them in sequence, not in a `Promise.all`, is
-  // deliberate: `Promise.all` would leave the order to the scheduler and this counterbalance would
-  // stop being a counterbalance.
-  const first = await browser.newContext({ hasTouch: touchFirst });
-  const second = await browser.newContext({ hasTouch: !touchFirst });
-  const touchContext = touchFirst ? first : second;
-  const plainContext = touchFirst ? second : first;
-  const touch = await touchContext.newPage();
-  const bare = await plainContext.newPage();
+  // 🔴 **EVERY setup step in physical order, roles assigned only afterwards.** An earlier version
+  // alternated context creation and then always made the touch page first, booted it first and
+  // timed it first — which counterbalanced almost nothing, because an empty `BrowserContext` is
+  // cheap and the renderer process, the WebGL context, the swap chain and the JIT warm-up are all
+  // created by the PAGE and BOOT work. Those costs stayed touch-correlated. Codex round 14,
+  // finding 2.
+  //
+  // Awaiting in sequence rather than `Promise.all` is deliberate: `Promise.all` would hand the
+  // order to the scheduler and the counterbalance would stop being one.
+  const firstCtx = await browser.newContext({ hasTouch: touchFirst });
+  const secondCtx = await browser.newContext({ hasTouch: !touchFirst });
+  const firstPage = await firstCtx.newPage();
+  const secondPage = await secondCtx.newPage();
+  await installTouchDriver(firstPage);
+  await installTouchDriver(secondPage);
+  await bootToTouchPlay(firstPage);
+  await bootToTouchPlay(secondPage);
+  const firstRenderer = await assertRealGpu(firstPage, `${label} first-created arm`);
+  await assertRealGpu(secondPage, `${label} second-created arm`);
+  await installGpuTimer(firstPage);
+  await installGpuTimer(secondPage);
 
-  await installTouchDriver(touch);
-  await installTouchDriver(bare);
-  await bootToTouchPlay(touch);
-  await bootToTouchPlay(bare);
-
-  const renderer = await assertRealGpu(touch, `${label} touch arm`);
-  await assertRealGpu(bare, `${label} bare arm`);
-  await installGpuTimer(touch);
-  await installGpuTimer(bare);
+  // Only now does either page acquire a ROLE.
+  const touch = touchFirst ? firstPage : secondPage;
+  const bare = touchFirst ? secondPage : firstPage;
+  const touchContext = touchFirst ? firstCtx : secondCtx;
+  const plainContext = touchFirst ? secondCtx : firstCtx;
+  const renderer = firstRenderer;
 
   // Equalise everything that is not the controls — `hideTexts` carries the evidence.
   const textTouch = await hideTexts(touch);

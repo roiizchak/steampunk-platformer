@@ -124,7 +124,12 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
  * walk/run toggle, so the grid holds six real faces and the model has no free space to invent into.
  *
  * The other two changes are the owner's as well: the attack face is the courier's own **wrench**
- * rather than crossed tools, and pause is a **gear** rather than two bars.
+ * rather than crossed tools, and pause was a **gear** rather than two bars.
+ *
+ * ⚠️ **Three of those subjects have since been replaced and this paragraph describes the PLATE**,
+ * which is still the source of `touch-left`, `touch-right` and `touch-jump`. `touch-attack`,
+ * `touch-pause` and `touch-walk` come from single-cell edits recorded in
+ * `touchAtlasCli.mjs`'s `TOUCH_CELL_SOURCES`; the pause gear in particular was replaced twice.
  */
 export const TOUCH_PLATE_EMPTY = null;
 

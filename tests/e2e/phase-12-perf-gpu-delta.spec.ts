@@ -54,6 +54,7 @@ import {
   hideTexts,
   median,
   pairedDeltas,
+  withinBudget,
   sampleArm,
   wakeLoop,
 } from './touchPerf';
@@ -99,7 +100,9 @@ test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)
       // 🔴 The precondition, before a single number. Zones are HITTABILITY — a `Zone` renders
       // nothing — so the pixels are the FACES, and they are asserted by name.
       const visible = new Set(
-        (await drawnFaces(withControls, 'UI')).filter((f) => f.visible).map((f) => f.name),
+        (await drawnFaces(withControls, 'UI'))
+          .filter((f) => f.drawn && f.alpha > 0 && f.w > 0 && f.h > 0)
+          .map((f) => f.name),
       );
       for (const id of TOUCH_IDS) {
         expect(visible.has(id), `${id} has nothing drawn — the timed arm draws an empty frame there`).toBe(
@@ -160,12 +163,23 @@ test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)
           `${gpuDelta.toFixed(4)} ms against a bound of ${MAX_TOUCH_GPU_DELTA_MS} ms\n`,
       );
 
+      // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, not by a restatement of its bound.
+      // `withinBudget` is the single function `phase-12-perf.spec.ts` asserts `ok` from; this
+      // asserts `!ok` on the amplified data. Written out separately, this spec proved only that
+      // it could measure a difference — deleting the clean gate's expectations left it green.
+      // Codex round 14, finding 3.
+      const verdict = withinBudget(perPair, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser');
+      expect(
+        verdict.ok,
+        `the controls drawn with ${FACE_COPIES} extra copies of their OWN faces each did not move the paired ${verdict.why}. ` +
+          'The clean gate therefore cannot fail when this regression is present, and it is decoration.',
+      ).toBe(false);
+
+      // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red
+      // proof satisfied by it alone could be satisfied by breaking the instrument.
       expect(
         gpuDelta,
-        `the controls drawn with ${FACE_COPIES} extra copies of their OWN faces each measured only ` +
-          `${gpuDelta.toFixed(4)} ms of extra rasteriser time per frame, against a bound of ` +
-          `${MAX_TOUCH_GPU_DELTA_MS} ms. The GPU bound in phase-12-perf.spec.ts therefore cannot fail ` +
-          'when the controls cost real fill rate, and it is decoration.',
+        `the amplified delta is ${gpuDelta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_GPU_DELTA_MS}, not merely differ`,
       ).toBeGreaterThan(MAX_TOUCH_GPU_DELTA_MS);
 
       // 🔴 Every pair, not just the median of them. A statistic that orders only on aggregate is one

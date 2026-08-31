@@ -116,14 +116,36 @@ export function centreOf(rect: CanvasRect, zone: DrawnZone): { x: number; y: num
  * the first version of the viewport spec asserted on it and failed for that reason alone. Visibility
  * is a property of the faces; hittability is a property of the zones. Two questions, two readings.
  */
-export async function drawnFaces(page: Page, sceneKey: string): Promise<{ name: string; visible: boolean }[]> {
+export async function drawnFaces(
+  page: Page,
+  sceneKey: string,
+): Promise<{ name: string; visible: boolean; drawn: boolean; alpha: number; w: number; h: number }[]> {
   return page.evaluate((key) => {
-    type Obj = { type: string; name: string; visible: boolean };
-    type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
+    type Cam = unknown;
+    type Obj = {
+      type: string; name: string; visible: boolean; alpha: number;
+      displayWidth: number; displayHeight: number;
+      willRender?: (c: Cam) => boolean;
+    };
+    type Scene = { children?: { list: Obj[] }; cameras?: { main?: Cam } };
+    type Handle = { scene: { getScene(k: string): Scene | null } };
     const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
+    const cam = scene?.cameras?.main;
     return (scene?.children?.list ?? [])
       .filter((o) => o.type !== 'Zone' && o.name !== '')
-      .map((o) => ({ name: o.name, visible: o.visible }));
+      .map((o) => ({
+        name: o.name,
+        visible: o.visible,
+        // 🔴 `visible` is not "the player sees pixels". Phaser's own `willRender(camera)` folds in
+        // alpha, scale, the render flags and the camera's filter — a face at alpha 0 or zero display
+        // size stays `visible: true` and draws nothing. A perf gate that trusted `visible` could time
+        // an arm that renders no controls at all, which is the criterion's own named failure mode
+        // passing its own precondition. Codex round 14, finding 7.
+        drawn: typeof o.willRender === 'function' && cam !== undefined ? o.willRender(cam) : o.visible,
+        alpha: o.alpha,
+        w: Math.round(o.displayWidth),
+        h: Math.round(o.displayHeight),
+      }));
   }, sceneKey);
 }
 

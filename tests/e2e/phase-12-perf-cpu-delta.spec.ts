@@ -55,6 +55,7 @@ import {
   hideTexts,
   median,
   pairedDeltas,
+  withinBudget,
   sampleArm,
   wakeLoop,
 } from './touchPerf';
@@ -141,12 +142,23 @@ test.describe('Phase 12 — criterion 12.11, the main-thread delta can go RED (v
           `${cpuDelta.toFixed(4)} ms against a bound of ${MAX_TOUCH_CPU_DELTA_MS} ms\n`,
       );
 
+      // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, not by a restatement of its bound.
+      // `withinBudget` is the single function `phase-12-perf.spec.ts` asserts `ok` from; this
+      // asserts `!ok` on the amplified data. Written out separately, this spec proved only that
+      // it could measure a difference — deleting the clean gate's expectations left it green.
+      // Codex round 14, finding 3.
+      const verdict = withinBudget(perPair, MAX_TOUCH_CPU_DELTA_MS, 'main-thread');
+      expect(
+        verdict.ok,
+        `the controls' own refresh() run ${REFRESH_COPIES} extra times per frame did not move the paired ${verdict.why}. ` +
+          'The clean gate therefore cannot fail when this regression is present, and it is decoration.',
+      ).toBe(false);
+
+      // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red
+      // proof satisfied by it alone could be satisfied by breaking the instrument.
       expect(
         cpuDelta,
-        `the controls' own refresh() run ${REFRESH_COPIES} extra times per frame measured only ` +
-          `${cpuDelta.toFixed(4)} ms of extra main-thread time, against a bound of ` +
-          `${MAX_TOUCH_CPU_DELTA_MS} ms. The CPU bound in phase-12-perf.spec.ts therefore cannot fail ` +
-          'when the controls cost real main-thread work, and it is decoration.',
+        `the amplified delta is ${cpuDelta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_CPU_DELTA_MS}, not merely differ`,
       ).toBeGreaterThan(MAX_TOUCH_CPU_DELTA_MS);
 
       // Every pair, not just the median of them.

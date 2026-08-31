@@ -291,18 +291,25 @@ next generation on this endpoint needs a ceiling raise, not a decision.**
 
 | [qa/phase-11-welcome.md § the title backdrop](qa/phase-11-welcome.md) | **The TITLE BACKDROP — two variants, one variable.** `01a04c99-550a-7170-b494-8b583728f783` (**A**, boiler hall) and `01a04c9a-2c78-7313-b63c-09402be40317` (**B**, rooftop canyon), seed 20260804, 2K, 16:9, both returned **2752×1536, ratio 1.7917** — which settles FAL-MODELS.md's open question: `nano-banana-pro` deviates from the aspect label exactly as `nano-banana-2` did *(4.11)*. The prompts are identical apart from the `SETTING` line *(§3, one variable)* and are saved beside the outputs. **❌ A is unusable, and the prompt is why:** it told the model *"a dark translucent band and lettering will be composited over that middle third"*, and the model **drew the band**. Measured mean luminance — outer thirds **43.1** and **41.2**, middle 0.22–0.78 **70.4**, with hard edges at y=0.333 and y=0.672. Our own 0.82 band would composite on top of it. **✅ B is clean:** 77.7 → 47.0 → 40.4 top to bottom, a natural sky-to-street gradient with no overlay, its two hard edges being diegetic riveted beams. **Lesson: describe what the IMAGE contains, never what will be composited onto it.** ✅ **B shipped** — owner chose it 2026-08-29 after seeing both plates under the real band; downscaled 2752×1536 → 1920×1080 (Lanczos) to `public/assets/backgrounds/title.png`, catalogued `title-backdrop`. | `fal-ai/nano-banana-pro` | 2 · $0.30 |
 
-**Running total: $55.50. The last ceiling anyone named is $55.**
+**Running total: $55.50 of the `$60` art ceiling. $4.50 remains.**
 
-🔴 **This $0.30 was authorised by the owner** — *"I authorize doing the generation in fal ai"*,
+✅ **The ceiling WAS raised, and this line said otherwise for two days.** `PRD.md:91` records
+*"the fal art-spend ceiling is `$60`, raised from `$55` by owner decision on **2026-08-29**"*, the
+same decision that settled the `$55.50` overrun this file had carried as unresolved. This paragraph
+went on saying *"the last ceiling anyone named is $55"* and the entry below still calls $55.20 an
+overrun. **A running total measured against a ceiling that moved is exactly the failure criterion
+12.18 exists to catch, and 12.18 was marked PASS while it was true.** Corrected 2026-08-31, found by
+the Codex round-14 implementation review.
+
+🔴 **The $0.30 itself was authorised by the owner** — *"I authorize doing the generation in fal ai"*,
 2026-08-29, against a proposal that named the endpoint, the locked parameters, the count and the
-price before anything was sent. **It is not a ceiling raise.** The position is unchanged from the
-entry below: the last stated ceiling is $55, spend is now $55.50, every overrun to date is cleared by
-an explicit owner decision, and **no new ceiling FIGURE has been named**. This file still does not
-invent one.
+price before anything was sent. That authorisation was never a ceiling raise; the separate
+`$55 → $60` decision on the same day was.
 
 **Superseded ceiling note, kept for the record:**
 
-**Running total: $55.20 of the $55 ceiling — ⚠️ $0.20 OVER.**
+**Running total: $55.20 — over the `$55` ceiling that stood at the time, inside the `$60` that
+replaced it on 2026-08-29.**
 
 🔴 **The ceiling was already exceeded before this generation** ($55.05, knowingly, on 2026-08-26) and
 the line above it said *"the next generation needs a ceiling raise, not a decision."* This spend was
