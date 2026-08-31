@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -104,6 +104,43 @@ function invertRadialLighting(face: Rgba): Rgba {
   return { width: w, height: h, data };
 }
 
+/**
+ * A copy of `face` with its brass rotated half a turn about the centroid, mark and all.
+ *
+ * 🔴 The case the RADIAL profile is blind to by construction. Every annulus keeps exactly the
+ * pixels it had — rotation maps a circle to itself — so `bands` does not move at all, and neither
+ * does any scalar. Only where the light comes FROM changes. Found by Codex mid-round-18, on the
+ * profile added one round earlier to close the mirror-image hole.
+ */
+function rotateHalfTurn(face: Rgba): Rgba {
+  const { width: w, height: h } = face;
+  const src = face.data;
+  const data = new Uint8ClampedArray(src.length);
+  let n = 0;
+  let sx = 0;
+  let sy = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (src[(y * w + x) * 4 + 3]! < 250) continue;
+      n += 1;
+      sx += x;
+      sy += y;
+    }
+  }
+  const cx = Math.round(sx / n);
+  const cy = Math.round(sy / n);
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const from = (y * w + x) * 4;
+      const rx = 2 * cx - x;
+      const ry = 2 * cy - y;
+      const to = rx < 0 || ry < 0 || rx >= w || ry >= h ? from : (ry * w + rx) * 4;
+      for (let c = 0; c < 4; c += 1) data[to + c] = src[from + c]!;
+    }
+  }
+  return { width: w, height: h, data };
+}
+
 describe('the six touch faces are one family of buttons', () => {
   it('accepts the adopted set', () => {
     const failures = familyFailures(shippedCuts());
@@ -172,6 +209,43 @@ describe('the six touch faces are one family of buttons', () => {
     );
   });
 
+  it('REFUSES a button lit from the wrong SIDE, with every band unchanged too', () => {
+    const faces = shippedCuts();
+    const key = [...faces.keys()][5]!;
+    const before = faceFamily(faces.get(key)!);
+    const turned = rotateHalfTurn(faces.get(key)!);
+    const after = faceFamily(turned);
+
+    // 🔴 The premise, stated as what actually matters: **the radial profile cannot catch this.**
+    // A rotation maps every annulus to itself, so each band keeps the pixels it had; the worst
+    // measured drift is 0.58 of a luminance point, against a band bound of 15. Asserting an exact
+    // equality would be asserting the rounding, so the claim is the one the gate turns on.
+    for (const [i, band] of after.bands.entries()) {
+      if (Number.isNaN(band.luma) || Number.isNaN(before.bands[i]!.luma)) continue;
+      expect(
+        Math.abs(band.luma - before.bands[i]!.luma),
+        `the premise failed: radius band ${i} moved enough for the radial profile to see it`,
+      ).toBeLessThan(1);
+    }
+    expect(after.bodyLuma, 'the premise failed: body luminance moved').toBeCloseTo(
+      before.bodyLuma,
+      6,
+    );
+
+    faces.set(key, turned);
+    const failures = familyFailures(faces);
+    expect(
+      failures.join('; '),
+      'a button lit from the opposite side was accepted — the radial profile alone cannot see it',
+    ).toMatch(/disagrees at angular sector/);
+    // And the other half of the premise: the radial profile really did stay quiet, so this case
+    // is proving the ANGULAR one and not riding on the repair it was written to outflank.
+    expect(
+      failures.filter((f) => f.includes('radius band')),
+      'the radial profile also fired, so this case does not isolate the angular one',
+    ).toEqual([]);
+  });
+
   it('REFUSES a button lit from the wrong side, with every scalar unchanged', () => {
     const faces = shippedCuts();
     const key = [...faces.keys()][3]!;
@@ -234,5 +308,15 @@ describe('the BUILDER refuses an out-of-family set', () => {
       () => main([], dirs),
       'the builder adopted a set it can measure as out of family',
     ).toThrow(/not one family/);
+
+    // 🔴 **"Before writing" is a claim about the FILESYSTEM, and throwing does not establish it.**
+    // A builder that wrote three faces and then refused the fourth throws exactly this error and
+    // leaves a half-written output directory — which for `ink` is the shipped art. The refusal has
+    // to happen before the first byte, so the directory it writes into must still be empty. Found
+    // by Codex mid-round-18.
+    expect(
+      readdirSync(dirs.outDir),
+      'the builder wrote faces before refusing the set — a partial write of the shipped art',
+    ).toEqual([]);
   });
 });

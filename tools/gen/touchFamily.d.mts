@@ -7,12 +7,17 @@ export const MAX_BODY_LUMA_SPREAD: number;
 export const MAX_WARMTH_SPREAD: number;
 export const MAX_BAND_LUMA_SPREAD: number;
 export const MAX_BAND_WARMTH_SPREAD: number;
+export const MAX_SECTOR_LUMA_SPREAD: number;
+export const MAX_SECTOR_WARMTH_SPREAD: number;
+
+type Slice = { n: number; luma: number; warmth: number };
 
 export function faceFamily(face: RgbaImage): {
   roundness: number;
   bodyLuma: number;
   bodyWarmth: number;
-  bands: { n: number; luma: number; warmth: number }[];
+  bands: Slice[];
+  sectors: Slice[];
 };
 
 export function familyFailures(faces: Map<string, RgbaImage>): string[];

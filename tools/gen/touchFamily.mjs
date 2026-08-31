@@ -28,6 +28,11 @@
  *   cannot.
  * - **`bands`** — a RADIAL profile: mean luminance and mean warmth in each of `RADIAL_BANDS`
  *   annuli from the centroid, over non-mark pixels only.
+ * - **`sectors`** — an ANGULAR profile, the same two means in each of `ANGULAR_SECTORS` wedges.
+ *   This is where the LIGHT DIRECTION lives, and it is plainly there in the adopted set: sectors 4
+ *   and 5 read ~140 against ~100 at sectors 0-2. A radial profile integrates around the whole
+ *   annulus and so cannot see a button lit from the opposite side; rotating a face's brass by half
+ *   a turn leaves every scalar AND every band untouched. Found by Codex mid-round-18.
  *
  * 🔴 **The three scalars alone are spatially blind, and that was a real hole.** Permute a face's
  * brass pixels and `bodyLuma` and `bodyWarmth` are unchanged to the last decimal, so a button lit
@@ -81,11 +86,14 @@ const BODY_SHARE = 0.4;
 /** Annuli in the radial profile, from the centroid out to the farthest opaque pixel. */
 const RADIAL_BANDS = 8;
 
+/** Wedges in the angular profile, from the centroid. */
+const ANGULAR_SECTORS = 8;
+
 /** A pixel under this share of its own face's `bodyLuma` is mark, not body. */
 const MARK_LUMA_SHARE = 0.6;
 
-/** A band with fewer non-mark pixels than this in ANY face is skipped, not compared. */
-const MIN_BAND_PX = 200;
+/** A slice — annulus or wedge — with fewer non-mark pixels than this in ANY face is skipped. */
+const MIN_SLICE_PX = 200;
 
 /**
  * Per-band spread across the set.
@@ -107,14 +115,21 @@ const MIN_BAND_PX = 200;
 export const MAX_BAND_LUMA_SPREAD = 15;
 export const MAX_BAND_WARMTH_SPREAD = 25;
 
-/** Fewer comparable bands than this and the profile is not measuring the button at all. */
-const MIN_COMPARABLE_BANDS = 3;
+/**
+ * Per-sector spread across the set. Measured on the adopted six, 2026-08-31: luminance at most
+ * **6.9** and warmth at most **10.9**, every sector comparable. Same ~2.5x as the bands.
+ */
+export const MAX_SECTOR_LUMA_SPREAD = 18;
+export const MAX_SECTOR_WARMTH_SPREAD = 28;
+
+/** Fewer comparable slices than this and the profile is not measuring the button at all. */
+const MIN_COMPARABLE_SLICES = 3;
 
 /**
  * The three family numbers for one cut face.
  *
  * @param {RgbaImage} face
- * @returns {{ roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[] }}
+ * @returns {{ roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[], sectors: { n: number, luma: number, warmth: number }[] }}
  */
 export function faceFamily(face) {
   const { width: w, height: h, data: d } = face;
@@ -178,24 +193,34 @@ export function faceFamily(face) {
     if (r > maxR) maxR = r;
   }
   const bands = Array.from({ length: RADIAL_BANDS }, () => ({ n: 0, luma: 0, warmth: 0 }));
+  const sectors = Array.from({ length: ANGULAR_SECTORS }, () => ({ n: 0, luma: 0, warmth: 0 }));
   for (const p of opaque) {
     if (p.luma < markBelow) continue;
-    const b = Math.min(RADIAL_BANDS - 1, Math.floor((Math.hypot(p.x - cx, p.y - cy) / maxR) * RADIAL_BANDS));
-    const band = bands[b];
+    const dx = p.x - cx;
+    const dy = p.y - cy;
+    const band = bands[Math.min(RADIAL_BANDS - 1, Math.floor((Math.hypot(dx, dy) / maxR) * RADIAL_BANDS))];
     band.n += 1;
     band.luma += p.luma;
     band.warmth += p.warmth;
+
+    let angle = Math.atan2(dy, dx);
+    if (angle < 0) angle += 2 * Math.PI;
+    const sector = sectors[Math.min(ANGULAR_SECTORS - 1, Math.floor((angle / (2 * Math.PI)) * ANGULAR_SECTORS))];
+    sector.n += 1;
+    sector.luma += p.luma;
+    sector.warmth += p.warmth;
   }
+
+  /** @param {{ n: number, luma: number, warmth: number }[]} raw */
+  const mean = (raw) =>
+    raw.map((b) => ({ n: b.n, luma: b.n > 0 ? b.luma / b.n : NaN, warmth: b.n > 0 ? b.warmth / b.n : NaN }));
 
   return {
     roundness,
     bodyLuma,
     bodyWarmth: body.reduce((a, b) => a + b.warmth, 0) / body.length,
-    bands: bands.map((b) => ({
-      n: b.n,
-      luma: b.n > 0 ? b.luma / b.n : NaN,
-      warmth: b.n > 0 ? b.warmth / b.n : NaN,
-    })),
+    bands: mean(bands),
+    sectors: mean(sectors),
   };
 }
 
@@ -212,7 +237,7 @@ export function familyFailures(faces) {
   /** @type {string[]} */
   const bad = [];
   const measured = [...faces].map(
-    /** @returns {[string, { roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[] }]} */
+    /** @returns {[string, { roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[], sectors: { n: number, luma: number, warmth: number }[] }]} */
     ([key, face]) => [key, faceFamily(face)],
   );
 
@@ -242,34 +267,47 @@ export function familyFailures(faces) {
     }
   }
 
-  // 🔴 The SPATIAL comparison. Everything above is a scalar over an unordered bag of pixels and is
-  // blind to where they are; this is not. A band is compared only where every face has real
-  // non-mark area in it — a mark-dominated annulus says nothing about the button.
-  let comparable = 0;
-  for (let b = 0; b < RADIAL_BANDS; b += 1) {
-    if (measured.some(([, m]) => m.bands[b].n < MIN_BAND_PX)) continue;
-    comparable += 1;
-    for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
-      ['luma', MAX_BAND_LUMA_SPREAD, 'lighting'],
-      ['warmth', MAX_BAND_WARMTH_SPREAD, 'patina'],
-    ])) {
-      const vals = measured.map(([, m]) => m.bands[b][stat]);
-      const lo = Math.min(...vals);
-      const hi = Math.max(...vals);
-      if (hi - lo > bound) {
-        const worst = measured.map(([key, m]) => `${key} ${m.bands[b][stat].toFixed(1)}`).join(', ');
-        bad.push(
-          `${what} disagrees at radius band ${b} of ${RADIAL_BANDS}: spans ${(hi - lo).toFixed(1)}, over ${bound} — ${worst}`,
-        );
+  // 🔴 The SPATIAL comparison, in two directions. Everything above is a scalar over an unordered
+  // bag of pixels and is blind to where they are; these are not.
+  //
+  // **Both are needed and neither subsumes the other.** A radial profile integrates around the whole
+  // annulus, so a face lit from the opposite side — the same brass rotated half a turn — leaves
+  // every band identical. An angular profile integrates from centre to rim, so a patina moved from
+  // the rim inward leaves every sector identical. Codex named the second hole in round 17 and the
+  // first mid-round-18.
+  //
+  // A slice is compared only where every face has real non-mark area in it: a mark-dominated
+  // annulus or wedge says nothing about the button.
+  for (const [slices, count, bounds, where] of /** @type {['bands' | 'sectors', number, [number, number], string][]} */ ([
+    ['bands', RADIAL_BANDS, [MAX_BAND_LUMA_SPREAD, MAX_BAND_WARMTH_SPREAD], 'radius band'],
+    ['sectors', ANGULAR_SECTORS, [MAX_SECTOR_LUMA_SPREAD, MAX_SECTOR_WARMTH_SPREAD], 'angular sector'],
+  ])) {
+    let comparable = 0;
+    for (let i = 0; i < count; i += 1) {
+      if (measured.some(([, m]) => m[slices][i].n < MIN_SLICE_PX)) continue;
+      comparable += 1;
+      for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
+        ['luma', bounds[0], 'lighting'],
+        ['warmth', bounds[1], 'patina'],
+      ])) {
+        const vals = measured.map(([, m]) => m[slices][i][stat]);
+        const lo = Math.min(...vals);
+        const hi = Math.max(...vals);
+        if (hi - lo > bound) {
+          const worst = measured.map(([key, m]) => `${key} ${m[slices][i][stat].toFixed(1)}`).join(', ');
+          bad.push(
+            `${what} disagrees at ${where} ${i} of ${count}: spans ${(hi - lo).toFixed(1)}, over ${bound} — ${worst}`,
+          );
+        }
       }
     }
-  }
-  if (comparable < MIN_COMPARABLE_BANDS) {
-    bad.push(
-      `only ${comparable} of ${RADIAL_BANDS} radius bands carry comparable body in every face, ` +
-        `under ${MIN_COMPARABLE_BANDS} — the marks cover so much of these buttons that their ` +
-        'bezels cannot be compared at all',
-    );
+    if (comparable < MIN_COMPARABLE_SLICES) {
+      bad.push(
+        `only ${comparable} of ${count} ${where}s carry comparable body in every face, under ` +
+          `${MIN_COMPARABLE_SLICES} — the marks cover so much of these buttons that their bezels ` +
+          'cannot be compared at all',
+      );
+    }
   }
 
   return bad;
