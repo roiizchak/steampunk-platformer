@@ -220,6 +220,8 @@ papered over.
 | M84 | let one lit pixel make a scanline a row, and drop the margin-remainder rule | 12.17, 12.19 | RED 2/9 — the stray speck and the two-run sheet with a deep margin. With two runs there is ONE step, so the drift check cannot fire and `round(h / pitch)` reads margin as an empty row |
 | M85 | refuse AFTER writing: move the family check below the write loop | 12.17, 12.19 | RED 1/5 — the out-of-family candidate landed in both directories and the throw came too late |
 | M85b | write `--cell`'s candidate before the family is assembled | 12.17, 12.19 | RED 2/5 — **including the missing-neighbour case**, which M85 alone could not red: that path throws in `requireFile`, upstream of the write loop, so only a write moved above it can prove the refusal is atomic |
+| M86 | delete `attachRotatePrompt`'s `SCENE_UPDATE` subscription, leaving only `resize` | 12.13, 12.19 | RED 1/3042 — **the defect the owner found on a phone.** A mobile browser fires `resize` on orientationchange while it still reports the OLD viewport, so the single evaluation ran against portrait and nothing asked again; the prompt stayed up after the device was turned. `UIScene` was unaffected because it polls, which is why five Codex rounds over this file saw nothing |
+| M87 | delete the word-wrap width from the rotate prompt's copy | 12.13, 12.19 | RED 1/3042 — the subline is 36 monospace characters at `18 / 0.203 = 89` game px, which is 1922 px on a 1920 px surface. It was cut off at both ends on the **widest** phone in scope and worse on every narrower one |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
 
