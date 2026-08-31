@@ -98,6 +98,21 @@ export const MAX_TOUCH_CPU_PAIR_MS = 2;
 export const MAX_TOUCH_ARM_GPU_MS = 8;
 
 /**
+ * The same absolute ceiling on the touch arm's own MAIN-THREAD median.
+ *
+ * 🔴 **The CPU twin of `MAX_TOUCH_ARM_GPU_MS`, and it was missing.** `cpuDelta` is a pure paired
+ * difference, so it has the identical hole the GPU ceiling exists to close: a cost added to BOTH
+ * arms divides out and the delta reads 0.000 while the game is broken — Phase 7's G32 finding. The
+ * only other backstops are a 50 fps floor and a frames-served ratio, and this file's own header
+ * argues at length that frames served against a vsync-locked display is blind to a constant
+ * per-frame cost below the headroom band. `performance-engineer` brief 1, finding 2.
+ *
+ * **8 ms**, the figure `perfBudget.ts:179` fixed for `MAX_FLEET_WORK_MS` for exactly this job —
+ * precedent rather than invention, and about nine times the 0.8-0.9 ms either arm measures clean.
+ */
+export const MAX_TOUCH_ARM_CPU_MS = 8;
+
+/**
  * Pairs per run, and it is EVEN on purpose.
  *
  * AB/BA counterbalancing only cancels order effects across a whole number of AB+BA blocks. An odd
@@ -140,6 +155,23 @@ export const SETTLE_TICKS = 30;
  * the `MAX_TOUCH_ARM_GPU_MS` ceiling carry the rest.
  */
 export const FACE_COPIES = 2000;
+
+/**
+ * Extra `TouchSession.refresh()` calls per frame on the touch arm — the MAIN-THREAD amplifier.
+ *
+ * 🔴 **Because `MAX_TOUCH_CPU_DELTA_MS` had never been watched failing.** The GPU red proof
+ * amplifies fill rate and asserts only `gpuDelta`; nothing anywhere drove the main-thread delta
+ * across its bound, so the criterion-bearing CPU claim rested on prose. *A gate that cannot go red
+ * is decoration.* `performance-engineer` brief 1, finding 1.
+ *
+ * 🔴 **And it is the feature's OWN work, not a busy loop.** `touchPerf.ts` names the regression this
+ * bound exists to catch — *"`refresh()` running per frame instead of per state change"* — and
+ * `UIScene.touch` is a public `TouchSession` whose `refresh()` re-places and re-gates the six
+ * controls (`touchSession.ts:94-95`). Calling it N times per frame IS that regression, N times over.
+ * A `while (Date.now() - t < x)` spin would prove the timer can see wall-clock work, which is the
+ * stand-in mistake Phase 8 paid for.
+ */
+export const REFRESH_COPIES = 300;
 
 type Loop = { loop: { sleep(): void; wake(seamless?: boolean): void } };
 
@@ -308,4 +340,37 @@ export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisi
     // asserting `hidden > 0` reds instead of reading a no-op as an equalised pair of arms.
     return seen === 2 ? { hidden, stillVisible } : { hidden: -1, stillVisible: -1 };
   });
+}
+
+/**
+ * Make the touch arm run the controls' own `refresh()` `count` extra times per frame.
+ *
+ * Wraps the live `UIScene` instance's `update`, so the cost lands inside the frame Phaser is already
+ * timing rather than in a separate task. Returns `false` if the scene or its session is not there —
+ * an amplifier that hooked nothing would otherwise read as a bound failing to fire when nothing was
+ * ever added, which is the assertion `addFaceCopies` exists to make and the reason Phase 8 has one.
+ */
+export async function addRefreshCost(page: Page, count: number): Promise<boolean> {
+  return page.evaluate((n) => {
+    type Session = { refresh(): void };
+    type Scene = { touch?: Session; update(t: number, d: number): void };
+    const ui = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
+      .__phaserGame.scene.getScene('UI');
+    if (!ui?.touch) return false;
+    const w = window as unknown as { __refreshCalls?: number };
+    w.__refreshCalls = 0;
+    const original = ui.update.bind(ui);
+    const session = ui.touch;
+    ui.update = (t: number, d: number): void => {
+      original(t, d);
+      for (let i = 0; i < n; i += 1) session.refresh();
+      w.__refreshCalls = (w.__refreshCalls ?? 0) + n;
+    };
+    return true;
+  }, count);
+}
+
+/** How many extra `refresh()` calls the hook has made. Asserted to GROW across the window. */
+export async function refreshCalls(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __refreshCalls?: number }).__refreshCalls ?? -1);
 }

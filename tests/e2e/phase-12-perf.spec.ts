@@ -11,6 +11,7 @@ import {
   installTouchDriver,
 } from './touchHarness';
 import {
+  MAX_TOUCH_ARM_CPU_MS,
   MAX_TOUCH_ARM_GPU_MS,
   MAX_TOUCH_CPU_DELTA_MS,
   MAX_TOUCH_CPU_PAIR_MS,
@@ -37,8 +38,9 @@ import {
  *
  * ## The statistic is FRAMES SERVED, not a percentile
  *
- * A percentile is blind to exactly the failure this phase could cause. The controls are ten DRAWN
- * objects and one non-drawing zone per control; if they cost anything it is a small, constant, per-frame cost —
+ * A percentile is blind to exactly the failure this phase could cause. The controls are six DRAWN
+ * faces and one non-drawing zone each — measured, see below; if they cost anything it is a small,
+ * constant, per-frame cost —
  * and at ~240 fps against a 60 Hz sim, a p95 taken over the same window moved by 0.3 ms while a
  * 30 ms stall went unseen (the Phase 9 lesson). Frames served over a fixed wall-clock window counts
  * every frame, so a per-frame cost shows up as fewer of them.
@@ -231,6 +233,7 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     const gpuDelta = median(gpuPer);
     const cpuDelta = median(cpuPer);
     const armGpu = median(gpuWith);
+    const armCpu = median(cpuWith);
 
     // eslint-disable-next-line no-console
     console.log(
@@ -251,6 +254,13 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       `the touch arm's own GPU median is ${armGpu.toFixed(4)} ms of a ${MAX_TOUCH_ARM_GPU_MS} ms ` +
         'ceiling — the baseline has collapsed, so the deltas below compare two broken runs',
     ).toBeLessThan(MAX_TOUCH_ARM_GPU_MS);
+    // 🔴 The same guard on the MAIN THREAD, which a paired difference cannot give either. Phase 7's
+    // G32: a cost left in BOTH arms moved each median 2 ms and the delta read 0.000.
+    expect(
+      armCpu,
+      `the touch arm's own main-thread median is ${armCpu.toFixed(4)} ms of a ${MAX_TOUCH_ARM_CPU_MS} ms ` +
+        'ceiling — the baseline has collapsed, so the deltas here compare two broken runs',
+    ).toBeLessThan(MAX_TOUCH_ARM_CPU_MS);
     expect(
       withoutFps,
       `the control arm itself served only ${withoutFps.toFixed(1)} frames/s`,

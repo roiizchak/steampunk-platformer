@@ -23,6 +23,7 @@ const FUTURE_NAMES = [
   'phase-12-perf.spec.ts',
   'phase-12-perf-b.spec.ts',
   'phase-12-perf-gpu-delta.spec.ts',
+  'phase-12-perf-cpu-delta.spec.ts',
   'phase-12-perf2.spec.ts',
   'phase-12-multitouch-drag.spec.ts',
   'phase-12-a.spec.ts',
@@ -53,6 +54,7 @@ describe('the Phase 12 Playwright partition', () => {
       'phase-12-perf-b.spec.ts',
       'phase-12-perf2.spec.ts',
       'phase-12-perf-gpu-delta.spec.ts',
+      'phase-12-perf-cpu-delta.spec.ts',
     ]) {
       expect(projectFor(name), name).toBe('touch-gpu');
     }

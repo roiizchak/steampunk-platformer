@@ -29,16 +29,16 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.5 | Contact identity and every loss path, registrations asserted | **PASS — two holes found and closed** | § 12.5. Exact-set assertion + six loss paths fired; M19/M20 red. Three recorded. |
 | 12.6 | A level transition rebinds idempotently | **PASS** | `touch-draw-path.test.ts` rebind case; M2b red after its gate was written. |
 | 12.7 | Nothing drawn or interactive on a desktop pointer | **PASS** | 12.7 in a `hasTouch:false` context; Phase 2 suite unregressed. |
-| 12.8 | Measured bounds inside the canvas, pairwise disjoint | **NOT MET — owner decision needed** | The five controls and the five menu rows pass at 10 viewports (M11 red 8/11, M11b 7/11, M29 2/21). The **completion zone is deliberately 64 px outside the canvas** and cannot satisfy the criterion as written. § 12.8. |
+| 12.8 | Discrete targets inside the canvas and disjoint; whole-screen routes measured for COVERAGE | **PASS — criterion amended 2026-08-31, owner decision** | The five play controls, the five level-menu rows and the title zone are inside the canvas and pairwise disjoint at 10 viewports (M11 red 8/11, M11b 7/11, M29 2/21). The completion zone is a whole-screen route, deliberately 64 px oversized, and is measured for coverage — no reachable strip of canvas is unroutable — which is what both route zones already assert. **No gate changed; the sentence did.** § 12.8. |
 | 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
-| 12.10 | The prompt appears iff a target falls under 44 CSS px | **NOT MET — owner decision needed** | The prompt and every route now share ONE predicate (M31 red 1/9), so they cannot disagree. But that predicate includes the PLAY controls, so a portrait phone shows the prompt on the title screen whose own target is 390 × 219 CSS px — which is decision **D1**, and not what 12.10's wording says. § 12.10. |
+| 12.10 | The prompt appears iff any target that would have to be hittable on this screen falls under 44 CSS px | **PASS — criterion amended 2026-08-31, owner decision** | The prompt and every route share ONE predicate (M31 red 1/9), so they cannot disagree. That predicate weighs the screen's own route **and** the play controls, which is decision **D1** and is now what the criterion says: a portrait title screen shows the prompt because the controls behind it would be 32.5 CSS px, not because its own 390 × 219 zone is small. **No gate changed; the sentence did.** § 12.10. |
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
 | 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes, the agent gate has not run** | The wrench cell was **re-shot** (owner decision 2026-08-31) and every stroke of all six faces now reaches **3.318:1** at rest and **3.846:1** pressed at 48 CSS px, over every background luminance, against 1.4.11's 3:1 — **with no exception table**: `KNOWN_SHORTFALL` is gone. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, recaptured on the new bytes. ⚠️ **The verdict is NOT MET, not PASS, because 12.14's owner is `ui-ux-tester` and that agent has not run two briefs against the new faces** *(A7)* — and *"ran" is never the same as "passed"*. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one**: production hands the downscale to the browser (`image-rendering: auto` at a fractional canvas scale) and nothing here proves it uses `resize.mjs`'s box filter. Codex round-11, which withdrew the finding once the label stood. **Five earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history below. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
-| 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
+| 12.17 | Shipped bytes: six PNGs, alpha, six distinct **marks**, own key | **PASS — criterion amended 2026-08-31, owner decision** | Everything measurable passes on the shipped bytes (§ 12.17): six 160×160 PNGs, a two-sided alpha band, six pairwise-distinct engraved marks, each bound to its own key. The two amended words are **five → six** and **silhouettes → marks**: the six deliberately share one round brass disc, so the outline is the same by design and the distinctness that exists to be asserted is of the mark. **The distinctness gate was not loosened** — it already compared marks. § 12.17b. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
 | 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 78 rows; 24 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one, M70–M71 the repair round 13 recorded but never landed plus the single-cell path it unlocked, and M72 12.11's replacement GPU bound. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
@@ -53,7 +53,12 @@ decision** (below); 12.13, 12.14 and 12.24 are hands-on and the owner's, and can
 is the Codex implementation review, still running rounds on the repaired diff. Every other row
 passed, several only after a repair.
 
-### 🔴 12.17b — the criterion says five distinct SILHOUETTES, and the art has one
+### ✅ 12.17b — the criterion said five distinct SILHOUETTES, and the art has one
+
+**Resolved 2026-08-31: the owner amended the criterion.** It now reads *"six 160x160 PNGs, alpha
+present, six distinct **marks**, each bound to its own key"*. Nothing in the gate moved — it already
+compared marks — and the two changed words bring the sentence to what the art has always been. The
+analysis that produced the decision is kept below.
 
 12.17 as approved reads *"five 160x160 PNGs, alpha present, five **distinct silhouettes**, each
 bound to its own key"* (`docs/prd/phase-12-touch.md:114`). Two words in it no longer describe the
@@ -102,7 +107,12 @@ itself now rests on the true-size contrast gate, which is a measurement rather t
 was right to reject that.** A criterion about *the button art* cannot be passed by the placeholder
 that stands where the art would be. The measurement is real and is kept below; the verdict is not.
 
-### 🔴 12.10 — the prompt is right and the criterion's wording is wrong, and that is an owner call
+### ✅ 12.10 — the prompt was right and the criterion's wording was wrong
+
+**Resolved 2026-08-31: the owner amended the criterion** to *"the prompt appears iff any target that
+would have to be hittable on this screen — the screen's own route and the play controls — falls under
+44 CSS px"*, which is D1 and what the one shared predicate computes. No gate changed. The analysis
+that produced the decision is kept below.
 
 12.10 says the prompt appears **iff** a live measured target falls under 44 CSS px. On a portrait
 phone at the title screen, the only live target is the full-screen title zone at **390 × 219 CSS
@@ -126,7 +136,12 @@ the move this project forbids.** NOT MET until the owner picks:
 
 Recommendation: **1**.
 
-### 🔴 12.8 — the completion zone cannot satisfy the criterion as written, and that is an owner call
+### ✅ 12.8 — the completion zone could not satisfy the criterion as written
+
+**Resolved 2026-08-31: the owner amended the criterion.** Containment and disjointness apply to
+discrete targets; a whole-screen route zone is measured for **coverage** — no reachable strip of
+canvas left unroutable — which is what both route zones already assert. No gate was weakened; the
+oversized completion zone stays oversized for the reason below. The analysis is kept below.
 
 12.8 says every live target's measured bounds *"lie fully inside the measured canvas CSS rect"*. The
 five play controls, the five level-menu rows and the title zone all do, at ten viewports. The

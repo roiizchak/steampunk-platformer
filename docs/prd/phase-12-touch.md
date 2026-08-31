@@ -81,7 +81,7 @@ feature deleted**, which is what the mutation matrix in §6 exists to answer.
 
 `src/render/touchLayout.ts` · `src/scenes/inputMerge.ts` · `src/scenes/touchControlsLayer.ts` ·
 `src/scenes/touchRoutes.ts` · `src/scenes/rotatePrompt.ts` · `tools/gen/promptTouch.mjs` ·
-`tools/gen/buildTouchAtlas.mjs` · `public/assets/ui/touch-*.png` (five) ·
+`tools/gen/buildTouchAtlas.mjs` · `public/assets/ui/touch-*.png` (six) ·
 `tests/unit/touch-layout.test.ts` · `tests/unit/input-merge.test.ts` ·
 `tests/unit/touch-contacts.test.ts` · `tests/unit/touch-draw-path.test.ts` ·
 `tests/unit/shipped-touch.test.ts` · `tests/e2e/touchHarness.ts` ·
@@ -102,16 +102,16 @@ Modified: `GameScene.ts` · `gameHud.ts` · `gameInput.ts` · `UIScene.ts` · `T
 | 12.5 | Contact identity: two fingers on one button, releasing one keeps it held; a contact that slides off and releases elsewhere still clears; every loss path (Game PAUSE/SLEEP/SHUTDOWN/DESTROY, BLUR, HIDDEN, GAME_OUT, scene POINTER_UP and POINTER_UP_OUTSIDE) cancels it; cancellation runs before disable; and the listener registrations themselves are asserted | `npm test` + `npm run test:e2e` | `voltagent-qa-sec:qa-expert` |
 | 12.6 | A level transition rebinds the session idempotently — no duplicate controls, listeners or stale `input$` after `scene.start('Game')` | `npm run test:e2e` | e2e |
 | 12.7 | No control drawn or interactive on a non-touch desktop pointer; the Phase 2 movement suite is unregressed | `npm run test:e2e` | e2e |
-| 12.8 | Every live touch target's measured bounds — the five play controls and the title, level-menu row and completion zones — lie fully inside the measured canvas CSS rect and are pairwise non-overlapping, at every in-scope viewport | `npm run test:e2e` | e2e |
+| 12.8 | **Discrete** touch targets — the play controls and the title and level-menu rows — have measured bounds fully inside the measured canvas CSS rect and pairwise non-overlapping, at every in-scope viewport. A whole-screen route zone is measured for **coverage** instead: no reachable strip of canvas is left unroutable *(amended 2026-08-31, owner decision)* | `npm run test:e2e` | e2e |
 | 12.9 | Every one of those targets is at least 44 CSS px with at least 8 CSS px gaps, derived from the measured bounds and not from the layout predicate; the figure is cited, not estimated | `npm run test:e2e` + measured | `voltagent-qa-sec:accessibility-tester` |
-| 12.10 | The rotate prompt appears if and only if a live measured target falls under 44 CSS px | `npm run test:e2e` | e2e |
+| 12.10 | The rotate prompt appears if and only if any target that would have to be hittable on this screen — the screen's own route **and** the play controls — falls under 44 CSS px *(amended 2026-08-31, owner decision; this is D1, and what the one shared predicate computes)* | `npm run test:e2e` | e2e |
 | 12.11 | Frame budget unregressed with controls drawn — headed, real GPU, paired arms in one session, and a positive "all five drawn" assertion before timing begins | `npm run test:e2e` | `voltagent-qa-sec:performance-engineer` |
 | 12.12 | Controls hidden and `disableInteractive()`d whenever `Game` is not RUNNING, `playerInputEnabled` is false, or the rotate prompt is up — proved by tapping each of the five underlying control coordinates and asserting no movement, jump, attack or route effect (tick progression continues; a frozen tick is not the claim) | `npm run test:e2e` | e2e |
 | 12.13 | A drag starting on a control is not stolen by browser pan, pinch or double-tap zoom | `playwright-cli` + hands-on *(C4)* | play |
 | 12.14 | The button art is readable at true on-screen size at the smallest in-scope viewport | `playwright-cli` screenshots | `voltagent-qa-sec:ui-ux-tester` |
 | 12.15 | `src/sim/` boundary intact and the whole suite runs with Phaser uninstalled | `npm run test:sim-isolated` | — |
 | 12.16 | Draw-path: blanking `touchLayout`'s bodies or deleting its production consumer turns a behavioural fake-scene gate red | `npm test`, watched failing | `voltagent-qa-sec:code-reviewer` |
-| 12.17 | Shipped bytes: five 160x160 PNGs, alpha present, five distinct silhouettes, each bound to its own key | `npm test` | — |
+| 12.17 | Shipped bytes: **six** 160x160 PNGs, alpha present, six distinct **marks**, each bound to its own key *(amended 2026-08-31, owner decision: the six deliberately share one round brass disc, so the distinctness that can be asserted is of the engraved mark, not of the outline)* | `npm test` | — |
 | 12.18 | Every generation logged with its `request_id`; the touch-UI figure agrees with its $5 ceiling; the art ceiling reads $60 against $55.50 | doc review | — |
 | 12.19 | Every new gate watched failing under the mutation it names, mutation confirmed reverted by "content changed AND the original count dropped by one" — and every row of the mutation matrix reds at least one named gate | watched failing | — |
 | 12.20 | `dist/` carries no dev-only scene key, debug symbol or user-facing dev prose | `npm run build` | — |
