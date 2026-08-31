@@ -29,9 +29,16 @@ const COLS = 3;
  *
  * `gaps` optionally shifts individual rows, so a sheet with uneven spacing can be built.
  */
-function sheet(rows: number, drawn: number[], shift: Record<number, number> = {}, radius = 0.35) {
+function sheet(
+  rows: number,
+  drawn: number[],
+  shift: Record<number, number> = {},
+  radius = 0.35,
+  extraHeight = 0,
+  specks: [number, number][] = [],
+) {
   const w = CELL * COLS;
-  const h = CELL * rows;
+  const h = CELL * rows + extraHeight;
   const data = new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < data.length; i += 4) {
     data[i + 1] = 255;
@@ -54,6 +61,13 @@ function sheet(rows: number, drawn: number[], shift: Record<number, number> = {}
         }
       }
     }
+  }
+  for (const [sx, sy] of specks) {
+    const i = (sy * w + sx) * 4;
+    data[i] = 200;
+    data[i + 1] = 150;
+    data[i + 2] = 60;
+    data[i + 3] = 255;
   }
   return keyOut(decodePng(encodePng(w, h, data)));
 }
@@ -88,6 +102,24 @@ describe('measurePlateRows reads the sheet rather than a constant', () => {
     // A model that draws its rows at 0, 300 and 900 is not drawing a grid, and the honest result is
     // a refusal a human reads — not a number the cutter then slices every button with.
     expect(() => measurePlateRows(sheet(4, [0, 1, 3]))).toThrow(/uneven|not measurable|pitch/i);
+  });
+
+  it('is not fooled by a stray SPECK between the rows', () => {
+    // 🔴 One alpha-qualified pixel on a scanline used to make that scanline an occupied row, so a
+    // speck in the gutter started a third run and re-gridded the sheet. Codex round 20, finding 7.
+    // The docstring above promised this case for two rounds before it existed.
+    const clean = measurePlateRows(sheet(2, [0, 1]));
+    expect(clean).toBe(2);
+    expect(measurePlateRows(sheet(2, [0, 1], {}, 0.35, 0, [[450, 299]]))).toBe(clean);
+  });
+
+  it('refuses a TWO-run sheet whose margins do not fit its spacing', () => {
+    // 🔴 Two runs give ONE step, whose deviation from its own mean is zero, so the drift check
+    // cannot fire and `round(h / pitch)` reads deep margins as empty grid rows. A genuine two-row
+    // sheet with 100 px of extra bottom margin used to be split as three. Codex round 20, finding 4.
+    expect(() => measurePlateRows(sheet(2, [0, 1], {}, 0.35, 200))).toThrow(
+      /ambiguous|do not fit|not that grid/i,
+    );
   });
 
   it('is not fooled by a row drawn flush to the top edge', () => {

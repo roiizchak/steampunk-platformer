@@ -23,7 +23,11 @@ import { describe, expect, it } from 'vitest';
 import {
   MAX_BODY_LUMA_SPREAD,
   MAX_CELL_LUMA_DEVIATION,
+  MAX_CELL_OCCUPANCY_DEVIATION,
+  MAX_CELL_TEXTURE_DEVIATION,
   MAX_CELL_WARMTH_DEVIATION,
+  MAX_CORE_LUMA_DEVIATION,
+  MAX_CORE_WARMTH_DEVIATION,
   MAX_FACE_ROUNDNESS,
   MAX_ROUNDNESS_SPREAD,
   MAX_WARMTH_SPREAD,
@@ -48,6 +52,10 @@ describe('the family policy the owner approved', () => {
       MIN_CELL_PX,
       MAX_CELL_LUMA_DEVIATION,
       MAX_CELL_WARMTH_DEVIATION,
+      MAX_CELL_TEXTURE_DEVIATION,
+      MAX_CELL_OCCUPANCY_DEVIATION,
+      MAX_CORE_LUMA_DEVIATION,
+      MAX_CORE_WARMTH_DEVIATION,
     }).toEqual({
       MAX_FACE_ROUNDNESS: 0.06,
       MIN_FACE_WARMTH: 40,
@@ -60,6 +68,10 @@ describe('the family policy the owner approved', () => {
       MIN_CELL_PX: 100,
       MAX_CELL_LUMA_DEVIATION: 44,
       MAX_CELL_WARMTH_DEVIATION: 40,
+      MAX_CELL_TEXTURE_DEVIATION: 9.5,
+      MAX_CELL_OCCUPANCY_DEVIATION: 0.21,
+      MAX_CORE_LUMA_DEVIATION: 43,
+      MAX_CORE_WARMTH_DEVIATION: 37,
     });
   });
 
@@ -67,9 +79,19 @@ describe('the family policy the owner approved', () => {
     // The measured worst within-family deviation on the adopted six, and the approved multiple.
     // Not a bound — a record of how the two bounds above were produced, kept where it can go red if
     // someone changes one without the other.
-    const WORST_WITHIN_FAMILY = { luma: 17.5, warmth: 16.0 };
+    const WORST_WITHIN_FAMILY = { luma: 17.5, warmth: 16.0, grain: 3.8, occupancy: 0.085, coreLuma: 17.2, coreWarmth: 14.9 };
     const APPROVED_MULTIPLE = 2.5;
     expect(MAX_CELL_LUMA_DEVIATION).toBeCloseTo(WORST_WITHIN_FAMILY.luma * APPROVED_MULTIPLE, 0);
     expect(MAX_CELL_WARMTH_DEVIATION).toBeCloseTo(WORST_WITHIN_FAMILY.warmth * APPROVED_MULTIPLE, 0);
+    expect(MAX_CELL_TEXTURE_DEVIATION).toBeCloseTo(WORST_WITHIN_FAMILY.grain * APPROVED_MULTIPLE, 1);
+    expect(MAX_CELL_OCCUPANCY_DEVIATION).toBeCloseTo(
+      WORST_WITHIN_FAMILY.occupancy * APPROVED_MULTIPLE,
+      2,
+    );
+    expect(MAX_CORE_LUMA_DEVIATION).toBeCloseTo(WORST_WITHIN_FAMILY.coreLuma * APPROVED_MULTIPLE, 0);
+    expect(MAX_CORE_WARMTH_DEVIATION).toBeCloseTo(
+      WORST_WITHIN_FAMILY.coreWarmth * APPROVED_MULTIPLE,
+      0,
+    );
   });
 });

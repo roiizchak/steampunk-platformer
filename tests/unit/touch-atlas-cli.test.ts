@@ -272,10 +272,29 @@ describe('the default build reads the cut faces and does not rewrite them', () =
     const source = join(base, 'candidate.png');
     writeFileSync(source, syntheticFamilyCell(5));
 
+    // 🔴 "It threw" is not "it wrote nothing". A refusal that has already overwritten the cut oracle
+    // leaves the tree in the state the refusal exists to prevent, and the next run judges the
+    // candidate against itself. Codex round 20, finding 8 — so both directories are snapshotted
+    // before the call and every surviving byte is compared after it.
+    const before = new Map<string, Uint8Array>();
+    for (const dir of [dirs.cutDir, dirs.outDir]) {
+      for (const file of readdirSync(dir)) before.set(join(dir, file), readBytes(join(dir, file)));
+    }
+
     expect(
       () => main([`--cell=touch-attack`, `--source=${source}`], dirs),
       'a partial set was judged as a family, and the candidate was written',
     ).toThrow(/touch-jump/);
+
+    for (const dir of [dirs.cutDir, dirs.outDir]) {
+      expect(
+        readdirSync(dir).map((f) => join(dir, f)).sort(),
+        `${dir} gained or lost a file during a refused run`,
+      ).toEqual([...before.keys()].filter((f) => f.startsWith(dir)).sort());
+    }
+    for (const [file, bytes] of before) {
+      expect(readBytes(file), `${file} was rewritten by a run that then refused`).toEqual(bytes);
+    }
   });
 
   it('REFUSES a --cell candidate that is out of family with the five it joins', () => {

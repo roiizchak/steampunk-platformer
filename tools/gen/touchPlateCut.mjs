@@ -66,6 +66,25 @@ const ROW_GAP_PX = 6;
 const MAX_PITCH_DRIFT = 0.15;
 
 /**
+ * The share of the image width a scanline must carry before it counts as part of a row.
+ *
+ * 🔴 One alpha-qualified pixel used to make a scanline "occupied", so a stray speck between two rows
+ * started a third run and a dust mote could re-grid the whole sheet. Codex round 20, finding 7. A
+ * button spans a third of the width; half a percent of it is far below any real row and far above
+ * any speck the keyer leaves behind.
+ */
+const MIN_ROW_SHARE = 0.005;
+
+/**
+ * How far the leftover margin may sit from a whole number of rows before the sheet is refused.
+ *
+ * A quarter of a cell: the flush-to-the-top-edge case in the row tests overshoots by 0.20 of one and
+ * is a legitimate three-row sheet; a two-row sheet with a deep bottom margin is 0.67 out and has no
+ * honest row count at all.
+ */
+const MAX_MARGIN_DRIFT = 0.25;
+
+/**
  * **How many rows of buttons this plate actually has**, counted from the keyed image.
  *
  * 🔴 `TOUCH_PLATE_SHEET_ROWS` is what take 3 drew, and the whole grid was split by it. The prompt
@@ -84,18 +103,17 @@ export function measurePlateRows(keyed) {
 
   /** Where each run of occupied image rows begins, and how tall the runs are. */
   const starts = [];
+  const ends = [];
   let inRun = false;
   let gap = 0;
   for (let y = 0; y < h; y += 1) {
-    let occupied = false;
+    let lit = 0;
     for (let x = 0; x < w; x += 1) {
-      if (d[(y * w + x) * 4 + 3] >= 128) {
-        occupied = true;
-        break;
-      }
+      if (d[(y * w + x) * 4 + 3] >= 128) lit += 1;
     }
-    if (occupied) {
+    if (lit >= Math.max(3, Math.ceil(w * MIN_ROW_SHARE))) {
       if (!inRun || gap >= ROW_GAP_PX) starts.push(y);
+      ends[starts.length - 1] = y;
       inRun = true;
       gap = 0;
     } else {
@@ -133,7 +151,27 @@ export function measurePlateRows(keyed) {
     );
   }
 
-  return Math.max(starts.length, Math.round(h / pitch));
+  // 🔴 With only two runs there is ONE step, so its deviation from its own mean is zero by
+  // construction and the drift check above cannot fire. `round(h / pitch)` then reads asymmetric top
+  // and bottom margins as empty grid rows, and a legitimate two-row redesign is split as three.
+  // Codex round 20, finding 4.
+  //
+  // So the grid is built from the RUNS outward instead: the rows that carry a button span
+  // `starts.length` pitches, and whatever height is left over must be a WHOLE number of further
+  // pitches, or the sheet is not the grid the arithmetic claims. A 600 px pair of rows in an 800 px
+  // image leaves 0.67 of a cell — that is a margin, not a row, and there is no honest row count to
+  // give back.
+  const spare = (h - starts.length * pitch) / pitch;
+  const extra = Math.round(spare);
+  if (Math.abs(spare - extra) > MAX_MARGIN_DRIFT) {
+    throw new Error(
+      `the plate's ${starts.length} drawn row(s) at ${pitch.toFixed(0)} px leave ` +
+        `${(h - starts.length * pitch).toFixed(0)} px over — ${spare.toFixed(2)} of a row, not a ` +
+        'whole one, so the row count of this sheet is ambiguous and it cannot be split',
+    );
+  }
+
+  return Math.max(starts.length, starts.length + extra);
 }
 
 /** The shipped face size, in game pixels. `TOUCH_BOX_PX` — a plate fills its box. */

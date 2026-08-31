@@ -1,5 +1,3 @@
-import type { RgbaImage } from './png.d.mts';
-
 export const MAX_FACE_ROUNDNESS: number;
 export const MIN_FACE_WARMTH: number;
 export const MAX_ROUNDNESS_SPREAD: number;
@@ -15,16 +13,3 @@ export const MAX_CELL_OCCUPANCY_DEVIATION: number;
 export const MAX_CELL_TEXTURE_DEVIATION: number;
 export const MAX_CORE_LUMA_DEVIATION: number;
 export const MAX_CORE_WARMTH_DEVIATION: number;
-
-type Cell = { n: number; luma: number; warmth: number; grain: number };
-
-export function faceFamily(face: RgbaImage): {
-  roundness: number;
-  coreLuma: number;
-  coreWarmth: number;
-  bodyLuma: number;
-  bodyWarmth: number;
-  cells: Cell[];
-};
-
-export function familyFailures(faces: Map<string, RgbaImage>): string[];

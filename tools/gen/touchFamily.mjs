@@ -59,59 +59,41 @@
 
 /** @typedef {import('./png.d.mts').RgbaImage} RgbaImage */
 
-/** A silhouette this far from a disc is not this plate's bezel. Absolute, per face. */
-export const MAX_FACE_ROUNDNESS = 0.06;
+export {
+  MAX_BODY_LUMA_SPREAD,
+  MAX_CELL_LUMA_DEVIATION,
+  MAX_CELL_OCCUPANCY_DEVIATION,
+  MAX_CELL_TEXTURE_DEVIATION,
+  MAX_CELL_WARMTH_DEVIATION,
+  MAX_CORE_LUMA_DEVIATION,
+  MAX_CORE_WARMTH_DEVIATION,
+  MAX_FACE_ROUNDNESS,
+  MAX_ROUNDNESS_SPREAD,
+  MAX_WARMTH_SPREAD,
+  MIN_CELL_PX,
+  MIN_FACE_WARMTH,
+  OUTER_R0,
+  OUTER_RINGS,
+  OUTER_SECTORS,
+} from './touchFamilyPolicy.mjs';
 
-/** Below this `R - B` the body is not brass at all, whatever the other five look like. */
-export const MIN_FACE_WARMTH = 40;
-
-/** Spread across the set: max minus min. Roughly 12x, 4x and 4.5x the adopted set's own. */
-export const MAX_ROUNDNESS_SPREAD = 0.02;
-export const MAX_BODY_LUMA_SPREAD = 20;
-export const MAX_WARMTH_SPREAD = 25;
-
-/** Where the compared region starts, as a share of the face's own maximum radius. */
-export const OUTER_R0 = 0.5;
-
-/** The joint polar grid over that region. 24 cells, none under 480 px on the adopted set. */
-export const OUTER_RINGS = 3;
-export const OUTER_SECTORS = 8;
-
-/**
- * A cell holding fewer opaque pixels than this in any face is a failure, not a skip.
- *
- * The adopted set's smallest cell holds **483**. This is a floor on the button FILLING its own
- * outer region, which is a family property in its own right — and it can never be used to drop a
- * cell from the comparison, because the region is fixed geometry.
- */
-export const MIN_CELL_PX = 100;
-
-/**
- * **How far one face may sit from the other five, per cell.** Owner decision, 2026-08-31.
- *
- * The question is an OUTLIER question — *is one of these six not from this family?* — so the
- * statistic is each face's deviation from the **median of the other five**, not the spread of all
- * six. A spread includes the suspect's own contribution and so is dragged toward admitting it.
- *
- * Measured on the adopted six: the worst within-family deviation is **17.5** (luminance) and
- * **16.0** (warmth), at `touch-attack`, cell 6.
- *
- * 🔴 **These bounds were fixed at 2.5x those figures BEFORE any mutation was run against this
- * statistic**, and they are 44 and 40 for that reason alone. The multiple is the one the owner
- * approved on 2026-08-31 for the statistic this replaces; the previous version's 15/25 was chosen
- * *after* seeing that 25/40 failed to red its mutation, which is post-data threshold selection and
- * is what CLAUDE.md § 5 forbids *(Codex round 18, finding 5)*. **Whether the mutations red at 44/40
- * is an outcome to report, never a reason to move these.**
- *
- * They remain **PROVISIONAL**, on the owner's condition: **the whole-plate redesign is the held-out
- * set.** It does not exist yet, so it cannot have influenced these numbers, and it is the art they
- * were built for. If the new plate reds them honestly, that is a finding to bring to the owner.
- *
- * ⚠️ `tests/unit/touch-family-policy.test.ts` pins these exact values. A red there is an approval
- * checkpoint, never something to clear by editing the pin.
- */
-export const MAX_CELL_LUMA_DEVIATION = 44;
-export const MAX_CELL_WARMTH_DEVIATION = 40;
+import {
+  MAX_BODY_LUMA_SPREAD,
+  MAX_CELL_LUMA_DEVIATION,
+  MAX_CELL_OCCUPANCY_DEVIATION,
+  MAX_CELL_TEXTURE_DEVIATION,
+  MAX_CELL_WARMTH_DEVIATION,
+  MAX_CORE_LUMA_DEVIATION,
+  MAX_CORE_WARMTH_DEVIATION,
+  MAX_FACE_ROUNDNESS,
+  MAX_ROUNDNESS_SPREAD,
+  MAX_WARMTH_SPREAD,
+  MIN_CELL_PX,
+  MIN_FACE_WARMTH,
+  OUTER_R0,
+  OUTER_RINGS,
+  OUTER_SECTORS,
+} from './touchFamilyPolicy.mjs';
 
 /** Opaque means opaque: a halo pixel is neither body nor background. */
 const BODY_ALPHA = 250;
@@ -129,7 +111,7 @@ const BODY_SHARE = 0.4;
  * The family numbers for one cut face.
  *
  * @param {RgbaImage} face
- * @returns {{ roundness: number, bodyLuma: number, bodyWarmth: number, cells: { n: number, luma: number, warmth: number }[] }}
+ * @returns {{ roundness: number, coreLuma: number, coreWarmth: number, bodyLuma: number, bodyWarmth: number, cells: { n: number, luma: number, warmth: number, grain: number }[] }}
  */
 export function faceFamily(face) {
   const { width: w, height: h, data: d } = face;
@@ -190,30 +172,66 @@ export function faceFamily(face) {
     if (r > maxR) maxR = r;
   }
 
-  const raw = Array.from({ length: OUTER_RINGS * OUTER_SECTORS }, () => ({ n: 0, luma: 0, warmth: 0 }));
+  // 🔴 The region the grid discards. `OUTER_R0` is a geometric line, not a semantic one, so a
+  // patina or bezel drift confined to the middle of the face is invisible to all 24 cells. Codex
+  // round 20, finding 2. The mark also lives here, and the mark is the one thing six buttons MUST
+  // draw differently — so the comparison is over the BRIGHTEST `BODY_SHARE` of the core, the brass
+  // between and around the glyph, which is common to the family by construction.
+  const core = [];
+
+  const raw = Array.from({ length: OUTER_RINGS * OUTER_SECTORS }, () => ({ n: 0, luma: 0, warmth: 0, grain: 0, pairs: 0 }));
+  /** Cell index per pixel, so the grain pass can ask whether two neighbours share a cell. */
+  const cellOf = new Map();
   for (const p of opaque) {
     const dx = p.x - cx;
     const dy = p.y - cy;
     const r = Math.hypot(dx, dy) / maxR;
-    if (r < OUTER_R0) continue;
+    if (r < OUTER_R0) {
+      core.push(p);
+      continue;
+    }
     const ring = Math.min(OUTER_RINGS - 1, Math.floor(((r - OUTER_R0) / (1 - OUTER_R0)) * OUTER_RINGS));
     let angle = Math.atan2(dy, dx);
     if (angle < 0) angle += 2 * Math.PI;
     const sector = Math.min(OUTER_SECTORS - 1, Math.floor((angle / (2 * Math.PI)) * OUTER_SECTORS));
-    const cell = raw[ring * OUTER_SECTORS + sector];
+    const index = ring * OUTER_SECTORS + sector;
+    cellOf.set(p.y * w + p.x, index);
+    const cell = raw[index];
     cell.n += 1;
     cell.luma += p.luma;
     cell.warmth += p.warmth;
   }
 
+  // 🔴 The within-cell pass. Every aggregate above is a function of the cell's histogram, and a
+  // permutation of the cell's own pixels leaves a histogram identical to the last decimal. A step
+  // between TOUCHING pixels is not: it is what tells a smooth bevel from the same brass shuffled.
+  const lumaAt = new Map();
+  for (const p of opaque) lumaAt.set(p.y * w + p.x, p.luma);
+  for (const [at, index] of cellOf) {
+    for (const step of [1, w]) {
+      const other = lumaAt.get(at + step);
+      if (other === undefined || cellOf.get(at + step) !== index) continue;
+      raw[index].grain += Math.abs(lumaAt.get(at) - other);
+      raw[index].pairs += 1;
+    }
+  }
+
+  if (core.length === 0) throw new Error('the face has no core — nothing inside the outer grid');
+  const coreBody = [...core]
+    .sort((a, b) => a.luma - b.luma)
+    .slice(Math.floor(core.length * (1 - BODY_SHARE)));
+
   return {
     roundness,
+    coreLuma: coreBody.reduce((a, b) => a + b.luma, 0) / coreBody.length,
+    coreWarmth: coreBody.reduce((a, b) => a + b.warmth, 0) / coreBody.length,
     bodyLuma: body.reduce((a, b) => a + b.luma, 0) / body.length,
     bodyWarmth: body.reduce((a, b) => a + b.warmth, 0) / body.length,
     cells: raw.map((c) => ({
       n: c.n,
       luma: c.n > 0 ? c.luma / c.n : NaN,
       warmth: c.n > 0 ? c.warmth / c.n : NaN,
+      grain: c.pairs > 0 ? c.grain / c.pairs : NaN,
     })),
   };
 }
@@ -273,6 +291,25 @@ export function familyFailures(faces) {
     }
   }
 
+  // 🔴 The CORE, which the grid does not reach. Median-of-others, like the cells.
+  if (measured.length >= 3) {
+    for (const [stat, bound, what] of /** @type {['coreLuma' | 'coreWarmth', number, string][]} */ ([
+      ['coreLuma', MAX_CORE_LUMA_DEVIATION, 'core lighting'],
+      ['coreWarmth', MAX_CORE_WARMTH_DEVIATION, 'core patina'],
+    ])) {
+      for (const [key, m] of measured) {
+        const consensus = median(measured.filter(([o]) => o !== key).map(([, om]) => om[stat]));
+        const off = Math.abs(m[stat] - consensus);
+        if (off > bound) {
+          bad.push(
+            `${key}'s ${what} reads ${m[stat].toFixed(1)} against the other faces' ` +
+              `${consensus.toFixed(1)} — off by ${off.toFixed(1)}, over ${bound}`,
+          );
+        }
+      }
+    }
+  }
+
   // 🔴 The JOINT polar grid, over fixed geometry, with every opaque pixel counted. Each face is
   // measured against the CONSENSUS of the others, cell by cell, which is the outlier question this
   // gate actually asks. Nothing here can be voted out of the comparison by the face under suspicion.
@@ -286,9 +323,25 @@ export function familyFailures(faces) {
           );
           continue;
         }
-        for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
+        // Occupancy, RELATIVE to the others — the fill invariant `MIN_CELL_PX` was claimed to be
+        // and is not. A face hollowed out behind an intact edge fails here and nowhere else.
+        const otherN = measured.filter(([o]) => o !== key).map(([, om]) => om.cells[i].n);
+        const consensusN = median(otherN);
+        if (consensusN > 0) {
+          const off = Math.abs(m.cells[i].n - consensusN) / consensusN;
+          if (off > MAX_CELL_OCCUPANCY_DEVIATION) {
+            bad.push(
+              `${key} fills ${cellName(i)} with ${m.cells[i].n} px against the other faces' ` +
+                `${consensusN} — off by ${(off * 100).toFixed(0)}%, over ` +
+                `${(MAX_CELL_OCCUPANCY_DEVIATION * 100).toFixed(0)}%`,
+            );
+          }
+        }
+
+        for (const [stat, bound, what] of /** @type {['luma' | 'warmth' | 'grain', number, string][]} */ ([
           ['luma', MAX_CELL_LUMA_DEVIATION, 'lighting'],
           ['warmth', MAX_CELL_WARMTH_DEVIATION, 'patina'],
+          ['grain', MAX_CELL_TEXTURE_DEVIATION, 'texture'],
         ])) {
           const others = measured.filter(([o]) => o !== key).map(([, om]) => om.cells[i][stat]);
           if (others.some((v) => Number.isNaN(v))) continue;
