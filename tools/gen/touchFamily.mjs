@@ -101,16 +101,21 @@ const MIN_SLICE_PX = 200;
  * Measured on the adopted six, 2026-08-31: luminance at most **5.9** and warmth at most **10.1**
  * over the five comparable bands. These are **~2.5x** that.
  *
- * 🔴 **They were 25 and 40 — 4x — and at 4x the profile could not order its own mutation.** The
- * radial-inversion case moves the worst band by 30 (warmth) and 23 (luminance), so a 40 / 25 band
- * admitted a button lit from the wrong side and the spatial statistic was decoration. Tightening a
- * bound so it can detect the defect it names is the opposite of the failure the perf gates record:
- * there a bound was widened until a clean run passed; here the clean set keeps a 2.5x margin and
- * the mutation reds. *(vault: a statistic that does not order its own mutation cannot be fixed by
- * moving the bound — but one that ALMOST orders it can, and this is which case that was.)*
+ * 🔴 **PROVISIONAL, AND CHOSEN AFTER SEEING THE MUTATION. Owner decision, 2026-08-31.**
  *
- * ⚠️ If the whole-plate redesign reds these honestly, that is a finding to report, not a licence to
- * move them.
+ * They were 25 and 40 — 4x — and at 4x the profile did not trip on the radial-inversion case, which
+ * moves the worst band by 30 (warmth) and 23 (luminance). Changing them to 2.5x so that it does is
+ * **post-data threshold selection**, which is the move CLAUDE.md § 5 forbids, and calling it "the
+ * statistic almost ordered its mutation" was an exception invented on the spot to permit it. Codex
+ * round 18, finding 5, and it was right.
+ *
+ * The owner approved these as **provisional**, on one condition: **the whole-plate redesign is the
+ * held-out set.** It does not exist yet, so it cannot have influenced these numbers, and it is the
+ * art these bounds were built for. If the new plate reds them honestly, that is a **finding to
+ * bring to the owner** — never a licence to move the bound to admit it.
+ *
+ * ⚠️ Until that plate is measured, treat every family verdict as resting on a threshold whose only
+ * validation is the set it was derived from.
  */
 export const MAX_BAND_LUMA_SPREAD = 15;
 export const MAX_BAND_WARMTH_SPREAD = 25;

@@ -534,6 +534,34 @@ pause finding independently, and brief 2 found something no one had looked for.
 | 5 | A boot names *feet*, not a walk/run **toggle** | **RECORDED.** *Reason: no conventional glyph distinguishes a gait toggle from locomotion; the lit/unlit plate carries the state* |
 | 6 | Pressed feedback is alpha-only and happens under the thumb | **RECORDED.** *Reason: a cue outside the box bounds is a layout change, not an art one* |
 
+#### 🔴 Codex round 18 — the implementation review (12.23), `VERDICT: REVISE`
+
+Seven findings. **Six applied, one resolved by owner decision.** Two of them — the angular profile
+and the empty-output assertion — were applied **mid-round**, from Codex's own reasoning trace rather
+than its report, so its numbered findings 2 and 4 arrived already fixed.
+
+**The theme is that the gate kept being weaker than the sentence describing it.** Finding 1 is an
+invariant with a documented bypass. Finding 3 is a comparison that could be switched off by the very
+drift it exists to catch. Finding 4 is *"throws before writing"* proved by a throw. Finding 5 is a
+threshold chosen to make its own test red.
+
+| # | finding | disposition |
+|---|---|---|
+| 1 | 🔴 **Single-cell adoption bypassed the family invariant** — and `--cell` is the path that overwrites the cut oracle AND the shipped face, the documented workflow every re-shoot in this phase went through. It was exempt on the reasoning that a set of one is a family by construction: true, and beside the point | **APPLIED.** The candidate is merged with the five committed cuts and the **six** are judged. A new case proves an out-of-family cell is refused *and* that the cut it would have replaced is byte-unchanged |
+| 2 | **The "spatial" gate was angularly blind** — each annulus reduces to one mean, so moving the highlight from one side to the other leaves every statistic identical, and the round-17 mutation reversed radial order rather than lighting direction | **APPLIED MID-ROUND**, before the report arrived. Eight angular sectors beside the eight annuli, and a half-turn rotation case that asserts the radial checks stay **quiet** while the angular one fires — so it proves the new profile rather than riding on the old one |
+| 3 | 🔴 **A drift could erase the evidence against it.** A slice was skipped whenever ANY face fell under the retained-pixel minimum, so darkening one annulus past the mark threshold **deleted the slice that disagreed**, while the brightest-40 % scalars barely moved | **APPLIED.** Eligibility is decided by the OTHER faces; a lone depleted face is the finding, not a reason to stop looking. Slices also carry their whole opaque area, counted before the mark is dropped |
+| 4 | **M79 did not prove the check happens before writes.** *"Throws before writing anything"* asserted only the exception — a builder that wrote three faces and then refused the fourth throws the same error | **APPLIED MID-ROUND and extended.** The output directory must be empty **and** every staged cut byte-unchanged |
+| 5 | 🔴 **The band threshold was fitted to the mutation after observing it.** 25/40 passed the radial-inversion case; 15/25 was then selected so it would red, and *"the statistic almost ordered its mutation"* was an exception invented to permit it | **OWNER DECISION, 2026-08-31: approved as PROVISIONAL, with the whole-plate redesign as the held-out set.** That plate does not exist yet, so it cannot have influenced the number, and it is the art these bounds were built for. **If it reds them honestly, that is a finding to bring to the owner — never a licence to move the bound.** Written into `touchFamily.mjs` beside the constants, including the fact that the exception was invented on the spot |
+| 6 | **The 12.23 row stopped at round 16** while the summary below it named round 17 | **APPLIED.** Rounds 14-18 all named in the row |
+| 7 | **Two reconciliation counts were false** — 27 matrix *rows* went green where 22 rows produced 27 green *attempts*, and "nine rows" in `GENERATION-LOG.md` is nine takes across four entries | **APPLIED** |
+
+⚠️ **Also landed this round, and not from a finding:** `plateCells` measures the sheet's row
+**pitch** instead of assuming three. That is round 15 finding 4's precondition on the redesign — the
+prompt asks for two rows and take 3 drew three, so a two-row sheet split by three cuts every button
+in half and no downstream gate compares a face to anything that would notice. Take 3 still measures
+3, and the unit suite's synthetic plates (two rows drawn in a three-row grid) measure 3 as well,
+which is why the count had to come from the pitch and not from the number of drawn rows.
+
 #### 🔴 Codex round 17 — the implementation review (12.23), `VERDICT: REVISE`
 
 Seven findings, every one re-verified locally before being acted on. **All seven applied.** Three of
