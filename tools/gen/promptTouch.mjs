@@ -69,7 +69,8 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
   {
     key: 'touch-attack',
     subject:
-      'a single adjustable spanner seen from the side, its open jaws pointing to the upper right',
+      'a single adjustable spanner seen from the side, its open jaws pointing to the upper right, ' +
+      'drawn as one solid silhouette of a single flat tone',
     row: 1,
     col: 0,
   },
@@ -157,5 +158,73 @@ export function touchPlatePrompt(template) {
     `${forbid.replace(/[.]$/, '')}, drop shadows cast onto the backing sheet, gradients or vignetting in the backing ` +
       'sheet, buttons overlapping or touching, a seventh button, a third row, a frame or border ' +
       'around the sheet, labels or numbers beside the buttons, a hand or finger.',
+  ].join('\n');
+}
+
+/**
+ * The GLYPH clause for a single-button re-shoot, and the one sentence it does not inherit.
+ *
+ * The plate prompt asks for a glyph "deeply cut and filled with dark shadow". That sentence is
+ * where the round-13 shortfall comes from: separating `attack`'s mark by its pre-halo seeds isolates
+ * four small fragments of the wrench's SHADING from its two real strokes, and the smallest — an
+ * 11-pixel seed — measures 2.86:1 at 48 CSS px against 12.14's 3:1. No parameter reaches it
+ * (`KEYLINE_PX` 4 leaves it at 2.86; `BOLD_PX` 3 and 4 make it 1.93 and 1.37), because at that size
+ * it is about three output pixels of mostly dark.
+ *
+ * So the interior shading is not asked for. STYLE.md section 6 forbids negating it — "no internal
+ * shading" is a phrase about shading, and a model that reads it half-attentively draws shading — so
+ * the clause states positively what IS there: one continuous inlay, one tone, one even depth, one
+ * unbroken outline. Owner decision 2026-08-31, taken over accepting the 2.86:1 fragment.
+ */
+const FLAT_GLYPH =
+  'The button carries one engraved glyph, cut as a single continuous inlay of one flat uniform ' +
+  'tone at one even depth across its whole area, with one unbroken outline, so that it reads as a ' +
+  'solid shape at a glance:';
+
+/**
+ * The prompt for ONE button, on its own 1:1 chroma field.
+ *
+ * Used with `fal-ai/nano-banana-pro/edit` and a raw plate cell as the reference, so the brass, the
+ * lighting and the patina come from the adopted plate rather than from a second interpretation of
+ * the word "brass" — `FAL-MODELS.md` section 2, vault 4.1: change the reference, not the wording.
+ * The plate prompt's own header says why that matters: six separately generated buttons sit next to
+ * each other on screen, where a mismatch is the most visible failure available.
+ *
+ * Geometry is stated as a positive fact for the same reason take 1 needed repairing: "a 3 by 2
+ * grid" is a label, not a geometry, and the model was free to decide what a cell was.
+ *
+ * @param {string} template STYLE.md's section 4 prompt template, read through `styleTemplate`.
+ * @param {{ key: string, subject: string }} cell the control being re-shot.
+ * @returns {string} the full prompt text, ready to send unchanged.
+ */
+export function touchButtonPrompt(template, cell) {
+  const rendering = templateBlock(template, 'RENDERING');
+  const forbid = templateBlock(template, 'DO NOT INCLUDE');
+
+  return [
+    'A single round push-button for a video game touchscreen interface, laid out flat on a plain ' +
+      'coloured backing sheet, viewed straight on from directly above.',
+    '',
+    'LAYOUT, STATED AS EXACT GEOMETRY. The image contains one button and nothing else. Its centre ' +
+      'is the centre of the image, and it is a circle whose diameter is one half of the width of ' +
+      'the image, so it is surrounded on all sides by a wide clear margin of backing sheet. Every ' +
+      'part of the image outside that one circle is backing sheet.',
+    '',
+    `BACKING SHEET: ${TOUCH_PLATE_CHROMA}, perfectly flat and evenly lit, filling every part of the ` +
+      'image that is not the button.',
+    '',
+    'THE BUTTON: a circular Victorian brass control, cast and polished, with a raised riveted ' +
+      'bezel around the rim, a slightly domed face, visible patina in the recesses and a warm amber ' +
+      'highlight along the upper-left edge. Keep the brass, the bezel, the patina and the lighting ' +
+      'exactly as they are in the reference image; change only the engraved glyph.',
+    '',
+    FLAT_GLYPH,
+    `${cell.subject}, centred on the button face.`,
+    '',
+    rendering,
+    '',
+    `${forbid.replace(/[.]$/, '')}, drop shadows cast onto the backing sheet, gradients or vignetting in the backing ` +
+      'sheet, a second button, a grid or sheet of buttons, a frame or border around the image, ' +
+      'labels or numbers beside the button, a hand or finger.',
   ].join('\n');
 }

@@ -8,8 +8,6 @@
 export const TOUCH_PLATE_SOURCE: string;
 export const TOUCH_CELL_SOURCES: Readonly<Record<string, string>>;
 
-export function sourceFor(key: string): string;
-
 export type TouchBuildArgs =
   | { mode: 'ink' }
   | { mode: 'adopt' }

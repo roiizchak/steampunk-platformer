@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { TOUCH_FACE_PX, cutPlate } from '../../tools/gen/buildTouchAtlas.mjs';
+import { TOUCH_FACE_PX, cutPlate, extractPlateCell, plateCells } from '../../tools/gen/touchPlateCut.mjs';
 import { encodePng } from '../../tools/gen/png.mjs';
 import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
 
@@ -96,5 +96,44 @@ describe('cutPlate routes each cell to the control the descriptors name', () => 
       data[i + 3] = 255;
     }
     expect(() => cutPlate(encodePng(side, side, data))).toThrow();
+  });
+});
+
+describe('extractPlateCell hands back the RAW cell, at the plate resolution', () => {
+  // The reference an image-to-image edit is given has to be the model's own pixels at the model's
+  // own resolution. Every other path here has already keyed the chroma out, cropped to the figure
+  // and resampled to 160 px, so a plan that named a full-resolution reference had nothing that
+  // could produce one. Codex plan review, round 3.
+  const GREYS = [60, 85, 110, 135, 160, 185];
+
+  it('returns a full-size cell that still carries its chroma field', () => {
+    const cell = extractPlateCell(syntheticPlate(GREYS), 'touch-attack');
+
+    // CELL px on a side, not TOUCH_FACE_PX: nothing has been downscaled.
+    expect([cell.width, cell.height], 'the cell was resampled, so it is not raw').toEqual([
+      CELL,
+      CELL,
+    ]);
+    // The corner is backing sheet. `cutFace` would have keyed it to transparent and cropped it
+    // away entirely, which is exactly the difference this seam exists for.
+    expect(
+      [cell.data[0], cell.data[1], cell.data[2], cell.data[3]],
+      'the corner was keyed out, so this went through cutFace after all',
+    ).toEqual([FIELD[0], FIELD[1], FIELD[2], 255]);
+    const middle = ((CELL / 2) * CELL + CELL / 2) * 4;
+    expect(cell.data[middle], 'the wrong cell came back').toBe(GREYS[3]);
+  });
+
+  it('routes by key, and refuses a key the descriptors do not name', () => {
+    // Same binding claim as the cut path above, one level lower — `cutPlate` composes this, so a
+    // mutation to `grid[row * COLS + col]` has to red here as well as there.
+    const raw = plateCells(syntheticPlate(GREYS));
+    TOUCH_PLATE_CELLS.forEach((cell, index) => {
+      const middle = ((CELL / 2) * CELL + CELL / 2) * 4;
+      expect(raw.cells.get(cell.key)!.data[middle], `${cell.key} read the wrong cell`).toBe(
+        GREYS[index],
+      );
+    });
+    expect(() => extractPlateCell(syntheticPlate(GREYS), 'touch-nope')).toThrow();
   });
 });

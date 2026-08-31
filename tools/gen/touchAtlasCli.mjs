@@ -50,16 +50,6 @@ export const TOUCH_PLATE_SOURCE =
  */
 export const TOUCH_CELL_SOURCES = Object.freeze({});
 
-/**
- * Which file a key's pixels come from.
- *
- * @param {string} key
- * @returns {string}
- */
-export function sourceFor(key) {
-  return TOUCH_CELL_SOURCES[key] ?? TOUCH_PLATE_SOURCE;
-}
-
 /** Every key the plate descriptors name, for validating `--cell`. */
 const CELL_KEYS = new Set(TOUCH_PLATE_CELLS.map((cell) => cell.key));
 

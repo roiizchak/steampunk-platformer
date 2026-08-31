@@ -20,4 +20,16 @@ export const TOUCH_PLATE_EMPTY: null;
 export const TOUCH_PLATE_COLS: number;
 export const TOUCH_PLATE_ROWS: number;
 export const TOUCH_PLATE_CHROMA: string;
-export function touchPlatePrompt(template: string): string;
+/**
+ * `template` is `styleTemplate()`'s opaque parsed STYLE.md, which `prompt.d.mts` types as
+ * `unknown` — it was declared `string` here, which no caller could satisfy.
+ */
+export function touchPlatePrompt(template: unknown): string;
+
+/**
+ * The single-button variant, for a one-cell re-shoot through `nano-banana-pro/edit`.
+ *
+ * Takes the cell rather than a key so `touch-prompt.test.ts` can drive it over every descriptor
+ * and assert that only the requested subject appears.
+ */
+export function touchButtonPrompt(template: unknown, cell: TouchPlateCell): string;
