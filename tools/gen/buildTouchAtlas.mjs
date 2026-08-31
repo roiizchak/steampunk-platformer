@@ -1,9 +1,16 @@
 /**
  * The touch-control plate → six 160 × 160 PNGs.
  *
- * `npm run assets:touch`. Reads the generated plate named by `TOUCH_PLATE_SOURCE`, cuts it by KNOWN
- * GEOMETRY, keys the chroma field out of each cell, validates it, downscales it, and writes one PNG
- * per control into `public/assets/ui/`.
+ * Cuts a plate by KNOWN GEOMETRY, keys the chroma field out of each cell, validates it, downscales
+ * it, and writes one PNG per control into `public/assets/ui/`.
+ *
+ * ## 🔴 Three modes, and the default one does NOT cut
+ *
+ * `npm run assets:touch` reads the committed cut faces in `tests/fixtures/touch-cut/` and inks
+ * them. `npm run assets:touch:adopt` is the only path that cuts a plate and rewrites those cuts.
+ * The grammar and the reasoning live in `touchAtlasCli.mjs`; the short version is that the cuts are
+ * the oracle every shipped-bytes gate measures against, and a build that rewrites its own oracle
+ * proves nothing.
  *
  * ## 🔴 Cell position, never detection order
  *
@@ -38,14 +45,11 @@ import { fileURLToPath } from 'node:url';
 import { keyOut } from './chromaKey.mjs';
 import { bakePlateAlpha, keylineMarks } from './touchInk.mjs';
 import { components, removeSpecks, trimHalo } from './chromaComponents.mjs';
-import { decodePng, encodePng, readBytes } from './png.mjs';
+import { decodePng, encodePng, readBytes, readPng } from './png.mjs';
 import { crop, downscale } from './resize.mjs';
 import { figureMetrics, splitGrid } from './sheets.mjs';
 import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from './promptTouch.mjs';
-
-/** The adopted plate. Take 3 — `docs/generations/phase-12-touch-plate.md`. */
-export const TOUCH_PLATE_SOURCE =
-  '_generated/phase-12-touch/take-3-01a05115-d226-72b2-ae41-8998a11940cf.png';
+import { TOUCH_CELL_SOURCES, TOUCH_PLATE_SOURCE, parseTouchArgs, sourceFor } from './touchAtlasCli.mjs';
 
 /**
  * How many rows the SHEET has, which is not how many rows the LAYOUT has.
@@ -206,49 +210,126 @@ function catalogTouchKeys() {
     .sort();
 }
 
-function main() {
-  const source = path.resolve(TOUCH_PLATE_SOURCE);
-  if (!fs.existsSync(source)) {
-    throw new Error(`no plate at ${TOUCH_PLATE_SOURCE} — generate it first, see docs/generations/`);
+/** Where the three modes look for their cut faces. Injected so a test can drive real writes. */
+export const DEFAULT_DIRS = { outDir: TOUCH_OUT_DIR, cutDir: TOUCH_CUT_DIR };
+
+/**
+ * The cut faces this run will ink, and where they came from.
+ *
+ * 🔴 `adopt` decodes the plate ONCE and then replaces only overridden keys, each from its own
+ * file. Cutting per key would decode a 3.8 MB plate six times for no gain; replacing after the cut
+ * is what lets a single re-shot cell coexist with five that still come from the plate.
+ *
+ * @param {import('./touchAtlasCli.d.mts').TouchBuildArgs} args
+ * @param {{ outDir: string, cutDir: string }} dirs
+ * @returns {Map<string, import('./png.d.mts').RgbaImage>}
+ */
+function sourceCells(args, dirs) {
+  if (args.mode === 'ink') {
+    // The committed oracle, read and never written. This is the ordinary build.
+    return new Map(
+      TOUCH_PLATE_CELLS.map((cell) => [cell.key, readPng(path.join(dirs.cutDir, `${cell.key}.png`))]),
+    );
   }
-  const { cells, width, height } = cutPlate(readBytes(source));
+  if (args.mode === 'cell') {
+    return new Map([[args.key, cutFace(decodePng(readBytes(requireFile(args.source))), args.key)]]);
+  }
+  const cells = cutPlate(readBytes(requireFile(TOUCH_PLATE_SOURCE))).cells;
+  for (const [key, file] of Object.entries(TOUCH_CELL_SOURCES)) {
+    cells.set(key, cutFace(decodePng(readBytes(requireFile(file))), key));
+  }
+  return cells;
+}
+
+/**
+ * @param {string} file
+ * @returns {string}
+ */
+function requireFile(file) {
+  const resolved = path.resolve(file);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`no image at ${file} — generate it first, see docs/generations/`);
+  }
+  return resolved;
+}
+
+/**
+ * Cut, ink and write, returning EVERY path written.
+ *
+ * ⚠️ The return value is the point. *"The default mode does not rewrite the oracle"* is a claim
+ * about a write set, and a test that can only inspect the filesystem afterwards cannot tell a file
+ * that was rewritten identically from one that was left alone.
+ *
+ * @param {import('./touchAtlasCli.d.mts').TouchBuildArgs} args
+ * @param {{ outDir: string, cutDir: string }} dirs
+ * @returns {string[]}
+ */
+export function runBuild(args, dirs) {
+  const cells = sourceCells(args, dirs);
 
   // The contract, checked BEFORE anything is written: what this run produced against what the game
-  // will look for. Neither side is derived from the other.
+  // will look for. Neither side is derived from the other. `cell` produces one key on purpose, so
+  // it asks the containment question that full-set equality cannot express.
   const produced = [...cells.keys()].sort();
   const wanted = catalogTouchKeys();
-  if (produced.join(',') !== wanted.join(',')) {
+  if (args.mode === 'cell') {
+    if (!wanted.includes(args.key)) {
+      throw new Error(`the catalog has no ${args.key} — a face it does not name is never loaded`);
+    }
+  } else if (produced.join(',') !== wanted.join(',')) {
     throw new Error(
       `cut [${produced.join(', ')}] but the catalog asks for [${wanted.join(', ')}] — ` +
         'add or remove the index.json rows and the cell descriptors together',
     );
   }
 
-  fs.mkdirSync(TOUCH_OUT_DIR, { recursive: true });
-  fs.mkdirSync(TOUCH_CUT_DIR, { recursive: true });
+  fs.mkdirSync(dirs.outDir, { recursive: true });
+  if (args.mode !== 'ink') fs.mkdirSync(dirs.cutDir, { recursive: true });
+
+  const written = [];
   for (const [key, cut] of cells) {
-    // The CUT face — everything the plate gave us, before either ink pass. Committed, because it
-    // is the only independent statement of where the engraving is: `shipped-touch.test.ts` re-runs
-    // the two pure passes over it and demands the shipped bytes back. See TOUCH_CUT_DIR.
-    fs.writeFileSync(path.join(TOUCH_CUT_DIR, `${key}.png`), encodePng(cut.width, cut.height, cut.data));
+    if (args.mode !== 'ink') {
+      // The CUT face — everything the source gave us, before either ink pass. Committed, because
+      // it is the only independent statement of where the engraving is. See TOUCH_CUT_DIR.
+      const cutPath = path.join(dirs.cutDir, `${key}.png`);
+      fs.writeFileSync(cutPath, encodePng(cut.width, cut.height, cut.data));
+      written.push(cutPath);
+    }
 
     const { image: inked, mark } = keylineMarks(cut);
     const image = bakePlateAlpha(inked, mark);
-    const out = path.join(TOUCH_OUT_DIR, `${key}.png`);
+    const out = path.join(dirs.outDir, `${key}.png`);
     fs.writeFileSync(out, encodePng(image.width, image.height, image.data));
+    written.push(out);
     console.log(`${out}  ${image.width} x ${image.height}`);
   }
 
-  for (const dir of [TOUCH_OUT_DIR, TOUCH_CUT_DIR]) {
+  // 🔴 `cell` never sweeps. It produces one key, so a sweep would delete the five faces the whole
+  // single-cell mode exists to leave alone.
+  const swept = args.mode === 'adopt' ? [dirs.outDir, dirs.cutDir] : args.mode === 'ink' ? [dirs.outDir] : [];
+  for (const dir of swept) {
     for (const file of staleFaces(fs.readdirSync(dir), cells)) {
       fs.rmSync(path.join(dir, file));
       console.log(`removed stale ${path.join(dir, file)}`);
     }
   }
-  console.log(
-    `\ncut ${cells.size} faces from a MEASURED ${width} x ${height} plate ` +
-      `(${TOUCH_PLATE_COLS} x ${TOUCH_PLATE_SHEET_ROWS} grid, rows 0-1 used)`,
-  );
+  console.log(`
+${args.mode}: ${cells.size} face(s), ${written.length} file(s) written`);
+  return written;
+}
+
+/**
+ * Parse, then build. **Exported and driven by a test**, because this composition is the seam.
+ *
+ * A parser tested alone proves only that it parses; the defect this replaces was a `main()` that
+ * never consulted argv at all, and a gate over a pure selector would not have seen it.
+ *
+ * @param {string[]} argv
+ * @param {{ outDir: string, cutDir: string }} [dirs]
+ * @returns {string[]}
+ */
+export function main(argv, dirs = DEFAULT_DIRS) {
+  return runBuild(parseTouchArgs(argv), dirs);
 }
 
 /**
@@ -296,5 +377,5 @@ export function isCliEntry(argv1, moduleUrl) {
 }
 
 if (isCliEntry(process.argv[1], import.meta.url)) {
-  main();
+  main(process.argv.slice(2));
 }

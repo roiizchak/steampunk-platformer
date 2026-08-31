@@ -12,9 +12,10 @@
  * not to depend on, and the day it drifts it would type a call that does not work.
  *
  * ⚠️ These are AMBIENT module declarations and `tsconfig.json` includes all of `tests/`, so they
- * also cover `tests/unit/engine-literals.test.ts`, which reads the same vendored Phaser sources from
- * the unit suite. The file stays here because this is where the need was paid for; if a third
- * consumer appears, move it up to `tests/` rather than copying it.
+ * also cover unit tests: `engine-literals.test.ts` reads the same vendored Phaser sources, and
+ * `touch-atlas-cli.test.ts` drives the atlas builder's real writes into a temp directory. The file
+ * stays here because this is where the need was paid for — it is `tests/`-wide despite the path,
+ * and a copy under `tests/unit/` would be two shims to drift apart rather than one.
  *
  * `package.json` sets `"type": "module"`, so specs are ESM and `require` does not exist — these are
  * reached with `await import('node:fs')` and friends, which is why each shim below is a module
@@ -38,6 +39,19 @@ declare module 'node:fs' {
     path: string,
     options: { withFileTypes: true },
   ): { name: string; isDirectory(): boolean }[];
+  /** The plain overload, for a directory known to hold only files. `touch-atlas-cli.test.ts`. */
+  export function readdirSync(path: string): string[];
+  export function mkdirSync(path: string, options: { recursive: true }): string | undefined;
+  /**
+   * A temp directory per test, so the builder's REAL writes can be observed without touching the
+   * committed cut faces the whole gate is about.
+   */
+  export function mkdtempSync(prefix: string): string;
+  export function writeFileSync(path: string, data: Uint8Array): void;
+}
+
+declare module 'node:os' {
+  export function tmpdir(): string;
 }
 
 declare module 'node:path' {
