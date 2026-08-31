@@ -165,15 +165,12 @@ export function runBuild(args, dirs) {
       family.set(cell.key, readPng(requireFile(path.join(dirs.cutDir, `${cell.key}.png`))));
     }
   }
-  // And the merged set is exactly the six the descriptors name, asserted rather than assumed.
-  const judged = [...family.keys()].sort();
-  const expected = TOUCH_PLATE_CELLS.map((c) => c.key).sort();
-  if (judged.join(',') !== expected.join(',')) {
-    throw new Error(
-      `the family check was handed [${judged.join(', ')}] and the descriptors name ` +
-        `[${expected.join(', ')}] — a partial set is not a family`,
-    );
-  }
+  // ⚠️ There is deliberately NO second "the set is complete" assertion here. One was written and
+  // it was DEAD: `requireFile` throws on the first missing cut, so the key-set comparison could
+  // never observe a partial family, and a mutation replacing it with the expected list left the
+  // whole suite green. A check that cannot go red is decoration *(vault C2)*, and defensive
+  // decoration reads to the next person as a guarantee. The refusal that does the work is
+  // `requireFile`, and `touch-atlas-cli.test.ts` drives it with a neighbour deleted.
   const notFamily = familyFailures(family);
   if (notFamily.length > 0) {
     throw new Error(`these are not one family of buttons: ${notFamily.join('; ')}`);

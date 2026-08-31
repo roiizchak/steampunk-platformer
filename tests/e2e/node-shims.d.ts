@@ -47,6 +47,8 @@ declare module 'node:fs' {
    * committed cut faces the whole gate is about.
    */
   export function mkdtempSync(prefix: string): string;
+  /** Deleting one staged fixture, so a builder's "this file must exist" refusal can be driven. */
+  export function rmSync(path: string): void;
   export function writeFileSync(path: string, data: Uint8Array): void;
 }
 

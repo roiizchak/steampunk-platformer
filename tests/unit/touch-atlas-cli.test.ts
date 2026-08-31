@@ -12,7 +12,7 @@
  * comparison directly, with the space that is the entire bug.
  */
 
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -251,6 +251,31 @@ describe('the default build reads the cut faces and does not rewrite them', () =
         `${file}'s cut changed — --cell touched a cut it was not given`,
       ).toEqual(bytes);
     }
+  });
+
+  it('REFUSES a --cell run when a neighbouring cut is missing', () => {
+    // 🔴 The family check reads the other five off disk. Loading them "if they happen to be there"
+    // meant a directory missing four cuts judged a family of two and wrote the candidate anyway —
+    // the check passing because there was nothing left to disagree with it. Codex round 19,
+    // finding 1. `requireFile` is what refuses, and this is what drives it.
+    const base = mkdtempSync(join(tmpdir(), 'touch-atlas-partial-'));
+    const dirs = {
+      outDir: join(base, 'ui'),
+      cutDir: join(base, 'cut'),
+      ...syntheticSources(join(base, 'cut')),
+    };
+    mkdirSync(dirs.outDir, { recursive: true });
+    mkdirSync(dirs.cutDir, { recursive: true });
+    main(['--adopt'], dirs);
+    rmSync(join(dirs.cutDir, 'touch-jump.png'));
+
+    const source = join(base, 'candidate.png');
+    writeFileSync(source, syntheticFamilyCell(5));
+
+    expect(
+      () => main([`--cell=touch-attack`, `--source=${source}`], dirs),
+      'a partial set was judged as a family, and the candidate was written',
+    ).toThrow(/touch-jump/);
   });
 
   it('REFUSES a --cell candidate that is out of family with the five it joins', () => {
