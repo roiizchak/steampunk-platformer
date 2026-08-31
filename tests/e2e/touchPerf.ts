@@ -174,8 +174,15 @@ export const FACE_COPIES = 2000;
  * controls (`touchSession.ts:94-95`). Calling it N times per frame IS that regression, N times over.
  * A `while (Date.now() - t < x)` spin would prove the timer can see wall-clock work, which is the
  * stand-in mistake Phase 8 paid for.
+ *
+ * ⚠️ **6000, because one `refresh()` is CHEAP — and that is the point, not a problem.** 300 per
+ * frame moved the paired main-thread delta **0.0500 ms** against a 0.5 ms bound, so a call costs
+ * about 0.17 us: `TouchSession.refresh()` reaches a layer that does nothing when nothing changed.
+ * The regression this bound names is exactly that cheap path running every frame instead of on a
+ * state change, so amplifying the cheap path N times is faithful to it; amplifying an expensive
+ * path the feature never takes would not be.
  */
-export const REFRESH_COPIES = 300;
+export const REFRESH_COPIES = 6000;
 
 type Loop = { loop: { sleep(): void; wake(seamless?: boolean): void } };
 
@@ -365,27 +372,33 @@ export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisi
 /**
  * Make the touch arm run the controls' own `refresh()` `count` extra times per frame.
  *
- * Wraps the live `UIScene` instance's `update`, so the cost lands inside the frame Phaser is already
- * timing rather than in a separate task. Returns `false` if the scene or its session is not there —
- * an amplifier that hooked nothing would otherwise read as a bound failing to fire when nothing was
- * ever added, which is the assertion `addFaceCopies` exists to make and the reason Phase 8 has one.
+ * 🔴 **Subscribed to the scene's UPDATE event, and the first version reassigned `scene.update`.**
+ * That is inert: Phaser caches the scene's update function into `sys.sceneUpdate` when the scene
+ * boots, so a later assignment to the instance property is never read and the amplifier added
+ * nothing while reporting that it had hooked successfully. The boolean below was true and the run
+ * measured a clean game.
+ *
+ * What caught it is the CALL COUNTER, asserted to grow inside every window — *a gate that reports
+ * it did something is not a gate that did it*. Kept for the same reason `addFaceCopies` asserts an
+ * exact count.
+ *
+ * The work lands inside the frame Phaser is already timing: `Systems.step` emits UPDATE and then
+ * calls `sceneUpdate`, both inside the one rAF callback the sampler measures.
  */
 export async function addRefreshCost(page: Page, count: number): Promise<boolean> {
   return page.evaluate((n) => {
     type Session = { refresh(): void };
-    type Scene = { touch?: Session; update(t: number, d: number): void };
+    type Scene = { touch?: Session; events: { on(k: string, fn: () => void): unknown } };
     const ui = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
       .__phaserGame.scene.getScene('UI');
     if (!ui?.touch) return false;
     const w = window as unknown as { __refreshCalls?: number };
     w.__refreshCalls = 0;
-    const original = ui.update.bind(ui);
     const session = ui.touch;
-    ui.update = (t: number, d: number): void => {
-      original(t, d);
+    ui.events.on('update', () => {
       for (let i = 0; i < n; i += 1) session.refresh();
       w.__refreshCalls = (w.__refreshCalls ?? 0) + n;
-    };
+    });
     return true;
   }, count);
 }

@@ -204,7 +204,8 @@ papered over.
 | M69 | keep the mark bit on a transparent pixel, skipping only the paint | 12.14 | **GREEN, and the picture is byte-identical** → RED 1/8 |
 | M70 | make `main()` ignore the parsed mode and always cut from the plate | 12.17, 12.19 | RED 2/18 — 12 files written where 6 were claimed |
 | M71 | route the `--cell` build's output to a fixed key instead of the requested one | 12.17, 12.19 | RED 1/18 |
-| M72 | draw 800 extra copies of each control's OWN face on the touch arm, then re-run the criterion's own paired procedure | 12.11, 12.19 | **GREEN at 40 copies — 0.0563 ms against a 0.5 ms bound** → RED at 800: 0.7060 ms, every pair over 0.5 |
+| M72 | draw 2000 extra copies of each control's OWN face on the touch arm, then re-run the criterion's own paired procedure | 12.11, 12.19 | **GREEN at 40 copies — 0.0563 ms against a 0.5 ms bound**; **GREEN at 800 under sweep load — 0.5007 ms, a 0.0007 ms margin** → RED at 2000: 1.7684 ms, every pair over 1.32 |
+| M73 | run the controls' own `TouchSession.refresh()` 6000 extra times per frame on the touch arm | 12.11, 12.19 | **GREEN twice — the `scene.update` hook was inert (Phaser caches `sys.sceneUpdate`), then 300/frame gave 0.0500 ms** → RED at 6000: 0.9000 ms, every pair 0.9000 |
 
 **Twenty-three rows reddened nothing, and all twenty-three were holes rather than mutations to drop.**
 
