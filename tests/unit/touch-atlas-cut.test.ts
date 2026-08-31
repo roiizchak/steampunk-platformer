@@ -23,6 +23,10 @@ import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch
 const CELL = 300;
 /** Chroma green, the field the prompt asks the model for and `keyOut` removes. */
 const FIELD = [0, 255, 0];
+/** As many rows as the descriptors name — what `measurePlateRows` will count off this plate. */
+const PLATE_ROWS = Math.max(...TOUCH_PLATE_CELLS.map((c) => c.row)) + 1;
+/** A grid cell's height on the synthetic plate. Square cells are not promised; square PLATES are. */
+const CELL_H = (CELL * TOUCH_PLATE_COLS) / PLATE_ROWS;
 
 /**
  * One disc per occupied cell, each a different grey, on a chroma field.
@@ -32,6 +36,10 @@ const FIELD = [0, 255, 0];
  * be a button" nor "cut by the split".
  */
 function syntheticPlate(greys: number[]): Uint8Array {
+  // 🔴 As many rows as the descriptors name, not a square. The plate used to be `COLS x COLS`,
+  // which was a three-row sheet with its last row empty — and `measurePlateRows` counted three
+  // because it inferred rows from the leftover margin. It counts what is DRAWN now, so a square
+  // fixture is a two-row sheet of 450 px cells and every disc straddles a boundary.
   const side = CELL * TOUCH_PLATE_COLS;
   const data = new Uint8ClampedArray(side * side * 4);
   for (let i = 0; i < data.length; i += 4) {
@@ -42,7 +50,11 @@ function syntheticPlate(greys: number[]): Uint8Array {
   }
   TOUCH_PLATE_CELLS.forEach((cell, index) => {
     const cx = cell.col * CELL + CELL / 2;
-    const cy = cell.row * CELL + CELL / 2;
+    // 🔴 Centred in its GRID cell, which is `side / ROWS` tall and not `CELL`. The plate has to stay
+    // square — `cutFace` refuses any other aspect, because a 3:2 sheet cut into squares is six
+    // squashed buttons — while the descriptors name two rows, so a cell is 300 x 450 here. Drawing
+    // at `row * CELL` put the second row across a boundary and `cutFace` found two shapes in a cell.
+    const cy = (cell.row + 0.5) * (side / PLATE_ROWS);
     const r = CELL * 0.35;
     const grey = greys[index]!;
     for (let y = cy - r; y <= cy + r; y += 1) {
@@ -112,7 +124,7 @@ describe('extractPlateCell hands back the RAW cell, at the plate resolution', ()
     // CELL px on a side, not TOUCH_FACE_PX: nothing has been downscaled.
     expect([cell.width, cell.height], 'the cell was resampled, so it is not raw').toEqual([
       CELL,
-      CELL,
+      CELL_H,
     ]);
     // The corner is backing sheet. `cutFace` would have keyed it to transparent and cropped it
     // away entirely, which is exactly the difference this seam exists for.
@@ -120,7 +132,7 @@ describe('extractPlateCell hands back the RAW cell, at the plate resolution', ()
       [cell.data[0], cell.data[1], cell.data[2], cell.data[3]],
       'the corner was keyed out, so this went through cutFace after all',
     ).toEqual([FIELD[0], FIELD[1], FIELD[2], 255]);
-    const middle = ((CELL / 2) * CELL + CELL / 2) * 4;
+    const middle = (Math.floor(CELL_H / 2) * CELL + CELL / 2) * 4;
     expect(cell.data[middle], 'the wrong cell came back').toBe(GREYS[3]);
   });
 
@@ -129,7 +141,7 @@ describe('extractPlateCell hands back the RAW cell, at the plate resolution', ()
     // mutation to `grid[row * COLS + col]` has to red here as well as there.
     const raw = plateCells(syntheticPlate(GREYS));
     TOUCH_PLATE_CELLS.forEach((cell, index) => {
-      const middle = ((CELL / 2) * CELL + CELL / 2) * 4;
+      const middle = (Math.floor(CELL_H / 2) * CELL + CELL / 2) * 4;
       expect(raw.cells.get(cell.key)!.data[middle], `${cell.key} read the wrong cell`).toBe(
         GREYS[index],
       );

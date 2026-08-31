@@ -114,15 +114,15 @@ describe('a face is out of family for what happens INSIDE it, not only between i
     // between cells, which the joint grid already refuses.
     //
     // ⚠️ **Which cell is not arbitrary, and the reason is a real limit.** Permuting each of the 24
-    // cells in turn crosses the bound in **18** of them; the six that survive are the whole of
-    // **ring 0**, the innermost band, where this brass has almost no internal contrast (a median
-    // grain of 1.5-3.0) so shuffling near-identical pixels barely moves any neighbour step. Grain is
-    // a contrast-proportional statistic and the flattest band is where it is weakest. That is
-    // recorded rather than fixed by moving the bound, which was set at the approved 2.5x before any
-    // of these mutations existed.
-    const band = (1 - OUTER_R0) / 3;
+    // cells in turn crosses the bound in **19** of them. Grain is a contrast-proportional statistic,
+    // so the cells it is weakest in are the ones whose brass is flattest — five of them here. That
+    // is recorded rather than fixed by moving the bound, which was set at the approved 2.5x before
+    // any of these mutations existed.
+    //
+    // ⚠️ The cell also changed with the art: on the pale set this was ring 1 sector 3, and the
+    // redesign's scrollwork moved the contrast around the face. The bound did not move.
     const pixels = [...body(face)].filter(
-      (p) => p.r >= OUTER_R0 + band && p.r < OUTER_R0 + 2 * band && p.sector === 3,
+      (p) => p.r >= OUTER_R0 && p.r < OUTER_R0 + (1 - OUTER_R0) / 3 && p.sector === 4,
     );
     expect(pixels.length).toBeGreaterThan(400);
 
@@ -143,7 +143,7 @@ describe('a face is out of family for what happens INSIDE it, not only between i
     faces.set('touch-left', { width: face.width, height: face.height, data });
 
     const bad = familyFailures(faces);
-    expect(bad.join('; ')).toMatch(/texture at ring 1 sector 3: touch-left/);
+    expect(bad.join('; ')).toMatch(/texture at ring 0 sector 4: touch-left/);
     // And ONLY that cell — the mutation is confined to it, so a hit anywhere else would mean the
     // statistic is reading something other than what was moved.
     expect(bad.filter((line) => line.includes('texture at'))).toHaveLength(1);

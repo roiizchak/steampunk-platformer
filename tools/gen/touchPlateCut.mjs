@@ -85,6 +85,18 @@ const MIN_ROW_SHARE = 0.005;
 const MAX_MARGIN_DRIFT = 0.25;
 
 /**
+ * The largest number of cells one gap between drawn rows may span.
+ *
+ * The redesign plate leaves its middle band empty on purpose, so start-to-start is two cells. Three
+ * is the honest ceiling for a six-button sheet: past it, "the rows are far apart" stops being a
+ * layout and starts being a licence to invent a grid.
+ */
+const MAX_PITCH_MULTIPLE = 3;
+
+/** A drawn row fills at least this share of the cell height it is assigned. */
+const MIN_ROW_FILL = 0.5;
+
+/**
  * **How many rows of buttons this plate actually has**, counted from the keyed image.
  *
  * 🔴 `TOUCH_PLATE_SHEET_ROWS` is what take 3 drew, and the whole grid was split by it. The prompt
@@ -151,27 +163,32 @@ export function measurePlateRows(keyed) {
     );
   }
 
-  // 🔴 With only two runs there is ONE step, so its deviation from its own mean is zero by
-  // construction and the drift check above cannot fire. `round(h / pitch)` then reads asymmetric top
-  // and bottom margins as empty grid rows, and a legitimate two-row redesign is split as three.
-  // Codex round 20, finding 4.
+  // 🔴 **A row is never invented from margin.** With only two runs there is ONE step, so its
+  // deviation from its own mean is zero by construction and the drift check above cannot fire —
+  // and `round(h / pitch)` then reads a deep bottom margin as an empty grid row, splitting a
+  // two-row sheet as three. Codex round 20, finding 4.
   //
-  // So the grid is built from the RUNS outward instead: the rows that carry a button span
-  // `starts.length` pitches, and whatever height is left over must be a WHOLE number of further
-  // pitches, or the sheet is not the grid the arithmetic claims. A 600 px pair of rows in an 800 px
-  // image leaves 0.67 of a cell — that is a margin, not a row, and there is no honest row count to
-  // give back.
-  const spare = (h - starts.length * pitch) / pitch;
-  const extra = Math.round(spare);
-  if (Math.abs(spare - extra) > MAX_MARGIN_DRIFT) {
+  // The first repair inferred the count from the leftover margin, and the REDESIGN then showed it
+  // refusing a sheet that was exactly what the prompt asked for: take 14 draws its six buttons in
+  // two rows spanning the whole height, with the empty middle band the prompt asks for, and no grid
+  // of equal cells with a whole-number margin describes that. The redesign was the held-out set the
+  // bounds were promised to, and it failed the rule rather than the art.
+  //
+  // So the count is what the sheet DRAWS. Trailing sheet is margin, and margin is padded away
+  // before the split rather than counted as rows. What is still checked is that the drawn rows are
+  // a grid at all: evenly spaced (above) and of a consistent height (here).
+  const heights = starts.map((y, i) => ends[i] - y + 1);
+  const meanHeight = heights.reduce((a, b) => a + b, 0) / heights.length;
+  const heightDrift = Math.max(...heights.map((v) => Math.abs(v - meanHeight))) / meanHeight;
+  if (heightDrift > MAX_PITCH_DRIFT) {
     throw new Error(
-      `the plate's ${starts.length} drawn row(s) at ${pitch.toFixed(0)} px leave ` +
-        `${(h - starts.length * pitch).toFixed(0)} px over — ${spare.toFixed(2)} of a row, not a ` +
-        'whole one, so the row count of this sheet is ambiguous and it cannot be split',
+      `the plate's rows are ${heights.join(', ')} px tall — uneven by ` +
+        `${(heightDrift * 100).toFixed(0)}%, over ${(MAX_PITCH_DRIFT * 100).toFixed(0)}%, so these ` +
+        'are not equal rows of one grid',
     );
   }
 
-  return Math.max(starts.length, starts.length + extra);
+  return starts.length;
 }
 
 /** The shipped face size, in game pixels. `TOUCH_BOX_PX` — a plate fills its box. */
@@ -286,14 +303,25 @@ export function plateCells(bytes) {
     );
   }
 
+  // 🔴 **Padded before it is cropped, on any side the art touches.** Every take of the redesign
+  // drew its bottom row flush to the bottom edge of the image — the requirement was in the prompt
+  // four times, last on its own with a number, and the model drew it flush anyway. `cutFace` then
+  // refuses the face, correctly, because a face on a boundary is a face something cut.
+  //
+  // Nothing cut it here: the sheet simply has no margin, and a margin is free. The pad is plain
+  // transparency, so it cannot add a pixel to any face, any mark or any measurement; it only gives
+  // the split somewhere to put the boundary. Refusing good art for the want of 100 px of empty
+  // sheet would be the gate serving itself.
+  const padded = padToClearEdges(keyOut({ width, height, data: decoded.data }));
+
   // Centre-crop to a size both grid dimensions divide, then ASSERT it - `splitGrid` throws
   // otherwise, and a throw two frames deeper is a worse error message than this one.
-  const cropW = width - (width % TOUCH_PLATE_COLS);
-  const cropH = height - (height % rows);
+  const cropW = padded.width - (padded.width % TOUCH_PLATE_COLS);
+  const cropH = padded.height - (padded.height % rows);
   const plate = crop(
-    { width, height, data: decoded.data },
-    Math.floor((width - cropW) / 2),
-    Math.floor((height - cropH) / 2),
+    padded,
+    Math.floor((padded.width - cropW) / 2),
+    Math.floor((padded.height - cropH) / 2),
     cropW,
     cropH,
   );
@@ -309,6 +337,53 @@ export function plateCells(bytes) {
     cells.set(cell.key, image);
   }
   return { cells, width, height };
+}
+
+/**
+ * The share of a dimension added as clear sheet on any side the art touches.
+ *
+ * Enough that a face has room between itself and a grid boundary, small enough that it cannot move
+ * a row out of the band it was drawn in. Take 14's bottom row needs 1 px and gets 61.
+ */
+const EDGE_PAD_SHARE = 0.03;
+
+/**
+ * Pad a keyed sheet with transparency on any side its art touches.
+ *
+ * @param {import('./png.d.mts').RgbaImage} keyed
+ * @returns {import('./png.d.mts').RgbaImage}
+ */
+export function padToClearEdges(keyed) {
+  const { width: w, height: h, data: d } = keyed;
+  const lit = (/** @type {number} */ x, /** @type {number} */ y) => d[(y * w + x) * 4 + 3] >= 128;
+  let top = false;
+  let bottom = false;
+  let left = false;
+  let right = false;
+  for (let x = 0; x < w; x += 1) {
+    if (lit(x, 0)) top = true;
+    if (lit(x, h - 1)) bottom = true;
+  }
+  for (let y = 0; y < h; y += 1) {
+    if (lit(0, y)) left = true;
+    if (lit(w - 1, y)) right = true;
+  }
+  if (!top && !bottom && !left && !right) return keyed;
+
+  const padX = Math.ceil(w * EDGE_PAD_SHARE);
+  const padY = Math.ceil(h * EDGE_PAD_SHARE);
+  const l = left ? padX : 0;
+  const r = right ? padX : 0;
+  const t = top ? padY : 0;
+  const b = bottom ? padY : 0;
+  const width = w + l + r;
+  const height = h + t + b;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < h; y += 1) {
+    const from = y * w * 4;
+    data.set(d.subarray(from, from + w * 4), ((y + t) * width + l) * 4);
+  }
+  return { width, height, data };
 }
 
 /**

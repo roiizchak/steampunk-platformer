@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { bakePlateAlpha, keylineMarks } from './touchInk.mjs';
+
 import { decodePng, encodePng, readBytes, readPng } from './png.mjs';
 import { TOUCH_PLATE_CELLS } from './promptTouch.mjs';
 import { cutFace, cutPlate } from './touchPlateCut.mjs';
@@ -189,8 +189,18 @@ export function runBuild(args, dirs) {
       written.push(cutPath);
     }
 
-    const { image: inked, mark } = keylineMarks(cut);
-    const image = bakePlateAlpha(inked, mark);
+    // 🔴 **The ink pass is not run, and that is an owner decision on 2026-08-31.**
+    //
+    // `keylineMarks` finds the engraving with `luma < INK_DARK_MAX` inside the central half, which
+    // worked while the button was a pale beige disc whose glyph was the only dark thing on it. The
+    // redesign puts verdigris in every recess and a deep shadow along the lower-right, so the
+    // detector reads 12 to 37 "strokes" per face and scribbles keylines across the scrollwork. The
+    // owner saw the result and said the button looks better without it, which it does, and the
+    // measured cause agrees: the mark mask is no longer the mark.
+    //
+    // So the shipped face IS the cut face. The redesign carries its own contrast — a dark glyph on
+    // bright brass — where the pale set needed a keyline to reach 3:1.
+    const image = cut;
     const out = path.join(dirs.outDir, `${key}.png`);
     fs.writeFileSync(out, encodePng(image.width, image.height, image.data));
     written.push(out);

@@ -288,7 +288,12 @@ describe('the six touch faces are one family of buttons', () => {
     expect(
       failures.join('; '),
       'a face darkened part of its bezel and the gate deleted the evidence',
-    ).toMatch(/lighting at ring \d sector \d/);
+      // ⚠️ Lighting OR texture, and not because either will do. Darkening one angular band changes
+      // the mean of the cells it covers and the neighbour step at the band's own edges, so which
+      // statistic speaks first is a property of the art rather than of the damage: on the pale set
+      // it was lighting, on the redesign it is texture. Both are the grid refusing the same face for
+      // the same reason, and pinning one of them would pin the brass rather than the rule.
+    ).toMatch(/(lighting|texture) at ring \d sector \d/);
   });
 
   it('REFUSES a button lit from the wrong SIDE — a half turn, which every ANNULUS survives', () => {

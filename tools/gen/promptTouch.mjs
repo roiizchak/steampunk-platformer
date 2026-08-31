@@ -159,17 +159,28 @@ export function touchPlatePrompt(template) {
       'in two rows of three and laid out flat on a plain coloured backing sheet, viewed straight ' +
       'on from directly above.',
     '',
-    'LAYOUT, STATED AS EXACT GEOMETRY. The image contains six buttons in total: three along the ' +
-      'top and three along the bottom, in two tidy rows of equal length. Reading across, the top ' +
-      'row holds buttons 1, 2 and 3 and the bottom row holds buttons 4, 5 and 6. Every part of ' +
-      'the image outside those six circles is backing sheet.',
+    // 🔴 THREE bands, with the middle one empty — which is the layout the CUTTER wants and the one
+    // the model keeps drawing anyway. Asked for two rows, `nano-banana-pro` produced a third both
+    // times: take 3 filled it with a duplicate row, take 10 with an empty ring and a blank button.
+    // Take 10 then failed the cut, because six buttons spread over a sheet's full height do not sit
+    // inside the thirds a three-row split makes — the bottom row overflowed its cell by 166 px.
+    //
+    // So the sheet is described as three equal bands whose middle band is backing sheet, stated as
+    // what IS there rather than as a forbidden third row, and every button is sized to sit inside
+    // its own band with room to spare. The model's tendency and the cutter's grid now agree.
+    'LAYOUT, STATED AS EXACT GEOMETRY. The image is divided into three equal horizontal bands of ' +
+      'the same height. The TOP band holds three buttons, numbered 1, 2 and 3 reading from left to ' +
+      'right. The MIDDLE band is entirely backing sheet from edge to edge, an empty gap. The ' +
+      'BOTTOM band holds three buttons, numbered 4, 5 and 6 reading from left to right. That is ' +
+      'six buttons in the whole image.',
     '',
     'BUTTON CENTRES, measured from the top-left corner of the image as fractions of its width and ' +
-      'height: buttons 1, 2 and 3 sit one quarter of the way down, at one sixth, one half and ' +
-      'five sixths across; buttons 4, 5 and 6 sit three quarters of the way down, at one sixth, ' +
-      'one half and five sixths across. Every button is a circle whose diameter is one quarter of ' +
-      'the width of the image, so each one is surrounded on all sides by a wide clear margin of ' +
-      'backing sheet and no two of them come close to touching.',
+      'height: buttons 1, 2 and 3 sit ELEVEN FIFTIETHS of the way down, at one sixth, one half and five ' +
+      'sixths across; buttons 4, 5 and 6 sit THIRTY-NINE FIFTIETHS of the way down, at one sixth, one half ' +
+      'and five sixths across. Every button is a circle whose diameter is ONE FIFTH of the width ' +
+      'of the image, so each one sits well inside its own band and no two of them come close to ' +
+      'touching.',
+
     '',
     `BACKING SHEET: ${TOUCH_PLATE_CHROMA}, perfectly flat and evenly lit, filling every part of the ` +
       'image that is not a button — the margins and the space between the buttons.',
@@ -195,7 +206,7 @@ export function touchPlatePrompt(template) {
     // The locked block ends in a full stop; this extends the same sentence rather than starting a
     // new one after it.
     `${forbid.replace(/[.]$/, '')}, drop shadows cast onto the backing sheet, gradients or vignetting in the backing ` +
-      'sheet, buttons overlapping or touching, a seventh button, a third row, a frame or border ' +
+      'sheet, buttons overlapping or touching, a seventh button, a fourth band, a frame or border ' +
       'around the sheet, labels or numbers beside the buttons, a hand or finger.',
   ].join('\n');
 }

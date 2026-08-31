@@ -35,7 +35,7 @@ import { TOUCH_PLATE_CELLS } from './promptTouch.mjs';
  * Gitignored and 3.8 MB, which is why the 160 px cuts are what the repository commits.
  */
 export const TOUCH_PLATE_SOURCE =
-  '_generated/phase-12-touch/take-3-01a05115-d226-72b2-ae41-8998a11940cf.png';
+  '_generated/phase-12-touch/take-14-01a058ef-d51e-7ae0-a19e-0fabacfcb9df.png';
 
 /**
  * Per-key source overrides — a cell that came from its own generation rather than from the plate.
@@ -49,27 +49,11 @@ export const TOUCH_PLATE_SOURCE =
  * @type {Readonly<Record<string, string>>}
  */
 export const TOUCH_CELL_SOURCES = Object.freeze({
-  // Re-shot 2026-08-31 through `nano-banana-pro/edit`, take 5. Take 3's wrench carried
-  // interior shading that split into four sub-3:1 fragments at 48 CSS px; this one is a
-  // solid filled silhouette and all three of its strokes reach 3.32:1 / 3.85:1.
-  // `docs/generations/phase-12-touch-plate.md` carries both `request_id`s.
-  // Re-shot again 2026-08-31, take 8. Take 5's wrench was three pieces and the smallest measured
-  // 2.740:1 at 47 CSS px while reading 3.318:1 at 44 and 48 — `resize.mjs`'s box filter is
-  // `Math.floor`-partitioned and not monotonic in output size, so one size proved nothing about its
-  // neighbours. One closed silhouette has no fragment to fall through.
-  'touch-attack': '_generated/phase-12-touch/take-8-01a056c7-347a-7691-b105-8c3cbbc43daf.png',
-  // Re-shot 2026-08-31, take 6. The cogwheel said SETTINGS, not pause, at any size — both
-  // `ui-ux-tester` briefs independently — and its thin teeth were also the only strokes in the set
-  // that missed 3:1 at the 44 CSS px floor where a control is still live (2.905:1). Two heavy
-  // upright bars answer both at once.
-  // Re-shot again 2026-08-31, take 9, and an HONESTY fix rather than a legibility one: the pause
-  // bars promised "this suspends play" while `touchControlsLayer.ts:381` routes the control to
-  // `openLevelSelect()`, a hard teardown that abandons the run. A grid of squares says *the level
-  // menu*, which is where the button actually goes. Both round-2 briefs, independently.
-  'touch-pause': '_generated/phase-12-touch/take-9-01a056c7-9d04-7fd2-bc7a-47c65b946658.png',
-  // Re-shot 2026-08-31, take 7. Two stacked horizontal bars read as an "equals" and evoked nothing
-  // about locomotion. A laced boot is the conventional pictograph for travelling on foot.
-  'touch-walk': '_generated/phase-12-touch/take-7-01a056b2-442f-7690-b0b8-4c6a46954279.png',
+  // 🔴 EMPTY, and that is the redesign landing rather than an oversight. Take 10 redraws all six
+  // buttons in the gate asset's material by owner decision on 2026-08-31, so every key's source is
+  // the plate again and takes 7, 8 and 9 are superseded whole. The map exists for the next
+  // single-cell re-shoot; until there is one, "every shipped face came from one draw" is a fact the
+  // byte-for-byte reproduction gate enforces rather than a claim.
 });
 
 /** Every key the plate descriptors name, for validating `--cell`. */
@@ -142,14 +126,8 @@ export function parseTouchArgs(argv) {
  * `main(['--adopt'])` from those exact bytes reproduces the committed cuts. On a clone without the
  * sources the pins remain the record of what was used.
  *
- * Measured 2026-08-31.
+ * Measured 2026-08-31; re-measured the same day for take 10, which supersedes takes 3, 7, 8 and 9.
  */
 export const TOUCH_SOURCE_HASHES = Object.freeze({
-  [TOUCH_PLATE_SOURCE]: '7d6429ba353f6cd7f5627912d6a89ecbd7c4cb49314f7f5fcb5127ac7f52906a',
-  '_generated/phase-12-touch/take-8-01a056c7-347a-7691-b105-8c3cbbc43daf.png':
-    '496ac302cb4b6cc413413947113e0f56f95b989dd404b8959d7b2072de027821',
-  '_generated/phase-12-touch/take-9-01a056c7-9d04-7fd2-bc7a-47c65b946658.png':
-    '94551e5f63faf4230919f22fc9e86674df8882493ce8d207bb6814c752408973',
-  '_generated/phase-12-touch/take-7-01a056b2-442f-7690-b0b8-4c6a46954279.png':
-    'ca6626428a1705e132059f50423a1105dc439273f3de3067a303bd57c8f17e3d',
+  [TOUCH_PLATE_SOURCE]: '49654c23e7472b3fa3d72047d5c90dda965943d57bd856825d4824a5c3a34390',
 });
