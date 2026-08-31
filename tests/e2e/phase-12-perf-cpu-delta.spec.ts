@@ -25,9 +25,10 @@
  *
  * ## It re-runs the SAME procedure as the bound
  *
- * Same `PAIRS`, same AB/BA interleave, same `sampleArm` isolation protocol, same `pairedDeltas`,
- * same `hideTexts` equalisation. A red proof measured more cheaply than the bound it is about is not
- * a proof of that bound.
+ * Same `makeArms` two-block creation-order counterbalance, same `PAIRS`, same AB/BA interleave,
+ * same `sampleArm` isolation protocol, same `pairedDeltas`, same `hideTexts` equalisation, and
+ * the verdict comes from the clean gate's own `withinBudget` under this statistic's own policy.
+ * A red proof measured more cheaply than the bound it is about is not a proof of that bound.
  *
  * ⚠️ **Strictly the POSITIVE direction.** The clean gate is two-sided — a large negative delta is an
  * arm-specific collapse, not a result — so a red proof satisfied by `Math.abs()` could be satisfied
@@ -40,136 +41,127 @@
 
 import { expect, test } from '@playwright/test';
 
-import { installGpuTimer } from './gpuTimer';
 import { MIN_SAMPLES } from './perfBudget';
-import { assertRealGpu } from './realGpu';
-import { bootToTouchPlay, installTouchDriver } from './touchHarness';
-import {
-  REFRESH_COPIES,
-  addRefreshCost,
-  refreshCalls,
-} from './touchAmplifiers';
+import { REFRESH_COPIES, addRefreshCost, refreshCalls } from './touchAmplifiers';
+import { makeArms } from './touchArms';
 import {
   MAX_TOUCH_CPU_DELTA_MS,
   PAIRS,
-  hideTexts,
   median,
   pairedDeltas,
-  withinBudget,
   sampleArm,
   wakeLoop,
+  withinBudget,
 } from './touchPerf';
 
 test.describe('Phase 12 — criterion 12.11, the main-thread delta can go RED (vault C2)', () => {
-  test("the controls' own refresh() run per frame breaks the paired CPU bound", async ({ browser }) => {
-    test.setTimeout(300_000);
+  test("the controls own refresh() run per frame breaks the paired CPU bound", async ({ browser }) => {
+    test.setTimeout(600_000);
 
-    const touchContext = await browser.newContext({ hasTouch: true });
-    const plainContext = await browser.newContext({ hasTouch: false });
-    const withControls = await touchContext.newPage();
-    const without = await plainContext.newPage();
-    try {
-      await installTouchDriver(withControls);
-      await installTouchDriver(without);
-      await bootToTouchPlay(withControls);
-      await bootToTouchPlay(without);
+    const withAmp: number[] = [];
+    const without: number[] = [];
+    let renderer = 'unknown';
 
-      const renderer = await assertRealGpu(withControls, '12.11-cpu-redproof');
-      await assertRealGpu(without, '12.11-cpu-redproof control');
-      await installGpuTimer(withControls);
-      await installGpuTimer(without);
+    // 🔴 The SAME two counterbalanced blocks the clean gate runs, through the SAME `makeArms`.
+    // This spec used to create the touch context first and keep it first for the whole run — the
+    // exact confound `touchArms.ts` exists to remove. A red proof that does not run the criterion's
+    // own measurement procedure is a proof of a different measurement. Codex round 15, finding 2.
+    // `makeArms` also carries the `hideTexts` equalisation and its `stillVisible === 0` assertions,
+    // which this spec had been missing entirely.
+    for (const touchFirst of [true, false]) {
+      const label = `12.11 cpu red proof ${touchFirst ? 'touch-first' : 'bare-first'}`;
+      const arms = await makeArms(browser, touchFirst, label);
+      renderer = arms.renderer;
+      const touch = arms.touch;
+      const bare = arms.bare;
+      try {
 
-      // The same equalisation the clean gate applies, for the same reason.
-      const textTouch = await hideTexts(withControls);
-      const textBare = await hideTexts(without);
-      expect(
-        textTouch.hidden + textBare.hidden,
-        'no text was visible in either arm, so this helper equalised nothing',
-      ).toBeGreaterThan(0);
-
-      // 🔴 The amplifier hooked something. Without this an amplifier that attached to nothing reads
-      // as a bound failing to fire when no extra work was ever done — `addFaceCopies`'s `added`
-      // assertion, and the reason Phase 8 has one.
-      expect(
-        await addRefreshCost(withControls, REFRESH_COPIES),
-        'the UI scene or its TouchSession was absent, so no extra refresh() work was added at all',
-      ).toBe(true);
-
-      const cpuWith: number[] = [];
-      const cpuWithout: number[] = [];
-      let callsBefore = await refreshCalls(withControls);
-      for (let pair = 0; pair < PAIRS; pair += 1) {
-        const first = pair % 2 === 0;
-        const a = first
-          ? await sampleArm(withControls, without, `pair ${pair} touch`)
-          : await sampleArm(without, withControls, `pair ${pair} bare`);
-        const b = first
-          ? await sampleArm(without, withControls, `pair ${pair} bare`)
-          : await sampleArm(withControls, without, `pair ${pair} touch`);
-        const touch = first ? a : b;
-        const bare = first ? b : a;
-
-        for (const [s, name] of [
-          [touch, 'touch'],
-          [bare, 'bare'],
-        ] as const) {
-          expect(s.frames, `too few frames served in the ${name} arm`).toBeGreaterThanOrEqual(MIN_SAMPLES);
-        }
-
-        // 🔴 The extra work happened DURING this window, not merely once at hook time. A hook whose
-        // wrapper stopped being called — a scene restart, a swapped update — would leave every
-        // number below measuring the clean game while this spec reported the bound uncrossable.
-        const callsNow = await refreshCalls(withControls);
+        // 🔴 The amplifier hooked something. `addRefreshCost` returning true is not enough on its
+        // own — reassigning `scene.update` returned true and did nothing, because Phaser caches the
+        // scene's update function into `sys.sceneUpdate` at boot. The call COUNTER below is what
+        // caught that.
         expect(
-          callsNow,
-          `pair ${pair}: the refresh hook made no calls during the window, so nothing was amplified`,
-        ).toBeGreaterThan(callsBefore);
-        callsBefore = callsNow;
+          await addRefreshCost(touch, REFRESH_COPIES),
+          `${label}: the UI scene or its TouchSession was absent, so no extra work was added`,
+        ).toBe(true);
+        let callsBefore = await refreshCalls(touch);
 
-        cpuWith.push(touch.workMedianMs);
-        cpuWithout.push(bare.workMedianMs);
+        for (let pair = 0; pair < PAIRS / 2; pair += 1) {
+          const first = pair % 2 === 0;
+          const a = first
+            ? await sampleArm(touch, bare, `${label} pair ${pair} touch`)
+            : await sampleArm(bare, touch, `${label} pair ${pair} bare`);
+          const b = first
+            ? await sampleArm(bare, touch, `${label} pair ${pair} bare`)
+            : await sampleArm(touch, bare, `${label} pair ${pair} touch`);
+          const hot = first ? a : b;
+          const cold = first ? b : a;
+
+          for (const [smp, name] of [
+            [hot, 'touch'],
+            [cold, 'bare'],
+          ] as const) {
+            expect(
+              smp.frames,
+              `${label}: too few frames served in the ${name} arm`,
+            ).toBeGreaterThanOrEqual(MIN_SAMPLES);
+          }
+
+          // 🔴 The extra work happened DURING this window, not merely once at hook time.
+          const callsNow = await refreshCalls(touch);
+          expect(
+            callsNow,
+            `${label} pair ${pair}: the refresh hook made no calls during the window`,
+          ).toBeGreaterThan(callsBefore);
+          callsBefore = callsNow;
+
+
+          withAmp.push(hot.workMedianMs);
+          without.push(cold.workMedianMs);
+        }
+      } finally {
+        await wakeLoop(touch).catch(() => {});
+        await wakeLoop(bare).catch(() => {});
+        await arms.close();
       }
+    }
 
-      const perPair = pairedDeltas(cpuWithout, cpuWith);
-      const cpuDelta = median(perPair);
+    expect(withAmp.length, 'the two blocks did not produce PAIRS pairs between them').toBe(PAIRS);
 
-      // eslint-disable-next-line no-console
-      console.log(
-        `\n[12.11 cpu red proof] renderer ${renderer}\n` +
-          `      bare work ${cpuWithout.map((v) => v.toFixed(4)).join(', ')}\n` +
-          `      touch + ${REFRESH_COPIES} refresh()/frame work ${cpuWith.map((v) => v.toFixed(4)).join(', ')}\n` +
-          `      per pair ${perPair.map((v) => v.toFixed(4)).join(', ')} -> paired delta ` +
-          `${cpuDelta.toFixed(4)} ms against a bound of ${MAX_TOUCH_CPU_DELTA_MS} ms\n`,
-      );
+    const perPair = pairedDeltas(without, withAmp);
+    const delta = median(perPair);
 
-      // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, not by a restatement of its bound.
-      // `withinBudget` is the single function `phase-12-perf.spec.ts` asserts `ok` from; this
-      // asserts `!ok` on the amplified data. Written out separately, this spec proved only that
-      // it could measure a difference — deleting the clean gate's expectations left it green.
-      // Codex round 14, finding 3.
-      const verdict = withinBudget(perPair, MAX_TOUCH_CPU_DELTA_MS, 'main-thread');
-      expect(
-        verdict.ok,
-        `the controls' own refresh() run ${REFRESH_COPIES} extra times per frame did not move the paired ${verdict.why}. ` +
-          'The clean gate therefore cannot fail when this regression is present, and it is decoration.',
-      ).toBe(false);
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[12.11 cpu red proof] renderer ${renderer}\n` +
+        `      bare ${without.map((v) => v.toFixed(4)).join(', ')}\n` +
+        `      amplified ${withAmp.map((v) => v.toFixed(4)).join(', ')}\n` +
+        `      per pair ${perPair.map((v) => v.toFixed(4)).join(', ')} -> paired delta ` +
+        `${delta.toFixed(4)} ms against a bound of ${MAX_TOUCH_CPU_DELTA_MS} ms\n`,
+    );
 
-      // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red
-      // proof satisfied by it alone could be satisfied by breaking the instrument.
-      expect(
-        cpuDelta,
-        `the amplified delta is ${cpuDelta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_CPU_DELTA_MS}, not merely differ`,
-      ).toBeGreaterThan(MAX_TOUCH_CPU_DELTA_MS);
+    // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, under its own policy for this statistic — not
+    // by a restatement of its bound. `withinBudget` is the single function `phase-12-perf.spec.ts`
+    // asserts `ok` from; this asserts `!ok`. Written out separately, this spec proved only that it
+    // could measure a difference, and deleting the clean gate's expectations left it green.
+    const verdict = withinBudget(perPair, MAX_TOUCH_CPU_DELTA_MS, 'main-thread', 'median-only');
+    expect(
+      verdict.ok,
+      `the controls' own refresh() run ${REFRESH_COPIES} extra times per frame did not move the paired ${verdict.why}. The clean gate therefore cannot fail ` +
+        'when this regression is present, and it is decoration.',
+    ).toBe(false);
 
-      // Every pair, not just the median of them.
-      for (const [i, d] of perPair.entries()) {
-        expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
-      }
-    } finally {
-      await wakeLoop(withControls).catch(() => {});
-      await wakeLoop(without).catch(() => {});
-      await touchContext.close();
-      await plainContext.close();
+    // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red proof
+    // satisfied by it alone could be satisfied by breaking the instrument.
+    expect(
+      delta,
+      `the amplified delta is ${delta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_CPU_DELTA_MS}, not merely differ`,
+    ).toBeGreaterThan(MAX_TOUCH_CPU_DELTA_MS);
+
+    // Every pair, not just the median of them. A statistic that orders only on aggregate is one
+    // whose red depends on which pairs happened to land where.
+    for (const [i, d] of perPair.entries()) {
+      expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
     }
   });
 });

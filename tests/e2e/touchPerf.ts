@@ -285,19 +285,30 @@ export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisi
  *
  * Both directions now route through this function: the clean gate asserts `ok`, each red proof
  * asserts `!ok`. Delete the bound and every one of them changes verdict together.
+ *
+ * 🔴 **`policy` exists because sharing the evaluator quietly RESURRECTED a bound that had been
+ * withdrawn.** The per-pair main-thread band was removed on evidence — a held-out sweep produced a
+ * pair at exactly -0.5000 ms while the median of the same four read -0.1000, because `workMedianMs`
+ * is a median over Chrome's 0.1 ms grid of a 0.8-0.9 ms quantity — and then the shared evaluator
+ * re-applied per-pair rejection to the CPU deltas at that same +/-0.5. The rationale said
+ * median-only and the code said otherwise. Codex round 15, finding 1.
+ *
+ * GPU is `median-and-pairs`: its per-pair spread is +/-0.2 against a 0.5 bound, which the band
+ * supports. CPU is `median-only`.
  */
 export function withinBudget(
   perPair: number[],
   bound: number,
   label: string,
+  policy: 'median-and-pairs' | 'median-only',
 ): { ok: boolean; why: string } {
   const mid = median(perPair);
-  const outliers = perPair.filter((d) => Math.abs(d) >= bound);
+  const outliers = policy === 'median-and-pairs' ? perPair.filter((d) => Math.abs(d) >= bound) : [];
   const ok = Math.abs(mid) < bound && outliers.length === 0;
   return {
     ok,
     why:
-      `${label}: median ${mid.toFixed(4)} ms against +/-${bound} ms` +
+      `${label}: median ${mid.toFixed(4)} ms against +/-${bound} ms (${policy})` +
       (outliers.length > 0 ? `, ${outliers.length} pair(s) outside the band` : '') +
       ` — pairs ${perPair.map((v) => v.toFixed(4)).join(', ')}`,
   };

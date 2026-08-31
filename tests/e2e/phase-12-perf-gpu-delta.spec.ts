@@ -28,8 +28,10 @@
  *
  * ## It re-runs the SAME procedure as the bound
  *
- * Same `PAIRS`, same AB/BA interleave, same `sampleArm` isolation protocol, same `pairedDeltas`. A
- * red proof measured more cheaply than the bound it is about is not a proof of that bound.
+ * Same `makeArms` two-block creation-order counterbalance, same `PAIRS`, same AB/BA interleave,
+ * same `sampleArm` isolation protocol, same `pairedDeltas`, and the verdict comes from the clean
+ * gate's own `withinBudget`. A red proof measured more cheaply than the bound it is about is not
+ * a proof of that bound.
  *
  * ⚠️ **Strictly the POSITIVE direction.** The clean gate is two-sided — a large negative delta is an
  * arm-specific timer collapse, not a result — so a red proof satisfied by `Math.abs()` could be
@@ -39,163 +41,139 @@
 
 import { expect, test } from '@playwright/test';
 
-import { TOUCH_IDS } from '../../src/render/touchLayout';
-import { installGpuTimer } from './gpuTimer';
 import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
-import { assertRealGpu } from './realGpu';
-import { bootToTouchPlay, drawnFaces, installTouchDriver } from './touchHarness';
-import {
-  FACE_COPIES,
-  addFaceCopies,
-} from './touchAmplifiers';
+import { TOUCH_IDS } from '../../src/render/touchLayout';
+import { drawnFaces } from './touchHarness';
+import { FACE_COPIES, addFaceCopies } from './touchAmplifiers';
+import { makeArms } from './touchArms';
 import {
   MAX_TOUCH_GPU_DELTA_MS,
   PAIRS,
-  hideTexts,
   median,
   pairedDeltas,
-  withinBudget,
   sampleArm,
   wakeLoop,
+  withinBudget,
 } from './touchPerf';
 
 test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)', () => {
   test('the controls drawn with real fill-rate cost break the paired GPU bound', async ({ browser }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(600_000);
 
-    const touchContext = await browser.newContext({ hasTouch: true });
-    const plainContext = await browser.newContext({ hasTouch: false });
-    const withControls = await touchContext.newPage();
-    const without = await plainContext.newPage();
-    try {
-      await installTouchDriver(withControls);
-      await installTouchDriver(without);
-      await bootToTouchPlay(withControls);
-      await bootToTouchPlay(without);
+    const withAmp: number[] = [];
+    const without: number[] = [];
+    let renderer = 'unknown';
 
-      const renderer = await assertRealGpu(withControls, '12.11-gpu-redproof');
-      await assertRealGpu(without, '12.11-gpu-redproof control');
-      await installGpuTimer(withControls);
-      await installGpuTimer(without);
-
-      // 🔴 Equalise everything that is not the controls. The keyboard help banner is ~130 glyphs
-      // of 44 px bold text and the touch one is ~35, which is more fill rate than the controls and
-      // runs the wrong way — the first clean run read every GPU pair NEGATIVE because of it.
-      const textTouch = await hideTexts(withControls);
-      const textBare = await hideTexts(without);
-      expect(
-        textTouch.hidden + textBare.hidden,
-        'no text was visible in either arm, so this helper equalised nothing',
-      ).toBeGreaterThan(0);
-      for (const [t, name] of [
-        [textTouch, 'touch'],
-        [textBare, 'bare'],
-      ] as const) {
-        expect(
-          t.stillVisible,
-          `${t.stillVisible} text objects are still drawn in the ${name} arm — the arms differ by more than the controls`,
-        ).toBe(0);
-      }
-
-      // 🔴 The precondition, before a single number. Zones are HITTABILITY — a `Zone` renders
-      // nothing — so the pixels are the FACES, and they are asserted by name.
-      const visible = new Set(
-        (await drawnFaces(withControls, 'UI'))
-          .filter((f) => f.drawn && f.alpha > 0 && f.w > 0 && f.h > 0)
-          .map((f) => f.name),
-      );
-      for (const id of TOUCH_IDS) {
-        expect(visible.has(id), `${id} has nothing drawn — the timed arm draws an empty frame there`).toBe(
-          true,
-        );
-      }
-
-      const added = await addFaceCopies(withControls, FACE_COPIES);
-      // 🔴 EXACTLY the expected count. An amplifier that added nothing would report a flat delta as
-      // the bound failing to fire, when nothing was ever drawn — Phase 8's `added` assertion, and
-      // the reason it exists.
-      expect(
-        added,
-        `the amplifier added ${added} faces, not ${TOUCH_IDS.length * FACE_COPIES}`,
-      ).toBe(TOUCH_IDS.length * FACE_COPIES);
-
-      const gpuWith: number[] = [];
-      const gpuWithout: number[] = [];
-      for (let pair = 0; pair < PAIRS; pair += 1) {
-        const first = pair % 2 === 0;
-        const a = first
-          ? await sampleArm(withControls, without, `pair ${pair} touch`)
-          : await sampleArm(without, withControls, `pair ${pair} bare`);
-        const b = first
-          ? await sampleArm(without, withControls, `pair ${pair} bare`)
-          : await sampleArm(withControls, without, `pair ${pair} touch`);
-        const touch = first ? a : b;
-        const bare = first ? b : a;
-
-        for (const [s, name] of [
-          [touch, 'touch'],
-          [bare, 'bare'],
-        ] as const) {
-          expect(s.frames, `too few frames served in the ${name} arm`).toBeGreaterThanOrEqual(MIN_SAMPLES);
+    // 🔴 The SAME two counterbalanced blocks the clean gate runs, through the SAME `makeArms`.
+    // This spec used to create the touch context first and keep it first for the whole run — the
+    // exact confound `touchArms.ts` exists to remove. A red proof that does not run the criterion's
+    // own measurement procedure is a proof of a different measurement. Codex round 15, finding 2.
+    // `makeArms` also carries the `hideTexts` equalisation and its `stillVisible === 0` assertions,
+    // which this spec had been missing entirely.
+    for (const touchFirst of [true, false]) {
+      const label = `12.11 gpu red proof ${touchFirst ? 'touch-first' : 'bare-first'}`;
+      const arms = await makeArms(browser, touchFirst, label);
+      renderer = arms.renderer;
+      const touch = arms.touch;
+      const bare = arms.bare;
+      try {
+        // 🔴 The precondition, before a single number, in BOTH blocks. Zones are HITTABILITY — a
+        // `Zone` renders nothing — so the pixels are the FACES, asserted by name and by whether
+        // Phaser will actually draw them.
+        const faces = await drawnFaces(touch, 'UI');
+        for (const id of TOUCH_IDS) {
+          const face = faces.find((f) => f.name === id);
+          expect(face, `${label}: ${id} has no face object at all`).toBeDefined();
           expect(
-            s.gpuSupported,
-            `EXT_disjoint_timer_query is absent in the ${name} arm — nothing here is measured`,
+            face!.drawn && face!.alpha > 0 && face!.w > 0 && face!.h > 0,
+            `${label}: ${id} puts no pixels on screen — the timed arm draws an empty frame there`,
           ).toBe(true);
-          expect(
-            s.gpuSamples,
-            `the ${name} arm's GPU median rests on ${s.gpuSamples} queries, under MIN_GPU_SAMPLES`,
-          ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
         }
 
-        gpuWith.push(touch.gpuMedianMs);
-        gpuWithout.push(bare.gpuMedianMs);
+        const added = await addFaceCopies(touch, FACE_COPIES);
+        // 🔴 EXACTLY the expected count. An amplifier that added nothing would report a flat delta
+        // as the bound failing to fire, when nothing was ever drawn.
+        expect(
+          added,
+          `${label}: the amplifier added ${added} faces, not ${TOUCH_IDS.length * FACE_COPIES}`,
+        ).toBe(TOUCH_IDS.length * FACE_COPIES);
+
+        for (let pair = 0; pair < PAIRS / 2; pair += 1) {
+          const first = pair % 2 === 0;
+          const a = first
+            ? await sampleArm(touch, bare, `${label} pair ${pair} touch`)
+            : await sampleArm(bare, touch, `${label} pair ${pair} bare`);
+          const b = first
+            ? await sampleArm(bare, touch, `${label} pair ${pair} bare`)
+            : await sampleArm(touch, bare, `${label} pair ${pair} touch`);
+          const hot = first ? a : b;
+          const cold = first ? b : a;
+
+          for (const [smp, name] of [
+            [hot, 'touch'],
+            [cold, 'bare'],
+          ] as const) {
+            expect(
+              smp.frames,
+              `${label}: too few frames served in the ${name} arm`,
+            ).toBeGreaterThanOrEqual(MIN_SAMPLES);
+            expect(
+              smp.gpuSupported,
+              `${label}: EXT_disjoint_timer_query is absent in the ${name} arm — nothing here is measured`,
+            ).toBe(true);
+            expect(
+              smp.gpuSamples,
+              `${label}: the ${name} arm's GPU median rests on ${smp.gpuSamples} queries, under MIN_GPU_SAMPLES`,
+            ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
+          }
+
+
+          withAmp.push(hot.gpuMedianMs);
+          without.push(cold.gpuMedianMs);
+        }
+      } finally {
+        await wakeLoop(touch).catch(() => {});
+        await wakeLoop(bare).catch(() => {});
+        await arms.close();
       }
+    }
 
-      const perPair = pairedDeltas(gpuWithout, gpuWith);
-      const gpuDelta = median(perPair);
+    expect(withAmp.length, 'the two blocks did not produce PAIRS pairs between them').toBe(PAIRS);
 
-      // eslint-disable-next-line no-console
-      console.log(
-        `\n[12.11 gpu red proof] renderer ${renderer}\n` +
-          `      bare gpu ${gpuWithout.map((v) => v.toFixed(4)).join(', ')}\n` +
-          `      touch + ${FACE_COPIES} copies per control gpu ${gpuWith.map((v) => v.toFixed(4)).join(', ')}\n` +
-          `      per pair ${perPair.map((v) => v.toFixed(4)).join(', ')} -> paired delta ` +
-          `${gpuDelta.toFixed(4)} ms against a bound of ${MAX_TOUCH_GPU_DELTA_MS} ms\n`,
-      );
+    const perPair = pairedDeltas(without, withAmp);
+    const delta = median(perPair);
 
-      // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, not by a restatement of its bound.
-      // `withinBudget` is the single function `phase-12-perf.spec.ts` asserts `ok` from; this
-      // asserts `!ok` on the amplified data. Written out separately, this spec proved only that
-      // it could measure a difference — deleting the clean gate's expectations left it green.
-      // Codex round 14, finding 3.
-      const verdict = withinBudget(perPair, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser');
-      expect(
-        verdict.ok,
-        `the controls drawn with ${FACE_COPIES} extra copies of their OWN faces each did not move the paired ${verdict.why}. ` +
-          'The clean gate therefore cannot fail when this regression is present, and it is decoration.',
-      ).toBe(false);
+    // eslint-disable-next-line no-console
+    console.log(
+      `\n[12.11 gpu red proof] renderer ${renderer}\n` +
+        `      bare ${without.map((v) => v.toFixed(4)).join(', ')}\n` +
+        `      amplified ${withAmp.map((v) => v.toFixed(4)).join(', ')}\n` +
+        `      per pair ${perPair.map((v) => v.toFixed(4)).join(', ')} -> paired delta ` +
+        `${delta.toFixed(4)} ms against a bound of ${MAX_TOUCH_GPU_DELTA_MS} ms\n`,
+    );
 
-      // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red
-      // proof satisfied by it alone could be satisfied by breaking the instrument.
-      expect(
-        gpuDelta,
-        `the amplified delta is ${gpuDelta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_GPU_DELTA_MS}, not merely differ`,
-      ).toBeGreaterThan(MAX_TOUCH_GPU_DELTA_MS);
+    // 🔴 REJECTED BY THE CLEAN GATE'S OWN EVALUATOR, under its own policy for this statistic — not
+    // by a restatement of its bound. `withinBudget` is the single function `phase-12-perf.spec.ts`
+    // asserts `ok` from; this asserts `!ok`. Written out separately, this spec proved only that it
+    // could measure a difference, and deleting the clean gate's expectations left it green.
+    const verdict = withinBudget(perPair, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser', 'median-and-pairs');
+    expect(
+      verdict.ok,
+      `the controls drawn with ${FACE_COPIES} extra copies of their OWN faces each did not move the paired ${verdict.why}. The clean gate therefore cannot fail ` +
+        'when this regression is present, and it is decoration.',
+    ).toBe(false);
 
-      // 🔴 Every pair, not just the median of them. A statistic that orders only on aggregate is one
-      // whose red depends on which pairs happened to land where.
-      for (const [i, d] of perPair.entries()) {
-        expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
-      }
+    // 🔴 And strictly the POSITIVE direction on top: `withinBudget` is two-sided, so a red proof
+    // satisfied by it alone could be satisfied by breaking the instrument.
+    expect(
+      delta,
+      `the amplified delta is ${delta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_GPU_DELTA_MS}, not merely differ`,
+    ).toBeGreaterThan(MAX_TOUCH_GPU_DELTA_MS);
 
-      // The clean direction of this same comparison lives in `phase-12-perf.spec.ts`, which asserts
-      // the delta is INSIDE the tolerance with the identical procedure. Both directions, one bound,
-      // one session.
-    } finally {
-      await wakeLoop(withControls).catch(() => {});
-      await wakeLoop(without).catch(() => {});
-      await touchContext.close();
-      await plainContext.close();
+    // Every pair, not just the median of them. A statistic that orders only on aggregate is one
+    // whose red depends on which pairs happened to land where.
+    for (const [i, d] of perPair.entries()) {
+      expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
     }
   });
 });

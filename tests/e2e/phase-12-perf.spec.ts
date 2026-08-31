@@ -279,11 +279,15 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     // Two-sided on purpose: a one-sided upper bound reads an arm-specific timer collapse as
     // excellent performance, and this repository has that episode on record at -0.243 ms
     // (`phase-08-perf.spec.ts`). The lower side is instrument validity, not a performance claim.
-    for (const [deltas, bound, unit] of [
-      [gpuPer, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser'],
-      [cpuPer, MAX_TOUCH_CPU_DELTA_MS, 'main-thread'],
+    for (const [deltas, bound, unit, policy] of [
+      // 🔴 GPU rejects a stray pair; the main thread does NOT. Its per-pair spread reaches the bound
+      // on quantization alone — the held-out sweep produced exactly -0.5000 ms on one pair while the
+      // median of the same four read -0.1000 — so a per-pair CPU band is a band on the 0.1 ms grid,
+      // not on the controls. Sharing one evaluator briefly re-imposed it; Codex round 15, finding 1.
+      [gpuPer, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser', 'median-and-pairs'],
+      [cpuPer, MAX_TOUCH_CPU_DELTA_MS, 'main-thread', 'median-only'],
     ] as const) {
-      const verdict = withinBudget(deltas, bound, unit);
+      const verdict = withinBudget(deltas, bound, unit, policy);
       expect(verdict.ok, `the controls moved ${unit} time outside the budget — ${verdict.why}`).toBe(
         true,
       );
