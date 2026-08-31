@@ -304,7 +304,12 @@ keyboard).
 
 ### 12.11 — the frame budget (`performance-engineer`)
 
-🔴 **NOT MET, and the reason is the statistic.** Both briefs reached it independently.
+✅ **The replacement is BUILT and green in both directions, 2026-08-31.** What follows first is the
+analysis that condemned the original statistic — kept, because it is the reasoning the replacement
+rests on — and then what replaced it and the three corrections the runs forced.
+
+🔴 **The original statistic was NOT MET, and the reason is the statistic.** Both briefs reached it
+independently.
 
 At 240 Hz the frame period is 4.1667 ms. A frame either makes its deadline or costs a whole period,
 so served rate is `R / (1 + p)` and red at 0.9 needs **p ≥ 11.1 %**. A *constant* per-frame cost —
@@ -344,6 +349,68 @@ a GPU-bound cost divides out exactly. The arms are interleaved but **not counter
 z-order and focus are fixed and perfectly correlated with arm. And the controls **ship only to touch
 devices**, so this gate runs on the one platform the feature is absent from; there is no mobile
 timing evidence anywhere in this repo.
+
+#### ✅ What replaced it, and the three things the runs corrected
+
+The criterion-bearing statistics are now **absolute paired per-frame deltas in milliseconds**, GPU
+and main thread, in `tests/e2e/touchPerf.ts`, fixed as a policy before any selection run:
+`MAX_TOUCH_GPU_DELTA_MS` and `MAX_TOUCH_CPU_DELTA_MS` at **0.5** (3 % of the 60 Hz budget, and the
+figure Phase 8 fixed for `MAX_LEVEL_GPU_DELTA_MS`), `MAX_TOUCH_ARM_GPU_MS` and
+`MAX_TOUCH_ARM_CPU_MS` at **8** as absolute per-arm ceilings a delta structurally cannot give.
+`sampleArm` stops the idle page's game loop and **asserts its tick frozen** across the window, so the
+shared-GPU cancellation is observed rather than commanded. The frames-served ratio and the baseline
+floor are kept, not swapped out.
+
+**Three corrections, none of which reading the code would have produced:**
+
+| # | what a run showed | the fix |
+|---|---|---|
+| 1 | every GPU pair NEGATIVE — the touch arm cheaper than the bare one, backwards for an arm drawing six extra faces | `helpLine()` prints ~130 glyphs of 44 px bold text on a keyboard device and ~35 on a touch one. *An A/B toggle bounds only what differs between the arms*, and a genuine +0.5 ms regression would have landed at +0.35 ms and passed. `hideTexts` equalises it — and the first version swept only `UI` while `gameHud.ts:79` builds the banner against **`Game`**, which moved the median -0.119 → -0.107 and was the tell |
+| 2 | the red proof could not go red | 40 copies per control moved the delta **0.0563 ms** against a 0.5 ms bound. 800 read 0.706 ms isolated and **0.5007 ms** inside the full sweep — a coin flip, not a proof. **2000**: 1.795 ms, every pair over 1.35 |
+| 3 | the held-out sweep FALSE-REDDED the per-pair CPU bound | one pair read exactly **-0.5000 ms** (failing on float dust, `0.5000000238414941`) while the median of the same four read -0.1000. `workMedianMs` is a median over Chrome's 0.1 ms `performance.now()` grid of a quantity that is itself 0.8-0.9 ms, so ±0.5 per pair is ±5 quanta of nine. The criterion-bearing claim moved to the median; the per-pair check became `MAX_TOUCH_CPU_PAIR_MS = 2`, a collapse guard |
+
+#### 🔴 What the gate can actually resolve, measured rather than assumed
+
+After `hideTexts`, both arms' display lists were dumped and diffed: they differ by **exactly the six
+control faces**, 160 × 160 at alpha 0.85, plus three objects already invisible. Nothing else. Six
+such faces are ~0.5 % of a 1920 × 1080 frame, and M72 measures 4800 of them at 0.706 ms, so **the
+whole feature costs on the order of 0.001 ms** against a ±0.2 ms per-pair noise floor between two
+browser contexts. The residual -0.06 to -0.18 ms offset is a context-identity artefact and does not
+shrink when more is equalised.
+
+So the gate does **not** claim the controls cost under 0.5 ms — that is true by three orders of
+magnitude and needs no gate. It claims no **absolute** half-millisecond regression has appeared on
+the touch arm: a filter, a per-frame re-render, a full-screen overdraw, a `refresh()` moved into
+`update()`. That is the class of defect 12.11 is about, and it is now written into the spec header
+rather than implied.
+
+#### The `performance-engineer` briefs, round 2 *(A7)*
+
+Two briefs, brief 1's findings withheld from brief 2.
+
+**Brief 1 — checklist. Four findings, all applied:**
+
+1. 🔴 **`MAX_TOUCH_CPU_DELTA_MS` had never been watched failing.** The GPU red proof amplifies fill
+   rate and asserts only `gpuDelta`; nothing drove the main-thread delta across its bound, so the
+   statistic called criterion-bearing rested on prose. *A gate that cannot go red is decoration* —
+   and this phase had already shipped that shape twice, at 40 face copies and at a per-pair CPU band
+   its own noise saturated. **Applied: M73**, `phase-12-perf-cpu-delta.spec.ts`, which runs the
+   controls' **own** `TouchSession.refresh()` `REFRESH_COPIES` extra times per frame. That is the
+   exact regression `touchPerf.ts` names, not a busy loop — a stand-in proves the timer sees
+   wall-clock work, the mistake Phase 8 paid for with 240 scrims.
+2. 🔴 **No absolute ceiling on either arm's own main-thread median** — the CPU twin of
+   `MAX_TOUCH_ARM_GPU_MS`, missing. A cost added to *both* arms divides out of a delta (Phase 7's
+   G32). **Applied: `MAX_TOUCH_ARM_CPU_MS = 8`**, the figure `perfBudget.ts:179` fixed for
+   `MAX_FLEET_WORK_MS` for the same job.
+3. **This § was stale** — it still read NOT MET and described the replacement as unbuilt. **Applied**
+   (this rewrite).
+4. **The spec header said the controls are "ten DRAWN objects"** while the same file's measured
+   display-list diff says six. **Applied.**
+
+Brief 1 also recorded, as sound: the M72 proof runs the identical instrument rather than a cheaper
+one; the bounds are pre-registered; the isolation is observed and not merely commanded; every
+precondition is asserted per arm per pair; the routing is pinned by name; AB/BA is correct for an
+even `PAIRS`.
 
 ### 12.14 — readability (`ui-ux-tester`)
 
