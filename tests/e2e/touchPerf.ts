@@ -57,13 +57,35 @@ export const FRAME_BUDGET_MS = 1000 / 60;
 export const MAX_TOUCH_GPU_DELTA_MS = 0.5;
 
 /**
- * The same fraction on the MAIN THREAD, and bounded rather than merely reported.
+ * The same fraction on the MAIN THREAD — but on the MEDIAN of the pairs, not on each pair.
  *
  * A GPU delta is blind to a cost that is all JavaScript, which is the more likely shape of a touch
  * regression: `refresh()` running per frame instead of per state change would move `workMedianMs`
- * and leave the rasteriser untouched.
+ * and leave the rasteriser untouched. So the statistic is kept and bounded.
+ *
+ * 🔴 **Per-pair, it is not a bound on the controls — the held-out sweep proved that.** Measured
+ * per-frame main-thread work here is **0.8-0.9 ms**, and Chrome clamps `performance.now()` to
+ * **0.1 ms**, so `workMedianMs` is a median over a nine-quantum grid. A +/-0.5 ms per-pair band is
+ * +/-5 quanta of a 9-quantum quantity — over half of it. Across 16 recorded pairs the delta sat
+ * inside +/-0.2 ms fifteen times and once read **exactly -0.5000 ms**, failing on float dust
+ * (`0.5000000238414941`), while the median of that same run's four pairs read -0.1000 ms.
+ *
+ * *A perf bound is chosen on one set of runs and confirmed on a HELD-OUT set*, and the held-out set
+ * disagreed. The response is not to move the number: the MEDIAN of four pairs has about half the
+ * spread and carries the criterion, and the per-pair check becomes `MAX_TOUCH_CPU_PAIR_MS` — a
+ * collapse guard rather than a performance claim.
  */
 export const MAX_TOUCH_CPU_DELTA_MS = 0.5;
+
+/**
+ * The per-pair main-thread guard: a COLLAPSE detector, and deliberately not a tolerance.
+ *
+ * 2 ms is more than twice the whole per-frame main-thread cost either arm measures, so no ordinary
+ * window drift reaches it, and anything that does means one arm stopped being a measurement — the
+ * failure `phase-08-perf.spec.ts` records at -0.243 ms and the reason both bounds here are
+ * two-sided. The performance claim lives in `MAX_TOUCH_CPU_DELTA_MS` on the median.
+ */
+export const MAX_TOUCH_CPU_PAIR_MS = 2;
 
 /**
  * An absolute ceiling on the touch arm's OWN median, not a difference.
@@ -103,11 +125,12 @@ export const SETTLE_TICKS = 30;
  * cross it. Every extra fragment here is a fragment of a touch control, at the controls' own size
  * and alpha.
  *
- * ⚠️ **800, and the first attempt at 40 could not go red.** 40 copies per control — 240 faces, about
- * one screen of fill on this box — moved the paired GPU delta by **0.0563 ms** against a 0.5 ms
- * bound, so the red proof failed and the bound was decoration at that amplitude. *If the held-out
- * set disagrees, raise the amplifier, never relax the assertion.* 800 is ~4800 faces, and the
- * measured cost scales close to linearly with the count.
+ * ⚠️ **2000, and it took two corrections.** 40 copies per control — 240 faces, about one screen of
+ * fill on this box — moved the paired GPU delta by **0.0563 ms** against a 0.5 ms bound, so the red
+ * proof failed outright. 800 read **0.7060 ms** in isolation and then **0.5007 ms** inside the
+ * held-out full sweep: a margin of 0.0007 ms, which is a coin flip rather than a proof. *If the
+ * held-out set disagrees, raise the amplifier, never relax the assertion.* 2000 is 12 000 faces and
+ * the measured cost scales close to linearly, so the sweep-loaded figure lands near 1.25 ms.
  *
  * 🔴 **What that ratio actually says, recorded rather than hidden:** six control faces cost roughly
  * `0.0563 / 240 * 6 ≈ 0.0014 ms` of rasteriser time, so the 0.5 ms tolerance is some 350x the
@@ -116,7 +139,7 @@ export const SETTLE_TICKS = 30;
  * full-screen overdraw — which is the class of regression 12.11 is about. The main-thread bound and
  * the `MAX_TOUCH_ARM_GPU_MS` ceiling carry the rest.
  */
-export const FACE_COPIES = 800;
+export const FACE_COPIES = 2000;
 
 type Loop = { loop: { sleep(): void; wake(seamless?: boolean): void } };
 

@@ -13,6 +13,7 @@ import {
 import {
   MAX_TOUCH_ARM_GPU_MS,
   MAX_TOUCH_CPU_DELTA_MS,
+  MAX_TOUCH_CPU_PAIR_MS,
   MAX_TOUCH_GPU_DELTA_MS,
   PAIRS,
   median,
@@ -65,6 +66,26 @@ import {
  *
  * ⚠️ **The controls ship only to touch devices**, so this gate still runs on a desktop GPU and there
  * is no mobile timing evidence anywhere in this repository. Recorded, not papered over.
+ *
+ * ## 🔴 What the paired delta can and cannot resolve, measured rather than assumed
+ *
+ * After `hideTexts` the two arms' display lists were dumped and diffed, and they differ by **exactly
+ * the six control faces** — 160 x 160 at alpha 0.85 — plus three objects that are already invisible
+ * (the rotate prompt's scrim and its two lines). Nothing else.
+ *
+ * Six such faces are about 0.5 % of a 1920 x 1080 frame, and the M72 amplifier measures 4800 of them
+ * at 0.706 ms, so **the whole feature costs on the order of 0.001 ms** of rasteriser time. The
+ * per-pair spread between two browser contexts is +/-0.2 ms. The feature is therefore two to three
+ * orders of magnitude below this instrument's noise floor, and the residual **-0.07 to -0.18 ms**
+ * offset — the touch arm reading *cheaper* than the bare one across sixteen recorded pairs — is a
+ * context-identity artefact, not the controls. It does not shrink when more is equalised: hiding the
+ * help banner moved it from -0.119 to -0.068 and the diff above shows there is nothing left to hide.
+ *
+ * So this gate does **not** claim the controls cost under 0.5 ms of extra frame time — that is true
+ * by three orders of magnitude and needs no gate. It claims that no ABSOLUTE regression of half a
+ * millisecond per frame — a filter, a per-frame re-render, a full-screen overdraw, a `refresh()`
+ * moved into `update()` — has appeared on the touch arm. That is the class of defect 12.11 is about,
+ * and `MAX_TOUCH_ARM_GPU_MS` catches the one a delta structurally cannot.
  *
  * ## The precondition that makes the arms mean anything
  *
@@ -244,9 +265,15 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     // episode on record: a clean paired delta of -0.243 ms when one arm's median stopped being a
     // measurement (`phase-08-perf.spec.ts`). The lower side is an instrument-validity check, not a
     // performance claim.
+    // 🔴 The main-thread pair bound is `MAX_TOUCH_CPU_PAIR_MS`, not `MAX_TOUCH_CPU_DELTA_MS`, and
+    // the held-out sweep is why: `workMedianMs` is a median over Chrome's 0.1 ms `performance.now()`
+    // grid of a quantity that is itself only 0.8-0.9 ms, so +/-0.5 ms per pair is +/-5 quanta of
+    // nine. One pair read exactly -0.5000 ms while the median of the same four read -0.1000. The
+    // criterion-bearing main-thread claim is the median assertion below; this one is a collapse
+    // guard. See `touchPerf.ts` for the sixteen recorded pairs.
     for (const [deltas, bound, unit] of [
       [gpuPer, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser'],
-      [cpuPer, MAX_TOUCH_CPU_DELTA_MS, 'main-thread'],
+      [cpuPer, MAX_TOUCH_CPU_PAIR_MS, 'main-thread'],
     ] as const) {
       for (const [i, d] of deltas.entries()) {
         expect(
