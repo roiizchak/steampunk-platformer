@@ -139,21 +139,9 @@ function syntheticPlate(): Uint8Array {
     data[i + 1] = 255;
     data[i + 3] = 255;
   }
-  const r = cell * 0.35;
   for (let row = 0; row < TOUCH_PLATE_SHEET_ROWS; row += 1) {
     for (let col = 0; col < TOUCH_PLATE_COLS; col += 1) {
-      const grey = 20 + (row * TOUCH_PLATE_COLS + col) * 15;
-      const cx = col * cell + cell / 2;
-      const cy = row * cell + cell / 2;
-      for (let y = cy - r; y <= cy + r; y += 1) {
-        for (let x = cx - r; x <= cx + r; x += 1) {
-          if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
-          const i = (Math.round(y) * w + Math.round(x)) * 4;
-          data[i] = grey;
-          data[i + 1] = grey;
-          data[i + 2] = grey;
-        }
-      }
+      familyCellPixels(w, h, col * cell, row * cell, row * TOUCH_PLATE_COLS + col, data);
     }
   }
   return encodePng(w, h, data);
@@ -169,8 +157,72 @@ function syntheticSources(root: string): { plateSource: string; cellSources: Rec
   const plateSource = join(root, '..', 'plate.png');
   const override = join(root, '..', 'override.png');
   writeFileSync(plateSource, syntheticPlate());
-  writeFileSync(override, syntheticCell(220));
+  // Mark 8 is a position no plate cell uses, so a face cut from the plate can never coincide
+  // with one cut from the override — and its BODY is the same brass, so the family gate passes.
+  writeFileSync(override, syntheticFamilyCell(8));
   return { plateSource, cellSources: { [OVERRIDE_KEY]: override } };
+}
+
+/**
+ * A brass disc carrying one distinguishing mark, framed the way `cutFace` demands.
+ *
+ * 🔴 **Warm and identical in body tone across every cell, distinguished by the MARK.** The
+ * family gate (`touchFamily.mjs`) refuses a set whose body luminance or warmth disagree, so a
+ * synthetic plate that varied its cells by grey level would be rejected by a real invariant for a
+ * reason that has nothing to do with what the test is asking. The mark is inside the disc, so the
+ * cell is still exactly one keyed component.
+ */
+function syntheticFamilyCell(mark: number): Uint8Array {
+  const side = 300;
+  return encodePng(side, side, familyCellPixels(side, side, 0, 0, mark));
+}
+
+/** Paints one brass disc with its mark into an RGBA buffer at cell offset `(ox, oy)`. */
+function familyCellPixels(
+  w: number,
+  h: number,
+  ox: number,
+  oy: number,
+  mark: number,
+  into?: Uint8ClampedArray,
+): Uint8ClampedArray {
+  const data = into ?? new Uint8ClampedArray(w * h * 4);
+  if (!into) {
+    for (let i = 0; i < data.length; i += 4) {
+      data[i + 1] = 255;
+      data[i + 3] = 255;
+    }
+  }
+  const cell = 300;
+  const cx = ox + cell / 2;
+  const cy = oy + cell / 2;
+  const r = cell * 0.35;
+  for (let y = cy - r; y <= cy + r; y += 1) {
+    for (let x = cx - r; x <= cx + r; x += 1) {
+      if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+      const i = (Math.round(y) * w + Math.round(x)) * 4;
+      // Brass: warm, and the same brass in every cell.
+      data[i] = 200;
+      data[i + 1] = 150;
+      data[i + 2] = 60;
+      data[i + 3] = 255;
+    }
+  }
+  // The mark: a dark square whose position is the cell's identity. Inside the disc, so the cell
+  // stays one component.
+  const angle = (mark * 2 * Math.PI) / 9;
+  const mx = cx + Math.cos(angle) * r * 0.4;
+  const my = cy + Math.sin(angle) * r * 0.4;
+  for (let y = my - 18; y <= my + 18; y += 1) {
+    for (let x = mx - 18; x <= mx + 18; x += 1) {
+      const i = (Math.round(y) * w + Math.round(x)) * 4;
+      data[i] = 30;
+      data[i + 1] = 22;
+      data[i + 2] = 9;
+      data[i + 3] = 255;
+    }
+  }
+  return data;
 }
 
 describe('the default build reads the cut faces and does not rewrite them', () => {

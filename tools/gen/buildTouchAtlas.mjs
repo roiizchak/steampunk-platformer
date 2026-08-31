@@ -25,6 +25,7 @@ import { decodePng, encodePng, readBytes, readPng } from './png.mjs';
 import { TOUCH_PLATE_CELLS } from './promptTouch.mjs';
 import { cutFace, cutPlate } from './touchPlateCut.mjs';
 import { TOUCH_CELL_SOURCES, TOUCH_PLATE_SOURCE, parseTouchArgs } from './touchAtlasCli.mjs';
+import { familyFailures } from './touchFamily.mjs';
 
 /** Where the faces ship. One file per control, keyed in `public/assets/index.json`. */
 export const TOUCH_OUT_DIR = 'public/assets/ui';
@@ -140,6 +141,20 @@ export function runBuild(args, dirs) {
       `cut [${produced.join(', ')}] but the catalog asks for [${wanted.join(', ')}] — ` +
         'add or remove the index.json rows and the cell descriptors together',
     );
+  }
+
+  // 🔴 ONE FAMILY, and this is the first gate in the pipeline that compares two faces at all.
+  // Everything else measures a face against itself, so a plate whose six buttons carry different
+  // bezels, brass or patina passed everything. Codex round 15, finding 6; built before the
+  // whole-plate redesign by owner decision, 2026-08-31, because a redesign is when it pays.
+  //
+  // `cell` is exempt and that is the known gap: it holds one face in memory and a set of one is a
+  // family by construction. The redesign empties the override map, so nothing ships through `cell`.
+  if (args.mode !== 'cell') {
+    const notFamily = familyFailures(cells);
+    if (notFamily.length > 0) {
+      throw new Error(`these are not one family of buttons: ${notFamily.join('; ')}`);
+    }
   }
 
   fs.mkdirSync(dirs.outDir, { recursive: true });
