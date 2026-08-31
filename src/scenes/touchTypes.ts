@@ -64,6 +64,13 @@ export interface TouchFaceLike {
   setStrokeStyle?(width: number, color: number): TouchFaceLike;
   /** `Text` only. The rotate prompt resizes its copy against the live CSS scale. */
   setFontSize?(size: number): TouchFaceLike;
+  /**
+   * `Text` only. The rotate prompt's subline is 36 monospace characters, and at a phone-portrait
+   * CSS scale that is wider than the 1920 px design surface — so it MUST be allowed to wrap.
+   */
+  setWordWrapWidth?(width: number, useAdvancedWrap?: boolean): TouchFaceLike;
+  /** `Text` only, and only meaningful once the line above can wrap. */
+  setAlign?(align: string): TouchFaceLike;
   /** `Rectangle` only. The rotate prompt's scrim re-sizes to a changed design size. */
   setSize?(width: number, height: number): TouchFaceLike;
   /** `Image` only. A 160 px face drawn into a box `touchLayout` scaled off the view. */

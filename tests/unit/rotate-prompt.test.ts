@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { TOUCH_BOX_PX, TOUCH_MIN_CSS_PX } from '../../src/render/touchLayout';
+import { SCENE_UPDATE } from '../../src/scenes/engineLiterals';
+import { attachRotatePrompt } from '../../src/scenes/rotateGuard';
 import { RotatePrompt } from '../../src/scenes/rotatePrompt';
 import { makeTouchScene, type TouchSceneHarness } from './touchSceneFake';
 
@@ -165,5 +167,111 @@ describe('RotatePrompt', () => {
     prompt.destroy();
     for (const f of h.faces) expect(f.destroyed, 'a prompt object outlived the prompt').toBe(true);
     expect(prompt.showing).toBe(false);
+  });
+});
+
+/**
+ * **Both of these were found by the owner on a phone, and neither could be seen from here.**
+ *
+ * Codex reviewed this prompt five times and the suite has 3039 cases. The first defect lives in a
+ * font size that only exists below a CSS scale of 0.275, which no headless run reaches; the second
+ * in the difference between a `resize` event and a viewport, which no fake emits wrongly. *(C4: a
+ * hands-on pass finds what a gate cannot.)*
+ */
+describe('the two defects a real phone found', () => {
+  /** Monospace advance as a share of the em. Conservative: real monospace faces run 0.55-0.6. */
+  const ADVANCE = 0.6;
+  const SUBLINE_TEXT = 'the controls need a landscape screen';
+
+  it('WRAPS its copy, because the subline is wider than the design surface without it', () => {
+    // 🔴 The subline was cut off at both ends on the owner's phone, and the arithmetic says it
+    // always was. 36 characters at `18 / 0.203 = 89` game px and 0.6 em advance is 1922 px on a
+    // 1920 px surface — over on the WIDEST phone in scope, worse on every narrower one.
+    const h = scene(PORTRAIT_CSS_WIDTH);
+    const prompt = live(h);
+    expect(prompt.showing, 'the fixture is not the failing viewport').toBe(true);
+
+    const subline = h.faces.filter((f) => f.fontSize > 0 && f.fontSize < 100)[0]!;
+    const unwrapped = SUBLINE_TEXT.length * subline.fontSize * ADVANCE;
+    expect(
+      unwrapped,
+      'the fixture no longer overflows, so this case proves nothing — re-derive it',
+    ).toBeGreaterThan(GAME_WIDTH);
+
+    for (const line of h.faces.filter((f) => f.fontSize > 0)) {
+      expect(line.wrapWidth, 'a line of copy can still run off both edges').toBeGreaterThan(0);
+      expect(line.wrapWidth, 'the wrap width is wider than the surface it wraps inside').
+        toBeLessThanOrEqual(GAME_WIDTH);
+    }
+  });
+
+  it('SUBSCRIBES to the per-frame event, so a late-reported rotation is still seen', () => {
+    // 🔴 The defect itself. `TitleScene` and `LevelSelectScene` attach the prompt through
+    // `attachRotatePrompt`, which subscribed `refresh` to `scale.on('resize')` and to nothing else.
+    // A mobile browser fires `resize` on orientationchange while it still reports the OLD viewport,
+    // so the one evaluation the prompt got ran against portrait and nothing asked again — the
+    // overlay stayed up after the phone was turned. `UIScene` was fine because it polls.
+    //
+    // ⚠️ **This drives `attachRotatePrompt`, not `RotatePrompt.refresh()`**, because the subscription
+    // is the thing that was missing. The case below drives the prompt and would have stayed GREEN
+    // through the entire defect. That file could not be unit-tested at all until its `phaser` value
+    // import came out — see `RotateGuardScene`.
+    const h = scene(PORTRAIT_CSS_WIDTH);
+    const own: string[] = [];
+    const scaleEvents: string[] = [];
+    const handlers = new Map<string, () => void>();
+    const guardScene = {
+      ...h.scene,
+      events: {
+        on: (e: string, fn: () => void) => {
+          own.push(e);
+          handlers.set(e, fn);
+        },
+        once: (e: string, fn: () => void) => {
+          own.push(e);
+          handlers.set(e, fn);
+        },
+        off: (e: string) => {
+          handlers.delete(e);
+        },
+      },
+      scale: {
+        ...h.scene.scale,
+        on: (e: string) => scaleEvents.push(e),
+        off: () => undefined,
+      },
+    } as unknown as Parameters<typeof attachRotatePrompt>[0];
+
+    attachRotatePrompt(guardScene, true);
+    expect(scaleEvents, 'the resize subscription is gone').toContain('resize');
+    expect(
+      own,
+      'nothing re-evaluates the prompt per frame, so a late-reported rotation strands it',
+    ).toContain(SCENE_UPDATE);
+
+    // The prompt is up, the device turns, and the browser reports it only on the next frame.
+    const scrim = h.faces[0]!;
+    expect(scrim.visible, 'the prompt should be up in portrait').toBe(true);
+    guardScene.scale.displaySize = { width: GAME_WIDTH, height: GAME_HEIGHT };
+    handlers.get(SCENE_UPDATE)!();
+    expect(scrim.visible, 'the prompt survived a rotation into landscape').toBe(false);
+  });
+
+  it('clears itself on a ROTATION the browser reported late, with no resize event', () => {
+    // 🔴 `TitleScene` and `LevelSelectScene` subscribed `refresh` to `scale.on('resize')` and to
+    // nothing else. A mobile browser fires `resize` on orientationchange while it still reports the
+    // OLD viewport, so the one evaluation the prompt got ran against portrait and nothing asked
+    // again — the overlay stayed up after the phone was turned. The owner found it, 2026-08-31.
+    //
+    // This is that sequence exactly: the viewport becomes landscape and `refresh()` is called by
+    // the per-frame subscription rather than by a resize. `attachRotatePrompt` is what wires that,
+    // and deleting its UPDATE subscription reds this.
+    const h = scene(PORTRAIT_CSS_WIDTH);
+    const prompt = live(h);
+    expect(prompt.showing, 'the prompt should be up in portrait').toBe(true);
+
+    h.scene.scale.displaySize = { width: GAME_WIDTH, height: GAME_HEIGHT };
+    prompt.refresh();
+    expect(prompt.showing, 'the prompt survived a rotation into landscape').toBe(false);
   });
 });

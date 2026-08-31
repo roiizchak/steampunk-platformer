@@ -59,6 +59,23 @@ const SUBLINE_OFFSET_PX = 56;
 const HEADLINE = 'ROTATE YOUR DEVICE';
 const SUBLINE = 'the controls need a landscape screen';
 
+/**
+ * The share of the design width the copy may occupy before it wraps.
+ *
+ * 🔴 **The subline was CUT OFF at both ends on a real phone**, and the arithmetic says it always
+ * was. `SUBLINE` is 36 monospace characters; monospace advance is about 0.6 em; and the font size
+ * is `SUBLINE_CSS_PX / scale`, which at iPhone 14 portrait (scale 0.203) is 89 game px. That is
+ * `36 x 89 x 0.6 = 1922` px on a 1920 px design surface — over by two pixels on the widest phone in
+ * scope, and worse on every narrower one. Nothing in the suite could see it: no gate measures a
+ * text object's rendered width, and the font size that produces it exists only at a CSS scale the
+ * headless harness never runs at. Found by the owner on the device, 2026-08-31.
+ *
+ * Wrapping rather than shrinking, because the whole point of sizing this copy in CSS pixels is that
+ * it stays over the 16 px legibility floor — shrinking it to fit would trade the bug for the defect
+ * the file's own header is about.
+ */
+const COPY_WIDTH_FRAC = 0.86;
+
 export class RotatePrompt {
   private faces: TouchFaceLike[] = [];
   /** The scrim, held separately because it is the one face that re-sizes. */
@@ -70,6 +87,8 @@ export class RotatePrompt {
   private headline?: TouchFaceLike;
   private subline?: TouchFaceLike;
   private isShowing = false;
+  /** The CSS scale the copy is currently sized for. See `refresh()`. */
+  private sizedFor = 0;
 
   constructor(
     private readonly scene: TouchSceneLike,
@@ -151,6 +170,10 @@ export class RotatePrompt {
     this.scrim?.setPosition(0, 0);
     this.headline?.setPosition(width / 2, height / 2 - HEADLINE_OFFSET_PX);
     this.subline?.setPosition(width / 2, height / 2 + SUBLINE_OFFSET_PX);
+    for (const line of [this.headline, this.subline]) {
+      line?.setWordWrapWidth?.(width * COPY_WIDTH_FRAC);
+      line?.setAlign?.('center');
+    }
   }
 
   /**
@@ -182,7 +205,11 @@ export class RotatePrompt {
     // width still has a valid design size. `Math.round(28 / 0)` is `Infinity`, which is what would
     // then reach Phaser's text renderer. Keep the last finite size instead; the prompt's VISIBILITY
     // is decided above and is unaffected. Codex round 4.
-    if (scale > 0) {
+    // ⚠️ **Only when it actually changed**, for the reason `place()` gives one screen up: this is
+    // polled every frame now, on every scene that carries a prompt, and `Text.setFontSize` re-styles
+    // and re-renders the text texture on every call.
+    if (scale > 0 && scale !== this.sizedFor) {
+      this.sizedFor = scale;
       this.headline?.setFontSize?.(Math.round(HEADLINE_CSS_PX / scale));
       this.subline?.setFontSize?.(Math.round(SUBLINE_CSS_PX / scale));
     }
@@ -195,6 +222,7 @@ export class RotatePrompt {
   destroy(): void {
     for (const face of this.faces) face.destroy();
     this.faces = [];
+    this.sizedFor = 0;
     this.headline = undefined;
     this.subline = undefined;
     this.isShowing = false;

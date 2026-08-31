@@ -42,6 +42,9 @@ export interface FaceFake {
   strokeWidth: number;
   strokeColor: number;
   fontSize: number;
+  /** Zero until something sets it — the rotate prompt's copy is the only thing that wraps. */
+  wrapWidth: number;
+  align: string;
   /** The texture an `add.image` face was built from. Empty for every drawn shape. */
   textureKey: string;
 }
@@ -146,6 +149,8 @@ export function makeFaceFactory(
     strokeWidth: 0,
     strokeColor: 0,
     fontSize: 0,
+    wrapWidth: 0,
+    align: '',
     textureKey: '',
     setName(name: string) {
       api.id = name;
@@ -192,6 +197,14 @@ export function makeFaceFactory(
     },
     setFontSize(size: number) {
       api.fontSize = size;
+      return api;
+    },
+    setWordWrapWidth(width: number) {
+      api.wrapWidth = width;
+      return api;
+    },
+    setAlign(align: string) {
+      api.align = align;
       return api;
     },
     destroy() {
