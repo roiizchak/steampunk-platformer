@@ -22,6 +22,7 @@ const FUTURE_NAMES = [
   'phase-12-viewport.spec.ts',
   'phase-12-perf.spec.ts',
   'phase-12-perf-b.spec.ts',
+  'phase-12-perf-gpu-delta.spec.ts',
   'phase-12-perf2.spec.ts',
   'phase-12-multitouch-drag.spec.ts',
   'phase-12-a.spec.ts',
@@ -43,7 +44,16 @@ describe('the Phase 12 Playwright partition', () => {
   it('routes every perf-prefixed name to the GPU project, not only the exact one', () => {
     // The named regression: an exact `phase-12-perf.spec.ts` pattern would send `-b` to the
     // headless project, where a millisecond figure is a measurement of SwiftShader.
-    for (const name of ['phase-12-perf.spec.ts', 'phase-12-perf-b.spec.ts', 'phase-12-perf2.spec.ts']) {
+    // 🔴 `phase-12-perf-gpu-delta.spec.ts` is named here BY NAME, not merely counted. The obvious
+    // name for it — `phase-12-gpu-delta.spec.ts` — matches TOUCH_ALL_SPECS and not the perf prefix,
+    // so it would have run headless in `chromium-touch`: a GPU timing spec measuring SwiftShader,
+    // with an "exactly one project" assertion passing. Codex plan review, before the file existed.
+    for (const name of [
+      'phase-12-perf.spec.ts',
+      'phase-12-perf-b.spec.ts',
+      'phase-12-perf2.spec.ts',
+      'phase-12-perf-gpu-delta.spec.ts',
+    ]) {
       expect(projectFor(name), name).toBe('touch-gpu');
     }
   });

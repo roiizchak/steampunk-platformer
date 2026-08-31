@@ -1,13 +1,25 @@
 import { expect, test } from '@playwright/test';
 
 import { TOUCH_IDS } from '../../src/render/touchLayout';
+import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
 import { assertRealGpu } from './realGpu';
+import { installGpuTimer } from './gpuTimer';
 import {
   bootToTouchPlay,
   drawnFaces,
   drawnZones,
   installTouchDriver,
 } from './touchHarness';
+import {
+  MAX_TOUCH_ARM_GPU_MS,
+  MAX_TOUCH_CPU_DELTA_MS,
+  MAX_TOUCH_GPU_DELTA_MS,
+  PAIRS,
+  median,
+  pairedDeltas,
+  sampleArm,
+  wakeLoop,
+} from './touchPerf';
 
 /**
  * **Criterion 12.11 — the frame budget with the controls drawn.**
@@ -29,43 +41,29 @@ import {
  * 30 ms stall went unseen (the Phase 9 lesson). Frames served over a fixed wall-clock window counts
  * every frame, so a per-frame cost shows up as fewer of them.
  *
- * ## 🔴 What this bound CANNOT see — and it is enough to fail the criterion
+ * ## 🔴 What the FRAMES-SERVED bound cannot see, and what replaced it
  *
- * Both 12.11 briefs reached this independently and they are right. **Frames served against a
- * vsync-locked display cannot order its own mutation**, which by this project's own rule
- * (`TESTING-RULES.md`) means the statistic must be replaced rather than re-bounded.
+ * Both 12.11 briefs reached this independently and they were right: **frames served against a
+ * vsync-locked display cannot order its own mutation.** At 240 Hz the frame period is 4.1667 ms; a
+ * frame either makes its deadline or costs a whole period, so the ratio is 1.000 below the headroom
+ * and 0.500 above it and nothing lands between. The invisible band is roughly [0, 2.7 ms] of added
+ * per-frame cost — 65 % of this box's frame budget, and a drop to ~30 fps on the owner's 60 Hz
+ * laptop. *A statistic that does not order its own mutation cannot be fixed by moving the bound.*
  *
- * At 240 Hz the frame period is 4.1667 ms. A frame either makes its deadline or costs a whole
- * period, so served rate is `R / (1 + p)` for an overrunning fraction `p`, and red at 0.9 needs
- * **p ≥ 11.1 %**. A CONSTANT per-frame cost — which is exactly what fifteen extra display-list
- * entries are — never produces a partial `p`: below the headroom every frame makes it and the
- * ratio is 1.000; above it every frame misses and the ratio is 0.500. **Nothing lands between**,
- * so 0.60, 0.75 and 0.95 would all behave identically and the 10 % figure is not load-bearing.
+ * So the criterion-bearing statistics are now **absolute paired per-frame deltas in milliseconds** —
+ * GPU and main thread — against tolerances fixed in `touchPerf.ts` before any run. The frames-served
+ * ratio and the baseline floor are KEPT below rather than swapped out: they catch a dropped frame
+ * and a collapsed baseline, which a delta cannot, and this spec's own docstring already said they
+ * were worth running. The red proof for the GPU bound is `phase-12-perf-gpu-delta.spec.ts`.
  *
- * The invisible band is roughly **[0, 2.7 ms] of added per-frame cost**, and what the owner feels
- * at the top of it:
+ * ⚠️ **And the two arms no longer share a GPU while one is measured.** Both contexts used to stay
+ * alive and rendering, so system load was `2·base + C` in both samples and a GPU-bound cost divided
+ * out exactly. `sampleArm` stops the idle page's game loop and ASSERTS its tick frozen across the
+ * window — commanding the isolation and observing it are different things, and a wrong-page call
+ * would have silently restored the cancellation with every assertion still green.
  *
- * | substrate | frame budget | 2.7 ms is | this gate says |
- * |---|---|---|---|
- * | this box, 240 Hz RTX 4080 | 4.167 ms | 65 % of it | 100.0 % |
- * | the owner's 60 Hz laptop | 16.667 ms | 16 % of it | 100.0 % |
- * | a mid-range phone | 16.667 ms | a hard drop to ~30 fps | 100.0 % |
- *
- * ⚠️ **And the phone is the substrate the controls SHIP to.** They render only when Phaser detects
- * touch, so this gate runs on the one platform the feature is absent from. Under `Scale.FIT` a
- * phone rasterises the full 1920x1080 backing store every frame and downscales it, on a GPU an
- * order of magnitude slower. There is no mobile timing evidence anywhere in this repo.
- *
- * ⚠️ **The two arms also share a GPU.** Both contexts stay alive and rendering for the whole run
- * (Playwright ships `--disable-backgrounding-occluded-windows`), so total system load is
- * `2·base + C` in both samples. If the shared GPU is the binding resource, C divides out exactly —
- * *an A/B toggle bounds only what differs between the arms*.
- *
- * **So 12.11 is recorded NOT MET, not quietly re-bounded.** The replacement this repo already ships
- * is `tests/e2e/gpuTimer.ts`'s `installGpuTimer` with a paired ABSOLUTE per-frame delta in
- * milliseconds against a 16.667 ms budget — the shape of `phase-08-gpu-delta.spec.ts`, which was
- * red-proved on a held-out set. What remains below is still worth running: it catches a dropped
- * frame and a collapsed baseline, and its preconditions are real. It is not the criterion.
+ * ⚠️ **The controls ship only to touch devices**, so this gate still runs on a desktop GPU and there
+ * is no mobile timing evidence anywhere in this repository. Recorded, not papered over.
  *
  * ## The precondition that makes the arms mean anything
  *
@@ -81,61 +79,23 @@ import {
  * precondition above is still load-bearing; it just answers a different question than the config.
  */
 
-/** Long enough to average out a compile hiccup, short enough that six of them fit in a test. */
-const WINDOW_MS = 2500;
-/** Three of each arm, interleaved. Enough for a median to mean something without a long run. */
-const ROUNDS = 3;
-
-interface Sample {
-  frames: number;
-  ms: number;
-  ticks: number;
-}
-
-/** Count animation frames actually served over a wall-clock window, inside the page. */
-async function sampleFrames(page: import('@playwright/test').Page, ms: number): Promise<Sample> {
-  return page.evaluate(
-    (windowMs) =>
-      new Promise<Sample>((resolve) => {
-        const startTick = window.__game?.tick ?? 0;
-        const start = performance.now();
-        let frames = 0;
-        const step = (): void => {
-          frames += 1;
-          const elapsed = performance.now() - start;
-          if (elapsed >= windowMs) {
-            resolve({ frames, ms: elapsed, ticks: (window.__game?.tick ?? 0) - startTick });
-            return;
-          }
-          requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-      }),
-    ms,
-  );
-}
-
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-}
-
 test('12.11 the frame budget is unregressed with the controls drawn', async ({ browser }) => {
   test.setTimeout(180_000);
 
   const touchContext = await browser.newContext({ hasTouch: true });
   const plainContext = await browser.newContext({ hasTouch: false });
+  const withControlsPage = await touchContext.newPage();
+  const withoutPage = await plainContext.newPage();
   try {
-    const withControls = await touchContext.newPage();
-    const without = await plainContext.newPage();
+    const withControls = withControlsPage;
+    const without = withoutPage;
     await installTouchDriver(withControls);
     await installTouchDriver(without);
 
     await bootToTouchPlay(withControls);
     await bootToTouchPlay(without);
 
-    await assertRealGpu(withControls, '12.11 controls');
+    const renderer = await assertRealGpu(withControls, '12.11 controls');
     await assertRealGpu(without, '12.11 control arm');
 
     // 🔴 The precondition. Time nothing until the thing being measured is on screen.
@@ -171,52 +131,126 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       'the control arm has touch controls, so the two arms are the same arm',
     ).toEqual([]);
 
+    await installGpuTimer(withControls);
+    await installGpuTimer(without);
+
     const controlsArm: number[] = [];
     const bareArm: number[] = [];
-    for (let round = 0; round < ROUNDS; round += 1) {
-      // Interleaved, always in this order, so a machine that warms up or cools down over the run
-      // moves both arms together rather than one of them.
-      const a = await sampleFrames(withControls, WINDOW_MS);
-      const b = await sampleFrames(without, WINDOW_MS);
+    const gpuWith: number[] = [];
+    const gpuWithout: number[] = [];
+    const cpuWith: number[] = [];
+    const cpuWithout: number[] = [];
 
-      expect(typeof a.frames).toBe('number');
-      expect(a.frames, 'the touch arm served no frames at all').toBeGreaterThan(0);
-      expect(b.frames, 'the control arm served no frames at all').toBeGreaterThan(0);
-      // A page that stopped ticking is not a page whose frame budget can be compared.
-      expect(a.ticks, 'the simulation stopped in the touch arm').toBeGreaterThan(0);
-      expect(b.ticks, 'the simulation stopped in the control arm').toBeGreaterThan(0);
+    // 🔴 AB/BA, and PAIRS is EVEN. Always sampling the touch arm first leaves an order effect
+    // perfectly correlated with the arm — the recorded objection to the old always-AB loop — and
+    // counterbalancing only cancels across whole AB+BA blocks, so an odd count leaves one unmatched.
+    for (let pair = 0; pair < PAIRS; pair += 1) {
+      const first = pair % 2 === 0;
+      const a = first
+        ? await sampleArm(withControls, without, `pair ${pair} touch`)
+        : await sampleArm(without, withControls, `pair ${pair} bare`);
+      const b = first
+        ? await sampleArm(without, withControls, `pair ${pair} bare`)
+        : await sampleArm(withControls, without, `pair ${pair} touch`);
+      const touch = first ? a : b;
+      const bare = first ? b : a;
 
-      controlsArm.push((a.frames / a.ms) * 1000);
-      bareArm.push((b.frames / b.ms) * 1000);
+      for (const [s, name] of [
+        [touch, 'touch'],
+        [bare, 'bare'],
+      ] as const) {
+        expect(typeof s.frames).toBe('number');
+        expect(s.frames, `the ${name} arm served no frames at all`).toBeGreaterThanOrEqual(MIN_SAMPLES);
+        // A page that stopped ticking is not a page whose frame budget can be compared.
+        expect(s.ticks, `the simulation stopped in the ${name} arm`).toBeGreaterThan(0);
+        expect(
+          s.gpuSupported,
+          `EXT_disjoint_timer_query is absent in the ${name} arm — nothing below is measured`,
+        ).toBe(true);
+        // 🔴 `MIN_GPU_SAMPLES`, not `> 0`. The shared contract says 30 is the fewest queries a GPU
+        // median may rest on; `> 0` would let ONE delayed query per arm decide the bound.
+        expect(
+          s.gpuSamples,
+          `the ${name} arm's GPU median rests on ${s.gpuSamples} queries, under MIN_GPU_SAMPLES`,
+        ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
+      }
+
+      controlsArm.push((touch.frames / touch.elapsedMs) * 1000);
+      bareArm.push((bare.frames / bare.elapsedMs) * 1000);
+      gpuWith.push(touch.gpuMedianMs);
+      gpuWithout.push(bare.gpuMedianMs);
+      cpuWith.push(touch.workMedianMs);
+      cpuWithout.push(bare.workMedianMs);
     }
 
     const withFps = median(controlsArm);
     const withoutFps = median(bareArm);
+    const gpuPer = pairedDeltas(gpuWithout, gpuWith);
+    const cpuPer = pairedDeltas(cpuWithout, cpuWith);
+    const gpuDelta = median(gpuPer);
+    const cpuDelta = median(cpuPer);
+    const armGpu = median(gpuWith);
+
     // eslint-disable-next-line no-console
     console.log(
-      `[12.11] frames/s median — with controls ${withFps.toFixed(1)}, without ${withoutFps.toFixed(1)}` +
-        ` (${((withFps / withoutFps) * 100).toFixed(1)}% of the control arm)`,
+      `\n[12.11] renderer ${renderer}\n` +
+        `      frames/s median — with controls ${withFps.toFixed(1)}, without ${withoutFps.toFixed(1)}\n` +
+        `      gpu per pair ${gpuPer.map((v) => v.toFixed(4)).join(', ')} -> ${gpuDelta.toFixed(4)} ms ` +
+        `against ${MAX_TOUCH_GPU_DELTA_MS} ms\n` +
+        `      cpu per pair ${cpuPer.map((v) => v.toFixed(4)).join(', ')} -> ${cpuDelta.toFixed(4)} ms ` +
+        `against ${MAX_TOUCH_CPU_DELTA_MS} ms\n` +
+        `      touch-arm gpu median ${armGpu.toFixed(4)} ms against a ${MAX_TOUCH_ARM_GPU_MS} ms ceiling\n`,
     );
 
-    // 10 % is the room this bound allows, chosen against the cost of the thing being added: fifteen
-    // objects on a display list that already carries a HUD. A regression that mattered — a per-frame
-    // layout recomputation, a re-created hit area — would cost far more than that, and anything under
-    // it is inside the run-to-run spread of a shared box.
-    // 🔴 An ABSOLUTE floor as well as a ratio. A ratio alone has no baseline: halve the frame
-    // rate in BOTH arms — anything in `UIScene.update()`, the renderer, an asset — and the
-    // ratio stays 1.0 while the gate is green at 30 fps. Phase 7's G32 finding is the same
-    // failure: `audioCues` left in both arms moved the median 2 ms in each and the delta stayed
-    // 0.000. 50 fps clears any 60 Hz display with room and catches a collapse.
+    // 🔴 An ABSOLUTE ceiling on the touch arm's own median, not a difference. Halve the frame rate
+    // in BOTH arms and every delta below stays 0.000 while the game is broken — Phase 7's G32
+    // finding, where `audioCues` in both arms moved each median 2 ms and the delta read 0.000.
+    expect(
+      armGpu,
+      `the touch arm's own GPU median is ${armGpu.toFixed(4)} ms of a ${MAX_TOUCH_ARM_GPU_MS} ms ` +
+        'ceiling — the baseline has collapsed, so the deltas below compare two broken runs',
+    ).toBeLessThan(MAX_TOUCH_ARM_GPU_MS);
     expect(
       withoutFps,
-      `the control arm itself served only ${withoutFps.toFixed(1)} frames/s — the baseline has ` +
-        'collapsed, so the ratio below is a comparison of two broken runs',
+      `the control arm itself served only ${withoutFps.toFixed(1)} frames/s`,
     ).toBeGreaterThan(50);
     expect(
       withFps,
       `the controls cost ${(100 - (withFps / withoutFps) * 100).toFixed(1)}% of the frame rate`,
     ).toBeGreaterThan(withoutFps * 0.9);
+
+    // 🔴 BOUNDED ON BOTH SIDES, per pair and on the median. A one-sided upper bound reads an
+    // arm-specific timer collapse as excellent performance, and this repository already has that
+    // episode on record: a clean paired delta of -0.243 ms when one arm's median stopped being a
+    // measurement (`phase-08-perf.spec.ts`). The lower side is an instrument-validity check, not a
+    // performance claim.
+    for (const [deltas, bound, unit] of [
+      [gpuPer, MAX_TOUCH_GPU_DELTA_MS, 'rasteriser'],
+      [cpuPer, MAX_TOUCH_CPU_DELTA_MS, 'main-thread'],
+    ] as const) {
+      for (const [i, d] of deltas.entries()) {
+        expect(
+          Math.abs(d),
+          `pair ${i}: the controls moved ${unit} time by ${d.toFixed(4)} ms, outside +/-${bound} ms` +
+            (d < 0 ? ' — a delta this negative is an arm-specific collapse, not a result' : ''),
+        ).toBeLessThan(bound);
+      }
+    }
+    expect(
+      Math.abs(gpuDelta),
+      `the controls cost ${gpuDelta.toFixed(4)} ms of rasteriser time per frame, against ` +
+        `+/-${MAX_TOUCH_GPU_DELTA_MS} ms (3 % of the 60 Hz budget)`,
+    ).toBeLessThan(MAX_TOUCH_GPU_DELTA_MS);
+    expect(
+      Math.abs(cpuDelta),
+      `the controls cost ${cpuDelta.toFixed(4)} ms of main-thread time per frame, against ` +
+        `+/-${MAX_TOUCH_CPU_DELTA_MS} ms`,
+    ).toBeLessThan(MAX_TOUCH_CPU_DELTA_MS);
   } finally {
+    // 🔴 Both, unconditionally. A failed assertion mid-pair leaves one page's loop stopped, and a
+    // stopped page is a page whose teardown can hang.
+    await wakeLoop(withControlsPage).catch(() => {});
+    await wakeLoop(withoutPage).catch(() => {});
     await touchContext.close();
     await plainContext.close();
   }
