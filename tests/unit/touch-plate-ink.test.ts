@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { createSnapshot } from '../../src/sim/input';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { touchLayout, TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
-import { ART_ALPHA } from '../../src/scenes/touchMarks';
+import { PLATE_ALPHA } from '../../src/scenes/touchMarks';
 import { TouchControlsLayer } from '../../src/scenes/touchControlsLayer';
 import { makeTouchScene } from './touchSceneFake';
 
@@ -177,22 +177,17 @@ describe('the generated faces, once the plate is cut', () => {
     // see-through and readable — faded flat at 0.55, the best ink reached 2.43-2.47:1 against
     // WCAG's 3:1.
     //
-    // 🔴 So the number moved but the guarantee did not. `buildTouchAtlas.mjs` fades only the
-    // brass, by `PLATE_ALPHA / ART_ALPHA`, and the face is drawn at `ART_ALPHA` — which multiplies
-    // back to exactly 0.55 on the plate while leaving the ink at 0.85. This asserts the arithmetic
-    // and the drawn half; `shipped-touch.test.ts` asserts the other half on the real bytes, where
-    // the baked value actually is. A fake scene has no pixels and cannot be asked.
+    // 🔴 The number moved back, and the two-factor arithmetic is gone with the ink pass. The build
+    // no longer fades the brass in the bytes, so a face drawn at the old 0.85 would put the WHOLE
+    // plate at 0.85 — past the 0.73 the occlusion argument allows. One alpha pair now, the measured
+    // one, for art and greybox alike. Owner decision 2026-08-31.
     const { scene, layer } = withArt();
     const face = (id: string) => scene.faces.filter((f) => f.id === id)[0];
-    // ⚠️ No arithmetic identity here. `ART_ALPHA * (PLATE_ALPHA / ART_ALPHA)` is `PLATE_ALPHA`
-    // for every value of either, so it cannot fail — measured, M47 stayed GREEN through it. The
-    // product is checked where one of the two factors is a BYTE and not a constant:
-    // `shipped-touch.test.ts`, against the modal plate alpha in the shipped PNGs.
     for (const id of TOUCH_IDS) {
       expect(
         face(id).alpha,
-        `the ${id} face rests at ${face(id).alpha}, not at ART_ALPHA`,
-      ).toBe(ART_ALPHA);
+        `the ${id} face rests at ${face(id).alpha}, not at the measured PLATE_ALPHA`,
+      ).toBe(PLATE_ALPHA);
     }
     // And the pressed state still answers a thumb, through the same one code path.
     const rest = face('right').alpha;

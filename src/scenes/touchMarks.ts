@@ -114,22 +114,26 @@ export const PLATE_STROKE_PX = 6;
 export const PLATE_ALPHA_PRESSED = 0.72;
 
 /**
- * 🔴 **The generated face rests at 0.85, not at 0.55, and its plate is faded in the BYTES.**
+ * 🔴 **The generated face rests at `PLATE_ALPHA` now, and the bytes are no longer pre-faded.**
  *
- * One flat alpha over a flat image cannot be both see-through enough for the level behind it and
- * opaque enough for the mark on it: measured over every background luminance, the whole face at
- * 0.55 gave the best ink only **2.43-2.47:1** against WCAG 1.4.11's 3:1. Found by the Codex round-7
- * review; verified locally before anything moved.
+ * One flat alpha over a flat image could not be both see-through enough for the level behind it and
+ * opaque enough for the mark on it, so `touchInk.mjs` used to multiply the BRASS pixels' alpha by
+ * `PLATE_ALPHA / ART_ALPHA` and leave the ink alone; drawn at 0.85 the plate landed back on exactly
+ * `PLATE_ALPHA` while the mark read at 3.32:1.
  *
- * `touchInk.mjs` therefore multiplies the BRASS pixels' alpha by `0.55 / 0.85` and leaves
- * the ink alone, and thickens and keylines the engraving because at the the 44-48 CSS px live band a phone actually
- * shows a face a 1 px feature averages into the plate. Drawn at 0.85 the plate lands back on
- * exactly `PLATE_ALPHA` — the occlusion
- * measurement is untouched — while the mark is read at **3.32:1**. Pressed at 1.0 the plate is
- * 0.647 (still under the 0.73 the occlusion argument allows) and the mark is **3.85:1**.
+ * That pass is deleted. It found the engraving with a luminance threshold inside the central half,
+ * which held while the button was a pale disc whose glyph was the only dark thing on it — the
+ * redesign has verdigris in every recess, so the detector read 12 to 37 "strokes" per face and drew
+ * keylines across the scrollwork. Owner decision 2026-08-31.
+ *
+ * So there is one alpha pair for every control, art or greybox, and it is the measured one: 0.55 at
+ * rest, 0.72 pressed. The face is no longer faded in its bytes, so drawing it at 0.85 would put the
+ * whole plate at 0.85 — past the 0.73 the occlusion argument allows — and the redesign carries its
+ * own contrast without needing the extra brightness.
+ *
+ * ⚠️ **This is the one number to look at first on a phone.** It is a measurement about occlusion,
+ * not about legibility of the new art, and the new art has never been read at 0.55 by a person.
  */
-export const ART_ALPHA = 0.85;
-export const ART_ALPHA_PRESSED = 1;
 
 /**
  * Which alpha pair one control draws with, decided by which path it took.
@@ -142,7 +146,7 @@ export function alphasFor(
   id: string,
 ): { rest: number; lit: number } {
   return scene.textures.exists(`touch-${id}`)
-    ? { rest: ART_ALPHA, lit: ART_ALPHA_PRESSED }
+    ? { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED }
     : { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED };
 }
 
@@ -161,7 +165,7 @@ export function alphasFor(
  * The drawn grey box gets `PLATE_ALPHA` / `PLATE_ALPHA_PRESSED` on the object. The generated face
  * cannot: one flat alpha over a flat image fades the MARK with the brass, and measured over a swept
  * background the ink then reaches only 2.43-2.47:1 against WCAG's 3:1. So its plate is faded in the
- * BYTES and it is drawn at `ART_ALPHA` / `ART_ALPHA_PRESSED`, which multiply back to 0.55 at rest.
+ * BYTES and every control is drawn at `PLATE_ALPHA` / `PLATE_ALPHA_PRESSED`.
  * `alphasFor` is the one place that chooses, and it chooses per control.
  *
  * ⚠️ `setDisplaySize`, not a scale factor: `touchLayout` sizes the box off the VIEW, so the face
@@ -181,7 +185,7 @@ export function drawFace(
     // redden, the same defect as a decision function with no consumer. Measured: deleting it left
     // every gate green (M39). Sizing lives in `refresh()`, where M39 now reds two cases.
     const face = scene.add.image(cx, cy, artKey).setName(target.id).setDepth(TOUCH_FACE_DEPTH);
-    face.setAlpha(ART_ALPHA);
+    face.setAlpha(PLATE_ALPHA);
     return [face];
   }
   return [drawPlate(scene, target, cx, cy), ...drawMarks(scene, target, cx, cy)];

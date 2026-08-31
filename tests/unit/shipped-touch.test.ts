@@ -51,10 +51,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { TOUCH_BOX_PX } from '../../src/render/touchLayout';
-import { ART_ALPHA, PLATE_ALPHA } from '../../src/scenes/touchMarks';
-import { bakePlateAlpha, keylineMarks } from '../../tools/gen/touchInk.mjs';
 import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
-import { KEYS, SOLID, cutFace, entry, shippedFace } from './touchFaces';
+import { KEYS, MARK_FRACTION, SOLID, cutFace, entry, shippedFace } from './touchFaces';
 
 /** Sum-over-RGB distance at which two pixels are a different colour rather than the same patina. */
 const INK_DELTA = 60;
@@ -88,132 +86,77 @@ describe('the shipped touch faces', () => {
     }
   });
 
-  it('ships THREE alpha bands: a keyed field, a translucent plate and opaque ink', () => {
-    // 🔴 The whole of the round-7 contrast repair is in this shape, and nothing else can see
-    // it. `buildTouchAtlas.mjs` fades only the BRASS, so a shipped face has to be three things at
-    // once: corners keyed to nothing, a disc that the level shows through, and a mark that does not
-    // fade with it. A face baked flat satisfies none of them and looks identical in a screenshot.
+  it('ships TWO alpha bands: a keyed field and an opaque button', () => {
+    // 🔴 This asserted THREE — a keyed field, a translucent plate and opaque ink — and the third
+    // band came from `bakePlateAlpha`, which is gone. The build no longer fades the brass in the
+    // bytes: it ships the cut face, and the scene draws the whole face at one alpha.
     //
-    // ⚠️ An alpha CHANNEL is not transparency *(vault 4.12)* — a fully opaque RGBA file has
-    // one. Measured on the shipped six: clear 19.8-21.5 %, plate 59.8-68.4 %, ink 10.4-20.5 %
-    // — the ink band is the MARK and nothing else now, since `bakePlateAlpha` stopped exempting
-    // the disc's own dark bezel from the fade. Codex round-11.
+    // ⚠️ **The old test would still have passed**, because antialiasing at the disc's rim leaves a
+    // few partly transparent pixels and "translucent > 0" is satisfied by an edge. A gate that
+    // passes for a reason unrelated to its claim is the failure this file exists to prevent, so the
+    // claim is restated as what is now true rather than left standing on a technicality.
+    //
+    // ⚠️ An alpha CHANNEL is not transparency *(vault 4.12)* — a fully opaque RGBA file has one.
     for (const key of KEYS) {
       const png = shippedFace(key);
       expect(png.sourceHadAlphaChannel, `${key} has no alpha channel at all`).toBe(true);
 
       let clear = 0;
-      let ink = 0;
-      let plate = 0;
+      let solid = 0;
       for (let i = 3; i < png.data.length; i += 4) {
         const a = png.data[i]!;
         if (a === 0) clear += 1;
-        else if (a >= SOLID) ink += 1;
-        else plate += 1;
+        else if (a >= SOLID) solid += 1;
       }
-      // ⚠️ **Presence, not coverage.** The first version demanded 10-35 % clear, 5-30 % ink
-      // and over 50 % plate — percentages no criterion approves, which would false-red a legal
-      // face with a 4.9 % mark or a plate filling more of its canvas. A test may not enforce more
-      // than the rule says *(Codex round-8)*. What 12.14 and 12.17 actually need is that all three
-      // bands EXIST: the key worked, the plate is translucent, the mark is not. How readable that
-      // mark is, is the contrast gate's question, and how distinct it is, is the marks gate's.
       expect(clear, `${key} has no fully transparent pixel — it was never keyed`).toBeGreaterThan(0);
-      expect(ink, `${key} has no opaque pixel — the mark faded with the plate`).toBeGreaterThan(0);
-      expect(plate, `${key} has no translucent pixel — nothing shows through it`).toBeGreaterThan(0);
-      // ⚠️ Presence, and no share. `plate / (plate + ink) > 0.5` was a second invented
-      // threshold: the 19.9 %-occlusion measurement establishes an ALPHA, not a pixel-share rule,
-      // and legal art could false-red on it. Codex round-9. What the disc actually has to do is
-      // measured where it is measurable — the byte-times-constant product below.
+      expect(solid, `${key} has no opaque pixel — there is no button here`).toBeGreaterThan(0);
     }
   });
 
-  it('is byte for byte what the two ink passes make of the committed cut face', () => {
-    // 🔴 **The gate the other three needed and did not have.** A shipped-bytes test can only ever
+  it('is byte for byte the committed cut face', () => {
+    // 🔴 **The gate the property checks needed and did not have.** A shipped-bytes test can only
     // check properties it can name, and each property check had to decide for itself which pixels
     // were mark and which were plate — from the mutated file. Codex round-11 built two byte
-    // mutations that survived every one of them. This one cannot be evaded by construction: the
-    // committed cut face plus the two pure passes IS the file, or the file is wrong.
+    // mutations that survived every one of them. This one cannot be evaded by construction.
     //
-    // ⚠️ It does not make the property gates redundant. This says the bytes match the PIPELINE;
-    // they say the pipeline is right. Change `PLATE_ALPHA_BAKED` and re-cut and this stays green
-    // while the alpha and contrast gates go red.
+    // It used to read "what the two ink passes make of the cut face". The passes are deleted, so
+    // the statement is simpler and strictly stronger: the shipped face IS the cut face.
     for (const key of KEYS) {
-      const { cut, mark } = cutFace(key);
-      const expected = bakePlateAlpha(keylineMarks(cut).image, mark);
+      const { cut } = cutFace(key);
       const png = shippedFace(key);
       expect([png.width, png.height], `${key} is not the size of its cut face`).toEqual([
-        expected.width,
-        expected.height,
+        cut.width,
+        cut.height,
       ]);
       let differing = 0;
-      for (let i = 0; i < expected.data.length; i += 1) {
-        if (png.data[i] !== expected.data[i]!) differing += 1;
+      for (let i = 0; i < cut.data.length; i += 1) {
+        if (png.data[i] !== cut.data[i]!) differing += 1;
       }
-      expect(differing, `${key} is not what the pipeline produces — ${differing} bytes differ`).toBe(
-        0,
-      );
+      expect(differing, `${key} is not the cut face — ${differing} bytes differ`).toBe(0);
     }
   });
-
-  it('draws the mark at ART_ALPHA and everything else at PLATE_ALPHA, per pixel', () => {
-    // 🔴 The number the 19.9 %-occlusion argument is about, checked on every pixel it applies to,
-    // against the two alphas `touchMarks.ts` DRAWS with rather than the constant the tool bakes
-    // with — which is what makes it a tie between the bytes and the scene and not a restatement.
-    //
-    // ⚠️ **Three earlier versions were each satisfiable by an average or a gap.** The modal
-    // translucent alpha let 9 717 opaque brass pixels through (M58). Replacing it with a per-pixel
-    // rule kept a one-sided bound, so setting all 11 956 moderate-luminance pixels of `pause` to
-    // alpha 1 — a plate that has effectively vanished — violated nothing. And classifying by
-    // luminance left every extreme pixel OUTSIDE the mark square checked as neither ink nor plate,
-    // 2 657-2 976 of them a face, so an arbitrary opaque region out there was invisible to it.
-    // Codex round-10 and round-11. The classification is the pipeline's own mask now, the bound is
-    // two-sided, and `bakePlateAlpha` fades the disc's bezel with the rest of the plate.
-    const baked = PLATE_ALPHA / ART_ALPHA;
-    for (const key of KEYS) {
-      const { cut, mark } = cutFace(key);
-      const png = shippedFace(key);
-      let ink = 0;
-      let plate = 0;
-      for (let p = 0; p < mark.length; p += 1) {
-        const was = cut.data[p * 4 + 3]!;
-        if (was === 0) continue;
-        const a = png.data[p * 4 + 3]!;
-        if (mark[p]) {
-          ink += 1;
-          expect(a, `${key} has mark ink at alpha ${a} — a faded engraving`).toBe(255);
-        } else {
-          plate += 1;
-          expect(
-            a,
-            `${key} has plate at alpha ${a}, not ${Math.round(was * baked)} — it would hide the ` +
-              'level, or has stopped being there at all',
-          ).toBe(Math.round(was * baked));
-        }
-      }
-      expect(ink, `${key} has no mark at all`).toBeGreaterThan(0);
-      expect(plate, `${key} has no plate at all`).toBeGreaterThan(0);
-    }
-  });
-
   it('ships six DIFFERENT MARKS, not one mark six times', () => {
-    // ⚠️ The mask comes from the CUT face, like every other mask here. "Opaque inside the
-    // central square" happens to select exactly these pixels today — the alpha invariant above
-    // leaves nothing else opaque — but that is a consequence of another gate, not a definition,
-    // and this comparison should not depend on the file it is comparing. Codex round-11.
-    const faces = KEYS.map((key) => {
-      const png = shippedFace(key);
-      return { key, px: png.data, mark: cutFace(key).mark };
-    });
+    // 🔴 The mask used to come from `keylineMarks`, and that pass is deleted. What replaces it is
+    // not a weaker oracle but a simpler one: the six buttons are the SAME button — one draw, one
+    // rim, one set of rivets — so inside the central square the only thing that can differ is the
+    // glyph. The region is fixed geometry, taken from neither file, which is the property Codex
+    // round-11 required when it caught this gate discovering its mask from the file under test.
+    const faces = KEYS.map((key) => ({ key, png: shippedFace(key) }));
+    const side = faces[0]!.png.width;
+    const inset = Math.round((side * (1 - MARK_FRACTION)) / 2);
+    const central = new Uint8Array(side * side);
+    for (let y = inset; y < side - inset; y += 1) {
+      for (let x = inset; x < side - inset; x += 1) central[y * side + x] = 1;
+    }
     for (let i = 0; i < faces.length; i += 1) {
       for (let j = i + 1; j < faces.length; j += 1) {
-        const a = faces[i]!;
-        const b = faces[j]!;
+        const a = { key: faces[i]!.key, px: faces[i]!.png.data };
+        const b = { key: faces[j]!.key, px: faces[j]!.png.data };
         expect(a.px.length, 'two faces are different sizes').toBe(b.px.length);
         let differing = 0;
         let counted = 0;
-        for (let q = 0; q < a.mark.length; q += 1) {
-          // Skip pixels that are mark in NEITHER — they say nothing about which button this is.
-          if (!a.mark[q] && !b.mark[q]) continue;
+        for (let q = 0; q < central.length; q += 1) {
+          if (!central[q]) continue;
           const p = q * 4;
           counted += 1;
           const d =
@@ -222,11 +165,11 @@ describe('the shipped touch faces', () => {
             Math.abs(a.px[p + 2]! - b.px[p + 2]!);
           if (d > INK_DELTA) differing += 1;
         }
-        expect(counted, `${a.key} and ${b.key} have no mark pixels at all`).toBeGreaterThan(0);
+        expect(counted, `${a.key} and ${b.key} have no comparable pixels at all`).toBeGreaterThan(0);
         const share = differing / counted;
         expect(
           share,
-          `${a.key} and ${b.key} differ on only ${(share * 100).toFixed(1)}% of their MARK — one glyph on two plates`,
+          `${a.key} and ${b.key} differ on only ${(share * 100).toFixed(1)}% of their FACE CENTRE — one glyph on two plates`,
         ).toBeGreaterThan(MIN_DIFFERING_SHARE);
       }
     }

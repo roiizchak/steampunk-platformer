@@ -29,3 +29,4 @@ export function cutPlate(bytes: Uint8Array): {
 };
 
 export function measurePlateRows(keyed: import('./png.d.mts').RgbaImage): number;
+export function padToClearEdges(image: RgbaImage, keyed: RgbaImage): RgbaImage;
