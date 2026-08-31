@@ -32,7 +32,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.8 | Discrete targets inside the canvas and disjoint; whole-screen routes measured for COVERAGE | **PASS — criterion amended 2026-08-31, owner decision** | The five play controls, the five level-menu rows and the title zone are inside the canvas and pairwise disjoint at 10 viewports (M11 red 8/11, M11b 7/11, M29 2/21). The completion zone is a whole-screen route, deliberately 64 px oversized, and is measured for coverage — no reachable strip of canvas is unroutable — which is what both route zones already assert. **No gate changed; the sentence did.** § 12.8. |
 | 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
 | 12.10 | The prompt appears iff any target that would have to be hittable on this screen falls under 44 CSS px | **PASS — criterion amended 2026-08-31, owner decision** | The prompt and every route share ONE predicate (M31 red 1/9), so they cannot disagree. That predicate weighs the screen's own route **and** the play controls, which is decision **D1** and is now what the criterion says: a portrait title screen shows the prompt because the controls behind it would be 32.5 CSS px, not because its own 390 × 219 zone is small. **No gate changed; the sentence did.** § 12.10. |
-| 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
+| 12.11 | Frame budget unregressed with the controls drawn | **PASS** | § 12.11. The frames-served ratio was replaced, not re-bounded — it returns exactly 1.000 or 0.500 against a vsync-locked display. The statistic is now the paired per-frame GPU and main-thread delta against ±0.5 ms, with absolute per-arm ceilings at 8 ms. Red-proved both ways: **M72** 2.09 ms, **M73** 0.85 ms, each after a recorded GREEN that was a real hole. Confirmed on a held-out `test:e2e` sweep, **218 passed, 0 failed**. Both `performance-engineer` briefs run *(A7)*; brief 2's finding 1 — the touch role pinned to one browser context all run — is applied in `touchArms.ts` and was the cause of an offset this log had recorded as noise. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
 | 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes, the agent gate has not run** | The wrench cell was **re-shot** (owner decision 2026-08-31) and every stroke of all six faces now reaches **3.318:1** at rest and **3.846:1** pressed at 48 CSS px, over every background luminance, against 1.4.11's 3:1 — **with no exception table**: `KNOWN_SHORTFALL` is gone. ⚠️ **But 48 is not the worst reachable size** — controls stay live down to 44 CSS px, and at 44 `touch-pause` stroke 1 measures **2.91:1**. See § 12.14's `ui-ux-tester` briefs, finding 2. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, recaptured on the new bytes. ⚠️ **The verdict is NOT MET, not PASS, because 12.14's owner is `ui-ux-tester` and that agent has not run two briefs against the new faces** *(A7)* — and *"ran" is never the same as "passed"*. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one**: production hands the downscale to the browser (`image-rendering: auto` at a fractional canvas scale) and nothing here proves it uses `resize.mjs`'s box filter. Codex round-11, which withdrew the finding once the label stood. **Five earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history below. |
@@ -47,11 +47,23 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**Four criteria are NOT MET and four are UNRUN, so the phase is reported FAILING.** 12.11's
-statistic cannot detect the regression it names; **12.8, 12.10 and 12.17 each need an owner
-decision** (below); 12.13, 12.14 and 12.24 are hands-on and the owner's, and cannot be closed from here; 12.23
-is the Codex implementation review, still running rounds on the repaired diff. Every other row
-passed, several only after a repair.
+**One criterion is NOT MET and three are UNRUN, so the phase is reported FAILING** *(status
+2026-08-31, after the close-out session)*.
+
+- **12.14 is NOT MET**, on both halves. The wrench re-shoot did what it was bought to do — every
+  stroke of all six faces clears 3:1 at 48 CSS px with no exception table — but the `ui-ux-tester`
+  briefs found that `pause` and `walk` do not say their actions at any size, and that **48 is not the
+  worst reachable size**: controls stay live to 44 CSS px, where `touch-pause` measures **2.91:1**.
+  Three options are on the table and each is an owner call.
+- **12.13 and 12.24 are UNRUN** — hands-on on a real phone *(C4)*, and cannot be closed from here.
+- **12.23 is UNRUN** — the Codex implementation review on the final diff.
+- **12.8, 12.10 and 12.17 are now PASS.** The owner amended all three on 2026-08-31; no gate moved.
+- **12.11 is now PASS.** The frames-served statistic was replaced with absolute paired per-frame
+  deltas, red-proved in both directions (M72, M73), confirmed on a held-out full sweep of **218
+  specs, 0 failures**, with both `performance-engineer` briefs run and every finding applied or
+  recorded.
+
+Every other row passed, several only after a repair.
 
 ### ✅ 12.17b — the criterion said five distinct SILHOUETTES, and the art has one
 

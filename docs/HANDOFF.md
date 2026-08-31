@@ -2,12 +2,25 @@
 
 > ## 👉 Resuming Phase 12? Read [handoff/next-session-prompt-phase-12.md](handoff/next-session-prompt-phase-12.md) first.
 >
-> Branch `phase-12-touch`, **not merged**. Thirteen Codex implementation-review rounds applied.
-> 2993 unit tests, 216 e2e across five projects, build + verify-dist clean, 75 mutation rows and
-> 23 holes found and closed. **Reported FAILING**: 12.8, 12.10, 12.11 and 12.17 are NOT MET;
-> 12.13, 12.14, 12.23 and 12.24 are UNRUN. Four jobs are left and the prompt above lists them:
-> re-shoot the wrench cell, build 12.11's replacement gate, bring the owner the three wording
-> disputes, and put a Vercel preview on the owner's phone for 12.13 and 12.24.
+> Branch `phase-12-touch`, **not merged**. Thirteen Codex implementation-review rounds applied, plus
+> the 2026-08-31 close-out session. 3019 unit tests, **218 e2e across five projects**, 79 mutation
+> rows and 26 holes found and closed.
+>
+> **Still reported FAILING**, and the remaining list is short: **12.14 is NOT MET** and **12.13,
+> 12.23 and 12.24 are UNRUN**.
+>
+> - **12.8, 12.10, 12.17 → PASS.** The owner amended all three on 2026-08-31; no gate moved.
+> - **12.11 → PASS.** Frames served against a vsync-locked display cannot order its own mutation, so
+>   the statistic was replaced with paired per-frame GPU and main-thread deltas, red-proved both ways
+>   (M72, M73) and confirmed on a held-out sweep.
+> - **12.14 → still NOT MET**, and this is the live decision. The wrench re-shoot succeeded — every
+>   stroke of all six faces clears 3:1 at 48 CSS px, `KNOWN_SHORTFALL` is gone — but the
+>   `ui-ux-tester` briefs found `pause` (a cog: reads *settings*) and `walk` (two bars: reads as
+>   nothing) do not say their actions at any size, and that **48 px is not the worst reachable size**:
+>   controls stay live to 44, where `touch-pause` measures **2.91:1** against WCAG's 3:1. Options and
+>   a recommendation are in `docs/qa/phase-12-touch.md` § 12.14.
+> - **12.13 and 12.24** need the owner's hands on a phone; **12.23** is the Codex implementation
+>   review on the final diff.
 
 ---
 
