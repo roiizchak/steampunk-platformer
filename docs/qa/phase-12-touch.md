@@ -35,7 +35,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **UNRUN — owner** | The generated faces ship now (take 3), so the criterion has a subject at last. § 12.14's four measured repairs still stand, but they measured the GREY BOX; the brass faces have not been through `ui-ux-tester`. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, **recaptured after the round-11 bezel fade**. The measurable half now passes on the shipped bytes: **mark-masked contrast at TRUE ON-SCREEN SIZE: 3.32:1** at rest and **3.85:1** pressed, for all six, over every background luminance, against 1.4.11's 3:1. ⚠️ **Two earlier versions of this row were false and both were caught by review.** The first cited 3.47:1 over the WHOLE FACE — `walk` passed on a decorative highlight while its own bars measured 1.12:1 (round 8). The second cited 3.64:1 on the mark but on 160 px SOURCE TEXELS; at the 48 CSS px the smallest in-scope viewport actually presents, a 3.3× downscale the canvas deliberately smooths, the 1 px keyline averaged away and the marks fell to 1.63–2.85:1 (round 9). The engraving is now thickened as well as keylined, both inside the mark region only, and the gate composites, box-filters to 48 px and measures there. Watched red at 2.43:1 flat (M46), at the mark alone (M51), and with the thickening removed (M55). ⚠️ A third correction, from round 10: the gate rolled its OWN box filter, which partitioned the source differently from `resize.mjs` — it now measures through the shared `downscale`. ⚠️ **And a fourth, from round 11, in two parts.** (a) The mark mask was discovered from the shipped file, so erasing the engraving and leaving two ink cells standing shrank the mask with the damage and still scored 3.09:1 — it comes from the committed cut face now (M60 red 3/8). (b) **This figure is a BOX-FILTER PROXY and is labelled as one.** The browser downscales the canvas with `image-rendering: auto` at a fractional scale; nothing here proves it uses `resize.mjs`'s deterministic box filter, so 3.32:1 is what a box filter at 48 px yields, not a measurement of the shipped pixels on a phone. ⚠️ **And a fifth, from round 13, which found a shortfall in the ART.** Splitting the mark by its pre-halo engraving — the halo merges strokes it was meant to separate — isolates four small fragments of `attack`'s wrench shading from its two real strokes, and the smallest, an **11-pixel seed**, measures **2.86:1**, not 3. No parameter fixes it: `KEYLINE_PX` 4 leaves it at 2.86 and bolder makes it worse (`BOLD_PX` 3 → 1.93, 4 → 1.37), because at 48 CSS px that fragment is about three output pixels of mostly dark. **I did not invent a minimum stroke size to exclude it** — that would be a test excusing more than 12.14 says. It is named in `KNOWN_SHORTFALL`, pinned at 2.8 so it cannot quietly worsen, and put to you: **accept a 2.86:1 fragment of shading, or re-shoot the wrench cell** ($0.15, taking the touch-UI figure to $0.60 of $5). Every other stroke of every face is 3.32:1 at rest and 3.85:1 pressed. What remains — the proxy's fidelity, and whether a wrench READS as a wrench at 48 CSS px — is the agent's call under 12.14 and the owner's under 12.24. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes, the agent gate has not run** | The wrench cell was **re-shot** (owner decision 2026-08-31) and every stroke of all six faces now reaches **3.318:1** at rest and **3.846:1** pressed at 48 CSS px, over every background luminance, against 1.4.11's 3:1 — **with no exception table**: `KNOWN_SHORTFALL` is gone. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, recaptured on the new bytes. ⚠️ **The verdict is NOT MET, not PASS, because 12.14's owner is `ui-ux-tester` and that agent has not run two briefs against the new faces** *(A7)* — and *"ran" is never the same as "passed"*. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one**: production hands the downscale to the browser (`image-rendering: auto` at a fractional canvas scale) and nothing here proves it uses `resize.mjs`'s box filter. Codex round-11, which withdrew the finding once the label stood. **Five earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history below. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
@@ -331,6 +331,41 @@ devices**, so this gate runs on the one platform the feature is absent from; the
 timing evidence anywhere in this repo.
 
 ### 12.14 — readability (`ui-ux-tester`)
+
+#### ✅ The re-shoot, and the five corrections that preceded it
+
+**Every figure this row has ever carried was wrong until the one it carries now, and review caught
+all five.** Kept because the sequence is the lesson, not the number:
+
+| round | the claim | why it was false |
+|---|---|---|
+| 8 | 3.47:1 over the WHOLE FACE | `walk` passed on a decorative highlight while its own bars measured **1.12:1** |
+| 9 | 3.64:1 on the mark | measured on 160 px SOURCE TEXELS; at the 48 CSS px the smallest viewport presents, the 1 px keyline averaged away and the marks fell to **1.63–2.85:1** |
+| 10 | — | the gate rolled its OWN box filter, partitioning the source differently from `resize.mjs`; it measures through the shared `downscale` now |
+| 11 | 3.32:1 | the mark mask was discovered from the SHIPPED file, so erasing the engraving and leaving two ink cells standing shrank the mask with the damage and still scored 3.09:1. It comes from the committed cut face now (M60 red 3/8) |
+| 13 | 3.32:1 for every stroke | the strokes were labelled on the FINISHED mask, so the halo merged the strokes it was meant to separate. Splitting by pre-halo seeds isolated four fragments of `attack`'s shading, the smallest at **2.86:1** (M67 red 1/1) |
+
+Round 13's split is what found a shortfall in the **art** rather than in a gate, and the owner chose
+the re-shoot over accepting it. The cause was the prompt — the plate asks for a glyph *"deeply cut
+and filled with dark shadow"*, and that shading is what fragments. Take 4 asked for a flat glyph and
+got a **hollow outlined** wrench: nine strokes, five under 3:1, the worst a two-cell fragment at
+**1.008:1**. Take 5 states the fill positively and produces **three** strokes, all at 3.318:1 /
+3.846:1. `docs/generations/phase-12-touch-plate.md` carries both `request_id`s and the full request
+contract; $0.75 of the $5 touch-UI ceiling.
+
+⚠️ **`KNOWN_SHORTFALL` was deleted BEFORE the candidate was adopted.** Its 2.8 floor would otherwise
+have let a 2.81 candidate pass the very gate that exists to decide whether the re-shoot worked.
+
+⚠️ **And the candidate was judged by the REAL battery, not a staged copy of part of it.** The plan
+called for a re-implemented validator against a temp directory; `shipped-touch.test.ts` enforces the
+two-sided alpha band, exact ink reproduction and six-way distinctness besides the contrast sweep, and
+a re-implemented subset would have validated the candidate against a different claim. The candidate
+was adopted into a committed tree and run through the whole suite, with `git checkout` as an exact
+rollback. **Exactly two files changed**; the other five faces are byte-identical, and `--adopt` still
+reproduces all six byte for byte because `TOUCH_CELL_SOURCES` records the new source.
+
+#### What the four original repairs measured, which was the GREY BOX
+
 
 Both briefs measured rather than judged, and four defects were **applied**.
 

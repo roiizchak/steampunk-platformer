@@ -48,7 +48,13 @@ export const TOUCH_PLATE_SOURCE =
  *
  * @type {Readonly<Record<string, string>>}
  */
-export const TOUCH_CELL_SOURCES = Object.freeze({});
+export const TOUCH_CELL_SOURCES = Object.freeze({
+  // Re-shot 2026-08-31 through `nano-banana-pro/edit`, take 5. Take 3's wrench carried
+  // interior shading that split into four sub-3:1 fragments at 48 CSS px; this one is a
+  // solid filled silhouette and all three of its strokes reach 3.32:1 / 3.85:1.
+  // `docs/generations/phase-12-touch-plate.md` carries both `request_id`s.
+  'touch-attack': '_generated/phase-12-touch/take-5-01a0563a-bae1-7842-a283-2a633f440d49.png',
+});
 
 /** Every key the plate descriptors name, for validating `--cell`. */
 const CELL_KEYS = new Set(TOUCH_PLATE_CELLS.map((cell) => cell.key));

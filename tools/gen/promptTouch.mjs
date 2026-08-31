@@ -179,7 +179,9 @@ export function touchPlatePrompt(template) {
 const FLAT_GLYPH =
   'The button carries one engraved glyph, cut as a single continuous inlay of one flat uniform ' +
   'tone at one even depth across its whole area, with one unbroken outline, so that it reads as a ' +
-  'solid shape at a glance:';
+  'solid shape at a glance. The whole area inside that outline is filled with the same dark tone ' +
+  'as the outline itself, so the glyph is one solid dark silhouette and the brass of the button ' +
+  'face shows only around it:';
 
 /**
  * The prompt for ONE button, on its own 1:1 chroma field.

@@ -18,20 +18,25 @@ import { ART_ALPHA, ART_ALPHA_PRESSED } from '../../src/scenes/touchMarks';
 import { KEYS, TRUE_SIZE_PX, cutFace, shippedFace, strokeContrast } from './touchFaces';
 
 /**
- * The one stroke of the shipped six that does not reach 3:1, with the figure it does reach.
+ * ✅ **There is no shortfall table any more, and that is the re-shoot's result.**
  *
- * 🔴 **Not a waiver and not a threshold — a second, lower, MEASURED bound on a named stroke.**
- * Splitting `attack` by its pre-halo engraving separates four small fragments of the wrench's
- * shading from its two real strokes, and the smallest — an 11-pixel seed — measures **2.86:1**.
- * No parameter fixes it: `KEYLINE_PX` 4 leaves it at 2.86 and bolder makes it worse (3 → 1.93,
- * 4 → 1.37), because at 48 CSS px the fragment is about three output pixels of mostly dark.
+ * `KNOWN_SHORTFALL` stood here from round 13 until 2026-08-31, naming `touch-attack` stroke 2 at a
+ * measured **2.86:1** and pinning it at 2.8 so it could not quietly get worse. It was never a
+ * waiver: the wrench's own interior SHADING was fragmenting into four sub-3:1 pieces, no parameter
+ * reached them (`KEYLINE_PX` 4 left it at 2.86; `BOLD_PX` 3 and 4 made it 1.93 and 1.37), and
+ * inventing a minimum stroke size to exclude them would have been this file excusing more than
+ * 12.14 says.
  *
- * Inventing a minimum stroke size to exclude it would be this file requiring — or excusing — more
- * than 12.14 says, which CLAUDE.md § 3 calls a STOP-and-ask. So it is named, pinned so it cannot
- * quietly get worse, and recorded against 12.14 in `docs/qa/phase-12-touch.md` as a shortfall for
- * the owner to rule on: accept it, or re-shoot the wrench cell. Codex round-13.
+ * The owner chose the re-shoot. The cell was re-generated through `nano-banana-pro/edit` from the
+ * plate's own attack cell, with a prompt that asks for one solid filled silhouette instead of a
+ * glyph "deeply cut and filled with dark shadow" — see `promptTouch.mjs`'s `FLAT_GLYPH`. The face
+ * now splits into **three** strokes and every one reaches the same 3.32:1 / 3.85:1 as the other
+ * five.
+ *
+ * 🔴 **The table was deleted BEFORE the candidate was adopted, not after.** Its 2.8 floor would
+ * have let a 2.81 candidate pass the very gate that exists to decide whether the re-shoot worked.
+ * Named by the Codex plan review, round 2.
  */
-const KNOWN_SHORTFALL: Record<string, Record<number, number>> = { 'touch-attack': { 2: 2.8 } };
 
 describe('the shipped touch faces', () => {
   it('reaches the 3:1 contrast floor over EVERY background, on EVERY stroke', () => {
@@ -76,12 +81,10 @@ describe('the shipped touch faces', () => {
             surviving[c],
             `stroke ${c} of ${key} does not survive the downscale at all`,
           ).toBeGreaterThan(0);
-          const floor = KNOWN_SHORTFALL[key]?.[c] ?? 3;
           expect(
             worst[c],
-            `stroke ${c} of ${key} at alpha ${alpha} reaches only ${worst[c]!.toFixed(2)}:1 at ${TRUE_SIZE_PX} CSS px` +
-              (floor === 3 ? '' : ' — a recorded shortfall, and it has got worse'),
-          ).toBeGreaterThan(floor);
+            `stroke ${c} of ${key} at alpha ${alpha} reaches only ${worst[c]!.toFixed(2)}:1 at ${TRUE_SIZE_PX} CSS px`,
+          ).toBeGreaterThan(3);
         }
       }
     }
