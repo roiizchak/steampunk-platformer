@@ -1,6 +1,6 @@
 # Phase 12 — the touch-control plate
 
-**5 generations · $0.75 of the `$5` touch-UI ceiling. Takes 1-3 `fal-ai/nano-banana-pro` (TAKE 3 ADOPTED for five faces); takes 4-5 `fal-ai/nano-banana-pro/edit` (TAKE 5 ADOPTED for `touch-attack`).**
+**7 generations · $1.05 of the `$5` touch-UI ceiling. Takes 1-3 `fal-ai/nano-banana-pro` (TAKE 3 ADOPTED for three faces); takes 4-7 `fal-ai/nano-banana-pro/edit` (TAKE 5 → `touch-attack`, TAKE 6 → `touch-pause`, TAKE 7 → `touch-walk`).**
 
 One plate carrying every button face on a chroma field, cut locally into 160 × 160 PNGs by
 `tools/gen/buildTouchAtlas.mjs` (`npm run assets:touch`). Takes 1 and 2 are kept as evidence; **take
@@ -15,6 +15,8 @@ One plate carrying every button face on a chroma field, cut locally into 160 × 
 | 3 | `01a05115-d226-72b2-ae41-8998a11940cf` | `fal-ai/nano-banana-pro` | `20260804` | same, prompt rewritten for **six** faces | **2048 × 2048** | $0.15 | ✅ **ADOPTED** — nine buttons in a clean 3 × 3; the six asked for, plus a duplicate row |
 | 4 | `01a05637-d0d2-7a72-b1b1-0de17b5e53c7` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own attack cell · `aspect_ratio 1:1` · `resolution 2K` · `output_format png` · `num_images 1` · `limit_generations true` | **2048 × 2048** | $0.15 | ❌ a HOLLOW outlined wrench — 9 strokes, 5 under 3:1, worst **1.008:1** |
 | 5 | `01a0563a-bae1-7842-a283-2a633f440d49` | `fal-ai/nano-banana-pro/edit` | `20260804` | same, glyph fill stated positively | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-attack` — 3 strokes, every one **3.318:1** / **3.846:1** |
+| 6 | `01a056b1-2c7d-7660-b1eb-87622be0cb0e` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **pause** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-pause` — two heavy upright bars, 3.088:1 / 3.318:1 **at 44 CSS px** |
+| 7 | `01a056b2-442f-7690-b0b8-4c6a46954279` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **walk** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-walk` — a laced work boot, **3.318:1** at 44 CSS px |
 
 Files, prompts and job records: `_generated/phase-12-touch/`.
 
@@ -189,3 +191,56 @@ reproduces all six byte for byte — without that entry it would recut take 3 an
 the superseded wrench.
 
 **Touch-UI figure: $0.75 of the $5 ceiling. $4.25 remains.**
+
+---
+
+## Takes 6 and 7 — the pause and walk cells, re-shot for MEANING
+
+**Owner decision, 2026-08-31.** These two takes were not bought to fix a number. Both
+`ui-ux-tester` briefs, run independently with brief 1's findings withheld from brief 2, reached the
+same conclusion:
+
+- `touch-pause` drew a **cogwheel**, which is the universal glyph for *settings*. Nothing about it
+  says *pause*, and no amount of size or contrast would have made it say so.
+- `touch-walk` drew **two stacked horizontal bars**, which read as an "equals" or a list mark and
+  evoke nothing about locomotion.
+
+🔴 **Contrast measures whether a mark is VISIBLE, never whether it is INTERPRETABLE.** That is the
+gap this repository's gates structurally cannot cover, and it is why 12.14 has an agent owner rather
+than only a unit test. Five earlier versions of the 12.14 row were wrong about the *number*; this is
+the first time the number was right and the *art* was still wrong.
+
+### One take answered two findings
+
+The cogwheel was also the only art in the set that missed 3:1 at the size where a control is still
+live. `TRUE_SIZE_PX` was `160 × 325 / 1080` = **48** — iPhone SE landscape, one measured device, not
+a floor — while `touchTargetsFit` shows and enables a control down to `TOUCH_MIN_CSS_PX` = **44**,
+and the hit box **is** the face box (`touchLayout.ts:156`). Probed at 44 on a committed tree, the
+cogwheel's thin teeth read **2.905:1** on strokes 1 and 4; every other stroke of every other face
+cleared 3:1. Two heavy upright bars are the heaviest shape in the set as well as the conventional
+pause mark.
+
+`TRUE_SIZE_PX` is now `TOUCH_MIN_CSS_PX` — literally the same constant production gates on, so
+raising the production floor raises the gate with it. The tightest stroke anywhere in the set is
+**3.088:1** at 44 CSS px.
+
+### The request contract, unchanged from take 5
+
+Same `fal-ai/nano-banana-pro/edit`, same seed `20260804`, `aspect_ratio 1:1` **explicit** (the
+endpoint defaults it to `auto`), `resolution 2K`, `output_format png`, `num_images 1`,
+`limit_generations true`. The reference is each cell's own **682 × 682** raw crop from the adopted
+plate via `extractPlateCell`, so the brass, bezel and patina come from the plate rather than a fresh
+interpretation. `genmedia schema` was re-read before spending and matched.
+
+⚠️ **`image_urls` is a LIST and the CLI does not wrap a bare string.** `--image_urls "<url>"`
+returns a 422 `Input should be a valid list` — no charge, but a wasted round trip. Pass
+`--image_urls "[\"<url>\"]"`.
+
+### Adopted, and `--adopt` still reproduces everything
+
+Both through `npm run assets:touch -- --cell=<key> --source=<take>`, two files each, no sweep. The
+other four faces are byte-identical. `TOUCH_CELL_SOURCES` records all three re-shot sources and
+`npm run assets:touch:adopt` reproduces **all twelve** shipped and cut files byte for byte — checked
+by hashing before and after.
+
+**Touch-UI figure: $1.05 of the $5 ceiling. $3.95 remains.**
