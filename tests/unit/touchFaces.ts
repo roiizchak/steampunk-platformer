@@ -46,16 +46,30 @@ export const MARK_FRACTION = 0.5;
  * surveyed — puts a live control anywhere in **[44, 48)**, a band this gate never measured.
  * `ui-ux-tester` brief 2, finding 2.
  *
- * It is `TOUCH_MIN_CSS_PX` now, so the size the gate measures is the size below which a control
- * stops existing. **The two constants are the same one**: raise the production floor and the gate
- * follows, which is the direction that cannot go wrong.
+ * It is `TOUCH_MIN_CSS_PX` now, so the smallest size the gate measures is the size below which a
+ * control stops existing. **The two constants are the same one**: raise the production floor and the
+ * gate follows, which is the direction that cannot go wrong.
  *
  * ⚠️ **The old shipped art did NOT pass here.** At 44, `touch-pause`'s cogwheel measured
  * **2.905:1** on strokes 1 and 4 — the only strokes in the set that missed — which is what bought
- * its re-shoot. The heavy pause bars read 3.088:1 and 3.318:1, and the tightest stroke anywhere in
- * the set is now 3.088:1.
+ * its re-shoot. The heavy pause bars read 3.088:1 and 3.318:1.
  */
 export const TRUE_SIZE_PX = TOUCH_MIN_CSS_PX;
+
+/**
+ * Every reachable live size, and the gate takes the WORST across all of them.
+ *
+ * 🔴 **44 passing does not prove 45 passes, and the filter is why.** `downscale` is a box filter
+ * whose destination cells are `Math.floor`-partitioned (`resize.mjs:44-49`), so at
+ * `160 / 44 = 3.636` some output cells average three source pixels and others four. That alias
+ * pattern is deterministic but **not monotonic in output size**: a thin keyline can land better at
+ * 44 than at 46. Pinning one value proved one point of a band, and the band `[44, 48]` is entirely
+ * reachable — 48 is iPhone SE Safari, 44 is where `touchTargetsFit` gives up, and every browser with
+ * chrome between theirs lands in between. `ui-ux-tester` round 2, brief 2, finding 5.
+ *
+ * The upper end is inclusive: 48 is a real measured device, not a bound.
+ */
+export const LIVE_SIZES_PX = Object.freeze([44, 45, 46, 47, 48]);
 
 /** WCAG relative luminance, sRGB. The same formula `contrast-floor.test.ts` uses. */
 export function luminance(r: number, g: number, b: number): number {
@@ -234,12 +248,14 @@ export function strokeLabels(
  * @param mark the mark mask from the cut face
  * @param seeds the pre-dilation seeds from the cut face
  * @param alpha the alpha the scene draws the face at
+ * @param size the drawn width in CSS px — one of `LIVE_SIZES_PX`, swept by the caller
  */
 export function strokeContrast(
   png: { width: number; height: number; data: Uint8ClampedArray },
   mark: Uint8Array,
   seeds: Uint8Array,
   alpha: number,
+  size: number = TRUE_SIZE_PX,
 ): { worst: number[]; surviving: number[]; count: number } {
   const { labels, count } = strokeLabels(mark, seeds, png.width);
 
@@ -252,7 +268,7 @@ export function strokeContrast(
       coverage[p * 4 + 3] = labels[p] === c ? 255 : 0;
     }
     strokes.push(
-      downscale({ width: png.width, height: png.height, data: coverage }, TRUE_SIZE_PX, TRUE_SIZE_PX),
+      downscale({ width: png.width, height: png.height, data: coverage }, size, size),
     );
   }
 
@@ -268,16 +284,12 @@ export function strokeContrast(
       over[i + 2] = png.data[i + 2]! * a + bg * (1 - a);
       over[i + 3] = 255;
     }
-    const shown = downscale(
-      { width: png.width, height: png.height, data: over },
-      TRUE_SIZE_PX,
-      TRUE_SIZE_PX,
-    );
+    const shown = downscale({ width: png.width, height: png.height, data: over }, size, size);
 
     for (let c = 0; c < count; c += 1) {
       let best = 0;
       let cells = 0;
-      for (let k = 0; k < TRUE_SIZE_PX * TRUE_SIZE_PX; k += 1) {
+      for (let k = 0; k < size * size; k += 1) {
         // An output pixel counts as this stroke only if the stroke is most of what fell into it.
         // Anything less is a blend of mark and plate, not what a reader is looking at.
         if (strokes[c]!.data[k * 4 + 3]! < 128) continue;

@@ -68,9 +68,15 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
   { key: 'touch-jump', subject: 'an upward-pointing solid triangle', row: 0, col: 2 },
   {
     key: 'touch-attack',
+    // Re-shot 2026-08-31, take 8. Take 5 drew the wrench in three pieces, and the smallest — a
+    // 14-output-pixel fragment — measured **2.740:1 at 47 CSS px** while reading 3.318:1 at both 44
+    // and 48. `resize.mjs`'s box filter is `Math.floor`-partitioned and so is NOT monotonic in
+    // output size, which is why one size proved nothing about its neighbours. One closed shape has
+    // no fragment to fall through.
     subject:
       'a single adjustable spanner seen from the side, its open jaws pointing to the upper right, ' +
-      'drawn as one solid silhouette of a single flat tone',
+      'drawn as ONE closed unbroken silhouette of a single flat tone, every part of it joined to ' +
+      'every other part, with no separate small pieces and no notches cutting it apart',
     row: 1,
     col: 0,
   },
@@ -81,9 +87,15 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
     // control is still live (2.905:1, strokes 1 and 4). Two heavy upright bars answer both: the
     // conventional pause mark, and the heaviest shape in the set.
     key: 'touch-pause',
+    // Re-shot again 2026-08-31, take 9, and this one is a HONESTY fix rather than a legibility one.
+    // The upright bars were the universal pause mark, and `touchControlsLayer.ts:381` routes this
+    // control to `openLevelSelect()` — a hard scene teardown that abandons the run with no
+    // confirmation and no checkpoint. Both round-2 `ui-ux-tester` briefs said the same thing
+    // independently: the cogwheel was vaguely wrong, the bars are confidently wrong. A grid of
+    // squares says *the level menu*, which is where the button actually goes.
     subject:
-      'two upright bars side by side, equal in height and equal in width, each bar as wide as the ' +
-      'gap between them, drawn as two solid silhouettes of a single flat tone',
+      'four equal squares arranged in a two-by-two grid with an even gap between them, drawn as ' +
+      'four solid silhouettes of a single flat tone',
     row: 1,
     col: 1,
   },
