@@ -47,11 +47,18 @@ import { hideTexts } from './touchPerf';
  * - **The bare arm has NO controls**, or the two arms are the same arm and every delta is zero.
  */
 export async function assertArmsDiffer(touch: Page, bare: Page, label: string): Promise<void> {
-  const drawn = await drawnZones(touch, 'UI');
-  expect(
-    drawn.length,
-    `${label}: the touch arm has no controls, so it is not the arm it claims to be`,
-  ).toBe(TOUCH_IDS.length);
+  // 🔴 BY NAME, EXACTLY ONCE EACH — never by count. `drawnZones(...).length === TOUCH_IDS.length`
+  // passes on a set missing `walk` and carrying one unrelated zone, and false-reds the moment a
+  // legitimate non-touch zone appears on the UI scene. Codex round 17, finding 4.
+  const zones = await drawnZones(touch, 'UI');
+  for (const id of TOUCH_IDS) {
+    const mine = zones.filter((z) => z.name === id);
+    expect(
+      mine.length,
+      `${label}: ${id} has ${mine.length} hit areas in the touch arm, not exactly one`,
+    ).toBe(1);
+    expect(mine[0]!.interactive, `${label}: ${id} is not live in the timed arm`).toBe(true);
+  }
 
   const faces = await drawnFaces(touch, 'UI');
   for (const id of TOUCH_IDS) {
@@ -63,23 +70,30 @@ export async function assertArmsDiffer(touch: Page, bare: Page, label: string): 
         `${face!.w}x${face!.h}. The timed arm would draw an empty frame there.`,
     ).toBe(true);
   }
-  for (const z of drawn) {
-    expect(z.interactive, `${label}: ${z.name} is not live in the timed arm`).toBe(true);
-  }
+
+  // The bare arm, asked the same two questions and answered the other way. Both halves matter and
+  // each has its own failure: a live control in the bare arm makes the two arms the same arm, and a
+  // control DRAWN there with no hit area cancels out of the GPU delta while leaving the zone
+  // assertion happy. `toEqual([])` over ALL zones was also false-red capable — an unrelated desktop
+  // zone on the UI scene is not a touch control.
+  const bareZones = (await drawnZones(bare, 'UI')).filter((z) =>
+    (TOUCH_IDS as readonly string[]).includes(z.name),
+  );
   expect(
-    await drawnZones(bare, 'UI'),
-    `${label}: the bare arm has touch controls, so the two arms are the same arm`,
+    bareZones.map((z) => z.name),
+    `${label}: the bare arm has live touch controls, so the two arms are the same arm`,
   ).toEqual([]);
 
-  // 🔴 And NO FACES either. Zones are hittability and faces are pixels — the distinction this
-  // whole helper is built on — so "the bare arm has no zones" leaves the case where it draws six
-  // control images that nothing can tap. The delta would then be zero for the honest reason that
-  // both arms draw the controls, and the gate would report the feature costs nothing. Found by
-  // Codex mid-round-17, on the extraction that was meant to close exactly this class of hole.
-  const bareFaces = await drawnFaces(bare, 'UI');
-  const drawnBare = bareFaces.filter((f) => f.drawn && f.alpha > 0 && f.w > 0 && f.h > 0);
+  const bareFaces = (await drawnFaces(bare, 'UI')).filter(
+    (f) =>
+      (TOUCH_IDS as readonly string[]).includes(f.name) &&
+      f.drawn &&
+      f.alpha > 0 &&
+      f.w > 0 &&
+      f.h > 0,
+  );
   expect(
-    drawnBare.map((f) => f.name),
+    bareFaces.map((f) => f.name),
     `${label}: the bare arm DRAWS control faces, so both arms pay for the controls and the delta ` +
       'cannot see them',
   ).toEqual([]);

@@ -19,9 +19,11 @@ One plate carrying every button face on a chroma field, cut locally into 160 × 
 | 2 | `01a04e0e-d45d-7ab2-be31-a7c2f479a495` | `fal-ai/nano-banana-pro` | `20260804` | same, prompt repaired | **2048 × 2048** | $0.15 | ❌ seven buttons, 3 / 2 / 2 |
 | 3 | `01a05115-d226-72b2-ae41-8998a11940cf` | `fal-ai/nano-banana-pro` | `20260804` | same, prompt rewritten for **six** faces | **2048 × 2048** | $0.15 | ✅ **ADOPTED** — nine buttons in a clean 3 × 3; the six asked for, plus a duplicate row |
 | 4 | `01a05637-d0d2-7a72-b1b1-0de17b5e53c7` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own attack cell · `aspect_ratio 1:1` · `resolution 2K` · `output_format png` · `num_images 1` · `limit_generations true` | **2048 × 2048** | $0.15 | ❌ a HOLLOW outlined wrench — 9 strokes, 5 under 3:1, worst **1.008:1** |
-| 5 | `01a0563a-bae1-7842-a283-2a633f440d49` | `fal-ai/nano-banana-pro/edit` | `20260804` | same, glyph fill stated positively | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-attack` — 3 strokes, every one **3.318:1** / **3.846:1** |
-| 6 | `01a056b1-2c7d-7660-b1eb-87622be0cb0e` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **pause** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-pause` — two heavy upright bars, 3.088:1 / 3.318:1 **at 44 CSS px** |
-| 7 | `01a056b2-442f-7690-b0b8-4c6a46954279` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **walk** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-walk` — a laced work boot, **3.318:1** at 44 CSS px |
+| 5 | `01a0563a-bae1-7842-a283-2a633f440d49` | `fal-ai/nano-banana-pro/edit` | `20260804` | same, glyph fill stated positively | **2048 × 2048** | $0.15 | ⛔ **SUPERSEDED by take 8.** Shipped as `touch-attack` for one day at 3 strokes, **3.318:1** / **3.846:1** measured at 44 CSS px — then the live-size sweep read stroke 2 at **2.740:1 at 47**, and the owner called its solid fill out of family beside five outlined marks |
+| 6 | `01a056b1-2c7d-7660-b1eb-87622be0cb0e` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **pause** cell, same contract | **2048 × 2048** | $0.15 | ⛔ **SUPERSEDED by take 9.** Two heavy upright bars at 3.088:1 / 3.318:1 at 44 CSS px — and both `ui-ux-tester` briefs then found independently that pause bars are the universal mark for *suspend play*, which this button does not do |
+| 7 | `01a056b2-442f-7690-b0b8-4c6a46954279` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **walk** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-walk` — a laced work boot, **3.318:1** across the whole 44-48 band |
+| 8 | `01a056c7-347a-7691-b105-8c3cbbc43daf` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **attack** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-attack` — an outlined spanner in the set's own idiom, clearing 3:1 on every stroke at **every size in the 44-48 live band**, where take 5 read 2.740:1 at 47 |
+| 9 | `01a056c7-9d04-7fd2-bc7a-47c65b946658` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **pause** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-pause` — a 2 × 2 grid of squares, which says *the level menu*, which is where the button actually goes. Clears 3:1 across the whole band |
 
 Files, prompts and job records: `_generated/phase-12-touch/`.
 
@@ -243,9 +245,19 @@ returns a 422 `Input should be a valid list` — no charge, but a wasted round t
 
 ### Adopted, and `--adopt` still reproduces everything
 
-Both through `npm run assets:touch -- --cell=<key> --source=<take>`, two files each, no sweep. The
-other four faces are byte-identical. `TOUCH_CELL_SOURCES` records all three re-shot sources and
-`npm run assets:touch:adopt` reproduces **all twelve** shipped and cut files byte for byte — checked
-by hashing before and after.
+Each through `npm run assets:touch -- --cell=<key> --source=<take>`, two files each, no sweep; the
+untouched faces byte-identical every time. `TOUCH_CELL_SOURCES` records the three adopted re-shot
+sources — takes **7, 8 and 9** — and `npm run assets:touch:adopt` reproduces **all twelve** shipped
+and cut files byte for byte.
 
-**Touch-UI figure: $1.05 of the $5 ceiling. $3.95 remains.**
+🔴 **That reproduction is a GATE now, not a hand-check.** `TOUCH_SOURCE_HASHES` pins a SHA-256 for
+every source, and `tests/unit/touch-sources.test.ts` re-cuts from those exact bytes into temporary
+directories and compares against the committed oracle. It used to be *"checked by hashing before and
+after"*, by hand, tied to no particular file. Codex round 16, finding 6.
+
+**Touch-UI figure: $1.35 of the $5 ceiling. $3.65 remains.**
+
+⚠️ **This line read `$1.05` and the table above it ended at take 7 while takes 8 and 9 had shipped.**
+Criterion 12.18's whole content is that these figures agree, and it was falsely PASS **three times**:
+round 14 caught the QA log, round 16 caught this file's header, round 17 caught its table and its
+total. Corrected 2026-08-31. **A header is not a record; the rows are.**

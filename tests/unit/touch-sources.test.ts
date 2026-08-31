@@ -12,8 +12,10 @@
  *
  * - **Always**: every source the manifest names carries a pinned SHA-256. That much is a property
  *   of the repository and runs on any clone.
- * - **When the gitignored sources are present**: they still hash to their pins, and
- *   `main(['--adopt'])` from those exact bytes reproduces the committed cuts byte for byte.
+ * - **Per source that is present**: it still hashes to its pin. Checked one file at a time, not
+ *   all-or-nothing — a partial cache used to leave every file it DID hold unconstrained.
+ * - **When the whole set is present**: `main(['--adopt'])` from those exact bytes reproduces the
+ *   committed cuts byte for byte.
  *
  * ⚠️ **The second half is conditional and says so.** That is not the defect round 15 finding 3
  * named — there the *only* behavioural test skipped itself; here the always-runs gate is the one
@@ -36,7 +38,17 @@ import {
 } from '../../tools/gen/touchAtlasCli.mjs';
 
 const sources = [TOUCH_PLATE_SOURCE, ...Object.values(TOUCH_CELL_SOURCES)];
-const present = sources.every((f) => existsSync(f));
+
+/**
+ * The sources that are on THIS machine, checked one by one.
+ *
+ * 🔴 This used to be a single all-or-nothing `present`, so a partial cache holding three of the
+ * four sources had every one of them unconstrained — the very state a half-finished download or a
+ * selectively cleaned `_generated/` leaves behind. Codex round 17, finding 7. Only the
+ * reproduction test needs the complete set, because it cuts all six faces.
+ */
+const onDisk = sources.filter((f) => existsSync(f));
+const complete = onDisk.length === sources.length;
 
 function sha256(file: string): string {
   return createHash('sha256').update(readBytes(file)).digest('hex');
@@ -56,15 +68,15 @@ describe('the recorded generation sources', () => {
     ).toEqual([...sources].sort());
   });
 
-  it.runIf(present)('still holds those exact bytes on this machine', () => {
-    for (const file of sources) {
+  it.runIf(onDisk.length > 0)('still holds those exact bytes, for every source present', () => {
+    for (const file of onDisk) {
       expect(sha256(file), `${file} is not the file the adoption claim was made against`).toBe(
         TOUCH_SOURCE_HASHES[file],
       );
     }
   });
 
-  it.runIf(present)(
+  it.runIf(complete)(
     'reproduces the committed cuts byte for byte from the production sources',
     () => {
       const root = mkdtempSync(join(tmpdir(), 'touch-adopt-real-'));
