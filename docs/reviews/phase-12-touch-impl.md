@@ -136,7 +136,7 @@ is *"now adequate… I do not count that labeling as a defect."*
 | 2 | HIGH | **"Per connected stroke" uses topology created by the transform being judged.** The halo merges `walk`'s two bars into one component, and an 11-pixel bridge keeps 927 erased pale pixels inside a component still scoring 3.318:1 | **Applied.** `keylineMarks` returns its pre-dilation `seeds`; `strokeLabels` assigns every mark pixel to the nearest seed. M67 red 1/1. **⚠️ And the finer split found a shortfall in the ART** — see below. |
 | 3 | HIGH | **The component-labelling decision cannot go red.** No direct test, no second consumer; collapsing every label to zero restores the statistic round 12 replaced, under which all six faces pass | **Applied.** `touch-strokes.test.ts` drives both helpers on the failing shape — two engravings whose halos merge. M68 red 3/5. |
 | 4 | MEDIUM | **The transparent-mask repair is ungated.** Delete `dark[p] = 0` and the picture is unchanged, the mask again claims 44 transparent pixels, and nothing notices — a C1/C2 failure | **Applied.** The boundary fixture now asserts every mark bit sits on a pixel the face draws. M69 red 1/8, with the six PNGs byte-identical under the mutation, which is why it hid for two rounds. |
-| 5 | MEDIUM | **Declining the separate adoption path is unsafe** — the ordinary builder still overwrites the supposed independent fixture and the shipped output together | **Applied — my round-12 refusal reversed.** Codex's second argument is better than its first: a change to `keyOut`, the crop or the downscale re-baselined the oracle silently. Cutting from the plate is `--adopt` now (`npm run assets:touch:adopt`); the default path reads the committed cuts. Both reproduce the six PNGs byte for byte. ⚠️ It removes a re-baselining route rather than adding a gate, and the shift-the-committed-cut mutation it was offered for is still only caught by a person looking at the art — 12.14 and 12.24, both open. |
+| 5 | MEDIUM | **Declining the separate adoption path is unsafe** — the ordinary builder still overwrites the supposed independent fixture and the shipped output together | 🔴 **RECORDED APPLIED, AND IT WAS NOT — see the correction below.** What was intended: Codex's second argument is better than its first: a change to `keyOut`, the crop or the downscale re-baselined the oracle silently. Cutting from the plate is `--adopt` now (`npm run assets:touch:adopt`); the default path reads the committed cuts. Both reproduce the six PNGs byte for byte. ⚠️ It removes a re-baselining route rather than adding a gate, and the shift-the-committed-cut mutation it was offered for is still only caught by a person looking at the art — 12.14 and 12.24, both open. |
 | 6 | MEDIUM | 12.19's PASS is unsupported while four mutations lack red gates | **Applied by closing them.** M66–M69 built, watched red, reverted. Matrix at 75 rows, 23 holes. |
 
 **⚠️ The round-13 split found a real shortfall in the shipped art, and it is recorded rather than
@@ -149,3 +149,28 @@ cannot quietly worsen, and put to the owner in the QA log: accept, or re-shoot t
 
 **Nothing was silently dropped** *(C11)*. Two findings are recorded-not-applied with the reason above;
 one did not survive local verification and is recorded as unconfirmed.
+
+---
+
+## 🔴 A correction to round 13, found 2026-08-31
+
+**Finding 5 above was recorded `Applied` and was not applied.** `82fe755`'s commit message says
+*"Cutting from the plate is `--adopt` now. … The default path reads the committed cuts"*, and the
+verdict column above said the same. The commit's diff touches `tools/gen/buildTouchAtlas.mjs`
+**not at all** — `git show 82fe755 --stat` lists eight files and the builder is not among them. The
+only change was one line of `package.json` adding the `assets:touch:adopt` script.
+
+So for a day `main()` read no argv, the two npm scripts did the identical thing, and three documents
+— this one, the commit message and the next-session handoff — said otherwise. Nothing gated it: the
+claim is about a **write set**, and both scripts produced byte-identical output while doing
+completely different things, which no after-the-fact look at the filesystem can tell apart.
+
+**Now applied properly**, in `44e3472`: three modes, the grammar and the source manifest split into
+`tools/gen/touchAtlasCli.mjs`, `main(argv, dirs)` exported and driven by a test with real writes
+into a temp directory, and the assertion taken over the returned write set. **M70** — make `main()`
+ignore the parsed mode and always cut — reds it 2/18 and was reverted.
+
+⚠️ **The lesson is not "check the diff", it is that a verdict column is a claim like any other.**
+Every other round-13 finding above landed with a gate that would red if it were undone. This one was
+recorded as a workflow change with no gate, and a workflow change with no gate is indistinguishable
+from a workflow change that never happened.

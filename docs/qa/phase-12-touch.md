@@ -40,7 +40,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 75 rows; 23 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one and M66–M69 the round-13 one. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 76 rows; 23 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one and M70 the repair round 13 recorded but never landed. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
@@ -484,6 +484,35 @@ drop* — so each produced a new gate rather than an edited matrix.
   two queued `scene.start` ops, and the player lands on **level-02**. **RED 1/10.** *A gate must be
   watched failing* is not a formality — the first two versions of this one would have shipped a
   green tick over a live defect.
+
+### 🔴 The round-13 repair that was recorded applied and never landed
+
+**Found 2026-08-31 by reading the diff of the commit that claimed it.** Codex round-13 finding 5
+asked for the plate cut to move behind `--adopt` so the ordinary build could not rewrite the
+committed cut faces. `82fe755`'s message says it did; `docs/reviews/phase-12-touch-impl.md` recorded
+it **Applied**; the handoff prompt told the next session to rely on it. The commit changed
+`package.json` by one line and `tools/gen/buildTouchAtlas.mjs` **not at all**. `main()` took no
+arguments, so `npm run assets:touch` and `npm run assets:touch:adopt` were the same command.
+
+That is not a cosmetic slip. `tests/fixtures/touch-cut/` is the oracle `shipped-touch.test.ts` and
+`shipped-touch-contrast.test.ts` both measure against — the whole point of committing it (round 11)
+was that a gate must not discover its own answer from the file it is judging. While the ordinary
+build rewrote it, a change to `keyOut`, the crop or the downscale re-baselined the fixture and the
+shipped face in one run and every gate downstream followed the change.
+
+⚠️ **Nothing could have caught it, and that is the transferable part.** The claim is about a WRITE
+SET. Both commands produced byte-identical output, so no inspection of the filesystem afterwards
+distinguishes a file rewritten identically from one that was never opened. Every other round-13
+finding landed with a gate that would red if undone; this one was recorded as a workflow change with
+no gate, and *a workflow change with no gate is indistinguishable from one that never happened.*
+
+**Applied in `44e3472`.** Three modes with the grammar and the source manifest in
+`tools/gen/touchAtlasCli.mjs` (split out at 301 of 400 lines, importing one way only);
+`main(argv, dirs)` exported and driven with real writes into a temp directory; the assertion taken
+over the returned write set rather than the resulting files. `TOUCH_CELL_SOURCES` ships empty, so a
+later single-cell re-shoot cannot be silently undone by `--adopt` recutting take-3 over it. Both
+paths reproduce the six shipped PNGs byte for byte. **M70 red 2/18** — 12 files written where 6 were
+claimed — reverted, and the revert confirmed by the original count returning to 1.
 
 ### The rows the two Codex implementation reviews added
 
