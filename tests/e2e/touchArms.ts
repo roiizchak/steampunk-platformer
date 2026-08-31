@@ -26,8 +26,51 @@ import { expect, type Browser, type Page } from '@playwright/test';
 
 import { installGpuTimer } from './gpuTimer';
 import { assertRealGpu } from './realGpu';
-import { bootToTouchPlay, installTouchDriver } from './touchHarness';
+import { TOUCH_IDS } from '../../src/render/touchLayout';
+import { bootToTouchPlay, drawnFaces, drawnZones, installTouchDriver } from './touchHarness';
 import { hideTexts } from './touchPerf';
+
+/**
+ * **The preconditions, in one place, run by `makeArms` so no spec can have a weaker set.**
+ *
+ * 🔴 They were written out in the clean gate and only partly copied into the red proofs — the GPU
+ * proof checked faces and its amplifier, the CPU proof checked only that its hook fired — while the
+ * QA log claimed all three ran "the same preconditions". Codex round 16, finding 4. A red proof
+ * that runs a weaker precondition than the gate it proves is measuring a different arm.
+ *
+ * Three separate claims, and each of them has failed on its own:
+ *
+ * - **Every control has a hit area.** `drawnZones` counts `Zone`s, which is HITTABILITY.
+ * - **Every control puts PIXELS on screen**, by name, through Phaser's own `willRender(camera)`
+ *   plus a positive alpha and a nonzero drawn size. A `Zone` renders nothing, so the count above
+ *   cannot tell a drawn arm from an undrawn one; and a face at alpha 0 reports `visible: true`.
+ * - **The bare arm has NO controls**, or the two arms are the same arm and every delta is zero.
+ */
+export async function assertArmsDiffer(touch: Page, bare: Page, label: string): Promise<void> {
+  const drawn = await drawnZones(touch, 'UI');
+  expect(
+    drawn.length,
+    `${label}: the touch arm has no controls, so it is not the arm it claims to be`,
+  ).toBe(TOUCH_IDS.length);
+
+  const faces = await drawnFaces(touch, 'UI');
+  for (const id of TOUCH_IDS) {
+    const face = faces.find((f) => f.name === id);
+    expect(face, `${label}: ${id} has a hit area and no face object at all`).toBeDefined();
+    expect(
+      face!.drawn && face!.alpha > 0 && face!.w > 0 && face!.h > 0,
+      `${label}: ${id} puts no pixels on screen — drawn=${face!.drawn} alpha=${face!.alpha} ` +
+        `${face!.w}x${face!.h}. The timed arm would draw an empty frame there.`,
+    ).toBe(true);
+  }
+  for (const z of drawn) {
+    expect(z.interactive, `${label}: ${z.name} is not live in the timed arm`).toBe(true);
+  }
+  expect(
+    await drawnZones(bare, 'UI'),
+    `${label}: the bare arm has touch controls, so the two arms are the same arm`,
+  ).toEqual([]);
+}
 
 export interface Arms {
   touch: Page;
@@ -65,16 +108,24 @@ export async function makeArms(browser: Browser, touchFirst: boolean, label: str
   await installGpuTimer(firstPage);
   await installGpuTimer(secondPage);
 
+  // 🔴 `hideTexts` runs in PHYSICAL order too, BEFORE roles exist. It was the last setup step
+  // still ordered by role: `hideTexts(touch)` always preceded `hideTexts(bare)`, so whatever the
+  // first of those two calls costs a page — a layout pass, a texture eviction — always landed on
+  // the touch arm. Codex round 16, finding 5. The 30-tick settle probably absorbs it; "probably"
+  // is exactly the word this file exists to remove.
+  const textFirst = await hideTexts(firstPage);
+  const textSecond = await hideTexts(secondPage);
+
   // Only now does either page acquire a ROLE.
   const touch = touchFirst ? firstPage : secondPage;
   const bare = touchFirst ? secondPage : firstPage;
   const touchContext = touchFirst ? firstCtx : secondCtx;
   const plainContext = touchFirst ? secondCtx : firstCtx;
   const renderer = firstRenderer;
+  const textTouch = touchFirst ? textFirst : textSecond;
+  const textBare = touchFirst ? textSecond : textFirst;
 
   // Equalise everything that is not the controls — `hideTexts` carries the evidence.
-  const textTouch = await hideTexts(touch);
-  const textBare = await hideTexts(bare);
   expect(
     textTouch.hidden + textBare.hidden,
     `${label}: no text was visible in either arm, so this helper equalised nothing`,
@@ -89,6 +140,8 @@ export async function makeArms(browser: Browser, touchFirst: boolean, label: str
         'differ by more than the controls',
     ).toBe(0);
   }
+
+  await assertArmsDiffer(touch, bare, label);
 
   return {
     touch,

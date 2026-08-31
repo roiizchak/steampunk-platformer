@@ -197,6 +197,15 @@ export async function sampleArm(
   // flipping it globally would re-found four other phases' numbers. Codex round 15, finding 5.
   const result = await sample(active, TOUCH_SAMPLE_TICKS, true);
 
+  // 🔴 THE WINDOW BOUNDARY, OBSERVED. `stopSubmitting()` disarming is a claim; a submission count
+  // that does not move across the drain is evidence, and it is the only assertion that goes red
+  // when the stop is deleted. Codex round 16, finding 2 — M78.
+  expect(
+    result.gpuSubmittedDuringDrain,
+    `${label}: ${result.gpuSubmittedDuringDrain} GPU queries were opened AFTER the tick window ` +
+      'closed, so the median includes frames the window never contained',
+  ).toBe(0);
+
   expect(
     await tickOf(idle),
     `${label}: the idle arm advanced during the window — its loop is still running and its GPU work ` +

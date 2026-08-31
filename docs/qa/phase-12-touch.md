@@ -49,11 +49,13 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
-| 12.23 | Codex IMPLEMENTATION review on the final diff | **NOT MET** | **Round 14 ran and returned `VERDICT: REVISE`** — 13 findings, nine applied and four recorded with reasons (§ Codex round 14). *Executed with an unresolved verdict is NOT MET, not UNRUN.* Round 15 was launched on the repaired diff and **stopped on a ChatGPT account usage limit** partway through, producing no verdict; it is queued to retry. |
+| 12.23 | Codex IMPLEMENTATION review on the final diff | **NOT MET** | **Round 14 ran and returned `VERDICT: REVISE`** — 13 findings, nine applied and four recorded with reasons (§ Codex round 14). *Executed with an unresolved verdict is NOT MET, not UNRUN.* **Round 15 then ran on the repaired diff and returned `VERDICT: REVISE`** — 11 findings, seven applied, one recorded as a precondition on the redesign, three taken to the owner (§ Codex round 15). **Round 16 ran on the round-15 repairs and returned `VERDICT: REVISE`** — 8 findings, all applied (§ Codex round 16). It was launched before the family gate and the 12.14 amendment landed, so a further round sees them. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
-**One criterion is NOT MET and three are UNRUN, so the phase is reported FAILING** *(status
-2026-08-31, after the close-out session)*.
+**Two criteria are NOT MET and two are UNRUN, so the phase is reported FAILING** *(status
+2026-08-31, after the close-out session)*. 🔴 This line said *"one NOT MET and three UNRUN"* against
+its own table, which already read 12.14 and 12.23 NOT MET — Codex round 16, finding 7. **A summary
+that disagrees with the table above it is the failure this log's own header records.**
 
 - **12.14 is NOT MET**, on both halves. The wrench re-shoot did what it was bought to do — every
   stroke of all six faces clears 3:1 at 48 CSS px with no exception table — but the `ui-ux-tester`
@@ -386,7 +388,7 @@ floor are kept, not swapped out.
 |---|---|---|
 | 1 | every GPU pair NEGATIVE — the touch arm cheaper than the bare one, backwards for an arm drawing six extra faces | `helpLine()` prints ~130 glyphs of 44 px bold text on a keyboard device and ~35 on a touch one. *An A/B toggle bounds only what differs between the arms*, and a genuine +0.5 ms regression would have landed at +0.35 ms and passed. `hideTexts` equalises it — and the first version swept only `UI` while `gameHud.ts:79` builds the banner against **`Game`**, which moved the median -0.119 → -0.107 and was the tell |
 | 2 | the red proof could not go red | 40 copies per control moved the delta **0.0563 ms** against a 0.5 ms bound. 800 read 0.706 ms isolated and **0.5007 ms** inside the full sweep — a coin flip, not a proof. **2000**: 1.795 ms, every pair over 1.35 |
-| 3 | the held-out sweep FALSE-REDDED the per-pair CPU bound | one pair read exactly **-0.5000 ms** (failing on float dust, `0.5000000238414941`) while the median of the same four read -0.1000. `workMedianMs` is a median over Chrome's 0.1 ms `performance.now()` grid of a quantity that is itself 0.8-0.9 ms, so ±0.5 per pair is ±5 quanta of nine. The criterion-bearing claim moved to the median; the per-pair check became `MAX_TOUCH_CPU_PAIR_MS = 2`, a collapse guard |
+| 3 | the held-out sweep FALSE-REDDED the per-pair CPU bound | one pair read exactly **-0.5000 ms** (failing on float dust, `0.5000000238414941`) while the median of the same four read -0.1000. `workMedianMs` is a median over Chrome's 0.1 ms `performance.now()` grid of a quantity that is itself 0.8-0.9 ms, so ±0.5 per pair is ±5 quanta of nine. The criterion-bearing claim moved to the median, and the main thread is **`median-only`** — GPU stays `median-and-pairs`, whose per-pair spread is ±0.2 against a 0.5 bound. ⚠️ The per-pair check first became `MAX_TOUCH_CPU_PAIR_MS = 2`, a "collapse guard" that **could not detect a collapse**: the arms measure 0.8-0.9 ms, so an arm falling to zero yields ~0.9 ms and passes comfortably. It is gone, replaced by `MIN_TOUCH_ARM_CPU_MS`, an absolute floor on each arm's own median — red-proved by **M75** |
 
 #### 🔴 What the gate can actually resolve, measured rather than assumed
 

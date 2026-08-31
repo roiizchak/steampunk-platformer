@@ -62,3 +62,14 @@ declare module 'node:path' {
 declare module 'node:module' {
   export function createRequire(url: string): { resolve(id: string): string };
 }
+
+/**
+ * Just enough of `node:crypto` for `touch-sources.test.ts` to hash a generation source against its
+ * pin. Declared rather than installed, exactly as the rest of this file is: `@types/node` is a
+ * frozen-dependency STOP-and-ask (CLAUDE.md § 3).
+ */
+declare module 'node:crypto' {
+  export function createHash(algorithm: string): {
+    update(data: Uint8Array): { digest(encoding: 'hex'): string };
+  };
+}

@@ -43,7 +43,6 @@ import { expect, test } from '@playwright/test';
 
 import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
 import { TOUCH_IDS } from '../../src/render/touchLayout';
-import { drawnFaces } from './touchHarness';
 import { FACE_COPIES, addFaceCopies } from './touchAmplifiers';
 import { makeArms } from './touchArms';
 import {
@@ -77,19 +76,6 @@ test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)
       const touch = arms.touch;
       const bare = arms.bare;
       try {
-        // 🔴 The precondition, before a single number, in BOTH blocks. Zones are HITTABILITY — a
-        // `Zone` renders nothing — so the pixels are the FACES, asserted by name and by whether
-        // Phaser will actually draw them.
-        const faces = await drawnFaces(touch, 'UI');
-        for (const id of TOUCH_IDS) {
-          const face = faces.find((f) => f.name === id);
-          expect(face, `${label}: ${id} has no face object at all`).toBeDefined();
-          expect(
-            face!.drawn && face!.alpha > 0 && face!.w > 0 && face!.h > 0,
-            `${label}: ${id} puts no pixels on screen — the timed arm draws an empty frame there`,
-          ).toBe(true);
-        }
-
         const added = await addFaceCopies(touch, FACE_COPIES);
         // 🔴 EXACTLY the expected count. An amplifier that added nothing would report a flat delta
         // as the bound failing to fire, when nothing was ever drawn.
@@ -170,10 +156,10 @@ test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)
       `the amplified delta is ${delta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_GPU_DELTA_MS}, not merely differ`,
     ).toBeGreaterThan(MAX_TOUCH_GPU_DELTA_MS);
 
-    // Every pair, not just the median of them. A statistic that orders only on aggregate is one
-    // whose red depends on which pairs happened to land where.
-    for (const [i, d] of perPair.entries()) {
-      expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
-    }
+    // 🔴 **And NOT a per-pair rule on top.** This used to require every pair above zero, which is
+    // an extra condition neither the criterion nor `withinBudget`'s policy for this statistic
+    // imposes: an amplified run whose median clears the bound but whose noisiest pair lands one
+    // quantum negative is a legal red the proof would have called a failure. A red proof that is
+    // stricter than the gate it proves is a gate of its own, unowned. Codex round 16, finding 3.
   });
 });

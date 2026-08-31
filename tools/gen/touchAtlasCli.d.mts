@@ -14,3 +14,5 @@ export type TouchBuildArgs =
   | { mode: 'cell'; key: string; source: string };
 
 export function parseTouchArgs(argv: string[]): TouchBuildArgs;
+
+export const TOUCH_SOURCE_HASHES: Readonly<Record<string, string>>;

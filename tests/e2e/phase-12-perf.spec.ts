@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
-import { drawnFaces, drawnZones } from './touchHarness';
 import { makeArms } from './touchArms';
 import {
   MAX_TOUCH_ARM_CPU_MS,
@@ -127,46 +125,9 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
     const withControls = arms.touch;
     const without = arms.bare;
     try {
-      // 🔴 The precondition, in BOTH blocks. Time nothing until the thing being measured is on
-      // screen — and a block whose arms booted differently is not the same measurement.
-      const drawn = await drawnZones(withControls, 'UI');
-      expect(
-        drawn.length,
-        `${label}: the touch arm has no controls, so it is not the arm it claims to be`,
-      ).toBe(TOUCH_IDS.length);
-      // 🔴 Zones are HITTABILITY. A `Zone` renders nothing — `touchMeasure.ts` says so in as many
-      // words — so the assertion above cannot tell a drawn arm from an undrawn one. Delete the
-      // `setVisible(wanted)` loop in `refresh()` and every zone is still there and still
-      // interactive, while the timed arm draws zero extra pixels: the criterion's own named failure
-      // mode, passing its own precondition. The pixels are the FACES. Found by both 12.11 briefs.
-      //
-      // ⚠️ **This was `> drawn.length` and the adopted art broke it, correctly.** The grey box drew
-      // a plate plus several marks per control, so "more faces than zones" happened to hold; one
-      // generated image per control makes the two counts EQUAL, and the bound false-redded a build
-      // that draws strictly better pixels. The claim was never about a ratio — it is *every control
-      // has something visible* — so it is asserted per control, by name, which the count could not
-      // do either: six visible faces all belonging to one plate passed the old form.
-      // 🔴 `drawn`, not `visible` — Phaser's `willRender(camera)`, plus a positive alpha and a
-      // nonzero drawn size. A face at alpha 0 or zero display size reports `visible: true` and puts
-      // no pixels on screen, so the old form could have passed on an arm drawing no controls at all.
-      // Codex round 14, finding 7.
-      const faces = await drawnFaces(withControls, 'UI');
-      for (const id of TOUCH_IDS) {
-        const face = faces.find((f) => f.name === id);
-        expect(face, `${label}: ${id} has a hit area and no face object at all`).toBeDefined();
-        expect(
-          face!.drawn && face!.alpha > 0 && face!.w > 0 && face!.h > 0,
-          `${label}: ${id} puts no pixels on screen — drawn=${face!.drawn} alpha=${face!.alpha} ` +
-            `${face!.w}x${face!.h}. The timed arm would draw an empty frame there.`,
-        ).toBe(true);
-      }
-      for (const z of drawn) {
-        expect(z.interactive, `${label}: ${z.name} is not live in the timed arm`).toBe(true);
-      }
-      expect(
-        await drawnZones(without, 'UI'),
-        `${label}: the control arm has touch controls, so the two arms are the same arm`,
-      ).toEqual([]);
+      // 🔴 The preconditions live in `makeArms` — see `assertArmsDiffer`. They used to be written
+      // out here and only partly copied into the two red proofs, while the QA log claimed all three
+      // ran the same set. Codex round 16, finding 4.
 
       // 🔴 AB/BA inside the block, and `PAIRS` is EVEN so each block gets a whole AB+BA. Always
       // sampling the touch arm first leaves an order effect perfectly correlated with the arm.
@@ -266,7 +227,7 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       `the controls cost ${(100 - (withFps / withoutFps) * 100).toFixed(1)}% of the frame rate`,
     ).toBeGreaterThan(withoutFps * 0.9);
 
-    // 🔴 BOUNDED ON BOTH SIDES, per pair and on the median. A one-sided upper bound reads an
+    // 🔴 BOUNDED ON BOTH SIDES. A one-sided upper bound reads an
     // arm-specific timer collapse as excellent performance, and this repository already has that
     // episode on record: a clean paired delta of -0.243 ms when one arm's median stopped being a
     // measurement (`phase-08-perf.spec.ts`). The lower side is an instrument-validity check, not a
@@ -309,5 +270,6 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       ).toBeGreaterThan(MIN_TOUCH_ARM_CPU_MS);
     }
 
-    // (the median and per-pair checks are both inside `withinBudget` above)
+    // (the verdicts are inside `withinBudget` above: GPU `median-and-pairs`, CPU `median-only`.
+    // The per-arm CPU floor is the only absolute check, and it is the loop directly above.)
 });

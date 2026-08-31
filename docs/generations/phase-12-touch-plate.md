@@ -1,6 +1,11 @@
 # Phase 12 — the touch-control plate
 
-**7 generations · $1.05 of the `$5` touch-UI ceiling. Takes 1-3 `fal-ai/nano-banana-pro` (TAKE 3 ADOPTED for three faces); takes 4-7 `fal-ai/nano-banana-pro/edit` (TAKE 5 → `touch-attack`, TAKE 6 → `touch-pause`, TAKE 7 → `touch-walk`).**
+**9 generations · $1.35 of the `$5` touch-UI ceiling. Takes 1-3 `fal-ai/nano-banana-pro` (TAKE 3 ADOPTED for `touch-left`, `touch-right` and `touch-jump`); takes 4-9 `fal-ai/nano-banana-pro/edit` (TAKE 7 → `touch-walk`, TAKE 8 → `touch-attack`, TAKE 9 → `touch-pause`). Takes 4, 5 and 6 are SUPERSEDED and ship nothing.**
+
+⚠️ **This line said "7 generations · $1.05" with takes 5 and 6 recorded as adopted while takes 8 and
+9 had been bought and adopted.** Criterion 12.18's entire content is that these figures agree with
+the QA log, and it was falsely PASS twice: caught by the Codex round-14 review, then again by round
+16 when only the QA log had been reconciled. Corrected 2026-08-31.
 
 One plate carrying every button face on a chroma field, cut locally into 160 × 160 PNGs by
 `tools/gen/buildTouchAtlas.mjs` (`npm run assets:touch`). Takes 1 and 2 are kept as evidence; **take

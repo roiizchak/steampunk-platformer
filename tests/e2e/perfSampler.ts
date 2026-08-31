@@ -104,6 +104,14 @@ export interface Sample {
   gpuP95Ms: number;
   /** Queries unread when the bounded drain expired. Non-zero means readback never landed. */
   gpuAbandoned: number;
+  /**
+   * Queries OPENED after the tick window closed, during the bounded drain.
+   *
+   * 🔴 With `stopSubmittingOnDrain` this must be **0**, and that is the only direct evidence the
+   * window boundary held. Without it, the drain re-arms the timer every frame and renders from
+   * after the window enter its median. Codex round 16, finding 2.
+   */
+  gpuSubmittedDuringDrain: number;
 }
 
 /** The in-page handle `installGpuTimer` puts on `window.__gpuTimer`. */
@@ -112,8 +120,16 @@ interface GpuTimerHandle {
   drainFrames: number;
   onFrameTop(): void;
   onFrameBottom(): void;
-  /** Disarm without finishing, so the drain reads back rather than submitting more. Opt-in. */
-  stopSubmitting?(): void;
+  /**
+   * Disarm without finishing, so the drain reads back rather than submitting more.
+   *
+   * 🔴 **Required, not optional.** It was `stopSubmitting?()` called through `?.`, so deleting the
+   * method restored drain-frame submission with no type error and no test to notice. Codex round
+   * 16, finding 2.
+   */
+  stopSubmitting(): void;
+  /** Every query opened since install. Differenced across the drain to prove the boundary held. */
+  submittedCount(): number;
   finish(): {
     supported: boolean;
     samples: number;
@@ -331,8 +347,11 @@ export async function sample(
           // it means a driver that never signals fails the sample-count assertion loudly instead of
           // hanging the spec until Playwright's timeout, where it would look like a boot hang.
           let drained = 0;
+          // The submission count at the moment the tick window closed. Anything opened after this
+          // is a frame outside the window contributing to the window's median.
+          const submittedAtClose = gpu?.submittedCount() ?? 0;
           const drain = (): void => {
-            if (cleanDrain) gpu?.stopSubmitting?.();
+            if (cleanDrain) gpu?.stopSubmitting();
             else gpu?.onFrameTop();
             if (drained < (gpu?.drainFrames ?? 0)) {
               drained += 1;
@@ -356,6 +375,7 @@ export async function sample(
               gpuSupported: gpuTiming.supported,
               gpuSamples: gpuTiming.samples,
               gpuDisjointFrames: gpuTiming.disjointFrames,
+              gpuSubmittedDuringDrain: (gpu?.submittedCount() ?? 0) - submittedAtClose,
               gpuMedianMs: gpuTiming.medianMs,
               gpuP95Ms: gpuTiming.p95Ms,
               gpuAbandoned: gpuTiming.abandoned,

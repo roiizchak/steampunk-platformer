@@ -158,10 +158,10 @@ test.describe('Phase 12 — criterion 12.11, the main-thread delta can go RED (v
       `the amplified delta is ${delta.toFixed(4)} ms — a red proof must exceed +${MAX_TOUCH_CPU_DELTA_MS}, not merely differ`,
     ).toBeGreaterThan(MAX_TOUCH_CPU_DELTA_MS);
 
-    // Every pair, not just the median of them. A statistic that orders only on aggregate is one
-    // whose red depends on which pairs happened to land where.
-    for (const [i, d] of perPair.entries()) {
-      expect(d, `pair ${i} did not separate: ${d.toFixed(4)} ms`).toBeGreaterThan(0);
-    }
+    // 🔴 **And NOT a per-pair rule on top.** This used to require every pair above zero, which is
+    // an extra condition neither the criterion nor `withinBudget`'s policy for this statistic
+    // imposes: an amplified run whose median clears the bound but whose noisiest pair lands one
+    // quantum negative is a legal red the proof would have called a failure. A red proof that is
+    // stricter than the gate it proves is a gate of its own, unowned. Codex round 16, finding 3.
   });
 });

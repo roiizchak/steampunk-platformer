@@ -136,12 +136,23 @@ export async function installGpuTimer(page: Page): Promise<void> {
       /** Only sample while a window is open, so idle frames between windows are not counted. */
       let armed = false;
 
+      /**
+       * Every query this timer has ever opened.
+       *
+       * 🔴 It exists so the DRAIN BOUNDARY is observable. `stopSubmitting()` disarming is a claim;
+       * a count that does not move across the drain is evidence. Without it, deleting the stop
+       * silently restores drain-frame submission and only a noisy numeric gate might notice.
+       * Codex round 16, finding 2.
+       */
+      let submitted = 0;
+
       /** `prerender` — open a query immediately before the frame's draw calls. */
       const onPreRender = (): void => {
         if (!ext || !armed || open || pending.length >= ringSize) return;
         const q = ext.createQueryEXT();
         ext.beginQueryEXT(ext.TIME_ELAPSED_EXT, q);
         open = q;
+        submitted += 1;
       };
 
       /** `postrender` — close it immediately after, then drain whatever has become readable. */
@@ -251,6 +262,7 @@ export async function installGpuTimer(page: Page): Promise<void> {
         onFrameTop,
         onFrameBottom,
         stopSubmitting,
+        submittedCount: () => submitted,
         finish,
       };
     },

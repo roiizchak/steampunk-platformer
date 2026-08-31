@@ -128,3 +128,28 @@ export function parseTouchArgs(argv) {
   }
   return adopt ? { mode: 'adopt' } : { mode: 'ink' };
 }
+
+/**
+ * **SHA-256 of every recorded source, pinned.**
+ *
+ * 🔴 The sources are gitignored 4 MB plates, so *"adoption reproduces the six shipped PNGs byte for
+ * byte"* was manual evidence with nothing tying it to particular bytes: a clone has no way to know
+ * WHICH file the claim was made against, and a file replaced in place would carry the claim with
+ * it. Codex round 16, finding 6.
+ *
+ * `tests/unit/touch-sources.test.ts` asserts the map covers every source in the manifest, and —
+ * when a source is on this machine — that the file still hashes to its pin and that
+ * `main(['--adopt'])` from those exact bytes reproduces the committed cuts. On a clone without the
+ * sources the pins remain the record of what was used.
+ *
+ * Measured 2026-08-31.
+ */
+export const TOUCH_SOURCE_HASHES = Object.freeze({
+  [TOUCH_PLATE_SOURCE]: '7d6429ba353f6cd7f5627912d6a89ecbd7c4cb49314f7f5fcb5127ac7f52906a',
+  '_generated/phase-12-touch/take-8-01a056c7-347a-7691-b105-8c3cbbc43daf.png':
+    '496ac302cb4b6cc413413947113e0f56f95b989dd404b8959d7b2072de027821',
+  '_generated/phase-12-touch/take-9-01a056c7-9d04-7fd2-bc7a-47c65b946658.png':
+    '94551e5f63faf4230919f22fc9e86674df8882493ce8d207bb6814c752408973',
+  '_generated/phase-12-touch/take-7-01a056b2-442f-7690-b0b8-4c6a46954279.png':
+    'ca6626428a1705e132059f50423a1105dc439273f3de3067a303bd57c8f17e3d',
+});
