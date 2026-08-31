@@ -45,14 +45,16 @@ import { MIN_SAMPLES } from './perfBudget';
 import { assertRealGpu } from './realGpu';
 import { bootToTouchPlay, installTouchDriver } from './touchHarness';
 import {
-  MAX_TOUCH_CPU_DELTA_MS,
-  PAIRS,
   REFRESH_COPIES,
   addRefreshCost,
+  refreshCalls,
+} from './touchAmplifiers';
+import {
+  MAX_TOUCH_CPU_DELTA_MS,
+  PAIRS,
   hideTexts,
   median,
   pairedDeltas,
-  refreshCalls,
   sampleArm,
   wakeLoop,
 } from './touchPerf';

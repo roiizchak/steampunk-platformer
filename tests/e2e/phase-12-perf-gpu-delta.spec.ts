@@ -46,9 +46,11 @@ import { assertRealGpu } from './realGpu';
 import { bootToTouchPlay, drawnFaces, installTouchDriver } from './touchHarness';
 import {
   FACE_COPIES,
+  addFaceCopies,
+} from './touchAmplifiers';
+import {
   MAX_TOUCH_GPU_DELTA_MS,
   PAIRS,
-  addFaceCopies,
   hideTexts,
   median,
   pairedDeltas,
