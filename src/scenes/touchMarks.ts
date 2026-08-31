@@ -122,7 +122,7 @@ export const PLATE_ALPHA_PRESSED = 0.72;
  * review; verified locally before anything moved.
  *
  * `touchInk.mjs` therefore multiplies the BRASS pixels' alpha by `0.55 / 0.85` and leaves
- * the ink alone, and thickens and keylines the engraving because at the 48 CSS px a phone actually
+ * the ink alone, and thickens and keylines the engraving because at the the 44-48 CSS px live band a phone actually
  * shows a face a 1 px feature averages into the plate. Drawn at 0.85 the plate lands back on
  * exactly `PLATE_ALPHA` — the occlusion
  * measurement is untouched — while the mark is read at **3.32:1**. Pressed at 1.0 the plate is

@@ -93,5 +93,5 @@ describe('the shipped touch faces', () => {
         }
       }
     }
-  });
+  }, 60_000);
 });

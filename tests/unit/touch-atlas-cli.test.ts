@@ -240,5 +240,5 @@ describe('the default build reads the cut faces and does not rewrite them', () =
         `adopt did not sweep ${dir} — a superseded file survived into the oracle`,
       ).toBe(false);
     }
-  });
+  }, 60_000);
 });

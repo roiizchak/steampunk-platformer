@@ -4,11 +4,16 @@ Branch `phase-12-touch`, off `main` at `7f339ad`. Executed 2026-08-29.
 
 The gate table below is the record. Everything under it is the evidence for one row.
 
-✅ **This phase ships the GENERATED faces.** Three fal plates were bought at $0.15 each and
-**take 3 is adopted** — six 160 × 160 PNGs in `public/assets/ui/`, cut by
+✅ **This phase ships the GENERATED faces.** **Nine** fal takes at $0.15 each: three whole plates on
+`nano-banana-pro` (take 3 adopted, and it is still the source of `touch-left`, `touch-right` and
+`touch-jump`) and six single-cell edits on `nano-banana-pro/edit` (takes 7, 8 and 9 adopted for
+`touch-walk`, `touch-attack` and `touch-pause`). Six 160 × 160 PNGs in `public/assets/ui/`, cut by
 `tools/gen/buildTouchAtlas.mjs`, catalogued in `public/assets/index.json` and gated on the shipped
 bytes by `tests/unit/shipped-touch.test.ts`. The takes and their `request_id`s are in
-`docs/generations/phase-12-touch-plate.md`; $0.45 of the $5 touch-UI ceiling.
+`docs/generations/phase-12-touch-plate.md`; **$1.35 of the $5** touch-UI ceiling.
+
+⚠️ **This paragraph said "three plates, take 3 adopted, $0.45" while six more takes had been bought**
+— the same drift that made 12.18 falsely PASS. Codex round 15, finding 10.
 
 ⚠️ **The header above used to say the opposite** — *"ships GREY-BOX controls, two
 generations, neither adopted, 12.17 NOT MET for five PNGs"* — three revisions after the art
@@ -33,7 +38,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.9 | ≥44 CSS px, ≥8 CSS px gaps, from measured bounds | **PASS — after a BLOCKER repair** | § 12.9. The menu rows were 38.5–42.2 CSS px on every real phone. All five target kinds measured; § 12.8. |
 | 12.10 | The prompt appears iff any target that would have to be hittable on this screen falls under 44 CSS px | **PASS — criterion amended 2026-08-31, owner decision** | The prompt and every route share ONE predicate (M31 red 1/9), so they cannot disagree. That predicate weighs the screen's own route **and** the play controls, which is decision **D1** and is now what the criterion says: a portrait title screen shows the prompt because the controls behind it would be 32.5 CSS px, not because its own 390 × 219 zone is small. **No gate changed; the sentence did.** § 12.10. |
 | 12.11 | Frame budget unregressed with the controls drawn | **PASS** | § 12.11. The frames-served ratio was replaced, not re-bounded — it returns exactly 1.000 or 0.500 against a vsync-locked display. The statistic is now the paired per-frame GPU and main-thread delta against ±0.5 ms, with absolute per-arm ceilings at 8 ms. Red-proved both ways: **M72** 2.09 ms, **M73** 0.85 ms, each after a recorded GREEN that was a real hole. Confirmed on a held-out `test:e2e` sweep, **218 passed, 0 failed**. Both `performance-engineer` briefs run *(A7)*; brief 2's finding 1 — the touch role pinned to one browser context all run — is applied in `touchArms.ts` and was the cause of an offset this log had recorded as noise. |
-| 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
+| 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps every `TOUCH_IDS` coordinate; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
 | 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes on the final bytes; the judgement half does not** | **Four faces have been re-shot** (owner decisions, 2026-08-31): `touch-attack` twice, `touch-pause` twice, `touch-walk` once. The contrast gate now **sweeps every size in the live band** `[44, 48]` and takes the worst, because `resize.mjs`'s box filter is `Math.floor`-partitioned and therefore **not monotonic in output size** — pinned at 44 it was green while `touch-attack` stroke 2 measured **2.740:1 at 47**. Every stroke of all six clears 3:1 across the whole band, with **no exception table**. Screenshot at 667 x 325: `docs/evidence/phase-12-touch-art.png`, recaptured on the final bytes. ⚠️ **NOT MET because the `ui-ux-tester` briefs have not run against takes 8 and 9**, and because their standing findings are recorded rather than applied: the set is mixed solid-fill and outline, `left`/`right` differ only by mirror symmetry, the sweep is over a flat grey ramp while STYLE.md mandates dithered backgrounds, and the box-filter proxy's error probably runs optimistic. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one.** **Six earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
@@ -52,15 +57,17 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 
 - **12.14 is NOT MET**, on both halves. The wrench re-shoot did what it was bought to do — every
   stroke of all six faces clears 3:1 at 48 CSS px with no exception table — but the `ui-ux-tester`
-  briefs found that `pause` and `walk` do not say their actions at any size, and that **48 is not the
-  worst reachable size**: controls stay live to 44 CSS px, where `touch-pause` measures **2.91:1**.
-  Three options are on the table and each is an owner call.
+  briefs found that `pause` and `walk` did not say their actions at any size, and that **48 was not
+  the worst reachable size**. **All three findings are now fixed in the art** — takes 7, 8 and 9, and
+  a gate that sweeps the whole live `[44, 48]` band — and 12.14 stays NOT MET because those briefs
+  have not run against the final bytes and their remaining findings are recorded rather than applied.
 - **12.13 and 12.24 are UNRUN** — hands-on on a real phone *(C4)*, and cannot be closed from here.
-- **12.23 is UNRUN** — the Codex implementation review on the final diff.
+- **12.23 is NOT MET, not UNRUN.** Codex rounds 14 and 15 both ran and both returned
+  `VERDICT: REVISE`. *Executed with an unresolved verdict is NOT MET* — the one state rule, applied
+  to the row that most tempts an exception.
 - **12.8, 12.10 and 12.17 are now PASS.** The owner amended all three on 2026-08-31; no gate moved.
 - **12.11 is now PASS.** The frames-served statistic was replaced with absolute paired per-frame
-  deltas, red-proved in both directions (M72, M73), confirmed on a held-out full sweep of **218
-  specs, 0 failures**, with both `performance-engineer` briefs run and every finding applied or
+  deltas, red-proved in both directions (M72, M73), confirmed on a held-out full sweep, with both `performance-engineer` briefs run and every finding applied or
   recorded.
 
 Every other row passed, several only after a repair.

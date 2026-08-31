@@ -38,7 +38,7 @@ test.afterEach(async ({ page }) => {
 });
 
 test.describe('the six controls exist and are hittable', () => {
-  test('12.2a all five are drawn, interactive, and none is a duplicate', async ({ page }) => {
+  test('12.2a every control is drawn, interactive, and none is a duplicate', async ({ page }) => {
     await bootToTouchPlay(page);
     const zones = await drawnZones(page, UI);
     const names = zones.map((z) => z.name).sort();

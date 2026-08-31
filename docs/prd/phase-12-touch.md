@@ -29,9 +29,10 @@ scale **0.203**, a legal 44 CSS px button would cost **217 of 1080 game pixels**
 area per button. Phone portrait therefore prompts to rotate; portrait **tablet** (0.400) is playable
 and in scope.
 
-**Five edge-anchored buttons**, 160 game px with 32 px gaps: left and right bottom-left, attack and
-jump bottom-right, pause top-right. Not a D-pad and not a stick — the sim's input surface is six
-booleans with no analog axis. Touch is a second *writer* of the existing `InputSnapshot` through the
+**Six edge-anchored buttons**, 160 game px with 32 px gaps: left, right and the walk/run latch
+bottom-left, attack and jump bottom-right, pause top-right. `TOUCH_IDS` is the authority on that
+list; this sentence said **five** until 2026-08-31, after the owner added the walk/run control.
+Not a D-pad and not a stick — the sim's input surface is six booleans with no analog axis. Touch is a second *writer* of the existing `InputSnapshot` through the
 existing latch doors, never a second control path.
 
 Out of scope: gamepad, haptics, a pause *scene* (pause reuses ESC's existing level-menu route),
@@ -106,7 +107,7 @@ Modified: `GameScene.ts` · `gameHud.ts` · `gameInput.ts` · `UIScene.ts` · `T
 | 12.9 | Every one of those targets is at least 44 CSS px with at least 8 CSS px gaps, derived from the measured bounds and not from the layout predicate; the figure is cited, not estimated | `npm run test:e2e` + measured | `voltagent-qa-sec:accessibility-tester` |
 | 12.10 | The rotate prompt appears if and only if any target that would have to be hittable on this screen — the screen's own route **and** the play controls — falls under 44 CSS px *(amended 2026-08-31, owner decision; this is D1, and what the one shared predicate computes)* | `npm run test:e2e` | e2e |
 | 12.11 | Frame budget unregressed with controls drawn — headed, real GPU, paired arms in one session, and a positive "every control drawn" assertion before timing begins | `npm run test:e2e` | `voltagent-qa-sec:performance-engineer` |
-| 12.12 | Controls hidden and `disableInteractive()`d whenever `Game` is not RUNNING, `playerInputEnabled` is false, or the rotate prompt is up — proved by tapping each of the five underlying control coordinates and asserting no movement, jump, attack or route effect (tick progression continues; a frozen tick is not the claim) | `npm run test:e2e` | e2e |
+| 12.12 | Controls hidden and `disableInteractive()`d whenever `Game` is not RUNNING, `playerInputEnabled` is false, or the rotate prompt is up — proved by tapping each underlying control coordinate and asserting no movement, jump, attack or route effect (tick progression continues; a frozen tick is not the claim) | `npm run test:e2e` | e2e |
 | 12.13 | A drag starting on a control is not stolen by browser pan, pinch or double-tap zoom | `playwright-cli` + hands-on *(C4)* | play |
 | 12.14 | The button art is readable at true on-screen size at the smallest in-scope viewport | `playwright-cli` screenshots | `voltagent-qa-sec:ui-ux-tester` |
 | 12.15 | `src/sim/` boundary intact and the whole suite runs with Phaser uninstalled | `npm run test:sim-isolated` | — |
@@ -143,7 +144,7 @@ papered over.
 | M11 | shift **one** control 200 px toward its neighbour | 12.8 and 12.9 — a uniform offset preserves gaps and reds only 12.8 | RED 8/11 |
 | M11b | shift **all** controls 200 px off-canvas | 12.8 alone | RED 7/11 |
 | M12 | remove `TOUCH_ALL_SPECS` from the base `chromium` `testIgnore` | the per-project collection-count assertion | RED 3/4 |
-| M13 | drop `hasTouch: true` from `chromium-touch-gpu`'s `use` block | 12.11's "all five drawn" precondition | **GREEN — hole; gate written** → RED 1/5 |
+| M13 | drop `hasTouch: true` from `chromium-touch-gpu`'s `use` block | 12.11's "every control drawn" precondition | **GREEN — hole; gate written** → RED 1/5 |
 | M13b | drop `hasTouch: true` from `chromium-touch`'s `use` block | the config-shape gate | RED 1/5 |
 | M14 | delete `destroy()`'s removal of the layer's `game.events` subscriptions | 12.5 | RED 1/22 |
 | M15 | make the merge ignore the touch record | 12.4 | RED 4/11 |
@@ -208,7 +209,7 @@ papered over.
 | M73 | run the controls' own `TouchSession.refresh()` 6000 extra times per frame on the touch arm | 12.11, 12.19 | **GREEN twice — the `scene.update` hook was inert (Phaser caches `sys.sceneUpdate`), then 300/frame gave 0.0500 ms** → RED at 6000: 0.9000 ms, every pair 0.9000 |
 | M74 | measure the contrast sweep at every size in the live band instead of pinning 44 | 12.14, 12.19 | **RED on its first run — `touch-attack` stroke 2 at 2.740:1 at 47 CSS px**, between two sizes both reading 3.318:1. The box filter is not monotonic in output size |
 
-**Twenty-three rows reddened nothing, and all twenty-three were holes rather than mutations to drop.**
+**Twenty-seven rows reddened nothing, and all twenty-seven were holes rather than mutations to drop.**
 
 🔴 **M66 and M68 are the same lesson as the burst of zero particles: a decision function needs its
 own gate.** The cell binding was pinned as a table and nothing drove the code that reads it; the
@@ -335,6 +336,6 @@ exclusion leaves a hole a future filename falls through — define one set and s
 ### 8. Demo
 
 Open the game on a phone in landscape: the welcome screen takes a tap, the level menu's rows are
-finger-sized, and five brass controls sit in the corners. Run right and jump at the same time with
+finger-sized, and six brass controls sit in the corners. Run right and jump at the same time with
 two thumbs, hit an enemy with the attack button, and tap pause to get back to the menu. Turn the
 phone upright and the game asks you to turn it back.

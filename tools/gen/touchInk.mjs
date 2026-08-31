@@ -31,7 +31,7 @@
  *
  * Splitting the alpha was necessary and not sufficient — see `BOLD_PX` for the half that measured
  * the marks at the size a player is actually shown them. With both repairs in place, all six marks
- * measure **3.32:1** at rest and **3.85:1** pressed, at 48 CSS px over every background, with the
+ * measure **3.32:1** at rest and **3.85:1** pressed, at the 44-48 CSS px live band over every background, with the
  * mark 10.4-20.5 % of the face and the translucent disc 59.8-68.4 %.
  */
 export const INK_DARK_MAX = 32;
@@ -57,7 +57,7 @@ const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
  * `contrast-floor.test.ts` refuses a 1 px stroke on a 44 px glyph as *"an anti-aliasing artefact"* —
  * and the first keyline was exactly that. Measured at the size a player actually sees, the marks
  * fell to 1.63-2.85:1: a face is 160 game px but the smallest in-scope viewport presents it at
- * **48 CSS px**, a 3.3x downscale that a fractional canvas scale deliberately SMOOTHS
+ * **the 44-48 CSS px live band**, a 3.3x downscale that a fractional canvas scale deliberately SMOOTHS
  * (`canvasScaling.ts`). A 1 px feature simply averages away. Codex round-9.
  *
  * So the dark engraving is thickened before it is keylined, both inside the mark region only.
@@ -66,7 +66,7 @@ const KEYLINE_RGB = [0xf7, 0xe3, 0xb8];
  * Swept at true size through the mark mask, `BOLD_PX` 1, 2, 3 and 4 all measure **3.32:1** — the
  * keyline is what carries the ratio (`KEYLINE_PX`: 1 px is 1.93, 2 px is 2.92, 3 px is 3.32).
  * Re-measured for Codex round-11, after the mask became the measurement window. What the thickening
- * buys is that the engraving still reads as a SHAPE at 48 CSS px rather than as a pale outline
+ * buys is that the engraving still reads as a SHAPE at the 44-48 CSS px live band rather than as a pale outline
  * around nothing, which is a judgement — 12.14's `ui-ux-tester` call and the owner's under 12.24 —
  * and is recorded here as one instead of borrowed from a number that does not order it.
  */
