@@ -9,7 +9,7 @@
 import { expect } from 'vitest';
 
 import catalog from '../../public/assets/index.json';
-import { TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
+import { TOUCH_IDS, TOUCH_MIN_CSS_PX } from '../../src/render/touchLayout';
 import { TOUCH_CUT_DIR } from '../../tools/gen/buildTouchAtlas.mjs';
 import { readPng } from '../../tools/gen/png.mjs';
 import { keylineMarks } from '../../tools/gen/touchInk.mjs';
@@ -36,13 +36,26 @@ export const SOLID = 200;
 export const MARK_FRACTION = 0.5;
 
 /**
- * The width, in CSS pixels, that a 160 game px face occupies at the smallest viewport in scope.
+ * The width, in CSS pixels, of the SMALLEST face that is still live — the worst reachable case.
  *
- * `160 * 325 / 1080` — iPhone SE landscape as a real browser gives it, with the URL bar Safari
- * never collapses because `index.html`'s `#game { height: 100% }` means the page cannot scroll.
- * `touchLayout.ts` documents that reduced viewport and `touchTargetsFit` is measured against it.
+ * 🔴 **This was `160 * 325 / 1080` = 48, and 48 is not the worst case.** That figure is iPhone SE
+ * landscape as a real browser gives it, with the URL bar Safari never collapses; it is one measured
+ * device, not a floor. `touchTargetsFit` shows and enables a control whenever its box is at least
+ * `TOUCH_MIN_CSS_PX`, and the hit box **is** the face box (`touchLayout.ts:156`), so any browser
+ * whose chrome is taller than Safari's — Firefox for Android, Samsung Internet, Edge, none of them
+ * surveyed — puts a live control anywhere in **[44, 48)**, a band this gate never measured.
+ * `ui-ux-tester` brief 2, finding 2.
+ *
+ * It is `TOUCH_MIN_CSS_PX` now, so the size the gate measures is the size below which a control
+ * stops existing. **The two constants are the same one**: raise the production floor and the gate
+ * follows, which is the direction that cannot go wrong.
+ *
+ * ⚠️ **The old shipped art did NOT pass here.** At 44, `touch-pause`'s cogwheel measured
+ * **2.905:1** on strokes 1 and 4 — the only strokes in the set that missed — which is what bought
+ * its re-shoot. The heavy pause bars read 3.088:1 and 3.318:1, and the tightest stroke anywhere in
+ * the set is now 3.088:1.
  */
-export const TRUE_SIZE_PX = Math.round((TOUCH_BOX_PX * 325) / 1080);
+export const TRUE_SIZE_PX = TOUCH_MIN_CSS_PX;
 
 /** WCAG relative luminance, sRGB. The same formula `contrast-floor.test.ts` uses. */
 export function luminance(r: number, g: number, b: number): number {

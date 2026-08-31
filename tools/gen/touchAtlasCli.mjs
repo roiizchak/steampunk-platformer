@@ -54,6 +54,14 @@ export const TOUCH_CELL_SOURCES = Object.freeze({
   // solid filled silhouette and all three of its strokes reach 3.32:1 / 3.85:1.
   // `docs/generations/phase-12-touch-plate.md` carries both `request_id`s.
   'touch-attack': '_generated/phase-12-touch/take-5-01a0563a-bae1-7842-a283-2a633f440d49.png',
+  // Re-shot 2026-08-31, take 6. The cogwheel said SETTINGS, not pause, at any size — both
+  // `ui-ux-tester` briefs independently — and its thin teeth were also the only strokes in the set
+  // that missed 3:1 at the 44 CSS px floor where a control is still live (2.905:1). Two heavy
+  // upright bars answer both at once.
+  'touch-pause': '_generated/phase-12-touch/take-6-01a056b1-2c7d-7660-b1eb-87622be0cb0e.png',
+  // Re-shot 2026-08-31, take 7. Two stacked horizontal bars read as an "equals" and evoked nothing
+  // about locomotion. A laced boot is the conventional pictograph for travelling on foot.
+  'touch-walk': '_generated/phase-12-touch/take-7-01a056b2-442f-7690-b0b8-4c6a46954279.png',
 });
 
 /** Every key the plate descriptors name, for validating `--cell`. */
