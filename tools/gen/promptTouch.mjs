@@ -75,14 +75,27 @@ export const TOUCH_PLATE_CELLS = Object.freeze([
     col: 0,
   },
   {
+    // Re-shot 2026-08-31, take 6. The cogwheel was the universal glyph for SETTINGS and said nothing
+    // about pausing at any size — found independently by both `ui-ux-tester` briefs — and its thin
+    // teeth were also the only strokes in the set that missed 3:1 at the 44 CSS px floor where a
+    // control is still live (2.905:1, strokes 1 and 4). Two heavy upright bars answer both: the
+    // conventional pause mark, and the heaviest shape in the set.
     key: 'touch-pause',
-    subject: 'a cogwheel with six square teeth and a round hole through its centre',
+    subject:
+      'two upright bars side by side, equal in height and equal in width, each bar as wide as the ' +
+      'gap between them, drawn as two solid silhouettes of a single flat tone',
     row: 1,
     col: 1,
   },
   {
+    // Re-shot 2026-08-31, take 7. Two stacked horizontal bars read as an "equals" or a list glyph
+    // and evoked nothing about locomotion — both `ui-ux-tester` briefs, independently. A boot is
+    // the conventional pictograph for travelling on foot and is one closed shape, which is what
+    // survives a downscale to 44 CSS px.
     key: 'touch-walk',
-    subject: 'two horizontal bars stacked one above the other, the upper bar half the length of the lower',
+    subject:
+      'a single tall laced work boot seen from the side, its toe pointing to the right, drawn as ' +
+      'one solid silhouette of a single flat tone',
     row: 1,
     col: 2,
   },
