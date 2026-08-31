@@ -15,7 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ART_ALPHA, ART_ALPHA_PRESSED } from '../../src/scenes/touchMarks';
-import { KEYS, TRUE_SIZE_PX, cutFace, shippedFace, strokeContrast } from './touchFaces';
+import { KEYS, LIVE_SIZES_PX, cutFace, shippedFace, strokeContrast } from './touchFaces';
 
 /**
  * ✅ **There is no shortfall table any more, and that is the re-shoot's result.**
@@ -63,6 +63,11 @@ describe('the shipped touch faces', () => {
     // Measured through this repository's own `downscale`: every component of all six reads
     // **3.32:1** at rest and **3.85:1** pressed. Before the alpha split they were 2.43-2.47:1
     // (M46); before the keyline, `walk`'s mark was 1.12:1 (M51).
+    // 🔴 SWEPT over every size in the live band, not pinned to one. `downscale` is a box filter
+    // whose destination cells are `Math.floor`-partitioned, so it is NOT monotonic in output size:
+    // pinned at 44 this gate was green while `touch-attack` stroke 2 measured **2.740:1 at 47**.
+    // `ui-ux-tester` round 2, brief 2, finding 5 — and the sweep found it on its first run.
+    for (const size of LIVE_SIZES_PX)
     for (const alpha of [ART_ALPHA, ART_ALPHA_PRESSED]) {
       for (const key of KEYS) {
         const png = shippedFace(key);
@@ -73,17 +78,17 @@ describe('the shipped touch faces', () => {
         // ⚠️ Strokes come from the PRE-HALO engraving. Labelling the finished mask let the keyline
         // merge `walk`'s two bars into one component, and an 11-pixel bridge then kept 927 erased
         // pale pixels inside a component that still scored 3.318:1. Codex round-13.
-        const { worst, surviving, count } = strokeContrast(png, mark, seeds, alpha);
+        const { worst, surviving, count } = strokeContrast(png, mark, seeds, alpha, size);
         expect(count, `${key} has no mark at all`).toBeGreaterThan(0);
 
         for (let c = 0; c < count; c += 1) {
           expect(
             surviving[c],
-            `stroke ${c} of ${key} does not survive the downscale at all`,
+            `stroke ${c} of ${key} does not survive the downscale at all at ${size} CSS px`,
           ).toBeGreaterThan(0);
           expect(
             worst[c],
-            `stroke ${c} of ${key} at alpha ${alpha} reaches only ${worst[c]!.toFixed(2)}:1 at ${TRUE_SIZE_PX} CSS px`,
+            `stroke ${c} of ${key} at alpha ${alpha} reaches only ${worst[c]!.toFixed(2)}:1 at ${size} CSS px`,
           ).toBeGreaterThan(3);
         }
       }
