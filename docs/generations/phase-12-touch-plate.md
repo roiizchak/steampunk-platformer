@@ -1,6 +1,12 @@
 # Phase 12 — the touch-control plate
 
-**9 generations · $1.35 of the `$5` touch-UI ceiling. Takes 1-3 `fal-ai/nano-banana-pro` (TAKE 3 ADOPTED for `touch-left`, `touch-right` and `touch-jump`); takes 4-9 `fal-ai/nano-banana-pro/edit` (TAKE 7 → `touch-walk`, TAKE 8 → `touch-attack`, TAKE 9 → `touch-pause`). Takes 4, 5 and 6 are SUPERSEDED and ship nothing.**
+**14 generations · $2.10 of the `$5` touch-UI ceiling. TAKE 14 `01a058ef-d51e-7ae0-a19e-0fabacfcb9df` is ADOPTED and is the source of ALL SIX shipped faces. Takes 1-9 are SUPERSEDED whole and ship nothing; takes 10-13 are the redesign's four rejected layouts.**
+
+🔴 **The whole plate was redesigned on 2026-08-31 by owner decision** — *"new designs for all the
+buttons, in the style of the gate asset"* — so every earlier take is superseded, including the three
+single-cell re-shoots that had just been adopted. The rows below are kept in full: what they record
+about the endpoint, the seed contract, the measured dimensions and the four separate ways a prompt
+can be wrong is what made the redesign cost five takes instead of nine.
 
 ⚠️ **This line said "7 generations · $1.05" with takes 5 and 6 recorded as adopted while takes 8 and
 9 had been bought and adopted.** Criterion 12.18's entire content is that these figures agree with
@@ -24,6 +30,17 @@ One plate carrying every button face on a chroma field, cut locally into 160 × 
 | 7 | `01a056b2-442f-7690-b0b8-4c6a46954279` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **walk** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-walk` — a laced work boot, **3.318:1** across the whole 44-48 band |
 | 8 | `01a056c7-347a-7691-b105-8c3cbbc43daf` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **attack** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-attack` — an outlined spanner in the set's own idiom, clearing 3:1 on every stroke at **every size in the 44-48 live band**, where take 5 read 2.740:1 at 47 |
 | 9 | `01a056c7-9d04-7fd2-bc7a-47c65b946658` | `fal-ai/nano-banana-pro/edit` | `20260804` | `image_urls` the plate's own **pause** cell, same contract | **2048 × 2048** | $0.15 | ✅ **ADOPTED** for `touch-pause` — a 2 × 2 grid of squares, which says *the level menu*, which is where the button actually goes. Clears 3:1 across the whole band |
+| 10 | `01a058e5-245c-7081-8ce2-f70467d9308e` | `fal-ai/nano-banana-pro` | `20260831` | the redesign: `BUTTON_BODY` in the gate asset's material, two rows of three | **2048 × 2048** | $0.15 | ⛔ **REJECTED — layout.** Six real buttons plus an empty ring and a blank button in a third band. The bottom row overflowed its cell by 166 px |
+| 11 | `01a058e8-fa72-7800-b1a6-ba227d1f5f88` | `fal-ai/nano-banana-pro` | `20260831` | same, layout restated as three bands with an empty middle | **2048 × 2048** | $0.15 | ⛔ **REJECTED — layout.** The three-band statement worked and a stray seventh wrench appeared in the middle band; the bottom row still sat 93-98 px on the image edge |
+| 12 | `01a058ea-8349-7cc2-82b4-656d0ea653bd` | `fal-ai/nano-banana-pro` | `20260831` | same, plus an OUTER MARGIN paragraph | **2048 × 2048** | $0.15 | ⛔ **REJECTED — layout.** Six buttons, empty middle band, no stray: the layout asked for. Nine pixels of one button on the bottom edge |
+| 13 | `01a058ec-eeda-7a83-af1a-3f8364fcf6dc` | `fal-ai/nano-banana-pro` | `20260831` | same, button diameter cut to one fifth of the width | **2048 × 2048** | $0.15 | ⛔ **REJECTED — layout.** The model drew them the same size regardless, 687 px against a 682 px cell, and flush to the bottom |
+| 14 | `01a058ef-d51e-7ae0-a19e-0fabacfcb9df` | `fal-ai/nano-banana-pro` | `20260831` | same, the margin restated LAST and on its own | **2048 × 2048** | $0.15 | ✅ **ADOPTED** — all six faces. Clean three-band layout, no stray button, rows of even height and spacing. The bottom row is STILL flush to the bottom edge, and the repair for that is ours: `padToClearEdges` pads a sheet whose art touches an edge before the split, and the row count is no longer inferred from leftover margin |
+
+🔴 **Four of the five redesign takes were rejected for LAYOUT and none for art.** The button was right
+on take 10. What cost four more takes was the bottom row sitting on the edge of the image — stated in
+the prompt four separate ways, last as its own closing paragraph with a measured depth, and drawn
+flush every time. **A prompt cannot be made to hold a constraint the model will not hold**, and the
+fix that worked was on our side of the line: pad the sheet, and stop inferring rows from margin.
 
 Files, prompts and job records: `_generated/phase-12-touch/`.
 
@@ -255,9 +272,10 @@ every source, and `tests/unit/touch-sources.test.ts` re-cuts from those exact by
 directories and compares against the committed oracle. It used to be *"checked by hashing before and
 after"*, by hand, tied to no particular file. Codex round 16, finding 6.
 
-**Touch-UI figure: $1.35 of the $5 ceiling. $3.65 remains.**
+**Touch-UI figure: $2.10 of the $5 ceiling. $2.90 remains.**
 
 ⚠️ **This line read `$1.05` and the table above it ended at take 7 while takes 8 and 9 had shipped.**
 Criterion 12.18's whole content is that these figures agree, and it was falsely PASS **three times**:
 round 14 caught the QA log, round 16 caught this file's header, round 17 caught its table and its
-total. Corrected 2026-08-31. **A header is not a record; the rows are.**
+total. Corrected 2026-08-31. **A header is not a record; the rows are.** Corrected again the same
+day for takes 10-14 and the redesign: **14 takes, $2.10**.

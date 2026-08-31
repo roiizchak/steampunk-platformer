@@ -180,34 +180,34 @@ papered over.
 | M43 | leave the retired layer's walk callback wired to the live session | 12.5 | RED 1/10 |
 | M44 | rest the art at 0.69 — inside the old bound, away from the measured 0.55 | 12.14 | RED 1/8 |
 | M45 | copy one face's central MARK onto another, leaving both discs alone | 12.17 | RED 1/4, at 0.0 % |
-| M46 | ship the faces faded FLAT — ink at the plate's alpha, as before the contrast repair | 12.14, 12.17 | RED 3/7, the ink at **2.43:1** |
-| M47 | draw the generated face at `PLATE_ALPHA`, double-fading the baked plate | 12.14 | **GREEN — the assertion was an identity** → RED 2/7 |
+| M46 | ship the faces faded FLAT — ink at the plate's alpha, as before the contrast repair | 12.14, 12.17 | RED 3/7, the ink at **2.43:1** — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M47 | draw the generated face at `PLATE_ALPHA`, double-fading the baked plate | 12.14 | **GREEN — the assertion was an identity** → RED 2/7 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M48 | toggle walk for every pointer, not on the 0 -> 1 transition | 12.5 | RED 1/8 |
 | M49 | open the level menu for every pointer that lands on pause | 12.5 | RED 1/8 |
 | M50 | drop a cell descriptor, as the circular count guard allowed | 12.17 | RED 1/7 |
 | M51 | dim only the WALK engraving, leaving every highlight outside it | 12.14 | RED 1/7 |
 | M53 | sweep every `.png` in the output directory, not just the touch faces | 12.19 | **GREEN — the sweep was inline and ungated** → RED 1/5 |
 | M54 | revert the CLI entry guard to the `%20` comparison that never matched | 12.19 | **GREEN — nothing ran the CLI** → RED 1/2 |
-| M55 | do not thicken the engraving, leaving only the hairline keyline | 12.14 | **GREEN — nothing pinned the thickening** → RED 1/6 |
-| M56 | paint the keyline over the mark as well as around it | 12.14 | RED 1/6 |
-| M57 | paint the keyline over transparent pixels too | 12.14 | **GREEN twice — the fixture could not reach the guard** → RED 1/6 |
+| M55 | do not thicken the engraving, leaving only the hairline keyline | 12.14 | **GREEN — nothing pinned the thickening** → RED 1/6 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M56 | paint the keyline over the mark as well as around it | 12.14 | RED 1/6 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M57 | paint the keyline over transparent pixels too | 12.14 | **GREEN twice — the fixture could not reach the guard** → RED 1/6 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M58 | make the OUTER brass opaque, leaving the modal alpha where it was | 12.14 | RED 1/7, at alpha 255 against a baked 165 |
 | M59 | fade the whole `walk` engraving except 32 pixels | 12.14, 12.17 | RED 2/7 |
-| M60 | erase `walk`'s 4 112 mark pixels to baked brass, keeping two 4x4 ink cells | 12.14, 12.17 | **GREEN — the mask shrank with the damage** → RED 3/8 |
-| M61 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone | 12.17 | **GREEN — the bound was one-sided** → RED 2/8 |
-| M62 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and opaque | 12.17 | **GREEN — classified as neither ink nor plate** → RED 2/8 |
-| M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for |
+| M60 | erase `walk`'s 4 112 mark pixels to baked brass, keeping two 4x4 ink cells | 12.14, 12.17 | **GREEN — the mask shrank with the damage** → RED 3/8 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M61 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone | 12.17 | **GREEN — the bound was one-sided** → RED 2/8 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M62 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and opaque | 12.17 | **GREEN — classified as neither ink nor plate** → RED 2/8 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M64 | swap the `left` and `right` COLUMNS in `TOUCH_PLATE_CELLS` and re-cut | 12.17 | **GREEN — both oracles moved together** → RED 1/8 |
-| M65 | skip the pale halo below the face midpoint, and re-cut | 12.14 | **GREEN at 3.318:1 — one best pixel for a whole glyph** → RED 1/8, `pause` stroke 3 at 1.21:1 |
+| M65 | skip the pale halo below the face midpoint, and re-cut | 12.14 | **GREEN at 3.318:1 — one best pixel for a whole glyph** → RED 1/8, `pause` stroke 3 at 1.21:1 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M66 | mirror the COLUMNS in the builder's grid selection, leaving the descriptors alone | 12.17 | **GREEN — the pinned table is only half the contract** → RED 1/2 |
 | M67 | M65 plus an 11-pixel pale bridge, so the damaged glyph stays one component | 12.14 | **GREEN — the halo defined the strokes** → RED 1/1 |
-| M68 | collapse every label in `markComponents` to zero | 12.14 | **GREEN — the split had no gate of its own** → RED 3/5 |
-| M69 | keep the mark bit on a transparent pixel, skipping only the paint | 12.14 | **GREEN, and the picture is byte-identical** → RED 1/8 |
+| M68 | collapse every label in `markComponents` to zero | 12.14 | **GREEN — the split had no gate of its own** → RED 3/5 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
+| M69 | keep the mark bit on a transparent pixel, skipping only the paint | 12.14 | **GREEN, and the picture is byte-identical** → RED 1/8 — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M70 | make `main()` ignore the parsed mode and always cut from the plate | 12.17, 12.19 | RED 2/18 — 12 files written where 6 were claimed |
 | M71 | route the `--cell` build's output to a fixed key instead of the requested one | 12.17, 12.19 | RED 1/18 |
 | M72 | draw 2000 extra copies of each control's OWN face on the touch arm, then re-run the criterion's own paired procedure | 12.11, 12.19 | **GREEN at 40 copies — 0.0563 ms against a 0.5 ms bound**; **GREEN at 800 under sweep load — 0.5007 ms, a 0.0007 ms margin** → RED at 2000: 1.7684 ms, every pair over 1.32 |
 | M73 | run the controls' own `TouchSession.refresh()` 6000 extra times per frame on the touch arm | 12.11, 12.19 | **GREEN twice — the `scene.update` hook was inert (Phaser caches `sys.sceneUpdate`), then 300/frame gave 0.0500 ms** → RED at 6000: 0.9000 ms, every pair 0.9000 |
-| M74 | measure the contrast sweep at every size in the live band instead of pinning 44 | 12.14, 12.19 | **RED on its first run — `touch-attack` stroke 2 at 2.740:1 at 47 CSS px**, between two sizes both reading 3.318:1. The box filter is not monotonic in output size |
+| M74 | measure the contrast sweep at every size in the live band instead of pinning 44 | 12.14, 12.19 | **RED on its first run — `touch-attack` stroke 2 at 2.740:1 at 47 CSS px**, between two sizes both reading 3.318:1. The box filter is not monotonic in output size — ⛔ **WITHDRAWN 2026-08-31**: the gate this reddened was deleted with the ink pass |
 | M75 | return `workMedianMs: 0` from the sampler, collapsing BOTH arms' main-thread measurement | 12.11, 12.19 | RED 1/1 — **and only the floor fired.** The delta stayed inside `median-only` +/-0.5 because zero minus zero is zero: the case a paired statistic structurally cannot see |
 | M76 | make `--adopt` ignore the override map and recut every face from the plate | 12.17, 12.19 | RED 1/19 — the re-shot cell silently reinstated from the plate |
 | M77 | make `familyFailures` return `[]` for every set | 12.17, 12.19 | RED 9/14 — a re-toned cell, a lighter button, a square bezel, six identically non-brass buttons, **a button lit from the wrong side**, **one rotated half a turn**, **one that darkens a band out of the comparison**, and the builder on both its paths |
@@ -222,6 +222,15 @@ papered over.
 | M85b | write `--cell`'s candidate before the family is assembled | 12.17, 12.19 | RED 2/5 — **including the missing-neighbour case**, which M85 alone could not red: that path throws in `requireFile`, upstream of the write loop, so only a write moved above it can prove the refusal is atomic |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
+
+🔴 **Thirteen more rows are WITHDRAWN, and 12.19 is NOT MET because of it.** M46, M47, M55-M57,
+M60-M63, M65, M68, M69 and M74 each reddened a gate that no longer exists: the owner's redesign
+deleted `touchInk.mjs`, `shipped-touch-contrast.test.ts`, `touch-atlas-ink.test.ts`,
+`touch-strokes.test.ts` and the two ink-derived assertions in `shipped-touch.test.ts`. A row that
+cannot red anything is the same defect M82 was, and pretending otherwise would repeat exactly the
+mistake round 20 caught. **Re-establishing this criterion means building red proofs for the gates
+that replaced them** — the two-band alpha claim, the byte-for-byte cut-face equality and the
+central-square distinctness comparison — and that has not been done. 12.19 is **NOT MET**.
 
 🔴 **M82 is WITHDRAWN from the matrix, and that is not a tidy-up.** 12.19 requires every row here to
 red at least one named gate, and M82 sat in the table reporting `GREEN 0/24` — so the criterion was

@@ -107,11 +107,11 @@ Every task in every phase inherits these. Copied verbatim from the locked decisi
   can fix. A separate number from the art ceiling because it funds a separate deliverable, by owner
   instruction, even though the endpoint is the same `nano-banana-pro` stills the art ceiling covers.
   One 1:1 2K plate is `$0.15`, so `$5` buys **33 takes** against a realistic need of one plus
-  retries. **Running total: `$1.35`** — **nine** takes, three whole-plate on `nano-banana-pro` and
-  six single-cell on `nano-banana-pro/edit`. Adopted: `01a05115-d226-72b2-ae41-8998a11940cf`
-  (the plate, three faces), `01a056c7-347a-7691-b105-8c3cbbc43daf` (`touch-attack`),
-  `01a056c7-9d04-7fd2-bc7a-47c65b946658` (`touch-pause`),
-  `01a056b2-442f-7690-b0b8-4c6a46954279` (`touch-walk`). Four takes bought and superseded. See
+  retries. **Running total: `$2.10`** — **fourteen** takes, eight whole-plate on `nano-banana-pro` and
+  six single-cell on `nano-banana-pro/edit`. Adopted: **`01a058ef-d51e-7ae0-a19e-0fabacfcb9df`**,
+  the redesigned plate, and it is the source of all six shipped faces. The other thirteen are
+  superseded or rejected and ship nothing — including three single-cell re-shoots that had been
+  adopted for one day, because the owner redesigned the whole plate on 2026-08-31. See
   [generations/phase-12-touch-plate.md](generations/phase-12-touch-plate.md). As with the other two, `GENERATION-LOG.md`'s figure is live
   and this line is the ceiling it is measured against; they must agree.
 - **The fal audio-spend ceiling is `$5`**, set by owner decision on 2026-08-16 **before Phase 7's
