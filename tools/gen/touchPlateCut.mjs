@@ -25,8 +25,11 @@
  * Three takes, three layouts: six buttons in 3/2/1, seven in 3/2/2, and finally nine in a clean
  * 3 x 3 - the six faces that were asked for, in the rows they were asked for, plus a duplicate of
  * the second row. The extra content is a whole repeated ROW, not an invented face, so every cell
- * read here is unambiguous. Rows 0 and 1 are read and row 2 ignored; `TOUCH_PLATE_SHEET_ROWS` is
- * the one place that decision lives.
+ * read here is unambiguous. Rows 0 and 1 are read and row 2 ignored.
+
+ * ⚠️ **`TOUCH_PLATE_SHEET_ROWS` is no longer the decision** — it is the record of what take 3 drew.
+ * `plateCells` calls `measurePlateRows` and splits by what the sheet actually has, because the
+ * redesign asks for two rows and may not get them. Codex round 19, finding 7.
  *
  * Recorded in `docs/generations/phase-12-touch-plate.md` with all three `request_id`s.
  */
@@ -39,11 +42,11 @@ import { figureMetrics, splitGrid } from './sheets.mjs';
 import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from './promptTouch.mjs';
 
 /**
- * How many rows the SHEET has, which is not how many rows the LAYOUT has.
+ * What take 3 DREW: three rows, where the prompt asked for two and the model duplicated the second.
  *
- * The prompt asked for two and the model drew three, duplicating the second. Splitting by the real
- * row count is what keeps every cell aligned; `TOUCH_PLATE_CELLS` then names the two rows that are
- * read. A future plate that honours the prompt sets this to 2 and nothing else changes.
+ * ⚠️ **This is a record, not a decision, and it used to be the decision.** `plateCells` measures the
+ * sheet with `measurePlateRows` and splits by that. Kept because the adopted plate's own layout is
+ * worth stating, and because a disagreement between it and a measurement is worth noticing.
  */
 export const TOUCH_PLATE_SHEET_ROWS = 3;
 
@@ -53,6 +56,14 @@ export const TOUCH_PLATE_SHEET_ROWS = 3;
  * full-width transparent band at all, because the bezel is solid.
  */
 const ROW_GAP_PX = 6;
+
+/**
+ * How far a row's spacing may sit from the mean before the sheet is refused rather than gridded.
+ *
+ * Take 3's steps are 686 and 676 px — 0.7 % apart. 15 % admits real drawing variation and refuses
+ * the sheet that skips a row, whose steps differ by a whole cell.
+ */
+const MAX_PITCH_DRIFT = 0.15;
 
 /**
  * **How many rows of buttons this plate actually has**, counted from the keyed image.
@@ -104,9 +115,23 @@ export function measurePlateRows(keyed) {
   // plates in the unit tests do exactly that, two rows drawn in a three-row grid — and counting
   // drawn rows would then split a three-row sheet into two and cut every button in half. The pitch
   // is the cell height, and the grid is however many of those fit the image.
-  let pitch = 0;
-  for (let i = 1; i < starts.length; i += 1) pitch += starts[i] - starts[i - 1];
-  pitch /= starts.length - 1;
+  const steps = [];
+  for (let i = 1; i < starts.length; i += 1) steps.push(starts[i] - starts[i - 1]);
+  const pitch = steps.reduce((a, b) => a + b, 0) / steps.length;
+
+  // 🔴 **An average turns an irregular sheet into a confident wrong answer.** Rows at 0, 300 and 900
+  // average to a pitch of 450 that describes no row on the plate, and the cutter would then slice
+  // every button with it. A sheet whose spacing is not near-uniform is REFUSED, because a number a
+  // human can argue with beats a number that silently halves six buttons.
+  // Codex round 19, finding 4.
+  const drift = Math.max(...steps.map((v) => Math.abs(v - pitch))) / pitch;
+  if (drift > MAX_PITCH_DRIFT) {
+    throw new Error(
+      `the plate's rows are spaced ${steps.join(', ')} px apart — uneven by ` +
+        `${(drift * 100).toFixed(0)}%, over ${(MAX_PITCH_DRIFT * 100).toFixed(0)}%, so this sheet ` +
+        'is not a grid and cannot be split like one',
+    );
+  }
 
   return Math.max(starts.length, Math.round(h / pitch));
 }

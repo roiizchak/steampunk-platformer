@@ -174,11 +174,22 @@ export function touchPlatePrompt(template) {
     `BACKING SHEET: ${TOUCH_PLATE_CHROMA}, perfectly flat and evenly lit, filling every part of the ` +
       'image that is not a button — the margins and the space between the buttons.',
     '',
+    // 🔴 The shading clause is GONE, and `FLAT_GLYPH` says what is there instead.
+    //
+    // This paragraph asked for a glyph "deeply cut and filled with dark shadow", and that interior
+    // shading is exactly what the round-13 stroke split isolated into four sub-3:1 fragments on the
+    // wrench. The single-cell prompt was repaired for it and the WHOLE-PLATE prompt was not, so the
+    // redesign would have re-bought the defect the re-shoots were bought to remove. Codex round 19,
+    // finding 6, and round 15 finding 4 named it as a precondition on the redesign.
+    //
+    // Stated positively per STYLE.md section 6: `FLAT_GLYPH` is the same sentence the single-cell
+    // path uses, so there is one description of what a glyph is and not two that agree today.
     'EACH BUTTON: a circular Victorian brass control, cast and polished, with a raised riveted ' +
       'bezel around the rim, a slightly domed face, visible patina in the recesses and a warm amber ' +
       'highlight along the upper-left edge. Every button is the same size, the same brass and the ' +
-      'same lighting as every other. Each carries one engraved glyph, deeply cut and filled with ' +
-      'dark shadow so it reads at a glance:',
+      'same lighting as every other.',
+    '',
+    FLAT_GLYPH,
     faces,
     '',
     rendering,

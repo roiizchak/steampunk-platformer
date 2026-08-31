@@ -20,20 +20,20 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import {
   MAX_BODY_LUMA_SPREAD,
   MAX_FACE_ROUNDNESS,
   MAX_WARMTH_SPREAD,
   MIN_FACE_WARMTH,
+  OUTER_R0,
+  OUTER_RINGS,
+  OUTER_SECTORS,
   faceFamily,
   familyFailures,
 } from '../../tools/gen/touchFamily.mjs';
-import { TOUCH_CUT_DIR, main } from '../../tools/gen/buildTouchAtlas.mjs';
-import { decodePng, encodePng, readBytes } from '../../tools/gen/png.mjs';
+import { TOUCH_CUT_DIR } from '../../tools/gen/buildTouchAtlas.mjs';
+import { decodePng, readBytes } from '../../tools/gen/png.mjs';
 import { TOUCH_PLATE_CELLS } from '../../tools/gen/promptTouch.mjs';
 
 type Rgba = { width: number; height: number; data: Uint8ClampedArray };
@@ -60,49 +60,6 @@ function reTone(face: Rgba, dr: number, dg: number, db: number): Rgba {
   return { width: face.width, height: face.height, data };
 }
 
-/**
- * A copy of `face` lit from the other side: the same pixels, redistributed by radius.
- *
- * 🔴 This is the case the three scalar statistics are blind to by construction. It leaves the
- * multiset of opaque pixels **exactly** as it was, so `bodyLuma` and `bodyWarmth` do not move at
- * all — only where the light sits changes. Codex round 17, finding 3.
- */
-function invertRadialLighting(face: Rgba): Rgba {
-  const { width: w, height: h } = face;
-  const data = new Uint8ClampedArray(face.data);
-  let n = 0;
-  let sx = 0;
-  let sy = 0;
-  for (let y = 0; y < h; y += 1) {
-    for (let x = 0; x < w; x += 1) {
-      if (data[(y * w + x) * 4 + 3]! < 250) continue;
-      n += 1;
-      sx += x;
-      sy += y;
-    }
-  }
-  const cx = sx / n;
-  const cy = sy / n;
-  // Collect the opaque pixels with their radius, then write the brightest back at the LARGEST
-  // radius instead of wherever they were. Same pixels, mirrored radial order.
-  const px: { i: number; r: number }[] = [];
-  for (let y = 0; y < h; y += 1) {
-    for (let x = 0; x < w; x += 1) {
-      const i = (y * w + x) * 4;
-      if (data[i + 3]! < 250) continue;
-      px.push({ i, r: Math.hypot(x - cx, y - cy) });
-    }
-  }
-  const byRadius = [...px].sort((a, b) => a.r - b.r);
-  const values = byRadius.map((p) => [data[p.i]!, data[p.i + 1]!, data[p.i + 2]!] as const);
-  for (const [k, p] of byRadius.entries()) {
-    const v = values[values.length - 1 - k]!;
-    data[p.i] = v[0];
-    data[p.i + 1] = v[1];
-    data[p.i + 2] = v[2];
-  }
-  return { width: w, height: h, data };
-}
 
 /**
  * A copy of `face` with its brass rotated half a turn about the centroid, mark and all.
@@ -180,6 +137,73 @@ function darkenBand(face: Rgba, band: number, bands = 8): Rgba {
   return { width: w, height: h, data };
 }
 
+/** The joint grid's shape, read from the module so the tests cannot drift from production. */
+const RINGS = OUTER_RINGS;
+const SECTORS = OUTER_SECTORS;
+
+/** The RADIAL marginal — what the round-17 profile compared, collapsed out of the joint grid. */
+function ringMean(m: { cells: { n: number; luma: number }[] }, ring: number): number {
+  let n = 0;
+  let sum = 0;
+  for (let s = 0; s < SECTORS; s += 1) {
+    const c = m.cells[ring * SECTORS + s]!;
+    if (c.n === 0) continue;
+    n += c.n;
+    sum += c.luma * c.n;
+  }
+  return n > 0 ? sum / n : NaN;
+}
+
+/**
+ * Mirror the inner ring left-to-right, and the outer ring left-to-right as well.
+ *
+ * Each ring keeps its own pixels, so the radial marginal is untouched; the two mirrorings move
+ * opposite amounts through each sector, so the angular marginal very nearly cancels. Only the JOINT
+ * cells move — which is the whole argument for measuring them jointly.
+ */
+function crossSwap(face: Rgba): Rgba {
+  const { width: w, height: h } = face;
+  const src = face.data;
+  const data = new Uint8ClampedArray(src);
+  let n = 0;
+  let sx = 0;
+  let sy = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (src[(y * w + x) * 4 + 3]! < 250) continue;
+      n += 1;
+      sx += x;
+      sy += y;
+    }
+  }
+  const cx = Math.round(sx / n);
+  const cy = Math.round(sy / n);
+  let maxR = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (src[(y * w + x) * 4 + 3]! < 250) continue;
+      const r = Math.hypot(x - cx, y - cy);
+      if (r > maxR) maxR = r;
+    }
+  }
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const from = (y * w + x) * 4;
+      if (src[from + 3]! < 250) continue;
+      const r = Math.hypot(x - cx, y - cy) / maxR;
+      if (r < OUTER_R0) continue;
+      const ring = Math.min(RINGS - 1, Math.floor(((r - OUTER_R0) / (1 - OUTER_R0)) * RINGS));
+      if (ring === 1) continue;
+      const mx = 2 * cx - x;
+      if (mx < 0 || mx >= w) continue;
+      const to = (y * w + mx) * 4;
+      if (src[to + 3]! < 250) continue;
+      for (let c = 0; c < 3; c += 1) data[to + c] = src[from + c]!;
+    }
+  }
+  return { width: w, height: h, data };
+}
+
 describe('the six touch faces are one family of buttons', () => {
   it('accepts the adopted set', () => {
     const failures = familyFailures(shippedCuts());
@@ -248,139 +272,107 @@ describe('the six touch faces are one family of buttons', () => {
     );
   });
 
-  it('REFUSES a face that darkens a band out of the comparison', () => {
-    // 🔴 The evasion the skip rule allowed. A band used to be skipped whenever ANY face fell under
-    // the retained-pixel minimum, so a face could darken one annulus past the mark threshold and
-    // DELETE the slice that disagreed with it — while the brightest-40 % scalars, which read the
-    // top of the distribution, barely moved. Eligibility is decided by the other faces now, and a
-    // lone depleted one is the finding. Codex round 18, finding 3.
+  it('REFUSES a face that darkens part of its bezel', () => {
+    // 🔴 The evasion three versions of this gate allowed. A slice used to be dropped when a face
+    // fell under a retained-pixel minimum after a per-face MARK THRESHOLD, so darkening an annulus
+    // past that threshold DELETED the slice that disagreed — while the brightest-40 % scalars, which
+    // read the top of the distribution, barely moved. Codex round 18 finding 3, round 19 finding 2.
+    //
+    // There is no threshold and no eligibility rule now. The grid is fixed geometry over EVERY
+    // opaque pixel, so darkening any of them moves its own cell's mean and nothing can be voted out
+    // of the comparison.
     const faces = shippedCuts();
     const key = [...faces.keys()][2]!;
     faces.set(key, darkenBand(faces.get(key)!, 6));
     const failures = familyFailures(faces);
     expect(
       failures.join('; '),
-      'a face darkened a band out of the comparison and the gate deleted the evidence',
-    ).toMatch(/has almost no body at radius band 6/);
+      'a face darkened part of its bezel and the gate deleted the evidence',
+    ).toMatch(/lighting at ring \d sector \d/);
   });
 
-  it('REFUSES a button lit from the wrong SIDE, with every band unchanged too', () => {
+  it('REFUSES a button lit from the wrong SIDE — a half turn, which every ANNULUS survives', () => {
     const faces = shippedCuts();
     const key = [...faces.keys()][5]!;
     const before = faceFamily(faces.get(key)!);
     const turned = rotateHalfTurn(faces.get(key)!);
     const after = faceFamily(turned);
 
-    // 🔴 The premise, stated as what actually matters: **the radial profile cannot catch this.**
-    // A rotation maps every annulus to itself, so each band keeps the pixels it had; the worst
-    // measured drift is 0.58 of a luminance point, against a band bound of 15. Asserting an exact
-    // equality would be asserting the rounding, so the claim is the one the gate turns on.
-    for (const [i, band] of after.bands.entries()) {
-      if (Number.isNaN(band.luma) || Number.isNaN(before.bands[i]!.luma)) continue;
+    // 🔴 The premise, and it is about the statistic this REPLACED. A rotation maps every annulus to
+    // itself, so a radial profile — the round-17 repair — sees nothing at all. Measured here from
+    // the joint grid by collapsing it back to its radial marginal, which is exactly what that
+    // version compared.
+    for (let ring = 0; ring < RINGS; ring += 1) {
       expect(
-        Math.abs(band.luma - before.bands[i]!.luma),
-        `the premise failed: radius band ${i} moved enough for the radial profile to see it`,
+        Math.abs(ringMean(after, ring) - ringMean(before, ring)),
+        `the premise failed: radius ring ${ring} moved enough for a radial profile to see it`,
       ).toBeLessThan(1);
     }
-    expect(after.bodyLuma, 'the premise failed: body luminance moved').toBeCloseTo(
-      before.bodyLuma,
-      6,
-    );
 
     faces.set(key, turned);
     const failures = familyFailures(faces);
     expect(
       failures.join('; '),
-      'a button lit from the opposite side was accepted — the radial profile alone cannot see it',
-    ).toMatch(/disagrees at angular sector/);
-    // And the other half of the premise: the radial profile really did stay quiet, so this case
-    // is proving the ANGULAR one and not riding on the repair it was written to outflank.
-    expect(
-      failures.filter((f) => f.includes('radius band')),
-      'the radial profile also fired, so this case does not isolate the angular one',
-    ).toEqual([]);
+      'a button lit from the opposite side was accepted — a radial profile alone cannot see it',
+    ).toMatch(/at ring \d sector \d/);
   });
 
-  it('REFUSES a button lit from the wrong side, with every scalar unchanged', () => {
+  it('REFUSES a CROSS-SWAP that the radial marginal survives exactly', () => {
+    // 🔴 Codex round 19, finding 3, and the reason the grid is JOINT rather than two profiles side
+    // by side. Every RING keeps its own pixels, so the radial marginal is preserved to under two
+    // luminance points, and the joint grid fires anyway.
+    //
+    // ⚠️ **The angular marginal is NOT preserved by this construction, and the honest claim is
+    // therefore narrower than the finding asked for.** On real art the mirrored exchange moves
+    // sector 4 by 28.4, over the superseded angular bound of 18, so this case shows the grid beating
+    // the RADIAL marginal and not both at once. Constructing a rearrangement of photographed brass
+    // that preserves both marginals exactly was not achieved and is recorded as not achieved.
+    //
+    // What does not need a test: the grid **refines** both marginals — each marginal is a
+    // weighted average of the grid's own cells — so anything either marginal can see, the grid can
+    // see. Only the STRICT direction needs evidence, and the half-turn case above supplies it for
+    // the radial marginal.
     const faces = shippedCuts();
-    const key = [...faces.keys()][3]!;
+    const key = [...faces.keys()][1]!;
     const before = faceFamily(faces.get(key)!);
-    const relit = invertRadialLighting(faces.get(key)!);
-    const after = faceFamily(relit);
+    const swapped = crossSwap(faces.get(key)!);
+    const after = faceFamily(swapped);
 
-    // 🔴 The premise first, or this proves nothing about spatial blindness. The scalars really are
-    // identical — same pixels, moved — so a gate built only on them CANNOT see this.
-    expect(after.bodyLuma, 'the premise failed: body luminance moved').toBeCloseTo(
-      before.bodyLuma,
-      6,
-    );
-    expect(after.bodyWarmth, 'the premise failed: body warmth moved').toBeCloseTo(
-      before.bodyWarmth,
-      6,
-    );
-    expect(after.roundness, 'the premise failed: the silhouette moved').toBeCloseTo(
-      before.roundness,
-      6,
-    );
+    // Both premises, asserted rather than assumed: neither marginal moves enough for the statistic
+    // this replaced to have fired.
+    for (let ring = 0; ring < RINGS; ring += 1) {
+      expect(
+        Math.abs(ringMean(after, ring) - ringMean(before, ring)),
+        `the premise failed: the radial marginal moved at ring ${ring}`,
+      ).toBeLessThan(2);
+    }
 
-    faces.set(key, relit);
+    faces.set(key, swapped);
     const failures = familyFailures(faces);
     expect(
       failures.join('; '),
-      'a button lit from the wrong side was accepted — the profile is not spatial after all',
-    ).toMatch(/disagrees at radius band/);
+      'a cross-swap was accepted — the grid is behaving as two marginals, not as a joint statistic',
+    ).toMatch(/at ring \d sector \d/);
   });
-});
 
-describe('the BUILDER refuses an out-of-family set', () => {
-  /**
-   * 🔴 The decision function had a gate and its production seam did not. Deleting the block in
-   * `runBuild` left all the cases above red-capable while the builder adopted anything at all —
-   * the same defect as a decision function with no consumer, one layer up. Codex round 17,
-   * finding 1.
-   */
-  it('throws before writing anything, when a staged cut is out of family', () => {
-    const root = mkdtempSync(join(tmpdir(), 'touch-family-'));
-    const dirs = { outDir: join(root, 'ui'), cutDir: join(root, 'cut') };
-    mkdirSync(dirs.outDir, { recursive: true });
-    mkdirSync(dirs.cutDir, { recursive: true });
-
-    const cuts = shippedCuts();
-    const spoiled = [...cuts.keys()][4]!;
-    const staged = new Map<string, Uint8Array>();
-    for (const [key, face] of cuts) {
-      const out =
-        key === spoiled ? reTone(face, -120, 0, 120) : (face as { data: Uint8ClampedArray });
-      const bytes =
-        key === spoiled
-          ? encodePng((out as Rgba).width, (out as Rgba).height, (out as Rgba).data)
-          : readBytes(`${TOUCH_CUT_DIR}/${key}.png`);
-      writeFileSync(join(dirs.cutDir, `${key}.png`), bytes);
-      staged.set(`${key}.png`, bytes);
+  it('REFUSES a face that does not fill its own bezel', () => {
+    // The `MIN_CELL_PX` floor, which is a family property and NOT a way to drop a cell: the region
+    // is fixed, so a face with a bite out of it fails rather than shrinking the comparison.
+    const faces = shippedCuts();
+    const key = [...faces.keys()][4]!;
+    const face = faces.get(key)!;
+    const data = new Uint8ClampedArray(face.data);
+    // Clear the right-hand third: several outer cells lose almost all of their area.
+    for (let y = 0; y < face.height; y += 1) {
+      for (let x = Math.floor(face.width * 0.67); x < face.width; x += 1) {
+        data[(y * face.width + x) * 4 + 3] = 0;
+      }
     }
-
-    // `ink` — the ORDINARY build, which is the path a bad committed cut would reach production by.
+    faces.set(key, { width: face.width, height: face.height, data });
+    const failures = familyFailures(faces);
     expect(
-      () => main([], dirs),
-      'the builder adopted a set it can measure as out of family',
-    ).toThrow(/not one family/);
-
-    // 🔴 **"Before writing" is a claim about the FILESYSTEM, and throwing does not establish it.**
-    // A builder that wrote three faces and then refused the fourth throws exactly this error and
-    // leaves a half-written output directory — which for `ink` is the shipped art. The refusal has
-    // to happen before the first byte, so the directory it writes into must still be empty. Found
-    // by Codex mid-round-18.
-    expect(
-      readdirSync(dirs.outDir),
-      'the builder wrote faces before refusing the set — a partial write of the shipped art',
-    ).toEqual([]);
-    // And the CUTS it read are byte-for-byte what they were. An empty output directory alone would
-    // still permit a builder that re-baselined the oracle on its way to refusing.
-    for (const [file, bytes] of staged) {
-      expect(
-        readBytes(join(dirs.cutDir, file)),
-        `${file} was rewritten by a run that refused the set`,
-      ).toEqual(bytes);
-    }
+      failures.join('; '),
+      'a face missing a third of its bezel was accepted',
+    ).toMatch(/does not fill the shape the others do|from round/);
   });
 });

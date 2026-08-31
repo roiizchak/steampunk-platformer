@@ -27,3 +27,5 @@ export function cutPlate(bytes: Uint8Array): {
   width: number;
   height: number;
 };
+
+export function measurePlateRows(keyed: import('./png.d.mts').RgbaImage): number;

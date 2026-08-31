@@ -5,57 +5,56 @@
  * (`touchPlateCut.mjs`), and every downstream gate measures a face against itself: alpha band, ink
  * reproduction, mark distinctness, per-stroke contrast. **Not one of them compares two faces.** So a
  * sheet whose six buttons carry visibly different bezels, brass or patina passes the entire pipeline
- * — and a single-cell re-shoot passes it even more easily, because the model is asked in prose to
+ * — and a single-cell re-shoot passes it more easily still, because the model is asked in prose to
  * keep the family and prose is not an invariant. Codex round 15, finding 6.
  *
  * Owner decision, 2026-08-31: **build this before adopting the whole-plate redesign**, not after.
- * A redesign is exactly when a family invariant pays, and it is a precondition of the spend.
  *
- * ## What is measured, and what deliberately is not
- *
- * Three statistics, all read off the CUT face — post-key, post-crop, post-downscale — because that
- * is what ships:
+ * ## What is measured
  *
  * - **`roundness`** — the standard deviation of the silhouette's edge radius about its centroid,
- *   over the mean of that radius. A plate is a disc; a disc scores ~0.01 and a rounded square ~0.05.
- *   This is the bezel's SHAPE, and it is scale-free, which matters because `cutFace` crops to the
- *   figure's own bounds. **Coverage and mean radius are NOT used**: the crop-to-bounds forces both
- *   to about 0.78 and 79.5 px whatever the model drew, so they measure the cutter, not the art.
- * - **`bodyLuma`** — the mean luminance of the brightest 40 % of opaque pixels, which is the plate
- *   body rather than the mark cut into it.
- * - **`bodyWarmth`** — mean `R - B` over those same pixels. Brass is warm; steel, pewter and a
- *   desaturated re-interpretation are not, and this separates them at a glance where luminance
- *   cannot.
- * - **`bands`** — a RADIAL profile: mean luminance and mean warmth in each of `RADIAL_BANDS`
- *   annuli from the centroid, over non-mark pixels only.
- * - **`sectors`** — an ANGULAR profile, the same two means in each of `ANGULAR_SECTORS` wedges.
- *   This is where the LIGHT DIRECTION lives, and it is plainly there in the adopted set: sectors 4
- *   and 5 read ~140 against ~100 at sectors 0-2. A radial profile integrates around the whole
- *   annulus and so cannot see a button lit from the opposite side; rotating a face's brass by half
- *   a turn leaves every scalar AND every band untouched. Found by Codex mid-round-18.
+ *   over the mean of that radius. A disc scores ~0.01 and a rounded square ~0.05. Scale-free, which
+ *   matters because `cutFace` crops to the figure's own bounds. **Coverage and mean radius are NOT
+ *   used**: crop-to-bounds forces both to ~0.78 and ~79.5 px whatever the model drew, so they
+ *   measure the cutter, not the art.
+ * - **`bodyLuma`** / **`bodyWarmth`** — mean luminance and mean `R - B` over the brightest 40 % of
+ *   opaque pixels. Brass is warm; steel, pewter and a desaturated re-interpretation are not.
+ * - **`cells`** — a JOINT polar grid, `OUTER_RINGS` x `OUTER_SECTORS`, over the outer
+ *   `1 - OUTER_R0` of the radius, over **every** opaque pixel in it.
  *
- * 🔴 **The three scalars alone are spatially blind, and that was a real hole.** Permute a face's
- * brass pixels and `bodyLuma` and `bodyWarmth` are unchanged to the last decimal, so a button lit
- * from below, a patina moved from the rim to the centre, or an entirely different inner bezel
- * inside the same circular outline all passed. Codex round 17, finding 3. The radial profile is
- * what makes the comparison positional: it is exactly where lighting, patina and bezel structure
- * live.
+ * ## Three earlier versions of the spatial half were each defeated, and how
  *
- * ⚠️ **The MARK is excluded, and by a THRESHOLD rather than a semantic mask.** Six buttons that say
- * six different things must draw six different glyphs — 12.17 requires exactly that — so comparing
- * them would reject every correct set. A pixel counts as mark when its luminance falls below
- * `MARK_LUMA_SHARE` of its own face's `bodyLuma`; on the adopted set that is ~78 against a body of
- * ~130 and a mark of ~30, which separates cleanly. It is not a claim about meaning, and a band
- * where any face has fewer than `MIN_BAND_PX` non-mark pixels is skipped rather than compared,
- * because a mark-dominated annulus has nothing to say about the button.
+ * 🔴 **Scalars alone are spatially blind.** Permute a face's brass and `bodyLuma` and `bodyWarmth`
+ * are unchanged to the last decimal, so a button lit from below or with its patina moved passed.
+ * *(Codex round 17, finding 3.)*
  *
- * ## The bounds are a policy, fixed before the redesign exists
+ * 🔴 **A radial profile is angularly blind.** Rotating a face half a turn maps every annulus to
+ * itself, so every band mean is identical while the light plainly comes from the other side.
+ * *(Codex round 18, finding 2.)*
  *
- * Measured on the six adopted faces on 2026-08-31, before any new plate was generated:
- * `roundness` 0.0094-0.0110, `bodyLuma` 128.54-133.33, `bodyWarmth` 113.40-118.96. The spreads
- * below are four to twelve times those, so they reject a button from a different family and not the
- * ordinary variation a single sheet already carries. Fixing them now is what stops a new plate's own
- * numbers from choosing the bound that admits it.
+ * 🔴 **Radial and angular profiles side by side are still only two MARGINALS.** Swap inner-left with
+ * inner-right and outer-right with outer-left and both one-dimensional summaries are preserved
+ * exactly while the lighting is visibly rearranged. *(Codex round 19, finding 3.)* Hence a **joint**
+ * grid: a cell is one radius band AND one angular wedge, and no rearrangement between cells survives
+ * it.
+ *
+ * ## Two things this version deliberately does NOT have, and why
+ *
+ * ⚠️ **No mark threshold.** Earlier versions dropped dark pixels as "mark" using a per-face
+ * luminance cut, which handed a drifted face the power to erase the evidence against it: darken an
+ * annulus past the threshold and the disagreeing slice stopped being compared, while the
+ * brightest-40 % scalars barely moved *(Codex round 18, finding 3)*. The grid is confined to the
+ * **outer** part of the radius instead, where the buttons carry bezel rather than glyph, and every
+ * opaque pixel there counts. Darkening any of them now moves its cell's mean directly.
+ *
+ * ⚠️ **No eligibility rule.** Deciding which slices to compare from how many faces survived their
+ * own threshold meant two depleted faces could still erase a slice, and one legitimately larger mark
+ * was condemned as damage *(Codex round 19, finding 2)*. The region is FIXED GEOMETRY, so no face
+ * can vote a cell out of the comparison, and there is nothing to be eligible for.
+ *
+ * ⚠️ **The MARK is not compared**, which the outer region achieves by construction rather than by
+ * classification. Six buttons that say six different things must draw six different glyphs; 12.17
+ * requires exactly that. This asks whether they are the same BUTTON.
  */
 
 /** @typedef {import('./png.d.mts').RgbaImage} RgbaImage */
@@ -71,6 +70,49 @@ export const MAX_ROUNDNESS_SPREAD = 0.02;
 export const MAX_BODY_LUMA_SPREAD = 20;
 export const MAX_WARMTH_SPREAD = 25;
 
+/** Where the compared region starts, as a share of the face's own maximum radius. */
+export const OUTER_R0 = 0.5;
+
+/** The joint polar grid over that region. 24 cells, none under 480 px on the adopted set. */
+export const OUTER_RINGS = 3;
+export const OUTER_SECTORS = 8;
+
+/**
+ * A cell holding fewer opaque pixels than this in any face is a failure, not a skip.
+ *
+ * The adopted set's smallest cell holds **483**. This is a floor on the button FILLING its own
+ * outer region, which is a family property in its own right — and it can never be used to drop a
+ * cell from the comparison, because the region is fixed geometry.
+ */
+export const MIN_CELL_PX = 100;
+
+/**
+ * **How far one face may sit from the other five, per cell.** Owner decision, 2026-08-31.
+ *
+ * The question is an OUTLIER question — *is one of these six not from this family?* — so the
+ * statistic is each face's deviation from the **median of the other five**, not the spread of all
+ * six. A spread includes the suspect's own contribution and so is dragged toward admitting it.
+ *
+ * Measured on the adopted six: the worst within-family deviation is **17.5** (luminance) and
+ * **16.0** (warmth), at `touch-attack`, cell 6.
+ *
+ * 🔴 **These bounds were fixed at 2.5x those figures BEFORE any mutation was run against this
+ * statistic**, and they are 44 and 40 for that reason alone. The multiple is the one the owner
+ * approved on 2026-08-31 for the statistic this replaces; the previous version's 15/25 was chosen
+ * *after* seeing that 25/40 failed to red its mutation, which is post-data threshold selection and
+ * is what CLAUDE.md § 5 forbids *(Codex round 18, finding 5)*. **Whether the mutations red at 44/40
+ * is an outcome to report, never a reason to move these.**
+ *
+ * They remain **PROVISIONAL**, on the owner's condition: **the whole-plate redesign is the held-out
+ * set.** It does not exist yet, so it cannot have influenced these numbers, and it is the art they
+ * were built for. If the new plate reds them honestly, that is a finding to bring to the owner.
+ *
+ * ⚠️ `tests/unit/touch-family-policy.test.ts` pins these exact values. A red there is an approval
+ * checkpoint, never something to clear by editing the pin.
+ */
+export const MAX_CELL_LUMA_DEVIATION = 44;
+export const MAX_CELL_WARMTH_DEVIATION = 40;
+
 /** Opaque means opaque: a halo pixel is neither body nor background. */
 const BODY_ALPHA = 250;
 
@@ -83,68 +125,11 @@ const RAYS = 360;
 /** The share of opaque pixels, brightest first, taken as the plate BODY rather than the mark. */
 const BODY_SHARE = 0.4;
 
-/** Annuli in the radial profile, from the centroid out to the farthest opaque pixel. */
-const RADIAL_BANDS = 8;
-
-/** Wedges in the angular profile, from the centroid. */
-const ANGULAR_SECTORS = 8;
-
-/** A pixel under this share of its own face's `bodyLuma` is mark, not body. */
-const MARK_LUMA_SHARE = 0.6;
-
-/** A slice — annulus or wedge — with fewer non-mark pixels than this in ANY face is skipped. */
-const MIN_SLICE_PX = 200;
-
 /**
- * Per-band spread across the set.
- *
- * Measured on the adopted six, 2026-08-31: luminance at most **5.9** and warmth at most **10.1**
- * over the five comparable bands. These are **~2.5x** that.
- *
- * 🔴 **PROVISIONAL, AND CHOSEN AFTER SEEING THE MUTATION. Owner decision, 2026-08-31.**
- *
- * They were 25 and 40 — 4x — and at 4x the profile did not trip on the radial-inversion case, which
- * moves the worst band by 30 (warmth) and 23 (luminance). Changing them to 2.5x so that it does is
- * **post-data threshold selection**, which is the move CLAUDE.md § 5 forbids, and calling it "the
- * statistic almost ordered its mutation" was an exception invented on the spot to permit it. Codex
- * round 18, finding 5, and it was right.
- *
- * The owner approved these as **provisional**, on one condition: **the whole-plate redesign is the
- * held-out set.** It does not exist yet, so it cannot have influenced these numbers, and it is the
- * art these bounds were built for. If the new plate reds them honestly, that is a **finding to
- * bring to the owner** — never a licence to move the bound to admit it.
- *
- * ⚠️ Until that plate is measured, treat every family verdict as resting on a threshold whose only
- * validation is the set it was derived from.
- */
-export const MAX_BAND_LUMA_SPREAD = 15;
-export const MAX_BAND_WARMTH_SPREAD = 25;
-
-/**
- * Per-sector spread across the set. Measured on the adopted six, 2026-08-31: luminance at most
- * **6.9** and warmth at most **10.9**, every sector comparable. Same ~2.5x as the bands.
- */
-export const MAX_SECTOR_LUMA_SPREAD = 18;
-export const MAX_SECTOR_WARMTH_SPREAD = 28;
-
-/** Fewer comparable slices than this and the profile is not measuring the button at all. */
-const MIN_COMPARABLE_SLICES = 3;
-
-/**
- * The share of a slice's opaque area that must survive the mark threshold for that face to be
- * carrying body there.
- *
- * Measured on the adopted six: the outer bands run 0.49-0.99 and the inner ones 0.00-0.63, because
- * a boot covers more of the centre than a two-by-two grid does — which is legitimate and is why
- * only slices where the SET agrees there is body get compared.
- */
-const MIN_RETAINED_SHARE = 0.45;
-
-/**
- * The three family numbers for one cut face.
+ * The family numbers for one cut face.
  *
  * @param {RgbaImage} face
- * @returns {{ roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[], sectors: { n: number, luma: number, warmth: number }[] }}
+ * @returns {{ roundness: number, bodyLuma: number, bodyWarmth: number, cells: { n: number, luma: number, warmth: number }[] }}
  */
 export function faceFamily(face) {
   const { width: w, height: h, data: d } = face;
@@ -195,60 +180,54 @@ export function faceFamily(face) {
     }
   }
   if (opaque.length === 0) throw new Error('the face has no fully opaque pixel — there is no body to measure');
+
   const byLuma = [...opaque].sort((a, b) => a.luma - b.luma);
   const body = byLuma.slice(Math.floor(byLuma.length * (1 - BODY_SHARE)));
-  const bodyLuma = body.reduce((a, b) => a + b.luma, 0) / body.length;
 
-  // The radial profile, over non-mark pixels. `maxR` normalises it, so a face framed a few pixels
-  // larger by the crop is compared band for band rather than pixel for pixel.
-  const markBelow = bodyLuma * MARK_LUMA_SHARE;
   let maxR = 0;
   for (const p of opaque) {
     const r = Math.hypot(p.x - cx, p.y - cy);
     if (r > maxR) maxR = r;
   }
-  const bands = Array.from({ length: RADIAL_BANDS }, () => ({ n: 0, total: 0, luma: 0, warmth: 0 }));
-  const sectors = Array.from({ length: ANGULAR_SECTORS }, () => ({ n: 0, total: 0, luma: 0, warmth: 0 }));
+
+  const raw = Array.from({ length: OUTER_RINGS * OUTER_SECTORS }, () => ({ n: 0, luma: 0, warmth: 0 }));
   for (const p of opaque) {
     const dx = p.x - cx;
     const dy = p.y - cy;
-    const bi = Math.min(RADIAL_BANDS - 1, Math.floor((Math.hypot(dx, dy) / maxR) * RADIAL_BANDS));
-    let a0 = Math.atan2(dy, dx);
-    if (a0 < 0) a0 += 2 * Math.PI;
-    const si = Math.min(ANGULAR_SECTORS - 1, Math.floor((a0 / (2 * Math.PI)) * ANGULAR_SECTORS));
-    // 🔴 `total` counts the slice's whole opaque area, mark included, and it is counted BEFORE
-    // the mark is dropped. Without it a face could darken an annulus out of the comparison and
-    // the gate would delete the very slice that disagreed. Codex round 18, finding 3.
-    bands[bi].total += 1;
-    sectors[si].total += 1;
-    if (p.luma < markBelow) continue;
-    const band = bands[bi];
-    band.n += 1;
-    band.luma += p.luma;
-    band.warmth += p.warmth;
-
-    const sector = sectors[si];
-    sector.n += 1;
-    sector.luma += p.luma;
-    sector.warmth += p.warmth;
+    const r = Math.hypot(dx, dy) / maxR;
+    if (r < OUTER_R0) continue;
+    const ring = Math.min(OUTER_RINGS - 1, Math.floor(((r - OUTER_R0) / (1 - OUTER_R0)) * OUTER_RINGS));
+    let angle = Math.atan2(dy, dx);
+    if (angle < 0) angle += 2 * Math.PI;
+    const sector = Math.min(OUTER_SECTORS - 1, Math.floor((angle / (2 * Math.PI)) * OUTER_SECTORS));
+    const cell = raw[ring * OUTER_SECTORS + sector];
+    cell.n += 1;
+    cell.luma += p.luma;
+    cell.warmth += p.warmth;
   }
-
-  /** @param {{ n: number, total: number, luma: number, warmth: number }[]} raw */
-  const mean = (raw) =>
-    raw.map((b) => ({
-      n: b.n,
-      share: b.total > 0 ? b.n / b.total : NaN,
-      luma: b.n > 0 ? b.luma / b.n : NaN,
-      warmth: b.n > 0 ? b.warmth / b.n : NaN,
-    }));
 
   return {
     roundness,
-    bodyLuma,
+    bodyLuma: body.reduce((a, b) => a + b.luma, 0) / body.length,
     bodyWarmth: body.reduce((a, b) => a + b.warmth, 0) / body.length,
-    bands: mean(bands),
-    sectors: mean(sectors),
+    cells: raw.map((c) => ({
+      n: c.n,
+      luma: c.n > 0 ? c.luma / c.n : NaN,
+      warmth: c.n > 0 ? c.warmth / c.n : NaN,
+    })),
   };
+}
+
+/** The median of a list, which is what a face is compared against. */
+function median(values) {
+  const s = [...values].sort((a, b) => a - b);
+  const mid = s.length / 2;
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** Where a cell index sits, for an error message someone has to act on. */
+function cellName(i) {
+  return `ring ${Math.floor(i / OUTER_SECTORS)} sector ${i % OUTER_SECTORS}`;
 }
 
 /**
@@ -264,7 +243,7 @@ export function familyFailures(faces) {
   /** @type {string[]} */
   const bad = [];
   const measured = [...faces].map(
-    /** @returns {[string, { roundness: number, bodyLuma: number, bodyWarmth: number, bands: { n: number, luma: number, warmth: number }[], sectors: { n: number, luma: number, warmth: number }[] }]} */
+    /** @returns {[string, ReturnType<typeof faceFamily>]} */
     ([key, face]) => [key, faceFamily(face)],
   );
 
@@ -294,64 +273,35 @@ export function familyFailures(faces) {
     }
   }
 
-  // 🔴 The SPATIAL comparison, in two directions. Everything above is a scalar over an unordered
-  // bag of pixels and is blind to where they are; these are not.
-  //
-  // **Both are needed and neither subsumes the other.** A radial profile integrates around the whole
-  // annulus, so a face lit from the opposite side — the same brass rotated half a turn — leaves
-  // every band identical. An angular profile integrates from centre to rim, so a patina moved from
-  // the rim inward leaves every sector identical. Codex named the second hole in round 17 and the
-  // first mid-round-18.
-  //
-  // A slice is compared only where every face has real non-mark area in it: a mark-dominated
-  // annulus or wedge says nothing about the button.
-  for (const [slices, count, bounds, where] of /** @type {['bands' | 'sectors', number, [number, number], string][]} */ ([
-    ['bands', RADIAL_BANDS, [MAX_BAND_LUMA_SPREAD, MAX_BAND_WARMTH_SPREAD], 'radius band'],
-    ['sectors', ANGULAR_SECTORS, [MAX_SECTOR_LUMA_SPREAD, MAX_SECTOR_WARMTH_SPREAD], 'angular sector'],
-  ])) {
-    let comparable = 0;
-    for (let i = 0; i < count; i += 1) {
-      const carries = (m) => m[slices][i].share >= MIN_RETAINED_SHARE && m[slices][i].n >= MIN_SLICE_PX;
-      const withBody = measured.filter(([, m]) => carries(m));
-
-      // 🔴 **Eligibility is decided by the OTHERS, and a lone depleted face is a FAILURE rather
-      // than a reason to delete the slice.** It used to be "skip if ANY face is short", which
-      // handed a drifted face the power to erase the evidence against it: darken one annulus past
-      // the mark threshold and the disagreeing slice simply stopped being compared, while the
-      // brightest-40 % scalars barely moved. Codex round 18, finding 3.
-      if (withBody.length < measured.length - 1) continue;
-      comparable += 1;
-
+  // 🔴 The JOINT polar grid, over fixed geometry, with every opaque pixel counted. Each face is
+  // measured against the CONSENSUS of the others, cell by cell, which is the outlier question this
+  // gate actually asks. Nothing here can be voted out of the comparison by the face under suspicion.
+  if (measured.length >= 3) {
+    for (let i = 0; i < OUTER_RINGS * OUTER_SECTORS; i += 1) {
       for (const [key, m] of measured) {
-        if (carries(m)) continue;
-        bad.push(
-          `${key} has almost no body at ${where} ${i} of ${count} — ${(m[slices][i].share * 100).toFixed(0)}% ` +
-            `of that slice survives the mark threshold where every other face keeps at least ` +
-            `${(MIN_RETAINED_SHARE * 100).toFixed(0)}%`,
-        );
-      }
-
-      for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
-        ['luma', bounds[0], 'lighting'],
-        ['warmth', bounds[1], 'patina'],
-      ])) {
-        const vals = withBody.map(([, m]) => m[slices][i][stat]);
-        const lo = Math.min(...vals);
-        const hi = Math.max(...vals);
-        if (hi - lo > bound) {
-          const worst = withBody.map(([key, m]) => `${key} ${m[slices][i][stat].toFixed(1)}`).join(', ');
+        if (m.cells[i].n < MIN_CELL_PX) {
           bad.push(
-            `${what} disagrees at ${where} ${i} of ${count}: spans ${(hi - lo).toFixed(1)}, over ${bound} — ${worst}`,
+            `${key} puts only ${m.cells[i].n} px in ${cellName(i)} of its own bezel, under ` +
+              `${MIN_CELL_PX} — it does not fill the shape the others do`,
           );
+          continue;
+        }
+        for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
+          ['luma', MAX_CELL_LUMA_DEVIATION, 'lighting'],
+          ['warmth', MAX_CELL_WARMTH_DEVIATION, 'patina'],
+        ])) {
+          const others = measured.filter(([o]) => o !== key).map(([, om]) => om.cells[i][stat]);
+          if (others.some((v) => Number.isNaN(v))) continue;
+          const consensus = median(others);
+          const deviation = Math.abs(m.cells[i][stat] - consensus);
+          if (deviation > bound) {
+            bad.push(
+              `${what} at ${cellName(i)}: ${key} reads ${m.cells[i][stat].toFixed(1)} against the ` +
+                `other faces' ${consensus.toFixed(1)} — off by ${deviation.toFixed(1)}, over ${bound}`,
+            );
+          }
         }
       }
-    }
-    if (comparable < MIN_COMPARABLE_SLICES) {
-      bad.push(
-        `only ${comparable} of ${count} ${where}s carry comparable body in every face, under ` +
-          `${MIN_COMPARABLE_SLICES} — the marks cover so much of these buttons that their bezels ` +
-          'cannot be compared at all',
-      );
     }
   }
 

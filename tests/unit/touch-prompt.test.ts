@@ -82,9 +82,30 @@ describe('touchButtonPrompt asks for ONE control, and not for shading', () => {
     expect(prompt).toContain('one flat uniform tone at one even depth');
   });
 
-  it('the PLATE prompt still carries that clause, so this is a difference and not a sweep', () => {
-    // Without this the assertion above passes on a repository where the clause was simply deleted
-    // everywhere — which would be a silent change to the adopted plate's own record.
-    expect(touchPlatePrompt(template)).toContain(SHADING_CLAUSE);
+  it('the PLATE prompt no longer carries it EITHER, and asks for the same flat inlay', () => {
+    // 🔴 This case used to assert the opposite — that the plate prompt still carried the clause —
+    // so that removing it from the single-cell path read as a difference rather than a repository-
+    // wide deletion. That was right while the adopted plate was the one take 3 drew.
+    //
+    // It is wrong now. The whole-plate prompt is what the REDESIGN will be bought with, and leaving
+    // the clause in it would re-buy the exact defect the three re-shoots were bought to remove:
+    // "deeply cut and filled with dark shadow" is the interior shading the round-13 stroke split
+    // isolated into four sub-3:1 fragments. Codex round 19 finding 6; named as a precondition on the
+    // redesign by round 15 finding 4.
+    //
+    // Both prompts now compose the SAME `FLAT_GLYPH` sentence, so there is one description of what
+    // a glyph is rather than two that happen to agree.
+    const plate = touchPlatePrompt(template);
+    expect(
+      plate.includes(SHADING_CLAUSE),
+      'the whole-plate prompt still asks for the interior shading that fragments at true size',
+    ).toBe(false);
+    expect(plate).toContain('one flat uniform tone at one even depth');
+    // 🔴 And it is the same sentence, not a second copy of the idea.
+    const cell = touchButtonPrompt(template, TOUCH_PLATE_CELLS[3]!);
+    const flat = 'The button carries one engraved glyph, cut as a single continuous inlay';
+    expect(plate.includes(flat) && cell.includes(flat), 'the two prompts describe glyphs separately').toBe(
+      true,
+    );
   });
 });

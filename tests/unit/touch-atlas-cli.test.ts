@@ -133,12 +133,15 @@ function familyCellPixels(
     }
   }
   // The mark: a dark square whose position is the cell's identity. Inside the disc, so the cell
-  // stays one component.
+  // stays one component — and well inside `OUTER_R0`, so it never reaches the annulus the family
+  // gate compares. Real glyphs sit centrally for the same reason; a synthetic mark placed out at
+  // 0.4r spilled past 0.5r once downscaled and read as a lighting disagreement, which was the
+  // fixture misbehaving and not the gate.
   const angle = (mark * 2 * Math.PI) / 9;
-  const mx = cx + Math.cos(angle) * r * 0.4;
-  const my = cy + Math.sin(angle) * r * 0.4;
-  for (let y = my - 18; y <= my + 18; y += 1) {
-    for (let x = mx - 18; x <= mx + 18; x += 1) {
+  const mx = cx + Math.cos(angle) * r * 0.15;
+  const my = cy + Math.sin(angle) * r * 0.15;
+  for (let y = my - 12; y <= my + 12; y += 1) {
+    for (let x = mx - 12; x <= mx + 12; x += 1) {
       const i = (Math.round(y) * w + Math.round(x)) * 4;
       data[i] = 30;
       data[i + 1] = 22;

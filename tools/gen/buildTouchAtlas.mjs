@@ -159,9 +159,20 @@ export function runBuild(args, dirs) {
   if (args.mode === 'cell') {
     for (const cell of TOUCH_PLATE_CELLS) {
       if (family.has(cell.key)) continue;
-      const beside = path.join(dirs.cutDir, `${cell.key}.png`);
-      if (fs.existsSync(beside)) family.set(cell.key, readPng(beside));
+      // 🔴 REQUIRED, not "if it happens to be there". Loading neighbours conditionally meant a
+      // directory missing four cuts judged a family of two and wrote the candidate anyway — the
+      // check passing because there was nothing left to disagree with it. Codex round 19, finding 1.
+      family.set(cell.key, readPng(requireFile(path.join(dirs.cutDir, `${cell.key}.png`))));
     }
+  }
+  // And the merged set is exactly the six the descriptors name, asserted rather than assumed.
+  const judged = [...family.keys()].sort();
+  const expected = TOUCH_PLATE_CELLS.map((c) => c.key).sort();
+  if (judged.join(',') !== expected.join(',')) {
+    throw new Error(
+      `the family check was handed [${judged.join(', ')}] and the descriptors name ` +
+        `[${expected.join(', ')}] — a partial set is not a family`,
+    );
   }
   const notFamily = familyFailures(family);
   if (notFamily.length > 0) {
