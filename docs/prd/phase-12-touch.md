@@ -214,7 +214,11 @@ papered over.
 | M79 | delete the family check from `runBuild`, leaving `familyFailures` intact | 12.17, 12.19 | RED 1/9 — **only the builder case.** The decision function's own six stayed green, which is exactly the hole: a gated function with an ungated seam |
 | M78 | drop `stopSubmitting()` from the clean drain, restoring drain-frame query submission | 12.11, 12.19 | RED 1/1 — **8** queries opened after the window closed, which is also the size of the contamination the repair removed |
 
-**Twenty-seven rows reddened nothing, and all twenty-seven were holes rather than mutations to drop.**
+**Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
+
+⚠️ This said *"twenty-seven rows"*: 27 is the number of green ATTEMPTS, and several rows went green
+more than once before they reddened — M72 twice, M73 twice. Twenty-two rows carry a GREEN marker.
+Codex round 18, finding 7.
 
 🔴 **M75 is the mutation the floor was introduced without.** `MIN_TOUCH_ARM_CPU_MS` replaced a
 per-pair "collapse guard" that could not detect a collapse, and 12.19 was PASS with no red proof for

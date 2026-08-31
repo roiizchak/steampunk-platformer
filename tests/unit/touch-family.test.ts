@@ -141,6 +141,45 @@ function rotateHalfTurn(face: Rgba): Rgba {
   return { width: w, height: h, data };
 }
 
+/** A copy of `face` with one radius band darkened below any plausible mark threshold. */
+function darkenBand(face: Rgba, band: number, bands = 8): Rgba {
+  const { width: w, height: h } = face;
+  const data = new Uint8ClampedArray(face.data);
+  let n = 0;
+  let sx = 0;
+  let sy = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (data[(y * w + x) * 4 + 3]! < 250) continue;
+      n += 1;
+      sx += x;
+      sy += y;
+    }
+  }
+  const cx = sx / n;
+  const cy = sy / n;
+  let maxR = 0;
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      if (data[(y * w + x) * 4 + 3]! < 250) continue;
+      const r = Math.hypot(x - cx, y - cy);
+      if (r > maxR) maxR = r;
+    }
+  }
+  for (let y = 0; y < h; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const i = (y * w + x) * 4;
+      if (data[i + 3]! < 250) continue;
+      const b = Math.min(bands - 1, Math.floor((Math.hypot(x - cx, y - cy) / maxR) * bands));
+      if (b !== band) continue;
+      data[i] = 20;
+      data[i + 1] = 15;
+      data[i + 2] = 6;
+    }
+  }
+  return { width: w, height: h, data };
+}
+
 describe('the six touch faces are one family of buttons', () => {
   it('accepts the adopted set', () => {
     const failures = familyFailures(shippedCuts());
@@ -207,6 +246,22 @@ describe('the six touch faces are one family of buttons', () => {
     expect(failures.join('; '), 'six identically non-brass buttons were accepted').toMatch(
       /that is not brass/,
     );
+  });
+
+  it('REFUSES a face that darkens a band out of the comparison', () => {
+    // 🔴 The evasion the skip rule allowed. A band used to be skipped whenever ANY face fell under
+    // the retained-pixel minimum, so a face could darken one annulus past the mark threshold and
+    // DELETE the slice that disagreed with it — while the brightest-40 % scalars, which read the
+    // top of the distribution, barely moved. Eligibility is decided by the other faces now, and a
+    // lone depleted one is the finding. Codex round 18, finding 3.
+    const faces = shippedCuts();
+    const key = [...faces.keys()][2]!;
+    faces.set(key, darkenBand(faces.get(key)!, 6));
+    const failures = familyFailures(faces);
+    expect(
+      failures.join('; '),
+      'a face darkened a band out of the comparison and the gate deleted the evidence',
+    ).toMatch(/has almost no body at radius band 6/);
   });
 
   it('REFUSES a button lit from the wrong SIDE, with every band unchanged too', () => {
@@ -292,15 +347,16 @@ describe('the BUILDER refuses an out-of-family set', () => {
 
     const cuts = shippedCuts();
     const spoiled = [...cuts.keys()][4]!;
+    const staged = new Map<string, Uint8Array>();
     for (const [key, face] of cuts) {
       const out =
         key === spoiled ? reTone(face, -120, 0, 120) : (face as { data: Uint8ClampedArray });
-      writeFileSync(
-        join(dirs.cutDir, `${key}.png`),
+      const bytes =
         key === spoiled
           ? encodePng((out as Rgba).width, (out as Rgba).height, (out as Rgba).data)
-          : readBytes(`${TOUCH_CUT_DIR}/${key}.png`),
-      );
+          : readBytes(`${TOUCH_CUT_DIR}/${key}.png`);
+      writeFileSync(join(dirs.cutDir, `${key}.png`), bytes);
+      staged.set(`${key}.png`, bytes);
     }
 
     // `ink` — the ORDINARY build, which is the path a bad committed cut would reach production by.
@@ -318,5 +374,13 @@ describe('the BUILDER refuses an out-of-family set', () => {
       readdirSync(dirs.outDir),
       'the builder wrote faces before refusing the set — a partial write of the shipped art',
     ).toEqual([]);
+    // And the CUTS it read are byte-for-byte what they were. An empty output directory alone would
+    // still permit a builder that re-baselined the oracle on its way to refusing.
+    for (const [file, bytes] of staged) {
+      expect(
+        readBytes(join(dirs.cutDir, file)),
+        `${file} was rewritten by a run that refused the set`,
+      ).toEqual(bytes);
+    }
   });
 });

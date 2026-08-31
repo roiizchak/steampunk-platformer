@@ -10,7 +10,7 @@ export const MAX_BAND_WARMTH_SPREAD: number;
 export const MAX_SECTOR_LUMA_SPREAD: number;
 export const MAX_SECTOR_WARMTH_SPREAD: number;
 
-type Slice = { n: number; luma: number; warmth: number };
+type Slice = { n: number; share: number; luma: number; warmth: number };
 
 export function faceFamily(face: RgbaImage): {
   roundness: number;

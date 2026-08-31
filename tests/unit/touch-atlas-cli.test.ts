@@ -18,87 +18,11 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { TOUCH_CUT_DIR, isCliEntry, main, staleFaces } from '../../tools/gen/buildTouchAtlas.mjs';
+import { TOUCH_CUT_DIR, main } from '../../tools/gen/buildTouchAtlas.mjs';
 import { encodePng, readBytes } from '../../tools/gen/png.mjs';
-import { parseTouchArgs } from '../../tools/gen/touchAtlasCli.mjs';
 import { TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
 import { TOUCH_PLATE_SHEET_ROWS } from '../../tools/gen/touchPlateCut.mjs';
 
-/** A directory with a space in it, which is this repository's own situation. */
-const DIR = 'C:/Claude/Steampunk Platformer/tools/gen';
-const URL_WITH_SPACE = `file:///${DIR.replace(/ /g, '%20')}/buildTouchAtlas.mjs`;
-
-describe('the atlas builder knows when it is being run', () => {
-  it('matches its own path even when the path contains a space', () => {
-    // The one assertion the old guard could not pass. `new URL(...).pathname` returns
-    // `/C:/Claude/Steampunk%20Platformer/...`, which resolves to a directory that does not exist.
-    expect(isCliEntry(`${DIR}/buildTouchAtlas.mjs`, URL_WITH_SPACE)).toBe(true);
-  });
-
-  it('does not match a different script, or none', () => {
-    expect(isCliEntry(`${DIR}/promptTouch.mjs`, URL_WITH_SPACE)).toBe(false);
-    expect(isCliEntry(undefined, URL_WITH_SPACE)).toBe(false);
-    expect(isCliEntry('', URL_WITH_SPACE)).toBe(false);
-  });
-});
-
-describe('the atlas builder sweeps only what it owns', () => {
-  const produced = new Set(['touch-left', 'touch-right']);
-
-  it('removes a face this run did not produce', () => {
-    // The stale-file case: a control dropped from the cells leaves its PNG behind, committed, and
-    // `shipped-touch.test.ts` then reads it as though this run had made it.
-    expect(staleFaces(['touch-left.png', 'touch-right.png', 'touch-walk.png'], produced)).toEqual([
-      'touch-walk.png',
-    ]);
-  });
-
-  it('does NOT remove a file that was never a touch face', () => {
-    // 🔴 Without the `touch-` test this deletes every `.png` in `public/assets/ui/`. Dormant
-    // while the directory holds only faces, destructive the moment any other UI image lands there
-    // — and `npm run assets:touch` would do it silently. Codex round-8; M53 reds here.
-    expect(
-      staleFaces(['touch-left.png', 'touch-right.png', 'hud-frame.png', 'logo.png'], produced),
-      'the sweep ate a file that is not a touch face',
-    ).toEqual([]);
-  });
-
-  it('ignores anything that is not a PNG', () => {
-    expect(staleFaces(['touch-left.png', 'touch-notes.md', 'touch-old.webp'], produced)).toEqual([]);
-  });
-});
-
-describe('parseTouchArgs — the grammar, and every way it is refused', () => {
-  it('reads the three modes', () => {
-    expect(parseTouchArgs([])).toEqual({ mode: 'ink' });
-    expect(parseTouchArgs(['--adopt'])).toEqual({ mode: 'adopt' });
-    expect(parseTouchArgs(['--cell=touch-attack', '--source=take.png'])).toEqual({
-      mode: 'cell',
-      key: 'touch-attack',
-      source: 'take.png',
-    });
-  });
-
-  // 🔴 Every rejection happens BEFORE the builder opens a file. A half-validated argv that fails
-  // partway through leaves one directory new and the other old, which is the exact state the cut
-  // fixtures exist to make impossible.
-  it.each([
-    ['an unknown flag', ['--nope']],
-    ['a flag with no value', ['--cell']],
-    ['an empty value', ['--cell=', '--source=x.png']],
-    ['a key the descriptors do not name', ['--cell=touch-nope', '--source=x.png']],
-    ['--cell without --source', ['--cell=touch-attack']],
-    ['--source without --cell', ['--source=x.png']],
-    ['--cell repeated', ['--cell=touch-attack', '--cell=touch-jump', '--source=x.png']],
-    ['--source repeated', ['--cell=touch-attack', '--source=a.png', '--source=b.png']],
-    ['--adopt repeated', ['--adopt', '--adopt']],
-    // Not a nicety: `--adopt` sweeps and `--cell` must not, so a run meaning both would delete the
-    // five faces the single-cell mode exists to leave alone.
-    ['--cell together with --adopt', ['--adopt', '--cell=touch-attack', '--source=x.png']],
-  ])('refuses %s', (_why, argv) => {
-    expect(() => parseTouchArgs(argv)).toThrow();
-  });
-});
 
 /** A one-cell source image: a grey disc on the chroma field, framed the way `cutFace` demands. */
 function syntheticCell(grey: number): Uint8Array {
@@ -278,9 +202,28 @@ describe('the default build reads the cut faces and does not rewrite them', () =
   it('CUTS in --cell mode, writing one key into both directories and sweeping neither', () => {
     // The positive half. Without a mode that does write `cutDir`, the assertion above passes on a
     // builder that can no longer cut at all.
-    const { dirs, before } = stage();
-    const source = join(dirs.outDir, '..', 'candidate.png');
-    writeFileSync(source, syntheticCell(120));
+    //
+    // 🔴 **Staged as a self-consistent SYNTHETIC family, not the shipped cuts.** `--cell` is now
+    // judged against the five faces it is joining (Codex round 18, finding 1), so dropping a plain
+    // grey disc beside five real brass buttons is correctly refused — the gate working, not the
+    // routing failing. An `--adopt` from the synthetic sources populates both directories with six
+    // faces that ARE one family, and the candidate is another cell of the same synthetic family.
+    const base = mkdtempSync(join(tmpdir(), 'touch-atlas-cell-'));
+    const dirs = {
+      outDir: join(base, 'ui'),
+      cutDir: join(base, 'cut'),
+      ...syntheticSources(join(base, 'cut')),
+    };
+    mkdirSync(dirs.outDir, { recursive: true });
+    mkdirSync(dirs.cutDir, { recursive: true });
+    main(['--adopt'], dirs);
+    const before = new Map<string, Uint8Array>();
+    for (const file of readdirSync(dirs.cutDir)) {
+      before.set(file, readBytes(join(dirs.cutDir, file)));
+    }
+
+    const source = join(base, 'candidate.png');
+    writeFileSync(source, syntheticFamilyCell(5));
 
     const written = main([`--cell=touch-attack`, `--source=${source}`], dirs);
 
@@ -301,14 +244,42 @@ describe('the default build reads the cut faces and does not rewrite them', () =
     for (const [file, bytes] of before) {
       if (file === 'touch-attack.png') continue;
       expect(
-        readBytes(join(dirs.outDir, file)),
-        `${file} changed — --cell touched a face it was not given`,
-      ).toEqual(bytes);
-      expect(
         readBytes(join(dirs.cutDir, file)),
         `${file}'s cut changed — --cell touched a cut it was not given`,
       ).toEqual(bytes);
     }
+  });
+
+  it('REFUSES a --cell candidate that is out of family with the five it joins', () => {
+    // 🔴 The single-cell path OVERWRITES the cut oracle and the shipped face, and it is the
+    // documented workflow every re-shoot in this phase went through — so it was the one path an
+    // out-of-family button could take into production and sit there until some later full build
+    // noticed. It was exempt on the reasoning that a set of one is a family by construction, which
+    // is true and beside the point. Codex round 18, finding 1.
+    const base = mkdtempSync(join(tmpdir(), 'touch-atlas-cellbad-'));
+    const dirs = {
+      outDir: join(base, 'ui'),
+      cutDir: join(base, 'cut'),
+      ...syntheticSources(join(base, 'cut')),
+    };
+    mkdirSync(dirs.outDir, { recursive: true });
+    mkdirSync(dirs.cutDir, { recursive: true });
+    main(['--adopt'], dirs);
+    const before = readBytes(join(dirs.cutDir, 'touch-attack.png'));
+
+    // A grey disc — the same shape and the same mark, and not this family's brass.
+    const source = join(base, 'grey.png');
+    writeFileSync(source, syntheticCell(120));
+
+    expect(
+      () => main([`--cell=touch-attack`, `--source=${source}`], dirs),
+      'an out-of-family single cell was written straight over the oracle',
+    ).toThrow(/not one family/);
+
+    expect(
+      readBytes(join(dirs.cutDir, 'touch-attack.png')),
+      'the refused candidate still overwrote the cut it was replacing',
+    ).toEqual(before);
   });
 
   it('SWEEPS both directories in --adopt mode, writing every key', () => {

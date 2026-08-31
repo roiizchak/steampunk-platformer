@@ -126,6 +126,16 @@ export const MAX_SECTOR_WARMTH_SPREAD = 28;
 const MIN_COMPARABLE_SLICES = 3;
 
 /**
+ * The share of a slice's opaque area that must survive the mark threshold for that face to be
+ * carrying body there.
+ *
+ * Measured on the adopted six: the outer bands run 0.49-0.99 and the inner ones 0.00-0.63, because
+ * a boot covers more of the centre than a two-by-two grid does — which is legitimate and is why
+ * only slices where the SET agrees there is body get compared.
+ */
+const MIN_RETAINED_SHARE = 0.45;
+
+/**
  * The three family numbers for one cut face.
  *
  * @param {RgbaImage} face
@@ -192,28 +202,40 @@ export function faceFamily(face) {
     const r = Math.hypot(p.x - cx, p.y - cy);
     if (r > maxR) maxR = r;
   }
-  const bands = Array.from({ length: RADIAL_BANDS }, () => ({ n: 0, luma: 0, warmth: 0 }));
-  const sectors = Array.from({ length: ANGULAR_SECTORS }, () => ({ n: 0, luma: 0, warmth: 0 }));
+  const bands = Array.from({ length: RADIAL_BANDS }, () => ({ n: 0, total: 0, luma: 0, warmth: 0 }));
+  const sectors = Array.from({ length: ANGULAR_SECTORS }, () => ({ n: 0, total: 0, luma: 0, warmth: 0 }));
   for (const p of opaque) {
-    if (p.luma < markBelow) continue;
     const dx = p.x - cx;
     const dy = p.y - cy;
-    const band = bands[Math.min(RADIAL_BANDS - 1, Math.floor((Math.hypot(dx, dy) / maxR) * RADIAL_BANDS))];
+    const bi = Math.min(RADIAL_BANDS - 1, Math.floor((Math.hypot(dx, dy) / maxR) * RADIAL_BANDS));
+    let a0 = Math.atan2(dy, dx);
+    if (a0 < 0) a0 += 2 * Math.PI;
+    const si = Math.min(ANGULAR_SECTORS - 1, Math.floor((a0 / (2 * Math.PI)) * ANGULAR_SECTORS));
+    // 🔴 `total` counts the slice's whole opaque area, mark included, and it is counted BEFORE
+    // the mark is dropped. Without it a face could darken an annulus out of the comparison and
+    // the gate would delete the very slice that disagreed. Codex round 18, finding 3.
+    bands[bi].total += 1;
+    sectors[si].total += 1;
+    if (p.luma < markBelow) continue;
+    const band = bands[bi];
     band.n += 1;
     band.luma += p.luma;
     band.warmth += p.warmth;
 
-    let angle = Math.atan2(dy, dx);
-    if (angle < 0) angle += 2 * Math.PI;
-    const sector = sectors[Math.min(ANGULAR_SECTORS - 1, Math.floor((angle / (2 * Math.PI)) * ANGULAR_SECTORS))];
+    const sector = sectors[si];
     sector.n += 1;
     sector.luma += p.luma;
     sector.warmth += p.warmth;
   }
 
-  /** @param {{ n: number, luma: number, warmth: number }[]} raw */
+  /** @param {{ n: number, total: number, luma: number, warmth: number }[]} raw */
   const mean = (raw) =>
-    raw.map((b) => ({ n: b.n, luma: b.n > 0 ? b.luma / b.n : NaN, warmth: b.n > 0 ? b.warmth / b.n : NaN }));
+    raw.map((b) => ({
+      n: b.n,
+      share: b.total > 0 ? b.n / b.total : NaN,
+      luma: b.n > 0 ? b.luma / b.n : NaN,
+      warmth: b.n > 0 ? b.warmth / b.n : NaN,
+    }));
 
   return {
     roundness,
@@ -284,17 +306,35 @@ export function familyFailures(faces) {
   ])) {
     let comparable = 0;
     for (let i = 0; i < count; i += 1) {
-      if (measured.some(([, m]) => m[slices][i].n < MIN_SLICE_PX)) continue;
+      const carries = (m) => m[slices][i].share >= MIN_RETAINED_SHARE && m[slices][i].n >= MIN_SLICE_PX;
+      const withBody = measured.filter(([, m]) => carries(m));
+
+      // 🔴 **Eligibility is decided by the OTHERS, and a lone depleted face is a FAILURE rather
+      // than a reason to delete the slice.** It used to be "skip if ANY face is short", which
+      // handed a drifted face the power to erase the evidence against it: darken one annulus past
+      // the mark threshold and the disagreeing slice simply stopped being compared, while the
+      // brightest-40 % scalars barely moved. Codex round 18, finding 3.
+      if (withBody.length < measured.length - 1) continue;
       comparable += 1;
+
+      for (const [key, m] of measured) {
+        if (carries(m)) continue;
+        bad.push(
+          `${key} has almost no body at ${where} ${i} of ${count} — ${(m[slices][i].share * 100).toFixed(0)}% ` +
+            `of that slice survives the mark threshold where every other face keeps at least ` +
+            `${(MIN_RETAINED_SHARE * 100).toFixed(0)}%`,
+        );
+      }
+
       for (const [stat, bound, what] of /** @type {['luma' | 'warmth', number, string][]} */ ([
         ['luma', bounds[0], 'lighting'],
         ['warmth', bounds[1], 'patina'],
       ])) {
-        const vals = measured.map(([, m]) => m[slices][i][stat]);
+        const vals = withBody.map(([, m]) => m[slices][i][stat]);
         const lo = Math.min(...vals);
         const hi = Math.max(...vals);
         if (hi - lo > bound) {
-          const worst = measured.map(([key, m]) => `${key} ${m[slices][i][stat].toFixed(1)}`).join(', ');
+          const worst = withBody.map(([key, m]) => `${key} ${m[slices][i][stat].toFixed(1)}`).join(', ');
           bad.push(
             `${what} disagrees at ${where} ${i} of ${count}: spans ${(hi - lo).toFixed(1)}, over ${bound} — ${worst}`,
           );

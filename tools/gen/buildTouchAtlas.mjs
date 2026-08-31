@@ -148,13 +148,24 @@ export function runBuild(args, dirs) {
   // bezels, brass or patina passed everything. Codex round 15, finding 6; built before the
   // whole-plate redesign by owner decision, 2026-08-31, because a redesign is when it pays.
   //
-  // `cell` is exempt and that is the known gap: it holds one face in memory and a set of one is a
-  // family by construction. The redesign empties the override map, so nothing ships through `cell`.
-  if (args.mode !== 'cell') {
-    const notFamily = familyFailures(cells);
-    if (notFamily.length > 0) {
-      throw new Error(`these are not one family of buttons: ${notFamily.join('; ')}`);
+  // 🔴 **`cell` IS CHECKED TOO, against the five it is joining.** It was exempt, on the reasoning
+  // that a set of one is a family by construction — which is true and beside the point: the
+  // single-cell path is the one that OVERWRITES the cut oracle and the shipped face, and it is the
+  // documented workflow every re-shoot in this phase went through. An out-of-family re-shoot could
+  // land and wait for some later full build to notice. Codex round 18, finding 1. The candidate is
+  // merged with the other five committed cuts and the SIX are judged, which is the question anyone
+  // actually has.
+  const family = new Map(cells);
+  if (args.mode === 'cell') {
+    for (const cell of TOUCH_PLATE_CELLS) {
+      if (family.has(cell.key)) continue;
+      const beside = path.join(dirs.cutDir, `${cell.key}.png`);
+      if (fs.existsSync(beside)) family.set(cell.key, readPng(beside));
     }
+  }
+  const notFamily = familyFailures(family);
+  if (notFamily.length > 0) {
+    throw new Error(`these are not one family of buttons: ${notFamily.join('; ')}`);
   }
 
   fs.mkdirSync(dirs.outDir, { recursive: true });

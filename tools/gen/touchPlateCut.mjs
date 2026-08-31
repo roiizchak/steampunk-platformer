@@ -47,6 +47,70 @@ import { TOUCH_PLATE_CELLS, TOUCH_PLATE_COLS } from './promptTouch.mjs';
  */
 export const TOUCH_PLATE_SHEET_ROWS = 3;
 
+/**
+ * A gap this many rows of pixels or wider separates two ROWS of buttons rather than two parts of
+ * one. Take 3's gaps are 18-19 px on a 2048 px plate; a button's own interior never opens a
+ * full-width transparent band at all, because the bezel is solid.
+ */
+const ROW_GAP_PX = 6;
+
+/**
+ * **How many rows of buttons this plate actually has**, counted from the keyed image.
+ *
+ * 🔴 `TOUCH_PLATE_SHEET_ROWS` is what take 3 drew, and the whole grid was split by it. The prompt
+ * asked for two rows and the model drew three; a redesign asking for two may well draw two, or four
+ * — and splitting a two-row sheet into three cuts every button in half while every downstream gate
+ * measures the halves happily. Codex round 15, finding 4, as a precondition on the redesign.
+ *
+ * Counted by runs of image rows carrying any opaque pixel after keying, which is a property of the
+ * picture rather than of what anyone expected.
+ *
+ * @param {import('./png.d.mts').RgbaImage} keyed
+ * @returns {number}
+ */
+export function measurePlateRows(keyed) {
+  const { width: w, height: h, data: d } = keyed;
+
+  /** Where each run of occupied image rows begins, and how tall the runs are. */
+  const starts = [];
+  let inRun = false;
+  let gap = 0;
+  for (let y = 0; y < h; y += 1) {
+    let occupied = false;
+    for (let x = 0; x < w; x += 1) {
+      if (d[(y * w + x) * 4 + 3] >= 128) {
+        occupied = true;
+        break;
+      }
+    }
+    if (occupied) {
+      if (!inRun || gap >= ROW_GAP_PX) starts.push(y);
+      inRun = true;
+      gap = 0;
+    } else {
+      gap += 1;
+      if (gap >= ROW_GAP_PX) inRun = false;
+    }
+  }
+
+  if (starts.length < 2) {
+    throw new Error(
+      `the plate draws ${starts.length} row(s) of buttons — a grid cannot be inferred from fewer ` +
+        'than two, so the sheet layout is not measurable',
+    );
+  }
+
+  // 🔴 The PITCH, not the count of drawn rows. A sheet can leave its last row empty — the synthetic
+  // plates in the unit tests do exactly that, two rows drawn in a three-row grid — and counting
+  // drawn rows would then split a three-row sheet into two and cut every button in half. The pitch
+  // is the cell height, and the grid is however many of those fit the image.
+  let pitch = 0;
+  for (let i = 1; i < starts.length; i += 1) pitch += starts[i] - starts[i - 1];
+  pitch /= starts.length - 1;
+
+  return Math.max(starts.length, Math.round(h / pitch));
+}
+
 /** The shipped face size, in game pixels. `TOUCH_BOX_PX` — a plate fills its box. */
 export const TOUCH_FACE_PX = 160;
 
@@ -147,10 +211,22 @@ export function plateCells(bytes) {
     );
   }
 
+  // 🔴 MEASURED, not assumed. The grid is split by the number of rows the model actually drew.
+  // A plate asked for two rows and drawn with three - which is what happened - split by two cuts
+  // every button in half, and nothing downstream compares a face to anything that would notice.
+  const rows = measurePlateRows(keyOut({ width, height, data: decoded.data }));
+  const wanted = Math.max(...TOUCH_PLATE_CELLS.map((c) => c.row)) + 1;
+  if (rows < wanted) {
+    throw new Error(
+      `the plate draws ${rows} row(s) of buttons and the descriptors name ${wanted} - ` +
+        'the sheet is missing a row the cell table expects',
+    );
+  }
+
   // Centre-crop to a size both grid dimensions divide, then ASSERT it - `splitGrid` throws
   // otherwise, and a throw two frames deeper is a worse error message than this one.
   const cropW = width - (width % TOUCH_PLATE_COLS);
-  const cropH = height - (height % TOUCH_PLATE_SHEET_ROWS);
+  const cropH = height - (height % rows);
   const plate = crop(
     { width, height, data: decoded.data },
     Math.floor((width - cropW) / 2),
@@ -158,11 +234,11 @@ export function plateCells(bytes) {
     cropW,
     cropH,
   );
-  if (plate.width % TOUCH_PLATE_COLS !== 0 || plate.height % TOUCH_PLATE_SHEET_ROWS !== 0) {
+  if (plate.width % TOUCH_PLATE_COLS !== 0 || plate.height % rows !== 0) {
     throw new Error(`the cropped plate ${plate.width} x ${plate.height} does not divide the grid`);
   }
 
-  const grid = splitGrid(plate, TOUCH_PLATE_COLS, TOUCH_PLATE_SHEET_ROWS);
+  const grid = splitGrid(plate, TOUCH_PLATE_COLS, rows);
   const cells = new Map();
   for (const cell of TOUCH_PLATE_CELLS) {
     const image = grid[cell.row * TOUCH_PLATE_COLS + cell.col];
