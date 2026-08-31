@@ -100,9 +100,23 @@ export const SETTLE_TICKS = 30;
  * 🔴 **The controls' own textures, not scrims.** Phase 8 paid for this: its first red proof used 240
  * full-viewport alpha rectangles, and the Codex implementation review was right that this proves the
  * timer can see extreme fill-rate work, not that a regression in *the thing the bound is about* can
- * cross it. Every extra fragment here is a fragment of a touch control.
+ * cross it. Every extra fragment here is a fragment of a touch control, at the controls' own size
+ * and alpha.
+ *
+ * ⚠️ **800, and the first attempt at 40 could not go red.** 40 copies per control — 240 faces, about
+ * one screen of fill on this box — moved the paired GPU delta by **0.0563 ms** against a 0.5 ms
+ * bound, so the red proof failed and the bound was decoration at that amplitude. *If the held-out
+ * set disagrees, raise the amplifier, never relax the assertion.* 800 is ~4800 faces, and the
+ * measured cost scales close to linearly with the count.
+ *
+ * 🔴 **What that ratio actually says, recorded rather than hidden:** six control faces cost roughly
+ * `0.0563 / 240 * 6 ≈ 0.0014 ms` of rasteriser time, so the 0.5 ms tolerance is some 350x the
+ * feature's whole fill-rate cost. The GPU bound therefore cannot detect a *proportional* regression
+ * in the controls' drawing; it detects an ABSOLUTE one — a filter, a per-frame re-render, a
+ * full-screen overdraw — which is the class of regression 12.11 is about. The main-thread bound and
+ * the `MAX_TOUCH_ARM_GPU_MS` ceiling carry the rest.
  */
-export const FACE_COPIES = 40;
+export const FACE_COPIES = 800;
 
 type Loop = { loop: { sleep(): void; wake(seamless?: boolean): void } };
 
