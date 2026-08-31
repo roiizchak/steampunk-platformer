@@ -446,6 +446,29 @@ was adopted into a committed tree and run through the whole suite, with `git che
 rollback. **Exactly two files changed**; the other five faces are byte-identical, and `--adopt` still
 reproduces all six byte for byte because `TOUCH_CELL_SOURCES` records the new source.
 
+#### 🔴 The `ui-ux-tester` briefs, and why 12.14 is still NOT MET *(A7)*
+
+Two briefs on the re-shot faces, brief 1's findings withheld from brief 2. **They disagreed on the
+first question, and the disagreement was resolved by looking**, not by preferring a brief: brief 1
+called the new wrench a clean family match; brief 2 called it visibly bolder. Brief 2 is right —
+`touch-jump` and `touch-pause` draw **hollow outlined** glyphs with a cream interior, and
+`touch-attack` now draws a **solid filled** silhouette. *A subagent's summary is a claim, not
+evidence*, and that applies to the agreeable one too.
+
+**Verdict: 12.14 remains NOT MET.** Contrast is green and unconditional; readability is not.
+
+| # | finding | disposition |
+|---|---|---|
+| 1 | 🔴 **`pause` draws a cog and `walk` draws two stacked bars.** A cog is the universal glyph for *settings*; two bars evoke nothing about locomotion. Neither says its action at any size, so this is not a size problem contrast could ever have caught. **Both briefs found this independently** | **RECORDED, owner decision.** Two more single-cell re-shoots, $0.30, taking the touch-UI figure to $1.05 of $5. Outside the wrench-only scope authorised on 2026-08-31 |
+| 2 | 🔴 **The gate measures 48 CSS px; controls go live at 44.** `TRUE_SIZE_PX` is `160 × 325 / 1080 = 48`, from two real-browser measurements, but `touchTargetsFit` shows and enables a control down to `TOUCH_MIN_CSS_PX = 44` and the hit box IS the face box (`touchLayout.ts:156`). The 44-48 px band is reachable and has never been measured — and round 9 recorded contrast falling from 3.32:1 to 1.63-2.85:1 over a few output pixels | **MEASURED, see below** |
+| 3 | The re-shot wrench is a **solid fill** where the other five are **outlines** — the direct consequence of `FLAT_GLYPH`, and nothing gates stroke weight across the set | **RECORDED, owner decision.** At 48 px a filled shape reads *better* than an outline, so this trades set coherence for legibility. Verified by eye on the shipped bytes |
+| 4 | `left` and `right` are mirror-image triangles a thumb-width apart — the only pair distinguished by orientation alone | **RECORDED, not fixed.** Position disambiguates them (bottom-left pair) and no brief called it a blocker |
+| 5 | The sweep is over a **flat** grey ramp, per 1.4.11's own solid-colour model, while STYLE.md mandates dense dithered detail behind every plate, and M21 found 175/878 sampled positions with a hazard, enemy or goal under a control | **RECORDED.** WCAG's model is flat; a per-pixel-noise statistic is not defined by the standard being cited |
+| 6 | The box-filter proxy's error probably runs **optimistic**: production hands a >3× downscale of the whole canvas to the browser at `image-rendering: auto`, which some mobile GPUs do more cheaply than a box average, and the pale keyline halo carrying most of the measured contrast is what would alias away | **RECORDED, and the label sharpened.** The proxy label already existed; what it did not say is which direction the error runs |
+
+⚠️ **Findings 1, 3 and 6 are recorded rather than applied, and each needs an owner call, not a
+patch.** Findings 4 and 5 are recorded as accepted. Finding 2 was measured rather than argued.
+
 #### What the four original repairs measured, which was the GREY BOX
 
 

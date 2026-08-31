@@ -2,14 +2,8 @@ import { expect, test } from '@playwright/test';
 
 import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { MIN_GPU_SAMPLES, MIN_SAMPLES } from './perfBudget';
-import { assertRealGpu } from './realGpu';
-import { installGpuTimer } from './gpuTimer';
-import {
-  bootToTouchPlay,
-  drawnFaces,
-  drawnZones,
-  installTouchDriver,
-} from './touchHarness';
+import { drawnFaces, drawnZones } from './touchHarness';
+import { makeArms } from './touchArms';
 import {
   MAX_TOUCH_ARM_CPU_MS,
   MAX_TOUCH_ARM_GPU_MS,
@@ -19,7 +13,6 @@ import {
   PAIRS,
   median,
   pairedDeltas,
-  hideTexts,
   sampleArm,
   wakeLoop,
 } from './touchPerf';
@@ -78,10 +71,16 @@ import {
  * Six such faces are about 0.5 % of a 1920 x 1080 frame, and the M72 amplifier measures 4800 of them
  * at 0.706 ms, so **the whole feature costs on the order of 0.001 ms** of rasteriser time. The
  * per-pair spread between two browser contexts is +/-0.2 ms. The feature is therefore two to three
- * orders of magnitude below this instrument's noise floor, and the residual **-0.07 to -0.18 ms**
- * offset — the touch arm reading *cheaper* than the bare one across sixteen recorded pairs — is a
- * context-identity artefact, not the controls. It does not shrink when more is equalised: hiding the
- * help banner moved it from -0.119 to -0.068 and the diff above shows there is nothing left to hide.
+ * orders of magnitude below this instrument's noise floor.
+ *
+ * 🔴 **And the residual -0.07 to -0.18 ms offset was a CONFOUND, not noise.** The touch arm read
+ * *cheaper* than the bare one across all sixteen pairs recorded before this was fixed, while drawing
+ * six more images. Equalising more did not shrink it — hiding the help banner moved it from -0.119
+ * to -0.068 and the display-list diff showed nothing left to hide — because the cause was not on
+ * either display list: `hasTouch` is fixed at context creation, the touch role was pinned to the
+ * first-created context for the whole run, and AB/BA swapped only sampling order. Up to 36 % of the
+ * tolerance, systematically in the direction that hides a regression. `touchArms.ts` counterbalances
+ * creation order across two blocks. `performance-engineer` brief 2, finding 1.
  *
  * So this gate does **not** claim the controls cost under 0.5 ms of extra frame time — that is true
  * by three orders of magnitude and needs no gate. It claims that no ABSOLUTE regression of half a
@@ -104,127 +103,117 @@ import {
  */
 
 test('12.11 the frame budget is unregressed with the controls drawn', async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
 
-  const touchContext = await browser.newContext({ hasTouch: true });
-  const plainContext = await browser.newContext({ hasTouch: false });
-  const withControlsPage = await touchContext.newPage();
-  const withoutPage = await plainContext.newPage();
-  try {
-    const withControls = withControlsPage;
-    const without = withoutPage;
-    await installTouchDriver(withControls);
-    await installTouchDriver(without);
+  const controlsArm: number[] = [];
+  const bareArm: number[] = [];
+  const gpuWith: number[] = [];
+  const gpuWithout: number[] = [];
+  const cpuWith: number[] = [];
+  const cpuWithout: number[] = [];
+  let renderer = 'unknown';
 
-    await bootToTouchPlay(withControls);
-    await bootToTouchPlay(without);
-
-    const renderer = await assertRealGpu(withControls, '12.11 controls');
-    await assertRealGpu(without, '12.11 control arm');
-
-    // 🔴 The precondition. Time nothing until the thing being measured is on screen.
-    const drawn = await drawnZones(withControls, 'UI');
-    expect(drawn.length, 'the touch arm has no controls, so it is not the arm it claims to be').toBe(
-      TOUCH_IDS.length,
-    );
-    // 🔴 Zones are HITTABILITY. A `Zone` renders nothing — `touchMeasure.ts` says so in as many
-    // words — so the assertion above cannot tell a drawn arm from an undrawn one. Delete the
-    // `setVisible(wanted)` loop in `refresh()` and every zone is still there and still
-    // interactive, while the timed arm draws zero extra pixels: the criterion's own named failure
-    // mode, passing its own precondition. The pixels are the FACES. Found by both 12.11 briefs.
-    //
-    // ⚠️ **This was `> drawn.length` and the adopted art broke it, correctly.** The grey box drew a
-    // plate plus several marks per control, so "more faces than zones" happened to hold; one
-    // generated image per control makes the two counts EQUAL, and the bound false-redded a build
-    // that draws strictly better pixels. The claim was never about a ratio — it is *every control
-    // has something visible* — so it is asserted per control, by name, which the count could not do
-    // either: six visible faces all belonging to one plate passed the old form.
-    const visibleFaces = (await drawnFaces(withControls, 'UI')).filter((f) => f.visible);
-    const facesFor = new Set(visibleFaces.map((f) => f.name));
-    for (const id of TOUCH_IDS) {
+  // 🔴 TWO BLOCKS, and the block variable is which browser context is CREATED first.
+  // `performance-engineer` brief 2, finding 1: `hasTouch` is fixed at context creation, so AB/BA
+  // within a run swaps sampling order and never the touch ROLE. Any cost tied to context identity —
+  // JIT warmth, GPU context and swap-chain allocation order — therefore rode along on every pair in
+  // the same direction, which is exactly the -0.07 to -0.18 ms offset this file used to record as an
+  // artefact. Half the pairs each way puts creation order on both sides of the comparison.
+  for (const touchFirst of [true, false]) {
+    const label = `12.11 ${touchFirst ? 'touch-first' : 'bare-first'}`;
+    const arms = await makeArms(browser, touchFirst, label);
+    renderer = arms.renderer;
+    const withControls = arms.touch;
+    const without = arms.bare;
+    try {
+      // 🔴 The precondition, in BOTH blocks. Time nothing until the thing being measured is on
+      // screen — and a block whose arms booted differently is not the same measurement.
+      const drawn = await drawnZones(withControls, 'UI');
       expect(
-        facesFor.has(id),
-        `${id} has a hit area and nothing drawn — the timed arm would draw an empty frame there`,
-      ).toBe(true);
-    }
-    for (const z of drawn) {
-      expect(z.interactive, `${z.name} is not live in the timed arm`).toBe(true);
-    }
-    expect(
-      await drawnZones(without, 'UI'),
-      'the control arm has touch controls, so the two arms are the same arm',
-    ).toEqual([]);
-
-    await installGpuTimer(withControls);
-    await installGpuTimer(without);
-
-    // 🔴 Equalise everything that is not the controls. The keyboard help banner is ~130 glyphs
-    // of 44 px bold text and the touch one is ~35, which is more fill rate than the controls and
-    // runs the wrong way — the first clean run read every GPU pair NEGATIVE because of it.
-    const textTouch = await hideTexts(withControls);
-    const textBare = await hideTexts(without);
-    expect(
-      textTouch.hidden + textBare.hidden,
-      'no text was visible in either arm, so this helper equalised nothing',
-    ).toBeGreaterThan(0);
-    for (const [t, name] of [
-      [textTouch, 'touch'],
-      [textBare, 'bare'],
-    ] as const) {
-      expect(
-        t.stillVisible,
-        `${t.stillVisible} text objects are still drawn in the ${name} arm — the arms differ by more than the controls`,
-      ).toBe(0);
-    }
-
-    const controlsArm: number[] = [];
-    const bareArm: number[] = [];
-    const gpuWith: number[] = [];
-    const gpuWithout: number[] = [];
-    const cpuWith: number[] = [];
-    const cpuWithout: number[] = [];
-
-    // 🔴 AB/BA, and PAIRS is EVEN. Always sampling the touch arm first leaves an order effect
-    // perfectly correlated with the arm — the recorded objection to the old always-AB loop — and
-    // counterbalancing only cancels across whole AB+BA blocks, so an odd count leaves one unmatched.
-    for (let pair = 0; pair < PAIRS; pair += 1) {
-      const first = pair % 2 === 0;
-      const a = first
-        ? await sampleArm(withControls, without, `pair ${pair} touch`)
-        : await sampleArm(without, withControls, `pair ${pair} bare`);
-      const b = first
-        ? await sampleArm(without, withControls, `pair ${pair} bare`)
-        : await sampleArm(withControls, without, `pair ${pair} touch`);
-      const touch = first ? a : b;
-      const bare = first ? b : a;
-
-      for (const [s, name] of [
-        [touch, 'touch'],
-        [bare, 'bare'],
-      ] as const) {
-        expect(typeof s.frames).toBe('number');
-        expect(s.frames, `the ${name} arm served no frames at all`).toBeGreaterThanOrEqual(MIN_SAMPLES);
-        // A page that stopped ticking is not a page whose frame budget can be compared.
-        expect(s.ticks, `the simulation stopped in the ${name} arm`).toBeGreaterThan(0);
+        drawn.length,
+        `${label}: the touch arm has no controls, so it is not the arm it claims to be`,
+      ).toBe(TOUCH_IDS.length);
+      // 🔴 Zones are HITTABILITY. A `Zone` renders nothing — `touchMeasure.ts` says so in as many
+      // words — so the assertion above cannot tell a drawn arm from an undrawn one. Delete the
+      // `setVisible(wanted)` loop in `refresh()` and every zone is still there and still
+      // interactive, while the timed arm draws zero extra pixels: the criterion's own named failure
+      // mode, passing its own precondition. The pixels are the FACES. Found by both 12.11 briefs.
+      //
+      // ⚠️ **This was `> drawn.length` and the adopted art broke it, correctly.** The grey box drew
+      // a plate plus several marks per control, so "more faces than zones" happened to hold; one
+      // generated image per control makes the two counts EQUAL, and the bound false-redded a build
+      // that draws strictly better pixels. The claim was never about a ratio — it is *every control
+      // has something visible* — so it is asserted per control, by name, which the count could not
+      // do either: six visible faces all belonging to one plate passed the old form.
+      const visibleFaces = (await drawnFaces(withControls, 'UI')).filter((f) => f.visible);
+      const facesFor = new Set(visibleFaces.map((f) => f.name));
+      for (const id of TOUCH_IDS) {
         expect(
-          s.gpuSupported,
-          `EXT_disjoint_timer_query is absent in the ${name} arm — nothing below is measured`,
+          facesFor.has(id),
+          `${label}: ${id} has a hit area and nothing drawn — the timed arm would draw an empty frame there`,
         ).toBe(true);
-        // 🔴 `MIN_GPU_SAMPLES`, not `> 0`. The shared contract says 30 is the fewest queries a GPU
-        // median may rest on; `> 0` would let ONE delayed query per arm decide the bound.
-        expect(
-          s.gpuSamples,
-          `the ${name} arm's GPU median rests on ${s.gpuSamples} queries, under MIN_GPU_SAMPLES`,
-        ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
       }
+      for (const z of drawn) {
+        expect(z.interactive, `${label}: ${z.name} is not live in the timed arm`).toBe(true);
+      }
+      expect(
+        await drawnZones(without, 'UI'),
+        `${label}: the control arm has touch controls, so the two arms are the same arm`,
+      ).toEqual([]);
 
-      controlsArm.push((touch.frames / touch.elapsedMs) * 1000);
-      bareArm.push((bare.frames / bare.elapsedMs) * 1000);
-      gpuWith.push(touch.gpuMedianMs);
-      gpuWithout.push(bare.gpuMedianMs);
-      cpuWith.push(touch.workMedianMs);
-      cpuWithout.push(bare.workMedianMs);
+      // 🔴 AB/BA inside the block, and `PAIRS` is EVEN so each block gets a whole AB+BA. Always
+      // sampling the touch arm first leaves an order effect perfectly correlated with the arm.
+      for (let pair = 0; pair < PAIRS / 2; pair += 1) {
+        const first = pair % 2 === 0;
+        const a = first
+          ? await sampleArm(withControls, without, `${label} pair ${pair} touch`)
+          : await sampleArm(without, withControls, `${label} pair ${pair} bare`);
+        const b = first
+          ? await sampleArm(without, withControls, `${label} pair ${pair} bare`)
+          : await sampleArm(withControls, without, `${label} pair ${pair} touch`);
+        const touch = first ? a : b;
+        const bare = first ? b : a;
+
+        for (const [smp, name] of [
+          [touch, 'touch'],
+          [bare, 'bare'],
+        ] as const) {
+          expect(typeof smp.frames).toBe('number');
+          expect(smp.frames, `${label}: the ${name} arm served no frames at all`).toBeGreaterThanOrEqual(
+            MIN_SAMPLES,
+          );
+          // A page that stopped ticking is not a page whose frame budget can be compared.
+          expect(smp.ticks, `${label}: the simulation stopped in the ${name} arm`).toBeGreaterThan(0);
+          expect(
+            smp.gpuSupported,
+            `${label}: EXT_disjoint_timer_query is absent in the ${name} arm — nothing below is measured`,
+          ).toBe(true);
+          // 🔴 `MIN_GPU_SAMPLES`, not `> 0`. The shared contract says 30 is the fewest queries a GPU
+          // median may rest on; `> 0` would let ONE delayed query per arm decide the bound.
+          expect(
+            smp.gpuSamples,
+            `${label}: the ${name} arm's GPU median rests on ${smp.gpuSamples} queries, under MIN_GPU_SAMPLES`,
+          ).toBeGreaterThanOrEqual(MIN_GPU_SAMPLES);
+        }
+
+        controlsArm.push((touch.frames / touch.elapsedMs) * 1000);
+        bareArm.push((bare.frames / bare.elapsedMs) * 1000);
+        gpuWith.push(touch.gpuMedianMs);
+        gpuWithout.push(bare.gpuMedianMs);
+        cpuWith.push(touch.workMedianMs);
+        cpuWithout.push(bare.workMedianMs);
+      }
+    } finally {
+      // 🔴 Both, unconditionally. A failed assertion mid-pair leaves one page's loop stopped, and a
+      // stopped page is a page whose teardown can hang.
+      await wakeLoop(withControls).catch(() => {});
+      await wakeLoop(without).catch(() => {});
+      await arms.close();
     }
+  }
+
+  // 🔴 Pooled across both creation orders, so `PAIRS` pairs still decide the bound.
+  expect(gpuWith.length, 'the two blocks did not produce PAIRS pairs between them').toBe(PAIRS);
 
     const withFps = median(controlsArm);
     const withoutFps = median(bareArm);
@@ -303,12 +292,4 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
       `the controls cost ${cpuDelta.toFixed(4)} ms of main-thread time per frame, against ` +
         `+/-${MAX_TOUCH_CPU_DELTA_MS} ms`,
     ).toBeLessThan(MAX_TOUCH_CPU_DELTA_MS);
-  } finally {
-    // 🔴 Both, unconditionally. A failed assertion mid-pair leaves one page's loop stopped, and a
-    // stopped page is a page whose teardown can hang.
-    await wakeLoop(withControlsPage).catch(() => {});
-    await wakeLoop(withoutPage).catch(() => {});
-    await touchContext.close();
-    await plainContext.close();
-  }
 });

@@ -150,9 +150,13 @@ export const SETTLE_TICKS = 30;
  * 🔴 **What that ratio actually says, recorded rather than hidden:** six control faces cost roughly
  * `0.0563 / 240 * 6 ≈ 0.0014 ms` of rasteriser time, so the 0.5 ms tolerance is some 350x the
  * feature's whole fill-rate cost. The GPU bound therefore cannot detect a *proportional* regression
- * in the controls' drawing; it detects an ABSOLUTE one — a filter, a per-frame re-render, a
- * full-screen overdraw — which is the class of regression 12.11 is about. The main-thread bound and
- * the `MAX_TOUCH_ARM_GPU_MS` ceiling carry the rest.
+ * in the controls' drawing; it detects an ABSOLUTE one — a shader filter, a full-screen overdraw, a
+ * plate re-rasterised every frame — which is the class of regression 12.11 is about.
+ *
+ * ⚠️ **A `refresh()` moved into `update()` is NOT one of them**, and this list used to say it was.
+ * That shape is pure JavaScript layout work: it moves `workMedianMs` and leaves the rasteriser
+ * untouched, so `MAX_TOUCH_CPU_DELTA_MS` is what catches it — which is precisely why M73 amplifies
+ * that call and not fill rate. `performance-engineer` brief 2, finding 4.
  */
 export const FACE_COPIES = 2000;
 
@@ -251,10 +255,17 @@ export async function sampleArm(
 export async function addFaceCopies(page: Page, count: number): Promise<number> {
   return page.evaluate(
     ([n, ids]) => {
-      type Obj = { type: string; name: string; x: number; y: number; alpha: number; texture?: { key: string } };
+      type Obj = {
+        type: string; name: string; x: number; y: number; alpha: number;
+        displayWidth: number; displayHeight: number; texture?: { key: string };
+      };
       type Scene = {
         children: { list: Obj[] };
-        add: { image(x: number, y: number, key: string): { setAlpha(a: number): { setDepth(d: number): unknown } } };
+        add: {
+          image(x: number, y: number, key: string): {
+            setDisplaySize(w: number, h: number): { setAlpha(a: number): { setDepth(d: number): unknown } };
+          };
+        };
       };
       const h = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
         .__phaserGame;
@@ -265,7 +276,16 @@ export async function addFaceCopies(page: Page, count: number): Promise<number> 
         const face = ui.children.list.find((o) => o.name === id && o.type !== 'Zone');
         if (!face?.texture) continue;
         for (let i = 0; i < (n as number); i += 1) {
-          ui.add.image(face.x, face.y, face.texture.key).setAlpha(face.alpha).setDepth(-1);
+          // 🔴 `setDisplaySize` to the REAL face's drawn size, which production sets explicitly
+          // (`touchControlsLayer.ts:263-267`) and this amplifier used to leave at the texture's
+          // native size. Harmless today only because every shipped face is exactly 160 x 160; a
+          // future regeneration at another resolution would silently change what the red proof
+          // measures, with nothing catching the drift. `performance-engineer` brief 2, finding 3.
+          ui.add
+            .image(face.x, face.y, face.texture.key)
+            .setDisplaySize(face.displayWidth, face.displayHeight)
+            .setAlpha(face.alpha)
+            .setDepth(-1);
           added += 1;
         }
       }
