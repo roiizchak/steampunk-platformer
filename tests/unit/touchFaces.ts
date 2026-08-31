@@ -13,6 +13,7 @@ import { TOUCH_BOX_PX, TOUCH_IDS } from '../../src/render/touchLayout';
 import { TOUCH_CUT_DIR } from '../../tools/gen/buildTouchAtlas.mjs';
 import { readPng } from '../../tools/gen/png.mjs';
 import { keylineMarks } from '../../tools/gen/touchInk.mjs';
+import { downscale } from '../../tools/gen/resize.mjs';
 
 /** Every control's texture key, in the form `touchControlsLayer.build` asks the texture manager for. */
 export const KEYS = TOUCH_IDS.map((id) => `touch-${id}`);
@@ -67,9 +68,15 @@ export function entry(key: string): CatalogImage {
   return found!;
 }
 
-/** The face as it ships, read through the catalog the game loads it by. */
-export function shippedFace(key: string): ReturnType<typeof readPng> {
-  return readPng(`public/${entry(key).url}`);
+/**
+ * The face as it ships, read through the catalog the game loads it by.
+ *
+ * `root` exists so a STAGED candidate can be measured by these same helpers before it is adopted —
+ * a candidate validated by a second copy of the algorithm is validated against a different claim.
+ * It defaults to what production ships, so every existing caller is unchanged.
+ */
+export function shippedFace(key: string, root = 'public'): ReturnType<typeof readPng> {
+  return readPng(`${root}/${entry(key).url}`);
 }
 
 /**
@@ -83,12 +90,15 @@ export function shippedFace(key: string): ReturnType<typeof readPng> {
  * each; the 2048 px plate they come from is 3.8 MB and gitignored), and `buildTouchAtlas.mjs`
  * writes them on the same run that writes `public/assets/ui/`.
  */
-export function cutFace(key: string): {
+export function cutFace(
+  key: string,
+  root = TOUCH_CUT_DIR,
+): {
   cut: ReturnType<typeof readPng>;
   mark: Uint8Array;
   seeds: Uint8Array;
 } {
-  const cut = readPng(`${TOUCH_CUT_DIR}/${key}.png`);
+  const cut = readPng(`${root}/${key}.png`);
   const { mark, seeds } = keylineMarks(cut);
   return { cut, mark, seeds };
 }
@@ -185,4 +195,89 @@ export function strokeLabels(
   }
   expect(orphans, 'mark pixels that no engraving stroke reaches').toBe(0);
   return { labels, count };
+}
+
+/**
+ * Every stroke's WORST contrast over a swept background, at true on-screen size.
+ *
+ * Lifted out of `shipped-touch-contrast.test.ts` so the shipped faces and a STAGED candidate are
+ * measured by one definition rather than two that agree on the happy path. Codex plan review,
+ * round 3: parameterising the loaders alone left the algorithm inside a Vitest case body, where a
+ * candidate validator could not reach it.
+ *
+ * Everything the algorithm was carrying stays:
+ *
+ * - **The mark comes from the CUT face, the strokes from its PRE-HALO seeds.** A mask discovered
+ *   from the shipped file is the mutated bytes describing themselves (round 11), and labelling the
+ *   finished mask lets the halo merge the strokes it was meant to separate (round 13).
+ * - **`max(ink : background)` over a SWEPT background**, which is `contrast-floor.test.ts`'s
+ *   method: no single colour wins against every background.
+ * - **Composite at full size, then downscale the composite**, through this repository's own
+ *   `downscale`. A second box filter rolled by hand partitions the source differently (round 10).
+ * - **A stroke must SURVIVE the downscale**, counted separately, because a stroke reduced to
+ *   nothing has no worst pixel to fail on (round 10).
+ *
+ * @param png the face as it ships
+ * @param mark the mark mask from the cut face
+ * @param seeds the pre-dilation seeds from the cut face
+ * @param alpha the alpha the scene draws the face at
+ */
+export function strokeContrast(
+  png: { width: number; height: number; data: Uint8ClampedArray },
+  mark: Uint8Array,
+  seeds: Uint8Array,
+  alpha: number,
+): { worst: number[]; surviving: number[]; count: number } {
+  const { labels, count } = strokeLabels(mark, seeds, png.width);
+
+  // Where each stroke is, at the SAME resolution and through the SAME partitioning as the
+  // composite below. The alpha channel carries the coverage: 255 where this stroke, 0 elsewhere.
+  const strokes = [];
+  for (let c = 0; c < count; c += 1) {
+    const coverage = new Uint8ClampedArray(png.width * png.height * 4);
+    for (let p = 0; p < labels.length; p += 1) {
+      coverage[p * 4 + 3] = labels[p] === c ? 255 : 0;
+    }
+    strokes.push(
+      downscale({ width: png.width, height: png.height, data: coverage }, TRUE_SIZE_PX, TRUE_SIZE_PX),
+    );
+  }
+
+  const worst = new Array<number>(count).fill(Infinity);
+  const surviving = new Array<number>(count).fill(0);
+  for (let bg = 0; bg <= 255; bg += 5) {
+    const back = luminance(bg, bg, bg);
+    const over = new Uint8ClampedArray(png.width * png.height * 4);
+    for (let i = 0; i < png.data.length; i += 4) {
+      const a = (png.data[i + 3]! / 255) * alpha;
+      over[i] = png.data[i]! * a + bg * (1 - a);
+      over[i + 1] = png.data[i + 1]! * a + bg * (1 - a);
+      over[i + 2] = png.data[i + 2]! * a + bg * (1 - a);
+      over[i + 3] = 255;
+    }
+    const shown = downscale(
+      { width: png.width, height: png.height, data: over },
+      TRUE_SIZE_PX,
+      TRUE_SIZE_PX,
+    );
+
+    for (let c = 0; c < count; c += 1) {
+      let best = 0;
+      let cells = 0;
+      for (let k = 0; k < TRUE_SIZE_PX * TRUE_SIZE_PX; k += 1) {
+        // An output pixel counts as this stroke only if the stroke is most of what fell into it.
+        // Anything less is a blend of mark and plate, not what a reader is looking at.
+        if (strokes[c]!.data[k * 4 + 3]! < 128) continue;
+        cells += 1;
+        const r = ratio(
+          luminance(shown.data[k * 4]!, shown.data[k * 4 + 1]!, shown.data[k * 4 + 2]!),
+          back,
+        );
+        if (r > best) best = r;
+      }
+      surviving[c] = cells;
+      if (best < worst[c]!) worst[c] = best;
+    }
+  }
+  return { worst, surviving, count };
 }

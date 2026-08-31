@@ -40,7 +40,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: PNGs, alpha, distinct **silhouettes**, own key | **NOT MET — owner decision needed** | Everything measurable passes on the shipped bytes (§ 12.17), but the criterion as written says **five** and **silhouettes**, and the shipped six deliberately share one round disc. § 12.17b. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS** | `GENERATION-LOG.md`, 3 rows, $0.45 of $5. |
-| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 76 rows; 23 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one and M70 the repair round 13 recorded but never landed. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS** | § The mutation matrix. 77 rows; 23 holes found, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one, and M70–M71 the repair round 13 recorded but never landed plus the single-cell path it unlocked. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
@@ -513,6 +513,65 @@ over the returned write set rather than the resulting files. `TOUCH_CELL_SOURCES
 later single-cell re-shoot cannot be silently undone by `--adopt` recutting take-3 over it. Both
 paths reproduce the six shipped PNGs byte for byte. **M70 red 2/18** — 12 files written where 6 were
 claimed — reverted, and the revert confirmed by the original count returning to 1.
+
+### The single-cell re-shoot, and how a candidate is judged before it is adopted
+
+The owner chose the re-shoot over accepting `attack` stroke 2's 2.86:1 on 2026-08-31, and chose the
+**single-cell** shape over a new full plate: five faces measure 3.32:1 at rest and 3.85:1 pressed
+today, and a new plate re-founds all six on a fresh draw to fix one.
+
+**The fix is the prompt, not the roll.** The plate prompt asks for a glyph *"deeply cut and filled
+with dark shadow"*, and that sentence is the shortfall — the four fragments the round-13 stroke split
+isolates ARE the wrench's shading. Re-shooting with the same clause is $0.15 for another coin flip.
+So `touchButtonPrompt` composes its own glyph sentence, stated positively per STYLE.md §6 (*"no
+internal shading"* is a phrase about shading): one continuous inlay, one flat tone, one even depth,
+one unbroken outline. `touch-prompt.test.ts` asserts the old clause is absent from the new prompt and
+still present in the plate prompt, so this is a difference rather than a sweep.
+
+**And the endpoint is `fal-ai/nano-banana-pro/edit`, not the base model.** `FAL-MODELS.md` § 2 records
+it as *"the lever for identity consistency"* at the same $0.15 — vault 4.1, *change the reference,
+not the wording*. `promptTouch.mjs`'s own header says why it matters here: separately generated
+buttons give separately drifting interpretations of "brass", and these six sit next to each other on
+screen where a mismatch is the most visible failure available. Found by the Codex plan review, which
+was right that a fresh text-to-image ignores the repository's own recorded mechanism.
+
+That needed a seam nothing here had. `extractPlateCell` returns the RAW plate cell — pre-keying,
+pre-crop, pre-downscale — because every existing path reached a cell through `cutFace`, which
+resamples it to 160 px. A reference image wants the model's own pixels at the model's own
+resolution.
+
+#### 🔴 How the candidate is judged, and why it is not a hand-built staging validator
+
+The plan called for staging the candidate to a temp directory and running a re-implemented battery
+there. **That was replaced with something smaller and stronger, and the change is recorded rather
+than made quietly.** The battery is not one gate — `shipped-touch.test.ts` enforces the two-sided
+alpha band, exact ink reproduction from the cut face and six-way mark distinctness; the contrast
+sweep is a fourth. Re-implementing a subset of those against staged paths would validate the
+candidate against a different claim than the one the shipped bytes answer to.
+
+So the candidate is adopted into a **committed** working tree and judged by the real suite, with
+`git checkout -- public/assets/ui tests/fixtures/touch-cut` as an exact rollback if it fails. The
+index is the backup, the gates are the real gates, and nothing is re-implemented.
+
+⚠️ **`KNOWN_SHORTFALL`'s entry is deleted BEFORE the candidate is adopted, not after.** Otherwise the
+2.8 floor it installs would let a 2.81 candidate pass the very gate that exists to decide whether the
+re-shoot worked. Named by the Codex plan review, round 2.
+
+⚠️ What the mechanism does not give: the bytes are on disk while the suite runs, so an interruption
+between adopt and revert leaves unvalidated art in the tree. It is visible in `git status` and the
+rollback stays exact, which is the trade taken.
+
+#### The contrast sweep now has one definition and two callers
+
+The swept-background per-stroke measurement lived inside a Vitest case body, so parameterising
+`touchFaces.ts`'s loaders — which is what the plan asked for — would not have let anything else
+reach the algorithm. It is `strokeContrast()` in `touchFaces.ts` now, and `shippedFace` and
+`cutFace` take an explicit root that defaults to what production ships. Codex plan review, round 3.
+
+**M71 red 1/18.** The `--cell` build's output routed to a fixed key instead of the requested one:
+nothing in the pipeline can tell a wrench from a triangle — `cutFace` checks component count,
+coverage, edges and dimensions — so the routing is what a mutation can order, and glyph identity
+stays 12.14's and 12.24's, which is where this repository has always put it.
 
 ### The rows the two Codex implementation reviews added
 

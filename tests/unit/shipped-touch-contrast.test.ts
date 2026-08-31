@@ -15,16 +15,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ART_ALPHA, ART_ALPHA_PRESSED } from '../../src/scenes/touchMarks';
-import { downscale } from '../../tools/gen/resize.mjs';
-import {
-  KEYS,
-  TRUE_SIZE_PX,
-  cutFace,
-  luminance,
-  ratio,
-  shippedFace,
-  strokeLabels,
-} from './touchFaces';
+import { KEYS, TRUE_SIZE_PX, cutFace, shippedFace, strokeContrast } from './touchFaces';
 
 /**
  * The one stroke of the shipped six that does not reach 3:1, with the figure it does reach.
@@ -77,61 +68,8 @@ describe('the shipped touch faces', () => {
         // ⚠️ Strokes come from the PRE-HALO engraving. Labelling the finished mask let the keyline
         // merge `walk`'s two bars into one component, and an 11-pixel bridge then kept 927 erased
         // pale pixels inside a component that still scored 3.318:1. Codex round-13.
-        const { labels, count } = strokeLabels(mark, seeds, png.width);
+        const { worst, surviving, count } = strokeContrast(png, mark, seeds, alpha);
         expect(count, `${key} has no mark at all`).toBeGreaterThan(0);
-
-        // Where each stroke is, at the SAME resolution and through the SAME partitioning as the
-        // composite below — `downscale` is this repository's own box filter, and rolling a second
-        // one by hand made the two disagree on which source columns fall in the first cell.
-        // Codex round-10. The alpha channel carries the coverage: 255 where this stroke, 0 else.
-        const strokes = [];
-        for (let c = 0; c < count; c += 1) {
-          const coverage = new Uint8ClampedArray(png.width * png.height * 4);
-          for (let p = 0; p < labels.length; p += 1) {
-            coverage[p * 4 + 3] = labels[p] === c ? 255 : 0;
-          }
-          strokes.push(
-            downscale({ width: png.width, height: png.height, data: coverage }, TRUE_SIZE_PX, TRUE_SIZE_PX),
-          );
-        }
-
-        const worst = new Array<number>(count).fill(Infinity);
-        const surviving = new Array<number>(count).fill(0);
-        for (let bg = 0; bg <= 255; bg += 5) {
-          const back = luminance(bg, bg, bg);
-          // Composite over this background at full size, then downscale the composite.
-          const over = new Uint8ClampedArray(png.width * png.height * 4);
-          for (let i = 0; i < png.data.length; i += 4) {
-            const a = (png.data[i + 3]! / 255) * alpha;
-            over[i] = png.data[i]! * a + bg * (1 - a);
-            over[i + 1] = png.data[i + 1]! * a + bg * (1 - a);
-            over[i + 2] = png.data[i + 2]! * a + bg * (1 - a);
-            over[i + 3] = 255;
-          }
-          const shown = downscale(
-            { width: png.width, height: png.height, data: over },
-            TRUE_SIZE_PX,
-            TRUE_SIZE_PX,
-          );
-
-          for (let c = 0; c < count; c += 1) {
-            let best = 0;
-            let cells = 0;
-            for (let k = 0; k < TRUE_SIZE_PX * TRUE_SIZE_PX; k += 1) {
-              // An output pixel counts as this stroke only if the stroke is most of what fell into
-              // it. Anything less is a blend of mark and plate, not what a reader is looking at.
-              if (strokes[c]!.data[k * 4 + 3]! < 128) continue;
-              cells += 1;
-              const r = ratio(
-                luminance(shown.data[k * 4]!, shown.data[k * 4 + 1]!, shown.data[k * 4 + 2]!),
-                back,
-              );
-              if (r > best) best = r;
-            }
-            surviving[c] = cells;
-            if (best < worst[c]!) worst[c] = best;
-          }
-        }
 
         for (let c = 0; c < count; c += 1) {
           expect(
