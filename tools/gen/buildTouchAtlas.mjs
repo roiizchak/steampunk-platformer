@@ -73,7 +73,7 @@ export const DEFAULT_DIRS = { outDir: TOUCH_OUT_DIR, cutDir: TOUCH_CUT_DIR };
  * is what lets a single re-shot cell coexist with five that still come from the plate.
  *
  * @param {import('./touchAtlasCli.d.mts').TouchBuildArgs} args
- * @param {{ outDir: string, cutDir: string }} dirs
+ * @param {{ outDir: string, cutDir: string, plateSource?: string, cellSources?: Record<string, string> }} dirs
  * @returns {Map<string, import('./png.d.mts').RgbaImage>}
  */
 function sourceCells(args, dirs) {
@@ -86,8 +86,15 @@ function sourceCells(args, dirs) {
   if (args.mode === 'cell') {
     return new Map([[args.key, cutFace(decodePng(readBytes(requireFile(args.source))), args.key)]]);
   }
-  const cells = cutPlate(readBytes(requireFile(TOUCH_PLATE_SOURCE))).cells;
-  for (const [key, file] of Object.entries(TOUCH_CELL_SOURCES)) {
+  // 🔴 The sources are INJECTABLE, and that is what lets adoption be tested at all. The recorded
+  // ones are gitignored 4 MB plates, so the only behavioural test that could exist caught its own
+  // ENOENT and returned green on a fresh clone — an `--adopt` gate that passes when adoption never
+  // runs. Codex round 15, finding 3. Production passes no overrides and reads the module
+  // constants, so the shipped path is byte-for-byte what it was.
+  const plateSource = dirs.plateSource ?? TOUCH_PLATE_SOURCE;
+  const cellSources = dirs.cellSources ?? TOUCH_CELL_SOURCES;
+  const cells = cutPlate(readBytes(requireFile(plateSource))).cells;
+  for (const [key, file] of Object.entries(cellSources)) {
     cells.set(key, cutFace(decodePng(readBytes(requireFile(file))), key));
   }
   return cells;
@@ -113,7 +120,7 @@ function requireFile(file) {
  * that was rewritten identically from one that was left alone.
  *
  * @param {import('./touchAtlasCli.d.mts').TouchBuildArgs} args
- * @param {{ outDir: string, cutDir: string }} dirs
+ * @param {{ outDir: string, cutDir: string, plateSource?: string, cellSources?: Record<string, string> }} dirs
  * @returns {string[]}
  */
 export function runBuild(args, dirs) {
@@ -177,7 +184,7 @@ ${args.mode}: ${cells.size} face(s), ${written.length} file(s) written`);
  * never consulted argv at all, and a gate over a pure selector would not have seen it.
  *
  * @param {string[]} argv
- * @param {{ outDir: string, cutDir: string }} [dirs]
+ * @param {{ outDir: string, cutDir: string, plateSource?: string, cellSources?: Record<string, string> }} [dirs]
  * @returns {string[]}
  */
 export function main(argv, dirs = DEFAULT_DIRS) {

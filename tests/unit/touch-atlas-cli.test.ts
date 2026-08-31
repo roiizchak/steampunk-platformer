@@ -21,6 +21,8 @@ import { describe, expect, it } from 'vitest';
 import { TOUCH_CUT_DIR, isCliEntry, main, staleFaces } from '../../tools/gen/buildTouchAtlas.mjs';
 import { encodePng, readBytes } from '../../tools/gen/png.mjs';
 import { parseTouchArgs } from '../../tools/gen/touchAtlasCli.mjs';
+import { TOUCH_PLATE_COLS } from '../../tools/gen/promptTouch.mjs';
+import { TOUCH_PLATE_SHEET_ROWS } from '../../tools/gen/touchPlateCut.mjs';
 
 /** A directory with a space in it, which is this repository's own situation. */
 const DIR = 'C:/Claude/Steampunk Platformer/tools/gen';
@@ -120,6 +122,57 @@ function syntheticCell(grey: number): Uint8Array {
   return encodePng(side, side, data);
 }
 
+/** The key whose source is overridden, standing in for a re-shot cell. */
+const OVERRIDE_KEY = 'touch-attack';
+
+/**
+ * A synthetic plate in the sheet's real shape: `TOUCH_PLATE_COLS` x `TOUCH_PLATE_SHEET_ROWS` cells,
+ * each a disc of its own grey so no two cells can be confused for one another, and square overall
+ * because `plateCells` refuses anything else.
+ */
+function syntheticPlate(): Uint8Array {
+  const cell = 300;
+  const w = cell * TOUCH_PLATE_COLS;
+  const h = cell * TOUCH_PLATE_SHEET_ROWS;
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i + 1] = 255;
+    data[i + 3] = 255;
+  }
+  const r = cell * 0.35;
+  for (let row = 0; row < TOUCH_PLATE_SHEET_ROWS; row += 1) {
+    for (let col = 0; col < TOUCH_PLATE_COLS; col += 1) {
+      const grey = 20 + (row * TOUCH_PLATE_COLS + col) * 15;
+      const cx = col * cell + cell / 2;
+      const cy = row * cell + cell / 2;
+      for (let y = cy - r; y <= cy + r; y += 1) {
+        for (let x = cx - r; x <= cx + r; x += 1) {
+          if ((x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+          const i = (Math.round(y) * w + Math.round(x)) * 4;
+          data[i] = grey;
+          data[i + 1] = grey;
+          data[i + 2] = grey;
+        }
+      }
+    }
+  }
+  return encodePng(w, h, data);
+}
+
+/**
+ * Write a plate and one override cell beside a staged run, and return the injection for `dirs`.
+ *
+ * The override's grey is deliberately outside the plate's ramp, so a face cut from the plate can
+ * never coincide with one cut from the override.
+ */
+function syntheticSources(root: string): { plateSource: string; cellSources: Record<string, string> } {
+  const plateSource = join(root, '..', 'plate.png');
+  const override = join(root, '..', 'override.png');
+  writeFileSync(plateSource, syntheticPlate());
+  writeFileSync(override, syntheticCell(220));
+  return { plateSource, cellSources: { [OVERRIDE_KEY]: override } };
+}
+
 describe('the default build reads the cut faces and does not rewrite them', () => {
   /** A temp pair seeded with the six committed cuts, plus the bytes they started as. */
   function stage(): { dirs: { outDir: string; cutDir: string }; before: Map<string, Uint8Array> } {
@@ -212,26 +265,20 @@ describe('the default build reads the cut faces and does not rewrite them', () =
     // superseded glyph if the override map is dropped — had no behavioural gate. Codex round 14,
     // finding 11.
     //
-    // The recorded sources are gitignored 4 MB plates, so this asserts the WRITE SET and the sweep
-    // rather than byte reproduction, and says so plainly instead of skipping. Byte reproduction is
-    // verified by hand against the real sources and recorded in the generation log.
-    const { dirs } = stage();
+    // 🔴 And the first version of this test **passed when adoption never ran**. The recorded
+    // sources are gitignored 4 MB plates, so it caught its own ENOENT and returned green — a gate
+    // whose subject was absent on any fresh clone, and which asserted only a write count even when
+    // the sources happened to be there. Codex round 15, finding 3. The sources are injected now,
+    // so adoption ALWAYS runs, and every one of the twelve files is compared byte for byte.
+    const { dirs: base } = stage();
+    const dirs = { ...base, ...syntheticSources(base.cutDir) };
     // 🔴 Named `touch-*.png`, because `staleFaces` sweeps only that prefix — deliberately, so the
     // build cannot delete a neighbour's asset (M53). A file called `stale-extra.png` would survive
     // by design and the assertion would be testing the wrong thing.
     writeFileSync(join(dirs.cutDir, 'touch-superseded.png'), syntheticCell(10));
     writeFileSync(join(dirs.outDir, 'touch-superseded.png'), syntheticCell(10));
 
-    let written: string[];
-    try {
-      written = main(['--adopt'], dirs);
-    } catch (err) {
-      // The plates are not in the repo. That is the expected state on a fresh clone, and an
-      // error naming the missing file is the correct behaviour — silently cutting something else
-      // would be the defect.
-      expect(String(err), 'adopt failed for a reason other than a missing source').toMatch(/take-|plate|ENOENT|not found/i);
-      return;
-    }
+    const written = main(['--adopt'], dirs);
 
     expect(written.length, 'adopt writes a cut and a face for every control').toBe(12);
     for (const dir of [dirs.cutDir, dirs.outDir]) {
@@ -240,5 +287,37 @@ describe('the default build reads the cut faces and does not rewrite them', () =
         `adopt did not sweep ${dir} — a superseded file survived into the oracle`,
       ).toBe(false);
     }
+
+    // Byte for byte, all twelve, against a second run into a fresh pair. Adoption that is not
+    // reproducible is not an oracle: the committed cuts every shipped-bytes gate measures against
+    // are whatever the last run happened to emit.
+    const secondBase = stage().dirs;
+    const second = { ...secondBase, ...syntheticSources(secondBase.cutDir) };
+    const again = main(['--adopt'], second);
+    expect(again.length, 'the second adopt run wrote a different number of files').toBe(12);
+    for (const file of written) {
+      const twin = file.replace(dirs.outDir, second.outDir).replace(dirs.cutDir, second.cutDir);
+      expect(
+        readBytes(twin),
+        `${file} is not reproducible — two adopt runs from the same sources disagree`,
+      ).toEqual(readBytes(file));
+    }
+
+    // 🔴 The OVERRIDE was honoured, which is the property that keeps a re-shot cell from being
+    // silently recut out of the plate. `touch-attack`'s source here is a disc no cell of the
+    // synthetic plate carries, so the face it produced can only have come from the override.
+    const overridden = readBytes(join(dirs.outDir, `${OVERRIDE_KEY}.png`));
+    const plateOnly = { ...stage().dirs };
+    const plateOnlyDirs = {
+      ...plateOnly,
+      ...syntheticSources(plateOnly.cutDir),
+      cellSources: {},
+    };
+    main(['--adopt'], plateOnlyDirs);
+    expect(
+      readBytes(join(plateOnlyDirs.outDir, `${OVERRIDE_KEY}.png`)),
+      `${OVERRIDE_KEY} came out identical with and without its override — adopt recut it from the ` +
+        'plate and the re-shoot is gone',
+    ).not.toEqual(overridden);
   }, 60_000);
 });
