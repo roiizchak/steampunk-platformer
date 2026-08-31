@@ -531,6 +531,34 @@ pause finding independently, and brief 2 found something no one had looked for.
 | 5 | A boot names *feet*, not a walk/run **toggle** | **RECORDED.** *Reason: no conventional glyph distinguishes a gait toggle from locomotion; the lit/unlit plate carries the state* |
 | 6 | Pressed feedback is alpha-only and happens under the thumb | **RECORDED.** *Reason: a cue outside the box bounds is a layout change, not an art one* |
 
+#### 🔴 Codex round 15 — the implementation review (12.23), `VERDICT: REVISE`
+
+Eleven findings on the round-14 repairs, every one re-verified locally before being acted on.
+**Seven applied, one blocks the redesign, three are owner decisions.**
+
+Two of them are the same failure mode: **a repair that quietly extends its own remit**. Finding 1
+is a bound the evidence had WITHDRAWN, resurrected by the fix for finding 14.3; finding 8 is an
+approved criterion widened by a gate rather than by the owner. Neither is a wrong repair — both are
+right repairs that were not authorised to be that wide.
+
+| # | finding | disposition |
+|---|---|---|
+| 1 | 🔴 **The withdrawn per-pair CPU bound still executed.** Sharing one evaluator between the clean gate and the red proofs re-applied per-pair rejection at ±0.5 ms to the main-thread deltas — the band a held-out sweep had already retired, because `workMedianMs` is a median over Chrome's 0.1 ms grid of a 0.8–0.9 ms quantity and one pair read exactly −0.5000 while the median of the same four read −0.1000 | **APPLIED.** `withinBudget` takes an explicit `policy`: GPU is `median-and-pairs`, CPU is `median-only`. **My own repair introduced this**, which is why the rationale and the code disagreed |
+| 2 | 🔴 **M72 and M73 bypassed the clean gate's counterbalance** — both red proofs created the touch context first and kept it first for the whole run, the exact confound `touchArms.ts` exists to remove, and the CPU proof omitted the `hideTexts` `stillVisible === 0` checks entirely | **APPLIED.** Both proofs run the same two `makeArms` blocks, the same preconditions and the same pooling as the clean gate |
+| 3 | 🔴 **The `--adopt` test passed without exercising adoption.** The recorded sources are gitignored 4 MB plates, so it caught its own ENOENT and returned green on any fresh clone; with the sources present it asserted a write count and left byte reproduction to a manual check | **APPLIED.** `sourceCells` takes `plateSource`/`cellSources` through `dirs` — production passes neither. The test injects a synthetic plate and one override cell, compares all twelve outputs against a second run, and asserts the override was honoured rather than recut. **M76** reds it |
+| 4 | 🔴 **The requested whole-plate redesign is unsafe through the current manifest** — it still points at take 3 plus three single-cell overrides that adoption reapplies, `TOUCH_PLATE_SHEET_ROWS` assumes three physical rows, and the whole-plate prompt still mandates the *"deeply cut and filled with dark shadow"* clause already blamed for the fragmented marks | **BLOCKS THE REDESIGN.** Recorded as its precondition: one atomic manifest change — new plate source, **measured** physical row count, empty override map, repaired flat-glyph prompt — **before** any spend or cut |
+| 5 | **GPU samples included drain-frame renders.** The bounded drain called `onFrameTop()` on every one of its frames, re-arming the timer, so `prerender` opened fresh queries after the window had closed | **APPLIED.** `stopSubmitting()` disarms without finishing, and `sample()` takes it as an **opt-in** — Phases 5–8 fixed their bounds against the contaminated median, and flipping it globally would silently re-found four phases' numbers |
+| 6 | **A fresh whole plate reduces family drift but does not establish the family invariant.** Every cell is independently keyed, bounded, cropped and rescaled; nothing compares bezel, silhouette, lighting or patina across cells, so one sheet can still hold six visibly different buttons | **OWNER DECISION — put to the owner before the redesign is adopted.** The round-14 deferral reason (*"it would re-open four adopted faces"*) is genuinely removed by a whole-plate redesign, so the finding is live again |
+| 7 | **12.19 was PASS with no red proof for `MIN_TOUCH_ARM_CPU_MS`.** The floor replaced a per-pair guard that could not detect a collapse, and nothing in the matrix collapsed an arm | **APPLIED as M75**, and the mutation is *both* arms rather than one: zeroing one arm reds the delta bound too and proves nothing about the floor. Zeroing both leaves the delta at 0.0000 — the case a paired statistic is blind to by construction — and **only the floor fired** |
+| 8 | 🔴 **The live-size sweep widened 12.14 without amending it.** The approved criterion says *"at the smallest in-scope viewport"*; the gate now rejects a failure at any integer size from 44 through 48, and it demonstrably rejected art that passed at 44 | **OWNER DECISION — the criterion, not the gate.** Widening an approved criterion is a STOP-and-ask even when the wider rule is better. Options: amend 12.14 to the live band, or keep 44 criterion-bearing and demote 45–48 to diagnostic |
+| 9 | **Component scoring is not a semantic-action mask**, and six new glyphs make that matter more, not less | **OWNER DECISION, carried forward from round 14 finding 12.** *Reason unchanged: inventing the mask at the end of a gate is what round 8 did* |
+| 10 | **The QA log contradicted itself materially** — header vs 12.18 on takes and spend, table vs summary on 12.23, superseded pause/walk evidence, and 23 holes in the PRD against 27 here | **APPLIED.** One final-source-of-truth sweep; 12.23 reads **NOT MET** in both places and nowhere UNRUN |
+| 11 | **The prose sweep missed direct falsehoods** — five controls in 12.12's criterion and its QA row, *"all five"* in the e2e title, 48 px as the presentation floor in two art comments | **APPLIED.** `TOUCH_IDS` is named as the authority instead of a number, and the proxy is described as the 44–48 px band |
+
+⚠️ **Findings 6, 8 and 9 are on the owner's desk and 12.14 cannot go PASS while 8 is open** — the
+gate currently enforces more than the criterion says, which is the failing shape the round-14 log
+already records once.
+
 #### 🔴 Codex round 14 — the implementation review (12.23), `VERDICT: REVISE`
 
 Thirteen findings, every one re-verified locally before being acted on. **Nine applied, four
