@@ -210,8 +210,8 @@ papered over.
 | M74 | measure the contrast sweep at every size in the live band instead of pinning 44 | 12.14, 12.19 | **RED on its first run — `touch-attack` stroke 2 at 2.740:1 at 47 CSS px**, between two sizes both reading 3.318:1. The box filter is not monotonic in output size |
 | M75 | return `workMedianMs: 0` from the sampler, collapsing BOTH arms' main-thread measurement | 12.11, 12.19 | RED 1/1 — **and only the floor fired.** The delta stayed inside `median-only` +/-0.5 because zero minus zero is zero: the case a paired statistic structurally cannot see |
 | M76 | make `--adopt` ignore the override map and recut every face from the plate | 12.17, 12.19 | RED 1/19 — the re-shot cell silently reinstated from the plate |
-| M77 | make `familyFailures` return `[]` for every set | 12.17, 12.19 | RED 6/8 — a re-toned cell, a lighter button, a square bezel, six identically non-brass buttons, **a button lit from the wrong side**, and the builder itself |
-| M79 | delete the family check from `runBuild`, leaving `familyFailures` intact | 12.17, 12.19 | RED 1/8 — **only the builder case.** The decision function's own five stayed green, which is exactly the hole: a gated function with an ungated seam |
+| M77 | make `familyFailures` return `[]` for every set | 12.17, 12.19 | RED 7/9 — a re-toned cell, a lighter button, a square bezel, six identically non-brass buttons, **a button lit from the wrong side**, **one rotated half a turn**, and the builder itself |
+| M79 | delete the family check from `runBuild`, leaving `familyFailures` intact | 12.17, 12.19 | RED 1/9 — **only the builder case.** The decision function's own six stayed green, which is exactly the hole: a gated function with an ungated seam |
 | M78 | drop `stopSubmitting()` from the clean drain, restoring drain-frame query submission | 12.11, 12.19 | RED 1/1 — **8** queries opened after the window closed, which is also the size of the contamination the repair removed |
 
 **Twenty-seven rows reddened nothing, and all twenty-seven were holes rather than mutations to drop.**
