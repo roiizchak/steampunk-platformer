@@ -239,22 +239,36 @@ export function median(values: number[]): number {
  * invisible in landscape. An already-invisible object costs nothing in either arm, so equal counts
  * was over-strict — what has to hold is that nothing textual is DRAWN in either window.
  *
+ * ⚠️ **BOTH scenes, and the first version swept only `UI`.** The help banner is built by
+ * `gameHud.ts:79` against the **`Game`** scene, not `UI` — it lives there precisely so it can apply
+ * the `- cam.x/y` correction `GameScene`'s displaced camera needs. Sweeping `UI` alone moved the
+ * median from -0.1188 ms to -0.1065 ms, which is nothing, because the banner was never in the sweep.
+ * A helper that reports a count and hides the wrong objects is the shape of a green no-op.
+ *
  * @returns how many were visible and got hidden, and how many are still visible after the pass.
  */
 export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisible: number }> {
   return page.evaluate(() => {
     type Obj = { type: string; visible: boolean; setVisible(v: boolean): unknown };
     type Scene = { children: { list: Obj[] } };
-    const ui = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
-      .__phaserGame.scene.getScene('UI');
-    if (!ui) return { hidden: -1, stillVisible: -1 };
+    const mgr = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
+      .__phaserGame.scene;
     let hidden = 0;
-    for (const o of ui.children.list) {
-      if (o.type !== 'Text') continue;
-      if (o.visible) hidden += 1;
-      o.setVisible(false);
+    let stillVisible = 0;
+    let seen = 0;
+    for (const key of ['Game', 'UI']) {
+      const scene = mgr.getScene(key);
+      if (!scene) continue;
+      seen += 1;
+      for (const o of scene.children.list) {
+        if (o.type !== 'Text') continue;
+        if (o.visible) hidden += 1;
+        o.setVisible(false);
+      }
+      stillVisible += scene.children.list.filter((o) => o.type === 'Text' && o.visible).length;
     }
-    const stillVisible = ui.children.list.filter((o) => o.type === 'Text' && o.visible).length;
-    return { hidden, stillVisible };
+    // Neither scene resolved: report an impossible count rather than a clean zero, so a caller
+    // asserting `hidden > 0` reds instead of reading a no-op as an equalised pair of arms.
+    return seen === 2 ? { hidden, stillVisible } : { hidden: -1, stillVisible: -1 };
   });
 }
