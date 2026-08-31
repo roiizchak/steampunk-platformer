@@ -211,6 +211,7 @@ papered over.
 | M75 | return `workMedianMs: 0` from the sampler, collapsing BOTH arms' main-thread measurement | 12.11, 12.19 | RED 1/1 — **and only the floor fired.** The delta stayed inside `median-only` +/-0.5 because zero minus zero is zero: the case a paired statistic structurally cannot see |
 | M76 | make `--adopt` ignore the override map and recut every face from the plate | 12.17, 12.19 | RED 1/19 — the re-shot cell silently reinstated from the plate |
 | M77 | make `familyFailures` return `[]` for every set | 12.17, 12.19 | RED 4/25 — a re-toned cell, a lighter button, a square bezel and six identically non-brass buttons all adopted |
+| M78 | drop `stopSubmitting()` from the clean drain, restoring drain-frame query submission | 12.11, 12.19 | RED 1/1 — **8** queries opened after the window closed, which is also the size of the contamination the repair removed |
 
 **Twenty-seven rows reddened nothing, and all twenty-seven were holes rather than mutations to drop.**
 
