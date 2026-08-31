@@ -213,6 +213,10 @@ papered over.
 | M77 | make `familyFailures` return `[]` for every set | 12.17, 12.19 | RED 9/14 — a re-toned cell, a lighter button, a square bezel, six identically non-brass buttons, **a button lit from the wrong side**, **one rotated half a turn**, **one that darkens a band out of the comparison**, and the builder on both its paths |
 | M79 | delete the family check from `runBuild`, leaving `familyFailures` intact | 12.17, 12.19 | RED — **only the builder cases.** The decision function's own stayed green, which is exactly the hole: a gated function with an ungated seam |
 | M78 | drop `stopSubmitting()` from the clean drain, restoring drain-frame query submission | 12.11, 12.19 | RED 1/1 — **8** queries opened after the window closed, which is also the size of the contamination the repair removed |
+| M80 | make `measurePlateRows` always return 3 | 12.17, 12.19 | RED 2/24 — the two-row and four-row sheets. **Every fixture in the suite was a three-row sheet before this gate existed**, so the estimator had no caller that could tell it from the constant it replaced |
+| M81 | delete the joint-grid comparison, keeping the three scalars | 12.17, 12.19 | RED 3/24 — the darkened bezel, the half turn and the cross-swap. The scalars see none of the three |
+| M82 | replace the merged key set with the expected list | 12.17, 12.19 | **GREEN 0/24 — the assertion was DEAD.** `requireFile` throws first, so it could never observe a partial family. Deleted rather than gated: a check that cannot go red is decoration, and defensive decoration reads as a guarantee |
+| M82b | load `--cell`'s neighbouring cuts only `if (existsSync)`, as it was | 12.17, 12.19 | RED 1/16 — a directory missing four cuts judged a family of two and wrote the candidate, the check passing because nothing was left to disagree with it |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
 
