@@ -17,6 +17,7 @@ import {
   PAIRS,
   median,
   pairedDeltas,
+  hideTexts,
   sampleArm,
   wakeLoop,
 } from './touchPerf';
@@ -133,6 +134,25 @@ test('12.11 the frame budget is unregressed with the controls drawn', async ({ b
 
     await installGpuTimer(withControls);
     await installGpuTimer(without);
+
+    // 🔴 Equalise everything that is not the controls. The keyboard help banner is ~130 glyphs
+    // of 44 px bold text and the touch one is ~35, which is more fill rate than the controls and
+    // runs the wrong way — the first clean run read every GPU pair NEGATIVE because of it.
+    const textTouch = await hideTexts(withControls);
+    const textBare = await hideTexts(without);
+    expect(
+      textTouch.hidden + textBare.hidden,
+      'no text was visible in either arm, so this helper equalised nothing',
+    ).toBeGreaterThan(0);
+    for (const [t, name] of [
+      [textTouch, 'touch'],
+      [textBare, 'bare'],
+    ] as const) {
+      expect(
+        t.stillVisible,
+        `${t.stillVisible} text objects are still drawn in the ${name} arm — the arms differ by more than the controls`,
+      ).toBe(0);
+    }
 
     const controlsArm: number[] = [];
     const bareArm: number[] = [];

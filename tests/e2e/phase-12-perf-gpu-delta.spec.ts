@@ -49,6 +49,7 @@ import {
   MAX_TOUCH_GPU_DELTA_MS,
   PAIRS,
   addFaceCopies,
+  hideTexts,
   median,
   pairedDeltas,
   sampleArm,
@@ -73,6 +74,25 @@ test.describe('Phase 12 — criterion 12.11, the GPU delta can go RED (vault C2)
       await assertRealGpu(without, '12.11-gpu-redproof control');
       await installGpuTimer(withControls);
       await installGpuTimer(without);
+
+      // 🔴 Equalise everything that is not the controls. The keyboard help banner is ~130 glyphs
+      // of 44 px bold text and the touch one is ~35, which is more fill rate than the controls and
+      // runs the wrong way — the first clean run read every GPU pair NEGATIVE because of it.
+      const textTouch = await hideTexts(withControls);
+      const textBare = await hideTexts(without);
+      expect(
+        textTouch.hidden + textBare.hidden,
+        'no text was visible in either arm, so this helper equalised nothing',
+      ).toBeGreaterThan(0);
+      for (const [t, name] of [
+        [textTouch, 'touch'],
+        [textBare, 'bare'],
+      ] as const) {
+        expect(
+          t.stillVisible,
+          `${t.stillVisible} text objects are still drawn in the ${name} arm — the arms differ by more than the controls`,
+        ).toBe(0);
+      }
 
       // 🔴 The precondition, before a single number. Zones are HITTABILITY — a `Zone` renders
       // nothing — so the pixels are the FACES, and they are asserted by name.

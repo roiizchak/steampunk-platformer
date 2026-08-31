@@ -216,3 +216,45 @@ export function median(values: number[]): number {
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!;
 }
+
+/**
+ * Hide every `Text` on the UI scene, and report how many.
+ *
+ * 🔴 **Because the two arms differed by more than the controls, and it showed.** The first clean run
+ * measured every GPU pair NEGATIVE — the touch arm costing *less* rasteriser time than the bare one,
+ * which is backwards for an arm that draws six extra faces. The cause is the help banner:
+ * `gameDev.ts:helpLine()` prints `ARROWS / WASD move · SPACE / UP / W jump · SHIFT walk · F / L
+ * attack · M mute · [ ] volume 100% · ESC levels` on a keyboard device and `VOLUME 100%` on a touch
+ * one — about 130 glyphs against 35, at 44 px bold across two wrapped rows. That is real fill rate,
+ * and it is larger than the controls.
+ *
+ * *An A/B toggle bounds only what differs between the arms*, and two things differed. Worse, the
+ * offset ran the wrong way: a genuine +0.5 ms regression in the controls would have landed at
+ * +0.35 ms and passed. Equalising the text is what makes the delta attributable to the controls,
+ * which is what 12.11 actually claims.
+ *
+ * ⚠️ **The invariant is "neither arm draws text", not "both arms draw the same amount."** The first
+ * version asserted equal counts and reddened at once: the touch arm carries three `Text` objects and
+ * the bare arm one, because the rotate prompt's two lines exist on a touch device and are merely
+ * invisible in landscape. An already-invisible object costs nothing in either arm, so equal counts
+ * was over-strict — what has to hold is that nothing textual is DRAWN in either window.
+ *
+ * @returns how many were visible and got hidden, and how many are still visible after the pass.
+ */
+export async function hideTexts(page: Page): Promise<{ hidden: number; stillVisible: number }> {
+  return page.evaluate(() => {
+    type Obj = { type: string; visible: boolean; setVisible(v: boolean): unknown };
+    type Scene = { children: { list: Obj[] } };
+    const ui = (window as unknown as { __phaserGame: { scene: { getScene(k: string): Scene | null } } })
+      .__phaserGame.scene.getScene('UI');
+    if (!ui) return { hidden: -1, stillVisible: -1 };
+    let hidden = 0;
+    for (const o of ui.children.list) {
+      if (o.type !== 'Text') continue;
+      if (o.visible) hidden += 1;
+      o.setVisible(false);
+    }
+    const stillVisible = ui.children.list.filter((o) => o.type === 'Text' && o.visible).length;
+    return { hidden, stillVisible };
+  });
+}
