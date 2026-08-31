@@ -44,7 +44,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | Three splits taken rather than an exemption. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
-| 12.23 | Codex IMPLEMENTATION review on the final diff | **UNRUN** | Runs after this log. |
+| 12.23 | Codex IMPLEMENTATION review on the final diff | **NOT MET** | **Round 14 ran and returned `VERDICT: REVISE`** — 13 findings, nine applied and four recorded with reasons (§ Codex round 14). *Executed with an unresolved verdict is NOT MET, not UNRUN.* Round 15 was launched on the repaired diff and **stopped on a ChatGPT account usage limit** partway through, producing no verdict; it is queued to retry. |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **UNRUN — owner** | Hands-on *(C4)*. |
 
 **One criterion is NOT MET and three are UNRUN, so the phase is reported FAILING** *(status
