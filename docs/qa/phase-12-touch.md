@@ -35,7 +35,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.11 | Frame budget unregressed with the controls drawn | **NOT MET** | § 12.11. The statistic cannot order its own mutation. Replacement named. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps all five coordinates; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN — owner** | Hands-on *(C4)*. Cannot be closed any other way. |
-| 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes, the agent gate has not run** | The wrench cell was **re-shot** (owner decision 2026-08-31) and every stroke of all six faces now reaches **3.318:1** at rest and **3.846:1** pressed at 48 CSS px, over every background luminance, against 1.4.11's 3:1 — **with no exception table**: `KNOWN_SHORTFALL` is gone. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, recaptured on the new bytes. ⚠️ **The verdict is NOT MET, not PASS, because 12.14's owner is `ui-ux-tester` and that agent has not run two briefs against the new faces** *(A7)* — and *"ran" is never the same as "passed"*. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one**: production hands the downscale to the browser (`image-rendering: auto` at a fractional canvas scale) and nothing here proves it uses `resize.mjs`'s box filter. Codex round-11, which withdrew the finding once the label stood. **Five earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history below. |
+| 12.14 | The button art is readable at true size at the smallest viewport | **NOT MET — the measurable half passes, the agent gate has not run** | The wrench cell was **re-shot** (owner decision 2026-08-31) and every stroke of all six faces now reaches **3.318:1** at rest and **3.846:1** pressed at 48 CSS px, over every background luminance, against 1.4.11's 3:1 — **with no exception table**: `KNOWN_SHORTFALL` is gone. ⚠️ **But 48 is not the worst reachable size** — controls stay live down to 44 CSS px, and at 44 `touch-pause` stroke 1 measures **2.91:1**. See § 12.14's `ui-ux-tester` briefs, finding 2. Screenshot at iPhone SE landscape, chrome-reduced (667 × 325): `docs/evidence/phase-12-touch-art.png`, recaptured on the new bytes. ⚠️ **The verdict is NOT MET, not PASS, because 12.14's owner is `ui-ux-tester` and that agent has not run two briefs against the new faces** *(A7)* — and *"ran" is never the same as "passed"*. ⚠️ **The figure remains a BOX-FILTER PROXY and is labelled as one**: production hands the downscale to the browser (`image-rendering: auto` at a fractional canvas scale) and nothing here proves it uses `resize.mjs`'s box filter. Codex round-11, which withdrew the finding once the label stood. **Five earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history below. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: six PNGs, alpha, six distinct **marks**, own key | **PASS — criterion amended 2026-08-31, owner decision** | Everything measurable passes on the shipped bytes (§ 12.17): six 160×160 PNGs, a two-sided alpha band, six pairwise-distinct engraved marks, each bound to its own key. The two amended words are **five → six** and **silhouettes → marks**: the six deliberately share one round brass disc, so the outline is the same by design and the distinctness that exists to be asserted is of the mark. **The distinctness gate was not loosened** — it already compared marks. § 12.17b. |
@@ -460,7 +460,7 @@ evidence*, and that applies to the agreeable one too.
 | # | finding | disposition |
 |---|---|---|
 | 1 | 🔴 **`pause` draws a cog and `walk` draws two stacked bars.** A cog is the universal glyph for *settings*; two bars evoke nothing about locomotion. Neither says its action at any size, so this is not a size problem contrast could ever have caught. **Both briefs found this independently** | **RECORDED, owner decision.** Two more single-cell re-shoots, $0.30, taking the touch-UI figure to $1.05 of $5. Outside the wrench-only scope authorised on 2026-08-31 |
-| 2 | 🔴 **The gate measures 48 CSS px; controls go live at 44.** `TRUE_SIZE_PX` is `160 × 325 / 1080 = 48`, from two real-browser measurements, but `touchTargetsFit` shows and enables a control down to `TOUCH_MIN_CSS_PX = 44` and the hit box IS the face box (`touchLayout.ts:156`). The 44-48 px band is reachable and has never been measured — and round 9 recorded contrast falling from 3.32:1 to 1.63-2.85:1 over a few output pixels | **MEASURED, see below** |
+| 2 | 🔴 **The gate measures 48 CSS px; controls go live at 44.** `TRUE_SIZE_PX` is `160 × 325 / 1080 = 48`, from two real-browser measurements, but `touchTargetsFit` shows and enables a control down to `TOUCH_MIN_CSS_PX = 44` and the hit box IS the face box (`touchLayout.ts:156`). The 44-48 px band is reachable and has never been measured — and round 9 recorded contrast falling from 3.32:1 to 1.63-2.85:1 over a few output pixels | 🔴 **MEASURED, and it FAILS. See below.** |
 | 3 | The re-shot wrench is a **solid fill** where the other five are **outlines** — the direct consequence of `FLAT_GLYPH`, and nothing gates stroke weight across the set | **RECORDED, owner decision.** At 48 px a filled shape reads *better* than an outline, so this trades set coherence for legibility. Verified by eye on the shipped bytes |
 | 4 | `left` and `right` are mirror-image triangles a thumb-width apart — the only pair distinguished by orientation alone | **RECORDED, not fixed.** Position disambiguates them (bottom-left pair) and no brief called it a blocker |
 | 5 | The sweep is over a **flat** grey ramp, per 1.4.11's own solid-colour model, while STYLE.md mandates dense dithered detail behind every plate, and M21 found 175/878 sampled positions with a hazard, enemy or goal under a control | **RECORDED.** WCAG's model is flat; a per-pixel-noise statistic is not defined by the standard being cited |
@@ -468,6 +468,35 @@ evidence*, and that applies to the agreeable one too.
 
 ⚠️ **Findings 1, 3 and 6 are recorded rather than applied, and each needs an owner call, not a
 patch.** Findings 4 and 5 are recorded as accepted. Finding 2 was measured rather than argued.
+
+##### 🔴 Finding 2, measured: at the real live floor the art does NOT clear 3:1
+
+`TRUE_SIZE_PX` was set to **44** and the shipped battery re-run against the shipped bytes:
+
+```
+AssertionError: stroke 1 of touch-pause at alpha 0.85 reaches only 2.91:1 at 44 CSS px
+```
+
+So the gate's 48 px figure is not the worst reachable case, and at the worst reachable case one
+stroke of `touch-pause` is **2.91:1** against 1.4.11's 3:1. The 48 comes from `160 × 325 / 1080`,
+iPhone SE landscape as Safari gives it; `touchTargetsFit` shows and enables a control down to
+`TOUCH_MIN_CSS_PX = 44`, and the hit box **is** the face box (`touchLayout.ts:156`), so any browser
+whose chrome is taller than Safari's — none of which has been surveyed — lands in a live band the
+contrast gate has never measured.
+
+⚠️ **The probe was run on a committed tree and reverted with `git checkout`; `TRUE_SIZE_PX` is
+unchanged in the shipped test.** Nothing here was greened by moving a number.
+
+**Three options, and this is an owner call because two of them change shipped behaviour:**
+
+| | what it does | cost |
+|---|---|---|
+| **A — raise `TOUCH_MIN_CSS_PX` to 48** *(recommended)* | no control is ever live below 48, so the gate's existing measurement becomes the worst case and the criterion's sentence becomes true as written. Still ≥ 44, so **12.9 is unaffected**, and 48 is Android's own dp guideline, which this log already records as stricter than the 44 cited | a device between 44 and 48 CSS px gets the rotate prompt instead of controls it can barely hit — which is what the prompt is for |
+| **B — re-shoot `touch-pause` for a heavier mark** | fixes the art rather than the threshold, and would fold into the `pause`-glyph re-shoot finding 1 already asks for | $0.15, and it fixes one face while leaving the band unmeasured for the other five |
+| **C — measure at 44 and record the shortfall** | most honest about what is known | leaves a WCAG 1.4.11 failure shipping, and re-introduces the exception table that was just deleted |
+
+Until one is taken, **12.14 is NOT MET on the measurable half as well as the judgement half.**
+
 
 #### What the four original repairs measured, which was the GREY BOX
 
