@@ -215,10 +215,21 @@ papered over.
 | M78 | drop `stopSubmitting()` from the clean drain, restoring drain-frame query submission | 12.11, 12.19 | RED 1/1 — **8** queries opened after the window closed, which is also the size of the contamination the repair removed |
 | M80 | make `measurePlateRows` always return 3 | 12.17, 12.19 | RED 2/24 — the two-row and four-row sheets. **Every fixture in the suite was a three-row sheet before this gate existed**, so the estimator had no caller that could tell it from the constant it replaced |
 | M81 | delete the joint-grid comparison, keeping the three scalars | 12.17, 12.19 | RED 3/24 — the darkened bezel, the half turn and the cross-swap. The scalars see none of the three |
-| M82 | replace the merged key set with the expected list | 12.17, 12.19 | **GREEN 0/24 — the assertion was DEAD.** `requireFile` throws first, so it could never observe a partial family. Deleted rather than gated: a check that cannot go red is decoration, and defensive decoration reads as a guarantee |
 | M82b | load `--cell`'s neighbouring cuts only `if (existsSync)`, as it was | 12.17, 12.19 | RED 1/16 — a directory missing four cuts judged a family of two and wrote the candidate, the check passing because nothing was left to disagree with it |
+| M83 | delete the CORE, OCCUPANCY and GRAIN comparisons, keeping the joint grid | 12.17, 12.19 | RED 3/14 — a patina drift confined to the core, a permutation inside one cell, and a cell hollowed out behind an intact edge. **Exactly the three new cases and nothing else**, which is what a statistic added for a named blind spot should red |
+| M84 | let one lit pixel make a scanline a row, and drop the margin-remainder rule | 12.17, 12.19 | RED 2/9 — the stray speck and the two-run sheet with a deep margin. With two runs there is ONE step, so the drift check cannot fire and `round(h / pitch)` reads margin as an empty row |
+| M85 | refuse AFTER writing: move the family check below the write loop | 12.17, 12.19 | RED 1/5 — the out-of-family candidate landed in both directories and the throw came too late |
+| M85b | write `--cell`'s candidate before the family is assembled | 12.17, 12.19 | RED 2/5 — **including the missing-neighbour case**, which M85 alone could not red: that path throws in `requireFile`, upstream of the write loop, so only a write moved above it can prove the refusal is atomic |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
+
+🔴 **M82 is WITHDRAWN from the matrix, and that is not a tidy-up.** 12.19 requires every row here to
+red at least one named gate, and M82 sat in the table reporting `GREEN 0/24` — so the criterion was
+PASS over a row that contradicted it. Codex round 20, finding 1. M82 replaced a "the merged key set
+is exactly six" assertion that could never observe a partial family, because `requireFile` throws
+first: it was a **probe that found dead code**, not a mutation of a live gate, and the dead code was
+deleted rather than gated. The hole it was aimed at is covered by **M82b**, which reds. The counts
+above are of the twenty-two rows that remain.
 
 ⚠️ This said *"twenty-seven rows"*: 27 is the number of green ATTEMPTS, and several rows went green
 more than once before they reddened — M72 twice, M73 twice. Twenty-two rows carry a GREEN marker.
