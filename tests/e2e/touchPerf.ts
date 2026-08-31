@@ -191,7 +191,11 @@ export async function sampleArm(
     `${label}: the sampled page is not visible, so it is not the page being drawn`,
   ).toBe('visible');
 
-  const result = await sample(active, TOUCH_SAMPLE_TICKS);
+  // 🔴 `true` = stop submitting GPU queries when the tick window closes. The bounded drain used to
+  // re-arm the timer on every one of its frames, so renders from AFTER the window entered its
+  // median. Opt-in, because Phases 5-8's bounds were fixed against the contaminated median and
+  // flipping it globally would re-found four other phases' numbers. Codex round 15, finding 5.
+  const result = await sample(active, TOUCH_SAMPLE_TICKS, true);
 
   expect(
     await tickOf(idle),

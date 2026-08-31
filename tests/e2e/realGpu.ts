@@ -19,7 +19,7 @@
  */
 
 import { expect } from '@playwright/test';
-import { SOFTWARE_RENDERERS, webglRenderer } from './perfSampler';
+import { SOFTWARE_RENDERERS, webglRenderer } from './perfRenderer';
 
 /** Asserts a hardware renderer, logs which one, and returns it lower-cased. */
 export async function assertRealGpu(

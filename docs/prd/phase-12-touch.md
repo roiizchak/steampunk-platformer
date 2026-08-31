@@ -208,8 +208,16 @@ papered over.
 | M72 | draw 2000 extra copies of each control's OWN face on the touch arm, then re-run the criterion's own paired procedure | 12.11, 12.19 | **GREEN at 40 copies — 0.0563 ms against a 0.5 ms bound**; **GREEN at 800 under sweep load — 0.5007 ms, a 0.0007 ms margin** → RED at 2000: 1.7684 ms, every pair over 1.32 |
 | M73 | run the controls' own `TouchSession.refresh()` 6000 extra times per frame on the touch arm | 12.11, 12.19 | **GREEN twice — the `scene.update` hook was inert (Phaser caches `sys.sceneUpdate`), then 300/frame gave 0.0500 ms** → RED at 6000: 0.9000 ms, every pair 0.9000 |
 | M74 | measure the contrast sweep at every size in the live band instead of pinning 44 | 12.14, 12.19 | **RED on its first run — `touch-attack` stroke 2 at 2.740:1 at 47 CSS px**, between two sizes both reading 3.318:1. The box filter is not monotonic in output size |
+| M75 | return `workMedianMs: 0` from the sampler, collapsing BOTH arms' main-thread measurement | 12.11, 12.19 | RED 1/1 — **and only the floor fired.** The delta stayed inside `median-only` +/-0.5 because zero minus zero is zero: the case a paired statistic structurally cannot see |
+| M76 | make `--adopt` ignore the override map and recut every face from the plate | 12.17, 12.19 | RED 1/19 — the re-shot cell silently reinstated from the plate |
 
 **Twenty-seven rows reddened nothing, and all twenty-seven were holes rather than mutations to drop.**
+
+🔴 **M75 is the mutation the floor was introduced without.** `MIN_TOUCH_ARM_CPU_MS` replaced a
+per-pair "collapse guard" that could not detect a collapse, and 12.19 was PASS with no red proof for
+its replacement — Codex round 15, finding 7. Zeroing ONE arm would have reddened the delta bound too
+and proved nothing about the floor; zeroing both isolates it exactly, and is the failure a delta is
+blind to by construction.
 
 🔴 **M66 and M68 are the same lesson as the burst of zero particles: a decision function needs its
 own gate.** The cell binding was pinned as a table and nothing drove the code that reads it; the

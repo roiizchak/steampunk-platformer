@@ -98,7 +98,8 @@ import {
   SAMPLE_TICKS,
   SENTRY_COOLDOWN_TICKS,
 } from './perfBudget';
-import { counts, sample, waitForBodyCount } from './perfSampler';
+import { counts, sample } from './perfSampler';
+import { waitForBodyCount } from './perfRenderer';
 import { assertRealGpu } from './realGpu';
 import { bootToGame } from './gameHarness';
 import { frameBudgetReport } from './perfReport';
