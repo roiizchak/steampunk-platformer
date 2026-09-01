@@ -1,0 +1,133 @@
+/**
+ * The touch-atlas builder's COMMAND LINE and its SOURCE MANIFEST — where the bytes come from.
+ *
+ * `buildTouchAtlas.mjs` owns how bytes become faces. This file owns which bytes, and how an argv
+ * says so. The dependency runs one way — the builder imports this module, this module imports only
+ * `promptTouch.mjs` for the key list — because the obvious alternative (a manifest in the builder,
+ * a parser that reads it) is an import cycle waiting to happen.
+ *
+ * ## 🔴 Why the modes exist at all
+ *
+ * The six PNGs under `tests/fixtures/touch-cut/` are the ORACLE every shipped-bytes gate measures
+ * against: `shipped-touch.test.ts` re-runs the two pure ink passes over them and demands the
+ * shipped bytes back, and `shipped-touch-contrast.test.ts` discovers the mark mask from them rather
+ * than from the file under test. An oracle the ordinary build rewrites is not an oracle — a change
+ * to `keyOut`, the crop or the downscale would re-baseline the fixture and the shipped face in one
+ * run, and every gate would follow the change.
+ *
+ * Codex round 13 asked for this split and it was recorded as applied. **It was not.** `82fe755`
+ * added `assets:touch:adopt` to `package.json` and changed the builder not at all: `main()` read no
+ * argv, so both scripts cut the plate and rewrote both directories. The commit message, the review
+ * record and the handoff all said otherwise for a day. Found on 2026-08-31 by reading the diff.
+ *
+ * | invocation | mode | writes |
+ * |---|---|---|
+ * | *(no flags)* | `ink` | `outDir` only — the committed cuts are read, never written |
+ * | `--adopt` | `adopt` | both, and sweeps both |
+ * | `--cell=<key> --source=<path>` | `cell` | one key's cut and face; **no sweep** |
+ */
+
+import { TOUCH_PLATE_CELLS } from './promptTouch.mjs';
+
+/**
+ * The adopted plate. Take 3 — `docs/generations/phase-12-touch-plate.md`.
+ *
+ * Gitignored and 3.8 MB, which is why the 160 px cuts are what the repository commits.
+ */
+export const TOUCH_PLATE_SOURCE =
+  '_generated/phase-12-touch/take-14-01a058ef-d51e-7ae0-a19e-0fabacfcb9df.png';
+
+/**
+ * Per-key source overrides — a cell that came from its own generation rather than from the plate.
+ *
+ * 🔴 **Empty is the correct starting state, and the map is what makes `--adopt` safe after a
+ * single-cell re-shoot.** Without it, `npm run assets:touch:adopt` recuts `TOUCH_PLATE_SOURCE` and
+ * silently reinstates the superseded cell over a newer one. The guard is not this comment: `adopt`
+ * has to reproduce all six shipped PNGs byte for byte, which it can only do while every key's
+ * recorded source is the one its shipped bytes actually came from.
+ *
+ * @type {Readonly<Record<string, string>>}
+ */
+export const TOUCH_CELL_SOURCES = Object.freeze({
+  // 🔴 EMPTY, and that is the redesign landing rather than an oversight. Take 10 redraws all six
+  // buttons in the gate asset's material by owner decision on 2026-08-31, so every key's source is
+  // the plate again and takes 7, 8 and 9 are superseded whole. The map exists for the next
+  // single-cell re-shoot; until there is one, "every shipped face came from one draw" is a fact the
+  // byte-for-byte reproduction gate enforces rather than a claim.
+});
+
+/** Every key the plate descriptors name, for validating `--cell`. */
+const CELL_KEYS = new Set(TOUCH_PLATE_CELLS.map((cell) => cell.key));
+
+/**
+ * Parse the builder's argv into a validated, discriminated mode.
+ *
+ * 🔴 **Every rejection happens here, before the builder opens a single file.** A half-validated
+ * argv that fails partway through leaves one directory new and the other old, which is the state
+ * the whole oracle argument exists to prevent.
+ *
+ * @param {string[]} argv arguments after the script name
+ * @returns {{ mode: 'ink' } | { mode: 'adopt' } | { mode: 'cell', key: string, source: string }}
+ */
+export function parseTouchArgs(argv) {
+  let adopt = false;
+  /** @type {string | undefined} */ let key;
+  /** @type {string | undefined} */ let source;
+
+  for (const arg of argv) {
+    if (arg === '--adopt') {
+      if (adopt) throw new Error('--adopt given twice');
+      adopt = true;
+      continue;
+    }
+    const named = /^--(cell|source)=(.*)$/.exec(arg);
+    if (!named) {
+      // A bare `--cell` with no `=value` lands here too, and saying so beats "unknown flag".
+      if (arg === '--cell' || arg === '--source') throw new Error(`${arg} needs a value: ${arg}=…`);
+      throw new Error(`unknown argument ${arg}`);
+    }
+    const [, name, value] = named;
+    if (!value) throw new Error(`--${name} was given an empty value`);
+    if (name === 'cell') {
+      if (key !== undefined) throw new Error('--cell given twice');
+      key = value;
+    } else {
+      if (source !== undefined) throw new Error('--source given twice');
+      source = value;
+    }
+  }
+
+  if (key !== undefined && source === undefined) throw new Error('--cell needs --source=<path>');
+  if (source !== undefined && key === undefined) throw new Error('--source needs --cell=<key>');
+  if (key !== undefined && adopt) {
+    // Not a nicety. `--adopt` sweeps and `--cell` must not, so a run that meant both would delete
+    // the five faces it was told not to touch.
+    throw new Error('--cell and --adopt are different modes; give one');
+  }
+  if (key !== undefined) {
+    if (!CELL_KEYS.has(key)) {
+      throw new Error(`--cell=${key} is not one of ${[...CELL_KEYS].join(', ')}`);
+    }
+    return { mode: 'cell', key, source: /** @type {string} */ (source) };
+  }
+  return adopt ? { mode: 'adopt' } : { mode: 'ink' };
+}
+
+/**
+ * **SHA-256 of every recorded source, pinned.**
+ *
+ * 🔴 The sources are gitignored 4 MB plates, so *"adoption reproduces the six shipped PNGs byte for
+ * byte"* was manual evidence with nothing tying it to particular bytes: a clone has no way to know
+ * WHICH file the claim was made against, and a file replaced in place would carry the claim with
+ * it. Codex round 16, finding 6.
+ *
+ * `tests/unit/touch-sources.test.ts` asserts the map covers every source in the manifest, and —
+ * when a source is on this machine — that the file still hashes to its pin and that
+ * `main(['--adopt'])` from those exact bytes reproduces the committed cuts. On a clone without the
+ * sources the pins remain the record of what was used.
+ *
+ * Measured 2026-08-31; re-measured the same day for take 10, which supersedes takes 3, 7, 8 and 9.
+ */
+export const TOUCH_SOURCE_HASHES = Object.freeze({
+  [TOUCH_PLATE_SOURCE]: '49654c23e7472b3fa3d72047d5c90dda965943d57bd856825d4824a5c3a34390',
+});

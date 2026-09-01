@@ -71,6 +71,8 @@ import {
   SUB_FILL,
   TITLE_FILL,
 } from '../render/titleInk';
+import { attachRotatePrompt } from './rotateGuard';
+import { attachTapRoutes } from './touchRoutes';
 
 export { TITLE_KEY } from './gameTitle';
 
@@ -236,9 +238,31 @@ export class TitleScene extends Phaser.Scene {
     // 🔴 ONE way in, and it is the level menu — owner's decision, 2026-08-29. `ENTER` used to start
     // a level directly with `L` as a second route to the menu; two doors to the same place is a
     // choice the player has no basis to make on the first screen they see.
-    make('ENTER   choose a level', CHOICE_STYLE);
+    // The copy change is required, not cosmetic. This screen advertised a key only, so a phone
+    // player was told to press ENTER and given no way in even once the tap worked.
+    //
+    // ✅ **And a phone is told about the TAP ALONE — owner decision, 2026-08-30.** `ENTER or TAP`
+    // named both routes on both devices, which reads as a choice on the one device that has only
+    // one of them. A player holding a phone has no ENTER key and no reason to be told about one.
+    const choice = this.game.device.input.touch
+      ? 'TAP   choose a level'
+      : 'ENTER   choose a level';
+    make(choice, CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
     this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
+
+    // One zone over the whole view: this screen has a single action, so anywhere is the target.
+    // No field and no explicit teardown — `attachTapRoutes` registers against this scene's own
+    // SHUTDOWN and DESTROY, which is the same lifetime the objects above have.
+    const titleTargets = [
+      { id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height },
+    ];
+    attachTapRoutes(this, this.game.device.input.touch, titleTargets, () =>
+      this.dismiss(this.data$?.onLevelSelect),
+    );
+    // A screen with a route needs a prompt: `touchRoutes.ts` makes the route dead while the prompt
+    // would be up, and a gated tap with nothing on screen to explain it is worse than the defect.
+    attachRotatePrompt(this, this.game.device.input.touch, titleTargets);
 
     this.applyLayout();
     // Re-layout rather than re-create, so a spec holding a reference across a resize is still

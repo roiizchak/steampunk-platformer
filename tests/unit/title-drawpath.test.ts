@@ -129,7 +129,6 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   const LINES: ReadonlyArray<readonly [string, string]> = [
     ['STEAMPUNK PLATFORMER', 'TITLE_STYLE'],
     ['a short climb through the works', 'SUB_STYLE'],
-    ['ENTER   choose a level', 'CHOICE_STYLE'],
   ];
 
   for (const [text, style] of LINES) {
@@ -137,6 +136,20 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
       expect(source, `"${text}" is not drawn`).toContain(`make('${text}', ${style})`);
     });
   }
+
+  it('names the route THIS device has, and only that one', () => {
+    // ✅ The choice line went from one literal to two — owner decision, 2026-08-30: a phone has no
+    // ENTER key and `ENTER or TAP` read as a choice on the one device with only one route. Both
+    // strings are pinned, and so is the fact that the branch is the DEVICE and not something else.
+    expect(source, 'the touch copy is gone').toContain("'TAP   choose a level'");
+    expect(source, 'the keyboard copy is gone').toContain("'ENTER   choose a level'");
+    expect(source, 'the copy no longer branches on the device').toMatch(
+      /this[.]game[.]device[.]input[.]touch[^;]*'TAP   choose a level'[^;]*'ENTER   choose a level'/,
+    );
+    expect(source, 'the choice line lost CHOICE_STYLE').toContain('make(choice, CHOICE_STYLE)');
+    // And it must not advertise a key a phone does not have.
+    expect(source, "the title still says 'ENTER or TAP'").not.toContain('ENTER or TAP');
+  });
 
   it('the audio hint is drawn from the live state, not a fixed string', () => {
     // Half of the claim: the scene routes that line through `audioHint`.

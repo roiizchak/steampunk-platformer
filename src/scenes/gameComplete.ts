@@ -43,6 +43,7 @@ import type { World } from '../sim/types';
 import { LEVEL_SELECT_KEY, levelOrder } from './gameLevelPick';
 import type { LevelCompleteInfo } from './hudFade';
 import type { UIScene } from './UIScene';
+import { attachTapRoutes } from './touchRoutes';
 
 /** The scene key the last level's continue goes to. Defined in `gameLevelPick.ts`, re-exported here
  * because this file's `bindContinue` is what routes to it. */
@@ -83,7 +84,9 @@ export function onLevelCompleted(ctx: CompletionContext): void {
   // function runs on `levelCompleted`, twenty ticks after the player reached the door and one tick
   // after the courier finished fading out — so the exit's flourish played over an empty doorway.
   // `GameScene.update()` fires it on the `goalReached` arrival edge instead.
-  ctx.ui?.levelComplete(panelText(save.levels[levelId]?.bestGears ?? 0, world, total, next));
+  ctx.ui?.levelComplete(
+    panelText(save.levels[levelId]?.bestGears ?? 0, world, total, next, scene.game.device.input.touch),
+  );
   bindContinue(scene, next);
 }
 
@@ -94,12 +97,21 @@ export function onLevelCompleted(ctx: CompletionContext): void {
  * number that was persisted — including the monotonic `max` and the clamp to the level's gear count.
  * Composing it independently would be a second place that decides what "best" means.
  */
-function panelText(best: number, world: World, total: number, next: string | null): LevelCompleteInfo {
+function panelText(
+  best: number,
+  world: World,
+  total: number,
+  next: string | null,
+  touch: boolean,
+): LevelCompleteInfo {
   return {
     title: next === null ? 'ALL LEVELS COMPLETE' : 'LEVEL COMPLETE',
     gears: `${world.gearsCollected} / ${total} gears`,
     best: `best ${best} / ${total}`,
-    prompt: next === null ? 'ENTER — level select' : `ENTER — ${next}`,
+    // ✅ The device's own route, not both — owner decision, 2026-08-30. A phone has no ENTER key.
+    // ⚠️ The SPECIFIC next level id stays in the string either way: criterion 8.6's mutation
+    // depends on it, and `phase-08-complete.spec.ts` asserts the exact text.
+    prompt: `${touch ? 'TAP' : 'ENTER'} — ${next ?? 'level select'}`,
     // ⚠️ `prompt` names the SPECIFIC next level rather than saying "next level", because criterion
     // 8.6's mutation is "hardcode the next id and confirm the spec names the specific next
     // `levelId`". A generic string is satisfied by a flow that always advances to level-02.
@@ -116,25 +128,58 @@ function panelText(best: number, world: World, total: number, next: string | nul
  * `emitOnRepeat` does not enter into it — a keyboard event listener does not repeat the way a held
  * `Key` object does.
  */
-function bindContinue(scene: Phaser.Scene, next: string | null): void {
+function advanceTo(scene: Phaser.Scene, next: string | null): void {
+  if (next === null) {
+    scene.scene.start(LEVEL_SELECT_KEY);
+    return;
+  }
+  // `start`, not `restart`: the level id travels in the data payload and `GameScene.init(data)`
+  // reads it. A `restart()` would re-enter with the payload the scene was last started with,
+  // which is the level just finished.
+  scene.scene.start('Game', { levelId: next });
+}
+
+/**
+ * Arm ENTER, re-arming itself on any other key.
+ *
+ * Split out of `bindContinue` when the tap route landed: the re-arm used to recurse into
+ * `bindContinue`, which would now build a SECOND zone on every irrelevant keypress.
+ */
+function armContinueKey(scene: Phaser.Scene, onAdvance: () => void): void {
   scene.input.keyboard?.once(Phaser.Input.Keyboard.Events.ANY_KEY_DOWN, function advance(
     event: KeyboardEvent,
   ) {
     if (event.code !== 'Enter' && event.code !== 'NumpadEnter') {
-      // Not our key. Re-arm, because `once` has already removed the listener and the player is still
-      // sitting on a screen whose only exit is this binding.
-      bindContinue(scene, next);
+      // Not our key. Re-arm, because `once` has already removed the listener and the player is
+      // still sitting on a screen whose only exit is this binding.
+      armContinueKey(scene, onAdvance);
       return;
     }
-    if (next === null) {
-      scene.scene.start(LEVEL_SELECT_KEY);
-      return;
-    }
-    // `start`, not `restart`: the level id travels in the data payload and `GameScene.init(data)`
-    // reads it. A `restart()` would re-enter with the payload the scene was last started with, which
-    // is the level just finished.
-    scene.scene.start('Game', { levelId: next });
+    onAdvance();
   });
+}
+
+function bindContinue(scene: Phaser.Scene, next: string | null): void {
+  const go = (): void => {
+    taps.destroy();
+    advanceTo(scene, next);
+  };
+  // ⚠️ The zone is on the GAME scene, not on the `UIScene` that DRAWS the panel: `UIScene`
+  // survives the level-to-level `scene.start('Game')` (`gameHud.ts:49-52`), so a zone parented
+  // to it would outlive the panel it belongs to and sit invisible over the next level, one stray
+  // tap from skipping it. `Game`'s own SHUTDOWN fires on that same start, and `go` destroys the
+  // route before advancing in any case.
+  const { width, height } = scene.scale.gameSize;
+  const taps = attachTapRoutes(
+    scene,
+    scene.game.device.input.touch,
+    // Deliberately larger than the view. `GameScene`'s camera is displaced to `(-10, -8)` for
+    // shake headroom (`gameEffects.ts:156-158`), and a shake in progress moves it further, so a
+    // zone sized exactly to the view can leave a live strip of screen along two edges.
+    [{ id: 'continue', x: -64, y: -64, w: width + 128, h: height + 128 }],
+    go,
+  );
+  armContinueKey(scene, go);
 }
 
 /**

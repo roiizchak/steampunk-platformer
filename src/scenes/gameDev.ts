@@ -118,7 +118,7 @@ export function attachDevOverlays(scene: Phaser.Scene, world: World): DevOverlay
  * scene-key sweep could not see it: the string says "playground" in lowercase, inside a longer
  * literal, and the sweep looks for a quoted `Playground`.
  */
-export function helpLine(audio?: AudioSettings): string {
+export function helpLine(audio?: AudioSettings, touch = false): string {
   // Phase 7's audio keys are in the SHIPPED half deliberately. A mute control the player cannot
   // discover is a mute control they do not have, and this banner is the only place the game
   // currently tells anyone what the keys are.
@@ -147,10 +147,28 @@ export function helpLine(audio?: AudioSettings): string {
   // pass one — gets the bare line rather than a `NaN%`.
   const level =
     audio === undefined ? '' : ` ${audio.muted ? 'muted' : `${Math.round(audio.volume * 100)}%`}`;
-  const base =
-    'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
-    `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
-    'ESC levels';
+  // 🔴 A touch player has none of these keys, and a persistent instruction to press ARROWS,
+  // SPACE, SHIFT, F, L, M, `[`, `]` and ESC — none of which exist on their device — is worse than
+  // no banner at all. Worse still, the two once CONTRADICTED each other: the banner said attack was
+  // `F / L` while the attack plate showed the letter `A`.
+  //
+  // ✅ **And the touch banner does not describe the buttons either — owner decision, 2026-08-30.**
+  // The interim version named each plate (*"TAP to move, jump, strike"*), which was the right
+  // answer while the plates were unlabelled grey boxes. They are not: the generated faces carry an
+  // arrow, a wrench, a gear. A caption explaining an arrow is clutter across the top of a 412 px
+  // screen, and it competed with the HUD for the only row either can use. What remains on touch is
+  // the state a symbol cannot show — the volume — and nothing else.
+  // ⚠️ And it is LABELLED. The interim touch line printed the bare value — `100%`, or worse
+  // `muted` alone — which names no quantity at all: a player reads a percentage across the top of
+  // the screen and has no way to know it is not health, progress or a load. The keyboard line gets
+  // the word from its `[ ] volume` keys; the touch line has to carry it. Codex round-6.
+  const base = touch
+    ? level.trim() === ''
+      ? ''
+      : `VOLUME ${level.trim().toUpperCase()}`
+    : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
+      `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
+      'ESC levels';
   // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
   // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the
   // long DEV form onto a THIRD wrapped row, which `hud-layout.test.ts` caps against for eating the

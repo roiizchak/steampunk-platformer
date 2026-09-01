@@ -136,12 +136,23 @@ export async function installGpuTimer(page: Page): Promise<void> {
       /** Only sample while a window is open, so idle frames between windows are not counted. */
       let armed = false;
 
+      /**
+       * Every query this timer has ever opened.
+       *
+       * 🔴 It exists so the DRAIN BOUNDARY is observable. `stopSubmitting()` disarming is a claim;
+       * a count that does not move across the drain is evidence. Without it, deleting the stop
+       * silently restores drain-frame submission and only a noisy numeric gate might notice.
+       * Codex round 16, finding 2.
+       */
+      let submitted = 0;
+
       /** `prerender` — open a query immediately before the frame's draw calls. */
       const onPreRender = (): void => {
         if (!ext || !armed || open || pending.length >= ringSize) return;
         const q = ext.createQueryEXT();
         ext.beginQueryEXT(ext.TIME_ELAPSED_EXT, q);
         open = q;
+        submitted += 1;
       };
 
       /** `postrender` — close it immediately after, then drain whatever has become readable. */
@@ -177,6 +188,18 @@ export async function installGpuTimer(page: Page): Promise<void> {
       /** Called by `sample()` at the top and bottom of its window; the events do the timing. */
       const onFrameTop = (): void => { armed = true; };
       const onFrameBottom = (): void => { armed = true; };
+
+      /**
+       * Stop OPENING queries without closing the window, so the bounded drain reads back what the
+       * window submitted and nothing more.
+       *
+       * 🔴 The drain used to re-arm on every one of its frames — `onFrameTop()` at the top of
+       * `drain()` — so `prerender` opened a fresh query on each, and those frames' render cost
+       * entered the median of a window that had already ended. Codex round 15, finding 5. It is a
+       * SEPARATE entry point rather than a change to `finish()` because Phases 5-8 fixed their
+       * bounds against the old behaviour: opting in leaves their numbers exactly where they were.
+       */
+      const stopSubmitting = (): void => { armed = false; };
 
       const finish = (): GpuTiming => {
         armed = false;
@@ -238,6 +261,8 @@ export async function installGpuTimer(page: Page): Promise<void> {
         drainFrames,
         onFrameTop,
         onFrameBottom,
+        stopSubmitting,
+        submittedCount: () => submitted,
         finish,
       };
     },

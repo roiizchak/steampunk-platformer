@@ -76,6 +76,17 @@ describe('helpLine prints the level beside the keys that move it', () => {
     expect(helpLine({ muted: false, volume: 0.5 })).toContain('volume 50%');
   });
 
+  it('labels the touch line too, where there are no keys to name the quantity', () => {
+    // A bare `50%` across the top of a phone names no quantity: it could be health, progress or a
+    // load. The keyboard line gets the word from its `[ ] volume` keys; touch has none of them.
+    // `startsWith`, not `toBe`: under vitest `import.meta.env.DEV` is true and the dev suffix is
+    // appended. The claim is about the SHIPPED half, which is the part a phone player reads.
+    expect(helpLine({ muted: false, volume: 0.5 }, true).startsWith('VOLUME 50%')).toBe(true);
+    expect(helpLine({ muted: true, volume: 0.5 }, true).startsWith('VOLUME MUTED')).toBe(true);
+    // And a caller with no audio manager gets no bare label at all.
+    expect(helpLine(undefined, true)).not.toContain('VOLUME');
+  });
+
   it('prints every stop on the ladder distinctly', () => {
     const printed = VOLUME_LADDER.map(
       (volume) => helpLine({ muted: false, volume }).match(/(\d+)%/)?.[1] ?? '',
@@ -167,11 +178,14 @@ describe('the chain that carries a press to the banner', () => {
 
   it('the scene hands the banner a PROVIDER and reads the live settings', () => {
     const code = source('GameScene.ts');
+    // Phase 12 widened this call with a fourth argument (the touch binding), and the closing
+    // paren was pinned here — so the gate went red for a change that has nothing to do with what it
+    // measures. It pins the PROVIDER now, up to the arrow, and not the call's arity.
     expect(code, 'a captured string freezes the readout at create()').toContain(
-      'attachHud(this, this.world, () => this.helpText())',
+      'attachHud(this, this.world, () => this.helpText()',
     );
     expect(code, 'helpText must ask the manager, not print a constant').toContain(
-      'helpLine(this.audio?.settings())',
+      'helpLine(this.audio?.settings(),',
     );
   });
 });

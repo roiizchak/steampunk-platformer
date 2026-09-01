@@ -19,7 +19,9 @@
     "test:sim-isolated": "npm rm phaser && vitest run && npm i phaser@4.2.1 --save-exact && node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\"",
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc --noEmit -p tsconfig.build.json",
-    "assets:anchors": "node tools/gen/anchorAudit.mjs"
+    "assets:anchors": "node tools/gen/anchorAudit.mjs",
+    "assets:touch": "node tools/gen/buildTouchAtlas.mjs",
+    "assets:touch:adopt": "node tools/gen/buildTouchAtlas.mjs --adopt"
   },
   "devDependencies": {
     "@babel/parser": "8.0.4",

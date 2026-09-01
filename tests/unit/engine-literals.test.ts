@@ -27,7 +27,16 @@ import { describe, expect, it } from 'vitest';
 
 import {
   BLEND_MODE_NORMAL,
+  GAMEOBJECT_POINTER_DOWN,
+  GAME_BLUR,
+  GAME_HIDDEN,
+  INPUT_GAME_OUT,
+  INPUT_POINTER_UP,
+  INPUT_POINTER_UP_OUTSIDE,
+  SCENE_DESTROY,
+  SCENE_PAUSE,
   SCENE_SHUTDOWN,
+  SCENE_SLEEP,
   SCENE_UPDATE,
   TINT_MODE_ADD,
 } from '../../src/scenes/engineLiterals';
@@ -122,6 +131,43 @@ describe('the transcribed Phaser constants', () => {
     SCENE_UPDATE,
     /@event\s+Phaser\.Scenes\.Events#UPDATE/,
   );
+
+  /**
+   * Phase 12's nine, all event-name strings, all read the same way: the file's single
+   * `module.exports` line, guarded by the `@event` tag that names the event. The guard is what stops
+   * a pin being satisfied by whichever event file the path happened to land on.
+   */
+  for (const [label, dir, file, value, tag] of [
+    ['SCENE_PAUSE', 'scene', 'PAUSE_EVENT.js', SCENE_PAUSE, 'Scenes.Events#PAUSE'],
+    ['SCENE_SLEEP', 'scene', 'SLEEP_EVENT.js', SCENE_SLEEP, 'Scenes.Events#SLEEP'],
+    ['SCENE_DESTROY', 'scene', 'DESTROY_EVENT.js', SCENE_DESTROY, 'Scenes.Events#DESTROY'],
+    ['GAME_BLUR', 'core', 'BLUR_EVENT.js', GAME_BLUR, 'Core.Events#BLUR'],
+    ['GAME_HIDDEN', 'core', 'HIDDEN_EVENT.js', GAME_HIDDEN, 'Core.Events#HIDDEN'],
+    ['INPUT_GAME_OUT', 'input', 'GAME_OUT_EVENT.js', INPUT_GAME_OUT, 'Input.Events#GAME_OUT'],
+    ['INPUT_POINTER_UP', 'input', 'POINTER_UP_EVENT.js', INPUT_POINTER_UP, 'Input.Events#POINTER_UP'],
+    [
+      'INPUT_POINTER_UP_OUTSIDE',
+      'input',
+      'POINTER_UP_OUTSIDE_EVENT.js',
+      INPUT_POINTER_UP_OUTSIDE,
+      'Input.Events#POINTER_UP_OUTSIDE',
+    ],
+    [
+      'GAMEOBJECT_POINTER_DOWN',
+      'input',
+      'GAMEOBJECT_POINTER_DOWN_EVENT.js',
+      GAMEOBJECT_POINTER_DOWN,
+      'Input.Events#GAMEOBJECT_POINTER_DOWN',
+    ],
+  ] as const) {
+    pin(
+      label,
+      ['src', dir, 'events', file],
+      /module\.exports\s*=\s*'([a-z]+)'/,
+      value,
+      new RegExp('@event\\s+Phaser\\.' + tag.replace(/\./g, '\\.') + '(?![A-Z_])'),
+    );
+  }
 });
 
 describe('the literals are what the modules that use them actually hold', () => {
@@ -132,5 +178,23 @@ describe('the literals are what the modules that use them actually hold', () => 
     expect(BLEND_MODE_NORMAL).toBe(0);
     expect(SCENE_SHUTDOWN).toBe('shutdown');
     expect(SCENE_UPDATE).toBe('update');
+    expect(SCENE_PAUSE).toBe('pause');
+    expect(SCENE_SLEEP).toBe('sleep');
+    expect(SCENE_DESTROY).toBe('destroy');
+    expect(GAME_BLUR).toBe('blur');
+    expect(GAME_HIDDEN).toBe('hidden');
+    expect(INPUT_GAME_OUT).toBe('gameout');
+    expect(INPUT_POINTER_UP).toBe('pointerup');
+    expect(INPUT_POINTER_UP_OUTSIDE).toBe('pointerupoutside');
+    expect(GAMEOBJECT_POINTER_DOWN).toBe('pointerdown');
+  });
+
+  it('gives POINTER_UP and GAMEOBJECT_POINTER_DOWN distinct names from each other', () => {
+    // 🔴 `pointerup` and `pointerdown` are the SAME strings at scene level and at object level —
+    // Phaser distinguishes them by which emitter you subscribe on, not by the name. That is a real
+    // hazard for `touchControlsLayer.ts`, whose whole release story is "the object's event is not
+    // enough". This case exists so a reader meets the collision here rather than in a debugger.
+    expect(new Set([INPUT_POINTER_UP, GAMEOBJECT_POINTER_DOWN]).size).toBe(2);
+    expect(INPUT_POINTER_UP_OUTSIDE).not.toBe(INPUT_POINTER_UP);
   });
 });

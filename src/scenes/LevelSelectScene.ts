@@ -30,14 +30,33 @@ import { parseLevel } from '../game/tilemap';
 import { isUnlocked } from '../sim/progress';
 import { updateDebugState } from '../debug/globals';
 import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
+import { touchMenuLayout } from '../render/touchLayout';
+import { attachRotatePrompt } from './rotateGuard';
+import { attachTapRoutes } from './touchRoutes';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
+/**
+ * 🔴 The touch hint gets its own size, and it is not a preference.
+ *
+ * At 22 game px the line reads at **7.6 CSS px** on the smallest in-scope landscape phone — the
+ * smallest text in the game, and the only string that tells a touch player the rows are tappable.
+ * `helpBanner.ts:32` already records `#8f8776` shipping bare as a defect and repairs it there at
+ * 43 px bold; the diagnosis was made in one file and not carried across. 40 px is 13.9 CSS px.
+ */
+const TOUCH_HINT_STYLE = { ...HINT_STYLE, fontSize: '40px' } as const;
 const ROW_STYLE = { fontFamily: 'monospace', fontSize: '34px' } as const;
 
 const ROW_HEIGHT = 68;
 const UNLOCKED_COLOUR = '#d9cdb0';
-const LOCKED_COLOUR = '#5d5748';
+/**
+ * 🔴 Was `#5d5748`, which is **2.64:1** against the config's `#12100e` ground at 11.8 CSS px — not
+ * text, texture. On first launch four of the five rows are locked, so a stranger's first view of
+ * this menu was one readable row and four unreadable ones, with the word `locked` — the only thing
+ * explaining why a tap does nothing — rendered in the ink they cannot read. `#8f8776` is already in
+ * the palette and measures 5.33:1. Found by the UI/UX gate.
+ */
+const LOCKED_COLOUR = '#8f8776';
 const SELECTED_COLOUR = '#ffd873';
 
 interface Row {
@@ -50,7 +69,6 @@ interface Row {
 export class LevelSelectScene extends Phaser.Scene {
   private rows: Row[] = [];
   private cursor = 0;
-
   constructor() {
     super(LEVEL_SELECT_KEY);
   }
@@ -63,6 +81,13 @@ export class LevelSelectScene extends Phaser.Scene {
   init(): void {
     this.rows = [];
     this.cursor = 0;
+    // 🔴 `started` belongs here for exactly the reason the paragraph above gives, and the Codex
+    // round-3 review caught that the latch was declared as a FIELD INITIALISER instead. Phaser
+    // preserves the scene instance across a shutdown (`Systems.js:760-788`), so a field initialiser
+    // runs once for the life of the game: after one level was chosen, coming back through ESC found
+    // `started === true` and every tap AND every ENTER returned early. The menu was dead until
+    // reload — a repair for a two-finger race that broke the one-finger case.
+    this.started = false;
   }
 
   create(): void {
@@ -71,8 +96,16 @@ export class LevelSelectScene extends Phaser.Scene {
     const save = readProgress(safeLocalStorage());
     const done = completedIds(save);
 
+    // 🔴 `ROW_HEIGHT` is 68 game px, which is 23.6 CSS px at the worst in-scope scale of 0.347 —
+    // under half the floor this phase sets for every other target, and widening each row's hit
+    // area in place would overlap its neighbours. So a touch device gets its own row band from
+    // `touchMenuLayout`, and the heading and hint move out of that band rather than over it. The
+    // keyboard layout on desktop is byte for byte what it was.
+    const touch = this.game.device.input.touch;
+    const band = touch ? touchMenuLayout(order.length, GAME_WIDTH, GAME_HEIGHT) : [];
+
     this.add
-      .text(GAME_WIDTH / 2, 160, 'SELECT LEVEL', TITLE_STYLE)
+      .text(GAME_WIDTH / 2, touch ? 80 : 160, 'SELECT LEVEL', TITLE_STYLE)
       .setOrigin(0.5)
       .setScrollFactor(0);
 
@@ -80,8 +113,10 @@ export class LevelSelectScene extends Phaser.Scene {
     this.rows = order.map((id, index) => {
       const unlocked = isUnlocked(id, done, order);
       const label = this.rowLabel(id, unlocked, save, index);
+      const row = band[index];
+      const y = row ? row.y + row.h / 2 : top + index * ROW_HEIGHT;
       const text = this.add
-        .text(GAME_WIDTH / 2, top + index * ROW_HEIGHT, label, ROW_STYLE)
+        .text(GAME_WIDTH / 2, y, label, ROW_STYLE)
         .setOrigin(0.5)
         .setScrollFactor(0);
       return { id, unlocked, label, text };
@@ -93,11 +128,34 @@ export class LevelSelectScene extends Phaser.Scene {
     this.cursor = lastPlayable < 0 ? 0 : lastPlayable;
 
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 140, 'UP / DOWN choose   ·   ENTER play', HINT_STYLE)
+      .text(
+        GAME_WIDTH / 2,
+        touch ? GAME_HEIGHT - 50 : GAME_HEIGHT - 140,
+        // A phone has no UP, no DOWN and no ENTER; naming them here was advertising keys the
+        // reader does not have, on the one screen built for the reader who does not have them.
+        touch ? 'TAP a level to play' : 'UP / DOWN choose   ·   ENTER play',
+        touch ? TOUCH_HINT_STYLE : HINT_STYLE,
+      )
       .setOrigin(0.5)
       .setScrollFactor(0);
 
     this.bindKeys();
+    // Tapping a row moves the cursor onto it and plays it — the same two steps ENTER takes, so a
+    // LOCKED row repaints and refuses exactly as it does for the keyboard. Letting a tap bypass
+    // `play()`'s refusal would hand the player level-01 while the menu showed level-04 selected:
+    // `resolveEntryLevel` silently substitutes `order[0]` for a locked id.
+    attachTapRoutes(this, touch, band, (id) => {
+      const index = Number(id.slice('row-'.length));
+      if (!Number.isInteger(index) || index < 0 || index >= this.rows.length) return;
+      this.cursor = index;
+      this.paint();
+      this.play();
+    });
+    // Phone portrait, where no row height clears the 44 CSS px floor. `UIScene` — which carries the
+    // prompt during play — has retired itself by the time this menu is up, because `Game` is gone,
+    // so this screen says it itself. The same call also makes the row taps above dead while the
+    // prompt is up (`touchRoutes.ts`).
+    attachRotatePrompt(this, touch, band);
     this.paint();
 
     /**
@@ -189,9 +247,20 @@ export class LevelSelectScene extends Phaser.Scene {
    * the two rules agreeing *and* keeps the reason visible: the row is drawn `locked`, and pressing
    * ENTER on it does nothing.
    */
+  /** One start per visit — reset in `init()`, never only here. See `play()`. */
+  private started = false;
+
   private play(): void {
+    // 🔴 Latched, and the Codex implementation review is why. `attachTapRoutes` spends a press per
+    // POINTER — correctly, so a lifted finger can tap a second row after a locked one refused — so
+    // two fingers landing on two unlocked rows in the same frame called `play()` twice and queued
+    // two `scene.start('Game')` ops. `ScenePlugin.start` is a queued op (`ScenePlugin.js:481-484`),
+    // so both would drain and which level wins is whichever finger landed second. ENTER cannot do
+    // this; a phone can.
+    if (this.started) return;
     const row = this.rows[this.cursor];
     if (!row || !row.unlocked) return;
+    this.started = true;
     this.scene.start('Game', { levelId: row.id });
   }
 }

@@ -15,6 +15,18 @@
  * | `SCENE_SHUTDOWN` | `Phaser.Scenes.Events.SHUTDOWN` | `src/scene/events/SHUTDOWN_EVENT.js` |
  * | `SCENE_UPDATE` | `Phaser.Scenes.Events.UPDATE` | `src/scene/events/UPDATE_EVENT.js` |
  *
+ * **Phase 12 added nine more**, all event-name strings, for `touchControlsLayer.ts` — which has to
+ * be `import type` only for exactly the same reason: it is driven by a fake scene in
+ * `tests/unit/touch-draw-path.test.ts`, and criterion 12.15 runs that suite with Phaser removed.
+ *
+ * | literal | what it replaces |
+ * |---|---|
+ * | `SCENE_PAUSE` / `SCENE_SLEEP` / `SCENE_DESTROY` | `Phaser.Scenes.Events.PAUSE` / `.SLEEP` / `.DESTROY` |
+ * | `GAME_BLUR` / `GAME_HIDDEN` | `Phaser.Core.Events.BLUR` / `.HIDDEN` |
+ * | `INPUT_GAME_OUT` | `Phaser.Input.Events.GAME_OUT` |
+ * | `INPUT_POINTER_UP` / `INPUT_POINTER_UP_OUTSIDE` | `Phaser.Input.Events.POINTER_UP` / `.POINTER_UP_OUTSIDE` |
+ * | `GAMEOBJECT_POINTER_DOWN` | `Phaser.Input.Events.GAMEOBJECT_POINTER_DOWN` |
+ *
  * That bought `gamePlayerDraw.ts` and `gameEffects.ts` a behavioural gate each, in place of the
  * source-text gates QA log entry 33 recorded as the weaker of the two by some distance.
  *
@@ -75,3 +87,61 @@ export const SCENE_SHUTDOWN = 'shutdown';
  * `once` on the owner's own event keeps the whole problem inside the layer.
  */
 export const SCENE_UPDATE = 'update';
+
+/**
+ * `Phaser.Scenes.Events.PAUSE` — `node_modules/phaser/src/scene/events/PAUSE_EVENT.js:22`.
+ *
+ * 🔴 Subscribed on the bound **`Game`** scene, never on `UIScene`. `UIScene` deliberately outlives
+ * PAUSED — that is how the HUD stays on screen under the Phase 11 welcome card (`UIScene.ts:160-186`)
+ * — so its own pause event never fires for the state the touch controls care about.
+ */
+export const SCENE_PAUSE = 'pause';
+
+/** `Phaser.Scenes.Events.SLEEP` — `src/scene/events/SLEEP_EVENT.js:22`. */
+export const SCENE_SLEEP = 'sleep';
+
+/** `Phaser.Scenes.Events.DESTROY` — `src/scene/events/DESTROY_EVENT.js:22`. */
+export const SCENE_DESTROY = 'destroy';
+
+/**
+ * `Phaser.Core.Events.BLUR` — `node_modules/phaser/src/core/events/BLUR_EVENT.js:18`.
+ *
+ * ⚠️ **On the GAME's emitter, not a scene's — so Phaser will not clean it up for you.** Scene
+ * shutdown removes `InputPlugin`'s own listeners (`InputPlugin.js:3098-3142`) and nothing else. A
+ * subscription left on `game.events` survives a level-select round trip and keeps firing into a
+ * destroyed layer. `touchControlsLayer.destroy()` removes them by hand; mutation M14 is the proof.
+ *
+ * The blur path pauses the loop **without clearing pointers** (`Game.js:645`), which is why a
+ * tab-away with a thumb down would otherwise leave the player running forever.
+ */
+export const GAME_BLUR = 'blur';
+
+/** `Phaser.Core.Events.HIDDEN` — `src/core/events/HIDDEN_EVENT.js:21`. Same ownership caveat as BLUR. */
+export const GAME_HIDDEN = 'hidden';
+
+/** `Phaser.Input.Events.GAME_OUT` — `src/input/events/GAME_OUT_EVENT.js:22`. The pointer left the canvas. */
+export const INPUT_GAME_OUT = 'gameout';
+
+/**
+ * `Phaser.Input.Events.POINTER_UP` — `node_modules/phaser/src/input/events/POINTER_UP_EVENT.js:30`.
+ *
+ * 🔴 **The authoritative release, and the one a first draft leaves out.** Phaser's own docs:
+ * *"dispatched by the Input Plugin belonging to a Scene if a pointer is released **anywhere**"*,
+ * with the hierarchy `GAMEOBJECT_POINTER_UP` -> `GAMEOBJECT_UP` -> `POINTER_UP` or
+ * `POINTER_UP_OUTSIDE`. A Game Object's own `pointerup` fires only when the release happens over
+ * that object — so press RIGHT, slide the thumb onto empty canvas, lift, and the button never hears
+ * about it. Mutation M6 deletes this subscription and 12.5 must go red.
+ */
+export const INPUT_POINTER_UP = 'pointerup';
+
+/** `Phaser.Input.Events.POINTER_UP_OUTSIDE` — `src/input/events/POINTER_UP_OUTSIDE_EVENT.js:29`. */
+export const INPUT_POINTER_UP_OUTSIDE = 'pointerupoutside';
+
+/**
+ * `Phaser.Input.Events.GAMEOBJECT_POINTER_DOWN` —
+ * `src/input/events/GAMEOBJECT_POINTER_DOWN_EVENT.js:36`.
+ *
+ * The only per-object event the touch controls use. Everything else is scene-level, because a
+ * release must be caught wherever it lands.
+ */
+export const GAMEOBJECT_POINTER_DOWN = 'pointerdown';

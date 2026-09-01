@@ -36,7 +36,24 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     autoRound: true,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
+    // 🔴 Send the WRAPPER fullscreen, not the canvas — and the difference is the rotate overlay.
+    // Left to itself Phaser creates a blank `<div>`, moves ONLY the canvas into it and fullscreens
+    // that, which strands `#rotate` outside the fullscreen subtree: a phone turned to portrait
+    // while fullscreen would then show a frozen game with nothing explaining why. `#rotate` lives
+    // inside `#game` in `index.html` for exactly this reason, and this line is the other half.
+    // The sibling project at `C:\Claude\Street-Fighter` documents the same pair (`main.ts:37-41`).
+    fullscreenTarget: 'game',
   },
+  /**
+   * Four simultaneous touch contacts.
+   *
+   * Phaser reserves one pointer for the mouse and creates `activePointers` touch pointers *in
+   * addition* to it (`Config.js:279`, `InputManager.js:155, 178, 469`), so the default of 1 can
+   * track exactly one finger — and criterion 12.3 is a thumb holding RIGHT while the other hand
+   * jumps. Four covers every simultaneous GAMEPLAY action; pause immediately leaves gameplay and
+   * has no simultaneous-use case. The cost is three extra `Pointer` instances.
+   */
+  input: { activePointers: 4 },
   // loader.maxRetries is left at Phaser 4's default of 2, so a 404 is attempted THREE times
   // before `loaderror` fires. Deliberate: retries are consistent with the no-timeout decision
   // (vault 1.4) and the failure direction stays safe. The consequence is that any test of the

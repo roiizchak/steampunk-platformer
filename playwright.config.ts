@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { TOUCH_ALL_SPECS, TOUCH_PERF_SPECS } from './tests/e2e/specRouting';
 
 const PORT = 5173;
 
@@ -24,6 +25,16 @@ const GPU_SPECS = /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!po
 
 /** The spec that runs against `dist/` rather than the dev server. Phase 10. */
 const PROD_SPECS = /phase-10-(production|campaign)\.spec\.ts/;
+
+/**
+ * 🔴 **Phase 12 routes from a SHARED module, not from patterns written here.**
+ *
+ * `tests/e2e/specRouting.ts` holds both, and `tests/unit/spec-routing.test.ts` drives them
+ * against filenames that do not exist yet. This file warns twice below that *"a file that
+ * matches neither runs nowhere and reports `0 passed`"* — the Phase 12 draft recreated exactly
+ * that, and the only thing that caught it was a test. A routing rule nobody can test is a rule
+ * that silently stops routing.
+ */
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -155,7 +166,11 @@ export default defineConfig({
       // `phase-10-production.spec.ts` drives `dist/` on port 4173 and asserts that `window.__game`
       // is absent — against the dev server on 5173 it would fail on its first assertion, correctly
       // and uselessly. It runs in `chromium-prod` below.
-      testIgnore: [GPU_SPECS, PROD_SPECS],
+      // 🔴 **Phase 12 joins the ignore list, and saying the touch projects are "disjoint" is not
+      // enough.** This project would otherwise ALSO collect every `phase-12-*` spec and run it
+      // without touch, where the controls are never drawn at all — forty assertions failing for a
+      // reason unrelated to what they test. Named by the Codex plan review, round 2.
+      testIgnore: [GPU_SPECS, PROD_SPECS, TOUCH_ALL_SPECS],
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -231,6 +246,47 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         headless: false,
         deviceScaleFactor: 2,
+        launchOptions: {
+          args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'],
+        },
+      },
+    },
+    /**
+     * 🔴 **Touch, Phase 12. Production draws the controls only when Phaser DETECTS touch.**
+     *
+     * `Phaser.Device.Input.touch` reads `ontouchstart` or `navigator.maxTouchPoints`
+     * (`src/device/Input.js:39-41`), and Playwright sets both from `hasTouch`. Without it every
+     * Phase 12 spec would run against a build with no controls in it and fail on its first
+     * assertion — correctly, and uselessly.
+     *
+     * ⚠️ Playwright's `Touchscreen` exposes only `tap` (`playwright-core/types/types.d.ts:22735`),
+     * so genuine multi-contact — a thumb holding RIGHT while the other hand jumps, criterion 12.3
+     * — is dispatched raw by `tests/e2e/touchHarness.ts`. `hasTouch` is what makes the page accept
+     * those events at all.
+     */
+    {
+      name: 'chromium-touch',
+      testMatch: TOUCH_ALL_SPECS,
+      testIgnore: TOUCH_PERF_SPECS,
+      use: { ...devices['Desktop Chrome'], hasTouch: true, isMobile: false },
+    },
+    /**
+     * The Phase 12 frame budget, on the substrate that argument requires.
+     *
+     * 🔴 `hasTouch: true` here as well, and it is not a copy-paste. The controls render only on a
+     * touch device, so without it the "every control drawn" precondition fails before timing starts and
+     * the arm being measured is a game with no controls in it — which would report the budget
+     * unregressed for the most persuasive possible wrong reason. Named by the Codex plan review,
+     * round 2, alongside the ignore-list finding above.
+     */
+    {
+      name: 'chromium-touch-gpu',
+      testMatch: TOUCH_PERF_SPECS,
+      use: {
+        ...devices['Desktop Chrome'],
+        hasTouch: true,
+        isMobile: false,
+        headless: false,
         launchOptions: {
           args: ['--enable-gpu-rasterization', '--ignore-gpu-blocklist'],
         },

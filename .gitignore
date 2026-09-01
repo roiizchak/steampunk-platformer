@@ -36,3 +36,6 @@ Recording*.mp4
 # what the CLI re-adds if removed, and a rule fighting the tool is a rule that loses quietly.
 .vercel
 .env*
+
+# The mutation runner writes its vitest report here. Never committed.
+_mutation-vt.json

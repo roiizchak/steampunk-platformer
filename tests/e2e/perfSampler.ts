@@ -42,7 +42,6 @@
  * Ticks are the right unit because the thing being caught recurs on a tick schedule, and because a
  * frame count means a different amount of game time on every display.
  */
-import { BOOT_TIMEOUT } from './gameHarness';
 
 type Page = import('@playwright/test').Page;
 
@@ -105,6 +104,14 @@ export interface Sample {
   gpuP95Ms: number;
   /** Queries unread when the bounded drain expired. Non-zero means readback never landed. */
   gpuAbandoned: number;
+  /**
+   * Queries OPENED after the tick window closed, during the bounded drain.
+   *
+   * 🔴 With `stopSubmittingOnDrain` this must be **0**, and that is the only direct evidence the
+   * window boundary held. Without it, the drain re-arms the timer every frame and renders from
+   * after the window enter its median. Codex round 16, finding 2.
+   */
+  gpuSubmittedDuringDrain: number;
 }
 
 /** The in-page handle `installGpuTimer` puts on `window.__gpuTimer`. */
@@ -113,6 +120,16 @@ interface GpuTimerHandle {
   drainFrames: number;
   onFrameTop(): void;
   onFrameBottom(): void;
+  /**
+   * Disarm without finishing, so the drain reads back rather than submitting more.
+   *
+   * 🔴 **Required, not optional.** It was `stopSubmitting?()` called through `?.`, so deleting the
+   * method restored drain-frame submission with no type error and no test to notice. Codex round
+   * 16, finding 2.
+   */
+  stopSubmitting(): void;
+  /** Every query opened since install. Differenced across the drain to prove the boundary held. */
+  submittedCount(): number;
   finish(): {
     supported: boolean;
     samples: number;
@@ -238,9 +255,22 @@ export async function counts(page: Page): Promise<{
  * would itself be the slowest thing in the window, and a wait expressed in ticks cannot bound a
  * sampling window at all (this suite has produced a false green and a false red that way).
  */
-export async function sample(page: Page, tickSpan: number): Promise<Sample> {
+export async function sample(
+  page: Page,
+  tickSpan: number,
+  /**
+   * Stop submitting GPU queries when the tick window closes, instead of letting the bounded drain
+   * keep opening them.
+   *
+   * 🔴 **Opt-in, and it defaults to the old behaviour on purpose.** Phases 5-8 fixed their GPU
+   * bounds against a median that included drain-frame renders; flipping that globally silently
+   * re-founds four other phases' numbers without re-confirming any of them. Phase 12's statistic is
+   * new, so it takes the clean window. Codex round 15, finding 5.
+   */
+  stopSubmittingOnDrain = false,
+): Promise<Sample> {
   return page.evaluate(
-    (wantTicks) =>
+    ([wantTicks, cleanDrain]) =>
       new Promise<Sample>((resolve) => {
         const supported =
           typeof PerformanceObserver !== 'undefined' &&
@@ -317,8 +347,12 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
           // it means a driver that never signals fails the sample-count assertion loudly instead of
           // hanging the spec until Playwright's timeout, where it would look like a boot hang.
           let drained = 0;
+          // The submission count at the moment the tick window closed. Anything opened after this
+          // is a frame outside the window contributing to the window's median.
+          const submittedAtClose = gpu?.submittedCount() ?? 0;
           const drain = (): void => {
-            gpu?.onFrameTop();
+            if (cleanDrain) gpu?.stopSubmitting();
+            else gpu?.onFrameTop();
             if (drained < (gpu?.drainFrames ?? 0)) {
               drained += 1;
               requestAnimationFrame(drain);
@@ -341,6 +375,7 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
               gpuSupported: gpuTiming.supported,
               gpuSamples: gpuTiming.samples,
               gpuDisjointFrames: gpuTiming.disjointFrames,
+              gpuSubmittedDuringDrain: (gpu?.submittedCount() ?? 0) - submittedAtClose,
               gpuMedianMs: gpuTiming.medianMs,
               gpuP95Ms: gpuTiming.p95Ms,
               gpuAbandoned: gpuTiming.abandoned,
@@ -350,49 +385,6 @@ export async function sample(page: Page, tickSpan: number): Promise<Sample> {
         };
         requestAnimationFrame(step);
       }),
-    tickSpan,
-  );
-}
-
-/**
- * The WebGL renderer string the page is actually rendering with.
- *
- * 🔴 **The `chromium-gpu` project ASKS for a GPU; nothing checked it got one.** `headless: false`
- * plus `--enable-gpu-rasterization` is a request, and Chromium falls back to **SwiftShader** — a
- * CPU rasteriser — whenever the driver is unavailable, blocklisted, or the box has no display.
- * HANDOFF §14 measured that fallback at **21x** slower, which is the entire reason this spec exists
- * as a separate project. Declaring "a real GPU" in a docstring while a software renderer silently
- * served the numbers is the same class of unverified claim the rest of this rebuild removed.
- * Found by the Codex implementation review.
- *
- * Read through `WEBGL_debug_renderer_info` on the game's own context, so it is the renderer that
- * drew the frames being measured and not a second one made for the question.
- */
-export async function webglRenderer(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const game = (window as unknown as { __phaserGame: { renderer: { gl?: WebGLRenderingContext } } })
-      .__phaserGame;
-    const gl = game.renderer.gl;
-    if (!gl) return 'no-webgl-context';
-    const ext = gl.getExtension('WEBGL_debug_renderer_info');
-    if (!ext) return 'no-debug-renderer-info';
-    return String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) ?? 'unknown');
-  });
-}
-
-/** Renderer names that mean the frames were rasterised on the CPU. Lower-cased before matching. */
-export const SOFTWARE_RENDERERS = ['swiftshader', 'llvmpipe', 'software', 'microsoft basic render'];
-
-/** Waits for the drawn body count to reach `target`. The growth path runs inside `sync()`. */
-export async function waitForBodyCount(page: Page, target: number): Promise<void> {
-  await page.waitForFunction(
-    (n) => {
-      const scene = (
-        window as unknown as { __phaserGame: { scene: { getScene(k: string): unknown } } }
-      ).__phaserGame.scene.getScene('Game') as unknown as { enemies: { bodies: unknown[] } };
-      return scene.enemies.bodies.length >= n;
-    },
-    target,
-    { timeout: BOOT_TIMEOUT },
+    [tickSpan, stopSubmittingOnDrain] as const,
   );
 }

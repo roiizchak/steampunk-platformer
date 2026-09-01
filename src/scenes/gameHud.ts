@@ -3,6 +3,7 @@ import { UIScene } from './UIScene';
 import { GearLayer } from './gearLayer';
 import { HelpBannerLayer } from './helpBannerLayer';
 import type { World } from '../sim/types';
+import type { TouchBinding } from './touchControlsLayer';
 
 /**
  * The seam between `GameScene` and everything that draws the player's status.
@@ -37,11 +38,19 @@ export interface HudAttachment {
  * for the restart path — an e2e spec re-entering `BootScene` runs `create()` again, and launching a
  * scene that is already running stacks a second copy of every HUD object.
  */
+/**
+ * What `GameScene` contributes to the touch binding: its snapshot, its input gate and its menu
+ * route. `gameScene` is filled in here and `isGameRunning` by `UIScene`, so neither can be
+ * passed inconsistently with the scene actually being attached.
+ */
+export type TouchHudBinding = Omit<TouchBinding, 'gameScene' | 'isGameRunning'>;
+
 export function attachHud(
   scene: Phaser.Scene,
   world: World,
   /** A PROVIDER, not a string — the banner re-reads it whenever the volume moves. */
   helpText: () => string,
+  touch: TouchHudBinding,
 ): HudAttachment {
   const gears = new GearLayer(scene, world);
   gears.create();
@@ -61,6 +70,12 @@ export function attachHud(
   // the gear counter this banner measures itself against does not exist yet and neither does the
   // layout. The layer defers its first placement to the owning scene's first update rather than
   // taking a position now that would have to be a second copy of `helpBannerLayout()`.
+  // 🔴 The same deferral, and the same reason: `ui.create()` has not run, so `ui.touch` has no
+  // layer yet. This is a method on `UIScene` itself — which exists from construction — and never
+  // `ui.touch.bind(...)` reached through a field that may not be there. The binding is stored and
+  // applied by `create()`; `touchSession.ts` has the queue analysis.
+  ui.bindTouchSession({ ...touch, gameScene: scene });
+
   const banner = new HelpBannerLayer(scene, ui, helpText);
   banner.create();
 

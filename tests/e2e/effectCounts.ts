@@ -33,7 +33,8 @@ import {
   type ShakeCounters,
 } from './effectShake';
 import { DEV_FLEET_COUNT, MIN_SAMPLES } from './perfBudget';
-import { counts, waitForBodyCount, type Sample } from './perfSampler';
+import { counts, type Sample } from './perfSampler';
+import { waitForBodyCount } from './perfRenderer';
 import { boundedWindow, stallReport } from './windowStall';
 
 type Page = import('@playwright/test').Page;

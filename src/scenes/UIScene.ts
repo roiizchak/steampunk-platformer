@@ -53,6 +53,10 @@ import { setOverlay, type LevelCompleteInfo, type LevelCompleteOverlay } from '.
 import { attachGearFlyers, type GearFlyers } from './hudGearFlyers';
 import { attachGearPop, type GearPop } from './hudGearPop';
 import type { World } from '../sim/types';
+import type { TouchBinding } from './touchControlsLayer';
+import { TouchSession } from './touchSession';
+import { attachUiTouch, type UiTouchOverlay } from './uiTouch';
+import type { TouchHeld } from './inputMerge';
 
 /**
  * The counter's colours moved to `hud.ts` on 2026-08-23 *(inventory 2b.4)*, with the contrast
@@ -101,6 +105,16 @@ export class UIScene extends Phaser.Scene {
   /** The collect flight, and the handles it holds — criterion 9.3. See `hudGearFlyers.ts`. */
   private flyers?: GearFlyers;
 
+  /**
+   * The seam that tells the touch controls which `Game` scene they drive.
+   *
+   * Constructed with the scene, not in `create()`, because `attachHud` binds before `create()`
+   * runs — `touchSession.ts` has the queue analysis. The objects it drives are built by
+   * `attachUiTouch`, which also carries why they belong on this scene and not on `GameScene`.
+   */
+  readonly touch = new TouchSession();
+  private touchUi?: UiTouchOverlay;
+
   constructor() {
     super('UI');
   }
@@ -108,12 +122,17 @@ export class UIScene extends Phaser.Scene {
   create(): void {
     this.flyers = attachGearFlyers(this);
     this.build();
+    this.touchUi = attachUiTouch(this, this.game.device.input.touch, this.touch);
     // Re-layout rather than re-create: the objects keep their identity, so an e2e spec holding a
     // reference across a resize is still looking at the thing on screen.
     this.scale.on('resize', this.applyLayout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off('resize', this.applyLayout, this);
       this.built = false;
+      // 🔴 M2b / M14. Phaser preserves this scene INSTANCE across a shutdown and removes only
+      // `InputPlugin`'s own listeners — `attachUiTouch`'s `destroy` has the detail.
+      this.touchUi?.destroy();
+      this.touchUi = undefined;
       // Phase 8. `destroy()` kills the tweens first — a tween still running against a destroyed
       // target throws inside Phaser's update loop, and a throw there stops every scene after it.
       this.levelComplete(null);
@@ -125,6 +144,29 @@ export class UIScene extends Phaser.Scene {
       this.gearPop = undefined;
       this.flyers?.destroy();
     });
+  }
+
+  /**
+   * Point the touch controls at a `Game` scene. Called by `attachHud`, which runs BEFORE this
+   * scene's `create()` — `touchSession.ts` carries why that is not a bug to route around.
+   *
+   * `isGameRunning` is supplied here rather than by the caller because it is the same status
+   * read `update()` already makes, and `gameHud.ts` imports Phaser as a TYPE only so it cannot
+   * name `Phaser.Scenes.RUNNING`. RUNNING exactly: PAUSED still renders, and controls that stay
+   * live under a pause screen drive a sim the player cannot see.
+   */
+  bindTouchSession(binding: Omit<TouchBinding, 'isGameRunning'>): void {
+    this.touch.bind({
+      ...binding,
+      isGameRunning: () =>
+        (this.scene.get('Game') as Phaser.Scene | null)?.sys?.settings?.status ===
+        Phaser.Scenes.RUNNING,
+    });
+  }
+
+  /** This frame's touch levels, for `sampleHeldKeys`. All-false when there are no controls. */
+  touchHeld(): TouchHeld {
+    return this.touch.held();
   }
 
   /** Show, or clear (`null`), the level-complete overlay. The transition lives in `hudFade.ts`. */
@@ -181,6 +223,10 @@ export class UIScene extends Phaser.Scene {
      */
     const game = this.scene.get('Game') as Phaser.Scene | null;
     const status = game?.sys?.settings?.status;
+    // Re-placed and re-gated here rather than from an event, for the reason the retirement check
+    // below is a per-frame condition: there is no ordering to get wrong because there is no
+    // ordering. Cheap — the layer re-places its objects only when the view size actually changed.
+    this.touchUi?.refresh();
     if (status === undefined || status >= Phaser.Scenes.SLEEPING) {
       this.scene.stop();
     }

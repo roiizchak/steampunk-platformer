@@ -1,0 +1,246 @@
+import { describe, expect, it } from 'vitest';
+
+import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { SCENE_DESTROY, SCENE_SHUTDOWN } from '../../src/scenes/engineLiterals';
+import { attachTapRoutes } from '../../src/scenes/touchRoutes';
+import { makeTouchScene, type TouchSceneHarness } from './touchSceneFake';
+
+/**
+ * **The three screens a phone player cannot get past without this.**
+ *
+ * 🔴 The whole game outside the play scene is keyboard-only, confirmed at `TitleScene.ts:333-335`
+ * (`Enter` / `NumpadEnter` / `Space`), `LevelSelectScene.ts:145-167` (`UP W DOWN S ENTER`) and
+ * `gameComplete.ts:119-135` (`ANY_KEY_DOWN` filtered to `Enter`). Shipping in-play controls alone
+ * would produce a phone build that still cannot be started — and a criterion "the owner played it
+ * on a phone" that can only be passed by reaching for a keyboard. Named by the Codex plan review,
+ * round 1, as its first BLOCKER.
+ *
+ * This file is the one mechanism all three use: a zone per target, a callback carrying the target's
+ * id, and a teardown registered against the scene that owns it.
+ *
+ * ## Why the teardown is not optional
+ *
+ * `gameComplete`'s panel lives while `UIScene` — which SURVIVES the level-to-level
+ * `scene.start('Game')` (`gameHud.ts:49-52`) — is still up. A zone that outlived its panel would sit
+ * invisible over the next level, one tap from skipping it. So every zone is registered against both
+ * SHUTDOWN and DESTROY of the scene it was drawn on, and `destroy()` is idempotent.
+ *
+ * ## 🔴 And why a route is dead while the rotate prompt is up
+ *
+ * The QA gate's adversarial code review found a shipped defect here: the prompt draws at depth 3000
+ * and these zones were interactive from creation until `destroy()`, with no gate at all. On a phone
+ * held upright, a tap on "ROTATE YOUR DEVICE" started the level underneath it. The five play
+ * controls were never exposed — `touchControlsLayer.refresh()` gates them on `touchTargetsFit` —
+ * which is exactly why the claim in `rotatePrompt.ts`'s header read as true.
+ */
+
+const RECTS = [
+  { id: 'a', x: 100, y: 100, w: 400, h: 200 },
+  { id: 'b', x: 100, y: 400, w: 400, h: 200 },
+];
+
+function scene(): TouchSceneHarness {
+  const h = makeTouchScene();
+  h.scene.scale.gameSize = { width: GAME_WIDTH, height: GAME_HEIGHT };
+  return h;
+}
+
+describe('attachTapRoutes', () => {
+  it('draws nothing on a device with no touch, so a desktop pointer hits nothing', () => {
+    const h = scene();
+    const taps: string[] = [];
+    const routes = attachTapRoutes(h.scene, false, RECTS, (id) => taps.push(id));
+    expect(h.zones, 'a desktop got hit areas it can never need').toEqual([]);
+    expect(h.ownEvents, 'a teardown was registered for objects that do not exist').toEqual([]);
+    routes.destroy();
+  });
+
+  it('makes one interactive zone per target, at the target', () => {
+    const h = scene();
+    attachTapRoutes(h.scene, true, RECTS, () => {});
+    expect(h.zones.map((z) => z.id)).toEqual(['a', 'b']);
+    for (const [i, z] of h.zones.entries()) {
+      expect([z.x, z.y, z.w, z.h], `${z.id} is not where the layout put it`).toEqual([
+        RECTS[i].x,
+        RECTS[i].y,
+        RECTS[i].w,
+        RECTS[i].h,
+      ]);
+      expect(z.originX, 'a zone placed from its centre lands half a box off').toBe(0);
+      expect(z.originY).toBe(0);
+      expect(z.interactive, `${z.id} is drawn but cannot be tapped`).toBe(true);
+    }
+  });
+
+  it('reports WHICH target was tapped, so a level row can name its level', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+    h.press('b' as never, 1);
+    h.press('a' as never, 2);
+    expect(taps).toEqual(['b', 'a']);
+  });
+
+  it('spends a press per pointer, so one finger held down cannot repeat', () => {
+    // ⚠️ **This test used to be named for something it did not do.** It pressed pointer 1 twice
+    // under the title *"not once per pointer already down"*, and the Codex re-review caught that
+    // the two-FINGER case it claimed to cover was untested. The one-pointer rule is real and is
+    // kept; the two-pointer rule is the case below.
+    const h = scene();
+    let count = 0;
+    attachTapRoutes(h.scene, true, RECTS, () => {
+      count += 1;
+    });
+    h.press('a' as never, 1);
+    h.press('a' as never, 1);
+    expect(count, 'the same pointer pressed twice ran the route twice').toBe(1);
+  });
+
+  it('gives each FINGER its own press, which is why a navigating caller has to latch', () => {
+    // 🔴 The contract, stated rather than assumed. `spent` is keyed by pointer id ON PURPOSE: a
+    // finger that lifts must be able to tap again, which is how a player picks a second row after a
+    // locked one refused. The consequence is that two fingers landing in the same frame produce
+    // TWO callbacks — and a caller whose callback is `scene.start` must therefore latch, or it
+    // queues two scene starts and the level the player gets is whichever finger landed second.
+    // `TitleScene.dismiss` latches on `dismissed`, `gameComplete`'s `go` destroys the routes first,
+    // and `LevelSelectScene.play` did neither until the Codex re-review found it.
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+    h.press('a' as never, 1);
+    h.press('b' as never, 2);
+    expect(taps, 'the routes layer silently swallowed the second finger').toEqual(['a', 'b']);
+  });
+
+  it('tears itself down on the drawing scene SHUTDOWN and on DESTROY', () => {
+    // 🔴 The completion panel's zone must not outlive its panel: `UIScene` survives the
+    // level-to-level `scene.start('Game')`, and an invisible zone over the next level is one tap
+    // from skipping it.
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+    expect(h.ownEvents.sort()).toEqual([SCENE_DESTROY, SCENE_SHUTDOWN].sort());
+    h.fireOwnEvent(SCENE_SHUTDOWN);
+    for (const z of h.zones) expect(z.destroyed, `${z.id} outlived its scene`).toBe(true);
+    expect(taps).toEqual([]);
+  });
+
+  it('stops calling back once destroyed, even if a press still arrives', () => {
+    const h = scene();
+    const taps: string[] = [];
+    const routes = attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+    routes.destroy();
+    h.press('a' as never, 1);
+    expect(taps, 'a destroyed route still ran its action').toEqual([]);
+  });
+
+  it('is safe to destroy twice', () => {
+    const h = scene();
+    const routes = attachTapRoutes(h.scene, true, RECTS, () => {});
+    routes.destroy();
+    expect(() => routes.destroy()).not.toThrow();
+  });
+
+  it('draws nothing for an empty target list rather than one zero-sized zone', () => {
+    const h = scene();
+    attachTapRoutes(h.scene, true, [], () => {});
+    expect(h.zones).toEqual([]);
+  });
+});
+
+describe('a tap route is dead on the frames the rotate prompt covers the screen', () => {
+  /** Phone portrait: 390 CSS px of canvas for 1920 game px, a scale of 0.203. */
+  const PORTRAIT = 390;
+
+  it('ignores a press while the prompt would be up, so the prompt cannot be tapped through', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+
+    // Landscape first, so the assertion below is about the SCALE and not about a route that never
+    // worked at all.
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('a' as never, 1);
+    expect(taps, 'the route never fired even in landscape — this test proves nothing').toEqual(['a']);
+    h.releasePointer(1);
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    h.press('a' as never, 2);
+    expect(
+      taps,
+      'a tap landed on a level row while the rotate prompt was covering it',
+    ).toEqual(['a']);
+  });
+
+  it('comes back the moment the device is turned, without anything being rebuilt', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, RECTS, (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    h.press('b' as never, 1);
+    h.releasePointer(1);
+    expect(taps).toEqual([]);
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('b' as never, 2);
+    expect(taps, 'the route stayed dead after the device was turned back').toEqual(['b']);
+  });
+});
+
+describe('a FULL-SCREEN route is dead under the prompt too, however big its own target is', () => {
+  /**
+   * 🔴 The Codex implementation review found this, and it is a regression the previous repair
+   * introduced. `RotatePrompt` decides visibility from the five 160 px play controls; the routes had
+   * just been changed to decide from their OWN targets. On a 390 px portrait canvas those disagree:
+   * a control is 32.5 CSS px so the prompt is up, while the title's full-viewport zone measures
+   * 390 x 219 CSS px and clears every floor by a factor of seven — so a tap on "ROTATE YOUR DEVICE"
+   * dismissed the title underneath it.
+   *
+   * The route's own targets are still a term, because a route whose targets are too small to hit is
+   * unusable with or without a prompt. Both, not either.
+   */
+  const FULL_SCREEN = [{ id: 'title', x: 0, y: 0, w: GAME_WIDTH, h: GAME_HEIGHT }];
+  /** iPhone 14 portrait: 390 CSS px of canvas for 1920 game px. */
+  const PORTRAIT = 390;
+
+  it('refuses a tap on a full-viewport zone while the prompt is covering it', () => {
+    const h = scene();
+    const taps: string[] = [];
+    attachTapRoutes(h.scene, true, FULL_SCREEN, (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('title' as never, 1);
+    expect(taps, 'the full-screen route never fired at all — this test proves nothing').toEqual(['title']);
+    h.releasePointer(1);
+
+    h.scene.scale.displaySize.width = PORTRAIT;
+    // The zone itself is 390 x 219 CSS px here — far over every floor. Only the PROMPT makes it dead.
+    h.press('title' as never, 2);
+    expect(
+      taps,
+      'a tap meant for ROTATE YOUR DEVICE dismissed the screen underneath it',
+    ).toEqual(['title']);
+  });
+
+  it('refuses a tap on a target too small to hit, even with the play controls fitting', () => {
+    // 🔴 M24: without this case, deleting the SECOND term of the gate reddened nothing, and the
+    // predicate would have been a one-term one wearing a two-term comment. No shipped caller
+    // produces a target under `TOUCH_BOX_PX`, so the term is unreachable through the three screens
+    // that exist today — which is exactly why it needs a gate of its own rather than a consumer:
+    // the contract is *this function refuses an unhittable target*, and a fourth caller with a
+    // smaller one must not have to discover that the guard was quietly dropped.
+    const h = scene();
+    const taps: string[] = [];
+    // The harness sets `displaySize.width` to `GAME_WIDTH` below, so the CSS scale is **1** and a
+    // 40 game px box is **40 CSS px** — under the 44 px floor, while `touchLayout`'s own 160 px
+    // controls are at 160.0 and comfortably over it. Only the targets term can refuse this.
+    // (This comment said 20.0 CSS px, which is the figure for a scale of 0.5. Corrected after the
+    // Codex round-3 review; the assertion was always right, the arithmetic beside it was not.)
+    attachTapRoutes(h.scene, true, [{ id: 'tiny', x: 0, y: 0, w: 40, h: 40 }], (id) => taps.push(id));
+
+    h.scene.scale.displaySize.width = GAME_WIDTH;
+    h.press('tiny' as never, 1);
+    expect(taps, 'a 40 CSS px target took a tap it is too small to be aimed at').toEqual([]);
+  });
+});

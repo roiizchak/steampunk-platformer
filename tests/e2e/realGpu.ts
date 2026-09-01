@@ -19,7 +19,7 @@
  */
 
 import { expect } from '@playwright/test';
-import { SOFTWARE_RENDERERS, webglRenderer } from './perfSampler';
+import { SOFTWARE_RENDERERS, webglRenderer } from './perfRenderer';
 
 /** Asserts a hardware renderer, logs which one, and returns it lower-cased. */
 export async function assertRealGpu(
@@ -27,6 +27,19 @@ export async function assertRealGpu(
   tag: string,
 ): Promise<string> {
   const renderer = (await webglRenderer(page)).toLowerCase();
+  // 🔴 The two sentinels `webglRenderer` returns when it cannot answer, refused explicitly.
+  //
+  // `'no-webgl-context'` means `game.renderer.gl` was falsy — Phaser fell back to the CANVAS
+  // renderer, a CPU rasteriser, which is exactly the case this helper exists to catch.
+  // `'no-debug-renderer-info'` means the extension is unavailable and the renderer is unknown.
+  // Neither string contains `swiftshader`, `llvmpipe`, `software` or `microsoft basic render`, so
+  // the loop below passed both — a CPU-rasterised run and an unidentifiable one were green.
+  // Found by the QA gate's 12.11 brief.
+  expect(
+    renderer,
+    `${tag} could not identify its renderer (${renderer}). A number taken here would be a ` +
+      'measurement of an unknown substrate, which is the thing this assertion refuses.',
+  ).not.toMatch(/^no-(webgl-context|debug-renderer-info)$/);
   // eslint-disable-next-line no-console
   console.log(`[${tag}] WebGL renderer: ${renderer}`);
   for (const software of SOFTWARE_RENDERERS) {
