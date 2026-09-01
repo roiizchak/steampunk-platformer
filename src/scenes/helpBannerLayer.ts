@@ -203,7 +203,31 @@ export class HelpBannerLayer {
      * It costs one string build per layout, and a layout runs only when `dirty` — a resize, or an
      * audio key. Not per frame.
      */
-    banner.setText(this.content());
+    const text = this.content();
+    banner.setText(text);
+
+    /**
+     * 🔴 **An empty line draws nothing, and clears `dirty` on the way out.**
+     *
+     * A touch device gets no banner at all now (`gameDev.helpLine`), so `content()` returns `''`
+     * there for the life of the session. Everything below measures the HUD counter and runs two
+     * layout passes to decide a wrap — all of it to place a string with no glyphs in it.
+     *
+     * ⚠️ **Clearing `dirty` is the load-bearing half, not `setVisible(false)`.** `dirty` is only
+     * cleared at the very END of this method, so an early return that merely hid the banner would
+     * leave it set and re-enter here on every single frame — a per-frame `hudObjects()` call, two
+     * `helpBannerLayout()` passes and a `getWrappedText()` forever, on the device with the least
+     * budget to spare. Caught by the Codex plan review, round 1.
+     *
+     * `placed` is nulled too: it is what the e2e specs read to ask where the banner is, and a
+     * stale coordinate for an invisible object is a lie a gate could believe.
+     */
+    if (text === '') {
+      banner.setVisible(false);
+      this.placed = null;
+      this.dirty = false;
+      return;
+    }
 
     const { counter, layout } = this.hud.hudObjects();
     // 🔴 `active`, not truthiness. `UIScene`'s SHUTDOWN handler resets only `built` and leaves

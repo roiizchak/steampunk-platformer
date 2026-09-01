@@ -100,7 +100,9 @@ is 0.92 dB at the top of the range and 6.02 dB at the bottom, from the same key.
 the one that failed.
 
 **The controls banner now prints the level**, which is the only readout in play and the whole answer
-to *"`]` does nothing at 100 %"*. `gameInput` emits `AUDIO_CHANGED`; `HelpBannerLayer` marks itself
+to *"`]` does nothing at 100 %"*.
+
+⚠️ **Desktop only from 2026-09-01 (owner decision).** A touch device draws **no banner at all** — `helpLine` returns `''` there, above the DEV suffix. The volume is not the game's to report on a phone: the player sets it with the hardware keys and the OS draws its own overlay. Everything below describes the keyboard build, which is unchanged. `gameInput` emits `AUDIO_CHANGED`; `HelpBannerLayer` marks itself
 dirty and its next **layout** re-reads a content provider.
 
 🔴 **Re-reading on layout rather than on the event is load-bearing, and the first version got it
