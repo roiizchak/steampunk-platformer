@@ -33,6 +33,7 @@ import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
 import { touchMenuLayout } from '../render/touchLayout';
 import { attachRotatePrompt } from './rotateGuard';
 import { attachTapRoutes } from './touchRoutes';
+import { keepTapRoutesSized } from './tapRouteResize';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
@@ -102,7 +103,13 @@ export class LevelSelectScene extends Phaser.Scene {
     // `touchMenuLayout`, and the heading and hint move out of that band rather than over it. The
     // keyboard layout on desktop is byte for byte what it was.
     const touch = this.game.device.input.touch;
-    const band = touch ? touchMenuLayout(order.length, GAME_WIDTH, GAME_HEIGHT) : [];
+    // ⚠️ The LIVE size, and ONE array mutated in place from here on. Under `Phaser.Scale.EXPAND`
+    // the view can widen while this screen is up, and `attachTapRoutes` and `attachRotatePrompt`
+    // both capture this reference — `RotatePrompt.refresh()` re-reads it every call — so one
+    // in-place rewrite keeps the zones and the rotate guard on the same geometry.
+    // `tapRouteResize.ts` explains why replacing the array instead would split them.
+    const view = this.scale.gameSize;
+    const band = touch ? touchMenuLayout(order.length, view.width, view.height) : [];
 
     this.add
       .text(GAME_WIDTH / 2, touch ? 80 : 160, 'SELECT LEVEL', TITLE_STYLE)
@@ -144,7 +151,7 @@ export class LevelSelectScene extends Phaser.Scene {
     // LOCKED row repaints and refuses exactly as it does for the keyboard. Letting a tap bypass
     // `play()`'s refusal would hand the player level-01 while the menu showed level-04 selected:
     // `resolveEntryLevel` silently substitutes `order[0]` for a locked id.
-    attachTapRoutes(this, touch, band, (id) => {
+    const routes = attachTapRoutes(this, touch, band, (id) => {
       const index = Number(id.slice('row-'.length));
       if (!Number.isInteger(index) || index < 0 || index >= this.rows.length) return;
       this.cursor = index;
@@ -156,6 +163,11 @@ export class LevelSelectScene extends Phaser.Scene {
     // so this screen says it itself. The same call also makes the row taps above dead while the
     // prompt is up (`touchRoutes.ts`).
     attachRotatePrompt(this, touch, band);
+    keepTapRoutesSized(this, routes, (size) => {
+      const next = touchMenuLayout(order.length, size.width, size.height);
+      for (const [i, box] of next.entries()) if (band[i]) Object.assign(band[i], box);
+      this.placeRows(band);
+    });
     this.paint();
 
     /**
@@ -229,6 +241,15 @@ export class LevelSelectScene extends Phaser.Scene {
     if (this.rows.length === 0) return;
     this.cursor = (this.cursor + delta + this.rows.length) % this.rows.length;
     this.paint();
+  }
+
+  /** Move the drawn rows onto the band's current geometry. Called on every resize. */
+  private placeRows(band: readonly { y: number; h: number }[]): void {
+    const { width } = this.scale.gameSize;
+    this.rows.forEach((row, index) => {
+      const box = band[index];
+      row.text.setPosition(width / 2, box ? box.y + box.h / 2 : row.text.y);
+    });
   }
 
   private paint(): void {

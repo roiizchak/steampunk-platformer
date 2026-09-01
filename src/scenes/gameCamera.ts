@@ -27,7 +27,7 @@
 import type Phaser from 'phaser';
 import { cameraSetup } from '../render/cameraRig';
 import type { LevelData } from '../game/tilemap';
-import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
+import { GAME_HEIGHT, MAX_GAME_WIDTH } from '../game/constants';
 
 /**
  * Set the main camera's bounds, zoom and follow behaviour for `level`.
@@ -41,7 +41,13 @@ export function applyCameraRig(
   playerSprite: Phaser.GameObjects.Sprite,
 ): void {
   const camera = scene.cameras.main;
-  const cam = cameraSetup(level, GAME_WIDTH, GAME_HEIGHT);
+  // 🔴 **`MAX_GAME_WIDTH`, not `GAME_WIDTH`.** Under `Phaser.Scale.EXPAND` the live view is wider
+  // than the design size, and the refusal this guard exists for — a level no larger than the view
+  // cannot scroll *(vault 3.2)* — has to be asked at the WIDEST view the game will draw. Validating
+  // at 1920 while drawing at up to 2560 makes the guard a statement about a view production no
+  // longer uses. Named by the Codex plan review, round 1: the safety margin was prose the guards
+  // never saw.
+  const cam = cameraSetup(level, MAX_GAME_WIDTH, GAME_HEIGHT);
   camera.setBounds(cam.bounds.x, cam.bounds.y, cam.bounds.w, cam.bounds.h);
   camera.setZoom(cam.zoom);
   camera.startFollow(playerSprite, false, cam.lerpX, cam.lerpY);
