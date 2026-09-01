@@ -567,6 +567,36 @@ function is subscribed to RESIZE; without the guard the page died with `RangeErr
 stack size exceeded` on the first e2e run. Street-Fighter's `main.ts` carries the same guard for the
 same reason — which is a second thing that reading it first would have supplied.
 
+#### 🔴 The fourth report — and the decision to stop reasoning and measure
+
+The owner reported the overlay stuck in landscape for the **fourth** time, after the DOM rewrite that
+M88 and M89 gate. Three causes have been found and fixed and the symptom has not moved.
+
+What was checked this round, before writing anything:
+
+- `rotateOverlayWanted` returns `false` at **every** landscape viewport a phone can report —
+  844x390, 896x414, 932x430, 800x360, and 640x300 with both toolbars up, where a 160 px control
+  still draws at 44.4 CSS px. It returns `true` only at 390x844 and 412x892. The arithmetic is not
+  the defect.
+- Both wiring paths re-read `window.innerWidth` **every frame**: `TitleScene` and `LevelSelectScene`
+  through `attachRotatePrompt`'s `SCENE_UPDATE` subscription, `UIScene` through `UIScene.update()`
+  calling `touchUi.refresh()`. The per-scene DOM-listener gap — `uiTouch.ts` wires none — adds
+  nothing a per-frame poll does not already cover, so closing it would have been a fourth repair
+  written from the same kind of reasoning as the first three.
+- `index.html`'s cascade is a single `html.rotate #rotate { display: flex }` against a `display: none`
+  base, and nothing else writes the class.
+
+Two explanations survive: **the viewport this code reads is not what it assumes on that hardware**,
+or **`refresh()` is not running there**. Nothing in the repository distinguishes them, and the
+recorded rule for a repeated report is to reproduce before repairing — which is not possible on a
+device this session cannot reach.
+
+So this round ships an **instrument, not a repair**: the overlay prints
+`innerWidth x innerHeight | visualViewport | screen.orientation | refresh count` under its copy,
+digits only so `verify-dist.mjs`'s shipped-prose sweep stays clean. A count that stops rising while
+the phone is turned means the poll is dead; a count that rises while the numbers stay portrait means
+the viewport is. **M90** reds the readout.
+
 **M88 and M89 red the two halves**, and M89's first attempt stayed green and is recorded as such:
 `white-space: nowrap` at the shipped 14 px does not overflow a 320 px phone, because a 14 px DOM
 string is not wide enough to. The gate measures overflow and the mutation has to produce some.
