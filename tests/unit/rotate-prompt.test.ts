@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 import { TOUCH_BOX_PX, TOUCH_MIN_CSS_PX } from '../../src/render/touchLayout';
 import { fitCanvasCssWidth, rotateOverlayWanted } from '../../src/render/rotateOverlay';
-import { RotatePrompt, type RotateHost } from '../../src/scenes/rotatePrompt';
+import { RotatePrompt, browserHost, type RotateHost } from '../../src/scenes/rotatePrompt';
 
 /**
  * **The one viewport the controls cannot be made to fit.**
@@ -173,5 +173,119 @@ describe('the overlay reports the numbers it decided from', () => {
     prompt.refresh();
     expect(host.shown).toBe(false);
     expect(host.line).toContain('844x390');
+  });
+});
+
+/**
+ * **The DEV instrument really draws — and the fake-host cases above cannot say so.**
+ *
+ * 🔴 M90 gates an *on-overlay* readout. When the diagnostic stopped shipping (owner decision
+ * 2026-09-01) the node left `index.html` and moved into `browserHost().report()` under
+ * `import.meta.env.DEV`. Every case above drives `fakeHost`, which records a string and touches no
+ * DOM — so all of them stay green if the real host writes nowhere at all. That is the shape of a
+ * decision function with no consumer, and it is exactly what M90 exists to catch, so the re-scoped
+ * M90 needs a case that watches the DOM instead of a string.
+ *
+ * ⚠️ **Hand-rolled document, not jsdom.** The suite runs `environment: 'node'` and the
+ * dependencies are frozen (CLAUDE.md §3), so a DOM library would be a STOP-and-ask. A fake with
+ * four methods is the same idiom `enemy-feedback.test.ts` uses for a fake scene, and it makes the
+ * assertions stronger rather than weaker: the test can see that the node was *created* once and
+ * *appended* to the overlay, which a real DOM would make tedious to check.
+ *
+ * ⚠️ This suite runs with `import.meta.env.DEV === true`, so it proves the DEV arm only. The
+ * production arm — that no `rotate-diag` reaches `dist/` — is a build-output claim and is gated in
+ * `tools/gen/verify-dist.mjs`, because no Vitest case can observe a production bundle.
+ */
+describe('the DEV diagnostic node', () => {
+  interface FakeEl {
+    id: string;
+    textContent: string | null;
+    children: FakeEl[];
+    setAttribute(name: string, value: string): void;
+    appendChild(child: FakeEl): void;
+  }
+
+  function fakeEl(id: string): FakeEl {
+    return {
+      id,
+      textContent: null,
+      children: [],
+      setAttribute() {},
+      appendChild(child: FakeEl) {
+        this.children.push(child);
+      },
+    };
+  }
+
+  /** Installs a fake document, returns the overlay and a restore function. */
+  function withFakeDom(withOverlay = true): { overlay: FakeEl; created: number; restore(): void } {
+    const overlay = fakeEl('rotate');
+    const state = { created: 0 };
+    const doc = {
+      getElementById(id: string): FakeEl | null {
+        if (id === 'rotate') return withOverlay ? overlay : null;
+        return overlay.children.find((c) => c.id === id) ?? null;
+      },
+      createElement(): FakeEl {
+        state.created += 1;
+        return fakeEl('');
+      },
+      documentElement: { classList: { contains: () => false, toggle: () => {} } },
+    };
+    const g = globalThis as unknown as Record<string, unknown>;
+    const priorDoc = g.document;
+    const priorWin = g.window;
+    g.document = doc;
+    g.window = { innerWidth: 390, innerHeight: 844 };
+    return {
+      overlay,
+      get created() {
+        return state.created;
+      },
+      restore() {
+        g.document = priorDoc;
+        g.window = priorWin;
+      },
+    };
+  }
+
+  it('creates the node, appends it to the overlay, and writes the line', () => {
+    const dom = withFakeDom();
+    try {
+      const host = browserHost();
+      expect(host, 'a fake document must still produce a host').not.toBeNull();
+      host?.report('390x844 | 390x844 | portrait-primary | 1');
+      expect(dom.overlay.children.length, 'nothing was appended to the overlay').toBe(1);
+      expect(dom.overlay.children[0]?.id).toBe('rotate-diag');
+      expect(dom.overlay.children[0]?.textContent).toBe('390x844 | 390x844 | portrait-primary | 1');
+    } finally {
+      dom.restore();
+    }
+  });
+
+  it('creates the node ONCE across many refreshes and updates it in place', () => {
+    // The counter rises every frame, so a host that re-created the element per call would append
+    // one div per frame — a leak that looks identical on screen.
+    const dom = withFakeDom();
+    try {
+      const host = browserHost();
+      host?.report('a | 1');
+      host?.report('a | 2');
+      host?.report('a | 3');
+      expect(dom.overlay.children.length, 'one node per refresh is a per-frame leak').toBe(1);
+      expect(dom.overlay.children[0]?.textContent).toBe('a | 3');
+    } finally {
+      dom.restore();
+    }
+  });
+
+  it('does nothing when the overlay is absent instead of throwing', () => {
+    const dom = withFakeDom(false);
+    try {
+      const host = browserHost();
+      expect(() => host?.report('a | 1')).not.toThrow();
+    } finally {
+      dom.restore();
+    }
   });
 });

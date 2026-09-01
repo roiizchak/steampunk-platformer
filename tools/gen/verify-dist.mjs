@@ -136,6 +136,18 @@ for (const [label, path] of scanned) {
     // `gamePlayerDraw.ts`. That shape is deliberate (it is what lets `feel-variants.test.ts` call it
     // directly) and must not be "fixed"; this entry is what keeps its callers honest instead.
     'URLSearchParams',
+    // 🔴 The rotate overlay's viewport readout. It shipped to production through Phase 12 — four
+    // device sessions had ended with "it still does not clear" and the instrument was what finally
+    // said why (a 2.1 px shortfall from the browser's address bar, not an arithmetic error). The
+    // question is answered, so it is DEV-only now and the node is INJECTED by
+    // `rotatePrompt.browserHost().report()` rather than living in `index.html`.
+    //
+    // This entry is the production half of the re-scoped M90, and it is the ONLY half a gate can
+    // hold: the unit suite runs with `import.meta.env.DEV === true`, so no Vitest case can observe
+    // the production branch. Both the id and the injected inline style would land in the bundle as
+    // string literals if the guard were dropped, and `dist/index.html` is swept here too — so a
+    // re-added static div is caught by the same line.
+    'rotate-diag',
   ]) {
     if (src.includes(symbol)) {
       problems.push(`${label} contains the DEV-only symbol ${symbol}`);

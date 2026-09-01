@@ -149,18 +149,6 @@
         device measures 53.3 px. `src/game/fullscreenOnTap.ts` listens on `#game`, which is the
         wrapper this overlay lives inside, so a tap on these words is what asks for it.
       */
-      /*
-        The overlay reports the numbers it decided from. Four device sessions have now ended with
-        "it still does not clear", and every repair between them was written from arithmetic that
-        measures correct on every viewport a phone can report - so the wrong thing is the input,
-        not the sum. Digits only, no prose: `verify-dist.mjs` sweeps shipped text for dev wording.
-      */
-      #rotate .diag {
-        font-size: 11px;
-        color: #6f6250;
-        letter-spacing: 1px;
-      }
-
     </style>
   </head>
   <body>
@@ -170,7 +158,6 @@
         <div class="title">ROTATE YOUR DEVICE</div>
         <div class="sub">the controls need a landscape screen</div>
         <div class="sub">already landscape? tap for fullscreen</div>
-        <div class="diag" id="rotate-diag"></div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
