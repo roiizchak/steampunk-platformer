@@ -42,6 +42,7 @@ import Phaser from 'phaser';
 import { HUD_SLOT, playerHudFill } from '../render/playerHud';
 import {
   COUNTER_FILL,
+  measuredDigitDescent,
   COUNTER_STROKE,
   COUNTER_STROKE_PX,
   counterText,
@@ -294,8 +295,19 @@ export class UIScene extends Phaser.Scene {
     this.gearIcon.setScale(this.layout.gearIcon.w / this.iconBaseDiameter);
     this.gearPop = attachGearPop(this, this.gearIcon, this.layout.gearIcon.w / this.iconBaseDiameter);
 
-    this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
+    // Two passes: the size must be applied before the font can be measured, and pass 1 exists
+    // only to learn `fontPx`. This `Text` is created with no `fontSize`, so metrics read before
+    // `setFontSize` describe the wrong size; Phaser's `setFontSize` re-runs `MeasureText`, so they
+    // are fresh straight after. The arithmetic and the reason it is HALF the descent live with the
+    // constant, in `measuredDigitDescent`.
     this.counter.setFontSize(this.layout.counter.fontPx);
+    this.layout = hudLayout(
+      width,
+      height,
+      HUD_SLOT,
+      measuredDigitDescent(this.counter.getTextMetrics()),
+    );
+    this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
   }
 
   /**

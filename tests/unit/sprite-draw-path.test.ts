@@ -176,6 +176,40 @@ describe('UIScene.ts fires the gear pop and stops what it started', () => {
     expect(render.slice(0, 400)).toContain('this.gearPop?.pop()');
   });
 
+  it('MEASURES the digit descent and hands it to hudLayout, in that order', () => {
+    /**
+     * 🔴 The half `hud-layout.test.ts` cannot reach. That file proves `hudLayout` honours a
+     * supplied fraction; nothing there notices if `UIScene` stops supplying one — the counter would
+     * silently fall back to `DIGIT_DESCENT_FRACTION`, the guess the owner reported as visibly
+     * wrong, and every layout assertion would stay green.
+     *
+     * Source text rather than a fake scene, because `UIScene` value-imports Phaser and cannot be
+     * constructed under `environment: 'node'` — the weaker of the two draw-path idioms, chosen here
+     * for the reason CLAUDE.md gives.
+     */
+    const layout = from(src, 'private applyLayout()');
+    expect(layout, 'the measured fraction never reaches hudLayout').toContain(
+      'measuredDigitDescent(this.counter.getTextMetrics())',
+    );
+
+    // ⚠️ ORDER. The counter is created with no `fontSize`, so metrics read before `setFontSize`
+    // describe the default size rather than the one that will draw — a measurement of the wrong
+    // font, presented as the right one. Named by the Codex plan review, round 1.
+    const setSize = layout.indexOf('this.counter.setFontSize(');
+    const measure = layout.indexOf('getTextMetrics()');
+    expect(setSize, 'the counter font size is never applied in applyLayout').toBeGreaterThan(-1);
+    expect(measure, 'nothing measures the font').toBeGreaterThan(-1);
+    expect(
+      setSize,
+      'the descent is measured BEFORE the font size is applied — that measures the wrong font',
+    ).toBeLessThan(measure);
+
+    // And the fraction is not re-derived here: `measuredDigitDescent` owns the `/ 2`, and a second
+    // copy of that arithmetic is how the two halves drift apart.
+    expect(layout, 'UIScene re-derives the half-descent instead of calling the shared function')
+      .not.toMatch(/descent\s*\/\s*\w+\.fontSize/);
+  });
+
   it('destroys the gear pop AND the flyers on SHUTDOWN, and nulls the pop', () => {
     // The handler exists specifically to stop tweens before their targets are destroyed and cites
     // the Phase 6 incident three lines above. Phase 9 added two more tween owners to this scene and

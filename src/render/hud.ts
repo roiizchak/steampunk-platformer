@@ -190,12 +190,23 @@ const COUNTER_FONT_PX = 44;
  * 4 px would be silently wrong the next time the font changes, which is the shape of half this
  * session's Tier 4.
  *
- * ⚠️ **This is a by-eye number and the by-eye read is still owed** *(S.9)*. The browser is the only
- * thing that knows the real metrics of the fallback font it picks, and at 852 × 480 the whole
- * correction is under 2 physical px — possibly imperceptible even though it is real at the design
- * resolution. Recorded rather than presented as measured.
+ * ⚠️ **This is the FALLBACK now, not the shipped value** *(the by-eye read that was owed is paid).
+ * The owner reported the count still sitting high against its icon on a real device, and the reason
+ * is in the paragraph above: 0.105 assumes a descent of ~21 %, but the browser picks the fallback
+ * monospace face and its descent is whatever that face has. `UIScene` measures it —
+ * `Text.getTextMetrics()`, which Phaser derives from `actualBoundingBoxAscent`/`Descent` — and
+ * passes `descent / fontSize / 2` in as `digitDescentFraction`.
+ *
+ * ⚠️ **HALF the descent, and the first repair of this got that wrong.** The correction is half,
+ * because a box centred on `ascent + descent` puts descender-less ink high by half the descent.
+ * Passing the FULL measured `descent / fontSize` (~0.21) doubles the nudge and moves the digits as
+ * far wrong in the other direction — while calling itself measured, which is worse than the guess
+ * it replaced. Caught by the Codex plan review, round 1.
+ *
+ * This value survives as the answer when nothing has measured: `hudLayout` is engine-free and is
+ * called from unit tests and from `hudFits` with no browser in reach.
  */
-const DIGIT_DESCENT_FRACTION = 0.105;
+export const DIGIT_DESCENT_FRACTION = 0.105;
 
 /**
  * The gear icon beside the counter, square, in DESIGN pixels.
@@ -208,6 +219,26 @@ const DIGIT_DESCENT_FRACTION = 0.105;
  * resampled a sprite, and the counter is not worth breaking that for.
  */
 const GEAR_ICON_PX = 72;
+
+/**
+ * The measured half-descent, as a fraction of the font size.
+ *
+ * Takes Phaser's `TextMetrics` structurally rather than by import, so this module stays engine-free
+ * and `npm run test:sim-isolated` can still load it. Phaser derives those numbers from the canvas
+ * `actualBoundingBoxAscent`/`Descent` of the style's own test string — a real measurement of the
+ * face the browser actually chose, which is the thing `DIGIT_DESCENT_FRACTION` could only guess at.
+ *
+ * ⚠️ **Half, not whole.** A glyph box centred on `ascent + descent` puts descender-less ink high by
+ * half the descent, so half is the correction. Returning the full `descent / fontSize` doubles the
+ * nudge and pushes the digits as far below centre as they used to sit above it — while calling
+ * itself measured, which is worse than the guess. Caught by the Codex plan review, round 1.
+ *
+ * Falls back when there is nothing to divide by: a zero font size means nothing measured.
+ */
+export function measuredDigitDescent(metrics: { descent: number; fontSize: number }): number {
+  if (!(metrics.fontSize > 0) || !Number.isFinite(metrics.descent)) return DIGIT_DESCENT_FRACTION;
+  return metrics.descent / metrics.fontSize / 2;
+}
 
 export interface Rect {
   x: number;
@@ -237,7 +268,18 @@ export interface HudLayout {
  * the play area. Choosing one axis deliberately is the `[SCALE_RATIO]` lesson from the art
  * pipeline applied to layout.
  */
-export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
+export function hudLayout(
+  gameW: number,
+  gameH: number,
+  slot: Rect,
+  /**
+   * The measured half-descent, as a fraction of the font size. See `DIGIT_DESCENT_FRACTION`.
+   *
+   * Optional so this module stays engine-free and every existing caller keeps working: only
+   * `UIScene` has a browser to ask, and it is the only caller that passes one.
+   */
+  digitDescentFraction: number = DIGIT_DESCENT_FRACTION,
+): HudLayout {
   if (!(gameW > 0) || !(gameH > 0) || !Number.isFinite(gameW) || !Number.isFinite(gameH)) {
     throw new Error(`hudLayout: game size must be finite and positive, got ${gameW} x ${gameH}`);
   }
@@ -283,7 +325,7 @@ export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
       //
       // `DIGIT_DESCENT_FRACTION` is scaled with the font rather than added as a literal, so the
       // correction survives a font-size change instead of becoming wrong at the next one.
-      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * DIGIT_DESCENT_FRACTION,
+      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * digitDescentFraction,
       fontPx,
     },
   };
