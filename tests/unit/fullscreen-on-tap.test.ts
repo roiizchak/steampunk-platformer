@@ -55,7 +55,7 @@ describe('installFullscreenOnTap', () => {
   it('asks for fullscreen on a tap', () => {
     const el = fakeElement();
     const scale = fakeScale();
-    installFullscreenOnTap(el, scale);
+    installFullscreenOnTap(el, scale, true);
     el.fire('pointerup');
     expect(scale.calls).toBe(1);
     expect(scale.isFullscreen).toBe(true);
@@ -67,7 +67,7 @@ describe('installFullscreenOnTap', () => {
     // same finding, and a listener on the wrong event is a fix that silently never fires.
     const el = fakeElement();
     const scale = fakeScale();
-    installFullscreenOnTap(el, scale);
+    installFullscreenOnTap(el, scale, true);
     el.fire('pointerdown');
     expect(scale.calls).toBe(0);
     el.fire('pointerup');
@@ -77,7 +77,7 @@ describe('installFullscreenOnTap', () => {
   it('does not ask again while already fullscreen', () => {
     const el = fakeElement();
     const scale = fakeScale();
-    installFullscreenOnTap(el, scale);
+    installFullscreenOnTap(el, scale, true);
     el.fire('pointerup');
     el.fire('pointerup');
     el.fire('pointerup');
@@ -90,19 +90,32 @@ describe('installFullscreenOnTap', () => {
     // player who swipes out of fullscreen has to be able to get back with one more tap.
     const el = fakeElement();
     const scale = fakeScale({ throws: true });
-    installFullscreenOnTap(el, scale);
+    installFullscreenOnTap(el, scale, true);
     expect(() => el.fire('pointerup')).not.toThrow();
     expect(() => el.fire('pointerup')).not.toThrow();
     expect(scale.calls).toBe(2);
   });
 
+  it('attaches NOTHING on a device with no touch', () => {
+    // 🔴 Found by a full e2e sweep, not by reasoning. Without this guard a desktop CLICK on the
+    // wrapper threw the browser into fullscreen, and `session-help-banner.spec.ts` — a spec with
+    // nothing to do with touch — failed on `page.setViewportSize` with "To resize
+    // minimized/maximized/fullscreen window, restore it to normal state first".
+    const el = fakeElement();
+    const scale = fakeScale();
+    installFullscreenOnTap(el, scale, false);
+    el.fire('pointerup');
+    expect(scale.calls).toBe(0);
+    expect(el.handlers.get('pointerup') ?? []).toHaveLength(0);
+  });
+
   it('detaches when its teardown runs, and is a no-op with no element', () => {
     const el = fakeElement();
     const scale = fakeScale();
-    installFullscreenOnTap(el, scale)();
+    installFullscreenOnTap(el, scale, true)();
     el.fire('pointerup');
     expect(scale.calls).toBe(0);
-    expect(() => installFullscreenOnTap(null, scale)()).not.toThrow();
+    expect(() => installFullscreenOnTap(null, scale, true)()).not.toThrow();
   });
 });
 
@@ -118,7 +131,9 @@ describe('the production wiring, which no behavioural test can reach', () => {
     // `#rotate` is a <div> above the canvas: Phaser's input never sees a tap on it, and that tap is
     // the one that matters — it is the only gesture a stuck player is offered. A listener on the
     // canvas would miss exactly the case this exists for.
-    expect(main).toContain("installFullscreenOnTap(document.getElementById('game'), game.scale)");
+    expect(main).toContain(
+      "installFullscreenOnTap(document.getElementById('game'), game.scale, game.device.input.touch)",
+    );
   });
 
   it("sends the WRAPPER fullscreen, so the overlay is inside the fullscreen subtree", () => {

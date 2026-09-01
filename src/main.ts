@@ -22,7 +22,7 @@ installCanvasFilter(game);
 // floor — so the rotate overlay stays up in landscape, correctly, and there is no button size that
 // fixes it. Fullscreen removes the chrome instead of shrinking the game around it. See
 // `fullscreenOnTap.ts` for the measurements and for why the listener is on the WRAPPER.
-installFullscreenOnTap(document.getElementById('game'), game.scale);
+installFullscreenOnTap(document.getElementById('game'), game.scale, game.device.input.touch);
 
 // DEV ONLY, and on the same side of the build gate as window.__game (vault 1.6). Vite folds
 // `import.meta.env.DEV` to false in a production build, so this whole block is dropped.

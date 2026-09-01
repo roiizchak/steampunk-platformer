@@ -45,6 +45,9 @@ export interface FullscreenTarget {
 /**
  * Watch `element` for taps and ask for fullscreen while the game is not already in it.
  *
+ * `isTouchDevice` is `game.device.input.touch`. A desktop gets **no listener at all**: a click is
+ * not a request for fullscreen, and the shortfall this repairs cannot happen at a desktop scale.
+ *
  * Returns the teardown, so a test can detach and production can ignore it — the wrapper outlives
  * the page.
  */
@@ -54,7 +57,15 @@ export function installFullscreenOnTap(
     removeEventListener(type: string, fn: () => void): void;
   } | null,
   scale: FullscreenTarget,
+  isTouchDevice: boolean,
 ): () => void {
+  // 🔴 **Touch devices only, and a full e2e sweep is what proved it.** Without this guard a plain
+  // desktop CLICK anywhere on the wrapper threw the browser into fullscreen, and
+  // `session-help-banner.spec.ts` failed with *"To resize minimized/maximized/fullscreen window,
+  // restore it to normal state first"* — a spec that has nothing to do with touch, broken by a
+  // repair for a phone. A mouse user who clicks the game has not asked for fullscreen, and the
+  // 44 px floor they are nowhere near is not a problem they have.
+  if (!isTouchDevice) return () => {};
   if (element === null) return () => {};
   const onTap = (): void => {
     if (scale.isFullscreen) return;
