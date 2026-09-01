@@ -228,6 +228,7 @@ papered over.
 | M91 | subscribe the fullscreen request to `pointerdown` instead of `pointerup` | 12.13, 12.19 | RED 4/8 — a fullscreen request originating from `pointerdown` is refused as an untrusted gesture on touch devices, so the wrong event is a repair that silently never fires |
 | M92 | install the fullscreen listener on `game.canvas` instead of the `#game` wrapper | 12.13, 12.19 | RED 1/8 — Phaser's input never sees a tap on the `#rotate` div, and that tap is the ONLY gesture a stuck player is offered. A canvas listener misses exactly the case the repair exists for |
 | M93 | drop `fullscreenTarget: 'game'` from the scale config | 12.13, 12.19 | RED 1/8 — without a target Phaser builds its own `<div>`, moves only the CANVAS into it and fullscreens that, stranding the overlay outside the fullscreen subtree |
+| M94 | drop the `isTouchDevice` guard from `installFullscreenOnTap` | 12.13, 12.19 | RED 1/9. ⚠️ **Found by the full e2e sweep before the merge, not by reasoning.** Without the guard a plain desktop CLICK on the wrapper threw the browser into fullscreen, and `session-help-banner.spec.ts` — a spec with nothing to do with touch — failed on `page.setViewportSize` with *"To resize minimized/maximized/fullscreen window, restore it to normal state first"*. A repair for a phone broke a desktop spec, and only the whole-suite run could see it |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
 

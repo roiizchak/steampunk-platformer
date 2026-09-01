@@ -567,6 +567,32 @@ function is subscribed to RESIZE; without the guard the page died with `RangeErr
 stack size exceeded` on the first e2e run. Street-Fighter's `main.ts` carries the same guard for the
 same reason — which is a second thing that reading it first would have supplied.
 
+#### ✅ The owner's device, 2026-09-01: the touch build plays
+
+After the fullscreen repair the owner reported the game **working on the phone** — the rotate
+overlay clears, fullscreen is granted, and the controls are usable. They also reported *"a few
+small issues"* deferred to the next session and **authorised the merge to `main` and a production
+deploy** in the same message.
+
+⚠️ **12.13 and 12.24 are therefore NOT closed by this.** The owner confirmed the build plays; they
+did not report running 12.13's four gesture checks (drag off a control's edge and back, two-finger
+pinch across the cluster, double-tap the jump plate, a drag ending past the canvas edge) or 12.24's
+five-level no-keyboard journey, and they named unresolved issues without enumerating them. Recording
+this as a pass would be reading *"ran"* as *"passed"*, which is the exact failure the verdict rule
+in this phase's plan was written to prevent. Both stay open, with the deferred issues to be
+enumerated at the start of the next session.
+
+⚠️ **One regression was caught by the full e2e sweep run before the merge, and by nothing else.**
+`installFullscreenOnTap` had no touch guard, so a desktop CLICK on the wrapper entered fullscreen
+and `session-help-banner.spec.ts` — a spec with nothing to do with touch — failed on
+`page.setViewportSize`. **M94** reds it. The lesson is the sweep itself: a phone repair broke a
+desktop spec three files away, and every targeted run stayed green.
+
+⚠️ **And the mutation trap fired again.** `git checkout -- src/game/fullscreenOnTap.ts` to revert
+M94 destroyed the uncommitted guard, because the guard had not been committed first. That is the
+third occurrence of a trap this phase's own plan names in bold. The rule is not *"commit often"* —
+it is **commit the fix before running the mutation that reverts its file**.
+
 #### ✅ What the instrument found: the overlay was right for four sessions
 
 The owner turned the phone to landscape and read the line back:
