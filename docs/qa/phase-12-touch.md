@@ -39,7 +39,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.10 | The prompt appears iff any target that would have to be hittable on this screen falls under 44 CSS px | **PASS — criterion amended 2026-08-31, owner decision** | The prompt and every route share ONE predicate (M31 red 1/9), so they cannot disagree. That predicate weighs the screen's own route **and** the play controls, which is decision **D1** and is now what the criterion says: a portrait title screen shows the prompt because the controls behind it would be 32.5 CSS px, not because its own 390 × 219 zone is small. **No gate changed; the sentence did.** § 12.10. |
 | 12.11 | Frame budget unregressed with the controls drawn | **PASS** | § 12.11. The frames-served ratio was replaced, not re-bounded — it returns exactly 1.000 or 0.500 against a vsync-locked display. The statistic is now the paired per-frame GPU and main-thread delta against ±0.5 ms, with absolute per-arm ceilings at 8 ms. Red-proved both ways: **M72** 2.09 ms, **M73** 0.85 ms, each after a recorded GREEN that was a real hole. Confirmed on a held-out `test:e2e` sweep, **218 passed, 0 failed**. Both `performance-engineer` briefs run *(A7)*; brief 2's finding 1 — the touch role pinned to one browser context all run — is applied in `touchArms.ts` and was the cause of an offset this log had recorded as noise. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps every `TOUCH_IDS` coordinate; M8 red. |
-| 12.13 | A drag is not stolen by browser pan / pinch / zoom | **NOT MET — the first hands-on pass found two defects, both now fixed and gated** | Preview deployed 2026-08-31 and run on the owner's phone. **Two findings, neither visible to any automated gate.** (1) 🔴 **Turning the device did not clear the rotate prompt.** `TitleScene` and `LevelSelectScene` subscribed `refresh` to `scale.on('resize')` and nothing else, and a mobile browser fires `resize` on orientationchange **while it still reports the old viewport** — so the one evaluation ran against portrait and nothing asked again. `UIScene` polls and was fine, which is exactly why five Codex rounds over this file saw nothing. Fixed by subscribing to `SCENE_UPDATE`; **M86** reds it. That required taking a `phaser` VALUE import out of `rotateGuard.ts` — for four event strings `engineLiterals.ts` already held — because until then the file could not be reached from a unit test at all *(criterion 12.15)*. (2) **The subline was cut off at both ends.** 36 monospace characters at `18 / 0.203 = 89` game px is 1922 px on a 1920 px surface: over on the widest phone in scope, worse on every narrower one, and produced only at a CSS scale the headless harness never runs at. Wrapped rather than shrunk, so the copy stays over the 16 px legibility floor; **M87** reds it. ⚠️ **The gesture checks themselves have not been re-run since the fix**, so the criterion stays NOT MET. |
+| 12.13 | A drag is not stolen by browser pan / pinch / zoom | **NOT MET — two hands-on passes, and the rotate gate needed rewriting rather than repairing** | Preview deployed 2026-08-31 and 2026-09-01 and run on the owner's phone. **The same two findings were reported twice**, because the first repair to each was written from arithmetic and shipped without a reproduction. *(See § the rotate overlay for the full account.)* The overlay is DOM now, not Phaser objects, and both defects have e2e reproductions in `phase-12-viewport.spec.ts` that were watched red. ⚠️ **The gesture checks themselves — drag off the edge, pinch, double-tap — have still not been run**, so the criterion stays NOT MET. |
 | 12.14 | The button art is readable at true size at every integer CSS size in the 44-48 px live band *(amended 2026-08-31, owner decision)* | **NOT MET — and the measurable half can no longer be measured** | 🔴 **The whole plate was redesigned on 2026-08-31 by owner decision** — *"new designs for all the buttons, in the style of the gate asset"* — so all six faces are take 14's cells and the three single-cell re-shoots this row used to describe ship nothing. **The per-stroke contrast gate is DELETED, not failing.** It found the glyph with `luma < INK_DARK_MAX` inside the central half, which held while the button was a pale disc whose glyph was the only dark thing on it; the redesign puts verdigris in every recess and shadow along the lower-right, so the detector reads **12 to 37 "strokes" per face** where the six used to have 1 to 4. Its figures were not low, they were meaningless — the mask is no longer the mark. Owner decision, taken on the measurement: report the criterion NOT MET rather than rebuild the statistic after seeing the art it would judge, which is the post-data selection this phase kept catching. ⚠️ **So there is now NO automated evidence for 12.14 at all**, and the criterion rests entirely on the hands-on pass, which is what it always required and has never had. `ui-ux-tester` has not run against these bytes either. Screenshot at 540 x 365: `docs/evidence/phase-12-touch-art.png`. **Seven earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. **Re-run on the round-16 diff, 2026-08-31: 3016 passed, 13 skipped of 3029**, Phaser restored to 4.2.1 afterwards. Re-run because the close-out session added four modules under `tools/gen/` and three test files, any of which could have reached for Phaser. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
@@ -533,6 +533,43 @@ pause finding independently, and brief 2 found something no one had looked for.
 | 4 | The set is mixed solid-fill and outline, and the heaviest mark is now on the most consequential button | **RECORDED, owner decision.** Widened from the `attack`-only note |
 | 5 | A boot names *feet*, not a walk/run **toggle** | **RECORDED.** *Reason: no conventional glyph distinguishes a gait toggle from locomotion; the lit/unlit plate carries the state* |
 | 6 | Pressed feedback is alpha-only and happens under the thumb | **RECORDED.** *Reason: a cue outside the box bounds is a layout change, not an art one* |
+
+### 🔴 The rotate overlay — three causes, two reports, and a repair written from arithmetic twice
+
+The owner turned the phone to landscape and the prompt stayed up. Twice. And read a subline cut off
+at both ends, then — after the first repair — a subline overlapping the headline.
+
+**The lesson is not that the code was wrong. It is that two repairs were deployed without ever
+reproducing the defect**, and both were plausible readings of the symptom that happened to be
+incomplete. *(C4, and the vault note that a repeat report means reproduce first — which was in
+memory, and was not followed until the third round.)*
+
+| # | cause | why the previous repair missed it |
+|---|---|---|
+| 1 | **The decision read `Phaser.ScaleManager.displaySize`, which is a cache.** Every consumer — the prompt, `touchControlsLayer`, `touchRoutes` — read the same stale number, so one stale value froze all three | Repair 1 added a per-frame poll of that same value. **Re-reading a cache more often does not make it current.** |
+| 2 | **Phaser subscribes to `window.resize` and a parent-bounds poll, and to nothing else.** It never listens to `orientationchange`, and never to `visualViewport` — which iOS Safari needs, because it does not reliably fire `resize` when the device turns or the toolbars slide | Nothing in the repo said this. The sibling project at `C:\Claude\Street-Fighter` wires all three in `src/main.ts` and says why; the owner pointed at it, and that is where the answer was |
+| 3 | **One overlay class, more than one `RotatePrompt`.** `TitleScene` and `LevelSelectScene` attach their own; `UIScene` builds another. Each cached "am I showing?" privately, so the title screen's teardown cleared the class while the UI's prompt still believed it was up | Invisible to arithmetic entirely. Found by the **e2e reproduction**, on the first run of it |
+
+**And the copy was sized in CSS pixels while being positioned in GAME pixels.** Those units do not
+move together: at phone portrait the subline renders at `18 / 0.203 = 89` game px while its offset
+from centre stays at 56. Repair 1 added word wrap, which fixed the clipping and turned it into a
+collision with the headline — the second report. The copy is DOM text now, laid out by `flex`,
+`gap`, `padding` and a `max-width`, and none of that arithmetic exists any more.
+
+**What changed structurally.** `RotatePrompt` draws nothing; it toggles `html.rotate`, and
+`index.html` owns the overlay. The decision is `rotateOverlayWanted(innerWidth, innerHeight, …)` —
+raw viewport in, one shared predicate out. `rotateGuard.ts` wires `resize`, `orientationchange` and
+`visualViewport.resize`, and calls `ScaleManager.refresh()` behind a re-entrancy guard so the
+Phaser-side input gating stops being live on the same event rather than up to half a second later.
+
+⚠️ **The re-entrancy guard is not a nicety.** `refresh()` emits RESIZE synchronously and this
+function is subscribed to RESIZE; without the guard the page died with `RangeError: Maximum call
+stack size exceeded` on the first e2e run. Street-Fighter's `main.ts` carries the same guard for the
+same reason — which is a second thing that reading it first would have supplied.
+
+**M88 and M89 red the two halves**, and M89's first attempt stayed green and is recorded as such:
+`white-space: nowrap` at the shipped 14 px does not overflow a 320 px phone, because a 14 px DOM
+string is not wide enough to. The gate measures overflow and the mutation has to produce some.
 
 #### 🔴 Codex round 20 — the implementation review (12.23), `VERDICT: REVISE`
 
