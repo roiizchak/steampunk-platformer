@@ -177,20 +177,38 @@ export async function faceAlpha(page: Page, sceneKey: string, name: string): Pro
 }
 
 /**
- * Is the rotate prompt on screen?
+ * Is the rotate overlay on screen?
  *
- * Read from the drawn `Text` objects, not from a flag the production code exports — a flag would be
- * the same circularity the layout predicate has, satisfied with nothing rendered.
+ * 🔴 **This used to read Phaser `Text` objects, and that is why it could not see either defect the
+ * owner found by hand.** The overlay is DOM now, and so is this: `display` off the real element,
+ * through the real cascade. A flag exported by production would be the same circularity the layout
+ * predicate has — satisfied with nothing rendered.
  */
-export async function rotatePromptVisible(page: Page, sceneKey: string): Promise<boolean> {
-  return page.evaluate((key) => {
-    type Obj = { type: string; text?: string; visible: boolean };
-    type Handle = { scene: { getScene(k: string): { children?: { list: Obj[] } } | null } };
-    const scene = (window as unknown as { __phaserGame?: Handle }).__phaserGame?.scene.getScene(key);
-    return (scene?.children?.list ?? []).some(
-      (o) => o.type === 'Text' && typeof o.text === 'string' && o.text.includes('ROTATE') && o.visible,
-    );
-  }, sceneKey);
+export async function rotatePromptVisible(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const el = document.getElementById('rotate');
+    if (el === null) return false;
+    return getComputedStyle(el).display !== 'none';
+  });
+}
+
+/**
+ * Where every line of the overlay's copy actually sits, in CSS pixels, measured off the page.
+ *
+ * 🔴 **The defect no gate in this repository could see.** The copy was two Phaser `Text` objects
+ * sized in CSS pixels and positioned in GAME pixels; at phone portrait that ran the subline off both
+ * edges and then, after a word-wrap repair, straight through the headline. Both were reported from a
+ * real device because nothing here measured a rendered text box. This does.
+ */
+export async function rotateCopyBoxes(
+  page: Page,
+): Promise<{ text: string; x: number; y: number; w: number; h: number }[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('#rotate > *')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { text: el.textContent ?? '', x: r.x, y: r.y, w: r.width, h: r.height };
+    }),
+  );
 }
 
 /** Every measured touch target on a scene, in CSS pixels — the units the accessibility floor is in. */

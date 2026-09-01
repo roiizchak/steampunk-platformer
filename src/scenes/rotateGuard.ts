@@ -60,6 +60,8 @@ export interface RotateGuardScene extends TouchSceneLike {
   scale: TouchSceneLike['scale'] & {
     on(event: string, fn: () => void): unknown;
     off(event: string, fn: () => void): unknown;
+    /** The engine's own re-measure. Optional so a fake scene need not provide one. */
+    refresh?(): unknown;
   };
 }
 
@@ -80,23 +82,66 @@ export function attachRotatePrompt(
   isTouchDevice: boolean,
   targets: readonly HitBox[] = [],
 ): void {
-  const prompt = new RotatePrompt(scene, isTouchDevice, targets);
-  prompt.create();
+  const prompt = new RotatePrompt(isTouchDevice, targets);
   prompt.refresh();
 
-  const refresh = (): void => prompt.refresh();
+  // 🔴 **The overlay reads the live viewport; the CONTROLS still read `scale.displaySize`.**
+  // `touchControlsLayer.refresh()` and `touchRoutes` ask the same predicate through the engine's
+  // cached CSS width, and that cache is what was stale through a rotation. `refresh()` on the
+  // ScaleManager is the engine's own re-measure, and it is the reason the six hit areas stop being
+  // live on the same event that clears the overlay rather than up to half a second later.
+  // ⚠️ **Re-entrancy guard, and it is not optional.** `ScaleManager.refresh()` ends by emitting
+  // RESIZE synchronously, and this function is subscribed to RESIZE — so calling it from inside
+  // itself recurses until the stack is gone. Written without the guard it took down the page with
+  // `RangeError: Maximum call stack size exceeded` on the first e2e run, which is the run that
+  // exists because the two repairs before it were deployed without one.
+  // Street-Fighter's `main.ts` carries the same guard for the same reason.
+  let refreshing = false;
+  const refresh = (): void => {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      scene.scale.refresh?.();
+      prompt.refresh();
+    } finally {
+      refreshing = false;
+    }
+  };
   const teardown = (): void => {
     scene.events.off(SCENE_SHUTDOWN, teardown);
     scene.events.off(SCENE_DESTROY, teardown);
     scene.events.off(SCENE_UPDATE, refresh);
     scene.scale.off('resize', refresh);
+    for (const [target, event] of domSubscriptions()) target.removeEventListener(event, refresh);
     prompt.destroy();
   };
 
-  // Both, and neither is redundant. `resize` answers a viewport change in the same frame it lands;
-  // UPDATE answers the one the browser reported late, which is every rotation on a phone.
   scene.scale.on('resize', refresh);
   scene.events.on(SCENE_UPDATE, refresh);
+  // 🔴 **The DOM events Phaser does not listen to.** Its ScaleManager watches `window.resize` and
+  // polls the parent's bounds; it never subscribes to `orientationchange`, and it never subscribes
+  // to `visualViewport`. iOS Safari does not reliably fire `window.resize` when the device turns or
+  // when its toolbars slide — which is why the owner's phone kept the overlay up through two
+  // separate repairs. The sibling project at `C:\Claude\Street-Fighter` wires exactly these three
+  // (`src/main.ts`) and its rotate gate works on that device.
+  for (const [target, event] of domSubscriptions()) target.addEventListener(event, refresh);
   scene.events.once(SCENE_SHUTDOWN, teardown);
   scene.events.once(SCENE_DESTROY, teardown);
+}
+
+/**
+ * The DOM targets and events a rotation can arrive on. Empty where there is no DOM.
+ *
+ * Named and exported so `rotate-prompt.test.ts` can assert the SET rather than trusting a comment:
+ * dropping `orientationchange` or `visualViewport` is the defect, and a list nothing reads is a
+ * list nothing gates.
+ */
+export function domSubscriptions(): readonly [EventTarget, string][] {
+  if (typeof window === 'undefined') return [];
+  const subs: [EventTarget, string][] = [
+    [window, 'resize'],
+    [window, 'orientationchange'],
+  ];
+  if (window.visualViewport) subs.push([window.visualViewport, 'resize']);
+  return subs;
 }

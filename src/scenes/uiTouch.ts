@@ -50,8 +50,9 @@ export function attachUiTouch(
   // on which launch this is.
   session.activate(layer);
 
-  const prompt = new RotatePrompt(scene, isTouchDevice);
-  prompt.create();
+  // No scene argument any more, and no `create()`: the overlay is DOM and the decision comes from
+  // the live viewport rather than from `scene.scale.displaySize`, which is stale after a rotation.
+  const prompt = new RotatePrompt(isTouchDevice);
 
   return {
     refresh(): void {

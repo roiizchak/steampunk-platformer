@@ -9,6 +9,7 @@ import {
   drawnZones,
   installTouchDriver,
   measuredTargets,
+  rotateCopyBoxes,
   rotatePromptVisible,
 } from './touchHarness';
 
@@ -81,7 +82,7 @@ for (const vp of VIEWPORTS) {
       // 12.10 — the prompt appears IFF a live target would fall under the floor, and the controls
       // underneath it go non-interactive. A prompt that only hides them would leave a tap meant for
       // "turn your phone" moving the player.
-      expect(await rotatePromptVisible(page, 'UI'), 'no rotate prompt on a phone held upright').toBe(
+      expect(await rotatePromptVisible(page), 'no rotate prompt on a phone held upright').toBe(
         true,
       );
       for (const z of zones) {
@@ -98,7 +99,7 @@ for (const vp of VIEWPORTS) {
     }
 
     expect(
-      await rotatePromptVisible(page, 'UI'),
+      await rotatePromptVisible(page),
       'a rotate prompt on a viewport whose controls fit',
     ).toBe(false);
 
@@ -148,7 +149,7 @@ test('12.10 rotating out of portrait clears the prompt without a reload', async 
   // from the same predicate the controls are gated on, so both must move together.
   await page.setViewportSize({ width: 390, height: 844 });
   await bootToTouchPlay(page);
-  expect(await rotatePromptVisible(page, 'UI')).toBe(true);
+  expect(await rotatePromptVisible(page)).toBe(true);
 
   await page.setViewportSize({ width: 844, height: 390 });
   await page.waitForFunction(
@@ -258,4 +259,72 @@ test('12.8/12.9 the title zone is a real target, and it covers the canvas', asyn
   expect(zone.y + zone.h, 'a live strip of canvas is below the title zone').toBeGreaterThanOrEqual(
     rect.top + rect.height - 0.5,
   );
+});
+
+/**
+ * **The two defects the owner found on a phone, on the page, in a browser.**
+ *
+ * 🔴 Both were reported twice. The first repair to each was written from arithmetic and shipped
+ * without reproduction, and both times the owner had to report the same thing again. These are the
+ * reproductions — the ones that should have existed before either fix was deployed.
+ */
+test.describe('the rotate overlay, on a real page', () => {
+  test('CLEARS when the viewport turns to landscape', async ({ page }) => {
+    // 🔴 The decision used to come from `Phaser.ScaleManager.displaySize`, which the engine caches
+    // and which is stale exactly when the device has just been turned. The overlay stayed up. It
+    // reads `window.innerWidth`/`innerHeight` now, which cannot be.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootToTouchPlay(page);
+    expect(await rotatePromptVisible(page), 'the fixture is not the failing viewport').toBe(true);
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await expect
+      .poll(() => rotatePromptVisible(page), {
+        message: 'the overlay survived a rotation into landscape',
+        timeout: 4000,
+      })
+      .toBe(false);
+
+    // And back, because a gate that only proves one direction proves half a predicate.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(() => rotatePromptVisible(page), {
+        message: 'the overlay did not come back in portrait',
+        timeout: 4000,
+      })
+      .toBe(true);
+  });
+
+  test('fits its copy on the narrowest phone in scope, with no line overlapping another', async ({
+    page,
+  }) => {
+    // 🔴 The second defect, and the one that was reported, "fixed", and reported again — the repair
+    // turned clipping into an overlap because the copy was sized in CSS px and positioned in game
+    // px. 320 CSS px is narrower than any phone in the viewport table, so a pass here is a pass on
+    // all of them.
+    await page.setViewportSize({ width: 320, height: 700 });
+    await bootToTouchPlay(page);
+    expect(await rotatePromptVisible(page)).toBe(true);
+
+    const boxes = await rotateCopyBoxes(page);
+    expect(boxes.length, 'the overlay has no copy in it at all').toBeGreaterThanOrEqual(2);
+    for (const b of boxes) {
+      expect(typeof b.x).toBe('number');
+      expect(typeof b.w).toBe('number');
+      expect(b.w, `"${b.text}" is not rendered at all`).toBeGreaterThan(0);
+      expect(b.x, `"${b.text}" is cut off the LEFT edge at ${b.x.toFixed(1)}`).toBeGreaterThanOrEqual(0);
+      expect(
+        b.x + b.w,
+        `"${b.text}" runs ${(b.x + b.w - 320).toFixed(1)} px off the RIGHT edge`,
+      ).toBeLessThanOrEqual(320);
+    }
+    for (let i = 1; i < boxes.length; i += 1) {
+      const above = boxes[i - 1]!;
+      const below = boxes[i]!;
+      expect(
+        below.y,
+        `"${below.text}" overlaps "${above.text}" — it starts at ${below.y.toFixed(1)} and the line above ends at ${(above.y + above.h).toFixed(1)}`,
+      ).toBeGreaterThanOrEqual(above.y + above.h);
+    }
+  });
 });

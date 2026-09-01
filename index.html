@@ -87,10 +87,69 @@
         height: 100%;
         overflow: hidden;
       }
+      /*
+        Phase 12, second repair. THE ROTATE OVERLAY IS DOM, NOT A PHASER OBJECT — and that is the
+        fix, not a preference.
+
+        It was two Phaser `Text` objects sized in CSS pixels (`18 / scale`) and positioned in GAME
+        pixels (a fixed +/-48 px either side of centre). Those two units do not move together: at
+        phone portrait the copy renders at 89 and 138 game px while its offsets stay at 48, so the
+        lines were BOTH clipped at the sides and overlapping each other. The owner reported the
+        clipping, a word-wrap fix turned it into an overlap, and the owner reported that too.
+
+        A browser does not need to be told any of this. `flex` + `gap` + `padding` + a `max-width`
+        lay two lines of real CSS text out correctly at every viewport that exists, and text that
+        is too long simply wraps. The sibling project at C:\Claude\Street-Fighter has always done
+        it this way and its rotate gate works on the owner's device.
+
+        `#rotate` lives INSIDE `#game` so that a future fullscreen target of `game` keeps the
+        overlay in the fullscreen subtree — the trap Street-Fighter's index.html documents. It is
+        `position: fixed` and above the canvas, and `html.rotate` is written by `rotatePrompt.ts`
+        from the one predicate the controls and the tap routes also ask.
+      */
+      #rotate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        padding: 24px;
+        background: #12100e;
+        color: #f7e3b8;
+        font-family: monospace;
+        text-align: center;
+      }
+      html.rotate #rotate {
+        display: flex;
+      }
+      #rotate .glyph {
+        font-size: 64px;
+        line-height: 1;
+        color: #c8862b;
+      }
+      #rotate .title {
+        font-size: 22px;
+        letter-spacing: 2px;
+      }
+      #rotate .sub {
+        font-size: 14px;
+        color: #b9a07a;
+        max-width: 30ch;
+      }
+
     </style>
   </head>
   <body>
-    <div id="game"></div>
+    <div id="game">
+      <div id="rotate" aria-live="polite">
+        <div class="glyph">&#8635;</div>
+        <div class="title">ROTATE YOUR DEVICE</div>
+        <div class="sub">the controls need a landscape screen</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
