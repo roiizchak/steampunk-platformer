@@ -36,6 +36,13 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     autoRound: true,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
+    // 🔴 Send the WRAPPER fullscreen, not the canvas — and the difference is the rotate overlay.
+    // Left to itself Phaser creates a blank `<div>`, moves ONLY the canvas into it and fullscreens
+    // that, which strands `#rotate` outside the fullscreen subtree: a phone turned to portrait
+    // while fullscreen would then show a frozen game with nothing explaining why. `#rotate` lives
+    // inside `#game` in `index.html` for exactly this reason, and this line is the other half.
+    // The sibling project at `C:\Claude\Street-Fighter` documents the same pair (`main.ts:37-41`).
+    fullscreenTarget: 'game',
   },
   /**
    * Four simultaneous touch contacts.

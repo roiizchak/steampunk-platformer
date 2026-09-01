@@ -3,6 +3,7 @@ import { devSeam } from './debug/devSeam';
 import { gameConfig } from './game/config';
 import { installDebugGlobals } from './debug/globals';
 import { installCanvasFilter } from './game/canvasFilter';
+import { installFullscreenOnTap } from './game/fullscreenOnTap';
 
 installDebugGlobals();
 
@@ -15,6 +16,13 @@ const game = new Phaser.Game(gameConfig);
 // columns and reorganises them every frame the world scrolls. See `src/render/canvasScaling.ts`
 // for the rule and the measurements; it is a Phase 1 decision reopened by the owner on 2026-08-27.
 installCanvasFilter(game);
+
+// The browser's own chrome is what keeps this game off a phone: the owner's landscape viewport is
+// 798x283, which letterboxes to a 503 px canvas and puts every control 2.1 CSS px under the 44 px
+// floor — so the rotate overlay stays up in landscape, correctly, and there is no button size that
+// fixes it. Fullscreen removes the chrome instead of shrinking the game around it. See
+// `fullscreenOnTap.ts` for the measurements and for why the listener is on the WRAPPER.
+installFullscreenOnTap(document.getElementById('game'), game.scale);
 
 // DEV ONLY, and on the same side of the build gate as window.__game (vault 1.6). Vite folds
 // `import.meta.env.DEV` to false in a production build, so this whole block is dropped.

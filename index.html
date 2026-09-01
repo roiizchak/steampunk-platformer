@@ -140,6 +140,16 @@
         max-width: 30ch;
       }
       /*
+        🔴 The second subline is the AFFORDANCE, and without it the fix is invisible.
+
+        The owner's phone reports a landscape viewport of 798x283 -- Brave keeps its address bar --
+        which letterboxes to a 503 px canvas, a CSS scale of 0.262, and controls at 41.9 px against
+        the 44 px floor. So this overlay is up IN LANDSCAPE, correctly, and for four device sessions
+        that read as a rotation the game never noticed. Fullscreen removes the chrome and the same
+        device measures 53.3 px. `src/game/fullscreenOnTap.ts` listens on `#game`, which is the
+        wrapper this overlay lives inside, so a tap on these words is what asks for it.
+      */
+      /*
         The overlay reports the numbers it decided from. Four device sessions have now ended with
         "it still does not clear", and every repair between them was written from arithmetic that
         measures correct on every viewport a phone can report - so the wrong thing is the input,
@@ -159,6 +169,7 @@
         <div class="glyph">&#8635;</div>
         <div class="title">ROTATE YOUR DEVICE</div>
         <div class="sub">the controls need a landscape screen</div>
+        <div class="sub">already landscape? tap for fullscreen</div>
         <div class="diag" id="rotate-diag"></div>
       </div>
     </div>
