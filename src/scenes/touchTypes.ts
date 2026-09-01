@@ -71,6 +71,25 @@ export interface TouchFaceLike {
   setWordWrapWidth?(width: number, useAdvancedWrap?: boolean): TouchFaceLike;
   /** `Text` only, and only meaningful once the line above can wrap. */
   setAlign?(align: string): TouchFaceLike;
+  /**
+   * `Text` only. Declared so that CALLING it is expressible — and therefore forbiddable.
+   *
+   * 🔴 `paintLevelButton` must never call this: the level-select label is byte-identical between
+   * the selected and unselected states, and selection reads on the plate's keyline instead. The
+   * gate for that is `level-buttons.test.ts`'s "does not touch the label text" case, and it was
+   * DECORATION until this line existed. `setText` was on neither the interface nor the fake, so a
+   * mutation that re-introduced the old `"> "` prefix was a no-op against the fake and the gate
+   * stayed green through the exact change it names *(C2)*. Caught by running that mutation.
+   */
+  setText?(text: string): TouchFaceLike;
+  /**
+   * `Text` only. The level-select row's ink — unlocked, locked or selected.
+   *
+   * A CSS colour STRING, not a number: `Text` styles are CSS and `setColor` takes `'#8f8776'`,
+   * while `setStrokeStyle` on the plate beside it takes `0x8f8776`. The two forms of the same ink
+   * are why `levelButtons.ts` declares each colour twice rather than converting at the call site.
+   */
+  setColor?(color: string): TouchFaceLike;
   /** `Rectangle` only. The rotate prompt's scrim re-sizes to a changed design size. */
   setSize?(width: number, height: number): TouchFaceLike;
   /** `Image` only. A 160 px face drawn into a box `touchLayout` scaled off the view. */

@@ -61,6 +61,10 @@
     {
       "key": "touch-walk",
       "url": "assets/ui/touch-walk.png"
+    },
+    {
+      "key": "ui-padlock",
+      "url": "assets/ui/ui-padlock.png"
     }
   ],
   "levels": [

@@ -57,6 +57,16 @@ export interface FaceFake {
   align: string;
   /** The texture an `add.image` face was built from. Empty for every drawn shape. */
   textureKey: string;
+  /**
+   * A `Text` face's string, from `add.text`'s third argument.
+   *
+   * 🔴 The fake used to DROP that argument. `paintLevelButton` replaced the old `"> "` selection
+   * prefix precisely by never calling `setText`, and "the label is byte-identical in both states"
+   * cannot be asserted against a fake that never recorded a label at all.
+   */
+  text: string;
+  /** A `Text` face's ink, from `setColor`. Empty until something sets it. */
+  colour: string;
 }
 
 /** The emitter handler type the layer's `EmitterLike` declares. See `touchSceneFake.ts`. */
@@ -177,6 +187,8 @@ export function makeFaceFactory(
     wrapWidth: 0,
     align: '',
     textureKey: '',
+    text: '',
+    colour: '',
     setName(name: string) {
       api.id = name;
       return api;
@@ -243,6 +255,20 @@ export function makeFaceFactory(
     },
     setAlign(align: string) {
       api.align = align;
+      return api;
+    },
+    setColor(colour: string) {
+      api.colour = colour;
+      return api;
+    },
+    /**
+     * 🔴 Recorded, and the fake had neither this nor `FaceFake.text` until 2026-09-01. The
+     * level-select gate asserts that repainting a row does NOT change its label — and a fake with
+     * no `setText` makes that assertion unfalsifiable: the mutation that re-introduces the old
+     * `"> "` prefix calls a method that is not there, and the gate passes through its own defect.
+     */
+    setText(text: string) {
+      api.text = text;
       return api;
     },
     destroy() {

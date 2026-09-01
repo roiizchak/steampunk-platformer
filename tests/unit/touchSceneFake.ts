@@ -146,7 +146,12 @@ export function makeTouchScene(options: { art?: boolean } = {}): TouchSceneHarne
       zone: (x: number, y: number, w: number, h2: number) => makeZone(x, y, w, h2),
       rectangle: (x: number, y: number, w: number, h2: number, _fill?: number, a?: number) =>
         makeFace(x, y, w, h2, a, true),
-      text: (x: number, y: number) => makeFace(x, y),
+      text: (x: number, y: number, t?: string) => {
+        const face = makeFace(x, y);
+        // The third argument, recorded. See `FaceFake.text` for the gate that needs it.
+        face.text = t ?? '';
+        return face;
+      },
       triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
       circle: (x: number, y: number, r: number, _fill?: number, a?: number) =>
         makeFace(x, y, r * 2, r * 2, a, true),

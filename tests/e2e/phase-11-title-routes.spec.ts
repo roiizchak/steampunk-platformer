@@ -18,6 +18,7 @@ import {
 } from './titleHarness';
 import type { SceneHandle } from './titleHarness';
 import { BOOT_TIMEOUT, dismissTitle } from './gameHarness';
+import { SELECTED_STROKE_PX } from '../../src/scenes/levelButtons';
 import './debugView';
 
 test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the ones that must not exist', () => {
@@ -181,24 +182,38 @@ test.describe('Phase 11 — 11.7 / 11.9 the routes out of the title, and the one
      * 🔴 **The row the menu DREW as selected, not the one its cursor points at.**
      *
      * Reading `rows[cursor]` catches `play()` ignoring the cursor — and nothing else. `paint()`
-     * could put the `>` marker and the selected colour on a different row entirely, and a test that
-     * called the cursor row "highlighted" would agree with itself and pass while the player watched
-     * one row light up and another load. Codex implementation review of the redesign, round 2,
-     * finding 2. The marker is the player-visible fact, so the marker is what is read.
+     * could put the selection on a different row entirely, and a test that called the cursor row
+     * "highlighted" would agree with itself and pass while the player watched one row light up and
+     * another load. Codex implementation review of the redesign, round 2, finding 2. The drawn mark
+     * is the player-visible fact, so the drawn mark is what is read.
+     *
+     * 🔴 **The mark is the KEYLINE WIDTH since 2026-09-01, not a `"> "` prefix.** The rows became
+     * buttons and selection moved onto two non-text channels — the plate's stroke hue and its
+     * width — so the label is now byte-identical in both states. `lineWidth` is the `Shape`
+     * property `setStrokeStyle` writes, and `SELECTED_STROKE_PX` is imported from `src/` so this
+     * asserts the SAME number production paints rather than a copy of it.
      */
-    const highlighted = await page.evaluate(() => {
+    const highlighted = await page.evaluate((selectedPx) => {
       const scene = (window as unknown as {
         __phaserGame: { scene: { getScene(k: string): unknown } };
       }).__phaserGame.scene.getScene('LevelSelect') as {
-        rows: { id: string; unlocked: boolean; text: { text: string } }[];
+        rows: { id: string; unlocked: boolean; plate: { lineWidth: number } }[];
       };
-      const marked = scene.rows.filter((row) => row.text.text.startsWith('> '));
+      const marked = scene.rows.filter((row) => row.plate.lineWidth === selectedPx);
       return {
         marked: marked.length,
         id: marked[0]?.id,
         unlocked: marked[0]?.unlocked,
+        widths: scene.rows.map((row) => row.plate.lineWidth),
       };
-    });
+    }, SELECTED_STROKE_PX);
+    // Non-vacuity: a menu that lost its plates entirely would report zero marked rows, which the
+    // count assertion below catches — but a menu that painted EVERY row selected would not be
+    // distinguishable from one that painted none if the widths were never read.
+    expect(
+      new Set(highlighted.widths).size,
+      'every row has the same keyline width — selection is not being drawn at all',
+    ).toBe(2);
     expect(highlighted.marked, 'exactly one row may be drawn selected').toBe(1);
     expect(typeof highlighted?.id, 'the menu drew no highlighted row').toBe('string');
     expect(highlighted?.unlocked, 'the menu opened on a LOCKED row').toBe(true);

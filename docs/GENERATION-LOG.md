@@ -293,6 +293,18 @@ next generation on this endpoint needs a ceiling raise, not a decision.**
 
 | [qa/phase-11-welcome.md § the title backdrop](qa/phase-11-welcome.md) | **The TITLE BACKDROP — two variants, one variable.** `01a04c99-550a-7170-b494-8b583728f783` (**A**, boiler hall) and `01a04c9a-2c78-7313-b63c-09402be40317` (**B**, rooftop canyon), seed 20260804, 2K, 16:9, both returned **2752×1536, ratio 1.7917** — which settles FAL-MODELS.md's open question: `nano-banana-pro` deviates from the aspect label exactly as `nano-banana-2` did *(4.11)*. The prompts are identical apart from the `SETTING` line *(§3, one variable)* and are saved beside the outputs. **❌ A is unusable, and the prompt is why:** it told the model *"a dark translucent band and lettering will be composited over that middle third"*, and the model **drew the band**. Measured mean luminance — outer thirds **43.1** and **41.2**, middle 0.22–0.78 **70.4**, with hard edges at y=0.333 and y=0.672. Our own 0.82 band would composite on top of it. **✅ B is clean:** 77.7 → 47.0 → 40.4 top to bottom, a natural sky-to-street gradient with no overlay, its two hard edges being diegetic riveted beams. **Lesson: describe what the IMAGE contains, never what will be composited onto it.** ✅ **B shipped** — owner chose it 2026-08-29 after seeing both plates under the real band; downscaled 2752×1536 → 1920×1080 (Lanczos) to `public/assets/backgrounds/title.png`, catalogued `title-backdrop`. | `fal-ai/nano-banana-pro` | 2 · $0.30 |
 
+| [generations/phase-13-padlock.md](generations/phase-13-padlock.md) | Phase 13 — **the level-select padlock. FIRST TAKE ADOPTED**, `01a05e37-ad8f-7e00-bb3c-0d93601f4fb0`, seed `20260804`, 2K, 1:1, measured **2048 x 2048** off the file. The owner asked for the level menu to become buttons *"and each button for a locked level should have a lock icon"*. Cut with `cutFace()` — the same key-out, edge-touch refusal and downscale the six touch faces went through — to a 160 x 160 `public/assets/ui/ui-padlock.png`, catalogued `ui-padlock`. **Not `touch-*`**: `catalogTouchKeys()` matches that prefix and would make `npm run assets:touch` throw. Nothing was re-shot; the margin, silhouette and shut-shackle clauses were each written against a defect the touch plate had already paid for | `fal-ai/nano-banana-pro` | 1 · $0.15 |
+
+**Running total: $57.75 of the `$60` art ceiling. $2.25 remains.**
+
+🔴 **The line below said `$55.50 … $4.50 remains`, and it was STALE by $2.10.** It was written after the title backdrop and never updated for the fourteen Phase 12 touch-plate generations in the index above (3 + 2 + 2 + 5 + 2 at $0.15 = $2.10) — so the true position before this entry was **$57.60**, not $55.50. This entry adds $0.15.
+
+That is the same failure this file already records twice: *"a running total measured against a ceiling that moved is exactly the failure criterion 12.18 exists to catch"*, and *"it was written as one, went stale the moment Phase 5 spent again"*. The arithmetic is shown rather than asserted so the next reader can check it against the index instead of trusting a number. **Every figure here is QUOTED, not invoiced** *(4.9)* — the last invoice reading is 2026-08-09 and is long superseded.
+
+⚠️ **$2.25 remains, which is fifteen images.** The margin is real but it is no longer $4.50, and a session that plans a batch should re-read the invoice first.
+
+**Superseded total, kept so the correction is checkable:**
+
 **Running total: $55.50 of the `$60` art ceiling. $4.50 remains.**
 
 ✅ **The ceiling WAS raised, and this line said otherwise for two days.** `PRD.md:91` records

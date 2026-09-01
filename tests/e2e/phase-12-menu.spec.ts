@@ -164,15 +164,27 @@ test.describe('the level menu answers a finger, once, every visit', () => {
     );
 
     // 🔴 Both sides, and against the plate's OWN resting value. An upper bound alone is
-    // satisfied by a dead RIGHT control (0 px/tick reads as "walking"), and `> 0` is satisfied by a
-    // plate that never lights at all, since a resting art face is already 0.55 opaque. Codex
-    // round-7: a bound that the broken case also passes is not a bound.
+    // satisfied by a dead RIGHT control (0 px/tick reads as "walking"), and a one-sided opacity
+    // bound is satisfied by a plate that never changes at all, since a resting face is already
+    // opaque. Codex round-7: a bound that the broken case also passes is not a bound.
+    //
+    // 🔴 **The DIRECTION inverted on 2026-09-01, and the criterion did not.** The owner asked for
+    // the touch buttons to lose their transparency, so the resting alpha went 0.55 -> 0.9 and the
+    // active state now DIMS to 0.72 instead of brightening to it. What 12.6c asserts is unchanged:
+    // the latched gait must be VISIBLE on the plate, and it must still be visible after the round
+    // trip. Only which way "visible" points moved.
     const walkAtRest = await faceAlpha(page, 'UI', 'walk');
     expect(walkAtRest, 'there is no walk plate to read').toBeGreaterThan(0);
 
     await tapControl(page, 'UI', 'walk', 42);
     const litBefore = await faceAlpha(page, 'UI', 'walk');
-    expect(litBefore, 'the walk plate did not light when it was tapped').toBeGreaterThan(walkAtRest!);
+    expect(
+      litBefore,
+      'the walk plate did not change when it was tapped, so the player cannot see the gait they ' +
+        'are in',
+    ).toBeLessThan(walkAtRest!);
+    // The other side: a plate that went to zero would satisfy the bound above and be invisible.
+    expect(litBefore, 'the walk plate vanished rather than dimming').toBeGreaterThan(0);
     const walking = await held();
     const atWalkSpeed = (vx: number): boolean =>
       vx > DEFAULT_TUNING.walkMax * 0.9 && vx < DEFAULT_TUNING.walkMax * 1.1;
@@ -197,7 +209,8 @@ test.describe('the level menu answers a finger, once, every visit', () => {
     ).toBe(true);
     expect(
       await faceAlpha(page, 'UI', 'walk'),
-      'the gait survived but the plate came back dark, so the player cannot see which gait they are in',
+      'the gait survived but the plate came back at its RESTING opacity, so the player cannot see ' +
+        'which gait they are in',
     ).toBe(litBefore);
   });
 
