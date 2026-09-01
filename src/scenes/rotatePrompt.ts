@@ -74,6 +74,20 @@ export interface RotateHost {
    */
   isShown(): boolean;
   setShown(shown: boolean): void;
+  /**
+   * Show the numbers this decision was made from, on the overlay itself.
+   *
+   * 🔴 **Four device sessions have ended with "it still does not clear", and each repair between
+   * them was reasoned from arithmetic rather than from the device.** `rotateOverlayWanted` returns
+   * `false` for every landscape viewport a phone can report — 844x390, 896x414, 932x430, and even
+   * 640x300 with both toolbars up — and both wiring paths re-read `window.innerWidth` every frame.
+   * So either those two numbers are not what this code assumes on that hardware, or nothing is
+   * calling `refresh()` there. A readout distinguishes the two in one look; another round of
+   * reasoning distinguishes nothing, which is what the last three rounds established.
+   *
+   * Digits and separators only. `tools/gen/verify-dist.mjs` sweeps shipped text for dev prose.
+   */
+  report(line: string): void;
 }
 
 /** The real page. Returns `null` where there is no DOM, which is every unit test. */
@@ -92,12 +106,19 @@ export function browserHost(): RotateHost | null {
     setShown(shown: boolean) {
       document.documentElement.classList.toggle(ROTATE_CLASS, shown);
     },
+    report(line: string) {
+      const el = document.getElementById('rotate-diag');
+      if (el !== null && el.textContent !== line) el.textContent = line;
+    },
   };
 }
 
 export class RotatePrompt {
   /** What THIS instance last decided. The page is the authority on what is drawn; see `RotateHost`. */
   private isShowing = false;
+
+  /** How many times `refresh()` has run. A frozen counter says the poll stopped, not that it lied. */
+  private refreshes = 0;
 
   constructor(
     private readonly isTouchDevice: boolean,
@@ -132,6 +153,8 @@ export class RotatePrompt {
       this.targets,
     );
     this.isShowing = wanted;
+    this.refreshes += 1;
+    this.host.report(diagnosticLine(this.host, this.refreshes));
     if (wanted === this.host.isShown()) return;
     this.host.setShown(wanted);
   }
@@ -141,4 +164,21 @@ export class RotatePrompt {
     if (this.isShowing) this.host?.setShown(false);
     this.isShowing = false;
   }
+}
+
+/**
+ * The one line the overlay prints under its copy: viewport, visual viewport, orientation, count.
+ *
+ * The two viewports are printed separately because they disagree on iOS whenever the toolbars are
+ * mid-slide or the page is pinched, and `window.innerWidth` is the one this decision reads. The
+ * count is the poll's own pulse: if it stops rising while the device is turned, nothing is asking.
+ */
+export function diagnosticLine(host: RotateHost, refreshes: number): string {
+  const vv =
+    typeof window !== 'undefined' && window.visualViewport
+      ? `${Math.round(window.visualViewport.width)}x${Math.round(window.visualViewport.height)}`
+      : '-';
+  const orient =
+    typeof screen !== 'undefined' && screen.orientation ? screen.orientation.type : '-';
+  return `${host.innerWidth}x${host.innerHeight} | ${vv} | ${orient} | ${refreshes}`;
 }

@@ -37,18 +37,25 @@ function fitsAt(cssWidth: number): boolean {
 }
 
 /** A page whose viewport the test moves, and whose class the test reads. */
-function fakeHost(width: number, height: number): RotateHost & { shown: boolean; toggles: number } {
+function fakeHost(
+  width: number,
+  height: number,
+): RotateHost & { shown: boolean; toggles: number; line: string } {
   return {
     innerWidth: width,
     innerHeight: height,
     shown: false,
     toggles: 0,
+    line: '',
     isShown() {
       return this.shown;
     },
     setShown(shown: boolean) {
       this.shown = shown;
       this.toggles += 1;
+    },
+    report(line: string) {
+      this.line = line;
     },
   };
 }
@@ -139,5 +146,32 @@ describe('RotatePrompt', () => {
     prompt.refresh();
     prompt.destroy();
     expect(host.shown, 'a shut-down scene stranded the overlay over the next one').toBe(false);
+  });
+});
+
+describe('the overlay reports the numbers it decided from', () => {
+  // 🔴 Four device sessions ended with "it still does not clear", and the arithmetic measures
+  // correct at every landscape viewport a phone can report. So the readout is the instrument that
+  // tells the next round WHICH of the two remaining explanations it is: a viewport this code does
+  // not expect, or a poll that is not running. A line nothing writes distinguishes neither.
+  it('writes the live viewport and a rising count on every refresh', () => {
+    const host = fakeHost(PHONE_PORTRAIT.width, PHONE_PORTRAIT.height);
+    const prompt = new RotatePrompt(true, [], host);
+    prompt.refresh();
+    expect(host.line).toContain('390x844');
+    expect(host.line.endsWith('| 1')).toBe(true);
+    prompt.refresh();
+    expect(host.line.endsWith('| 2')).toBe(true);
+  });
+
+  it('reports on a LANDSCAPE refresh too, when the overlay stays hidden', () => {
+    // The case that matters on the device: the overlay is wrongly up, the player turns the phone,
+    // and nothing visible changes. If the count stops rising there, the poll is dead — which is a
+    // different defect from the numbers being wrong, and the line separates them.
+    const host = fakeHost(PHONE_LANDSCAPE.width, PHONE_LANDSCAPE.height);
+    const prompt = new RotatePrompt(true, [], host);
+    prompt.refresh();
+    expect(host.shown).toBe(false);
+    expect(host.line).toContain('844x390');
   });
 });

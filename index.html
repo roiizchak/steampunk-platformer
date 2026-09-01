@@ -139,6 +139,17 @@
         color: #b9a07a;
         max-width: 30ch;
       }
+      /*
+        The overlay reports the numbers it decided from. Four device sessions have now ended with
+        "it still does not clear", and every repair between them was written from arithmetic that
+        measures correct on every viewport a phone can report - so the wrong thing is the input,
+        not the sum. Digits only, no prose: `verify-dist.mjs` sweeps shipped text for dev wording.
+      */
+      #rotate .diag {
+        font-size: 11px;
+        color: #6f6250;
+        letter-spacing: 1px;
+      }
 
     </style>
   </head>
@@ -148,6 +159,7 @@
         <div class="glyph">&#8635;</div>
         <div class="title">ROTATE YOUR DEVICE</div>
         <div class="sub">the controls need a landscape screen</div>
+        <div class="diag" id="rotate-diag"></div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
