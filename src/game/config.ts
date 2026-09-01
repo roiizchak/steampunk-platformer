@@ -7,7 +7,7 @@ import { LevelSelectScene } from '../scenes/LevelSelectScene';
 import { PlaygroundScene } from '../scenes/PlaygroundScene';
 import { TitleScene } from '../scenes/TitleScene';
 import { UIScene } from '../scenes/UIScene';
-import { GAME_HEIGHT, GAME_WIDTH, PHASER_RNG_SEED } from './constants';
+import { GAME_HEIGHT, GAME_WIDTH, MAX_GAME_WIDTH, PHASER_RNG_SEED } from './constants';
 import { devSeam } from '../debug/devSeam';
 
 /**
@@ -28,14 +28,48 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: PIXEL_ART,
   seed: [PHASER_RNG_SEED],
   scale: {
-    // The default scale mode is NONE (0), not FIT — without this line 1920x1080 renders
-    // unscaled and overflows the viewport.
-    mode: Phaser.Scale.FIT,
+    /**
+     * 🔴 **`EXPAND`, not `FIT`, since 2026-09-01 — the game fills the screen.**
+     *
+     * The default mode is NONE (0), so this line is not optional either way; what changed is which
+     * non-default. Under FIT a landscape phone (~19.5:9 = 2.17) against a 16:9 game left **17.9 %
+     * of the width black** — 151 CSS px on an iPhone 14, 160 on a Pixel 7, which is what the owner
+     * reported as "a lot less space on the right and left".
+     *
+     * EXPAND grows the SHORT axis of the design box to match the viewport's aspect and leaves the
+     * other at the configured value (`ScaleManager.js:1088-1134`). It reads `game.config.width` and
+     * `.height` on every pass rather than the live `gameSize`, so it does not compound across
+     * resizes — safe to leave running through rotations and fullscreen toggles.
+     */
+    mode: Phaser.Scale.EXPAND,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     // Floor display/style sizes; avoids fractional CSS sizes that shimmer on scaled pixel art.
     autoRound: true,
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
+    /**
+     * **The clamp is what makes EXPAND cheap, and the height pin is the load-bearing half.**
+     *
+     * Height is fixed at `GAME_HEIGHT` at BOTH ends, so `GAME_HEIGHT` stays literally invariant and
+     * every `gameH / GAME_HEIGHT` ratio in `src/render/` stays exactly 1 — the HUD, the touch
+     * layout and the parallax all keep their measured sizes. Only the width breathes, between the
+     * 1920 floor and the `MAX_GAME_WIDTH` ceiling.
+     *
+     * 🔴 Without the height pin, EXPAND in PORTRAIT produces a `gameSize` of 1920 x **4155** on a
+     * 390 x 844 phone (`scaleX < scaleY`, so the height grows instead). That would scale the HUD by
+     * 3.85x and make `cameraSetup` throw on every shipped level, since their heights are 2208-2688.
+     * The rotate overlay is the intended answer to a portrait phone; a 4155 px view is not.
+     *
+     * ⚠️ `min` is **documentation, not a gate**: EXPAND's own arithmetic never produces either axis
+     * below the configured base, so removing it changes nothing and no mutation can redden it.
+     * Recorded rather than dressed up as a bound with a test — a gate that cannot go red is
+     * decoration *(C2)*. `max` is real and is proved per-axis by M111a/M111b, which mutate to a
+     * large finite value rather than deleting the property: `ScaleManager` only calls
+     * `displaySize.setMax` `if (config.maxWidth > 0)`, so a deletion disables BOTH maxima and a
+     * zero height clamps back up to `minHeight`. Named by the Codex plan review, round 4.
+     */
+    min: { width: GAME_WIDTH, height: GAME_HEIGHT },
+    max: { width: MAX_GAME_WIDTH, height: GAME_HEIGHT },
     // 🔴 Send the WRAPPER fullscreen, not the canvas — and the difference is the rotate overlay.
     // Left to itself Phaser creates a blank `<div>`, moves ONLY the canvas into it and fullscreens
     // that, which strands `#rotate` outside the fullscreen subtree: a phone turned to portrait

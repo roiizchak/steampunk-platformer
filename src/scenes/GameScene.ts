@@ -30,7 +30,7 @@ import { assetCatalog, firstLevelId, openLevelSelect, pickLevel, worldOptionsFor
 import { runGoalFlow } from './gameComplete';
 import { drawFrame } from './gameFrameDraw';
 import { drawGoal } from './goalLayer';
-import { createParallax, type ParallaxImage } from './gameParallax';
+import { createParallax, type ParallaxAttachment } from './gameParallax';
 import { applyFeelVariant, registerAnimations } from './gamePlayerDraw';
 import { createSnapshot } from '../sim/input';
 import { createWorld } from '../sim/tick';
@@ -85,7 +85,7 @@ export class GameScene extends Phaser.Scene {
   /** Phase 7's sound manager. Optional for the same reason `ui` is: a frame can beat `create()`. */
   private audio?: AudioManager;
   private effects!: EffectAttachment;
-  private parallax: ParallaxImage[] = [];
+  private parallax?: ParallaxAttachment;
   protected levelKey = '';
   /** The id `init(data)` was started with. `null` on a plain boot: resume whatever the save says. */
   private requestedLevelId: string | null = null;
@@ -313,7 +313,7 @@ export class GameScene extends Phaser.Scene {
         ? (devSeam('__DEVSEAM_GameScene_feelTunerPass__'), this.dev.feelTuner)
         : undefined,
       effects: this.effects, ui: this.ui, gears: this.gears, enemies: this.enemies,
-      parallax: this.parallax, motionProbe: this.dev.motionProbe, deltaMs: delta,
+      parallax: this.parallax?.images ?? [], motionProbe: this.dev.motionProbe, deltaMs: delta,
       pinProbe: this.dev.pinProbe, ticks, dropped: drain.dropped, publish: publishWorldState,
     });
   }

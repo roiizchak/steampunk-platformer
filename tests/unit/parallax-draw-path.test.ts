@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type Phaser from 'phaser';
 import { parallaxLayers } from '../../src/render/parallaxRig';
 import { createParallax, renderParallax } from '../../src/scenes/gameParallax';
+import { SCENE_DESTROY, SCENE_SHUTDOWN } from '../../src/scenes/engineLiterals';
 
 /**
  * # The parallax rig's draw path (session inventory 1b.4 — T13)
@@ -47,10 +48,38 @@ interface FakeTileSprite {
   setOrigin(x: number, y: number): FakeTileSprite;
   setScrollFactor(value: number): FakeTileSprite;
   setDepth(value: number): FakeTileSprite;
+  setSize(w: number, h: number): FakeTileSprite;
 }
 
-function makeFakeScene(): { scene: Phaser.Scene; made: FakeTileSprite[] } {
+function makeFakeScene(gameW = 1920, gameH = 1080): {
+  scene: Phaser.Scene;
+  made: FakeTileSprite[];
+  /** Drive an EXPAND-style widening and fire `resize`, as Phaser's ScaleManager would. */
+  resize: (w: number, h: number) => void;
+  /** How many `resize` listeners survive — the leak observable. */
+  scaleListeners: () => number;
+  sceneListeners: { name: string; fn: () => void }[];
+} {
   const made: FakeTileSprite[] = [];
+  const handlers: (() => void)[] = [];
+  const sceneListeners: { name: string; fn: () => void }[] = [];
+  const gameSize = { width: gameW, height: gameH };
+  const scale = {
+    gameSize,
+    on(event: string, fn: () => void) {
+      if (event === 'resize') handlers.push(fn);
+    },
+    off(event: string, fn: () => void) {
+      if (event !== 'resize') return;
+      const i = handlers.indexOf(fn);
+      if (i >= 0) handlers.splice(i, 1);
+    },
+  };
+  const resize = (w: number, h: number): void => {
+    gameSize.width = w;
+    gameSize.height = h;
+    for (const fn of [...handlers]) fn();
+  };
   const scene = {
     add: {
       tileSprite(x: number, y: number, width: number, height: number, key: string): FakeTileSprite {
@@ -76,13 +105,24 @@ function makeFakeScene(): { scene: Phaser.Scene; made: FakeTileSprite[] } {
             sprite.depth = value;
             return sprite;
           },
+          setSize(w: number, h: number) {
+            sprite.width = w;
+            sprite.height = h;
+            return sprite;
+          },
         };
         made.push(sprite);
         return sprite;
       },
     },
+    scale,
+    events: {
+      once(name: string, fn: () => void) {
+        sceneListeners.push({ name, fn });
+      },
+    },
   } as unknown as Phaser.Scene;
-  return { scene, made };
+  return { scene, made, resize, scaleListeners: () => handlers.length, sceneListeners };
 }
 
 describe('parallaxLayers — the engine-free decision (inventory 1b.4)', () => {
@@ -130,7 +170,7 @@ describe('createParallax / renderParallax — the draw path (CLAUDE.md §2)', ()
     const { scene, made } = makeFakeScene();
     const built = createParallax(scene);
 
-    expect(built.length, 'nothing was built, so nothing below means anything').toBe(3);
+    expect(built.images.length, 'nothing was built, so nothing below means anything').toBe(3);
     expect(made.length).toBe(3);
 
     // The whole point of a draw-path gate: the decision function could be perfect and this call
@@ -151,17 +191,17 @@ describe('createParallax / renderParallax — the draw path (CLAUDE.md §2)', ()
   it('carries each layer FACTOR through, so renderParallax has something to scale by', () => {
     const { scene } = makeFakeScene();
     const built = createParallax(scene);
-    expect(built.map((b) => b.factor)).toEqual(parallaxLayers().map((l) => l.factor));
+    expect(built.images.map((b) => b.factor)).toEqual(parallaxLayers().map((l) => l.factor));
   });
 
   it('scrolling moves the TEXTURE offset, and does not move the object', () => {
     const { scene, made } = makeFakeScene();
     const built = createParallax(scene);
 
-    renderParallax(built, 1000);
+    renderParallax(built.images, 1000);
 
     for (const [i, sprite] of made.entries()) {
-      expect(sprite.tilePositionX).toBe(1000 * built[i]!.factor);
+      expect(sprite.tilePositionX).toBe(1000 * built.images[i]!.factor);
       // `gameParallax.ts` records this exact defect as already shipped once: setting position
       // instead of texture offset double-applies the scroll and slides the layer off the viewport,
       // "which showed up as a black band above a strip of background".
@@ -173,7 +213,7 @@ describe('createParallax / renderParallax — the draw path (CLAUDE.md §2)', ()
   it('a further layer really does move less than a nearer one', () => {
     // The observable meaning of "parallax", asserted on drawn values rather than on the spec table.
     const { scene, made } = makeFakeScene();
-    renderParallax(createParallax(scene), 1000);
+    renderParallax(createParallax(scene).images, 1000);
 
     const offsets = made.map((s) => s.tilePositionX);
     expect(offsets[0]!).toBeLessThan(offsets[1]!);
@@ -182,7 +222,64 @@ describe('createParallax / renderParallax — the draw path (CLAUDE.md §2)', ()
 
   it('zero scroll leaves every layer at its origin', () => {
     const { scene, made } = makeFakeScene();
-    renderParallax(createParallax(scene), 0);
+    renderParallax(createParallax(scene).images, 0);
     expect(made.map((s) => s.tilePositionX)).toEqual([0, 0, 0]);
+  });
+});
+
+/**
+ * **The layers cover the LIVE view, and let go of the ScaleManager when the scene ends.**
+ *
+ * Under `Phaser.Scale.EXPAND` the view is wider than the design size on a landscape phone. These
+ * are `setScrollFactor(0)` objects at the screen origin, so a layer left 1920 px wide leaves the
+ * right ~417 px of sky drawn in raw `backgroundColor` — a hard black band, not a subtle seam,
+ * wherever the level's own tiles do not cover.
+ */
+describe('the parallax follows an EXPAND resize', () => {
+  it('is built at the live size, not at the design size', () => {
+    const { scene, made } = makeFakeScene(2400, 1080);
+    createParallax(scene);
+    for (const sprite of made) {
+      expect(sprite.width, `layer "${sprite.key}" was built at the design width`).toBe(2400);
+      expect(sprite.height).toBe(1080);
+    }
+  });
+
+  it('re-sizes every layer when the view widens', () => {
+    const { scene, made, resize } = makeFakeScene();
+    createParallax(scene);
+    expect(made.every((s) => s.width === 1920), 'the fixture did not start at the design width')
+      .toBe(true);
+    resize(2400, 1080);
+    for (const sprite of made) {
+      expect(sprite.width, `layer "${sprite.key}" left a band of bare background`).toBe(2400);
+    }
+  });
+
+  it('drops its resize listener on SHUTDOWN', () => {
+    const { scene, scaleListeners, sceneListeners } = makeFakeScene();
+    createParallax(scene);
+    expect(scaleListeners(), 'nothing subscribed — this case would prove nothing').toBe(1);
+    sceneListeners.find((l) => l.name === SCENE_SHUTDOWN)?.fn();
+    expect(scaleListeners(), 'one listener per level restart is a leak that grows with play time')
+      .toBe(0);
+  });
+
+  it('drops it on DESTROY too — the path that never passes through SHUTDOWN', () => {
+    const { scene, scaleListeners, sceneListeners } = makeFakeScene();
+    createParallax(scene);
+    sceneListeners.find((l) => l.name === SCENE_DESTROY)?.fn();
+    expect(scaleListeners(), 'removing an active scene leaked the listener').toBe(0);
+  });
+
+  it('stops re-sizing destroyed sprites once torn down', () => {
+    // What the listener count cannot show: a stale closure still writing to objects the scene took
+    // with it.
+    const { scene, made, resize, sceneListeners } = makeFakeScene();
+    createParallax(scene);
+    sceneListeners.find((l) => l.name === SCENE_SHUTDOWN)?.fn();
+    resize(2400, 1080);
+    expect(made.every((s) => s.width === 1920), 'a torn-down attachment still resized its layers')
+      .toBe(true);
   });
 });

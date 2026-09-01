@@ -1,6 +1,6 @@
 import type Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import { parallaxLayers } from '../render/parallaxRig';
+import { SCENE_DESTROY, SCENE_SHUTDOWN } from './engineLiterals';
 
 /**
  * The scene-side half of the parallax rig — the layer specs come from `src/render/parallaxRig.ts`
@@ -21,15 +21,74 @@ export interface ParallaxImage {
   factor: number;
 }
 
-export function createParallax(scene: Phaser.Scene): ParallaxImage[] {
-  return parallaxLayers().map(({ key, factor, depth }) => {
+/**
+ * The layers plus the lifecycle they need, because they now own a ScaleManager subscription.
+ *
+ * `images` stays a plain array so `renderParallax` and `gameFrameDraw` are untouched — the render
+ * path is the hot one and had no reason to change.
+ */
+export interface ParallaxAttachment {
+  images: ParallaxImage[];
+  /** Re-size every layer to the live view. Idempotent; safe to call on any resize event. */
+  resize(): void;
+  destroy(): void;
+}
+
+export function createParallax(scene: Phaser.Scene): ParallaxAttachment {
+  /**
+   * 🔴 **Sized from the LIVE view, not from `GAME_WIDTH`.**
+   *
+   * These were `tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, key)` at screen origin with
+   * `setScrollFactor(0)`. Under `Phaser.Scale.EXPAND` the view is up to `MAX_GAME_WIDTH` wide, so a
+   * 1920 px layer leaves the right ~417 px of SKY drawn in raw `backgroundColor` — a hard black
+   * band wherever the level's own tiles do not cover, which is most of the frame.
+   *
+   * The textures do not change: they are 5092 px wide and `TileSprite` wraps natively, with
+   * `build-world.mjs` mirroring each layer so the join and the end wrap repeat a source column
+   * exactly. A wider box simply shows more of a loop that was always there.
+   */
+  const images = parallaxLayers().map(({ key, factor, depth }) => {
+    const { width, height } = scene.scale.gameSize;
     const image = scene.add
-      .tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, key)
+      .tileSprite(0, 0, width, height, key)
       .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(depth);
     return { image, factor };
   });
+
+  const resize = (): void => {
+    const { width, height } = scene.scale.gameSize;
+    for (const { image } of images) {
+      if (image.width === width && image.height === height) continue;
+      image.setSize(width, height);
+    }
+  };
+
+  /**
+   * ⚠️ **The subscription is on the ScaleManager, which outlives every scene — so it owns a
+   * teardown, and that teardown runs on BOTH lifecycle events.**
+   *
+   * Without it, each level restart adds one more listener holding one more set of destroyed
+   * `TileSprite`s: a leak that grows with play time and only shows up as the next resize writing to
+   * dead objects. And SHUTDOWN alone is not enough — removing an ACTIVE scene reaches DESTROY
+   * without passing through it, the lifecycle `rotateGuard.ts:33-37` documents. Both named by the
+   * Codex plan review, rounds 1 and 2.
+   */
+  scene.scale.on('resize', resize);
+  let alive = true;
+  const attachment: ParallaxAttachment = {
+    images,
+    resize,
+    destroy() {
+      if (!alive) return;
+      alive = false;
+      scene.scale.off('resize', resize);
+    },
+  };
+  scene.events.once(SCENE_SHUTDOWN, () => attachment.destroy());
+  scene.events.once(SCENE_DESTROY, () => attachment.destroy());
+  return attachment;
 }
 
 /**

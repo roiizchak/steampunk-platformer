@@ -80,12 +80,12 @@ import {
   shakeStartTick,
   shouldPreempt,
   type ShakeState,
-  shakeSafeMargin,
 } from '../render/screenShake';
 import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import type { Freezable, ImpactClass } from '../sim/hitstop';
 import type { World } from '../sim/types';
-import { SCENE_SHUTDOWN } from './engineLiterals';
+import { SCENE_DESTROY, SCENE_SHUTDOWN } from './engineLiterals';
+import { attachShakeViewport } from './effectsCamera';
 import { createEmitter } from './gameEmitters';
 
 /** What `GameScene` holds on to after attaching the effects. */
@@ -153,12 +153,9 @@ export function attachEffects(
    * up to 9.6 px of raw page background at whichever edge the shake moves it away from. The
    * reasoning, and why clamping and scroll-shaking are both worse, is in `shakeSafeMargin`.
    */
-  const margin = shakeSafeMargin(GAME_WIDTH, GAME_HEIGHT);
-  scene.cameras.main.setSize(GAME_WIDTH + margin.x * 2, GAME_HEIGHT + margin.y * 2);
-  scene.cameras.main.setPosition(-margin.x, -margin.y);
-
-  const baseX = scene.cameras.main.x;
-  const baseY = scene.cameras.main.y;
+  const viewport = attachShakeViewport(scene);
+  const baseX = viewport.base.x;
+  const baseY = viewport.base.y;
   let alive = true;
 
   const emit = (burst: Burst, coneDeg: number): void => {
@@ -331,6 +328,7 @@ export function attachEffects(
       // Skipping the restore there is correct rather than a workaround: there is no camera left to
       // restore, and `CameraManager.start()` builds a fresh one for the next run. This call is for
       // an explicit mid-life `destroy()`, where the camera object genuinely does survive.
+      viewport.destroy();
       scene.cameras?.main?.setPosition(baseX, baseY);
       for (const kind of KINDS) {
         built[kind].destroy();
@@ -353,7 +351,14 @@ export function attachEffects(
   // Registered here rather than in `GameScene` for the reason `hudFade` and `goalLayer` register
   // theirs the same way: the teardown belongs to the thing that built the state, `GameScene.ts` sits
   // at exactly 400 lines, and a handler in the scene is one more thing the next feature forgets.
+  // ⚠️ **Both lifecycle events, and `destroy()` is idempotent by its `alive` latch so the second
+  // one is free.** SHUTDOWN alone was enough while everything this attachment owned belonged to the
+  // scene and died with it. The `resize` listener does not: it hangs off the ScaleManager, which
+  // outlives every scene, and removing an ACTIVE scene reaches DESTROY without ever passing through
+  // SHUTDOWN — the lifecycle `rotateGuard.ts:33-37` already documents. Named by the Codex plan
+  // review, round 2.
   scene.events.once(SCENE_SHUTDOWN, () => attachment.destroy());
+  scene.events.once(SCENE_DESTROY, () => attachment.destroy());
 
   return attachment;
 
