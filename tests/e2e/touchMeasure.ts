@@ -14,7 +14,6 @@
 
 import { expect } from '@playwright/test';
 
-import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 
 type Page = import('@playwright/test').Page;
 
@@ -35,6 +34,23 @@ export interface CanvasRect {
   top: number;
   width: number;
   height: number;
+  /**
+   * The BACKING STORE size — `canvas.width`/`canvas.height`, i.e. the live game size in game px.
+   *
+   * 🔴 **This is the denominator now, and `GAME_WIDTH` was wrong the moment the view could widen.**
+   * Under `Phaser.Scale.FIT` the backing store never moved off 1920 x 1080, so the design constant
+   * and the live game size were the same number and nothing noticed which one was meant. The fill
+   * separates them: the backing store is up to `MAX_GAME_WIDTH` wide, and a game-px coordinate
+   * divided by 1920 lands proportionally too far right — every synthesised tap in the touch suite
+   * missing its control, on a page where the controls are drawn correctly.
+   *
+   * ⚠️ Read from the ELEMENT rather than from `scale.gameSize`. This helper also serves specs that
+   * run against the production bundle, where `phase-10-production.spec.ts` asserts both
+   * `window.__game` and `window.__phaserGame` are absent — there is no Phaser handle to ask. Named
+   * by the Codex plan review, round 4.
+   */
+  backingWidth: number;
+  backingHeight: number;
 }
 /** The canvas's laid-out rectangle. The denominator for every CSS-pixel claim in this phase. */
 export async function canvasRect(page: Page): Promise<CanvasRect> {
@@ -42,11 +58,19 @@ export async function canvasRect(page: Page): Promise<CanvasRect> {
     const c = document.querySelector('canvas');
     if (!c) return null;
     const r = c.getBoundingClientRect();
-    return { left: r.left, top: r.top, width: r.width, height: r.height };
+    return {
+      left: r.left,
+      top: r.top,
+      width: r.width,
+      height: r.height,
+      backingWidth: c.width,
+      backingHeight: c.height,
+    };
   });
   expect(rect, 'no canvas on the page').not.toBeNull();
   expect(typeof rect!.width).toBe('number');
   expect(rect!.width, 'the canvas has collapsed').toBeGreaterThan(0);
+  expect(rect!.backingWidth, 'the canvas has no backing store to scale against').toBeGreaterThan(0);
   return rect!;
 }
 
@@ -96,11 +120,17 @@ export async function drawnZone(page: Page, sceneKey: string, name: string): Pro
   return zone!;
 }
 
-/** Game pixels -> CSS pixels on the page, through the canvas's measured rectangle. */
+/**
+ * Game pixels -> CSS pixels on the page, through the canvas's measured rectangle.
+ *
+ * The denominator is the canvas's own BACKING store, not the design constant — see `CanvasRect`.
+ * At a fixed view the two agreed; at a filled one they do not, and the design constant sends every tap to
+ * the wrong place on a widened view.
+ */
 export function toClient(rect: CanvasRect, gameX: number, gameY: number): { x: number; y: number } {
   return {
-    x: rect.left + (gameX * rect.width) / GAME_WIDTH,
-    y: rect.top + (gameY * rect.height) / GAME_HEIGHT,
+    x: rect.left + (gameX * rect.width) / rect.backingWidth,
+    y: rect.top + (gameY * rect.height) / rect.backingHeight,
   };
 }
 

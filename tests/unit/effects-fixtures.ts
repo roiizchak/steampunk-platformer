@@ -104,7 +104,7 @@ export function build(spawn?: { x: number; y: number }) {
   /**
    * The ScaleManager, modelled because `attachEffects` sizes the camera off the LIVE view now.
    *
-   * 🔴 Under `Phaser.Scale.EXPAND` the game size is not the design size: a landscape phone gets a
+   * 🔴 With the view filled the game size is not the design size: a landscape phone gets a
    * view up to `MAX_GAME_WIDTH` wide, and a camera left at `GAME_WIDTH + 2 * margin` draws raw
    * background down the right edge. `resize(w, h)` below lets a case drive that transition, which
    * is the only way to see the defect — the first `setSize` is correct either way.
@@ -150,7 +150,7 @@ export function build(spawn?: { x: number; y: number }) {
     explosions,
     destroyed,
     scales,
-    /** Drive an EXPAND-style widening and fire the ScaleManager's resize, as Phaser would. */
+    /** Drive a view widening and fire the ScaleManager's resize, as Phaser would. */
     resize(width: number, height: number) {
       gameSize.width = width;
       gameSize.height = height;

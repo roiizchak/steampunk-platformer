@@ -83,7 +83,7 @@ export const MAX_GAME_WIDTH = 2560;
  * is three chances to drift while a doc review stays green (Codex P8).
  *
  * At zoom 1 the world view is `liveWidth` x `GAME_HEIGHT` — at the design size, 20 x 11.25 tiles;
- * at the ceiling, 26.67 x 11.25. Zoom itself does not move: EXPAND changes the size of the view,
+ * at the ceiling, 26.67 x 11.25. Zoom itself does not move: the view fill changes the SIZE of the view,
  * never its scale, which is why the grid and every tile measurement are unaffected.
  */
 export const CAMERA_ZOOM = 1;

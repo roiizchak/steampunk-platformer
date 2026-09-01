@@ -26,6 +26,7 @@ import { expect, test } from '@playwright/test';
 import { bootToGame, waitTicks } from './gameHarness';
 import { readHud } from './hudHelpers';
 import { hudFits } from '../../src/render/hud';
+import { GAME_HEIGHT, GAME_WIDTH, MAX_GAME_WIDTH } from '../../src/game/constants';
 
 
 test.describe('criterion 6.2 — the HUD is pinned under pan and under zoom', () => {
@@ -191,15 +192,30 @@ test.describe('criterion 6.3 — built from the live game size', () => {
   /**
    * Codex plan review F6.
    *
-   * The scale mode is `FIT`, so a browser resize never changes `scale.gameSize` and the viewport
-   * tests above bound the layout function rather than a resize Phaser performs. This drives a real
-   * `game.scale.resize()` instead, which is the code path the criterion actually names — and which
-   * vault 6.2's blocker is about.
+   * 🔴 **Rewritten 2026-09-01: a real BROWSER resize, because that path now exists.** This used to
+   * open *"the scale mode is `FIT`, so a browser resize never changes `scale.gameSize`"*, and drove
+   * a synthetic `game.scale.resize(1280, 720)` for want of a real one. `src/game/viewSize.ts` makes
+   * the view a function of the viewport, so the real path is available — and the synthetic one is
+   * no longer reachable at all: `scale.resize` emits `resize`, the fill loop hears it and snaps the
+   * view straight back to what the viewport says. A spec driving it measures the loop undoing it.
+   *
+   * ⚠️ **Two assertions were dropped rather than adapted, and that is a REDUCTION.** The old resize
+   * shrank the height to 720, so `layout.scale` and `plate.w` both fell and could be asserted to
+   * fall. Height is now pinned at 1080 at every viewport, and `hudLayout` scales off height alone
+   * (`hud.ts:16`) — so the HUD genuinely does not re-lay-out under a width change, and asserting
+   * that it does would be asserting a falsehood. What survives is the half vault 6.2 is actually
+   * about: a UI camera built from a LITERAL rather than from the live view, which crops the HUD the
+   * moment the two differ. That is checked at both sizes, and the width now differs by 480 px.
    */
-  test('a real scale.resize() re-lays-out the HUD rather than cropping it', async ({ page }) => {
+  test('a real browser resize re-sizes the UI camera rather than cropping the HUD', async ({
+    page,
+  }) => {
+    // Exactly 16:9, so the view starts at the design size and the widening below is unambiguous.
+    await page.setViewportSize({ width: 1024, height: 576 });
     await bootToGame(page);
     const before = await readHud(page);
     expect(before.gameSize.height).toBe(1080);
+    expect(before.gameSize.width, 'a 16:9 viewport should sit at the design width').toBe(1920);
 
     /**
      * The camera is checked at BOTH sizes, and the second check alone is not enough — found by the
@@ -215,21 +231,26 @@ test.describe('criterion 6.3 — built from the live game size', () => {
         `from the live game size`,
     ).toEqual({ w: before.gameSize.width, h: before.gameSize.height });
 
-    await page.evaluate(() => {
-      (
-        window as unknown as { __phaserGame: { scale: { resize(w: number, h: number): void } } }
-      ).__phaserGame.scale.resize(1280, 720);
-    });
+    // EXACTLY 20:9 (2.2222), a landscape phone's aspect, inside the 2.37 ceiling. 1024x461 was
+    // here first and is 2.2213, which rounds the view to 2399 — near enough to read as 2400 and
+    // wrong enough to fail an equality, which is how these viewports earned their exact numbers.
+    // The view widens to 2400 x 1080.
+    await page.setViewportSize({ width: 1000, height: 450 });
+    await expect
+      .poll(async () => (await readHud(page)).gameSize.width, {
+        message: 'the view never widened after the browser resize',
+      })
+      .toBe(2400);
     await waitTicks(page, 4);
 
     const after = await readHud(page);
-    expect(after.gameSize.width).toBe(1280);
-    expect(after.gameSize.height).toBe(720);
-    // The layout followed the new size rather than staying at the old one — the exact failure vault
-    // 6.2 describes, where a camera built at a fixed size cropped a whole HUD plate off a phone.
-    expect(after.layout.scale).toBeLessThan(before.layout.scale);
-    expect(after.plate.w).toBeLessThan(before.plate.w);
-    expect(hudFits(after.layout, 1280, 720, after.counter.w)).toBe(true);
+    expect(after.gameSize.height, 'the height pin let the view grow vertically').toBe(1080);
+    // The HUD scales off HEIGHT alone, which is pinned — so it must be IDENTICAL across this
+    // resize. Stated as an assertion rather than left unsaid: if it ever moves, the height pin
+    // that every `gameH / GAME_HEIGHT` ratio in `src/render/` depends on has been broken.
+    expect(after.layout.scale).toBe(before.layout.scale);
+    expect(after.plate.w).toBe(before.plate.w);
+    expect(hudFits(after.layout, 2400, 1080, after.counter.w)).toBe(true);
     expect(after.plate.willRender).toBe(true);
 
     /**
@@ -289,9 +310,35 @@ test.describe('criterion 6.7 — the canvas is centred once', () => {
    * Phaser's rounding before a bound means anything, and it is carried to Phase 9 rather than
    * guessed at here.
    */
+  /**
+   * 🔴 **Rewritten 2026-09-01 for the filled view, and the middle case INVERTED.**
+   *
+   * This loop used to be `[[1400,900,'letterboxed'], [2000,900,'pillarboxed']]`, and under `FIT`
+   * both were right: the canvas held a 16:9 aspect and slack appeared on whichever axis was not the
+   * limiting one. A filled view removes the pillarbox for any viewport inside the ceiling — 2000x900 is
+   * 2.22 against a 2.37 ceiling, so it now FILLS, which is the whole point of the change the owner
+   * asked for. A spec asserting the old behaviour would have gone red on a correct game.
+   *
+   * The three cases are chosen to sit on either side of both bounds:
+   *   - **1400x900** is 1.56, NARROWER than 16:9. The view width clamps at its 1920 floor and the height is pinned
+   *     at 1080, so the view stays 1920x1080 and letterboxes. This is what proves the height clamp
+   *     does not simply stretch.
+   *   - **2000x900** is 2.22, between 16:9 and the ceiling. The view becomes 2400x1080 and fills.
+   *   - **2600x1000** is 2.60, PAST the ceiling. The view clamps at `MAX_GAME_WIDTH` x 1080 and
+   *     pillarboxes again — deliberately, which is why the case exists at all. Without it the
+   *     ceiling would be a number nothing ever reached.
+   *
+   * The aspect assertion generalises rather than branching: the drawn canvas is the viewport's own
+   * aspect, clamped into [16:9, ceiling]. That one expression is exactly the contract `liveViewWidth` plus
+   * the clamp implements, and it fails for a stretch, a mis-fit and a wrong clamp alike.
+   */
+  const CEILING_ASPECT = MAX_GAME_WIDTH / GAME_HEIGHT;
+  const DESIGN_ASPECT = GAME_WIDTH / GAME_HEIGHT;
+
   for (const [w, h, boxing] of [
     [1400, 900, 'letterboxed'],
-    [2000, 900, 'pillarboxed'],
+    [2000, 900, 'fills'],
+    [2600, 1000, 'pillarboxed'],
   ] as const) {
     test(`a ${boxing} viewport (${w}x${h}) leaves equal gaps on both sides`, async ({ page }) => {
       // Deliberately NOT 16:9: at the game's own aspect ratio the canvas fills the viewport and any
@@ -319,23 +366,29 @@ test.describe('criterion 6.7 — the canvas is centred once', () => {
 
       /**
        * 🔴 Equal gaps are satisfied by a canvas of the WRONG SIZE that happens to be centred — a
-       * zero-width canvas has perfectly equal gaps. `FIT` must preserve the game's 16:9 aspect
-       * whichever axis is the limiting one, so that is what pins the size.
+       * zero-width canvas has perfectly equal gaps. So the SIZE is pinned too.
        */
       expect(box.width, `${boxing}: canvas has no width`).toBeGreaterThan(0);
       expect(box.height, `${boxing}: canvas has no height`).toBeGreaterThan(0);
+      const wanted = Math.min(Math.max(w / h, DESIGN_ASPECT), CEILING_ASPECT);
       expect(
-        Math.abs(box.width / box.height - 16 / 9),
+        Math.abs(box.width / box.height - wanted),
         `${boxing}: the canvas is ${box.width}x${box.height}, aspect ` +
-          `${(box.width / box.height).toFixed(4)} against the game's 1.7778. FIT stretched or ` +
-          `mis-fitted it, which equal gaps alone cannot see.`,
+          `${(box.width / box.height).toFixed(4)} against the expected ${wanted.toFixed(4)}. ` +
+          `the view stretched, mis-fitted, or clamped to the wrong bound.`,
       ).toBeLessThan(0.01);
-      // The slack is on the axis this boxing NAMES. Without it, both cases could pass while FIT
-      // silently picked the wrong limiting axis.
+
+      // The slack is on the axis this boxing NAMES. Without it, all three cases could pass while
+      // the fit silently picked the wrong limiting axis.
       if (boxing === 'letterboxed') {
         expect(box.top, 'letterboxed: expected vertical slack').toBeGreaterThan(0);
+        expect(box.left, 'letterboxed: expected NO horizontal slack').toBeLessThanOrEqual(1);
+      } else if (boxing === 'pillarboxed') {
+        expect(box.left, 'pillarboxed: expected horizontal slack past the ceiling').toBeGreaterThan(0);
       } else {
-        expect(box.left, 'pillarboxed: expected horizontal slack').toBeGreaterThan(0);
+        // The owner-reported defect, asserted directly: no bars on either side inside the ceiling.
+        expect(box.left, 'fills: a black bar survived on the left').toBeLessThanOrEqual(1);
+        expect(box.top, 'fills: a black bar survived on the top').toBeLessThanOrEqual(1);
       }
     });
   }

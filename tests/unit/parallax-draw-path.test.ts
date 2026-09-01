@@ -54,7 +54,7 @@ interface FakeTileSprite {
 function makeFakeScene(gameW = 1920, gameH = 1080): {
   scene: Phaser.Scene;
   made: FakeTileSprite[];
-  /** Drive an EXPAND-style widening and fire `resize`, as Phaser's ScaleManager would. */
+  /** Drive a view widening and fire `resize`, as Phaser's ScaleManager would. */
   resize: (w: number, h: number) => void;
   /** How many `resize` listeners survive — the leak observable. */
   scaleListeners: () => number;
@@ -230,12 +230,12 @@ describe('createParallax / renderParallax — the draw path (CLAUDE.md §2)', ()
 /**
  * **The layers cover the LIVE view, and let go of the ScaleManager when the scene ends.**
  *
- * Under `Phaser.Scale.EXPAND` the view is wider than the design size on a landscape phone. These
+ * With the view filled it is wider than the design size on a landscape phone. These
  * are `setScrollFactor(0)` objects at the screen origin, so a layer left 1920 px wide leaves the
  * right ~417 px of sky drawn in raw `backgroundColor` — a hard black band, not a subtle seam,
  * wherever the level's own tiles do not cover.
  */
-describe('the parallax follows an EXPAND resize', () => {
+describe('the parallax follows a view resize', () => {
   it('is built at the live size, not at the design size', () => {
     const { scene, made } = makeFakeScene(2400, 1080);
     createParallax(scene);

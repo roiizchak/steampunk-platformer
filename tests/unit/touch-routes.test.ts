@@ -248,7 +248,7 @@ describe('a FULL-SCREEN route is dead under the prompt too, however big its own 
 /**
  * **The zones follow the targets, and the rotate guard follows with them.**
  *
- * 🔴 `Phaser.Scale.EXPAND` (2026-09-01) made the view able to change while a screen is up. These
+ * 🔴 The filled view (2026-09-01) made the view able to change while a screen is up. These
  * zones are built once and were never moved: a rotation or a fullscreen toggle re-lays-out the
  * drawn content and leaves them where the buttons used to be — a menu that answers taps in the
  * wrong places, which reads as the game ignoring the player. Named by the Codex plan review,

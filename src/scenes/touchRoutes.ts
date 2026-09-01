@@ -99,7 +99,7 @@ export interface TapRoutes {
   /**
    * Move the existing zones onto the geometry their target boxes now carry.
    *
-   * 🔴 **The zones are a SNAPSHOT, and before `Phaser.Scale.EXPAND` nothing needed to move them.**
+   * 🔴 **The zones are a SNAPSHOT, and before the view could change nothing needed to move them.**
    * They are built once from `targets` in the loop below; only `promptIsUp` re-reads the live size.
    * The view could not change under FIT, so a snapshot was the whole truth. It can now: a rotation
    * or a fullscreen toggle re-lays-out the screen, the drawn content moves, and stale zones sit

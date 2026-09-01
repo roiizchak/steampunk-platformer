@@ -11,7 +11,11 @@
  * hardcoded at 1280 cropped a whole HUD plate off a phone and looked perfectly correct on the
  * desktop it was written on.
  *
- * This project cannot currently hit that trap — the scale mode is `FIT`, so the game size is
+ * ⚠️ **The view fills the screen since 2026-09-01, so the game size is no longer fixed** — but
+ * this module was already written against the live size and needs no change: `hudLayout` takes
+ * `gameW`/`gameH` and scales off HEIGHT, which the clamp pins at 1080. The note below described
+ * FIT and is kept for the trap it names.
+ * This project cannot currently hit that trap — the scale mode was `FIT`, so the game size is
  * permanently 1920 × 1080 and the canvas is scaled by CSS instead. **Saying so plainly matters more
  * than pretending otherwise** *(vault 9.3)*: `hudLayout` takes the size as arguments and contains no
  * viewport literal, so the trap cannot open later, and `hudFits` is a real predicate that a

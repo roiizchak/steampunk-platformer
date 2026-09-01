@@ -5,7 +5,14 @@
  * these globs read `public/assets/levels/` rather than a fixture copy (vault 3.1).
  */
 
-import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE, TILE_SIZE } from '../../src/game/constants';
+import {
+  CAMERA_ZOOM,
+  GAME_HEIGHT,
+  GAME_WIDTH,
+  MAX_GAME_WIDTH,
+  RENDER_SCALE,
+  TILE_SIZE,
+} from '../../src/game/constants';
 import { parseLevel } from '../../src/game/tilemap';
 import { PLAYER_BOX } from '../../src/sim/player';
 
@@ -164,7 +171,17 @@ export function docExpectations(): [string, string][] {
   return [
     ['grid cell size', `Grid cell size ${TILE_SIZE} × ${TILE_SIZE} px`],
     ['camera zoom', `Camera zoom ${CAMERA_ZOOM}`],
-    ['viewport', `Viewport / world view ${GAME_WIDTH} × ${GAME_HEIGHT} px`],
+    // Two rows since the view began filling the screen (2026-09-01): 1920 is the design view and the
+    // guaranteed minimum, `MAX_GAME_WIDTH` is the widest the game will ever draw. Publishing
+    // only the first would state a fixed view the game no longer holds.
+    [
+      'design viewport',
+      `Viewport / world view (design, and the minimum) ${GAME_WIDTH} × ${GAME_HEIGHT} px`,
+    ],
+    [
+      'widest live viewport',
+      `Viewport / world view (widest live) ${MAX_GAME_WIDTH} × ${GAME_HEIGHT} px`,
+    ],
     ['world extent', `World extent (level-01) ${LEVEL_01.widthPx} × ${LEVEL_01.heightPx} px`],
     [
       'character collision box',

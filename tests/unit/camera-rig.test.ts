@@ -215,7 +215,7 @@ describe('tracksTarget (criterion 3.4 — following, not merely moving)', () => 
  * exactly the level that separates a correct call site from a reverted one. `M116` and `M117`
  * revert the two call sites independently, because one reverting must not hide behind the other.
  */
-describe('the level guards see the widest live view (EXPAND)', () => {
+describe('the level guards see the widest live view', () => {
   /** Scrolls at the design width, does NOT scroll at the ceiling. The whole point of the fixture. */
   const BETWEEN_W = (GAME_WIDTH + MAX_GAME_WIDTH) / 2;
 

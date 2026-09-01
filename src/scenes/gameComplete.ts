@@ -194,7 +194,7 @@ function bindContinue(scene: Phaser.Scene, next: string | null): void {
     box,
     go,
   );
-  // The zone is view-sized, so an EXPAND resize leaves it short down one side — a strip of the
+  // The zone is view-sized, so a view resize leaves it short down one side — a strip of the
   // completion panel where a tap does nothing. Mutated in place, never replaced; `tapRouteResize.ts`
   // says why.
   const sized = keepTapRoutesSized(scene, taps, (size) => {

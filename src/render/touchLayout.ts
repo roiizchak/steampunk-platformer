@@ -7,6 +7,16 @@
  *
  * ## The measurement everything here rests on
  *
+ * ⚠️ **This paragraph described `Phaser.Scale.FIT`, which the game stopped using on 2026-09-01.**
+ * Since the view fills the screen the backing store is the LIVE game size — still exact at every DPR, but between
+ * `GAME_WIDTH` and `MAX_GAME_WIDTH` wide rather than fixed. The consequence for THIS file is that
+ * the view-scaling below finally executes in production: it never did under FIT, which is exactly
+ * why it was written as arithmetic rather than as a literal *(vault 6.2)*. The 44 CSS px verdict
+ * is unmoved — `fitCanvasCssWidth`'s `min()` picks the constraining axis, which on any phone wider
+ * than 16:9 is HEIGHT, and a wider view does not change the height-derived scale (measured: 57.75 CSS px
+ * at a fixed 1920 view against 57.78 at a filled one). What improves is the GAP term, by 151 CSS px.
+ *
+ * The original note, still true of FIT:
  * `Phaser.Scale.FIT` holds the backing store at **1920 x 1080 at every viewport and every DPR** and
  * restyles only the canvas CSS width and height — measured, not assumed, in
  * `docs/ENGINE-NOTES.md § Scale`. So a button declared in GAME pixels arrives on the player's screen

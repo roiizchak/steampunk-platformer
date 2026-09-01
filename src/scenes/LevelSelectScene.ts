@@ -103,7 +103,7 @@ export class LevelSelectScene extends Phaser.Scene {
     // `touchMenuLayout`, and the heading and hint move out of that band rather than over it. The
     // keyboard layout on desktop is byte for byte what it was.
     const touch = this.game.device.input.touch;
-    // ⚠️ The LIVE size, and ONE array mutated in place from here on. Under `Phaser.Scale.EXPAND`
+    // ⚠️ The LIVE size, and ONE array mutated in place from here on. With a filled view
     // the view can widen while this screen is up, and `attachTapRoutes` and `attachRotatePrompt`
     // both capture this reference — `RotatePrompt.refresh()` re-reads it every call — so one
     // in-place rewrite keeps the zones and the rotate guard on the same geometry.

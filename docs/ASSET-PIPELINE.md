@@ -33,9 +33,11 @@ right in isolation *(Codex plan review P8; criteria 3.6 and 3.6b)*.
 |---|---|---|
 | **Grid cell size** | **`96 × 96` px** | `TILE_SIZE` |
 | **Camera zoom** | **`1`** | `CAMERA_ZOOM` |
-| **Viewport / world view** | **`1920 × 1080` px = `20 × 11.25` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
+| **Viewport / world view (design, and the minimum)** | **`1920 × 1080` px = `20 × 11.25` tiles** | `GAME_WIDTH`, `GAME_HEIGHT` |
+| **Viewport / world view (widest live)** | **`2560 × 1080` px = `26.67 × 11.25` tiles** | `MAX_GAME_WIDTH`, `GAME_HEIGHT` |
 | **World extent (level-01)** | **`9216 × 2208` px = `96 × 23` tiles** | measured off the shipped `.tmj` |
-| **Camera travel** | **`7296 × 1128` px** | extent − world view |
+| **Camera travel (at the design view)** | **`7296 × 1128` px** | extent − design view |
+| **Camera travel (at the widest live view)** | **`6656 × 1128` px** | extent − widest view |
 | **Character collision box** | **`132 × 288` px = `1.375 × 3.0` tiles** | `PLAYER_BOX × RENDER_SCALE` |
 | **Character render height** | **`288` px — 26.67 % of screen height** | `PLAYER_BOX.h × RENDER_SCALE` |
 | **Render scale** | **`RENDER_SCALE` 6** | `RENDER_SCALE` |

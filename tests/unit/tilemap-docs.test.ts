@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH, RENDER_SCALE } from '../../src/game/constants';
+import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH, MAX_GAME_WIDTH, RENDER_SCALE } from '../../src/game/constants';
 import { ticksToMs } from '../../src/sim/index';
 import { derivedFeel } from '../../src/sim/derived';
 import { DEFAULT_TUNING, PLAYER_BOX } from '../../src/sim/player';
@@ -49,7 +49,17 @@ describe('ASSET-PIPELINE.md publishes exactly what the code implements (3.6, 3.6
     // drift from the level while every other row stayed green.
     const travelX = LEVEL_01.widthPx - GAME_WIDTH / CAMERA_ZOOM;
     const travelY = LEVEL_01.heightPx - GAME_HEIGHT / CAMERA_ZOOM;
-    expect(doc).toContain(`Camera travel ${travelX} × ${travelY} px`);
+    expect(doc).toContain(`Camera travel (at the design view) ${travelX} × ${travelY} px`);
+  });
+
+  it('publishes the travel at the WIDEST live view too', () => {
+    // 🔴 The filled view (2026-09-01) made 1920 the design view and the floor rather than the
+    // whole contract. The travel at the design width is still true and still worth publishing; it
+    // is no longer the number that bounds the worst case, and a document naming only the roomier of
+    // the two reads as a guarantee the game does not make.
+    const travelX = LEVEL_01.widthPx - MAX_GAME_WIDTH / CAMERA_ZOOM;
+    const travelY = LEVEL_01.heightPx - GAME_HEIGHT / CAMERA_ZOOM;
+    expect(doc).toContain(`Camera travel (at the widest live view) ${travelX} × ${travelY} px`);
   });
 
   it('no longer carries the PROPOSED marker on the grid cell size (criterion 3.6)', () => {

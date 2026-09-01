@@ -4,10 +4,17 @@ import { gameConfig } from './game/config';
 import { installDebugGlobals } from './debug/globals';
 import { installCanvasFilter } from './game/canvasFilter';
 import { installFullscreenOnTap } from './game/fullscreenOnTap';
+import { installViewFill } from './game/viewSize';
 
 installDebugGlobals();
 
 const game = new Phaser.Game(gameConfig);
+
+// The game FILLS the screen: the view takes the viewport's own aspect at a fixed 1080 height,
+// clamped between GAME_WIDTH and MAX_GAME_WIDTH, so `Phaser.Scale.FIT` has nothing to letterbox.
+// This is the answer to the black bars the owner reported in fullscreen on a phone. It must be
+// installed before anything reads the view size — every scene lays out against `scale.gameSize`.
+installViewFill(game.scale);
 
 // `pixelArt: true` decides how TEXTURES are sampled onto the canvas. It says nothing about how the
 // finished CANVAS is scaled onto the screen, and `Phaser.Scale.FIT` leaves the backing store at

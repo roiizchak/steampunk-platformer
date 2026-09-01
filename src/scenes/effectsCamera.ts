@@ -8,7 +8,7 @@
  *   - the **margin** is design-anchored and must stay so. `screenShake.ts:110-112` records why:
  *     `shakeSafeMargin` takes the DESIGN size, and feeding the grown viewport back into it is a
  *     feedback loop that grows the camera every resize.
- *   - the **size** must track the live view, because `Phaser.Scale.EXPAND` makes that view up to
+ *   - the **size** must track the live view, because `src/game/viewSize.ts` makes that view up to
  *     `MAX_GAME_WIDTH` wide.
  *
  * So the camera's position never moves and its size always does.

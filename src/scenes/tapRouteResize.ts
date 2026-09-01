@@ -1,7 +1,7 @@
 /**
  * Keep a screen's tap targets on the live view, and let go of the ScaleManager when it ends.
  *
- * 🔴 **`Phaser.Scale.EXPAND` (2026-09-01) is what made this necessary.** `attachTapRoutes` builds
+ * 🔴 **The filled view (2026-09-01, `src/game/viewSize.ts`) is what made this necessary.** `attachTapRoutes` builds
  * its zones once from the target array; under `FIT` the view could never change, so a snapshot was
  * the whole truth. It can now — a rotation or a fullscreen toggle re-lays-out the screen — and a
  * stale zone sits where a button used to be, answering taps in the wrong place with nothing on

@@ -2,7 +2,7 @@
  * **Every screen with its own tap routes keeps them on the live view.**
  *
  * 🔴 Under `Phaser.Scale.FIT` the view could not change while a screen was up, so `attachTapRoutes`
- * building its zones once was the whole truth. `Phaser.Scale.EXPAND` (2026-09-01) makes a rotation
+ * building its zones once was the whole truth. The filled view (2026-09-01) makes a rotation
  * or a fullscreen toggle re-lay-out the screen, and a stale zone then sits where a button used to
  * be — a tap that does nothing, with nothing on screen to explain it.
  *

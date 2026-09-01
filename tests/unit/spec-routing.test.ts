@@ -27,6 +27,7 @@ const FUTURE_NAMES = [
   'phase-12-perf2.spec.ts',
   'phase-12-multitouch-drag.spec.ts',
   'phase-12-a.spec.ts',
+  'phase-13-viewfill-touch.spec.ts',
 ];
 
 /** Which project a file lands in, by the same two rules the config applies. */
@@ -86,5 +87,19 @@ describe('the Phase 12 Playwright partition', () => {
         expect(TOUCH_ALL_SPECS.test(name), `${name} is perf but not "all"`).toBe(true);
       }
     }
+  });
+
+  /**
+   * 🔴 The view-fill work is split across two FILES, and the touch half must land in the touch
+   * project. Its tap-zone case measures zones that are drawn only where Phaser detects touch
+   * (criterion 12.7: desktop gains no hit targets) — in `chromium` it would skip itself and report
+   * a green tick for a gate that never executed.
+   */
+  it('claims the touch half of the view-fill work, and not the desktop half', () => {
+    expect(projectFor('phase-13-viewfill-touch.spec.ts')).toBe('touch');
+    expect(
+      TOUCH_ALL_SPECS.test('phase-13-viewfill.spec.ts'),
+      'the geometry spec was claimed by the touch project — it belongs on the cheap desktop one',
+    ).toBe(false);
   });
 });

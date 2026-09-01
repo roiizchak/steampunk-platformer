@@ -49,7 +49,6 @@ import { dismissTitleProduction } from './prodTitle';
 import vercel from '../../vercel.json' with { type: 'json' };
 
 import { headersFrom } from '../../tools/gen/vercelHeaders.mjs';
-import { GAME_WIDTH } from '../../src/game/constants';
 
 /** The Phase 8 save key. Named here once; `src/game/save.ts` owns the schema. */
 export const SAVE_KEY = 'steampunk.progress';
@@ -331,18 +330,31 @@ export async function playCampaign(
  * this file's first criterion. Returns a counter rather than a number so one screenshot answers
  * several regions — taking a fresh shot per region would compare two different frames.
  *
- * The canvas is `FIT`-scaled and letterboxed inside the viewport, so design coordinates are mapped
- * through its real bounding box rather than assumed to be screen pixels.
+ * The canvas is scaled and centred inside the viewport, so design coordinates are mapped through
+ * its real bounding box rather than assumed to be screen pixels.
+ *
+ * 🔴 **The denominator is the canvas's BACKING store, not `GAME_WIDTH`.** It said "FIT-scaled and
+ * letterboxed" and divided by the design constant — true, and indistinguishable from correct, only
+ * while a FIXED 1920 x 1080 view held the backing store there forever. With the view filled
+ * (2026-09-01) the backing store is the LIVE game size, up to `MAX_GAME_WIDTH` wide, and a sampling
+ * rectangle divided by 1920 lands proportionally too far right — sampling the wrong pixels and
+ * returning a plausible count, which is the silent-failure shape the DPR assertion below already
+ * guards the other axis against.
+ *
+ * ⚠️ Read off the ELEMENT, not from Phaser: this file's whole premise is that `dist/` exposes
+ * neither `window.__game` nor `window.__phaserGame`. Named by the Codex plan review, round 4.
  */
 export async function bannerInk(
   page: Page,
 ): Promise<(x0: number, y0: number, x1: number, y1: number) => number> {
   const box = await page.locator('canvas').boundingBox();
   if (box === null || box.width <= 0) throw new Error('no canvas to measure banner ink in');
+  const backingWidth = await page.evaluate(() => document.querySelector('canvas')?.width ?? 0);
+  if (backingWidth <= 0) throw new Error('no canvas backing store to scale banner ink against');
   const shot = await page.screenshot();
   const { decodePng } = await import('../../tools/gen/png.mjs');
   const img = decodePng(new Uint8Array(shot));
-  const scale = box.width / GAME_WIDTH;
+  const scale = box.width / backingWidth;
 
   // 🔴 `boundingBox()` is CSS pixels and `screenshot()` is DEVICE pixels, so `scale` is only the
   // right number at a device pixel ratio of 1. `chromium-prod` runs at 1 and `chromium-dpr2` exists

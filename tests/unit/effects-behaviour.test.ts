@@ -337,13 +337,13 @@ describe('every emitter is built with the values the spec names', () => {
 /**
  * **The camera follows the live view, and lets go of the ScaleManager when the scene ends.**
  *
- * `Phaser.Scale.EXPAND` makes the game size wider than the design size on a landscape phone. This
+ * The filled view makes the game size wider than the design size on a landscape phone. This
  * camera is deliberately oversized and at a negative offset, so `CameraManager.onResize` skips it —
  * it only re-sizes cameras at `(0,0)` whose size equals the previous game size
  * (`CameraManager.js:685`). Nothing else would ever grow it, and the pillarbox the whole change
  * removes would simply reappear INSIDE the canvas.
  */
-describe('the shake camera tracks an EXPAND resize', () => {
+describe('the shake camera tracks a view resize', () => {
   it('covers the widened view, margin included', () => {
     const { camera, resize } = build();
     const beforeW = camera.width;
