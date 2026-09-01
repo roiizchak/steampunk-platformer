@@ -156,13 +156,18 @@ describe('TouchControlsLayer goes quiet when it must', () => {
 
   it('leaves the walk plate LIT while the latch is engaged, and only that plate', () => {
     const { scene, layer } = live();
-    const alphaOf = (id: string): number =>
-      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === id)[0].alpha;
-    const rest = alphaOf('walk');
+    // `fillAlpha`, not `alpha`: a grey-box plate's translucency is its FILL, and the press path
+    // sets it with `setFillStyle` so the keyline stays opaque. Reading `alpha` here would measure
+    // the object opacity, which production never touches on this arm.
+    const fillOf = (id: string): number =>
+      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === id)[0].fillAlpha;
+    const rest = fillOf('walk');
     scene.press('walk', 1);
     scene.releasePointer(1);
-    expect(alphaOf('walk'), 'the walk plate went dark the moment the finger left').toBeGreaterThan(rest);
-    expect(alphaOf('jump'), 'an unrelated plate lit up').toBe(rest);
+    // Lit means DIMMER since PLATE_ALPHA went to 0.9 — the latch still reads differently from rest,
+    // which is the claim; only the direction of "different" moved.
+    expect(fillOf('walk'), 'the walk plate went dark the moment the finger left').toBeLessThan(rest);
+    expect(fillOf('jump'), 'an unrelated plate lit up').toBe(rest);
 
     // A loss path lifts every FINGER; it does not un-choose a gait, so the plate must stay lit.
     layer.destroy();

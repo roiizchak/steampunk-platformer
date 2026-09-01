@@ -145,11 +145,11 @@ export function makeTouchScene(options: { art?: boolean } = {}): TouchSceneHarne
     add: {
       zone: (x: number, y: number, w: number, h2: number) => makeZone(x, y, w, h2),
       rectangle: (x: number, y: number, w: number, h2: number, _fill?: number, a?: number) =>
-        makeFace(x, y, w, h2, a),
+        makeFace(x, y, w, h2, a, true),
       text: (x: number, y: number) => makeFace(x, y),
       triangle: (_x: number, _y: number, x1: number, y1: number) => makeFace(x1, y1),
       circle: (x: number, y: number, r: number, _fill?: number, a?: number) =>
-        makeFace(x, y, r * 2, r * 2, a),
+        makeFace(x, y, r * 2, r * 2, a, true),
       image: (x: number, y: number, key: string) => {
         if (!hasArt) {
           throw new Error(

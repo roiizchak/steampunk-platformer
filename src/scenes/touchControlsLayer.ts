@@ -56,7 +56,7 @@ import {
   touchLayout,
   touchTargetsFit,
 } from '../render/touchLayout';
-import { alphasFor, drawFace } from './touchMarks';
+import { alphasFor, drawFace, paintPlate } from './touchMarks';
 import type {
   PointerLike,
   TouchBinding,
@@ -137,8 +137,8 @@ export class TouchControlsLayer {
   private setPressed(id: TouchId, pressed: boolean): void {
     const control = this.controls.find((c) => c.id === id);
     if (!control) return;
-    const alpha = alphasFor(this.scene, id);
-    control.faces[0]?.setAlpha(this.litFor(id, pressed) ? alpha.lit : alpha.rest);
+    const alpha = alphasFor();
+    paintPlate(control.faces[0], this.litFor(id, pressed) ? alpha.lit : alpha.rest);
   }
 
   /** Every control back to rest. Runs on every loss path, so no plate can be left lit. */
@@ -146,8 +146,8 @@ export class TouchControlsLayer {
     // ⚠️ Through `litFor`, so the walk plate keeps its latched look. A loss path lifts every
     // FINGER; it does not un-choose a gait.
     for (const control of this.controls) {
-      const alpha = alphasFor(this.scene, control.id);
-      control.faces[0]?.setAlpha(this.litFor(control.id, false) ? alpha.lit : alpha.rest);
+      const alpha = alphasFor();
+      paintPlate(control.faces[0], this.litFor(control.id, false) ? alpha.lit : alpha.rest);
     }
   }
 

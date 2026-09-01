@@ -91,7 +91,7 @@ export interface RotateHost {
    * browser's address bar took the height with it. `fullscreenOnTap.ts` is the repair that came
    * out of this readout.
    *
-   * So it no longer ships. `browserHost()` injects the node under `import.meta.env.DEV` instead of
+   * So it no longer ships. `browserHost()` injects the node in the DEV build only, instead of
    * `index.html` carrying it, and `verify-dist.mjs` fails the build on `rotate-diag` reaching
    * `dist/`. Digits and separators only, still — that sweep also reads shipped text for dev prose.
    */

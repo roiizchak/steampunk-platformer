@@ -52,7 +52,7 @@ describe('the plate stays translucent, because the level is behind it', () => {
    *
    * Without this gate, raising the alpha back reddens nothing (mutation M21).
    */
-  it('draws every plate see-through, so the world under a thumb is still readable', () => {
+  it('draws every plate at the owner-chosen resting fill, and reads the FILL not the object alpha', () => {
     const { scene } = live();
     const plates = scene.faces.filter((f) => f.strokeWidth > 0);
     expect(plates, 'no plate was found by its keyline — this gate is measuring nothing').toHaveLength(
@@ -60,11 +60,14 @@ describe('the plate stays translucent, because the level is behind it', () => {
     );
     for (const plate of plates) {
       expect(
-        plate.alpha,
-        `the ${plate.id} plate is ${plate.alpha} opaque — the level behind it is hidden, and 19.9 % ` +
-          'of standing positions have a hazard, an enemy or the goal back there',
-      ).toBeLessThan(0.7);
-      expect(plate.alpha, 'a fully transparent plate is not a control').toBeGreaterThan(0.2);
+        plate.fillAlpha,
+        `the ${plate.id} plate's FILL moved off PLATE_ALPHA — see the occlusion note in touchMarks.ts`,
+      ).toBe(PLATE_ALPHA);
+      // 🔴 The keyline is where this plate's WCAG 1.4.11 contrast comes from, and it must be fully
+      // opaque at rest. Reading `alpha` here — the Alpha component — is what proves the fill was
+      // set through `fillAlpha` and did not take the stroke down with it.
+      expect(plate.alpha, 'the plate was dimmed as a whole, taking its keyline with it').toBe(1);
+      expect(plate.strokeWidth, 'a plate with no keyline has no contrast argument').toBeGreaterThan(0);
     }
   });
 
@@ -74,10 +77,17 @@ describe('the plate stays translucent, because the level is behind it', () => {
     // hazard, an enemy or the goal behind a plate — and an opaque pressed state hides exactly that
     // content at exactly the moment the player is running through it.
     const { scene } = live();
-    const plate = (): number => scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].alpha;
+    const plate = (): number =>
+      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].fillAlpha;
+    const keyline = (): number =>
+      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].alpha;
     const atRest = plate();
     scene.press('right', 1);
-    expect(plate(), 'the plate does not answer a thumb at all').toBeGreaterThan(atRest);
+    // 🔴 DIMMER, not brighter, since `PLATE_ALPHA` went to 0.9. Same 0.18 step, same purpose — a
+    // control that does not visibly answer a thumb reads as a broken app — and a press now
+    // IMPROVES occlusion instead of worsening it, which is the one consolation in that decision.
+    expect(plate(), 'the plate does not answer a thumb at all').toBeLessThan(atRest);
+    expect(keyline(), 'the press dimmed the whole plate, keyline included').toBe(1);
     // 🔴 The bound stands on a PINNED measurement, not on the live production value. The Codex
     // round-3 review caught the second version deriving its bound from `atRest` — an active oracle,
     // so `PLATE_ALPHA = 0.69` with a pressed 0.80 satisfied it while neither number had ever been
@@ -89,17 +99,25 @@ describe('the plate stays translucent, because the level is behind it', () => {
     // measured between them, so the rule is: keep at least 60 % of the residual transparency the
     // readable value had. That refuses 0.86 and 0.78 alike, and it is honest about which half of it
     // is evidence.
-    const MEASURED_RESTING = 0.55;
-    const RESIDUAL_SHARE = 0.6;
-    expect(atRest, 'the resting alpha moved away from the measured value the bound stands on').toBe(
-      MEASURED_RESTING,
+    // 🔴 **The 60 %-residual bound is WITHDRAWN, not re-parameterised.** It said a plate keeps at
+    // least 60 % of the resting state's residual transparency. `PLATE_ALPHA` is 0.9 on owner
+    // instruction (2026-09-01), whose residual is 0.10 against the measured-readable 0.45 —
+    // **22 %** — and 0.9 is past the 0.86 that was measured to erase the content outright. Quietly
+    // swapping 0.55 for 0.9 inside the old formula would have kept a green gate that no longer
+    // measures anything, which is worse than having no gate: it would read as evidence.
+    //
+    // What is left is the honest pair of claims: the resting fill is the value the owner chose,
+    // and a press is visibly different from rest. Occlusion is now answered by a HANDS-ON
+    // hazard-visibility pass (the level-01 sentry behind the pause plate, the level-04 goal under
+    // the jump plate), recorded as a criterion in the QA log — not by arithmetic in this file.
+    const OWNER_CHOSEN_RESTING = 0.9;
+    expect(atRest, 'the resting fill moved off the value the owner authorised').toBe(
+      OWNER_CHOSEN_RESTING,
     );
-    const floor = RESIDUAL_SHARE * (1 - MEASURED_RESTING);
     expect(
-      1 - plate(),
-      `the pressed plate leaves ${(1 - plate()).toFixed(2)} of the level visible against ` +
-        `${floor.toFixed(3)} required — 0.86 was measured to erase it`,
-    ).toBeGreaterThanOrEqual(floor);
+      atRest - plate(),
+      'the pressed step is too small to see — a press must be visibly different from rest',
+    ).toBeGreaterThanOrEqual(0.1);
     scene.releasePointer(1);
     expect(plate(), 'the plate stayed lit after the finger left').toBe(atRest);
   });
@@ -110,12 +128,14 @@ describe('the plate stays translucent, because the level is behind it', () => {
     // saw an unpressed button that was still driving the sim — the contact-identity defect this
     // phase gated on the sim side, reappearing on the side they can see.
     const { scene } = live();
-    const plate = (): number => scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].alpha;
+    const plate = (): number =>
+      scene.faces.filter((f) => f.strokeWidth > 0 && f.id === 'right')[0].fillAlpha;
     const atRest = plate();
     scene.press('right', 1);
     scene.press('right', 2);
     const lit = plate();
-    expect(lit, 'the plate never lit at all — this gate proves nothing').toBeGreaterThan(atRest);
+    // Dims on press since PLATE_ALPHA went to 0.9 — see the direction note above.
+    expect(lit, 'the plate never lit at all — this gate proves nothing').toBeLessThan(atRest);
     scene.releasePointer(1);
     expect(plate(), 'the plate went dark while a finger was still holding the control').toBe(lit);
     scene.releasePointer(2);
@@ -192,7 +212,7 @@ describe('the generated faces, once the plate is cut', () => {
     // And the pressed state still answers a thumb, through the same one code path.
     const rest = face('right').alpha;
     scene.press('right', 1);
-    expect(face('right').alpha, 'the art does not answer a thumb at all').toBeGreaterThan(rest);
+    expect(face('right').alpha, 'the art does not answer a thumb at all').toBeLessThan(rest);
     scene.releasePointer(1);
     expect(face('right').alpha).toBe(rest);
     layer.destroy();
