@@ -567,6 +567,47 @@ function is subscribed to RESIZE; without the guard the page died with `RangeErr
 stack size exceeded` on the first e2e run. Street-Fighter's `main.ts` carries the same guard for the
 same reason — which is a second thing that reading it first would have supplied.
 
+#### ✅ What the instrument found: the overlay was right for four sessions
+
+The owner turned the phone to landscape and read the line back:
+
+```
+portrait   384x727 | 384x727 | portrait-primary  | 2008
+landscape  798x283 | 799x283 | landscape-primary | 2225
+```
+
+Both explanations died at once. The count rose 2008 → 2225, so **the poll was alive**; the
+orientation read `landscape-primary` and the viewport flipped, so **the numbers were current**. The
+overlay was up in landscape because it was **correct** to be:
+
+| | |
+|---|---|
+| viewport | 798 x 283 — Brave keeps its address bar, which eats ~a quarter of the short side |
+| aspect | 2.82:1, **wider** than the 16:9 design surface, so under `Scale.FIT` **height binds** |
+| canvas | `min(798, 283 x 16/9)` = **503 px** wide |
+| CSS scale | 503 / 1920 = **0.262** |
+| a `TOUCH_BOX_PX` control | 160 x 0.262 = **41.9 CSS px** against the 44 px floor |
+
+**2.1 pixels.** Every landscape viewport in the table this phase reasoned from — 844x390 down to
+640x300 — clears the floor, and none of them is what a browser with a persistent bottom bar
+actually reports. Three of the four repairs made between the first report and this one fixed real
+defects (M87, M88, M89); none of them was this one, and none of them could have been, because the
+symptom they were chasing was not a defect.
+
+**Owner decision, 2026-09-01: request fullscreen on tap.** The chrome is removed rather than the
+game shrunk around it — the same device measures roughly 798x360 with the bars gone, a 640 px
+canvas, and controls at **53.3 CSS px**. The alternative put to the owner was raising
+`TOUCH_BOX_PX` 160 → 176, which buys 46.1 px on this device but still fails on a browser leaving
+260 px, and costs 10 % larger controls on every device plus a matching enlargement of the
+level-select band. Rejected on both counts.
+
+⚠️ **A refusal is not fatal and the affordance is not one-shot.** iOS Safari has no fullscreen for
+an arbitrary element (Phaser answers `FULLSCREEN_UNSUPPORTED`) and Android may refuse an untrusted
+request; the letterboxed layout is correct either way and the next tap asks again, so a player who
+swipes out of fullscreen is one tap from back in. The listener is on `#game`, the **wrapper**,
+because the tap that matters is the one on the `#rotate` div and Phaser's input never sees it.
+**M91, M92 and M93** red the three ways that wiring can be silently wrong.
+
 #### 🔴 The fourth report — and the decision to stop reasoning and measure
 
 The owner reported the overlay stuck in landscape for the **fourth** time, after the DOM rewrite that
