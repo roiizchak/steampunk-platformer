@@ -40,7 +40,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.11 | Frame budget unregressed with the controls drawn | **PASS** | § 12.11. The frames-served ratio was replaced, not re-bounded — it returns exactly 1.000 or 0.500 against a vsync-locked display. The statistic is now the paired per-frame GPU and main-thread delta against ±0.5 ms, with absolute per-arm ceilings at 8 ms. Red-proved both ways: **M72** 2.09 ms, **M73** 0.85 ms, each after a recorded GREEN that was a real hole. Confirmed on a held-out `test:e2e` sweep, **218 passed, 0 failed**. Both `performance-engineer` briefs run *(A7)*; brief 2's finding 1 — the touch role pinned to one browser context all run — is applied in `touchArms.ts` and was the cause of an offset this log had recorded as noise. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps every `TOUCH_IDS` coordinate; M8 red. |
 | 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN on the device, and now REPRODUCIBLE without one — the machine half is pinned and one real defect fell out of it** | Preview deployed 2026-08-31 and 2026-09-01 and run on the owner's phone. **The same two findings were reported twice**, because the first repair to each was written from arithmetic and shipped without a reproduction. *(See § the rotate overlay for the full account.)* The overlay is DOM now, not Phaser objects, and both defects have e2e reproductions in `phase-12-viewport.spec.ts` that were watched red. ⚠️ **The gesture checks themselves — drag off the edge, pinch, double-tap — had never been run.** 2026-09-02: the machine half is now pinned in three places — `tests/unit/gesture-prevention.test.ts` (the source CSS, M105/M106 red), `verify-dist.mjs` (the same rules in `dist/index.html`, M105/M106 red) and `tests/e2e/phase-12-gestures.spec.ts` (five cases: `defaultPrevented` on every `touchmove`, the contact surviving the canvas edge, a drag off the button and back, a two-finger pinch measured on `visualViewport.scale`, and a double tap). 🔴 **The edge-drag case found a real defect and it is fixed** — see § 12.13, the GAME_OUT contact drop. **The criterion still needs the device**, which is what `play` means. |
-| 12.14 | The button art is readable at true size at every integer CSS size in the 44-48 px live band *(amended 2026-08-31, owner decision)* | **NOT MET — and the measurable half can no longer be measured** | 🔴 **The whole plate was redesigned on 2026-08-31 by owner decision** — *"new designs for all the buttons, in the style of the gate asset"* — so all six faces are take 14's cells and the three single-cell re-shoots this row used to describe ship nothing. **The per-stroke contrast gate is DELETED, not failing.** It found the glyph with `luma < INK_DARK_MAX` inside the central half, which held while the button was a pale disc whose glyph was the only dark thing on it; the redesign puts verdigris in every recess and shadow along the lower-right, so the detector reads **12 to 37 "strokes" per face** where the six used to have 1 to 4. Its figures were not low, they were meaningless — the mask is no longer the mark. Owner decision, taken on the measurement: report the criterion NOT MET rather than rebuild the statistic after seeing the art it would judge, which is the post-data selection this phase kept catching. ⚠️ **So there is now NO automated evidence for 12.14 at all**, and the criterion rests entirely on the hands-on pass, which is what it always required and has never had. `ui-ux-tester` has not run against these bytes either. Screenshot at 540 x 365: `docs/evidence/phase-12-touch-art.png`. **Seven earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history. |
+| 12.14 | The button art is readable at true size at every integer CSS size in the 44-48 px live band *(amended 2026-08-31, owner decision)* | **AGENT HALF MET 2026-09-02 — both `voltagent-qa-sec:ui-ux-tester` briefs have now run against these bytes; awaiting the owner's device confirmation** | 🔴 **The whole plate was redesigned on 2026-08-31 by owner decision** — *"new designs for all the buttons, in the style of the gate asset"* — so all six faces are take 14's cells and the three single-cell re-shoots this row used to describe ship nothing. **The per-stroke contrast gate is DELETED, not failing.** It found the glyph with `luma < INK_DARK_MAX` inside the central half, which held while the button was a pale disc whose glyph was the only dark thing on it; the redesign puts verdigris in every recess and shadow along the lower-right, so the detector reads **12 to 37 "strokes" per face** where the six used to have 1 to 4. Its figures were not low, they were meaningless — the mask is no longer the mark. Owner decision, taken on the measurement: report the criterion NOT MET rather than rebuild the statistic after seeing the art it would judge, which is the post-data selection this phase kept catching. ⚠️ **So there is NO automated evidence for 12.14 at all**, and the criterion rests entirely on judgement — which is what it always required and, until 2026-09-02, had never had. **Both briefs have now run against these bytes** *(A7, brief 1's findings withheld from brief 2)*, and four of brief 2's eight findings were closed by measurement rather than argued away — see § 12.14, the two briefs. What is left is the owner's own eyes on their own phone. Screenshot at 540 x 365: `docs/evidence/phase-12-touch-art.png`. **Seven earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. **Re-run on the round-16 diff, 2026-08-31: 3016 passed, 13 skipped of 3029**, Phaser restored to 4.2.1 afterwards. Re-run because the close-out session added four modules under `tools/gen/` and three test files, any of which could have reached for Phaser. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: six PNGs, alpha, six distinct **marks**, own key | **PASS — criterion amended 2026-08-31, owner decision** | Everything measurable passes on the shipped bytes (§ 12.17): six 160×160 PNGs, a two-sided alpha band, six pairwise-distinct engraved marks, each bound to its own key. The two amended words are **five → six** and **silhouettes → marks**: the six deliberately share one round brass disc, so the outline is the same by design and the distinctness that exists to be asserted is of the mark. **The distinctness gate was not loosened** — it already compared marks. § 12.17b. ⚠️ **Re-stated 2026-08-31 with the redesign:** the alpha claim is now **two** bands, a keyed field and an opaque button, because `bakePlateAlpha` is deleted and the bytes are no longer pre-faded — the old three-band assertion would have gone on passing on rim antialiasing alone, which is a gate passing for a reason unrelated to its claim. And the distinctness mask, which came from `keylineMarks`, is now a **fixed central square**: the six are the same button, so inside that square only the glyph can differ, which is a sounder oracle than the one it replaces rather than a weaker one. |
@@ -60,8 +60,8 @@ disagrees with the table above it is the failure this log's own header records**
 against the table and dated every time it moves.
 
 **Derived from the table above, 2026-09-02 mid-session:** 12.19 PASS; 12.13's machine half is built
-and red-proved and its device half is not run. **12.14 and 12.23 NOT MET; 12.13 and 12.14b UNRUN —
-both need the owner's phone. The phase is reported FAILING** until they move.
+and red-proved; 12.14's agent half is MET, both briefs run. **12.23 NOT MET. 12.13, 12.14 and 12.14b
+all await the owner's phone. The phase is reported FAILING** until they move.
 
 - **12.14 is NOT MET on its judgement half; its measurable half PASSES.** The wrench re-shoot did what it was bought to do — every
   stroke of all six faces clears 3:1 at every size in the live 44-48 band, with no exception table —
@@ -976,6 +976,82 @@ Every row applied, verified applied by *"content changed AND the original count 
 gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
+
+### 12.14 — the two briefs, and the four findings that were closed by measuring
+
+**2026-09-02.** `voltagent-qa-sec:ui-ux-tester`, two briefs *(A7)*, brief 1's findings withheld from
+brief 2. This is the first time either brief has run against the bytes the 2026-08-31 redesign
+shipped.
+
+#### Brief 1 — verify the criterion
+
+Drove the running game, solved the viewport that puts a 160-game-px box at each target size, and
+confirmed from the live `UI` scene's own objects that the controls were drawn and interactive at
+that size before capturing. Measured:
+
+| target | achieved | viewport |
+|---|---|---|
+| 44 | 44.070 | 537 × 298 |
+| 45 | 45.033 | 548 × 304 |
+| 46 | 45.997 | 559 × 311 |
+| 47 | 47.030 | 573 × 318 |
+| 48 | 47.992 | 584 × 324 |
+
+65 screenshots: six full-context frames, 30 true-size per-button crops, 30 nearest-neighbour zooms
+of the *same pixels*. **Verdict: all six glyphs read as their action at all five sizes**, including
+`attack` at 47 — the size the retired proxy once flagged — and including `pause` and `walk`, the two
+an earlier brief found unreadable **against the previous art**.
+
+That earlier finding is not contradicted: the art it judged is gone. `pause` was a cogwheel and is
+now a 2×2 grid; `walk` was two bars and is now a boot. Both were re-shot for exactly those findings,
+and this is the first pass to see the result.
+
+#### Brief 2 — how could this pass while the feature is broken
+
+Eight ways, ranked. **Four were closed by going and measuring; four are recorded as standing blind
+spots**, which is the honest split — a brief's job is to name them, not to be talked out of them.
+
+| # | the way | disposition |
+|---|---|---|
+| 1 | This criterion has five recorded prior methodology errors, each caught by a different reviewer and never by the method self-catching. Nothing stops a sixth | **RECORDED.** Structural, and true. Brief 1 avoided all five by construction — live game, true on-screen size, all five sizes, per-button crops of the shipped bytes — but nothing *forces* the next run to |
+| 2 | The 44–48 band may not be where a tester lands: every documented device scale is **above** it (`touchLayout.ts:26-34` — 0.347 → 55.6 px, 0.400 → 64 px), so a screenshot at a real phone viewport never enters the band the criterion names | **APPLIED, and the residual recorded.** Both passes landed in it deliberately: brief 1 at 44.07–47.99, and the pressed/WebKit pass at exactly 44 and 48 (viewports 528 × 297 and 576 × 324). ⚠️ The finding's other half stands: the band's low end needs a canvas narrower than iPhone SE landscape, so on every documented phone the glyphs are **larger** than what was judged. The band is the conservative worst case, not the typical one, and 44 is where a control stops existing at all |
+| 3 | The **pressed** state is never judged. `PLATE_ALPHA_PRESSED` 0.72 leaves 0.28 residual against resting 0.9's 0.10 — nearly 3× more level bleeding through, at the moment a thumb is using the control | **APPLIED.** Captured rest and pressed for all six at 44 and 48 on both engines. The press is proved to have registered rather than assumed: **4 320–4 436 bytes differ** between each rest/pressed pair of a 44 × 44 crop. The marks are opaque, so the extra transparency moves the plate and not the glyph; every one stays legible pressed |
+| 4 | Desktop Chromium at `deviceScaleFactor: 1` is a different pipeline from a phone at DPR 2–3 | **RECORDED.** True, and it is the direction of *more* device pixels for the same CSS size — the easier direction, not the harder one. It is exactly what the owner's device pass is for, and it cannot be closed from here |
+| 5 | The art is judged over whatever background the tester happened to be on; 19.9 % of standing positions have a hazard, an enemy or the goal behind a plate | **RECORDED.** The two documented worst cases — level-01's `brass-sentry` behind the pause plate, level-04's goal under the jump plate — are **12.14b's** device checks by name, so this is covered by a criterion rather than uncovered |
+| 6 | No 12.14 judgement has ever happened on WebKit, and this project shipped a Safari-only defect past 229 green Chromium tests on 2026-09-02 | **APPLIED.** All six glyphs captured on WebKit at 44 and 48, rest and pressed. No rendering difference that affects legibility: the spanner, the 2×2 grid and the boot read the same on both engines |
+| 7 | A screenshot could catch a transitional size — the first draw before a resize settles, or mid-orientation-change — that is never the live steady state | **RECORDED.** M39 gates the stale-size case behind it (two cases, watched red), and both passes confirmed the achieved CSS size from the live canvas before capturing rather than assuming the viewport arithmetic |
+| 8 | A still frame judged in a quiet room is a different judgement from a glance mid-jump under camera shake and outdoor glare | **RECORDED, and irreducible.** No gate closes it, including a rebuilt one. It is what `play` exists for *(vault C4)* |
+
+🔴 **No replacement contrast statistic was built, proposed or run**, by either brief. That was the
+owner's decision of 2026-09-02 and both briefs were told so; brief 2 in particular was told it may
+report an uncovered blind spot but not propose the deleted gate back, and it did exactly that.
+
+**Evidence:** [`docs/evidence/phase-12-touch-44px-pressed-webkit.png`](../evidence/phase-12-touch-44px-pressed-webkit.png)
+— all six controls at **44 CSS px**, four rows: Chromium rest, Chromium pressed, WebKit rest, WebKit
+pressed, each cell the true-size capture at 4×. `pause` has no pressed cell, deliberately.
+
+#### Two findings of the session's own, from doing the work
+
+⚠️ **WebKit has no `Touch` constructor** — `new Touch(...)` throws *"Illegal constructor"*. The e2e
+raw-`TouchEvent` driver in `tests/e2e/touchHarness.ts` therefore **cannot run on WebKit at all**, on
+the one engine every iOS browser uses. The pressed/WebKit pass worked around it with a mouse
+`pointerdown`, which reaches the same `GAMEOBJECT_POINTER_DOWN` handler and the same `paintPlate`
+path. Recorded as the gap it is: the `webkit` project stays deliberately narrow, and extending it to
+touch would need a different driver, not a wider `testMatch`.
+
+⚠️ **A mouse `pointerdown` on Chromium in a `hasTouch` context trips `installFullscreenOnTap`**, and
+the next `setViewportSize` then fails with *"restore it to normal state first"*. That is **M94's
+symptom from the other side** — the guard is `isTouchDevice`, which a `hasTouch` desktop context
+satisfies. Not a defect (a real desktop has `hasTouch: false`); recorded because it will cost the
+next person an hour if it is not written down.
+
+🔴 **And the first pressed-state capture was wrong, which is why it was checked.** `pause` was fifth
+in the capture order and pressing it **opens the level menu** (`touchControlsLayer.ts:381`), so its
+"pressed" frame came back fully black and every capture after it was taken over the menu rather than
+over the level. `pause` is last now and its pressed state is not captured at all: a pressed pause
+plate is a scene transition, not a state a player looks at.
+
+---
 
 ### 12.13 — the gesture checks, and the defect the first one found
 
