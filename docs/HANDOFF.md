@@ -1429,6 +1429,17 @@ Written 2026-09-02 at the tip (`8a560d4`). Everything through Phase 13 is merged
 | suite | unit **3126/0** (220 files) · sim-isolated 3113 + 13 skipped · e2e **229/0** · build + verify-dist ok |
 | phases | 1–11 and 13 done · **12 merged with four criteria open** |
 
+## Owner decisions, taken 2026-09-02 before the session starts
+
+1. **Close all four.** The session's goal is Phase 12 done, not partially done. If one resists, the
+   record says which and why rather than the row saying done.
+2. **12.14 closes HANDS-ON, and no replacement statistic is built.** Owner decision. The criterion
+   always required a hands-on pass and never had one; the deleted contrast gate is explained in the
+   record rather than rebuilt. This is the right call precisely because inventing a statistic after
+   seeing the art it will judge is the post-data selection this phase kept catching.
+3. **No further game work.** Five levels, art, audio, HUD, touch and the responsive view are done and
+   live. Close the QA debt and stop. Do not propose new content, new levels, or new fal spend.
+
 ## The four, in the order they should be attacked
 
 **12.19 — thirteen mutation rows red nothing.** Agent-free, no device, no Codex. Every other
@@ -1445,13 +1456,17 @@ a double-tap on a control. None must scroll, zoom, or drop the contact. The auto
 reachable first — `index.html`'s `touch-action` / `user-scalable` and Playwright's multi-touch
 dispatch can pin the prevention before the device confirms the feel.
 
-**12.14 — the button art's readability.** `voltagent-qa-sec:ui-ux-tester` owns it, and the owner's
-eyes close the rest. 🔴 **Do not rebuild the per-stroke contrast statistic before deciding what it
-measures.** The old one found a dark glyph on a pale disc; the 2026-08-31 redesign puts verdigris in
-every recess, so it counts 12–37 "strokes" per face where six had 1–4. Inventing a replacement after
-looking at the art it will judge is the post-data selection this phase caught repeatedly — decide the
-statistic from the DESIGN (what must be distinguishable at 44 CSS px), or accept that the criterion
-is a hands-on one and close it that way.
+**12.14 — the button art's readability. HANDS-ON, and NO new statistic — owner decision.**
+Run `voltagent-qa-sec:ui-ux-tester` against the shipped bytes (`docs/evidence/phase-12-touch-art.png`
+plus the six PNGs the catalog names), give it **two briefs** *(A7)* with brief 1's findings withheld
+from brief 2, then the owner confirms the six glyphs read at 44–48 CSS px on the phone. Record the
+criterion as what it always was — hands-on — with the deleted per-stroke gate explained.
+
+🔴 **Do NOT rebuild the contrast statistic.** The old one found a dark glyph on a pale disc; the
+2026-08-31 redesign puts verdigris in every recess, so it counts 12–37 "strokes" per face where six
+had 1–4. Its figures were not low, they were meaningless. Inventing a replacement after looking at
+the art it will judge is the post-data selection this phase caught repeatedly, and the owner ruled
+against it on 2026-09-02.
 
 **12.23 — a Codex implementation review that resolves.** Seven rounds (14–20), all `REVISE`, every
 finding applied. ⚠️ **Codex's sandboxed shell cannot spawn processes on this machine**
