@@ -1042,9 +1042,9 @@ has never been tested on a device. Check 2 is where that would show.
 
 ---
 
-### 🔴 The `chromium-touch` project is intermittently red on `main`, and it is NOT this session's doing
+### 🔴 The `chromium-touch` project was intermittently red on `main`, and the cause was geometry
 
-Found while regressing the GAME_OUT repair, and recorded rather than absorbed: a criterion whose e2e
+Found while regressing the GAME_OUT repair, and chased rather than absorbed: a criterion whose e2e
 evidence is intermittently red is not solidly PASS.
 
 **Measured 2026-09-02, one Playwright run at a time, ports 5173 and 4173 freed between each:**
@@ -1059,16 +1059,47 @@ The assertion that fails is 12.12's last one: **`a tap on a retired control move
 `sceneKey` somewhere other than `LevelSelect`. It is **not** a timeout: the wait on `LevelSelect` had
 already succeeded before that line.
 
-⚠️ **Two things are deliberately NOT claimed.** That the branch's lower rate means anything — 2 in
-9 against 3 in 3 is suggestive and nothing more, and post-hoc rate comparison on a flake is exactly
-the reading this phase kept catching. And a cause: the obvious candidate is that Phase 13's
-level-select **buttons** now sit under one of the six retired coordinates, but that was not measured
-and is written as the hypothesis it is.
+#### The cause, measured rather than guessed
 
-**Not fixed in this session.** It is a pre-existing defect on `main`, in a criterion this session
-does not own, and diagnosing it properly means measuring where the tap actually routes. It is
-carried forward as an open item, and it is why the e2e evidence behind 12.12 is described here as
-intermittent rather than green.
+A throwaway probe tapped the six retired coordinates one at a time on `LevelSelect` and read
+`sceneKey` after each. Five left it on `LevelSelect`; **`walk` left it on `Game`.** The geometry
+says why:
+
+| | game px |
+|---|---|
+| the retired `walk` coordinate | **(1520, 208)** |
+| `LevelSelect` `row-0` | x **364.8 – 1555.2**, y **91 – 251**, `interactive: true` |
+
+`walk` is *inside a live level button*. Tapping it starts level 1 — the menu working exactly as
+designed. The intermittency was never randomness in the product: it was whether `row-0` had become
+interactive by the time the tap landed, so a **deterministic overlap** presented as a flake.
+
+🔴 **So this was a defect in the TEST, not in the game.** 12.12's claim is *controls hidden and
+`disableInteractive()`d*, and the case already proves that per control — all six come back
+`interactive: false`, and that assertion never failed. The final line then asserted
+`sceneKey === 'LevelSelect'` after tapping all six, which conflates *"the control is dead"* with
+*"nothing else lives at that coordinate"*. The second is not this criterion's claim, and it is not
+even true.
+
+**Repaired**: the loop now skips a coordinate that a live `LevelSelect` row covers, and asserts on
+the rest by name. To keep that from being a way to assert nothing, it first asserts the uncovered
+set is **non-empty** — a partition that excluded everything would be the vacuous pass this file has
+paid for before. **M108** reds that guard. Measured after the repair: **3 full runs of
+`phase-12-touch.spec.ts`, 10/10 each**, where the same file had been 3 for 3 red.
+
+⚠️ **What is NOT claimed.** That the branch's earlier lower failure rate meant anything — 2 in 9
+against 3 in 3 is a post-hoc rate comparison on a flake, which is the reading this phase kept
+catching, and the real cause turned out to be a race that load changes the odds of. And the other
+baseline failure is **not** explained: *the tap zones move with the view, not with where they were
+built* (`phase-13-viewfill-touch.spec.ts`) failed once in three baseline runs and has not recurred
+in any run since. It is carried forward as an open item with one observation behind it, which is
+not enough to name a cause.
+
+🔴 **And one probe went green and is recorded as such.** **M109** — dropping
+`this.binding.isGameRunning()` from `controlsLive` — leaves 12.12 at 10/10. The pause route unbinds
+the layer first, so `bind(null)` makes the predicate false whatever that term says: the mutation is
+unreachable from this criterion rather than uncaught by it. Whether the term is reachable from any
+path at all was **not** established. That is the open question, and it is a pre-existing one.
 
 ### The 12.19 repair, 2026-09-02
 
