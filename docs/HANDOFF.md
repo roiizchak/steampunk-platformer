@@ -94,10 +94,9 @@ gate, strip both comment kinds first**, and prove it by commenting out the thing
 
 ## What is still owed
 
-🔴 **The hands-on pass on the owner's device.** Deploy a Vercel preview and check in fullscreen:
-no bars left or right, no black band over the sky, no digits on the rotate prompt, buttons read
-solid, the gear count level with its icon, the volume banner gone, the level menu centred with lock
-icons.
+✅ **The hands-on pass on the owner's device RAN**, three times — 2026-09-01, and twice on
+2026-09-02. Nine defects across the three rounds, all fixed, all gated. It closed **12.24**. See
+[qa/session-mobile-polish-02-device-report.md](qa/session-mobile-polish-02-device-report.md).
 
 🔴 **The hazard-visibility pass item 3 owes.** `PLATE_ALPHA` 0.9 **abandons** the occlusion
 criterion rather than weakening it — 22 % residual against a 60 % rule, past the 0.86 measured to
@@ -106,8 +105,11 @@ level-01 where a shooting `brass-sentry` sits for nine consecutive standing posi
 jump plate on level-04 where the goal sits for nine more. **If either is unplayable, 0.9 is wrong
 and the number comes back down.**
 
-⚠️ `max.height` clamping the CSS height on a display taller than 1080 CSS px is **derived from the
-code, not measured** — this box could not produce the case. One look on a 1440p display settles it.
+🔴 **WITHDRAWN 2026-09-02 — `max.height` no longer exists.** It was a `Phaser.Scale.EXPAND`
+clamp, and EXPAND was abandoned in `1257de2`; `src/game/config.ts` now carries `mode: FIT` and no
+`min`/`max` at all, because those bounds reach `displaySize`, which is also the CSS style size. The
+height is held at 1080 by `viewSize.ts` passing `GAME_HEIGHT` to `setGameSize`, which is code with a
+gate on it rather than a clamp with a derivation. Nothing is owed here.
 
 ⚠️ The frame-budget figures in `docs/qa/` were all taken at the design size. They are now a floor
 for a widened view rather than the figure for every size. Nothing has re-measured them.
@@ -1410,3 +1412,74 @@ bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
 - **Phase 4 debt:** only **4.2b** (owner decision — an ordering violation no work can undo) and
   **4.27** remain. 4.10/4.12 were already closed; **4.16 closed this session**. The PRD row was
   stale and is corrected.
+
+---
+
+# NEXT SESSION — the four open Phase 12 criteria
+
+Written 2026-09-02 at the tip (`8a560d4`). Everything through Phase 13 is merged and live;
+**Phase 12 is the only thing not done**, and its row in [PRD.md](PRD.md) names why.
+
+## The state
+
+| | |
+|---|---|
+| branch | `main`, clean, nothing unmerged |
+| live | [steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app) (`5447c8a`) |
+| suite | unit **3126/0** (220 files) · sim-isolated 3113 + 13 skipped · e2e **229/0** · build + verify-dist ok |
+| phases | 1–11 and 13 done · **12 merged with four criteria open** |
+
+## The four, in the order they should be attacked
+
+**12.19 — thirteen mutation rows red nothing.** Agent-free, no device, no Codex. Every other
+criterion in this phase rests on gates, and thirteen of the 92 rows in the matrix are decoration
+*(C2)*. This is the one that can be finished start to finish in a session and the one that makes the
+other three worth having. Start at `docs/qa/phase-12-touch.md § The mutation matrix` and find the
+thirteen; for each, either build the mutation the row's bound actually names or replace the
+statistic. ⚠️ **Build the mutation the bound names, not the convenient one** — that is how the
+first 22 of these were found green.
+
+**12.13 — the gesture checks.** `play`-owned, needs the owner's phone. Three checks, never run:
+a drag that starts on a control and leaves the canvas edge; a two-finger pinch over the play area;
+a double-tap on a control. None must scroll, zoom, or drop the contact. The automated half is
+reachable first — `index.html`'s `touch-action` / `user-scalable` and Playwright's multi-touch
+dispatch can pin the prevention before the device confirms the feel.
+
+**12.14 — the button art's readability.** `voltagent-qa-sec:ui-ux-tester` owns it, and the owner's
+eyes close the rest. 🔴 **Do not rebuild the per-stroke contrast statistic before deciding what it
+measures.** The old one found a dark glyph on a pale disc; the 2026-08-31 redesign puts verdigris in
+every recess, so it counts 12–37 "strokes" per face where six had 1–4. Inventing a replacement after
+looking at the art it will judge is the post-data selection this phase caught repeatedly — decide the
+statistic from the DESIGN (what must be distinguishable at 44 CSS px), or accept that the criterion
+is a hands-on one and close it that way.
+
+**12.23 — a Codex implementation review that resolves.** Seven rounds (14–20), all `REVISE`, every
+finding applied. ⚠️ **Codex's sandboxed shell cannot spawn processes on this machine**
+(`CreateProcessAsUserW failed: 5`) — the prompt must say to use `node_repl` + `fs.readFileSync`, and
+every finding is file-evidence that must be re-verified locally. ⚠️ This row has **twice** stopped
+one review short of the summary beside it; whatever round runs, the summary must name that round.
+
+## Also owed, smaller
+
+- 🔴 **The hazard-visibility pass.** `PLATE_ALPHA` 0.9 **abandons** the occlusion criterion rather
+  than weakening it — 22 % residual against a 60 % rule, past the 0.86 measured to erase content, on
+  owner authority. The replacement check is on the device: stand behind the pause plate on level-01
+  where a shooting `brass-sentry` sits for nine consecutive standing positions, and under the jump
+  plate on level-04 where the goal sits for nine more. **If either is unplayable, 0.9 is wrong and
+  the number comes back down.**
+- ⚠️ **The frame-budget figures in `docs/qa/` were all taken at the design size.** Since the view can
+  now be up to 2560 wide, they are a floor rather than the figure for every size. Nothing has
+  re-measured them. Recorded as the open question it is, not as a number.
+
+## Traps that will cost a session if forgotten
+
+- **Run `test:e2e` per PROJECT, never as one invocation**, and **free ports 5173 AND 4173 between
+  projects, not only at the start of a sweep.** A leaked server made 6.9 read 1.2524 ms and 9.5 read
+  N^0.893 on 2026-09-02; both passed in isolation and the project re-ran 71/71. A warm box reads as a
+  broken game to a wall-clock-bounded gate.
+- **Detect greenness positively, including the COUNT.** A run that selected nothing exits 0.
+  `--list` gives the expected number.
+- **The view is not 1920 wide.** 1920 at exactly 16:9, up to 2560 wide, height pinned at 1080.
+  Anything sized once in `create()` from a literal is wrong on the second size.
+- **A game-pixel assertion cannot see a CSS-pixel defect**, and a source-text gate cannot see a font.
+  Both cost a device round in this session.
