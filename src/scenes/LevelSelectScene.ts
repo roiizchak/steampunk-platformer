@@ -24,15 +24,21 @@
  */
 
 import Phaser from 'phaser';
-import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
 import { bestGears, completedIds, readProgress, safeLocalStorage } from '../game/save';
 import { parseLevel } from '../game/tilemap';
 import { isUnlocked } from '../sim/progress';
 import { updateDebugState } from '../debug/globals';
 import { LEVEL_SELECT_KEY, assetCatalog, levelOrder } from './gameLevelPick';
-import { touchMenuLayout } from '../render/touchLayout';
+import { touchMenuLayout, type HitBox } from '../render/touchLayout';
+import {
+  drawLevelButton,
+  paintLevelButton,
+  resizeLevelButton,
+  type LevelButton,
+} from './levelButtons';
 import { attachRotatePrompt } from './rotateGuard';
 import { attachTapRoutes } from './touchRoutes';
+import { keepTapRoutesSized } from './tapRouteResize';
 
 const TITLE_STYLE = { fontFamily: 'monospace', fontSize: '56px', color: '#f0d79a' } as const;
 const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776' } as const;
@@ -47,28 +53,30 @@ const HINT_STYLE = { fontFamily: 'monospace', fontSize: '22px', color: '#8f8776'
 const TOUCH_HINT_STYLE = { ...HINT_STYLE, fontSize: '40px' } as const;
 const ROW_STYLE = { fontFamily: 'monospace', fontSize: '34px' } as const;
 
-const ROW_HEIGHT = 68;
-const UNLOCKED_COLOUR = '#d9cdb0';
 /**
- * 🔴 Was `#5d5748`, which is **2.64:1** against the config's `#12100e` ground at 11.8 CSS px — not
- * text, texture. On first launch four of the five rows are locked, so a stranger's first view of
- * this menu was one readable row and four unreadable ones, with the word `locked` — the only thing
- * explaining why a tap does nothing — rendered in the ink they cannot read. `#8f8776` is already in
- * the palette and measures 5.33:1. Found by the UI/UX gate.
+ * 🔴 The three row inks live in `levelButtons.ts` now, with the measurements that chose them.
+ *
+ * `LOCKED_COLOUR` was `#5d5748`, which is **2.64:1** against the config's `#12100e` ground at
+ * 11.8 CSS px — not text, texture. On first launch four of the five rows are locked, so a
+ * stranger's first view of this menu was one readable row and four unreadable ones, with the word
+ * `locked` — the only thing explaining why a tap does nothing — rendered in the ink they cannot
+ * read. `#8f8776` is already in the palette and measures 5.33:1. Found by the UI/UX gate, and the
+ * reason `levelButtons.ts` draws an UNFILLED plate: a brass fill puts that 5.33:1 back to 3.52:1.
  */
-const LOCKED_COLOUR = '#8f8776';
-const SELECTED_COLOUR = '#ffd873';
 
-interface Row {
+/** One row: the model, plus the drawn button. `text` keeps its name — see `LevelButton`. */
+interface Row extends LevelButton {
   id: string;
   unlocked: boolean;
   label: string;
-  text: Phaser.GameObjects.Text;
 }
 
 export class LevelSelectScene extends Phaser.Scene {
   private rows: Row[] = [];
   private cursor = 0;
+  /** Held so a resize can re-centre them against the LIVE width, never a literal (vault 6.2). */
+  private title?: Phaser.GameObjects.Text;
+  private hint?: Phaser.GameObjects.Text;
   constructor() {
     super(LEVEL_SELECT_KEY);
   }
@@ -81,6 +89,8 @@ export class LevelSelectScene extends Phaser.Scene {
   init(): void {
     this.rows = [];
     this.cursor = 0;
+    this.title = undefined;
+    this.hint = undefined;
     // 🔴 `started` belongs here for exactly the reason the paragraph above gives, and the Codex
     // round-3 review caught that the latch was declared as a FIELD INITIALISER instead. Phaser
     // preserves the scene instance across a shutdown (`Systems.js:760-788`), so a field initialiser
@@ -96,30 +106,34 @@ export class LevelSelectScene extends Phaser.Scene {
     const save = readProgress(safeLocalStorage());
     const done = completedIds(save);
 
-    // 🔴 `ROW_HEIGHT` is 68 game px, which is 23.6 CSS px at the worst in-scope scale of 0.347 —
-    // under half the floor this phase sets for every other target, and widening each row's hit
-    // area in place would overlap its neighbours. So a touch device gets its own row band from
-    // `touchMenuLayout`, and the heading and hint move out of that band rather than over it. The
-    // keyboard layout on desktop is byte for byte what it was.
+    // 🔴 **ONE layout path since 2026-09-01, not two.** The desktop rows were 68 game px of bare
+    // text — 23.6 CSS px at the worst in-scope scale, under half the floor this project sets for
+    // every other target — and `touchMenuLayout(5, 1920, 1080)` yields rows of 1190 x 160, bigger
+    // than that at every viewport and never smaller. So the band is unconditional and the desktop
+    // `ROW_HEIGHT` arithmetic is gone. The owner asked for buttons on BOTH, so there is no longer a
+    // reason to keep a second geometry alive to drift.
+    //
+    // `touch` still decides two things, and only two: whether tap routes attach at all (criterion
+    // 12.7 — desktop gains no hit targets) and what the hint STRING says, since a phone has no
+    // ENTER key.
     const touch = this.game.device.input.touch;
-    const band = touch ? touchMenuLayout(order.length, GAME_WIDTH, GAME_HEIGHT) : [];
+    // ⚠️ The LIVE size, and ONE array mutated in place from here on. With a filled view
+    // the view can widen while this screen is up, and `attachTapRoutes` and `attachRotatePrompt`
+    // both capture this reference — `RotatePrompt.refresh()` re-reads it every call — so one
+    // in-place rewrite keeps the zones and the rotate guard on the same geometry.
+    // `tapRouteResize.ts` explains why replacing the array instead would split them.
+    const view = this.scale.gameSize;
+    const band = touchMenuLayout(order.length, view.width, view.height);
 
-    this.add
-      .text(GAME_WIDTH / 2, touch ? 80 : 160, 'SELECT LEVEL', TITLE_STYLE)
-      .setOrigin(0.5)
-      .setScrollFactor(0);
+    // The band has drawn edges at 91 and 1019, so the heading and the hint move OUT of it rather
+    // than over it. The old desktop heading at y = 160 would land inside row 0.
+    this.title = this.add.text(view.width / 2, 48, 'SELECT LEVEL', TITLE_STYLE).setOrigin(0.5);
 
-    const top = GAME_HEIGHT / 2 - (order.length * ROW_HEIGHT) / 2;
     this.rows = order.map((id, index) => {
       const unlocked = isUnlocked(id, done, order);
       const label = this.rowLabel(id, unlocked, save, index);
-      const row = band[index];
-      const y = row ? row.y + row.h / 2 : top + index * ROW_HEIGHT;
-      const text = this.add
-        .text(GAME_WIDTH / 2, y, label, ROW_STYLE)
-        .setOrigin(0.5)
-        .setScrollFactor(0);
-      return { id, unlocked, label, text };
+      const box = band[index]!;
+      return { id, unlocked, label, ...drawLevelButton(this, box, label, unlocked, ROW_STYLE) };
     });
 
     // Open on the furthest playable level rather than on row 0. A player with four levels done wants
@@ -127,24 +141,24 @@ export class LevelSelectScene extends Phaser.Scene {
     const lastPlayable = this.rows.map((row) => row.unlocked).lastIndexOf(true);
     this.cursor = lastPlayable < 0 ? 0 : lastPlayable;
 
-    this.add
+    this.hint = this.add
       .text(
-        GAME_WIDTH / 2,
-        touch ? GAME_HEIGHT - 50 : GAME_HEIGHT - 140,
+        view.width / 2,
+        view.height - 34,
         // A phone has no UP, no DOWN and no ENTER; naming them here was advertising keys the
         // reader does not have, on the one screen built for the reader who does not have them.
+        // Only the STRING and the STYLE stay conditional — the position no longer is.
         touch ? 'TAP a level to play' : 'UP / DOWN choose   ·   ENTER play',
         touch ? TOUCH_HINT_STYLE : HINT_STYLE,
       )
-      .setOrigin(0.5)
-      .setScrollFactor(0);
+      .setOrigin(0.5);
 
     this.bindKeys();
     // Tapping a row moves the cursor onto it and plays it — the same two steps ENTER takes, so a
     // LOCKED row repaints and refuses exactly as it does for the keyboard. Letting a tap bypass
     // `play()`'s refusal would hand the player level-01 while the menu showed level-04 selected:
     // `resolveEntryLevel` silently substitutes `order[0]` for a locked id.
-    attachTapRoutes(this, touch, band, (id) => {
+    const routes = attachTapRoutes(this, touch, band, (id) => {
       const index = Number(id.slice('row-'.length));
       if (!Number.isInteger(index) || index < 0 || index >= this.rows.length) return;
       this.cursor = index;
@@ -156,6 +170,11 @@ export class LevelSelectScene extends Phaser.Scene {
     // so this screen says it itself. The same call also makes the row taps above dead while the
     // prompt is up (`touchRoutes.ts`).
     attachRotatePrompt(this, touch, band);
+    keepTapRoutesSized(this, routes, (size) => {
+      const next = touchMenuLayout(order.length, size.width, size.height);
+      for (const [i, box] of next.entries()) if (band[i]) Object.assign(band[i], box);
+      this.placeRows(band);
+    });
     this.paint();
 
     /**
@@ -231,11 +250,20 @@ export class LevelSelectScene extends Phaser.Scene {
     this.paint();
   }
 
+  /** Move everything drawn onto the band's current geometry. Called on every resize. */
+  private placeRows(band: readonly HitBox[]): void {
+    const { width, height } = this.scale.gameSize;
+    this.title?.setPosition(width / 2, 48);
+    this.hint?.setPosition(width / 2, height - 34);
+    this.rows.forEach((row, index) => {
+      const box = band[index];
+      if (box) resizeLevelButton(row, box);
+    });
+  }
+
   private paint(): void {
     this.rows.forEach((row, index) => {
-      const selected = index === this.cursor;
-      row.text.setColor(selected ? SELECTED_COLOUR : row.unlocked ? UNLOCKED_COLOUR : LOCKED_COLOUR);
-      row.text.setText(selected ? `> ${row.label}` : row.label);
+      paintLevelButton(row, index === this.cursor, row.unlocked);
     });
   }
 

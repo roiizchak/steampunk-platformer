@@ -28,12 +28,31 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
   pixelArt: PIXEL_ART,
   seed: [PHASER_RNG_SEED],
   scale: {
-    // The default scale mode is NONE (0), not FIT — without this line 1920x1080 renders
-    // unscaled and overflows the viewport.
+    /**
+     * 🔴 **`FIT` stays — what changed on 2026-09-01 is the SIZE it fits.**
+     *
+     * The default mode is NONE (0), so this line is not optional. Under a FIXED 1920x1080 view a
+     * landscape phone (~19.5:9 = 2.17) left **17.9 % of the width black** — 151 CSS px on an
+     * iPhone 14, 160 on a Pixel 7, which is what the owner reported as "a lot less space on the
+     * right and left". The answer is `src/game/viewSize.ts`: it gives the view the viewport's own
+     * aspect at a fixed height, so `FIT` has nothing left to letterbox.
+     *
+     * `Phaser.Scale.EXPAND` computes that size itself and would look like the obvious choice. It
+     * is not usable here: its `min`/`max` clamp is applied to `displaySize`, which is also the CSS
+     * style size, so clamping the view also clamps the canvas in CSS pixels. Measured, not
+     * reasoned — the full account and the line numbers are in `viewSize.ts`.
+     */
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
     // Floor display/style sizes; avoids fractional CSS sizes that shimmer on scaled pixel art.
     autoRound: true,
+    /**
+     * **The design view, the guaranteed minimum, and the floor `viewSize.ts` clamps to.**
+     *
+     * No `min`/`max` here on purpose: they would reach `displaySize` and clamp the CSS size in the
+     * bargain (see `viewSize.ts`). The view's bounds are `GAME_WIDTH` and `MAX_GAME_WIDTH`, applied
+     * where the view is decided.
+     */
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     // 🔴 Send the WRAPPER fullscreen, not the canvas — and the difference is the rotate overlay.

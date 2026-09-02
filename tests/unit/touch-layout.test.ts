@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { liveViewWidth } from '../../src/game/viewSize';
 import {
   TOUCH_BOX_PX,
   TOUCH_EDGE_PX,
@@ -236,5 +237,83 @@ describe('touchMenuLayout', () => {
   it('returns nothing for a catalog with no levels, rather than one row of NaN', () => {
     expect(touchMenuLayout(0, GAME_WIDTH, GAME_HEIGHT)).toEqual([]);
     expect(touchMenuLayout(-1, GAME_WIDTH, GAME_HEIGHT)).toEqual([]);
+  });
+});
+
+/**
+ * **The controls have to clear the phone's OWN gesture zones, and only a CSS number can say so.**
+ *
+ * `TOUCH_EDGE_PX` is in game pixels, and game pixels are not what a thumb or an operating system
+ * measures. On a landscape phone the canvas fills the viewport height, so one game pixel is roughly
+ * `viewportHeight / 1080` CSS px — about a third. 64 game px, which shipped, was **19-24 CSS px**:
+ * inside Android's back-gesture strip (~24 CSS px in from each side edge) at every viewport this
+ * project supports. The owner reported it from the device as *"too close to the edges … need to
+ * decide where to move them so it be easy to tap them"*.
+ *
+ * 🔴 That defect was INVISIBLE to every gate in this file, because every assertion here is in
+ * game pixels and 64 satisfied all of them. This is the missing one. It converts through
+ * `liveViewWidth` — the real function the running game uses — rather than restating its arithmetic,
+ * so a change to how the view is sized reaches this floor instead of going around it.
+ */
+describe('the touch controls clear the system gesture zones, in CSS pixels', () => {
+  /**
+   * Every landscape viewport `phase-12-viewport.spec.ts` plays at — the ones with no rotate prompt.
+   * The two 325-height rows are browser chrome eating the viewport, and they are the worst case:
+   * a scale of 0.301, not the 0.347 of a chrome-less iPhone SE.
+   */
+  const PLAYABLE: ReadonlyArray<readonly [string, number, number]> = [
+    ['iPhone SE landscape', 667, 375],
+    ['iPhone 14 landscape', 844, 390],
+    ['Pixel 7 landscape', 892, 412],
+    ['iPhone SE landscape, Safari chrome', 667, 325],
+    ['iPhone 14 landscape, safe area + chrome', 750, 325],
+    ['Pixel 7 landscape, Chrome chrome', 892, 356],
+    ['declared minimum', 852, 480],
+    ['iPad landscape', 1024, 768],
+  ];
+
+  /** One game pixel in CSS pixels: `Phaser.Scale.FIT` takes the constraining axis. */
+  const cssScale = (vw: number, vh: number): number =>
+    Math.min(vw / liveViewWidth(vw, vh), vh / GAME_HEIGHT);
+
+  /**
+   * The floor, and what it is derived from rather than chosen to fit.
+   *
+   * Android's back-gesture strip reaches ~24 CSS px in from each side edge; iOS's home indicator
+   * owns a comparable band along the bottom. 32 is that strip plus a third of itself, which is the
+   * least that can be called "clear of it" rather than "just outside it". The shipped 128 measures
+   * **38.5 CSS px at the worst supported viewport** and 68.3 on an iPad, so this is a floor with
+   * real headroom under it — not a bound drawn around the number that happens to ship.
+   */
+  const MIN_CSS_INSET = 32;
+
+  it('keeps every control at least 32 CSS px from the edge, at every playable viewport', () => {
+    for (const [name, vw, vh] of PLAYABLE) {
+      const inset = TOUCH_EDGE_PX * cssScale(vw, vh);
+      expect(inset, `${name} (${vw}x${vh}): ${inset.toFixed(1)} CSS px from the edge`)
+        .toBeGreaterThanOrEqual(MIN_CSS_INSET);
+    }
+  });
+
+  it('is a floor the RETIRED 64 px inset fails — so it can go red', () => {
+    // 🔴 A floor no plausible value violates is decoration *(C2)*. The value this replaced is
+    // the proof: 64 breaches it on every PHONE, which is every viewport the owner's report came
+    // from. It is scoped to phones deliberately — an iPad landscape puts 64 at 34.1 CSS px, which
+    // clears this floor, so a floor tested on a tablet alone would never have caught the report.
+    const phones = PLAYABLE.filter(([, , vh]) => vh <= 480);
+    expect(phones.length, 'the phone rows went missing').toBe(7);
+    for (const [name, vw, vh] of phones) {
+      expect(64 * cssScale(vw, vh), `${name}: the shipped 64 would have passed this floor`)
+        .toBeLessThan(MIN_CSS_INSET);
+    }
+  });
+
+  it('does not push the four play controls into each other at the narrowest view', () => {
+    // The cost of moving in from the edge is play area, and it is the reason the inset is not simply
+    // made enormous. Each end holds `edge + box + gap + box`; what is left is the clear middle.
+    const perEnd = TOUCH_EDGE_PX + TOUCH_BOX_PX + TOUCH_GAP_PX + TOUCH_BOX_PX;
+    expect(GAME_WIDTH - 2 * perEnd, 'the controls have eaten the play area').toBeGreaterThan(900);
+    expect(byId('right').x + TOUCH_BOX_PX, 'the movement pair reaches the action pair')
+      .toBeLessThan(byId('attack').x);
   });
 });

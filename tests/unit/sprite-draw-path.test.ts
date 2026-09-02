@@ -176,16 +176,96 @@ describe('UIScene.ts fires the gear pop and stops what it started', () => {
     expect(render.slice(0, 400)).toContain('this.gearPop?.pop()');
   });
 
-  it('destroys the gear pop AND the flyers on SHUTDOWN, and nulls the pop', () => {
+  it('measures BOTH strings and hands the combination to hudLayout, in that order', () => {
+    /**
+     * 🔴 The half `hud-counter-ink.test.ts` cannot reach. That file proves `hudLayout` honours a
+     * supplied fraction and that the arithmetic combining two measurements is right; nothing there
+     * notices if `UIScene` stops supplying one — the counter would silently fall back to
+     * `DIGIT_INK_CENTRE_FRACTION` and every layout assertion would stay green while the count sat
+     * visibly off its icon. That is the defect the owner reported, twice.
+     *
+     * Source text rather than a fake scene, because `UIScene` value-imports Phaser and cannot be
+     * constructed under `environment: 'node'` — the weaker of the two draw-path idioms, chosen here
+     * for the reason CLAUDE.md gives.
+     */
+    const layout = from(src, 'private applyLayout()');
+    expect(layout, 'the measured fraction never reaches hudLayout').toContain(
+      'measuredInkCentreFraction(',
+    );
+
+    // 🔴 **TWO measurements, of two different strings.** `getTextMetrics()` describes the
+    // style's test string — the box Phaser lays out and the baseline it uses. `digitInkAscent`
+    // describes the digits. Passing the first alone is exactly the conflation that put the count
+    // 4.4 px low on the owner's device.
+    expect(layout, 'the layout metrics are never read').toContain('getTextMetrics()');
+    expect(layout, 'nothing measures the DIGITS — only the test string').toContain(
+      'digitInkAscent(this.counter)',
+    );
+
+    // ⚠️ The third argument is the FONT SIZE. `TextMetrics.fontSize` is `ascent + descent`
+    // (`MeasureText.js:38`) — the box height — and dividing by it is precisely what shipped wrong.
+    // The only correct denominator in reach is the layout's own `fontPx`.
+    expect(layout, 'the retired denominator is back').not.toMatch(/metrics\s*\.\s*fontSize/);
+    expect(layout, 'the fraction is not divided by the layout font size').toMatch(
+      /measuredInkCentreFraction\([\s\S]{0,200}?this\.layout\.counter\.fontPx/,
+    );
+
+    // ⚠️ ORDER. The counter is created with no `fontSize`, so metrics read before
+    // `setFontSize` describe the default size rather than the one that will draw — a measurement of
+    // the wrong font, presented as the right one. It applies to BOTH measurements: `digitInkAscent`
+    // reads the `Text`'s own 2D context, which only carries the resolved font after `setFontSize`.
+    const setSize = layout.indexOf('this.counter.setFontSize(');
+    // Qualified: the prose above the call names `getTextMetrics()` in backticks, and an unqualified
+    // needle finds the COMMENT first — which would put `measure` before `setSize` and fail on
+    // correct code.
+    const measure = layout.indexOf('this.counter.getTextMetrics()');
+    const inkMeasure = layout.indexOf('digitInkAscent(this.counter)');
+    expect(setSize, 'the counter font size is never applied in applyLayout').toBeGreaterThan(-1);
+    expect(
+      setSize,
+      'the layout metrics are read BEFORE the font size is applied — that measures the wrong font',
+    ).toBeLessThan(measure);
+    expect(
+      setSize,
+      'the digit ink is measured BEFORE the font size is applied — same wrong font',
+    ).toBeLessThan(inkMeasure);
+
+    // And the arithmetic is not re-derived here: `measuredInkCentreFraction` owns the halving and
+    // the subtraction, and a second copy of them is how the two halves drift apart.
+    expect(layout, 'UIScene re-derives the ink centre instead of calling the shared function')
+      .not.toMatch(/ascent\s*[-/]/);
+  });
+
+  it('destroys the gear pop AND the flyers when the scene retires, and nulls the pop', () => {
     // The handler exists specifically to stop tweens before their targets are destroyed and cites
     // the Phase 6 incident three lines above. Phase 9 added two more tween owners to this scene and
     // added neither. `gearPop` must also be NULLED: `applyLayout` calls `destroy()` on it, so after
     // a re-`create()` the first layout settles a destroyed icon from the previous run's display list.
-    const shutdown = from(src, 'Phaser.Scenes.Events.SHUTDOWN');
-    const handler = shutdown.slice(0, shutdown.indexOf('\n  }'));
-    expect(handler).toContain('this.gearPop?.destroy()');
-    expect(handler).toContain('this.gearPop = undefined');
-    expect(handler).toContain('this.flyers?.destroy()');
+    //
+    // 🔴 **Anchored on `const retire`, not on the SHUTDOWN literal.** The handler was an inline
+    // arrow passed straight to `events.once(SHUTDOWN, …)` until 2026-09-02, when Codex's
+    // implementation review (finding 3) required it on DESTROY as well and it became a named
+    // function subscribed twice. The literal then appeared AFTER the body rather than before it, so
+    // this slice read empty and the case failed — a gate anchored on the shape of the code rather
+    // than on the thing it is checking.
+    const handler = from(src, 'const retire = ()');
+    const body = handler.slice(0, handler.indexOf('\n    };'));
+    expect(body).toContain('this.gearPop?.destroy()');
+    expect(body).toContain('this.gearPop = undefined');
+    expect(body).toContain('this.flyers?.destroy()');
+  });
+
+  it('subscribes that retirement to DESTROY as well as SHUTDOWN', () => {
+    // 🔴 A ScaleManager listener is GAME-global, and removing an active scene reaches DESTROY
+    // without ever reaching SHUTDOWN — the lifecycle `rotateGuard.ts` already documents. Subscribed
+    // to only one of the two, `applyLayout` survives its scene and re-lays-out destroyed objects on
+    // the next resize. That became reachable the moment the view stopped being a fixed size.
+    expect(src).toContain('Phaser.Scenes.Events.SHUTDOWN, retire');
+    expect(
+      src,
+      'the HUD retires on SHUTDOWN only — a scene removed while active leaves a global resize ' +
+        'listener pointed at destroyed objects',
+    ).toContain('Phaser.Scenes.Events.DESTROY, retire');
   });
 });
 

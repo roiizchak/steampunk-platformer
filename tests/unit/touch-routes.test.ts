@@ -244,3 +244,64 @@ describe('a FULL-SCREEN route is dead under the prompt too, however big its own 
     expect(taps, 'a 40 CSS px target took a tap it is too small to be aimed at').toEqual([]);
   });
 });
+
+/**
+ * **The zones follow the targets, and the rotate guard follows with them.**
+ *
+ * 🔴 The filled view (2026-09-01) made the view able to change while a screen is up. These
+ * zones are built once and were never moved: a rotation or a fullscreen toggle re-lays-out the
+ * drawn content and leaves them where the buttons used to be — a menu that answers taps in the
+ * wrong places, which reads as the game ignoring the player. Named by the Codex plan review,
+ * round 1.
+ */
+describe('updateTargets moves the zones the caller already owns', () => {
+  it('writes the mutated geometry onto the existing zones', () => {
+    const h = scene();
+    // ONE array, mutated in place — the contract `tapRouteResize.ts` documents.
+    const targets = RECTS.map((r) => ({ ...r }));
+    const routes = attachTapRoutes(h.scene, true, targets, () => {});
+
+    const before = h.zones.map((z) => ({ x: z.x, y: z.y, w: z.w, h: z.h }));
+    expect(before.length, 'no zones were built — this case would prove nothing').toBe(2);
+
+    targets[0]!.x = 900;
+    targets[0]!.w = 700;
+    routes.updateTargets();
+
+    expect(h.zones[0]!.x, 'the zone stayed where the old layout put it').toBe(900);
+    expect(h.zones[0]!.w).toBe(700);
+    // And only the box that moved: a loop writing every zone from target 0 would pass the two
+    // assertions above.
+    expect(
+      { x: h.zones[1]!.x, y: h.zones[1]!.y, w: h.zones[1]!.w, h: h.zones[1]!.h },
+      'an untouched target moved its zone anyway',
+    ).toEqual(before[1]);
+  });
+
+  it('creates no new zones — it moves the ones already there', () => {
+    // A re-create would drop the pointer handlers and leave the old zones interactive underneath.
+    const h = scene();
+    const targets = RECTS.map((r) => ({ ...r }));
+    const routes = attachTapRoutes(h.scene, true, targets, () => {});
+    const count = h.zones.length;
+    routes.updateTargets();
+    routes.updateTargets();
+    expect(h.zones.length, 'updateTargets built new zones instead of moving them').toBe(count);
+  });
+
+  it('is inert after destroy, so a late resize cannot touch dead zones', () => {
+    const h = scene();
+    const targets = RECTS.map((r) => ({ ...r }));
+    const routes = attachTapRoutes(h.scene, true, targets, () => {});
+    routes.destroy();
+    targets[0]!.x = 900;
+    expect(() => routes.updateTargets()).not.toThrow();
+  });
+
+  it('the no-touch route answers updateTargets too, rather than throwing', () => {
+    // `NO_ROUTES` is what a desktop gets. A caller wiring a resize handler must not have to ask.
+    const h = scene();
+    const routes = attachTapRoutes(h.scene, false, RECTS, () => {});
+    expect(() => routes.updateTargets()).not.toThrow();
+  });
+});

@@ -227,6 +227,8 @@ The controls banner now prints the level beside the keys that move it: `[ ] volu
 `[ ] volume muted`. It is the only readout in play, and at the top of the ladder it is the *whole*
 answer to the first complaint — `]` cannot do anything at 100 %, and now the screen says so.
 
+⚠️ **Desktop only from 2026-09-01 (owner decision).** A touch device draws **no banner at all** — `helpLine` returns `''` there, above the DEV suffix. The volume is not the game's to report on a phone: the player sets it with the hardware keys and the OS draws its own overlay. Everything below describes the keyboard build, which is unchanged.
+
 The chain is: `gameInput`'s listener emits `AUDIO_CHANGED` on the owning scene → `HelpBannerLayer`
 marks itself dirty → its next layout re-reads a content **provider** instead of a string captured at
 construction. An event rather than a callback argument because `GameScene.ts` sits one line under the

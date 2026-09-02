@@ -63,6 +63,23 @@ const VIEWPORTS: Viewport[] = [
   { name: 'desktop', width: 1920, height: 1080 },
   { name: 'iPhone 14 portrait', width: 390, height: 844, expectPrompt: true },
   { name: 'Pixel 7 portrait', width: 412, height: 892, expectPrompt: true },
+  /**
+   * 🔴 **HELD OUT — added 2026-09-01 with the filled view, and none of them had a say in the
+   * bounds above.** Every viewport before this line was chosen while the bounds were being set, so
+   * all of them are in-sample: they cannot tell us the floors hold anywhere the author did not
+   * already look *(the held-out rule, CLAUDE.md §5)*. These three are the aspects the fill newly makes
+   * reachable, and they are here to be measured against bounds that were fixed without them.
+   *
+   *   - **21:9 landscape** — inside the ceiling, so the view widens to its aspect and fills.
+   *   - **just past the ceiling** — 2.60, wider than `MAX_GAME_WIDTH / GAME_HEIGHT` = 2.37, so it
+   *     clamps and pillarboxes. The behaviour there is chosen rather than discovered.
+   *
+   * ⚠️ A narrower-than-16:9 case is NOT added here: `iPad landscape` above is already 4:3, and
+   * copying it under a "held out" label would be a duplicate presented as new evidence. The height
+   * clamp it exercises is proved instead by the `letterboxed` case in `phase-06-chrome.spec.ts`.
+   */
+  { name: '21:9 landscape (held out)', width: 1008, height: 432 },
+  { name: 'past the aspect ceiling (held out)', width: 1040, height: 400 },
 ];
 
 test.beforeEach(async ({ page }) => {

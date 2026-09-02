@@ -664,6 +664,8 @@ digits only so `verify-dist.mjs`'s shipped-prose sweep stays clean. A count that
 the phone is turned means the poll is dead; a count that rises while the numbers stay portrait means
 the viewport is. **M90** reds the readout.
 
+⚠️ **Superseded 2026-09-01 — the instrument is DEV-only now.** It answered its question: the shortfall was 2.1 px of browser chrome, not an arithmetic error. On owner instruction the readout was withdrawn from production; the `<div class="diag">` left `index.html` entirely and is injected by `browserHost().report()` under `import.meta.env.DEV`. Injecting rather than merely guarding the write is the load-bearing half: deleting the markup while leaving `report()` calling `getElementById` would have made the DEV instrument silently inert behind its own `el !== null` guard — a decision function with no consumer, which is the defect M90 exists to catch. M90's DEV half is now the `the DEV diagnostic node` cases (behavioural, against a hand-rolled fake document — `environment: 'node'` and frozen deps rule out jsdom); its production half is the `rotate-diag` entry in `verify-dist.mjs`'s DEV-symbol sweep, which also covers `dist/index.html` so a re-added static div is caught by the same line.
+
 **M88 and M89 red the two halves**, and M89's first attempt stayed green and is recorded as such:
 `white-space: nowrap` at the shipped 14 px does not overflow a 320 px phone, because a 14 px DOM
 string is not wide enough to. The gate measures overflow and the mutation has to produce some.

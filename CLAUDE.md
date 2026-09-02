@@ -13,11 +13,22 @@ Ten phases, one per session, each built on a `phase-NN-name` branch and merged t
 approval. **[PRD.md § The phases](docs/PRD.md#the-phases) is the authority on what is done** — never
 a sentence in this file. Resuming mid-phase starts at [HANDOFF.md](docs/HANDOFF.md).
 
-**The world contract:** 96 px grid · camera zoom 1 · 1920 × 1080 view · 132 × 288 px character at
+**The world contract:** 96 px grid · camera zoom 1 · **1920 × 1080 design view, and the guaranteed
+minimum; the LIVE view may be up to `MAX_GAME_WIDTH` × 1080** · 132 × 288 px character at
 `RENDER_SCALE` 6 · `PLAYER_BOX` 22 × 48 sim units. Published in
 [ASSET-PIPELINE.md § 0a](docs/ASSET-PIPELINE.md), pinned by `tests/unit/tilemap-data.test.ts`.
 **`src/game/constants.ts` is the authority; prose is not** — these were 32 px / 44 × 96 / scale 2
 before Phase 4's 3× rescale, and three documents went on saying so.
+
+⚠️ **The view stopped being a fixed size on 2026-09-01, and that line used to read "1920 × 1080
+view".** A fixed 16:9 view pillarboxed a landscape phone — ~19.5:9 against a 16:9 game leaves
+**17.9 %** of the width black — and filling the screen is incompatible with holding a fixed-width
+view. `src/game/viewSize.ts` sets the view to the viewport's own aspect on every resize and
+`Phaser.Scale.FIT` then has nothing to letterbox; **`Phaser.Scale.EXPAND` cannot be used here** and
+that file says why in full. **Height is invariant**, pinned at 1080, which is what
+keeps every `gameH / GAME_HEIGHT` ratio at exactly 1 and leaves the grid, the zoom and every tile
+measurement untouched. Only the width breathes. A viewport wider than the ceiling pillarboxes again,
+deliberately and with a spec of its own.
 
 Animation timings are settled for `idle`, `walk`, `run`, `jump` and `fall` — see
 `public/assets/index.json` and `character-bounds.json`. ⚠️ This used to end *"`run`'s stride is still

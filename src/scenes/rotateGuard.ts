@@ -90,18 +90,51 @@ export function attachRotatePrompt(
   // cached CSS width, and that cache is what was stale through a rotation. `refresh()` on the
   // ScaleManager is the engine's own re-measure, and it is the reason the six hit areas stop being
   // live on the same event that clears the overlay rather than up to half a second later.
-  // ⚠️ **Re-entrancy guard, and it is not optional.** `ScaleManager.refresh()` ends by emitting
-  // RESIZE synchronously, and this function is subscribed to RESIZE — so calling it from inside
-  // itself recurses until the stack is gone. Written without the guard it took down the page with
-  // `RangeError: Maximum call stack size exceeded` on the first e2e run, which is the run that
-  // exists because the two repairs before it were deployed without one.
-  // Street-Fighter's `main.ts` carries the same guard for the same reason.
   let refreshing = false;
+  /**
+   * 🔴 **The engine re-measure is CONDITIONAL, and that is finding 1 of the Codex implementation
+   * review.** This ran `scene.scale.refresh()` unconditionally, and it is subscribed to
+   * `SCENE_UPDATE` — so it ran on **every frame**.
+   *
+   * `ScaleManager.refresh()` re-runs `updateScale()` (which writes `canvas.style` and calls
+   * `updateCenter()`, and `updateCenter` calls `getBoundingClientRect()` — a forced layout),
+   * `updateBounds()`, `updateOrientation()`, and then emits RESIZE **globally**. Every scale
+   * listener in the game therefore fired every frame while the title or the level menu was up.
+   * `UIScene.applyLayout` is one of them: it destroys and recreates the gear-pop attachment and,
+   * since the digit descent became a measured number, calls `setFontSize` — which synchronously
+   * re-runs Phaser's `MeasureText`. Per frame, for a size that had not changed.
+   *
+   * The polling itself is NOT the defect and must stay. iOS Safari does not reliably fire
+   * `window.resize` on a rotation or when its toolbars slide, and Phaser subscribes to neither
+   * `orientationchange` nor `visualViewport` — which is why the owner's phone kept the overlay up
+   * through two separate repairs. What the poll is FOR is noticing that the viewport moved without
+   * an event; so it now reads the viewport itself, cheaply, and only pays for the engine re-measure
+   * when the numbers actually changed. `prompt.refresh()` still runs every frame: it is our own
+   * arithmetic over values already in hand, and it is what clears the overlay.
+   *
+   * ⚠️ **Re-entrancy guard, and it is not optional.** `ScaleManager.refresh()` ends by emitting
+   * RESIZE synchronously, and this function is subscribed to RESIZE — so calling it from inside
+   * itself recurses until the stack is gone. Written without the guard it took down the page with
+   * `RangeError: Maximum call stack size exceeded` on the first e2e run, which is the run that
+   * exists because the two repairs before it were deployed without one.
+   * Street-Fighter's `main.ts` carries the same guard for the same reason.
+   */
+  let seenW = -1;
+  let seenH = -1;
   const refresh = (): void => {
     if (refreshing) return;
     refreshing = true;
     try {
-      scene.scale.refresh?.();
+      // `isTouchDevice` gates the engine re-measure, not the poll. On a desktop the overlay can
+      // never show and there are no touch hit areas to re-measure, so the one thing `scale.refresh()`
+      // buys is not bought there — it was one wasted forced layout per attachment, and a gate that
+      // asserted zero is what made it visible.
+      const [w, h] = isTouchDevice ? viewportSize() : [seenW, seenH];
+      if (w !== seenW || h !== seenH) {
+        seenW = w;
+        seenH = h;
+        scene.scale.refresh?.();
+      }
       prompt.refresh();
     } finally {
       refreshing = false;
@@ -127,6 +160,21 @@ export function attachRotatePrompt(
   for (const [target, event] of domSubscriptions()) target.addEventListener(event, refresh);
   scene.events.once(SCENE_SHUTDOWN, teardown);
   scene.events.once(SCENE_DESTROY, teardown);
+}
+
+/**
+ * The live viewport, read cheaply, from the most accurate source available.
+ *
+ * `visualViewport` is the one that moves when iOS Safari's toolbars slide — the case
+ * `domSubscriptions` below subscribes to and the case `window.innerWidth` does not report. Falls
+ * back to `window`, and to a pair that can never equal a real size where there is no DOM, so the
+ * caller's "has it changed" test is false on the first read and the engine re-measure still happens
+ * once.
+ */
+function viewportSize(): [number, number] {
+  if (typeof window === 'undefined') return [-1, -1];
+  const vv = (window as { visualViewport?: { width: number; height: number } }).visualViewport;
+  return vv ? [Math.round(vv.width), Math.round(vv.height)] : [window.innerWidth, window.innerHeight];
 }
 
 /**

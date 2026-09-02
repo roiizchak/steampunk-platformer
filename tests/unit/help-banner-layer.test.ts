@@ -234,3 +234,69 @@ describe('and it tears itself down', () => {
     expect(h.layer.object()).toBeNull();
   });
 });
+
+/**
+ * **The empty line: a touch device gets no banner, and must not pay for one every frame.**
+ *
+ * `gameDev.helpLine` returns `''` on a touch device from 2026-09-01, so `content()` is empty for
+ * the whole session there. Two separate claims, and the second is the one that is easy to get
+ * wrong:
+ *
+ *  1. nothing is drawn — the object is hidden, and `placed` is nulled so no gate can read a stale
+ *     coordinate for an invisible thing;
+ *  2. **the work stops.** `dirty` is cleared only at the very end of `layout()`, so an early return
+ *     that merely hid the banner would re-enter on every frame forever — `hudObjects()`, two
+ *     `helpBannerLayout()` passes and a `getWrappedText()`, on the device with the least budget for
+ *     it. Named by the Codex plan review, round 1.
+ */
+describe('an empty legend draws nothing and stops working', () => {
+  it('hides the banner and clears its placement', () => {
+    const h = build('');
+    h.emitUpdate();
+    expect(h.banner.visible, 'an empty banner was left visible').toBe(false);
+    // `placed` is private, so this reads its consequence instead: `onUpdate`'s camera-follow branch
+    // returns early while `placed` is null, so nothing ever positions the hidden object.
+    expect(
+      h.resizeOrder.filter((who) => who === 'banner'),
+      'an invisible banner was still being positioned',
+    ).toEqual([]);
+  });
+
+  it('lays out ONCE, not on every frame — the dirty flag really is cleared', () => {
+    const h = build('');
+    h.emitUpdate();
+    const after = h.banner.setTextCalls;
+    expect(after, 'the layer never ran at all — this case would prove nothing').toBeGreaterThan(0);
+    h.emitUpdate();
+    h.emitUpdate();
+    h.emitUpdate();
+    expect(
+      h.banner.setTextCalls,
+      'the empty path re-laid-out on every frame: `dirty` was never cleared',
+    ).toBe(after);
+  });
+
+  it('still draws a NON-empty legend, so the early return is not swallowing both', () => {
+    // Non-vacuity: a `return` at the top of `layout()` satisfies both cases above.
+    const h = build('ARROWS move');
+    h.emitUpdate();
+    expect(h.banner.visible).toBe(true);
+    expect(
+      h.resizeOrder.filter((who) => who === 'banner').length,
+      'a real legend was never positioned — the early return swallowed it too',
+    ).toBeGreaterThan(0);
+  });
+
+  it('comes back when the legend does — an empty session is not a permanent one', () => {
+    // The provider form: a scene whose audio manager arrives late returns '' on the first layout
+    // and a real line afterwards. Clearing `dirty` must not strand it hidden.
+    let line = '';
+    const h = build(() => line);
+    h.emitUpdate();
+    expect(h.banner.visible).toBe(false);
+    line = 'ARROWS move';
+    h.emitAudioChanged();
+    h.emitUpdate();
+    expect(h.banner.visible, 'the banner never returned after its legend did').toBe(true);
+  });
+});

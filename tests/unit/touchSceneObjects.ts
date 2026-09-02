@@ -37,7 +37,17 @@ export interface FaceFake {
   destroyed: boolean;
   /** Recorded, because a depth nothing reads is a depth nothing gates. */
   depth: number;
+  /**
+   * The Alpha component's opacity — what `setAlpha` writes, and what an `Image` face uses.
+   *
+   * 🔴 Kept SEPARATE from `fillAlpha`, and it was not always. This fake recorded
+   * `add.rectangle`'s 6th argument straight into `alpha`, so a gate asserting `plate.alpha === 0`
+   * passed here while the real object's `alpha` stayed 1 — a fake-only green. Phaser distinguishes
+   * the two; so does this. Caught by the Codex plan review, round 2.
+   */
   alpha: number;
+  /** A `Shape`'s fill opacity: `add.rectangle`'s 6th argument, or `setFillStyle`'s 2nd. */
+  fillAlpha: number;
   angle: number;
   strokeWidth: number;
   strokeColor: number;
@@ -47,6 +57,16 @@ export interface FaceFake {
   align: string;
   /** The texture an `add.image` face was built from. Empty for every drawn shape. */
   textureKey: string;
+  /**
+   * A `Text` face's string, from `add.text`'s third argument.
+   *
+   * 🔴 The fake used to DROP that argument. `paintLevelButton` replaced the old `"> "` selection
+   * prefix precisely by never calling `setText`, and "the label is byte-identical in both states"
+   * cannot be asserted against a fake that never recorded a label at all.
+   */
+  text: string;
+  /** A `Text` face's ink, from `setColor`. Empty until something sets it. */
+  colour: string;
 }
 
 /** The emitter handler type the layer's `EmitterLike` declares. See `touchSceneFake.ts`. */
@@ -129,12 +149,26 @@ export function makeZoneFactory(
 
 export function makeFaceFactory(
   faces: FaceFake[],
-): (x: number, y: number, w?: number, h2?: number, fillAlpha?: number) => FaceFake & TouchFaceLike {
+): (
+  x: number,
+  y: number,
+  w?: number,
+  h2?: number,
+  fillAlpha?: number,
+  isShape?: boolean,
+) => FaceFake & TouchFaceLike {
   // 🔴 `fillAlpha` is recorded from the CONSTRUCTOR, not left at 1 until something calls
   // `setAlpha`. Production sets a plate's translucency in the `add.rectangle` call, so a fake
   // that ignored the argument reported every plate fully opaque — and the gate that pins the
   // plate's alpha would have measured the fake's default instead of the layer's choice.
-  return (x: number, y: number, w = 0, h2 = 0, fillAlpha = 1): FaceFake & TouchFaceLike => {
+  return (
+    x: number,
+    y: number,
+    w = 0,
+    h2 = 0,
+    fillAlpha = 1,
+    isShape = false,
+  ): FaceFake & TouchFaceLike => {
   const api = {
     id: '',
     x,
@@ -144,7 +178,8 @@ export function makeFaceFactory(
     visible: true,
     destroyed: false,
     depth: 0,
-    alpha: fillAlpha,
+    alpha: 1,
+    fillAlpha,
     angle: 0,
     strokeWidth: 0,
     strokeColor: 0,
@@ -152,6 +187,8 @@ export function makeFaceFactory(
     wrapWidth: 0,
     align: '',
     textureKey: '',
+    text: '',
+    colour: '',
     setName(name: string) {
       api.id = name;
       return api;
@@ -186,6 +223,19 @@ export function makeFaceFactory(
       api.alpha = a;
       return api;
     },
+    /**
+     * 🔴 **Deleted below for non-shapes, and that is the point of the flag.**
+     *
+     * `paintPlate` feature-detects this method to tell a `Shape` from an `Image`. A fake that
+     * hands it to every face makes the art arm take the fill branch — so the gate proving the art
+     * responds to a thumb went green while measuring a number production never writes. A fake
+     * whose objects have MORE API than the real ones is not a neutral convenience; it silently
+     * re-routes the code under test.
+     */
+    setFillStyle(_color: number, a: number) {
+      api.fillAlpha = a;
+      return api;
+    },
     setAngle(deg: number) {
       api.angle = deg;
       return api;
@@ -207,10 +257,27 @@ export function makeFaceFactory(
       api.align = align;
       return api;
     },
+    setColor(colour: string) {
+      api.colour = colour;
+      return api;
+    },
+    /**
+     * 🔴 Recorded, and the fake had neither this nor `FaceFake.text` until 2026-09-01. The
+     * level-select gate asserts that repainting a row does NOT change its label — and a fake with
+     * no `setText` makes that assertion unfalsifiable: the mutation that re-introduces the old
+     * `"> "` prefix calls a method that is not there, and the gate passes through its own defect.
+     */
+    setText(text: string) {
+      api.text = text;
+      return api;
+    },
     destroy() {
       api.destroyed = true;
     },
   } as unknown as FaceFake & TouchFaceLike;
+    // Only a `Shape` has a fill. An `Image` and a `Text` do not, and `paintPlate` reads exactly
+    // that difference to decide between `setFillStyle` and `setAlpha`.
+    if (!isShape) delete (api as { setFillStyle?: unknown }).setFillStyle;
     faces.push(api);
     return api;
   };

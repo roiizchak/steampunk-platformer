@@ -37,6 +37,14 @@ interface TextRecorder {
   strokePx: number | null;
   style: Record<string, unknown>;
   content: string;
+  /**
+   * How many times `setText` has been called — i.e. how many times `layout()` actually ran.
+   *
+   * 🔴 The only observable that can see a `dirty` flag which is never cleared. The empty-banner
+   * path returns before it touches a position, a font size or a wrap width, so every other field
+   * here is byte-identical between "laid out once" and "laid out on every frame forever".
+   */
+  setTextCalls: number;
 }
 
 interface Harness {
@@ -100,6 +108,7 @@ export function build(
     strokePx: null,
     style: {},
     content: '',
+    setTextCalls: 0,
   };
 
   const text = {
@@ -109,6 +118,7 @@ export function build(
     // what was set, because the layer's own re-layout is what the assertions drive.
     setText: (c: string) => {
       banner.content = c;
+      banner.setTextCalls += 1;
       return text;
     },
     setDepth: (d: number) => {

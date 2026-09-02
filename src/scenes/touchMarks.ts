@@ -65,30 +65,50 @@ const MARK_BAR_FRAC = 0.15;
  * **3.80:1** — and the plate gets
  * the same treatment: brass fill for a bright background, a pale keyline for a dark one.
  *
- * ⚠️ **The alpha stays at 0.55, and the first repair got that wrong.** Raising it to 0.86 made the
- * fill a fill rather than a tint — and the UI/UX gate's adversarial brief then measured what that
- * costs, from the shipped level data rather than from a screenshot: sampling the player standing
- * on every solid surface in all five `.tmj` files at 96 px intervals, **175 of 878 positions
- * (19.9 %) have a hazard, an enemy or the goal drawn underneath a control plate.** On `level-01`
- * a `brass-sentry` that is actively shooting sits behind the pause plate for nine consecutive
- * positions; on `level-04` the goal sits under the jump plate for nine more.
+ * ⚠️ **The occlusion measurement, and why the alpha no longer honours it.** The UI/UX gate's
+ * adversarial brief measured what an opaque plate costs, from the shipped level data rather than
+ * from a screenshot: sampling the player standing on every solid surface in all five `.tmj` files
+ * at 96 px intervals, **175 of 878 positions (19.9 %) have a hazard, an enemy or the goal drawn
+ * underneath a control plate.** On `level-01` a `brass-sentry` that is actively shooting sits
+ * behind the pause plate for nine consecutive positions; on `level-04` the goal sits under the
+ * jump plate for nine more. Two values were measured: at **0.55** that content is dim but
+ * readable; at **0.86** it is gone.
  *
- * At 0.55 the world under a plate is dim but readable. At 0.86 it is gone. The contrast the
- * repair was for does not come from the fill anyway — it comes from the keyline and from the
- * marks' own two inks, both of which are opaque and neither of which occludes anything, because
- * they cover a fraction of the plate. So the fill goes back to a tint and the legibility is paid
- * for by the two things that can afford it.
+ * 🔴 **`PLATE_ALPHA` is 0.9 as of 2026-09-01, on owner instruction, and that ABANDONS the bound
+ * rather than weakening it.** Say it plainly, because the first draft of this change did not: the
+ * rule was *a plate keeps at least 60 % of the resting state's residual transparency*. At 0.9 the
+ * residual is 0.10 against the measured-readable 0.45 — **22 %, not 60 %** — and 0.9 is past the
+ * 0.86 that was measured to erase the content outright. The owner was shown the measurement and
+ * chose a solid-looking control anyway; that is their call to make.
+ *
+ * The measurement stays in this file because it is the evidence, and the evidence did not change.
+ * What replaces the bound is a **hands-on hazard-visibility pass** on a real device — the level-01
+ * sentry behind the pause plate, the level-04 goal under the jump plate. If either is unplayable,
+ * this number comes back down.
+ *
+ * The plate's CONTRAST never came from the fill anyway. It comes from the keyline and the marks'
+ * two inks, all opaque, all covering a small fraction of the plate — which is why raising the fill
+ * buys legibility nothing and costs occlusion everything.
  *
  * ⚠️ Reusing `COUNTER_*` is deliberate and not laziness: two independent legibility constants that
  * are supposed to mean the same thing drift, and `contrast-floor.test.ts` already holds this pair
  * against the shipped PNGs.
  */
 export const PLATE_FILL = 0x6b4b21;
-export const PLATE_ALPHA = 0.55;
+export const PLATE_ALPHA = 0.9;
 export const PLATE_STROKE = 0xf7e3b8;
 export const PLATE_STROKE_PX = 6;
 /**
- * The plate under a thumb: brighter, and still see-through.
+ * The plate under a thumb: **dimmer** than rest, since 2026-09-01.
+ *
+ * 🔴 The direction inverted when `PLATE_ALPHA` went to 0.9. The press used to brighten 0.55 -> 0.72;
+ * now it dims 0.9 -> 0.72, which is the same 0.18 step and the same purpose — a control that does
+ * not visibly answer a thumb reads as a broken app. The value did not move; only the value it is
+ * compared against did. Note that a press now IMPROVES occlusion rather than worsening it, which
+ * is the one consolation in the 0.9 decision.
+ *
+ * The paragraphs below are the original derivation, kept because the number is still 0.72 and its
+ * reasoning is still why:
  *
  * 🔴 It was 1, and the Codex implementation review caught what that undid. The whole reason the
  * resting alpha is 0.55 is that 19.9 % of standing positions have a hazard, an enemy or the goal
@@ -136,18 +156,39 @@ export const PLATE_ALPHA_PRESSED = 0.72;
  */
 
 /**
- * Which alpha pair one control draws with, decided by which path it took.
+ * The one alpha pair every control draws with.
  *
- * The layer asks per control rather than per layer: a build with five faces present and one missing
- * draws five images and one grey box, and each has to answer with its own numbers.
+ * 🔴 This used to take `(scene, id)` and branch on `textures.exists`, with **both arms returning
+ * the identical pair** — a decision function that decided nothing, and whose `textures.exists`
+ * call read as a live dependency it was not. Deleted 2026-09-01. If the art and grey-box arms ever
+ * genuinely need different numbers, the branch comes back with two different values in it, and a
+ * test that can tell them apart.
  */
-export function alphasFor(
-  scene: TouchSceneLike,
-  id: string,
-): { rest: number; lit: number } {
-  return scene.textures.exists(`touch-${id}`)
-    ? { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED }
-    : { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED };
+export function alphasFor(): { rest: number; lit: number } {
+  return { rest: PLATE_ALPHA, lit: PLATE_ALPHA_PRESSED };
+}
+
+/**
+ * Draw one plate at `a`, through whichever opacity that face actually has.
+ *
+ * 🔴 **A `Shape`'s fill and a `Shape`'s object alpha are different numbers, and using the wrong
+ * one dims the keyline.** `drawPlate` sets translucency through `add.rectangle`'s 6th argument —
+ * `fillAlpha` (`Shape.js:119`, *"only used when `isFilled`"*) — which leaves the stroke fully
+ * opaque. That stroke is where the plate's WCAG 1.4.11 contrast comes from: the fill is a tint and
+ * was never load-bearing. Pressing with `setAlpha` multiplied BOTH, so the effective fill became
+ * `rest x pressed` and the keyline dropped with it — the one element the contrast argument rests
+ * on, dimmed by the feedback. At the old 0.55/0.72 that was a quiet wrongness; at 0.9 it is
+ * visible.
+ *
+ * The art arm is an `Image`. It has no fill, so `setAlpha` is exactly right there, and
+ * `setFillStyle` is absent from it — which is what this feature-detect reads. Found while applying
+ * the Codex round-2 finding about the level-select plate; the same confusion was already shipped
+ * here.
+ */
+export function paintPlate(face: TouchFaceLike | undefined, a: number): void {
+  if (!face) return;
+  if (face.setFillStyle) face.setFillStyle(PLATE_FILL, a);
+  else face.setAlpha(a);
 }
 
 /**

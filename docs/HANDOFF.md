@@ -1,3 +1,126 @@
+# Session handoff — the six mobile polish items (2026-09-02)
+
+> Branch `phase-13-mobile-polish`, **not merged**.
+> Full record: [qa/session-mobile-polish.md](qa/session-mobile-polish.md) and, for the second device
+> round, [qa/session-mobile-polish-02-device-report.md](qa/session-mobile-polish-02-device-report.md).
+>
+> The owner played the shipped Phase 12 build on a real device and reported six things. All six are
+> implemented and gated. A Vercel preview then went to the phone and **two more reports came back**,
+> then a third preview and **one more**: the welcome screen's `M mute  ·  [ / ] volume` line, which
+> is desktop-only now. 🔴 **Removing a row from the title screen is a LAYOUT change** — the four
+> row fractions were solved twice and two adversarial briefs tuned them, so `titleRowSpread` re-derives
+> the spacing for three rows rather than slicing the four-row table. Slicing leaves margins of 0.120
+> against 0.211.
+> — the touch controls sitting inside the phone's gesture zones, and the gear count still off its
+> icon. Both fixed and gated. **What is STILL not done is the hands-on pass**, and most of these
+> items are "does it look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is
+> 240)*.
+
+## 🔴 A game-pixel gate cannot see a CSS-pixel defect
+
+`TOUCH_EDGE_PX` was 64 game px, which is **19–24 CSS px** on every phone this project supports —
+inside Android's back-gesture strip. Every assertion in `tests/unit/touch-layout.test.ts` passed,
+because every one of them was in game pixels too. It is 128 now, and there is a CSS floor beside
+them that converts through the real `liveViewWidth`.
+
+The same shape produced the gear-counter defect three times: the placement is only wrong once a
+browser has picked a font, and no gate had a font until `phase-06-hud.spec.ts` grew one.
+**⚠️ `TextMetrics.fontSize` is `ascent + descent`, not the font size** (`MeasureText.js:38`),
+and Phaser measures the style's test string `|MÉqgy`, not the digits — the two facts behind
+attempts two and three. See the round-2 QA log.
+
+## 🔴 Read this before touching the scale code
+
+**Item 6 shipped twice.** `Phaser.Scale.EXPAND` landed in `e542823` and was **replaced** in
+`1257de2`. Do not put it back without reading `src/game/viewSize.ts`'s header first.
+
+EXPAND's only clamp is `scale.min`/`scale.max`, and `ScaleManager` feeds those bounds to
+`displaySize` — which is **also the CSS style size** (`ScaleManager.js:1088-1140`; `Size.setSize`
+re-clamps into the same min/max). Game units and CSS pixels, clamped by one pair of numbers. A `min`
+of 1920x1080 therefore forces the canvas to be at least 1920 CSS px wide on a 900 px viewport, and
+it was **measured doing exactly that**: a 1920 CSS px canvas in a 1040 px viewport.
+
+What ships is `Phaser.Scale.FIT` — unchanged, five phases of specs still measure it — over a game
+size that is a function of the viewport: `liveViewWidth` gives the view the viewport's own aspect at
+a fixed `GAME_HEIGHT`, clamped into `[GAME_WIDTH, MAX_GAME_WIDTH]`, so FIT has nothing left to
+letterbox inside the ceiling.
+
+⚠️ **`installViewFill`'s equality guard is load-bearing.** `setGameSize` ends in `refresh()`, which
+emits `resize` straight back into the handler. Without the guard the first resize is an infinite
+loop, not a slow one.
+
+⚠️ **A synthetic `game.scale.resize(w, h)` is no longer reachable.** It emits `resize`, the fill
+loop hears it and snaps the view back to what the viewport says. Three specs used to drive it and
+now drive `page.setViewportSize` instead. If you write a new one, drive the viewport.
+
+## The traps, and they are not visible in the code
+
+- **The view is no longer 1920 wide.** It is 1920 at exactly 16:9, up to 2560 on a wide viewport,
+  and never narrower. **Height is pinned at 1080**, which is what keeps every `gameH / GAME_HEIGHT`
+  ratio at exactly 1 — the HUD, the touch layout and the parallax all depend on that. Anything you
+  size once in `create()` from a literal will be wrong on the second size.
+- **`1024x461` is not 20:9.** It is 2.2213 and rounds the view to **2399**, which reads as 2400 and
+  fails an equality. `1000x450` is exact. Three specs learned this the same way.
+- **`bootToTitle` lands on the LEVEL MENU on a touch device**, not on the title, and the tap zones
+  live there — five `Zone`s under `LevelSelect`, none anywhere else. Probed, not assumed.
+- **`bootToTitle`'s canvas tap goes FULLSCREEN on a touch device**, after which Chromium refuses
+  `setViewportSize` outright: *"To resize minimized/maximized/fullscreen window, restore it to
+  normal state first."* Exit fullscreen before resizing.
+- **Run `test:e2e` per PROJECT, not as one invocation.** A whole-suite run completed in 32 minutes
+  once and then hung past two hours, with the JSON reporter producing **no file at all** — a hang
+  costs the entire signal. Per-project runs with a `timeout` localise it and keep every earlier
+  project's result.
+- **A fake with MORE API than the real object re-routes the code under test**, and one with LESS
+  makes a gate unfalsifiable. Both happened here: `setFillStyle` on every face sent the art arm down
+  the fill branch, and a missing `setText` made "never calls `setText`" a sentence about itself.
+
+## The Codex implementation review found two defects that PREDATE this branch
+
+Both applied; full dispositions in
+[reviews/session-mobile-polish-impl.md](reviews/session-mobile-polish-impl.md).
+
+🔴 **`rotateGuard` called `scale.refresh()` on EVERY FRAME** — it is subscribed to `SCENE_UPDATE`,
+and `ScaleManager.refresh()` writes `canvas.style`, forces a layout through
+`getBoundingClientRect()` and emits a **global** RESIZE. Every scale listener in the game ran 60
+times a second while the title or level menu was up, and item 4 had just added a `setFontSize` call
+— a synchronous `MeasureText` — to `UIScene.applyLayout`. The poll stays (iOS Safari does not
+reliably fire `window.resize` on a rotation); the engine re-measure is now conditional on the
+viewport having actually moved.
+
+🔴 **A source-text gate that does not strip comments is not a gate.** `view-size.test.ts` scanned
+raw source for `installViewFill(`, so commenting the call out left every assertion green.
+`playwright-projects.test.ts` had already been bitten by this twice. **If you write a source-text
+gate, strip both comment kinds first**, and prove it by commenting out the thing it names.
+
+## What is still owed
+
+🔴 **The hands-on pass on the owner's device.** Deploy a Vercel preview and check in fullscreen:
+no bars left or right, no black band over the sky, no digits on the rotate prompt, buttons read
+solid, the gear count level with its icon, the volume banner gone, the level menu centred with lock
+icons.
+
+🔴 **The hazard-visibility pass item 3 owes.** `PLATE_ALPHA` 0.9 **abandons** the occlusion
+criterion rather than weakening it — 22 % residual against a 60 % rule, past the 0.86 measured to
+erase content — on the owner's authority. The replacement check: stand behind the pause plate on
+level-01 where a shooting `brass-sentry` sits for nine consecutive standing positions, and under the
+jump plate on level-04 where the goal sits for nine more. **If either is unplayable, 0.9 is wrong
+and the number comes back down.**
+
+⚠️ `max.height` clamping the CSS height on a display taller than 1080 CSS px is **derived from the
+code, not measured** — this box could not produce the case. One look on a 1440p display settles it.
+
+⚠️ The frame-budget figures in `docs/qa/` were all taken at the design size. They are now a floor
+for a widened view rather than the figure for every size. Nothing has re-measured them.
+
+## Verification at the tip
+
+- `npm test` — **3116 passed, 220 files**, 0 failed.
+- `npm run test:e2e` — **227 passed, 0 failed, 0 skipped**: `chromium` 106 · `chromium-gpu` 70 ·
+  `chromium-dpr2` 8 · `chromium-touch` 34 · `chromium-touch-gpu` 3 · `chromium-prod` 6.
+- `npx tsc --noEmit` clean; `npm run build` + `verify-dist` ok.
+
+---
+
 # Session handoff — Phase 12, touch and responsive support
 
 > ## 👉 Resuming Phase 12? Read [handoff/next-session-prompt-phase-12.md](handoff/next-session-prompt-phase-12.md) first.
@@ -100,7 +223,9 @@ is 0.92 dB at the top of the range and 6.02 dB at the bottom, from the same key.
 the one that failed.
 
 **The controls banner now prints the level**, which is the only readout in play and the whole answer
-to *"`]` does nothing at 100 %"*. `gameInput` emits `AUDIO_CHANGED`; `HelpBannerLayer` marks itself
+to *"`]` does nothing at 100 %"*.
+
+⚠️ **Desktop only from 2026-09-01 (owner decision).** A touch device draws **no banner at all** — `helpLine` returns `''` there, above the DEV suffix. The volume is not the game's to report on a phone: the player sets it with the hardware keys and the OS draws its own overlay. Everything below describes the keyboard build, which is unchanged. `gameInput` emits `AUDIO_CHANGED`; `HelpBannerLayer` marks itself
 dirty and its next **layout** re-reads a content provider.
 
 🔴 **Re-reading on layout rather than on the event is load-bearing, and the first version got it

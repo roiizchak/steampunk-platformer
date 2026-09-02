@@ -56,11 +56,11 @@
 
 import Phaser from 'phaser';
 import { TITLE_KEY } from './gameTitle';
-import { applyAudioAction, audioActionForCode } from './audioKeyMap';
 import type { AudioActionResult } from './audioKeyMap';
+import { bindTitleKeys } from './titleKeys';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
 import { TITLE_BACKDROP_KEY } from '../render/titleInk';
-import { RULE_ALPHA, RULE_PX, TITLE_ROWS, panelSize } from '../render/titleInk';
+import { RULE_ALPHA, RULE_PX, panelSize, titleRows } from '../render/titleInk';
 import type { AudioManager } from '../game/audio';
 import {
   audioHint,
@@ -73,6 +73,7 @@ import {
 } from '../render/titleInk';
 import { attachRotatePrompt } from './rotateGuard';
 import { attachTapRoutes } from './touchRoutes';
+import { keepTapRoutesSized } from './tapRouteResize';
 
 export { TITLE_KEY } from './gameTitle';
 
@@ -249,17 +250,29 @@ export class TitleScene extends Phaser.Scene {
       : 'ENTER   choose a level';
     make(choice, CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
-    this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
+    //
+    // ✅ **Not on a phone.** `audioHint` returns empty for touch, and the row is then not created at
+    // all rather than created empty: `applyLayout` positions `this.items` by INDEX against
+    // `titleRows(this.items.length)`, so an empty fourth object would hold a row open and re-open
+    // the uneven-margin defect that spacing was solved twice to remove.
+    const hint = audioHint(this.audioState.muted, this.audioState.volume, this.game.device.input.touch);
+    if (hint !== '') {
+      this.hint = make(hint, HINT_STYLE);
+    }
 
     // One zone over the whole view: this screen has a single action, so anywhere is the target.
-    // No field and no explicit teardown — `attachTapRoutes` registers against this scene's own
-    // SHUTDOWN and DESTROY, which is the same lifetime the objects above have.
+    // No explicit teardown — `attachTapRoutes` and `keepTapRoutesSized` both register against this
+    // scene's own SHUTDOWN and DESTROY, the same lifetime the objects above have. The array is
+    // mutated in place on resize, never replaced; `tapRouteResize.ts` says why that matters.
     const titleTargets = [
       { id: 'title', x: 0, y: 0, w: this.scale.gameSize.width, h: this.scale.gameSize.height },
     ];
-    attachTapRoutes(this, this.game.device.input.touch, titleTargets, () =>
+    const routes = attachTapRoutes(this, this.game.device.input.touch, titleTargets, () =>
       this.dismiss(this.data$?.onLevelSelect),
     );
+    keepTapRoutesSized(this, routes, ({ width, height }) => {
+      if (titleTargets[0]) Object.assign(titleTargets[0], { w: width, h: height });
+    });
     // A screen with a route needs a prompt: `touchRoutes.ts` makes the route dead while the prompt
     // would be up, and a gated tap with nothing on screen to explain it is worse than the defect.
     attachRotatePrompt(this, this.game.device.input.touch, titleTargets);
@@ -313,50 +326,17 @@ export class TitleScene extends Phaser.Scene {
     // FOUR rows, and they live in `titleInk.ts` — both because a unit test can then prove they land
     // inside the panel the contrast premise depends on, and because the two re-spreads they have
     // been through are worth reading before touching them. See `TITLE_ROWS`.
-    const rows = TITLE_ROWS;
+    const rows = titleRows(this.items.length);
     this.items.forEach((item, index) => {
       item.setPosition(width / 2, height * (rows[index] ?? 0.5));
     });
   }
 
   private bindKeys(): void {
-    const keyboard = this.input.keyboard;
-    if (!keyboard) {
-      return;
-    }
-    keyboard.on('keydown', (event: KeyboardEvent) => {
-      // The OS repeats a held key ~30 times a second, and this scene is entered with a key possibly
-      // still down from whatever started the game. Nothing here may fire twice.
-      //
-      // 🔴 `isComposing` too, and it is NOT redundant with `gameInput.ts`'s. This scene registers
-      // no `Key` objects at all, so `keys[229]` is undefined and Phaser's `ANY_KEY_DOWN` accepts a
-      // composition keydown here that the game listener rejects — the welcome screen was the one
-      // place a CJK user composing text could still walk the volume. Codex implementation review,
-      // finding 3: the guard was copied to one of the two listeners.
-      if (event.repeat || event.isComposing) {
-        return;
-      }
-      /**
-       * 🔴 The audio keys answer HERE too, and deliberately WITHOUT `gameInput.ts`'s
-       * `isPlayerInputEnabled()` guard.
-       *
-       * `Game` is paused while this screen is up, so its own listener is inert — and this is the
-       * first screen the player sees. Leaving them dead here would mean shipping a welcome screen
-       * whose advertised mute and volume keys do nothing, in the phase that exists to repair them.
-       * The same shared map and applier as `gameInput.ts`, so the two can never drift.
-       */
-      const action = audioActionForCode(event.code);
-      if (action) {
-        const manager = this.data$?.audio?.();
-        if (manager) {
-          this.showAudio(applyAudioAction(manager, action));
-        }
-        return;
-      }
-      // Every begin key goes to the LEVEL MENU. There is no second route and no resume.
-      if (event.code === 'Enter' || event.code === 'NumpadEnter' || event.code === 'Space') {
-        this.dismiss(this.data$?.onLevelSelect);
-      }
+    bindTitleKeys(this, {
+      audio: () => this.data$?.audio?.(),
+      onAudio: (result: AudioActionResult) => this.showAudio(result),
+      onBegin: () => this.dismiss(this.data$?.onLevelSelect),
     });
   }
 

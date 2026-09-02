@@ -53,6 +53,91 @@ test.describe('criterion 6.1 — the gear counter', () => {
     expect(Number(after.counter.text)).toBe(score);
   });
 
+  test('the DIGITS are level with the gear icon, measured in the real font', async ({ page }) => {
+    /**
+     * 🔴 The owner reported this twice, from a phone, and both repairs shipped wrong — once
+     * high, once **4.4 px low**. Nothing could catch it: the unit gates assert `hudLayout` honours
+     * whatever fraction it is handed, and the source-text gate asserts `UIScene` hands it one.
+     * Neither has a font. The quantity that was wrong is only knowable in a browser, so it is
+     * asserted in a browser.
+     *
+     * The two mistakes are the two halves of the measurement:
+     *   1. guessing the descent instead of measuring it;
+     *   2. measuring, but dividing by `TextMetrics.fontSize` — which is `ascent + descent`, the box
+     *      HEIGHT, not the font size — and measuring the style's test string rather than the digits.
+     */
+    await bootToGame(page);
+    await waitForHud(page);
+
+    const m = await page.evaluate(() => {
+      interface Ui {
+        hudObjects(): {
+          gearIcon: { y: number };
+          layout: { counter: { fontPx: number } };
+          counter: {
+            y: number;
+            originY: number;
+            text: string;
+            getTextMetrics(): { ascent: number; descent: number };
+          };
+        };
+      }
+      const game = (window as unknown as { __phaserGame: Phaser.Game }).__phaserGame;
+      const ui = game.scene.getScene('UI') as unknown as Ui;
+      const { gearIcon, counter, layout } = ui.hudObjects();
+      const ctx = (counter as unknown as { context: CanvasRenderingContext2D }).context;
+      const box = ctx.measureText(counter.text);
+      return {
+        iconCentreY: gearIcon.y,
+        fontPx: layout.counter.fontPx,
+        boxTop: counter.y,
+        originY: counter.originY,
+        layoutAscent: counter.getTextMetrics().ascent,
+        digitInkAscent: box.actualBoundingBoxAscent,
+        digitInkDescent: box.actualBoundingBoxDescent,
+      };
+    });
+
+    // Non-vacuity first: a browser that measured nothing would report zeroes and every difference
+    // below would be trivially small.
+    expect(m.layoutAscent, 'the font was never measured').toBeGreaterThan(10);
+    expect(m.digitInkAscent, 'the digits were never measured').toBeGreaterThan(10);
+    expect(m.originY, 'counter.y stopped meaning the top of the glyph box').toBe(0);
+
+    // ⚠️ The two measurements must DIFFER, or this viewport cannot tell a correct placement
+    // from the naive one and the case is decoration *(C2)*. A face whose figures reach the test
+    // string's ascent would make every scheme agree.
+    expect(
+      m.layoutAscent - m.digitInkAscent,
+      'the digits reach the layout ascent — this font cannot distinguish the two schemes',
+    ).toBeGreaterThan(4);
+
+    // Phaser puts the baseline at `boxTop + ascent`; the ink runs `digitInkAscent` above it and
+    // `digitInkDescent` below (0 for figures on most faces).
+    const baseline = m.boxTop + m.layoutAscent;
+    const inkCentre = baseline - m.digitInkAscent / 2 + m.digitInkDescent / 2;
+    expect(
+      inkCentre - m.iconCentreY,
+      `digits at ${inkCentre.toFixed(1)}, icon at ${m.iconCentreY.toFixed(1)}`,
+    ).toBeLessThanOrEqual(1);
+    expect(inkCentre - m.iconCentreY).toBeGreaterThanOrEqual(-1);
+
+    // 🔴 And the defect the owner saw is genuinely out of range, not merely inside a loose bound.
+    //
+    // ⚠️ The thing that was wrong was **the nudge, not the centring**. On this face the ink centre
+    // lands almost exactly half the font below the box top (`36 - 28/2 = 22`, against a 44 px font),
+    // so plain box-centring is right here by arithmetic coincidence — do not assert that box-centring
+    // misses, because it does not. Both retired schemes were corrections applied ON TOP of it, and
+    // it is those that pushed the digits off: 0.105 by guess, then a measured 0.1 whose denominator
+    // was `ascent + descent` rather than the font size.
+    const shippedTop = m.iconCentreY - m.fontPx / 2 + m.fontPx * 0.1;
+    const shippedInk = shippedTop + m.layoutAscent - m.digitInkAscent / 2 + m.digitInkDescent / 2;
+    expect(
+      shippedInk - m.iconCentreY,
+      'the arithmetic the owner reported is inside this bound — the assertion above cannot go red',
+    ).toBeGreaterThan(1);
+  });
+
   test('the counter uses tabular figures — its drawn width does not change with its value', async ({
     page,
   }) => {

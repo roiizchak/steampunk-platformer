@@ -158,17 +158,24 @@ export function helpLine(audio?: AudioSettings, touch = false): string {
   // arrow, a wrench, a gear. A caption explaining an arrow is clutter across the top of a 412 px
   // screen, and it competed with the HUD for the only row either can use. What remains on touch is
   // the state a symbol cannot show — the volume — and nothing else.
-  // ⚠️ And it is LABELLED. The interim touch line printed the bare value — `100%`, or worse
-  // `muted` alone — which names no quantity at all: a player reads a percentage across the top of
-  // the screen and has no way to know it is not health, progress or a load. The keyboard line gets
-  // the word from its `[ ] volume` keys; the touch line has to carry it. Codex round-6.
-  const base = touch
-    ? level.trim() === ''
-      ? ''
-      : `VOLUME ${level.trim().toUpperCase()}`
-    : 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
-      `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
-      'ESC levels';
+  // ⚠️ And it WAS labelled — `VOLUME 100%` rather than a bare `100%`, because a percentage across
+  // the top of the screen names no quantity on its own. That reasoning was sound and is kept for
+  // the record, but the line it defended is gone.
+  //
+  // 🔴 **A touch device gets NO banner at all — 2026-09-01, owner decision.** The volume readout
+  // was the last thing standing on the touch line, and on a phone the volume is not the game's to
+  // report: the player sets it with the hardware keys and the OS draws its own overlay when they
+  // do. A row of text across a 412 px screen, duplicating a control the game does not own, is
+  // clutter competing with the HUD for the only row either can use.
+  //
+  // ⚠️ **The return is HERE, ABOVE the DEV suffix, and that placement is the fix.** The suffix is
+  // appended to `base` below, so emptying only the touch arm of `base` would have left
+  // `·  P play  ·  O editor  ·  G gym` rendering alone on a phone in the dev build. Caught by the
+  // Codex plan review, round 1.
+  if (touch) return '';
+  const base = 'ARROWS / WASD move  ·  SPACE / UP / W jump  ·  ' +
+    `SHIFT walk  ·  F / L attack  ·  M mute  ·  [ ] volume${level}  ·  ` +
+    'ESC levels';
   // 🔴 **Abbreviated 2026-08-26, and only because it is DEV-only text.** Raising the banner to
   // 44 px bold — the size that makes it WCAG large text and so lets the 3:1 bar apply — pushed the
   // long DEV form onto a THIRD wrapped row, which `hud-layout.test.ts` caps against for eating the

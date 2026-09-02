@@ -44,16 +44,47 @@ export const MAX_TICKS_PER_FRAME = 5;
  */
 export const TILE_SIZE = 96;
 
-/** Base render resolution. 60 x 33.75 tiles visible at CAMERA_ZOOM. */
+/**
+ * **The DESIGN view, and the guaranteed MINIMUM live view.** 20 x 11.25 tiles at `CAMERA_ZOOM`.
+ *
+ * 🔴 **This stopped being the whole contract on 2026-09-01.** It read "base render resolution" and
+ * every document said the world view *is* 1920 x 1080. The owner reported the game pillarboxing on
+ * a phone — a landscape handset is ~19.5:9 against the game's 16:9, so `Phaser.Scale.FIT` scaled by
+ * height and left **17.9 % of the width black**. Filling the screen and holding a fixed-width view
+ * are mutually exclusive, so the contract is restated rather than quietly broken:
+ *
+ *   **1920 x 1080 is the design view and the floor. The LIVE view may be up to
+ *   `MAX_GAME_WIDTH` x `GAME_HEIGHT`.**
+ *
+ * `GAME_HEIGHT` is invariant — the scale config clamps height at 1080 at BOTH ends, which is what
+ * keeps every `gameH / GAME_HEIGHT` ratio in the render layer at exactly 1 and keeps the 96 px
+ * grid, `CAMERA_ZOOM` and every tile measurement untouched. Only the width breathes.
+ */
 export const GAME_WIDTH = 1920;
 export const GAME_HEIGHT = 1080;
+
+/**
+ * The widest live view the game will draw. 2560 x 1080 is 21.3:9.
+ *
+ * Wider than any phone in scope — 20:9 is 2.22, 21:9 is 2.33, and this is 2.37 — so in practice the
+ * ceiling is a guard rather than a limit anyone meets. A viewport wider than it pillarboxes again,
+ * **deliberately**: that is a stated bound with a spec of its own, not a discovered behaviour.
+ *
+ * ⚠️ It lives HERE and not in `config.ts`. Scene modules need it for their level-extent guards, and
+ * importing it from `config.ts` — which value-imports Phaser — would drag the engine into modules
+ * that are deliberately engine-free and pull `npm run test:sim-isolated` apart. Named by the Codex
+ * plan review, round 2.
+ */
+export const MAX_GAME_WIDTH = 2560;
 
 /**
  * **PUBLISHED by Phase 3.** The single runtime source — `src/render/cameraRig.ts` imports it
  * rather than declaring its own, because three sources for one number (two modules and a doc)
  * is three chances to drift while a doc review stays green (Codex P8).
  *
- * At zoom 1 the world view is exactly GAME_WIDTH x GAME_HEIGHT = 60 x 33.75 tiles.
+ * At zoom 1 the world view is `liveWidth` x `GAME_HEIGHT` — at the design size, 20 x 11.25 tiles;
+ * at the ceiling, 26.67 x 11.25. Zoom itself does not move: the view fill changes the SIZE of the view,
+ * never its scale, which is why the grid and every tile measurement are unaffected.
  */
 export const CAMERA_ZOOM = 1;
 

@@ -7,7 +7,20 @@
  *
  * ## The measurement everything here rests on
  *
- * `Phaser.Scale.FIT` holds the backing store at **1920 x 1080 at every viewport and every DPR** and
+ * ⚠️ **This paragraph described a FIXED 1920 x 1080 view, which the game stopped having on
+ * 2026-09-01.** `Phaser.Scale.FIT` still ships — what changed is the SIZE it fits, which
+ * `src/game/viewSize.ts` now derives from the viewport. The backing store is the LIVE game size —
+ * still exact at every DPR, but between
+ * `GAME_WIDTH` and `MAX_GAME_WIDTH` wide rather than fixed. The consequence for THIS file is that
+ * the view-scaling below finally executes in production: it never did under FIT, which is exactly
+ * why it was written as arithmetic rather than as a literal *(vault 6.2)*. The 44 CSS px verdict
+ * is unmoved — `fitCanvasCssWidth`'s `min()` picks the constraining axis, which on any phone wider
+ * than 16:9 is HEIGHT, and a wider view does not change the height-derived scale (measured: 57.75 CSS px
+ * at a fixed 1920 view against 57.78 at a filled one). What improves is the GAP term, by 151 CSS px.
+ *
+ * The original note, still true of the MECHANISM and no longer of the number:
+ * `Phaser.Scale.FIT` holds the backing store at **the game size at every viewport and every DPR** —
+ * which was **1920 x 1080** when this was written and is now the live view — and
  * restyles only the canvas CSS width and height — measured, not assumed, in
  * `docs/ENGINE-NOTES.md § Scale`. So a button declared in GAME pixels arrives on the player's screen
  * at `gamePx * canvasCssWidth / 1920`, and an accessibility floor expressed in CSS pixels is a
@@ -81,8 +94,32 @@ export const TOUCH_BOX_PX = 160;
 /** Gap between two boxes in a pair. 32 * 0.347 = 11.1 CSS px against an 8 px floor. */
 export const TOUCH_GAP_PX = 32;
 
-/** Inset from the view edge. Two thirds of a tile; clear of the 24 px HUD margin. */
-export const TOUCH_EDGE_PX = 64;
+/**
+ * Inset from the view edge, in game pixels.
+ *
+ * 🔴 **128, doubled from 64 on 2026-09-02 by owner decision, and the old value put every control
+ * inside the operating system's own gesture zones.**
+ *
+ * The number that matters is the CSS one, because that is where the player's thumb and the phone's
+ * gesture handlers both live. On a landscape phone the canvas fills the width, so one game pixel is
+ * about **0.36 CSS px** (iPhone 14 landscape: an 844 CSS px viewport against a 2338 px view). At 64
+ * that left every control **23 CSS px** from the screen edge — on top of Android's back-gesture
+ * strip (~24 CSS px in from each side) and the home indicator along the bottom. The owner reported
+ * it from the device as *"too close to the edges … need to decide where to move them so it be easy
+ * to tap them"*, which is the symptom of a control competing with a system gesture.
+ *
+ * 128 is **46 CSS px** on that phone, and **38.5 CSS px at the worst viewport this project plays
+ * at** — an iPhone SE landscape with Safari chrome, 667x325, a scale of 0.301. Browser chrome, not a
+ * chrome-less phone, is the worst case; do not quote 0.347. Every playable viewport is above the
+ * gesture strip with margin, and far enough in to sit under a thumb rather than at the very corner
+ * of the screen. The CSS numbers are gated — in game pixels this change is unobservable, which is
+ * why the shipped 64 passed every existing assertion — by .
+ *
+ * It cannot push the controls into each other: `touchLayout` places two boxes plus a gap in from
+ * each side, so the pairs occupy `128 + 160 + 32 + 160 = 480` px at each end and leave **960 px**
+ * of clear play area even at the narrowest supported view. Still clear of the 24 px HUD margin.
+ */
+export const TOUCH_EDGE_PX = 128;
 
 /**
  * The level menu's row band, in game pixels.

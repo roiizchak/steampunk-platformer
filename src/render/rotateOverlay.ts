@@ -13,6 +13,13 @@
  *
  * ## What is computed here, and what is not
  *
+ * ⚠️ **Deliberately still reasoning from FIT, and that is a decision rather than an oversight.**
+ * The view fills the screen (2026-09-01), so `touchControlsLayer` lays out against the LIVE view
+ * while this predicate evaluates the DESIGN one. With the height clamped at 1080 the two differ
+ * only in horizontal separation, and MORE separation can never turn a passing fit-verdict into a
+ * failing one — so the overlay stays strictly conservative, which is the safe direction. Recorded
+ * because `touchLayout.ts:5-9` warns about consumers reading different numbers.
+ *
  * `Phaser.Scale.FIT` letterboxes the fixed design surface into the viewport, so the canvas CSS width
  * is `min(viewportWidth, viewportHeight * aspect)` — the same arithmetic the engine does, from
  * numbers that are always current. That feeds the ONE predicate the routes and the controls also

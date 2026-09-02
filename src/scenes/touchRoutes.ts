@@ -96,11 +96,27 @@ export interface TapSceneLike {
 }
 
 export interface TapRoutes {
+  /**
+   * Move the existing zones onto the geometry their target boxes now carry.
+   *
+   * 🔴 **The zones are a SNAPSHOT, and before the view could change nothing needed to move them.**
+   * They are built once from `targets` in the loop below; only `promptIsUp` re-reads the live size.
+   * The view could not change under FIT, so a snapshot was the whole truth. It can now: a rotation
+   * or a fullscreen toggle re-lays-out the screen, the drawn content moves, and stale zones sit
+   * where the buttons used to be — a menu that answers taps in the wrong places, which reads as the
+   * game ignoring the player.
+   *
+   * ⚠️ **The caller keeps ONE target array and mutates its boxes in place.** That is deliberate and
+   * it is what keeps `attachRotatePrompt` out of this change: `RotatePrompt.refresh()` re-reads
+   * `targets` on every call, so a band mutated in place is a band the prompt already sees. Replacing
+   * the array would leave the guard judging the old geometry while the routes judged the new.
+   */
+  updateTargets(): void;
   /** Idempotent. Called by the caller, and by the scene's own SHUTDOWN and DESTROY. */
   destroy(): void;
 }
 
-const NO_ROUTES: TapRoutes = { destroy(): void {} };
+const NO_ROUTES: TapRoutes = { updateTargets(): void {}, destroy(): void {} };
 
 /**
  * Make one tappable zone per target.
@@ -170,6 +186,19 @@ export function attachTapRoutes(
   }
 
   const routes: TapRoutes = {
+    updateTargets(): void {
+      if (!alive) return;
+      // Positional, by construction: `zones` is built from `targets` in order and never re-ordered,
+      // so index i is target i. Zones carry `setOrigin(0, 0)`, so `setPosition` takes the box's
+      // top-left exactly as `add.zone` did.
+      for (const [i, zone] of zones.entries()) {
+        const target = targets[i];
+        if (target === undefined) continue;
+        zone.setPosition(target.x, target.y);
+        zone.setSize(target.w, target.h);
+      }
+    },
+
     destroy(): void {
       if (!alive) return;
       alive = false;

@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
+import { CAMERA_ZOOM, GAME_HEIGHT, GAME_WIDTH, MAX_GAME_WIDTH } from '../../src/game/constants';
 import type { LevelData } from '../../src/game/tilemap';
 import { cameraSetup, tracksTarget, viewFits } from '../../src/render/cameraRig';
 import type { Rect } from '../../src/sim/types';
@@ -40,6 +40,15 @@ function levelOf(widthPx: number, heightPx: number): LevelData {
     gears: [],
   };
 }
+
+/** The five shipped levels, measured from their `.tmj` by `tilemap-data.test.ts`. */
+const SHIPPED_EXTENTS: ReadonlyArray<readonly [string, number, number]> = [
+  ['level-01', 9216, 2208],
+  ['level-02', 10752, 2304],
+  ['level-03', 12288, 2400],
+  ['level-04', 13824, 2496],
+  ['level-05', 15360, 2688],
+];
 
 const VIEW_W = GAME_WIDTH / CAMERA_ZOOM;
 const VIEW_H = GAME_HEIGHT / CAMERA_ZOOM;
@@ -190,4 +199,96 @@ describe('tracksTarget (criterion 3.4 — following, not merely moving)', () => 
       );
     });
   });
+});
+
+/**
+ * **The guards must be asked at the WIDEST view the game will draw, not at the design width.**
+ *
+ * 🔴 `Phaser.Scale.EXPAND` (2026-09-01) makes the live view up to `MAX_GAME_WIDTH` wide. Both
+ * production call sites — `gameCamera.ts` and `bootLevels.ts` — validated at `GAME_WIDTH`, so the
+ * "a side-scroller that cannot scroll" refusal *(vault 3.2)* was a statement about a view the game
+ * no longer uses. The Codex plan review named it: the safety margin was prose the guards never saw.
+ *
+ * ⚠️ **A boundary fixture is not a mutation, and on its own it proves nothing here.** A level that
+ * simply fails everywhere would red whatever width was passed. The fixture below is chosen to sit
+ * BETWEEN the two widths — wide enough to scroll at 1920, not wide enough at 2560 — so it is
+ * exactly the level that separates a correct call site from a reverted one. `M116` and `M117`
+ * revert the two call sites independently, because one reverting must not hide behind the other.
+ */
+describe('the level guards see the widest live view', () => {
+  /** Scrolls at the design width, does NOT scroll at the ceiling. The whole point of the fixture. */
+  const BETWEEN_W = (GAME_WIDTH + MAX_GAME_WIDTH) / 2;
+
+  it('the fixture really does straddle the two widths, or it separates nothing', () => {
+    expect(BETWEEN_W, 'the fixture must scroll at the design width').toBeGreaterThan(GAME_WIDTH);
+    expect(BETWEEN_W, 'the fixture must NOT scroll at the ceiling').toBeLessThan(MAX_GAME_WIDTH);
+    // Passes at the design width...
+    expect(() => cameraSetup(levelOf(BETWEEN_W, 4000), GAME_WIDTH, GAME_HEIGHT)).not.toThrow();
+    // ...and refuses at the ceiling, which is the view production actually draws.
+    expect(() => cameraSetup(levelOf(BETWEEN_W, 4000), MAX_GAME_WIDTH, GAME_HEIGHT)).toThrow(
+      /cannot scroll/,
+    );
+  });
+
+  it('every SHIPPED level still clears the ceiling, with room to spare', () => {
+    // The reassurance half: the ceiling is a guard, not a constraint anyone meets. The narrowest
+    // shipped level is 9216 px against a 2560 px view.
+    for (const [id, widthPx, heightPx] of SHIPPED_EXTENTS) {
+      expect(
+        () => cameraSetup(levelOf(widthPx, heightPx), MAX_GAME_WIDTH, GAME_HEIGHT),
+        `${id} no longer scrolls at the widest live view`,
+      ).not.toThrow();
+    }
+  });
+});
+
+/**
+ * **Both production call sites really do pass the ceiling — the boundary fixture cannot see this.**
+ *
+ * 🔴 The Codex plan review, round 2: *"a boundary fixture is not a mutation and will remain green if
+ * `gameCamera.ts` or `bootLevels.ts` is reverted to `GAME_WIDTH`"*. Exactly so. Everything above
+ * calls `cameraSetup` directly with a width the test chooses; nothing above notices which width
+ * PRODUCTION chooses. Two call sites, two rows (M116, M117), because one reverting must not hide
+ * behind the other.
+ *
+ * Source text rather than behaviour: `gameCamera.ts` value-imports Phaser and cannot be constructed
+ * under `environment: 'node'`. The comment-stripping helper keeps a match from coming out of the
+ * paragraph that explains the choice — the notes at both call sites name `GAME_WIDTH` to say why it
+ * is wrong, which a naive `includes` would read as the code still using it.
+ */
+describe('the guards are wired to the ceiling in production', () => {
+  const SOURCES = import.meta.glob(
+    ['../../src/scenes/gameCamera.ts', '../../src/scenes/bootLevels.ts'],
+    { query: '?raw', import: 'default', eager: true },
+  ) as Record<string, string>;
+
+  /** Strip block and line comments, so prose naming `GAME_WIDTH` cannot satisfy or break a claim. */
+  function code(file: string): string {
+    const key = Object.keys(SOURCES).find((k) => k.endsWith(file));
+    if (key === undefined) throw new Error(`${file} is not in the glob — this gate scans nothing`);
+    return SOURCES[key]!.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  }
+
+  it.each([['gameCamera.ts'], ['bootLevels.ts']])(
+    '%s validates at MAX_GAME_WIDTH, not the design width',
+    (file) => {
+      const src = code(file);
+      expect(src, `${file} does not call cameraSetup at all — this gate scans nothing`).toContain(
+        'cameraSetup(',
+      );
+      // Line-based, not a single regex: `bootLevels` nests `parseLevel(...)` inside the call, so a
+      // `[^)]*` window stops at the inner paren and never reaches the width argument.
+      const calls = src
+        .split(String.fromCharCode(10))
+        .filter((line) => line.includes('cameraSetup(') && !line.includes('import'));
+      expect(calls.length, `${file} has no cameraSetup CALL — this gate scans nothing`).toBe(1);
+      expect(
+        calls[0],
+        `${file} validates levels at the design width while production draws up to the ceiling`,
+      ).toContain('MAX_GAME_WIDTH');
+      expect(calls[0], `${file} still passes the design width to cameraSetup`).not.toMatch(
+        /[^_]GAME_WIDTH/,
+      );
+    },
+  );
 });

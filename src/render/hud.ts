@@ -11,7 +11,11 @@
  * hardcoded at 1280 cropped a whole HUD plate off a phone and looked perfectly correct on the
  * desktop it was written on.
  *
- * This project cannot currently hit that trap — the scale mode is `FIT`, so the game size is
+ * ⚠️ **The view fills the screen since 2026-09-01, so the game size is no longer fixed** — but
+ * this module was already written against the live size and needs no change: `hudLayout` takes
+ * `gameW`/`gameH` and scales off HEIGHT, which the clamp pins at 1080. The note below described
+ * FIT and is kept for the trap it names.
+ * This project cannot currently hit that trap — the scale mode was `FIT`, so the game size is
  * permanently 1920 × 1080 and the canvas is scaled by CSS instead. **Saying so plainly matters more
  * than pretending otherwise** *(vault 9.3)*: `hudLayout` takes the size as arguments and contains no
  * viewport literal, so the trap cannot open later, and `hudFits` is a real predicate that a
@@ -178,24 +182,7 @@ export const COUNTER_GAP = 24;
  */
 const COUNTER_FONT_PX = 44;
 
-/**
- * How far down to nudge a digit string so its ink centres, as a fraction of the font size.
- *
- * A typical font's descent is ~20–22% of its em box, and digits use none of it — so a glyph box
- * centred on `ascent + descent` puts the ink about **half the descent** too high. Half of ~0.21 is
- * ~0.105, which at the shipped 44 px is **4.6 design px** — the top of the 2–4 px range item 3.8
- * reported, measured at 1920 × 1080 where the report was made.
- *
- * ⚠️ **A fraction, not a literal.** The correction has to move with `COUNTER_FONT_PX`; a hardcoded
- * 4 px would be silently wrong the next time the font changes, which is the shape of half this
- * session's Tier 4.
- *
- * ⚠️ **This is a by-eye number and the by-eye read is still owed** *(S.9)*. The browser is the only
- * thing that knows the real metrics of the fallback font it picks, and at 852 × 480 the whole
- * correction is under 2 physical px — possibly imperceptible even though it is real at the design
- * resolution. Recorded rather than presented as measured.
- */
-const DIGIT_DESCENT_FRACTION = 0.105;
+import { DIGIT_INK_CENTRE_FRACTION } from './counterInk';
 
 /**
  * The gear icon beside the counter, square, in DESIGN pixels.
@@ -208,6 +195,12 @@ const DIGIT_DESCENT_FRACTION = 0.105;
  * resampled a sprite, and the counter is not worth breaking that for.
  */
 const GEAR_ICON_PX = 72;
+
+/**
+ * The counter's ink placement lives in `counterInk.ts` — re-exported here because every caller and
+ * every gate already reaches for it through `hud.ts`, and moving a file should not move an import.
+ */
+export { DIGIT_INK_CENTRE_FRACTION, measuredInkCentreFraction } from './counterInk';
 
 export interface Rect {
   x: number;
@@ -237,7 +230,19 @@ export interface HudLayout {
  * the play area. Choosing one axis deliberately is the `[SCALE_RATIO]` lesson from the art
  * pipeline applied to layout.
  */
-export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
+export function hudLayout(
+  gameW: number,
+  gameH: number,
+  slot: Rect,
+  /**
+   * How far the digits' ink centre sits below the glyph box's top, as a fraction of the font size.
+   * See `measuredInkCentreFraction`.
+   *
+   * Optional so this module stays engine-free and every existing caller keeps working: only
+   * `UIScene` has a browser to ask, and it is the only caller that passes one.
+   */
+  counterInkCentreFraction: number = DIGIT_INK_CENTRE_FRACTION,
+): HudLayout {
   if (!(gameW > 0) || !(gameH > 0) || !Number.isFinite(gameW) || !Number.isFinite(gameH)) {
     throw new Error(`hudLayout: game size must be finite and positive, got ${gameW} x ${gameH}`);
   }
@@ -275,15 +280,16 @@ export function hudLayout(gameW: number, gameH: number, slot: Rect): HudLayout {
     gearIcon,
     counter: {
       x: gearIcon.x + iconSize + COUNTER_GAP * 0.5 * scale,
-      // 🔴 The descender correction — inventory 3.8's second clause, and the one that was silently
-      // left out when 3.8's padding half was fixed. Phaser `Text` lays out on the font's full
-      // ascent + descent box, so `y = middle - fontPx / 2` centres THAT box. Digits have no
-      // descenders, so the ink sits in the upper part of it and reads **2–4 px high** against the
-      // gear icon beside it, which is centred on its own bounds.
+      // 🔴 **`y` is the top of the GLYPH BOX, and the digits' ink is not centred in it.** Phaser
+      // lays the box out on its test string's `ascent + descent` and puts the baseline at
+      // `boxTop + ascent`; digits are shorter than that ascent and have no descender, so their ink
+      // sits in the upper middle of the box. Centring the box leaves the count reading high against
+      // the gear icon, which IS centred on its own bounds — inventory 3.8's second clause.
       //
-      // `DIGIT_DESCENT_FRACTION` is scaled with the font rather than added as a literal, so the
+      // So the box top is placed from the ink instead: subtract the measured distance from the box
+      // top down to the ink's own centre. A FRACTION of `fontPx` rather than a literal, so the
       // correction survives a font-size change instead of becoming wrong at the next one.
-      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * DIGIT_DESCENT_FRACTION,
+      y: plate.y + plate.h / 2 - fontPx * counterInkCentreFraction,
       fontPx,
     },
   };

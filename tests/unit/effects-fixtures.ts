@@ -101,10 +101,33 @@ export function build(spawn?: { x: number; y: number }) {
 
   // Keyed off the texture key `ensureParticleTexture` returns, which encodes the kind — the only
   // route from `scene.add.particles(...)` back to which emitter is being built.
+  /**
+   * The ScaleManager, modelled because `attachEffects` sizes the camera off the LIVE view now.
+   *
+   * 🔴 With the view filled the game size is not the design size: a landscape phone gets a
+   * view up to `MAX_GAME_WIDTH` wide, and a camera left at `GAME_WIDTH + 2 * margin` draws raw
+   * background down the right edge. `resize(w, h)` below lets a case drive that transition, which
+   * is the only way to see the defect — the first `setSize` is correct either way.
+   */
+  const scaleHandlers: (() => void)[] = [];
+  const gameSize = { width: 1920, height: 1080 };
+  const scale = {
+    gameSize,
+    on(event: string, fn: () => void) {
+      if (event === 'resize') scaleHandlers.push(fn);
+    },
+    off(event: string, fn: () => void) {
+      if (event !== 'resize') return;
+      const i = scaleHandlers.indexOf(fn);
+      if (i >= 0) scaleHandlers.splice(i, 1);
+    },
+  };
+
   const scene = {
     add: { particles: (_x: number, _y: number, key: string) => emitter(key.split('-').pop() as EffectKind) },
     textures: { exists: () => true },
     cameras: { main: camera },
+    scale,
     events: { once: (name: string, fn: () => void) => listeners.push({ name, fn }) },
   };
 
@@ -127,6 +150,14 @@ export function build(spawn?: { x: number; y: number }) {
     explosions,
     destroyed,
     scales,
+    /** Drive a view widening and fire the ScaleManager's resize, as Phaser would. */
+    resize(width: number, height: number) {
+      gameSize.width = width;
+      gameSize.height = height;
+      for (const fn of [...scaleHandlers]) fn();
+    },
+    /** How many `resize` listeners the ScaleManager still holds — the leak observable. */
+    scaleListeners: () => scaleHandlers.length,
     built,
     listeners,
     sentry: world.enemies.sentries[0]!,

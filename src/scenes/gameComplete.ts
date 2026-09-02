@@ -44,6 +44,8 @@ import { LEVEL_SELECT_KEY, levelOrder } from './gameLevelPick';
 import type { LevelCompleteInfo } from './hudFade';
 import type { UIScene } from './UIScene';
 import { attachTapRoutes } from './touchRoutes';
+import { keepTapRoutesSized } from './tapRouteResize';
+import { SCENE_DESTROY, SCENE_SHUTDOWN } from './engineLiterals';
 
 /** The scene key the last level's continue goes to. Defined in `gameLevelPick.ts`, re-exported here
  * because this file's `bindContinue` is what routes to it. */
@@ -160,8 +162,20 @@ function armContinueKey(scene: Phaser.Scene, onAdvance: () => void): void {
 }
 
 function bindContinue(scene: Phaser.Scene, next: string | null): void {
-  const go = (): void => {
+  /**
+   * 🔴 **One idempotent teardown, and it is new.** `go` used to destroy `taps` and nothing else,
+   * which was complete while the route was all this function owned. It now also owns a ScaleManager
+   * subscription — global, and outliving every scene — so leaving on any other path would leak it
+   * and the panel's closure with it. Named by the Codex plan review, round 4: the owner I first
+   * reached for ("the teardown that removes the panel") does not exist here, because the panel
+   * belongs to `UIScene`.
+   */
+  const teardown = (): void => {
+    sized.destroy();
     taps.destroy();
+  };
+  const go = (): void => {
+    teardown();
     advanceTo(scene, next);
   };
   // ⚠️ The zone is on the GAME scene, not on the `UIScene` that DRAWS the panel: `UIScene`
@@ -170,15 +184,24 @@ function bindContinue(scene: Phaser.Scene, next: string | null): void {
   // tap from skipping it. `Game`'s own SHUTDOWN fires on that same start, and `go` destroys the
   // route before advancing in any case.
   const { width, height } = scene.scale.gameSize;
+  // Deliberately larger than the view. `GameScene`'s camera is displaced to `(-10, -8)` for shake
+  // headroom (`effectsCamera.ts`), and a shake in progress moves it further, so a zone sized exactly
+  // to the view can leave a live strip of screen along two edges.
+  const box = [{ id: 'continue', x: -64, y: -64, w: width + 128, h: height + 128 }];
   const taps = attachTapRoutes(
     scene,
     scene.game.device.input.touch,
-    // Deliberately larger than the view. `GameScene`'s camera is displaced to `(-10, -8)` for
-    // shake headroom (`gameEffects.ts:156-158`), and a shake in progress moves it further, so a
-    // zone sized exactly to the view can leave a live strip of screen along two edges.
-    [{ id: 'continue', x: -64, y: -64, w: width + 128, h: height + 128 }],
+    box,
     go,
   );
+  // The zone is view-sized, so a view resize leaves it short down one side — a strip of the
+  // completion panel where a tap does nothing. Mutated in place, never replaced; `tapRouteResize.ts`
+  // says why.
+  const sized = keepTapRoutesSized(scene, taps, (size) => {
+    Object.assign(box[0]!, { w: size.width + 128, h: size.height + 128 });
+  });
+  scene.events.once(SCENE_SHUTDOWN, teardown);
+  scene.events.once(SCENE_DESTROY, teardown);
   armContinueKey(scene, go);
 }
 

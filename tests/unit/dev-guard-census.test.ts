@@ -66,6 +66,13 @@ const CENSUS: ReadonlyArray<readonly [string, number]> = [
   ['src/scenes/gameInput.ts', 2],
   ['src/scenes/gameLevelPick.ts', 1],
   ['src/scenes/gamePlayerDraw.ts', 4],
+  // 🔴 ADDED 2026-09-01 with the rotate overlay's readout going DEV-only. One negated guard in
+  // `browserHost().report()`, which now injects the `#rotate-diag` node instead of `index.html`
+  // shipping it. Accounted for line-by-line: +1 here, +1 in `NEGATED_CENSUS`, and **0** in
+  // `GUARDED_BODY_LINES` — an early-return guard carries no brace, so the body scan does not and
+  // should not see it. Production absence is gated separately by `verify-dist.mjs`'s `rotate-diag`
+  // symbol.
+  ['src/scenes/rotatePrompt.ts', 1],
   ['src/sim/hitstop.ts', 1],
   ['src/sim/types.ts', 1],
 ];
@@ -129,6 +136,8 @@ const NEGATED_CENSUS: ReadonlyArray<readonly [string, number]> = [
   ['src/scenes/gameDev.ts', 1],
   ['src/scenes/gameLevelPick.ts', 1],
   ['src/scenes/gamePlayerDraw.ts', 1],
+  // The rotate overlay's DEV-only readout — see the note in `CENSUS`.
+  ['src/scenes/rotatePrompt.ts', 1],
 ];
 
 /**

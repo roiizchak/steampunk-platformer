@@ -34,7 +34,7 @@ import {
   type EffectKind,
 } from '../../src/render/effects';
 import { shakeFor, shakeOffset, shakeStartTick } from '../../src/render/screenShake';
-import { BLEND_MODE_NORMAL, SCENE_SHUTDOWN } from '../../src/scenes/engineLiterals';
+import { BLEND_MODE_NORMAL, SCENE_DESTROY, SCENE_SHUTDOWN } from '../../src/scenes/engineLiterals';
 import { freezePair } from '../../src/sim/hitstop';
 import { advance, createWorld } from '../../src/sim/tick';
 import type { InputSnapshot } from '../../src/sim/types';
@@ -209,8 +209,12 @@ describe('the teardown is registered on the event Phaser actually fires', () => 
 
     // The NAME, not merely that something was registered: a handler on an event Phaser never fires
     // is the same as no handler, and reads identically in the source.
-    expect(listeners.map((l) => l.name), 'the teardown is not on Phaser’s shutdown event').toEqual([
+    // 🔴 BOTH events. SHUTDOWN alone was right while everything this attachment owned belonged to
+    // the scene and died with it; the `resize` listener hangs off the ScaleManager, which outlives
+    // every scene, and removing an ACTIVE scene reaches DESTROY without passing through SHUTDOWN.
+    expect(listeners.map((l) => l.name), 'the teardown is not on the events Phaser fires').toEqual([
       SCENE_SHUTDOWN,
+      SCENE_DESTROY,
     ]);
 
     // Leave the camera genuinely displaced, which is the state the restore exists for: a camera
@@ -327,5 +331,55 @@ describe('every emitter is built with the values the spec names', () => {
       );
       expect(built[kind]!.depth, `${kind} was not built at its spec depth`).toBe(EFFECT_DEPTH[kind]);
     }
+  });
+});
+
+/**
+ * **The camera follows the live view, and lets go of the ScaleManager when the scene ends.**
+ *
+ * The filled view makes the game size wider than the design size on a landscape phone. This
+ * camera is deliberately oversized and at a negative offset, so `CameraManager.onResize` skips it —
+ * it only re-sizes cameras at `(0,0)` whose size equals the previous game size
+ * (`CameraManager.js:685`). Nothing else would ever grow it, and the pillarbox the whole change
+ * removes would simply reappear INSIDE the canvas.
+ */
+describe('the shake camera tracks a view resize', () => {
+  it('covers the widened view, margin included', () => {
+    const { camera, resize } = build();
+    const beforeW = camera.width;
+    const beforeH = camera.height;
+    resize(2400, 1080);
+    expect(camera.width, 'the camera kept its old width — raw background appears down the edge')
+      .toBeGreaterThan(beforeW);
+    // The margin is design-anchored on purpose (`screenShake.ts:110-112`: feeding the grown
+    // viewport back in is a feedback loop), so the camera is exactly the view plus twice it — and
+    // the same overhang before and after is what proves the margin did not move with the view.
+    expect(camera.width - 2400, 'the margin changed with the view').toBe(beforeW - 1920);
+    expect(camera.height, 'height is clamped at 1080, so the camera height must not move').toBe(
+      beforeH,
+    );
+  });
+
+  it('drops its resize listener on SHUTDOWN', () => {
+    const { listeners, scaleListeners } = build();
+    expect(scaleListeners(), 'nothing subscribed — this case would prove nothing').toBe(1);
+    listeners.find((l) => l.name === SCENE_SHUTDOWN)?.fn();
+    expect(scaleListeners(), 'a ScaleManager listener outlived the scene').toBe(0);
+  });
+
+  it('drops it on DESTROY too — the path that never passes through SHUTDOWN', () => {
+    const { listeners, scaleListeners } = build();
+    listeners.find((l) => l.name === SCENE_DESTROY)?.fn();
+    expect(scaleListeners(), 'removing an active scene leaked the listener').toBe(0);
+  });
+
+  it('stops re-sizing the camera once torn down', () => {
+    // The consequence a listener count alone cannot show: a stale closure still writing to a camera
+    // that by then belongs to the next scene.
+    const { camera, listeners, resize } = build();
+    listeners.find((l) => l.name === SCENE_SHUTDOWN)?.fn();
+    const after = camera.width;
+    resize(2400, 1080);
+    expect(camera.width, 'a torn-down attachment still resized the camera').toBe(after);
   });
 });

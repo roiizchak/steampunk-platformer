@@ -17,7 +17,14 @@ import { describe, expect, it } from 'vitest';
 
 import { HELP_FONT_PX } from '../../src/render/helpBanner';
 import { helpLine } from '../../src/scenes/gameDev';
-import { HUD_MARGIN, HUD_PLATE, counterText, gearsCollectedFrom, hudFits, hudLayout } from '../../src/render/hud';
+import {
+  HUD_MARGIN,
+  HUD_PLATE,
+  counterText,
+  gearsCollectedFrom,
+  hudFits,
+  hudLayout,
+} from '../../src/render/hud';
 import { HUD_SLOT } from '../../src/render/playerHud';
 import { GAME_HEIGHT, GAME_WIDTH, MAX_LEVEL_GEARS } from '../../src/game/constants';
 import type { GearSim } from '../../src/sim';
@@ -324,62 +331,5 @@ describe('HELP_FONT_PX has a consumer (CLAUDE.md §2 draw-path gate)', () => {
     expect(source, "a literal px fontSize is back — that is item 2.5's defect").not.toMatch(
       /fontSize:\s*'\d+px'/,
     );
-  });
-});
-
-/**
- * # The counter's digits centre on their INK, not on their glyph box (inventory 3.8, clause 2)
- *
- * Item 3.8 named three UI defects. The padding half was fixed; **this one was silently left out and
- * never recorded** — found by the S.7 gate owner, which makes it a C11 gap as well as a visual one.
- *
- * Phaser `Text` lays out on the font's full ascent + descent box. Digits have no descenders, so
- * centring that box leaves the ink sitting **2–4 px high** next to the gear icon, which is centred
- * on its own bounds.
- *
- * ⚠️ Changing `counter.y` moved **no test at all** — 2283 passed before and after. That is the
- * finding this file exists to close: the value was ungated, so the defect could be introduced or
- * removed without anything noticing, in either direction.
- *
- * **The mutation this names:** drop the `+ fontPx * DIGIT_DESCENT_FRACTION` term.
- */
-describe('the gear counter is nudged for the descender it does not have (3.8)', () => {
-  const layout = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
-
-  /** Where a naive ascent+descent centring would put it — the defect's position. */
-  function naiveY(l: ReturnType<typeof hudLayout>): number {
-    return l.plate.y + l.plate.h / 2 - l.counter.fontPx / 2;
-  }
-
-  it('sits BELOW naive centring — the whole point', () => {
-    expect(
-      layout.counter.y,
-      'the counter is centred on its glyph box again, so the digits read high',
-    ).toBeGreaterThan(naiveY(layout));
-  });
-
-  it('the nudge is a plausible half-descent, not an arbitrary shove', () => {
-    // Asserted as a range rather than an equality: an equality against the constant would be the
-    // same expression twice and could never fail. A half-descent is ~10% of the em box; anything
-    // outside 5–15% is a different decision that should be argued, not tuned in.
-    const nudge = (layout.counter.y - naiveY(layout)) / layout.counter.fontPx;
-    expect(nudge, `nudge is ${(nudge * 100).toFixed(1)}% of the font size`).toBeGreaterThan(0.05);
-    expect(nudge).toBeLessThan(0.15);
-  });
-
-  it('scales with the font — it is a fraction, not a literal', () => {
-    // The regression that a hardcoded 4 px would cause: correct at 1920x1080, wrong everywhere else.
-    // This is half of what Tier 4 was about.
-    const small = hudLayout(852, 480, HUD_SLOT);
-    const big = hudLayout(GAME_WIDTH, GAME_HEIGHT, HUD_SLOT);
-    const smallNudge = (small.counter.y - naiveY(small)) / small.counter.fontPx;
-    const bigNudge = (big.counter.y - naiveY(big)) / big.counter.fontPx;
-    expect(smallNudge).toBeCloseTo(bigNudge, 6);
-  });
-
-  it('still leaves the whole HUD on screen at the minimum window', () => {
-    // The counter moving down cannot be allowed to push it off the bottom — `hudFits` measures the
-    // counter's bottom as `y + fontPx`, so the nudge is inside that budget or it is not.
-    expect(hudFits(hudLayout(852, 480, HUD_SLOT), 852, 480, 60)).toBe(true);
   });
 });

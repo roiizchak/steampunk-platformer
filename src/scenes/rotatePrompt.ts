@@ -85,7 +85,15 @@ export interface RotateHost {
    * calling `refresh()` there. A readout distinguishes the two in one look; another round of
    * reasoning distinguishes nothing, which is what the last three rounds established.
    *
-   * Digits and separators only. `tools/gen/verify-dist.mjs` sweeps shipped text for dev prose.
+   * ⚠️ **DEV ONLY as of 2026-09-01 — and the answer it produced is recorded here so the next
+   * session does not rebuild it.** The instrument worked: the viewport was not lying and the poll
+   * was not dead. The shortfall was **2.1 px** — 41.9 CSS px against the 44 px floor — because the
+   * browser's address bar took the height with it. `fullscreenOnTap.ts` is the repair that came
+   * out of this readout.
+   *
+   * So it no longer ships. `browserHost()` injects the node in the DEV build only, instead of
+   * `index.html` carrying it, and `verify-dist.mjs` fails the build on `rotate-diag` reaching
+   * `dist/`. Digits and separators only, still — that sweep also reads shipped text for dev prose.
    */
   report(line: string): void;
 }
@@ -107,8 +115,29 @@ export function browserHost(): RotateHost | null {
       document.documentElement.classList.toggle(ROTATE_CLASS, shown);
     },
     report(line: string) {
-      const el = document.getElementById('rotate-diag');
-      if (el !== null && el.textContent !== line) el.textContent = line;
+      // 🔴 **DEV only, and the node is INJECTED rather than shipped.** The question this readout
+      // was built to answer is answered: four device sessions ended with "it still does not
+      // clear", and the instrument settled it in one look — a 2.1 px shortfall from the browser's
+      // address bar, not an arithmetic error. A production player has no use for four numbers in
+      // the corner of a rotate prompt, so it does not ship. Owner decision 2026-09-01.
+      //
+      // ⚠️ The node is CREATED here instead of living in `index.html`, and that is the whole
+      // point. Deleting the markup while leaving this function writing to `getElementById` would
+      // have made the DEV instrument silently inert — the `el !== null` guard would swallow it —
+      // which is the same defect as a decision function with no consumer. M90 is re-scoped to DEV
+      // rather than withdrawn, and it stays true because this branch really does draw.
+      if (!import.meta.env.DEV) return;
+      const overlay = document.getElementById('rotate');
+      if (overlay === null) return;
+      let el = document.getElementById('rotate-diag');
+      if (el === null) {
+        el = document.createElement('div');
+        el.id = 'rotate-diag';
+        // Inline, because the stylesheet no longer carries a rule this build would use.
+        el.setAttribute('style', 'font-size:11px;color:#6f6250;letter-spacing:1px');
+        overlay.appendChild(el);
+      }
+      if (el.textContent !== line) el.textContent = line;
     },
   };
 }

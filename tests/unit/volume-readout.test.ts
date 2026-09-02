@@ -76,15 +76,31 @@ describe('helpLine prints the level beside the keys that move it', () => {
     expect(helpLine({ muted: false, volume: 0.5 })).toContain('volume 50%');
   });
 
-  it('labels the touch line too, where there are no keys to name the quantity', () => {
-    // A bare `50%` across the top of a phone names no quantity: it could be health, progress or a
-    // load. The keyboard line gets the word from its `[ ] volume` keys; touch has none of them.
-    // `startsWith`, not `toBe`: under vitest `import.meta.env.DEV` is true and the dev suffix is
-    // appended. The claim is about the SHIPPED half, which is the part a phone player reads.
-    expect(helpLine({ muted: false, volume: 0.5 }, true).startsWith('VOLUME 50%')).toBe(true);
-    expect(helpLine({ muted: true, volume: 0.5 }, true).startsWith('VOLUME MUTED')).toBe(true);
-    // And a caller with no audio manager gets no bare label at all.
-    expect(helpLine(undefined, true)).not.toContain('VOLUME');
+  it('prints NOTHING on a touch device — not the volume, and not the dev suffix either', () => {
+    // 🔴 Owner decision 2026-09-01: on a phone the volume belongs to the hardware keys and the OS
+    // overlay, not to a row of text competing with the HUD for the only line either can use. The
+    // labelled `VOLUME 50%` this case used to assert was the right answer while the readout stayed;
+    // it is the wrong answer now that it does not.
+    //
+    // ⚠️ **`toBe('')`, not `not.toContain('VOLUME')`.** The weaker assertion passes on a line that
+    // dropped the volume and kept the DEV suffix — which is exactly the defect the early return
+    // exists to prevent, since the suffix is appended AFTER `base`. This suite runs with
+    // `DEV === true`, so a suffix leak is reachable here and this is the case that sees it.
+    expect(helpLine({ muted: false, volume: 0.5 }, true)).toBe('');
+    expect(helpLine({ muted: true, volume: 0.5 }, true)).toBe('');
+    expect(helpLine(undefined, true)).toBe('');
+  });
+
+  it('still prints the whole keyboard line, so the touch return did not swallow both arms', () => {
+    // The non-vacuity half: a bare `return ''` at the top of the function would satisfy every
+    // assertion above.
+    // No literal spaces in these needles: the line joins its words with U+00A0 so a wrap cannot
+    // separate a level from the keys that move it, and a plain-space needle silently misses.
+    const keyboard = helpLine({ muted: false, volume: 0.5 });
+    expect(keyboard).toContain('50%');
+    expect(keyboard).toContain('ESC');
+    expect(keyboard).toContain('ARROWS');
+    expect(keyboard.length).toBeGreaterThan(40);
   });
 
   it('prints every stop on the ladder distinctly', () => {

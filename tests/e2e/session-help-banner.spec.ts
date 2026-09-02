@@ -221,36 +221,73 @@ test.describe('the controls banner is placed beside the HUD, not over the level'
    * nothing here. `UIScene` re-lays-out the whole plate through `hudLayout()` on this event while
    * the banner used to stay at raw design pixels — Codex round 1, finding 4.
    */
-  test('follows the HUD through a real scale.resize()', async ({ page }) => {
+  /**
+   * 🔴 **Rewritten 2026-09-01: a real BROWSER resize, and the sizes changed with it.**
+   *
+   * ⚠️ Any paragraph above this block describing a synthetic `game.scale.resize()` is HISTORY —
+   * that path is unreachable now, for the reason the next paragraph gives.
+   *
+   * This drove `game.scale.resize(1280, 720)` directly. That path is no longer reachable:
+   * `src/game/viewSize.ts` makes the view a function of the viewport, `scale.resize` emits
+   * `resize`, and the fill loop hears it and snaps the view straight back to what the viewport
+   * says. A spec driving it measures the loop undoing it.
+   *
+   * ⚠️ The old second arm — *"the smallest size this project supports, where the band is
+   * narrowest"* — is GONE rather than adapted, and that is a reduction worth naming. The view can
+   * no longer be narrower than `GAME_WIDTH`: `liveViewWidth` clamps there, so 852 x 480 (1.775,
+   * just under 16:9) now letterboxes at a 1920-wide view rather than shrinking the band. The
+   * narrowest band the banner can ever be laid out in IS the design width, which the first read
+   * below already covers. The widest is the ceiling, and that is the arm that replaces it.
+   */
+  test('follows the HUD through a real browser resize', async ({ page }) => {
+    // Exactly 16:9, so the view starts at the design width.
+    await page.setViewportSize({ width: 1024, height: 576 });
     await bootToGame(page);
     const before = await bannerAndHud(page);
     expect(before.banner.gameSize.height).toBe(1080);
+    expect(before.banner.gameSize.width, 'a 16:9 viewport should sit at the design width').toBe(1920);
 
-    await page.evaluate(() => {
-      (
-        window as unknown as { __phaserGame: { scale: { resize(w: number, h: number): void } } }
-      ).__phaserGame.scale.resize(1280, 720);
-    });
+    // EXACTLY 20:9 (2.2222), a landscape phone's aspect, inside the 2.37 ceiling — the view widens
+    // to exactly 2400. 1024x461 is 2.2213 and rounds to 2399, which reads as 2400 and fails an
+    // equality; that is how these viewports earned their exact numbers.
+    await page.setViewportSize({ width: 1000, height: 450 });
+    await expect
+      .poll(async () => (await bannerAndHud(page)).banner.gameSize.width, {
+        message: 'the view never widened after the browser resize',
+      })
+      .toBe(2400);
     await waitTicks(page, 4);
 
     const after = await bannerAndHud(page);
-    expect(after.banner.gameSize.width).toBe(1280);
     assertPlaced(after.hud, after.banner);
-    // It genuinely moved rather than happening to satisfy the same bounds at both sizes.
-    expect(after.banner.bounds.left, 'the banner did not move with the HUD').not.toBe(
+    // 🔴 It genuinely followed the view rather than happening to satisfy the same bounds at both
+    // sizes — and the observable is the RIGHT edge, not the left. `bounds.left` is derived from the
+    // gear counter, which is left-anchored and scaled off HEIGHT, and height is pinned: it read 624
+    // at both sizes and the assertion failed on correct behaviour. What the extra width actually
+    // buys is `wrapPx` (`helpBanner.ts:279`), so the banner wraps later and reaches further right.
+    expect(
+      after.banner.bounds.right,
+      'the banner did not use the extra width — its wrap is still bounded by the design view',
+    ).toBeGreaterThan(before.banner.bounds.right);
+    expect(after.banner.bounds.left, 'the banner left edge is height-derived and must not move').toBe(
       before.banner.bounds.left,
     );
 
-    // And again at the smallest size this project supports, where the band is narrowest.
-    await page.evaluate(() => {
-      (
-        window as unknown as { __phaserGame: { scale: { resize(w: number, h: number): void } } }
-      ).__phaserGame.scale.resize(852, 480);
-    });
+    // And again past the aspect ceiling, where the view clamps at its widest and the band is at
+    // its most generous — the other end of the range the banner must lay out in.
+    await page.setViewportSize({ width: 1040, height: 400 });
+    await expect
+      .poll(async () => (await bannerAndHud(page)).banner.gameSize.width, {
+        message: 'the view did not clamp at the ceiling',
+      })
+      .toBe(2560);
     await waitTicks(page, 4);
-    const small = await bannerAndHud(page);
-    expect(small.banner.gameSize.width).toBe(852);
-    assertPlaced(small.hud, small.banner);
+    const widest = await bannerAndHud(page);
+    assertPlaced(widest.hud, widest.banner);
+    expect(
+      widest.banner.bounds.right,
+      'the widest supported view did not give the banner more room than the 20:9 one',
+    ).toBeGreaterThan(after.banner.bounds.right);
   });
 
 

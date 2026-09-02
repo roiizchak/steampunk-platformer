@@ -10,8 +10,10 @@
  * the finished **canvas** is scaled onto the screen, and that is a second, independent resample.
  *
  * `Phaser.Scale.FIT` — read in `ScaleManager.updateScale`, the "all other scale modes" branch —
- * leaves the canvas **backing store at 1920x1080** and changes only its CSS width and height. So
- * the browser rescales 1920 px of buffer into however many CSS pixels the window allows, and
+ * leaves the canvas **backing store at the GAME SIZE** and changes only its CSS width and height.
+ * That size was a fixed 1920x1080 when this was measured; since 2026-09-01 `src/game/viewSize.ts`
+ * derives it from the viewport, so it is 1920 at 16:9 and up to `MAX_GAME_WIDTH` on a wide one.
+ * Either way the browser rescales a buffer into however many CSS pixels the window allows, and
  * `image-rendering: pixelated` makes that nearest-neighbour.
  *
  * **Nearest-neighbour at a fractional scale drops and duplicates whole pixel columns.** At scale

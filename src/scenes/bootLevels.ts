@@ -1,6 +1,6 @@
 import type Phaser from 'phaser';
 import { describeCatalogProblem, type AssetCatalog, type CatalogEntry } from '../game/assetCatalog';
-import { GAME_HEIGHT, GAME_WIDTH } from '../game/constants';
+import { GAME_HEIGHT, MAX_GAME_WIDTH } from '../game/constants';
 import { describeLevelProblem, parseLevel } from '../game/tilemap';
 import { cameraSetup } from '../render/cameraRig';
 
@@ -82,7 +82,8 @@ export function verifyLevels(scene: Phaser.Scene, catalog: AssetCatalog | undefi
     // The camera contract is part of "this level is loadable": a level no larger than the view
     // cannot scroll, and vault 3.2 is the lesson that this is invisible until level design.
     try {
-      cameraSetup(parseLevel(entry.key, cached.data), GAME_WIDTH, GAME_HEIGHT);
+      // The widest view the game will draw — see the note at `gameCamera.ts`'s own call.
+      cameraSetup(parseLevel(entry.key, cached.data), MAX_GAME_WIDTH, GAME_HEIGHT);
     } catch (error) {
       problems.push(`level "${entry.key}" (${String(error)})`);
     }

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { bootToGame } from './gameHarness';
+import { GAME_HEIGHT, GAME_WIDTH, MAX_GAME_WIDTH } from '../../src/game/constants';
 
 /**
  * # The game at device pixel ratio 2 — inventory 2b.6
@@ -81,14 +82,19 @@ test.describe('Phase 6 — DPR 2 (inventory 2b.6)', () => {
     expect(state?.ready).toBe(true);
   });
 
+  // The same three viewports `phase-06-chrome.spec.ts` uses, deliberately: the claim under test is
+  // that DPR does not change this geometry, and the only way to say that is to ask the identical
+  // question at both ratios and compare. Rewritten with that file on 2026-09-01 — 2000x900 FILLS
+  // now that the view fills the screen rather than pillarboxing, and the over-ceiling case is new.
+  const CEILING_ASPECT = MAX_GAME_WIDTH / GAME_HEIGHT;
+  const DESIGN_ASPECT = GAME_WIDTH / GAME_HEIGHT;
+
   for (const [w, h, boxing] of [
     [1400, 900, 'letterboxed'],
-    [2000, 900, 'pillarboxed'],
+    [2000, 900, 'fills'],
+    [2600, 1000, 'pillarboxed'],
   ] as const) {
     test(`a ${boxing} viewport (${w}x${h}) still centres at DPR 2`, async ({ page }) => {
-      // The same two viewports `phase-06-chrome.spec.ts` uses, deliberately: the claim under test is
-      // that DPR does not change this geometry, and the only way to say that is to ask the same
-      // question at both ratios and compare.
       await page.setViewportSize({ width: w, height: h });
       await bootToGame(page);
       const box = await canvasBox(page);
@@ -98,18 +104,22 @@ test.describe('Phase 6 — DPR 2 (inventory 2b.6)', () => {
       expect(Math.abs(box.left - box.right), `${boxing} at DPR 2: horizontal gaps unequal`).toBeLessThanOrEqual(1);
 
       // Equal gaps are satisfied by a canvas of the wrong size that happens to be centred — a
-      // zero-width canvas has perfectly equal gaps. FIT must preserve 16:9 whichever axis limits.
+      // zero-width canvas has perfectly equal gaps. The drawn aspect is the viewport's own, clamped
+      // into [16:9, ceiling]; DPR must not change which side of those bounds it lands on.
       expect(box.width).toBeGreaterThan(0);
+      const wanted = Math.min(Math.max(w / h, DESIGN_ASPECT), CEILING_ASPECT);
       expect(
-        Math.abs(box.width / box.height - 16 / 9),
+        Math.abs(box.width / box.height - wanted),
         `${boxing} at DPR 2: canvas is ${box.width}x${box.height}, aspect ` +
-          `${(box.width / box.height).toFixed(4)} against 1.7778`,
+          `${(box.width / box.height).toFixed(4)} against ${wanted.toFixed(4)}`,
       ).toBeLessThan(0.01);
 
       if (boxing === 'letterboxed') {
         expect(box.top, 'letterboxed: expected vertical slack').toBeGreaterThan(0);
+      } else if (boxing === 'pillarboxed') {
+        expect(box.left, 'pillarboxed: expected horizontal slack past the ceiling').toBeGreaterThan(0);
       } else {
-        expect(box.left, 'pillarboxed: expected horizontal slack').toBeGreaterThan(0);
+        expect(box.left, 'fills: a black bar survived at DPR 2').toBeLessThanOrEqual(1);
       }
     });
   }

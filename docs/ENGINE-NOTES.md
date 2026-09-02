@@ -302,7 +302,56 @@ opposite and shipped.
   nothing about what it hit. Hold the handle. `tests/unit/tween-boundary.test.ts` enforces both
   halves statically.
 
-## Scale · `FIT` keeps the backing store at the GAME size, at every DPR
+## Text · `TextMetrics.fontSize` is NOT the font size, and the metrics are of the TEST STRING
+
+Measured 2026-09-02, on the third attempt at one 4-pixel defect.
+
+`Text.getTextMetrics()` returns `{ ascent, descent, fontSize }`. **`fontSize` is `ascent + descent`**
+— `MeasureText.js:38` assigns exactly that. It is the glyph BOX height, not the size you asked for.
+A 44 px counter reports `{ ascent: 36, descent: 9, fontSize: 45 }`. Anything that divides by it as
+if it were the font size is off by the ratio of the two, silently, and a repair written that way
+looks measured while being wrong.
+
+And **the three numbers describe `style.testString`, not your text.** The default is `|MÉqgy`,
+chosen to reach the extremes of the face. That is the right string to lay the box out on — Phaser
+puts the baseline at `boxTop + ascent`, so a `Text` at `setOrigin(0, 0)` is positioned by it — and
+the wrong one to centre digits by: figures are shorter than `|` or `É` and have no descender. On the
+face the browser picks for our HUD, `measureText('0123456789').actualBoundingBoxAscent` is **28**
+against the metrics' ascent of **36**.
+
+**To centre a digit string's INK on something**, the box top is
+`target - (layoutAscent - digitInkAscent / 2)`, taking `layoutAscent` from `getTextMetrics()` and
+`digitInkAscent` from `measureText()` on the `Text`'s own 2D context — which carries the resolved
+font only AFTER `setFontSize`. Both measurements are needed and they are of different strings;
+`src/render/counterInk.ts` is the one place that combines them. Two shipped repairs guessed the
+correction instead, in opposite directions.
+
+## Scale · the backing store is the GAME size, at every DPR
+
+⚠️ **AMENDED 2026-09-01: `Phaser.Scale.FIT` still ships, but the game size it fits is no
+longer a constant.** The measurement below is unchanged and still correct — what moved is the
+number in the right-hand column.
+
+`src/game/viewSize.ts` sets the view to `clamp(1080 x viewport aspect, GAME_WIDTH, MAX_GAME_WIDTH)`
+by `GAME_HEIGHT` on every resize, so FIT has nothing left to letterbox inside the ceiling. The
+change exists because a fixed 16:9 view pillarboxed a landscape phone — a ~19.5:9 handset left
+17.9 % of the width black, which the owner reported from a real device.
+
+🔴 **`Phaser.Scale.EXPAND` is the mode that appears to do this, and it cannot be used here.**
+Its clamp is `scale.min`/`scale.max`, and `ScaleManager` hands those bounds to `displaySize`, which
+is **also the CSS style size** (`ScaleManager.js:1131-1140`; `Size.setSize` re-clamps into the same
+min/max). The two are in different coordinate spaces — game units and CSS pixels — so a `min` of
+1920x1080 forces the canvas to be at least 1920 CSS px wide on a 900 px viewport, and a `max` of
+2560x1080 caps it at 1080 CSS px tall on a 1440p monitor. Both were observed on this machine:
+EXPAND with that clamp drew a **1920 CSS px** canvas into a 1040 px viewport. There is no
+assignment of `min`/`max` that bounds the view without bounding the CSS size the same way. Measured
+2026-09-01, after the mode had already been committed and the e2e gate caught it.
+
+So the second consequence below is now *slightly* weaker than it reads: a WIDE window costs more
+GPU than the design size, up to 2560 x 1080 rather than always exactly 1920 x 1080. The
+frame-budget figures in `docs/qa/` were taken at the design size and are a floor for a widened view
+rather than the figure for every size. Nothing has re-measured that; recorded as the open question
+it is rather than as a number.
 
 **Measured 2026-08-23** (inventory 2b.6), against a prediction that was wrong — which is why the
 measurement is here rather than the prediction.
@@ -314,18 +363,21 @@ measurement is here rather than the prediction.
 
 The game sets no explicit `resolution`, and the natural reading of Phaser's default is that the
 backing store follows the CSS size and the browser upscales on a HiDPI display. **It does not.**
-`Phaser.Scale.FIT` holds the render target at the configured game size — 1920 × 1080 — and scales the
-element with CSS.
+`Phaser.Scale.FIT` holds the render target at the configured game size — 1920 × 1080 at the time of
+this measurement — and scales the element with CSS.
 
 Two consequences, and they pull in opposite directions:
 
 - ✅ **There is no HiDPI blur.** At 852 CSS px on a DPR-2 screen the physical canvas is 1704 device
   px against a 1920 px backing store, so the frame is *downsampled*. Supersampling, not upscaling.
   Item 2b.6 asked whether DPR ≠ 1 needed a sharpness fix; it does not.
-- ⚠️ **A small window costs the same GPU as a large one.** The game always rasterises 1920 × 1080.
+- ⚠️ **A small window costs the same GPU as a large one at a given aspect.** The game rasterises the
+  VIEW, which is 1920 × 1080 at 16:9 and up to 2560 × 1080 on a wide one.
   Every frame-budget figure in `docs/qa/` was taken at the design size and is therefore the figure
   for *every* size — which is convenient, and is not what a reader would assume.
 
 Pinned by `tests/e2e/phase-06-dpr2.spec.ts` under the `chromium-dpr2` project. A red there means an
-explicit `resolution` was set or Phaser changed `FIT`'s behaviour; both are decisions that belong in
-this file rather than in an updated assertion.
+explicit `resolution` was set or Phaser changed the scale mode's behaviour; both are decisions that
+belong in this file rather than in an updated assertion. That spec now checks three viewports — a
+letterbox below 16:9, a fill inside the ceiling, and a pillarbox past it — because with a filled
+view "centred with equal gaps" is no longer the same claim at every aspect.

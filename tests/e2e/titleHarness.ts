@@ -139,3 +139,26 @@ export async function restartGame(page: Page): Promise<void> {
     { timeout: BOOT_TIMEOUT },
   );
 }
+
+/**
+ * Every string the Title scene actually DRAWS, in display-list order.
+ *
+ * Reads the live display list rather than the source, because the claim is about what a player sees
+ * on a screen - and the two shipped repairs to this screen were both wrong in a browser while every
+ * source-text gate stayed green.
+ */
+export async function drawnTitleLines(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const game = (window as unknown as {
+      __phaserGame: { scene: { getScene(k: string): { children: { list: unknown[] } } } };
+    }).__phaserGame;
+    const list = game.scene.getScene('Title').children.list as Array<{
+      type?: string;
+      text?: unknown;
+      visible?: boolean;
+    }>;
+    return list
+      .filter((o) => o.type === 'Text' && o.visible !== false && typeof o.text === 'string')
+      .map((o) => o.text as string);
+  });
+}
