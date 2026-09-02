@@ -40,9 +40,10 @@
 
 import Phaser from 'phaser';
 import { HUD_SLOT } from '../render/playerHud';
+import { digitInkAscent } from '../render/counterInk';
 import {
   COUNTER_FILL,
-  measuredDigitDescent,
+  measuredInkCentreFraction,
   COUNTER_STROKE,
   COUNTER_STROKE_PX,
   counterText,
@@ -307,14 +308,21 @@ export class UIScene extends Phaser.Scene {
     // Two passes: the size must be applied before the font can be measured, and pass 1 exists
     // only to learn `fontPx`. This `Text` is created with no `fontSize`, so metrics read before
     // `setFontSize` describe the wrong size; Phaser's `setFontSize` re-runs `MeasureText`, so they
-    // are fresh straight after. The arithmetic and the reason it is HALF the descent live with the
-    // constant, in `measuredDigitDescent`.
+    // are fresh straight after.
+    //
+    // 🔴 **TWO measurements, of two different strings, and that is the whole point.**
+    // `getTextMetrics()` measures the style's TEST STRING (`|MÉqgy`) — which is what Phaser lays
+    // the glyph box out on and where it puts the baseline. The digits are shorter than that and
+    // have no descender, so their ink is not centred in that box. `digitInkAscent` measures the
+    // digits themselves, through the `Text`'s own 2D context, which already has the resolved font
+    // applied. `measuredInkCentreFraction` combines the two; the reasoning is with the constant.
     this.counter.setFontSize(this.layout.counter.fontPx);
+    const metrics = this.counter.getTextMetrics();
     this.layout = hudLayout(
       width,
       height,
       HUD_SLOT,
-      measuredDigitDescent(this.counter.getTextMetrics()),
+      measuredInkCentreFraction(metrics.ascent, digitInkAscent(this.counter), this.layout.counter.fontPx),
     );
     this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
 

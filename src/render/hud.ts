@@ -182,35 +182,7 @@ export const COUNTER_GAP = 24;
  */
 const COUNTER_FONT_PX = 44;
 
-/**
- * How far down to nudge a digit string so its ink centres, as a fraction of the font size.
- *
- * A typical font's descent is ~20–22% of its em box, and digits use none of it — so a glyph box
- * centred on `ascent + descent` puts the ink about **half the descent** too high. Half of ~0.21 is
- * ~0.105, which at the shipped 44 px is **4.6 design px** — the top of the 2–4 px range item 3.8
- * reported, measured at 1920 × 1080 where the report was made.
- *
- * ⚠️ **A fraction, not a literal.** The correction has to move with `COUNTER_FONT_PX`; a hardcoded
- * 4 px would be silently wrong the next time the font changes, which is the shape of half this
- * session's Tier 4.
- *
- * ⚠️ **This is the FALLBACK now, not the shipped value** *(the by-eye read that was owed is paid).
- * The owner reported the count still sitting high against its icon on a real device, and the reason
- * is in the paragraph above: 0.105 assumes a descent of ~21 %, but the browser picks the fallback
- * monospace face and its descent is whatever that face has. `UIScene` measures it —
- * `Text.getTextMetrics()`, which Phaser derives from `actualBoundingBoxAscent`/`Descent` — and
- * passes `descent / fontSize / 2` in as `digitDescentFraction`.
- *
- * ⚠️ **HALF the descent, and the first repair of this got that wrong.** The correction is half,
- * because a box centred on `ascent + descent` puts descender-less ink high by half the descent.
- * Passing the FULL measured `descent / fontSize` (~0.21) doubles the nudge and moves the digits as
- * far wrong in the other direction — while calling itself measured, which is worse than the guess
- * it replaced. Caught by the Codex plan review, round 1.
- *
- * This value survives as the answer when nothing has measured: `hudLayout` is engine-free and is
- * called from unit tests and from `hudFits` with no browser in reach.
- */
-export const DIGIT_DESCENT_FRACTION = 0.105;
+import { DIGIT_INK_CENTRE_FRACTION } from './counterInk';
 
 /**
  * The gear icon beside the counter, square, in DESIGN pixels.
@@ -225,24 +197,10 @@ export const DIGIT_DESCENT_FRACTION = 0.105;
 const GEAR_ICON_PX = 72;
 
 /**
- * The measured half-descent, as a fraction of the font size.
- *
- * Takes Phaser's `TextMetrics` structurally rather than by import, so this module stays engine-free
- * and `npm run test:sim-isolated` can still load it. Phaser derives those numbers from the canvas
- * `actualBoundingBoxAscent`/`Descent` of the style's own test string — a real measurement of the
- * face the browser actually chose, which is the thing `DIGIT_DESCENT_FRACTION` could only guess at.
- *
- * ⚠️ **Half, not whole.** A glyph box centred on `ascent + descent` puts descender-less ink high by
- * half the descent, so half is the correction. Returning the full `descent / fontSize` doubles the
- * nudge and pushes the digits as far below centre as they used to sit above it — while calling
- * itself measured, which is worse than the guess. Caught by the Codex plan review, round 1.
- *
- * Falls back when there is nothing to divide by: a zero font size means nothing measured.
+ * The counter's ink placement lives in `counterInk.ts` — re-exported here because every caller and
+ * every gate already reaches for it through `hud.ts`, and moving a file should not move an import.
  */
-export function measuredDigitDescent(metrics: { descent: number; fontSize: number }): number {
-  if (!(metrics.fontSize > 0) || !Number.isFinite(metrics.descent)) return DIGIT_DESCENT_FRACTION;
-  return metrics.descent / metrics.fontSize / 2;
-}
+export { DIGIT_INK_CENTRE_FRACTION, measuredInkCentreFraction } from './counterInk';
 
 export interface Rect {
   x: number;
@@ -277,12 +235,13 @@ export function hudLayout(
   gameH: number,
   slot: Rect,
   /**
-   * The measured half-descent, as a fraction of the font size. See `DIGIT_DESCENT_FRACTION`.
+   * How far the digits' ink centre sits below the glyph box's top, as a fraction of the font size.
+   * See `measuredInkCentreFraction`.
    *
    * Optional so this module stays engine-free and every existing caller keeps working: only
    * `UIScene` has a browser to ask, and it is the only caller that passes one.
    */
-  digitDescentFraction: number = DIGIT_DESCENT_FRACTION,
+  counterInkCentreFraction: number = DIGIT_INK_CENTRE_FRACTION,
 ): HudLayout {
   if (!(gameW > 0) || !(gameH > 0) || !Number.isFinite(gameW) || !Number.isFinite(gameH)) {
     throw new Error(`hudLayout: game size must be finite and positive, got ${gameW} x ${gameH}`);
@@ -321,15 +280,16 @@ export function hudLayout(
     gearIcon,
     counter: {
       x: gearIcon.x + iconSize + COUNTER_GAP * 0.5 * scale,
-      // 🔴 The descender correction — inventory 3.8's second clause, and the one that was silently
-      // left out when 3.8's padding half was fixed. Phaser `Text` lays out on the font's full
-      // ascent + descent box, so `y = middle - fontPx / 2` centres THAT box. Digits have no
-      // descenders, so the ink sits in the upper part of it and reads **2–4 px high** against the
-      // gear icon beside it, which is centred on its own bounds.
+      // 🔴 **`y` is the top of the GLYPH BOX, and the digits' ink is not centred in it.** Phaser
+      // lays the box out on its test string's `ascent + descent` and puts the baseline at
+      // `boxTop + ascent`; digits are shorter than that ascent and have no descender, so their ink
+      // sits in the upper middle of the box. Centring the box leaves the count reading high against
+      // the gear icon, which IS centred on its own bounds — inventory 3.8's second clause.
       //
-      // `DIGIT_DESCENT_FRACTION` is scaled with the font rather than added as a literal, so the
+      // So the box top is placed from the ink instead: subtract the measured distance from the box
+      // top down to the ink's own centre. A FRACTION of `fontPx` rather than a literal, so the
       // correction survives a font-size change instead of becoming wrong at the next one.
-      y: plate.y + plate.h / 2 - fontPx / 2 + fontPx * digitDescentFraction,
+      y: plate.y + plate.h / 2 - fontPx * counterInkCentreFraction,
       fontPx,
     },
   };

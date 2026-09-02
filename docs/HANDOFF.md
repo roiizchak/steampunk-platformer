@@ -1,11 +1,28 @@
 # Session handoff — the six mobile polish items (2026-09-02)
 
-> Branch `phase-13-mobile-polish`, **not merged**, eight commits on top of `9eba673`.
-> Full record: [qa/session-mobile-polish.md](qa/session-mobile-polish.md).
+> Branch `phase-13-mobile-polish`, **not merged**.
+> Full record: [qa/session-mobile-polish.md](qa/session-mobile-polish.md) and, for the second device
+> round, [qa/session-mobile-polish-02-device-report.md](qa/session-mobile-polish-02-device-report.md).
 >
 > The owner played the shipped Phase 12 build on a real device and reported six things. All six are
-> implemented and gated. **What is NOT done is the hands-on pass**, and four of the six are "does it
-> look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is 240)*.
+> implemented and gated. A Vercel preview then went to the phone and **two more reports came back**
+> — the touch controls sitting inside the phone's gesture zones, and the gear count still off its
+> icon. Both fixed and gated. **What is STILL not done is the hands-on pass**, and most of these
+> items are "does it look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is
+> 240)*.
+
+## 🔴 A game-pixel gate cannot see a CSS-pixel defect
+
+`TOUCH_EDGE_PX` was 64 game px, which is **19–24 CSS px** on every phone this project supports —
+inside Android's back-gesture strip. Every assertion in `tests/unit/touch-layout.test.ts` passed,
+because every one of them was in game pixels too. It is 128 now, and there is a CSS floor beside
+them that converts through the real `liveViewWidth`.
+
+The same shape produced the gear-counter defect three times: the placement is only wrong once a
+browser has picked a font, and no gate had a font until `phase-06-hud.spec.ts` grew one.
+**⚠️ `TextMetrics.fontSize` is `ascent + descent`, not the font size** (`MeasureText.js:38`),
+and Phaser measures the style's test string `|MÉqgy`, not the digits — the two facts behind
+attempts two and three. See the round-2 QA log.
 
 ## 🔴 Read this before touching the scale code
 

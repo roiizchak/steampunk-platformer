@@ -161,6 +161,13 @@ what the hint string says.
 
 ## Item 4 — a measured number replacing a by-eye one
 
+🔴 **SUPERSEDED 2026-09-02. Everything in this section shipped and the owner reported it wrong
+again**, 4.4 px in the opposite direction. `TextMetrics.fontSize` is `ascent + descent`, not the font
+size, so the "measured" number below was divided by the wrong denominator — and the metrics describe
+the style's test string, not the digits. Read
+[session-mobile-polish-02-device-report.md](session-mobile-polish-02-device-report.md) instead; this
+section is kept for what it records about how the wrong answer was reached twice.
+
 `hud.ts:193-196` said outright of `DIGIT_DESCENT_FRACTION` 0.105: *"a by-eye number and the by-eye
 read is still owed"*. It is now `metrics.descent / metrics.fontSize / 2`, read through
 `Text.getTextMetrics()`.
@@ -313,6 +320,12 @@ is checkable. Everything is **quoted, not invoiced** *(4.9)* — the last invoic
 ---
 
 ## Outstanding — what this session did NOT do
+
+🔴 **Round 2 came back from the device on 2026-09-02** with two more reports — the touch
+controls inside the phone's gesture zones, and the gear count still off its icon. Both are fixed and
+gated in
+[session-mobile-polish-02-device-report.md](session-mobile-polish-02-device-report.md), which
+also carries the current suite counts. The pass below is still owed.
 
 🔴 **The hands-on pass on the owner's device has not been run**, and four of the six items are
 "does it look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is 240)*. It

@@ -302,6 +302,30 @@ opposite and shipped.
   nothing about what it hit. Hold the handle. `tests/unit/tween-boundary.test.ts` enforces both
   halves statically.
 
+## Text · `TextMetrics.fontSize` is NOT the font size, and the metrics are of the TEST STRING
+
+Measured 2026-09-02, on the third attempt at one 4-pixel defect.
+
+`Text.getTextMetrics()` returns `{ ascent, descent, fontSize }`. **`fontSize` is `ascent + descent`**
+— `MeasureText.js:38` assigns exactly that. It is the glyph BOX height, not the size you asked for.
+A 44 px counter reports `{ ascent: 36, descent: 9, fontSize: 45 }`. Anything that divides by it as
+if it were the font size is off by the ratio of the two, silently, and a repair written that way
+looks measured while being wrong.
+
+And **the three numbers describe `style.testString`, not your text.** The default is `|MÉqgy`,
+chosen to reach the extremes of the face. That is the right string to lay the box out on — Phaser
+puts the baseline at `boxTop + ascent`, so a `Text` at `setOrigin(0, 0)` is positioned by it — and
+the wrong one to centre digits by: figures are shorter than `|` or `É` and have no descender. On the
+face the browser picks for our HUD, `measureText('0123456789').actualBoundingBoxAscent` is **28**
+against the metrics' ascent of **36**.
+
+**To centre a digit string's INK on something**, the box top is
+`target - (layoutAscent - digitInkAscent / 2)`, taking `layoutAscent` from `getTextMetrics()` and
+`digitInkAscent` from `measureText()` on the `Text`'s own 2D context — which carries the resolved
+font only AFTER `setFontSize`. Both measurements are needed and they are of different strings;
+`src/render/counterInk.ts` is the one place that combines them. Two shipped repairs guessed the
+correction instead, in opposite directions.
+
 ## Scale · the backing store is the GAME size, at every DPR
 
 ⚠️ **AMENDED 2026-09-01: `Phaser.Scale.FIT` still ships, but the game size it fits is no

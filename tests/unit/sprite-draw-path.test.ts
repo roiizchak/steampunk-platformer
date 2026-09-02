@@ -176,12 +176,13 @@ describe('UIScene.ts fires the gear pop and stops what it started', () => {
     expect(render.slice(0, 400)).toContain('this.gearPop?.pop()');
   });
 
-  it('MEASURES the digit descent and hands it to hudLayout, in that order', () => {
+  it('measures BOTH strings and hands the combination to hudLayout, in that order', () => {
     /**
-     * 🔴 The half `hud-layout.test.ts` cannot reach. That file proves `hudLayout` honours a
-     * supplied fraction; nothing there notices if `UIScene` stops supplying one — the counter would
-     * silently fall back to `DIGIT_DESCENT_FRACTION`, the guess the owner reported as visibly
-     * wrong, and every layout assertion would stay green.
+     * 🔴 The half `hud-counter-ink.test.ts` cannot reach. That file proves `hudLayout` honours a
+     * supplied fraction and that the arithmetic combining two measurements is right; nothing there
+     * notices if `UIScene` stops supplying one — the counter would silently fall back to
+     * `DIGIT_INK_CENTRE_FRACTION` and every layout assertion would stay green while the count sat
+     * visibly off its icon. That is the defect the owner reported, twice.
      *
      * Source text rather than a fake scene, because `UIScene` value-imports Phaser and cannot be
      * constructed under `environment: 'node'` — the weaker of the two draw-path idioms, chosen here
@@ -189,25 +190,50 @@ describe('UIScene.ts fires the gear pop and stops what it started', () => {
      */
     const layout = from(src, 'private applyLayout()');
     expect(layout, 'the measured fraction never reaches hudLayout').toContain(
-      'measuredDigitDescent(this.counter.getTextMetrics())',
+      'measuredInkCentreFraction(',
     );
 
-    // ⚠️ ORDER. The counter is created with no `fontSize`, so metrics read before `setFontSize`
-    // describe the default size rather than the one that will draw — a measurement of the wrong
-    // font, presented as the right one. Named by the Codex plan review, round 1.
+    // 🔴 **TWO measurements, of two different strings.** `getTextMetrics()` describes the
+    // style's test string — the box Phaser lays out and the baseline it uses. `digitInkAscent`
+    // describes the digits. Passing the first alone is exactly the conflation that put the count
+    // 4.4 px low on the owner's device.
+    expect(layout, 'the layout metrics are never read').toContain('getTextMetrics()');
+    expect(layout, 'nothing measures the DIGITS — only the test string').toContain(
+      'digitInkAscent(this.counter)',
+    );
+
+    // ⚠️ The third argument is the FONT SIZE. `TextMetrics.fontSize` is `ascent + descent`
+    // (`MeasureText.js:38`) — the box height — and dividing by it is precisely what shipped wrong.
+    // The only correct denominator in reach is the layout's own `fontPx`.
+    expect(layout, 'the retired denominator is back').not.toMatch(/metrics\s*\.\s*fontSize/);
+    expect(layout, 'the fraction is not divided by the layout font size').toMatch(
+      /measuredInkCentreFraction\([\s\S]{0,200}?this\.layout\.counter\.fontPx/,
+    );
+
+    // ⚠️ ORDER. The counter is created with no `fontSize`, so metrics read before
+    // `setFontSize` describe the default size rather than the one that will draw — a measurement of
+    // the wrong font, presented as the right one. It applies to BOTH measurements: `digitInkAscent`
+    // reads the `Text`'s own 2D context, which only carries the resolved font after `setFontSize`.
     const setSize = layout.indexOf('this.counter.setFontSize(');
-    const measure = layout.indexOf('getTextMetrics()');
+    // Qualified: the prose above the call names `getTextMetrics()` in backticks, and an unqualified
+    // needle finds the COMMENT first — which would put `measure` before `setSize` and fail on
+    // correct code.
+    const measure = layout.indexOf('this.counter.getTextMetrics()');
+    const inkMeasure = layout.indexOf('digitInkAscent(this.counter)');
     expect(setSize, 'the counter font size is never applied in applyLayout').toBeGreaterThan(-1);
-    expect(measure, 'nothing measures the font').toBeGreaterThan(-1);
     expect(
       setSize,
-      'the descent is measured BEFORE the font size is applied — that measures the wrong font',
+      'the layout metrics are read BEFORE the font size is applied — that measures the wrong font',
     ).toBeLessThan(measure);
+    expect(
+      setSize,
+      'the digit ink is measured BEFORE the font size is applied — same wrong font',
+    ).toBeLessThan(inkMeasure);
 
-    // And the fraction is not re-derived here: `measuredDigitDescent` owns the `/ 2`, and a second
-    // copy of that arithmetic is how the two halves drift apart.
-    expect(layout, 'UIScene re-derives the half-descent instead of calling the shared function')
-      .not.toMatch(/descent\s*\/\s*\w+\.fontSize/);
+    // And the arithmetic is not re-derived here: `measuredInkCentreFraction` owns the halving and
+    // the subtraction, and a second copy of them is how the two halves drift apart.
+    expect(layout, 'UIScene re-derives the ink centre instead of calling the shared function')
+      .not.toMatch(/ascent\s*[-/]/);
   });
 
   it('destroys the gear pop AND the flyers when the scene retires, and nulls the pop', () => {
