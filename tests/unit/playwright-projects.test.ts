@@ -108,7 +108,10 @@ function projectBlock(name: string): string {
   const start = source.indexOf(`name: '${name}'`);
   if (start < 0) return '';
   const rest = source.slice(start + 1);
-  const next = rest.indexOf("name: 'chromium");
+  // Any project name, not just `chromium`. It was `name: 'chromium` until 2026-09-02, when a
+  // `webkit` project was added and the slice for the project BEFORE it silently ran to the end of
+  // the file — swallowing webkit's block into its neighbour's.
+  const next = rest.indexOf("name: '");
   return next < 0 ? rest : rest.slice(0, next);
 }
 
@@ -164,6 +167,7 @@ const dpr2 = projectBlock('chromium-dpr2');
 const prod = projectBlock('chromium-prod');
 const touch = projectBlock('chromium-touch');
 const touchGpu = projectBlock('chromium-touch-gpu');
+const webkit = projectBlock('webkit');
 
 const chromiumIgnores = patternTexts(chromium, 'testIgnore');
 const gpuMatch = patternText(gpu, 'testMatch');
@@ -173,6 +177,7 @@ const prodMatch = patternText(prod, 'testMatch');
 const touchMatch = patternText(touch, 'testMatch');
 const touchIgnore = patternText(touch, 'testIgnore');
 const touchGpuMatch = patternText(touchGpu, 'testMatch');
+const webkitMatch = patternText(webkit, 'testMatch');
 
 /** Vacuity guard. If the config is refactored so the extraction finds nothing, every equality below
  *  would compare `null` to `null` and pass while measuring absolutely nothing. */
@@ -185,6 +190,7 @@ const PATTERNS_FOUND = [
   touchMatch,
   touchIgnore,
   touchGpuMatch,
+  webkitMatch,
 ].filter((p) => p !== null).length;
 
 /**
@@ -217,8 +223,32 @@ describe('playwright project selection', () => {
       PATTERNS_FOUND,
       'could not extract the project patterns from playwright.config.ts — the config was refactored ' +
         'and every assertion in this file is now vacuous. Fix the extraction, do not delete the test.',
-    ).toBe(10);
+    ).toBe(12);
     expect(specNames.length, 'no e2e spec files were globbed at all').toBeGreaterThan(20);
+  });
+
+  it('the webkit project is actually WEBKIT, and points at the PRODUCTION server', () => {
+    // 🔴 Both halves are load-bearing and neither is implied by the project's NAME.
+    //
+    // A project called `webkit` using `devices['Desktop Chrome']` is a seventh Chromium wearing a
+    // label, and it would pass every assertion in `session-webkit-boot.spec.ts` while testing
+    // nothing the other six do not already cover. That is the exact shape of the defect this
+    // project was created for: a substrate assumption nobody wrote down.
+    //
+    // And the shipped catalog is the artifact that broke. A dev-server baseURL would test a build
+    // no player fetches, and the spec's `fetch('assets/index.json')` would read the authored file
+    // rather than the built one.
+    expect(webkit, 'no project named `webkit` was found in the config').not.toBe('');
+    // 🔴 And specifically an iPHONE descriptor. Playwright's WebKit on this platform decodes
+    // Ogg (it links GStreamer); real Safari does not. Under `Desktop Safari` the mutation that
+    // reproduces the shipped defect came back 2 passed. The iPhone profile restricts media the way
+    // iOS does and reddens it. Measured on 2026-09-02, not assumed.
+    expect(webkit, 'the webkit project does not use an iPhone WebKit descriptor').toMatch(
+      /devices\['iPhone [0-9]+[a-z ]*'\]/,
+    );
+    expect(webkit, 'the webkit project does not target the production server').toMatch(
+      /baseURL:\s*`http:\/\/localhost:\$\{PROD_PORT\}`/,
+    );
   });
 
   it('both touch projects declare hasTouch, which is what makes Phaser draw the controls at all', () => {
@@ -248,7 +278,7 @@ describe('playwright project selection', () => {
     expect(
       [...chromiumIgnores].sort(),
       "chromium's testIgnore has drifted from what the other projects claim.",
-    ).toEqual([gpuMatch, prodMatch, touchMatch].sort());
+    ).toEqual([gpuMatch, prodMatch, touchMatch, webkitMatch].sort());
   });
 
   it("chromium-gpu's testIgnore and chromium-dpr2's testMatch are mirrors", () => {
@@ -277,6 +307,7 @@ describe('playwright project selection', () => {
     const touchTake = toRegExp(touchMatch!);
     const touchSkip = toRegExp(touchIgnore!);
     const touchGpuTake = toRegExp(touchGpuMatch!);
+    const webkitTake = toRegExp(webkitMatch!);
 
     const wrong: string[] = [];
     for (const name of specNames) {
@@ -289,6 +320,9 @@ describe('playwright project selection', () => {
       // total partition of `phase-12-*` by construction — see `tests/e2e/specRouting.ts`.
       if (touchTake.test(name) && !touchSkip.test(name)) projects.push('chromium-touch');
       if (touchGpuTake.test(name)) projects.push('chromium-touch-gpu');
+      // The only non-Chromium project. A spec that landed in BOTH `chromium` and `webkit` would run
+      // its substrate check on the substrate it exists to be independent of.
+      if (webkitTake.test(name)) projects.push('webkit');
       if (projects.length !== 1) {
         wrong.push(`${name} -> ${projects.length === 0 ? 'NOWHERE' : projects.join(' + ')}`);
       }

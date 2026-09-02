@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { TOUCH_ALL_SPECS, TOUCH_PERF_SPECS } from './tests/e2e/specRouting';
+import { TOUCH_ALL_SPECS, TOUCH_PERF_SPECS, WEBKIT_SPECS } from './tests/e2e/specRouting';
 
 const PORT = 5173;
 
@@ -25,7 +25,6 @@ const GPU_SPECS = /phase-0(5-perf|6-[a-z0-9-]+|7-[a-z0-9-]+|8-[a-z0-9-]+|9-(?!po
 
 /** The spec that runs against `dist/` rather than the dev server. Phase 10. */
 const PROD_SPECS = /phase-10-(production|campaign)\.spec\.ts/;
-
 /**
  * 🔴 **Phase 12 routes from a SHARED module, not from patterns written here.**
  *
@@ -170,7 +169,7 @@ export default defineConfig({
       // enough.** This project would otherwise ALSO collect every `phase-12-*` spec and run it
       // without touch, where the controls are never drawn at all — forty assertions failing for a
       // reason unrelated to what they test. Named by the Codex plan review, round 2.
-      testIgnore: [GPU_SPECS, PROD_SPECS, TOUCH_ALL_SPECS],
+      testIgnore: [GPU_SPECS, PROD_SPECS, TOUCH_ALL_SPECS, WEBKIT_SPECS],
     },
     /**
      * 🔴 **The frame-budget project, and the only reason it exists.**
@@ -314,6 +313,34 @@ export default defineConfig({
       name: 'chromium-prod',
       testMatch: PROD_SPECS,
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PROD_PORT}` },
+    },
+    /**
+     * 🔴 **The only non-Chromium project, and the reason it exists is a shipped defect.**
+     * See `WEBKIT_SPECS` for the full account.
+     *
+     * ⚠️ It runs against the **production** server, not the dev one. The defect was in the
+     * SHIPPED catalog and the shipped loader; a dev-server run would test a build the player never
+     * fetches. It also means `window.__game` is absent here, exactly as in `chromium-prod`, so the
+     * spec waits on drawn state rather than on the debug surface.
+     *
+     * ⚠️ Like `chromium-prod`, this must never be `projects[0]` — `globalSetup` warms the FIRST
+     * project's `baseURL` by waiting on `window.__game`, which production does not carry.
+     *
+     * 🔴 **`iPhone 14 landscape`, and `Desktop Safari` is WRONG here — measured, not assumed.**
+     * Playwright's WebKit build on this platform links GStreamer and therefore DOES decode Ogg,
+     * unlike any real Safari. Under `devices['Desktop Safari']` the mutation that reproduces the
+     * shipped defect — the loader ignoring its alternates — came back **2 passed**. Under the
+     * iPhone descriptor the same mutation reddens, because that profile restricts media the way iOS
+     * does. A harness that is more capable than the platform it stands for is a green tick over the
+     * exact defect it was added to catch.
+     *
+     * The `hasTouch` that descriptor brings is incidental, not the point; it routes the spec through
+     * the touch screens, which costs nothing here because this spec asserts boot, not behaviour.
+     */
+    {
+      name: 'webkit',
+      testMatch: WEBKIT_SPECS,
+      use: { ...devices['iPhone 14 landscape'], baseURL: `http://localhost:${PROD_PORT}` },
     },
   ],
   /**

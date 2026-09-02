@@ -302,6 +302,36 @@ opposite and shipped.
   nothing about what it hit. Hold the handle. `tests/unit/tween-boundary.test.ts` enforces both
   halves statically.
 
+## Audio · Safari decodes no Ogg, and Phaser picks the format from an ARRAY
+
+Measured 2026-09-02, from a defect that reached production.
+
+`load.audio(key, url)` takes **one url or an array**, and with an array Phaser picks the **first
+entry the browser reports it can play** — so order is preference, and only the chosen file is
+fetched. A single url is a bet that every engine decodes that container.
+
+🔴 **Safari decodes no Ogg container** (`.ogg`, `.oga`), and **every browser on iOS is WebKit**. Two
+`.ogg` music beds with a single url each therefore put a `BOOT REFUSED` screen on every iPhone while
+Chromium was perfectly happy. Measured `canPlayType` in Playwright's WebKit:
+
+| type | verdict |
+|---|---|
+| `audio/ogg`, `audio/ogg; codecs="vorbis"` | `''` |
+| `audio/mp4` | `'probably'` |
+| `audio/wav` | `'probably'` |
+
+⚠️ `canPlayType` returns `''`, `'maybe'` or `'probably'` — never a boolean. `'maybe'` is a yes; only
+the empty string is a no.
+
+⚠️ **Playwright's WebKit on this machine has NO Web Audio at all** — `window.AudioContext` and
+`window.webkitAudioContext` are both `undefined`, under `Desktop Safari` and under the iPhone
+descriptors alike. Phaser falls back accordingly. It is still codec-faithful about Ogg, which is
+what makes the `webkit` project worth having, but do not use it to measure anything about Web Audio.
+
+⚠️ **The Ogg headers lie about duration.** `ffprobe` reports 7.53 s for a file that is **116 s**
+long. Anything computed from an Ogg's declared duration in this project is wrong; re-encode and read
+the container that has a real header.
+
 ## Text · `TextMetrics.fontSize` is NOT the font size, and the metrics are of the TEST STRING
 
 Measured 2026-09-02, on the third attempt at one 4-pixel defect.

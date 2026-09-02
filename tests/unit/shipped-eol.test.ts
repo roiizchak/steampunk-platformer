@@ -53,7 +53,12 @@ import { readBytes } from '../../tools/gen/png.mjs';
  * shrinks; a denylist over one fails loudly the day a new binary type arrives, which is the
  * direction an error should point.
  */
-const BINARY_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.wav', '.ogg', '.mp3', '.mp4'];
+// `.m4a` and friends joined on 2026-09-02 with the Safari audio alternates. A binary the walk
+// does not know about is reported as a text file with no CRLF, which is true and useless.
+const BINARY_EXTENSIONS = [
+  '.png', '.jpg', '.jpeg', '.gif', '.webp',
+  '.wav', '.ogg', '.oga', '.mp3', '.mp4', '.m4a', '.aac', '.caf', '.webm',
+];
 
 function textFilesUnder(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

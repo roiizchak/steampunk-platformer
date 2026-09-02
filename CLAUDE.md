@@ -259,6 +259,11 @@ Each rule below cost a real false green or false red. **The evidence for every o
   animation frame, and return an aggregate.
 - **The headless harness is not the frame rate** — SwiftShader inflates e2e milliseconds ~21×. Only
   same-session interleaved A/Bs decide a performance question.
+- **The suite runs on ONE ENGINE unless a spec says otherwise** *(2026-09-02)*. Six of the seven
+  Playwright projects are Chromium. Two `.ogg` beds shipped a `BOOT REFUSED` screen to every iPhone
+  \u2014 Safari decodes no Ogg, every iOS browser is WebKit \u2014 while 229 e2e tests were green. A suite
+  cannot test the substrate it stands on. The **`webkit`** project exists for that class; keep it
+  narrow and keep it green.
 - **Kill dev servers by port before reporting done** *(C13)*.
 - **Two review briefs per gate** *(A7)*, and withhold brief 1's findings from brief 2.
 - **A subagent's summary is a claim, not evidence.** Re-verify locally whatever it could not run.

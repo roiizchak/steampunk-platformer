@@ -1486,6 +1486,28 @@ one review short of the summary beside it; whatever round runs, the summary must
   now be up to 2560 wide, they are a floor rather than the figure for every size. Nothing has
   re-measured them. Recorded as the open question it is, not as a number.
 
+## \U0001f534 The suite runs on ONE ENGINE, and that shipped a defect
+
+Read [qa/session-webkit-audio.md](qa/session-webkit-audio.md) before adding an asset in any format.
+
+All six Playwright projects were Chromium. Chromium decodes Ogg; **Safari decodes no Ogg container**,
+and every browser on iOS is WebKit. Two `.ogg` music beds with a single url each put a
+`BOOT REFUSED` screen on every iPhone, live in production, while **229 e2e tests were green**. The
+owner's friends found it by opening the link.
+
+A **seventh `webkit` project** now exists — two tests, 14 seconds, against the production server. It
+is deliberately narrow: it asserts only what can differ by ENGINE. Extend it the next time an engine
+difference bites; do not turn it into a second copy of the suite.
+
+\u26a0\ufe0f **An audio url in a container Safari cannot play now needs `altUrls`**, and the alternate must
+itself be playable \u2014 `.ogg` + `.oga` satisfies *"has a fallback"* and gains no browser. Both the
+catalog validator and `verify-dist` refuse it.
+
+\U0001f534 **And the first version of that spec was decoration.** It read `document.body.innerText` for
+`BOOT REFUSED`, which `refuseToRoute` draws onto the **canvas** \u2014 invisible to any DOM query. The
+mutation came back *2 passed* against a build that refused on every load. If you assert about the
+refusal screen, assert on the `console.error` it emits or on the drawn frame, never on the DOM.
+
 ## Traps that will cost a session if forgotten
 
 - **Run `test:e2e` per PROJECT, never as one invocation**, and **free ports 5173 AND 4173 between

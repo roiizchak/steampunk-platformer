@@ -326,13 +326,19 @@
       "key": "bed-music",
       "url": "assets/audio/bed-music.ogg",
       "gain": 0.2532,
-      "loop": true
+      "loop": true,
+      "altUrls": [
+        "assets/audio/bed-music.m4a"
+      ]
     },
     {
       "key": "bed-ambience",
       "url": "assets/audio/bed-ambience.ogg",
       "gain": 0.2011,
-      "loop": true
+      "loop": true,
+      "altUrls": [
+        "assets/audio/bed-ambience.m4a"
+      ]
     },
     {
       "key": "sfx-complete",

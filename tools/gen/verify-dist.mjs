@@ -201,16 +201,34 @@ if (existsSync(builtCatalog)) {
     problems.push('catalog has no audio array; criterion 7.5b cannot be satisfied by zero files');
   }
   for (const entry of catalog.audio ?? []) {
-    const built = join(root, 'dist', entry.url);
-    if (!existsSync(built)) {
-      problems.push(`catalog audio "${entry.key}" points at ${entry.url}, which is not in dist/`);
-      continue;
+    // 🔴 **Every url, alternates included.** An alternate that never reaches `dist/` is worse
+    // than no alternate: the catalog promises Safari a file, Phaser picks it because the browser
+    // says it can play `.m4a`, the fetch 404s, `verifyAudio` finds nothing in the cache and the
+    // iPhone gets the BOOT REFUSED screen this whole change exists to remove — while every
+    // Chromium still takes the `.ogg` and looks perfectly healthy. That is the 2026-09-02 defect
+    // rebuilt one layer down, and only checking the alternates here can see it.
+    for (const url of [entry.url, ...(entry.altUrls ?? [])]) {
+      const built = join(root, 'dist', url);
+      if (!existsSync(built)) {
+        problems.push(`catalog audio "${entry.key}" points at ${url}, which is not in dist/`);
+        continue;
+      }
+      const source = join(root, 'public', url);
+      if (existsSync(source) && !readFileSync(source).equals(readFileSync(built))) {
+        problems.push(
+          `catalog audio "${entry.key}" (${url}) differs between public/ and dist/; ` +
+            'its measured level is no longer the level that ships',
+        );
+      }
     }
-    const source = join(root, 'public', entry.url);
-    if (existsSync(source) && !readFileSync(source).equals(readFileSync(built))) {
+    // ⚠️ A `.ogg` with no alternate boots on this machine and refuses on every iPhone. The
+    // catalog validator says the same thing at runtime; this says it before the bytes ship, which
+    // is the only place it can stop a deploy.
+    const needsAlt = /\.(ogg|oga|webm)(\?|#|$)/i.test(entry.url);
+    if (needsAlt && !(entry.altUrls ?? []).length) {
       problems.push(
-        `catalog audio "${entry.key}" differs between public/ and dist/; ` +
-          'its measured level is no longer the level that ships',
+        `catalog audio "${entry.key}" is ${entry.url} with no altUrls; no Safari decodes that ` +
+          'container, and every browser on iOS is WebKit — this ships a BOOT REFUSED to every iPhone',
       );
     }
   }
@@ -287,8 +305,14 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
+// FILES, not entries. Since 2026-09-02 an entry can carry alternates, so counting entries would
+// report 12 while 14 files were checked — a summary that understates its own coverage is how the
+// next missing alternate goes unnoticed in the build log.
 const shippedAudio = existsSync(builtCatalog)
-  ? (JSON.parse(readFileSync(builtCatalog, 'utf8')).audio ?? []).length
+  ? (JSON.parse(readFileSync(builtCatalog, 'utf8')).audio ?? []).reduce(
+      (n, entry) => n + 1 + (entry.altUrls ?? []).length,
+      0,
+    )
   : 0;
 
 

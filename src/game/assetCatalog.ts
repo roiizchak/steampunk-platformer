@@ -61,6 +61,38 @@ export interface AudioEntry extends CatalogEntry {
   /** Playback gain, `0 < gain <= 1`. Solved, not chosen. */
   gain: number;
   loop: boolean;
+  /**
+   * Same sound, other containers, in DESCENDING preference after `url`.
+   *
+   * 🔴 **This exists because Safari cannot decode Ogg Vorbis, and shipping without it put a
+   * BOOT REFUSED screen on every iPhone.** The owner sent the production link to friends on
+   * 2026-09-02 and they reported a black screen; every browser on iOS is WebKit, so Chrome and
+   * Firefox on a phone fail identically. The two beds were `.ogg` with no alternate, `verifyAudio`
+   * found neither in the cache, and `refuseToRoute` did exactly what it exists to do.
+   *
+   * Phaser's `load.audio` takes an array and picks the **first entry the browser reports it can
+   * play**, so order is preference and only the chosen file is fetched — a browser that takes the
+   * `.ogg` never downloads the `.m4a`. The cost is repository and `dist/` size, not bandwidth.
+   *
+   * ⚠️ **For an `.ogg` this is REQUIRED, not optional**, and `describeCatalogProblem` enforces it.
+   * An optional field here is exactly how the next bed ships Ogg-only and breaks iOS again, in a
+   * way no gate in this project could see until one ran on WebKit.
+   */
+  altUrls?: string[];
+}
+
+/**
+ * Containers no Safari can decode, so an entry using one owes an alternate.
+ *
+ * Ogg is the whole list today. It is a list rather than a string because the rule is *"a format
+ * some shipping browser cannot play"*, not *"ogg"* — WebM audio would belong here too.
+ */
+export const NEEDS_ALT_EXTENSIONS = ['.ogg', '.oga', '.webm'] as const;
+
+/** Whether a url is in a container that needs an alternate. Case-insensitive; ignores any query. */
+export function needsAlternate(url: string): boolean {
+  const clean = url.toLowerCase().split(/[?#]/)[0]!;
+  return NEEDS_ALT_EXTENSIONS.some((ext) => clean.endsWith(ext));
 }
 
 export interface AssetCatalog {
@@ -202,6 +234,29 @@ export function describeCatalogProblem(catalog: AssetCatalog | undefined): strin
         if (typeof cue.loop !== 'boolean') {
           return `audio "${entry.key}" is missing its loop flag; a loop is a CLAIM (vault 4.23), ` +
             `and a one-shot that loops never stops`;
+        }
+        if (cue.altUrls !== undefined) {
+          if (!Array.isArray(cue.altUrls) || cue.altUrls.length === 0) {
+            return `audio "${entry.key}" has an altUrls that is not a non-empty array; ` +
+              `omit the field or list at least one alternate`;
+          }
+          for (const alt of cue.altUrls) {
+            if (typeof alt !== 'string' || alt === '') {
+              return `audio "${entry.key}" has a missing or empty entry in altUrls`;
+            }
+            if (needsAlternate(alt)) {
+              return `audio "${entry.key}" lists ${alt} as an ALTERNATE, but that container is ` +
+                `one no Safari can decode — an alternate no browser gained is not an alternate`;
+            }
+          }
+        }
+        // 🔴 The rule the iPhone black screen bought. An `.ogg` with no alternate is a
+        // BOOT REFUSED on every iOS device, and it ships looking perfectly healthy from any
+        // Chromium. Enforced here rather than left to a test so a hand-edited catalog cannot
+        // reintroduce it either.
+        if (needsAlternate(cue.url) && cue.altUrls === undefined) {
+          return `audio "${entry.key}" is ${cue.url}, which no Safari can decode, and lists no ` +
+            `altUrls; every browser on iOS is WebKit, so this refuses to boot on every iPhone`;
         }
       }
     }

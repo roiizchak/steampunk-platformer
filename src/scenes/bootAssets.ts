@@ -77,12 +77,19 @@ export function queueCatalog(
     if (scene.cache.audio.exists(cue.key)) {
       scene.cache.audio.remove(cue.key);
     }
-    // A single URL, not the usual cross-browser array. The formats are chosen per file and are
-    // deliberate: WAV for the nine cues, because vault 7.1 requires them trimmed and a RIFF trim is
-    // thirty lines with no new dependency; OGG for the two beds, because they loop whole and need no
-    // local edit. Chromium decodes both. `docs/qa/phase-07-audio.md` records the browser-support
-    // trade this accepts.
-    scene.load.audio(cue.key, cue.url);
+    // 🔴 **An ARRAY, and it used to be a single URL.** The comment here used to say the
+    // single URL was deliberate and that "Chromium decodes both" — which was true, and was the
+    // whole defect. **Safari decodes neither Ogg container**, and every browser on iOS is WebKit,
+    // so the two `.ogg` beds put a BOOT REFUSED screen on every iPhone while every gate in this
+    // project stayed green. Found on 2026-09-02 by the owner's friends, reporting a black screen.
+    //
+    // Phaser picks the FIRST entry the browser reports it can play, so order is preference and only
+    // the chosen file is fetched. Chromium and Firefox still take the `.ogg` and download no more
+    // bytes than before; Safari takes the `.m4a`.
+    //
+    // WAV for the nine cues is unchanged and still deliberate: vault 7.1 requires them trimmed and
+    // a RIFF trim is thirty lines with no new dependency. Safari decodes WAV.
+    scene.load.audio(cue.key, [cue.url, ...(cue.altUrls ?? [])]);
   }
 
   // Loading and verification both live beside this function — see the header.
@@ -191,7 +198,10 @@ export function verifyAudio(scene: Phaser.Scene, catalog: AssetCatalog | undefin
   const problems: string[] = [];
   for (const entry of catalog.audio) {
     if (!scene.cache.audio.exists(entry.key)) {
-      problems.push(`audio "${entry.key}" did not decode (${entry.url})`);
+      // Naming every candidate, not just the first: with alternates in play "did not decode
+      // (bed-music.ogg)" would send the reader to a file the browser may never have fetched.
+      const tried = [entry.url, ...(entry.altUrls ?? [])].join(', ');
+      problems.push(`audio "${entry.key}" did not decode (${tried})`);
     }
   }
   return problems;
