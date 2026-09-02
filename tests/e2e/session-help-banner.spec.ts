@@ -224,6 +224,9 @@ test.describe('the controls banner is placed beside the HUD, not over the level'
   /**
    * 🔴 **Rewritten 2026-09-01: a real BROWSER resize, and the sizes changed with it.**
    *
+   * ⚠️ Any paragraph above this block describing a synthetic `game.scale.resize()` is HISTORY —
+   * that path is unreachable now, for the reason the next paragraph gives.
+   *
    * This drove `game.scale.resize(1280, 720)` directly. That path is no longer reachable:
    * `src/game/viewSize.ts` makes the view a function of the viewport, `scale.resize` emits
    * `resize`, and the fill loop hears it and snaps the view straight back to what the viewport

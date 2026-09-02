@@ -33,7 +33,7 @@ export function attachShakeViewport(scene: Phaser.Scene): ShakeViewport {
    * `shakeSafeMargin` deliberately takes the DESIGN size — `screenShake.ts:110-112` warns that
    * feeding the grown viewport back in is a feedback loop — so the margin is a constant and the
    * camera's position never moves. Only the width changes, and it must, because
-   * `Phaser.Scale.EXPAND` makes the live view up to `MAX_GAME_WIDTH` wide: a camera pinned to
+   * `src/game/viewSize.ts` makes the live view up to `MAX_GAME_WIDTH` wide: a camera pinned to
    * `GAME_WIDTH + 2 * margin.x` on a 2400 px canvas draws ~460 px of raw `backgroundColor` down the
    * right edge. The pillarbox would simply move from outside the canvas to inside it.
    */

@@ -52,6 +52,24 @@ now drive `page.setViewportSize` instead. If you write a new one, drive the view
   makes a gate unfalsifiable. Both happened here: `setFillStyle` on every face sent the art arm down
   the fill branch, and a missing `setText` made "never calls `setText`" a sentence about itself.
 
+## The Codex implementation review found two defects that PREDATE this branch
+
+Both applied; full dispositions in
+[reviews/session-mobile-polish-impl.md](reviews/session-mobile-polish-impl.md).
+
+🔴 **`rotateGuard` called `scale.refresh()` on EVERY FRAME** — it is subscribed to `SCENE_UPDATE`,
+and `ScaleManager.refresh()` writes `canvas.style`, forces a layout through
+`getBoundingClientRect()` and emits a **global** RESIZE. Every scale listener in the game ran 60
+times a second while the title or level menu was up, and item 4 had just added a `setFontSize` call
+— a synchronous `MeasureText` — to `UIScene.applyLayout`. The poll stays (iOS Safari does not
+reliably fire `window.resize` on a rotation); the engine re-measure is now conditional on the
+viewport having actually moved.
+
+🔴 **A source-text gate that does not strip comments is not a gate.** `view-size.test.ts` scanned
+raw source for `installViewFill(`, so commenting the call out left every assertion green.
+`playwright-projects.test.ts` had already been bitten by this twice. **If you write a source-text
+gate, strip both comment kinds first**, and prove it by commenting out the thing it names.
+
 ## What is still owed
 
 🔴 **The hands-on pass on the owner's device.** Deploy a Vercel preview and check in fullscreen:
@@ -74,7 +92,7 @@ for a widened view rather than the figure for every size. Nothing has re-measure
 
 ## Verification at the tip
 
-- `npm test` — **3109 passed, 219 files**, 0 failed.
+- `npm test` — **3116 passed, 220 files**, 0 failed.
 - `npm run test:e2e` — **227 passed, 0 failed, 0 skipped**: `chromium` 106 · `chromium-gpu` 70 ·
   `chromium-dpr2` 8 · `chromium-touch` 34 · `chromium-touch-gpu` 3 · `chromium-prod` 6.
 - `npx tsc --noEmit` clean; `npm run build` + `verify-dist` ok.

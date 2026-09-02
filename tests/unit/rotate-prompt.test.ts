@@ -8,9 +8,11 @@ import { RotatePrompt, browserHost, type RotateHost } from '../../src/scenes/rot
 /**
  * **The one viewport the controls cannot be made to fit.**
  *
- * `Phaser.Scale.FIT` holds the backing store at 1920x1080 at every viewport and DPR — only the CSS
- * size changes (`docs/ENGINE-NOTES.md:305-331`, measured). So a control's real size is
- * `gamePx * canvasCssWidth / 1920`, and on a phone held upright that is:
+ * `Phaser.Scale.FIT` holds the backing store at the GAME SIZE at every viewport and DPR — only the
+ * CSS size changes (`docs/ENGINE-NOTES.md § Scale`, measured). That size was a fixed 1920x1080 when
+ * this was written; `src/game/viewSize.ts` now derives it from the viewport, and **the figures below
+ * are unaffected** because the clamp's floor IS 1920 and a portrait phone sits on it. So a control's
+ * real size is `gamePx * canvasCssWidth / viewWidth`, and on a phone held upright that is:
  *
  * | viewport | canvas CSS | scale | a 160 px button is |
  * |---|---|---|---|

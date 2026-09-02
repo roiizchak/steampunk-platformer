@@ -19,6 +19,7 @@ import {
   resizeLevelButton,
 } from '../../src/scenes/levelButtons';
 import { makeTouchScene, type FaceFake } from './touchSceneFake';
+import { PLATE_ALPHA, PLATE_FILL } from '../../src/scenes/touchMarks';
 import type { TouchFaceLike } from '../../src/scenes/touchTypes';
 
 /**
@@ -82,17 +83,12 @@ describe('drawing one level button', () => {
    * `Shape.js:119`) entirely separately from the Alpha component's `alpha`. Asserting
    * `plate.alpha === 0` would pass against a fake that conflated them and be actively WRONG against
    * real Phaser: `alpha === 0` erases the STROKE too, and the stroke is the entire visual.
-   *
-   * The unfilled plate is a contrast decision, not a style one: `PLATE_FILL` at its resting alpha
-   * over the config ground composites to about `rgb(67,48,24)`, against which `LOCKED_COLOUR`
-   * measures **3.52:1** — below the 4.5:1 a 34 px row font needs, and a regression from the
-   * **5.33:1** the UI/UX gate bought.
    */
-  it('draws the plate UNFILLED (3.52:1 if filled) while keeping a visible keyline', () => {
+  it('draws the plate UNFILLED while keeping a visible keyline', () => {
     const { scene } = makeTouchScene();
     const button = drawLevelButton(scene, band()[0]!, 'row 0', true, ROW_STYLE);
 
-    expect(read(button.plate).fillAlpha, 'a filled plate drops the locked label to 3.52:1').toBe(0);
+    expect(read(button.plate).fillAlpha, 'a filled plate drops the locked label below 4.5:1').toBe(0);
     expect(read(button.plate).alpha, 'object alpha 0 would erase the keyline, which IS the button').toBe(1);
     expect(read(button.plate).strokeWidth).toBeGreaterThan(0);
   });
@@ -223,5 +219,65 @@ describe('resizing a button', () => {
     expect(read(button.plate).w).toBe(wide.w - PLATE_INSET_PX * 2);
     expect(read(button.text).x).toBe(wide.x + wide.w / 2);
     for (const piece of button.lock) expect(read(piece).x).toBe(wide.x + wide.h / 2);
+  });
+});
+
+/**
+ * **The contrast argument for an UNFILLED plate, DERIVED rather than restated.**
+ *
+ * 🔴 Codex implementation review, finding 6. The header of `levelButtons.ts` quoted **3.52:1** for
+ * a filled plate — a number computed at a `PLATE_ALPHA` of 0.55, which item 3 then took to 0.9
+ * without recomputing it. Nothing is filled, so the figure was never load-bearing; but a stale
+ * number inside the argument for a decision is how a later session re-derives the decision wrongly.
+ *
+ * So this case COMPUTES both, from `PLATE_FILL` and the live `PLATE_ALPHA`, and fails if either the
+ * constant or the conclusion moves. It cannot drift the way a comment can.
+ */
+describe('why the plate is a frame and not a fill', () => {
+  const GROUND = 0x12100e; // `config.ts`'s `backgroundColor` — the menu has no world behind it.
+  const LOCKED = 0x8f8776;
+  /** The 4.5:1 WCAG floor for the 34 px row font at its worst in-scope 11.8 CSS px. */
+  const FLOOR = 4.5;
+
+  const channel = (c: number): number => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (hex: number): number =>
+    0.2126 * channel((hex >> 16) & 0xff) +
+    0.7152 * channel((hex >> 8) & 0xff) +
+    0.0722 * channel(hex & 0xff);
+  const ratio = (a: number, b: number): number => {
+    const [hi, lo] = a > b ? [a, b] : [b, a];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  /** Source-over composite of `fill` at `alpha` onto `GROUND`, per channel. */
+  const over = (fill: number, alpha: number): number => {
+    const mix = (shift: number): number =>
+      Math.round((((fill >> shift) & 0xff) * alpha + ((GROUND >> shift) & 0xff) * (1 - alpha)));
+    return (mix(16) << 16) | (mix(8) << 8) | mix(0);
+  };
+
+  it('an unfilled plate leaves the locked label at the ratio the UI/UX gate bought', () => {
+    const unfilled = ratio(luminance(LOCKED), luminance(GROUND));
+    expect(unfilled).toBeGreaterThan(FLOOR);
+    expect(unfilled).toBeCloseTo(5.33, 1);
+  });
+
+  it('a plate filled at the LIVE PLATE_ALPHA would put it under the floor', () => {
+    const filled = ratio(luminance(LOCKED), luminance(over(PLATE_FILL, PLATE_ALPHA)));
+    expect(
+      filled,
+      `a brass fill at PLATE_ALPHA ${PLATE_ALPHA} leaves the locked label at ` +
+        `${filled.toFixed(2)}:1, which is why this plate has fillAlpha 0`,
+    ).toBeLessThan(FLOOR);
+  });
+
+  it('and so would the 0.55 it was first measured at — the conclusion is not alpha-specific', () => {
+    // The historical figure, kept as a computation so the header's table stays checkable. If a
+    // future session lowers PLATE_ALPHA back towards 0.55, the case above still holds.
+    const filledAt55 = ratio(luminance(LOCKED), luminance(over(PLATE_FILL, 0.55)));
+    expect(filledAt55).toBeLessThan(FLOOR);
+    expect(filledAt55).toBeCloseTo(3.52, 1);
   });
 });

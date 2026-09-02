@@ -87,7 +87,7 @@ export const SCRIM_ALPHA = 0.82;
  * smallest supported window each of these scales by 852/1920 = 0.444.
  *
  * ⚠️ The second column used to be labelled "physical px". These are **displayed CSS pixels** —
- * what the browser lays out after `Phaser.Scale.FIT` letterboxes the fixed 1920x1080 canvas — not
+ * what the browser lays out after `Phaser.Scale.FIT` fits the canvas into the window — not
  * device pixels, which a high-DPR screen multiplies again. WCAG's thresholds are CSS pixels, so the
  * arithmetic was always right and only the name was wrong. Codex implementation review round 3.
  *

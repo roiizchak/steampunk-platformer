@@ -62,7 +62,7 @@ import {
   HELP_STROKE_PX,
   helpBannerLayout,
 } from '../render/helpBanner';
-import { SCENE_SHUTDOWN, SCENE_UPDATE } from './engineLiterals';
+import { SCENE_DESTROY, SCENE_SHUTDOWN, SCENE_UPDATE } from './engineLiterals';
 import { AUDIO_CHANGED } from './audioKeyMap';
 
 /**
@@ -144,7 +144,13 @@ export class HelpBannerLayer {
     this.scene.events.on(SCENE_UPDATE, this.onUpdate, this);
     this.scene.events.on(AUDIO_CHANGED, this.markDirty, this);
     this.scene.scale.on('resize', this.markDirty, this);
+    // 🔴 **Both lifecycle events, not just SHUTDOWN** — Codex implementation review, finding 3.
+    // The `resize` listener above is on the ScaleManager, which is GAME-global: removing an active
+    // scene reaches DESTROY without ever reaching SHUTDOWN (the lifecycle `rotateGuard.ts` already
+    // documents), leaving a callback that retains every object this layer built. `destroy()` is
+    // idempotent, so subscribing it twice is safe and the first one to fire wins.
     this.scene.events.once(SCENE_SHUTDOWN, this.destroy, this);
+    this.scene.events.once(SCENE_DESTROY, this.destroy, this);
   }
 
   /** The drawn object, for the e2e spec. `null` before `create()`, and after `destroy()`. */
@@ -289,7 +295,12 @@ export class HelpBannerLayer {
     this.dirty = false;
   }
 
-  /** Drop the listeners with the scene, or a restarted scene accumulates a set per entry. */
+  /**
+   * Drop the listeners with the scene, or a restarted scene accumulates a set per entry.
+   *
+   * Idempotent, and it has to be: it is subscribed to both SHUTDOWN and DESTROY, and `off` on a
+   * listener that is already gone is a no-op in Phaser's `EventEmitter`.
+   */
   destroy(): void {
     this.scene.events.off(SCENE_UPDATE, this.onUpdate, this);
     this.scene.events.off(AUDIO_CHANGED, this.markDirty, this);

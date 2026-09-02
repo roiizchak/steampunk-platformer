@@ -133,7 +133,19 @@ describe('the production wiring, which no behavioural test can reach', () => {
   // available gate is its source text — the weaker of the two shapes CLAUDE.md names, used here
   // because the stronger one is not reachable. The cases above carry the logic; this carries the
   // composition, and without it every one of them is green on a game that never installs the loop.
-  const main = readFileSync('src/main.ts', 'utf8');
+  /**
+   * 🔴 **Comments stripped FIRST, both kinds** — Codex implementation review, finding 4.
+   *
+   * The scan below read raw source, so `// installViewFill(game.scale);` still produced one
+   * word-boundary match, still satisfied `toContain`, and still appeared before
+   * `installFullscreenOnTap`. The game could revert to fixed-width letterboxing with every case in
+   * this file green. `playwright-projects.test.ts` already learned this exact lesson twice — a
+   * line comment, and then a BLOCK comment on the same line — which is why both are stripped here
+   * rather than only the one that was demonstrated.
+   */
+  const main = readFileSync('src/main.ts', 'utf8')
+    .replace(/[/][*][^]*?[*][/]/g, '')
+    .replace(/[/][/].*/g, '');
 
   /**
    * ⚠️ A word-boundary scan, NOT `toContain`. `toContain('installViewFill(')` survives renaming the

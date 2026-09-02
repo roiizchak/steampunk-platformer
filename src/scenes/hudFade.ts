@@ -80,6 +80,18 @@ export interface LevelCompleteInfo {
 export interface LevelCompleteOverlay {
   fade: Phaser.GameObjects.Rectangle;
   lines: Phaser.GameObjects.Text[];
+  /**
+   * Re-fit the scrim and re-centre the panel on a new view size.
+   *
+   * 🔴 Added 2026-09-02, Codex implementation review finding 2. This overlay was built from
+   * `scene.scale` once, under a comment saying it was transient and *"a window dragged during the
+   * half-second the tween runs is not worth a listener"*. That was TRUE while the view could not
+   * change — and it is the panel the player READS, so it stands until they dismiss it, not for
+   * half a second. Once `viewSize.ts` made the view a function of the viewport, a rotation or a
+   * fullscreen toggle with the panel up left a 1920-wide scrim inside a 2400-wide view: a 480 px
+   * strip of undimmed game down the right, with the text centred on the old x = 960.
+   */
+  resize(width: number, height: number): void;
   destroy(): void;
 }
 
@@ -205,6 +217,17 @@ export function showLevelComplete(scene: Phaser.Scene, info: LevelCompleteInfo):
   return {
     fade,
     lines,
+    /**
+     * Re-fit the scrim and re-centre the panel. See `LevelCompleteOverlay.resize`.
+     *
+     * The `dy` offsets are recomputed from the SAME `rows` table the panel was stacked from, so
+     * there is one description of the layout rather than a copy that can drift. Alpha is untouched:
+     * a resize mid-tween must not jump the fade to its end value.
+     */
+    resize(width: number, height: number) {
+      fade.setSize(width, height);
+      lines.forEach((line, i) => line.setPosition(width / 2, height / 2 + (rows[i]?.[2] ?? 0)));
+    },
     destroy() {
       // The tweens go first. A tween still running against a destroyed target throws inside Phaser's
       // update loop, and a throw there stops every subsequent scene — which is how the Phase 6

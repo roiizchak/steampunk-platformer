@@ -39,7 +39,7 @@
  */
 
 import Phaser from 'phaser';
-import { HUD_SLOT, playerHudFill } from '../render/playerHud';
+import { HUD_SLOT } from '../render/playerHud';
 import {
   COUNTER_FILL,
   measuredDigitDescent,
@@ -57,6 +57,7 @@ import type { World } from '../sim/types';
 import type { TouchBinding } from './touchControlsLayer';
 import { TouchSession } from './touchSession';
 import { attachUiTouch, type UiTouchOverlay } from './uiTouch';
+import { drawHealth } from './hudHealthBar';
 import type { TouchHeld } from './inputMerge';
 
 /**
@@ -127,7 +128,13 @@ export class UIScene extends Phaser.Scene {
     // Re-layout rather than re-create: the objects keep their identity, so an e2e spec holding a
     // reference across a resize is still looking at the thing on screen.
     this.scale.on('resize', this.applyLayout, this);
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    // 🔴 **Both lifecycle events, not just SHUTDOWN** — Codex implementation review, finding 3.
+    // The `resize` subscription above is on the ScaleManager, which is GAME-global: removing an
+    // active scene reaches DESTROY without ever reaching SHUTDOWN (the lifecycle `rotateGuard.ts`
+    // already documents), leaving a callback that re-lays-out destroyed objects on the next resize.
+    // The body is idempotent — every `off` is a no-op on an absent listener and every handle is
+    // optional-chained then nulled — so `once` on both is safe and whichever fires first wins.
+    const retire = (): void => {
       this.scale.off('resize', this.applyLayout, this);
       this.built = false;
       // 🔴 M2b / M14. Phaser preserves this scene INSTANCE across a shutdown and removes only
@@ -144,7 +151,9 @@ export class UIScene extends Phaser.Scene {
       this.gearPop?.destroy();
       this.gearPop = undefined;
       this.flyers?.destroy();
-    });
+    };
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, retire);
+    this.events.once(Phaser.Scenes.Events.DESTROY, retire);
   }
 
   /**
@@ -308,6 +317,13 @@ export class UIScene extends Phaser.Scene {
       measuredDigitDescent(this.counter.getTextMetrics()),
     );
     this.counter.setPosition(this.layout.counter.x, this.layout.counter.y);
+
+    // 🔴 The completion panel is laid out from the view too, and it is the panel the player READS —
+    // it stands until they dismiss it, not for the half-second its tween runs. Left out, a rotation
+    // or a fullscreen toggle with it up leaves a 1920-wide scrim inside a 2400-wide view: a strip of
+    // undimmed game down the right, with the text on the old centre. Codex implementation review,
+    // finding 2.
+    this.overlay?.resize(width, height);
   }
 
   /**
@@ -325,7 +341,7 @@ export class UIScene extends Phaser.Scene {
       return;
     }
 
-    this.drawHealth(world.player.hp, world.player.maxHp);
+    drawHealth(this.barFill, this.layout, world.player.hp, world.player.maxHp);
 
     // 🔴 Both of the next two are guarded on "did the count actually change", and the guard is the
     // finding rather than an optimisation reflex.
@@ -348,25 +364,6 @@ export class UIScene extends Phaser.Scene {
     }
     this.lastGearTick = world.tickCount;
   }
-
-  private drawHealth(hp: number, maxHp: number): void {
-    const fill = playerHudFill(hp, maxHp, 0, 0);
-    const { slot, scale } = this.layout;
-    this.barFill.clear();
-
-    // The EMPTY portion is painted, not the full one. `hud-health.png` already contains a complete
-    // gold bar, so drawing a gold fill over it was invisible — gold on gold, which is how the first
-    // version of this fix looked identical to the bug it was fixing. Blanking the spent part turns
-    // the art's bar into the lit portion and this rectangle into the drained one, which also leaves
-    // the bezel and highlights in the art untouched.
-    const spentW = (HUD_SLOT.w - fill.w) * scale;
-    if (spentW > 0) {
-      this.barFill
-        .fillStyle(0x241c18, 0.92)
-        .fillRect(slot.x + fill.w * scale, slot.y, spentW, slot.h);
-    }
-  }
-
 
   /**
    * The drawn objects, for the e2e spec.

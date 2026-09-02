@@ -210,16 +210,36 @@ describe('UIScene.ts fires the gear pop and stops what it started', () => {
       .not.toMatch(/descent\s*\/\s*\w+\.fontSize/);
   });
 
-  it('destroys the gear pop AND the flyers on SHUTDOWN, and nulls the pop', () => {
+  it('destroys the gear pop AND the flyers when the scene retires, and nulls the pop', () => {
     // The handler exists specifically to stop tweens before their targets are destroyed and cites
     // the Phase 6 incident three lines above. Phase 9 added two more tween owners to this scene and
     // added neither. `gearPop` must also be NULLED: `applyLayout` calls `destroy()` on it, so after
     // a re-`create()` the first layout settles a destroyed icon from the previous run's display list.
-    const shutdown = from(src, 'Phaser.Scenes.Events.SHUTDOWN');
-    const handler = shutdown.slice(0, shutdown.indexOf('\n  }'));
-    expect(handler).toContain('this.gearPop?.destroy()');
-    expect(handler).toContain('this.gearPop = undefined');
-    expect(handler).toContain('this.flyers?.destroy()');
+    //
+    // 🔴 **Anchored on `const retire`, not on the SHUTDOWN literal.** The handler was an inline
+    // arrow passed straight to `events.once(SHUTDOWN, …)` until 2026-09-02, when Codex's
+    // implementation review (finding 3) required it on DESTROY as well and it became a named
+    // function subscribed twice. The literal then appeared AFTER the body rather than before it, so
+    // this slice read empty and the case failed — a gate anchored on the shape of the code rather
+    // than on the thing it is checking.
+    const handler = from(src, 'const retire = ()');
+    const body = handler.slice(0, handler.indexOf('\n    };'));
+    expect(body).toContain('this.gearPop?.destroy()');
+    expect(body).toContain('this.gearPop = undefined');
+    expect(body).toContain('this.flyers?.destroy()');
+  });
+
+  it('subscribes that retirement to DESTROY as well as SHUTDOWN', () => {
+    // 🔴 A ScaleManager listener is GAME-global, and removing an active scene reaches DESTROY
+    // without ever reaching SHUTDOWN — the lifecycle `rotateGuard.ts` already documents. Subscribed
+    // to only one of the two, `applyLayout` survives its scene and re-lays-out destroyed objects on
+    // the next resize. That became reachable the moment the view stopped being a fixed size.
+    expect(src).toContain('Phaser.Scenes.Events.SHUTDOWN, retire');
+    expect(
+      src,
+      'the HUD retires on SHUTDOWN only — a scene removed while active leaves a global resize ' +
+        'listener pointed at destroyed objects',
+    ).toContain('Phaser.Scenes.Events.DESTROY, retire');
   });
 });
 

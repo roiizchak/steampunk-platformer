@@ -17,8 +17,9 @@ const game = new Phaser.Game(gameConfig);
 installViewFill(game.scale);
 
 // `pixelArt: true` decides how TEXTURES are sampled onto the canvas. It says nothing about how the
-// finished CANVAS is scaled onto the screen, and `Phaser.Scale.FIT` leaves the backing store at
-// 1920x1080 while restyling its CSS size — so the browser rescales it at a fractional ratio, and
+// finished CANVAS is scaled onto the screen, and `Phaser.Scale.FIT` leaves the backing store at the
+// GAME SIZE — a fixed 1920x1080 when this was written, the live view since `installViewFill` above
+// — while restyling its CSS size, so the browser rescales it at a fractional ratio, and
 // `image-rendering: pixelated` makes that nearest-neighbour, which DROPS AND DUPLICATES pixel
 // columns and reorganises them every frame the world scrolls. See `src/render/canvasScaling.ts`
 // for the rule and the measurements; it is a Phase 1 decision reopened by the owner on 2026-08-27.

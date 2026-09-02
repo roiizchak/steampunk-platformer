@@ -248,9 +248,41 @@ real browser resize, and two of them lost assertions:
 - **`phase-12-menu.spec.ts` 12.6c** only inverted: the latched walk plate now DIMS. Both sides are
   still asserted, plus `> 0` so a vanished plate cannot pass.
 
+### The Codex implementation review — 6 findings, all applied
+
+Full text and dispositions: [reviews/session-mobile-polish-impl.md](../reviews/session-mobile-polish-impl.md).
+**Nothing was rejected**, and every finding was re-verified locally before it was acted on.
+
+Two are worth carrying beyond this session:
+
+🔴 **A source-text gate that does not strip comments is not a gate.** `view-size.test.ts`'s wiring
+case scanned raw source for `installViewFill(` — so `// installViewFill(game.scale);` still
+produced a word-boundary match, still satisfied `toContain`, and still appeared before
+`installFullscreenOnTap`. The game could revert to fixed-width letterboxing with the whole file
+green. `playwright-projects.test.ts` had already learned this **twice** — a line comment, then a
+block comment on the same line — and the lesson did not travel to the next source-text gate written.
+
+🔴 **`rotateGuard` was calling `scale.refresh()` on EVERY FRAME**, which emits a global RESIZE:
+`updateScale()` writes `canvas.style` and forces a layout through `getBoundingClientRect()`, then
+every scale listener in the game runs. `UIScene.applyLayout` is one of them — and **item 4 made it
+worse**, because the measured descent added a `setFontSize` call, which synchronously re-runs
+Phaser's `MeasureText`. Sixty times a second, on the title and level-menu screens, for a size that
+had not moved. The poll itself is not the defect and stays: iOS Safari does not reliably fire
+`window.resize` on a rotation. It now reads the viewport cheaply and pays for the engine re-measure
+only when the numbers actually changed.
+
+Also applied: the completion overlay now follows a resize (it was built from the view once, under a
+comment saying it was transient — true while the view could not change, and it is the panel the
+player READS); `UIScene` and `helpBannerLayer` retire on DESTROY as well as SHUTDOWN; seven prose
+sites still taught the old architecture, including one in `touchLayout.ts` that said the game had
+*stopped* using FIT, which is exactly backwards; and the level-button contrast argument quoted
+**3.52:1** computed at the retired 0.55 plate alpha — at the live 0.9 a filled plate is **2.47:1**,
+worse rather than better. That table is now **derived** from `PLATE_FILL` and `PLATE_ALPHA` in the
+gate rather than restated in a comment, so it cannot drift from the constant again.
+
 ### Regression, after everything
 
-- `npm test` — **3109 passed, 219 files**, 0 failed.
+- `npm test` — **3116 passed, 220 files**, 0 failed.
 - `npx tsc --noEmit` — clean.
 - `npm run build` — `verify-dist ok: 5 level(s) and 12 audio file(s) shipped byte-identical, no
   DEV-only scene key or debug surface in 1 bundle(s)`.

@@ -12,10 +12,24 @@
  * ## 🔴 The plate is a FRAME, not a fill, and that is a contrast decision
  *
  * Reusing `touchMarks.drawPlate` verbatim would reopen the defect `LevelSelectScene`'s
- * `LOCKED_COLOUR` block was written to close. `PLATE_FILL 0x6b4b21` at its resting alpha over the
- * config's `#12100e` ground composites to about `rgb(67,48,24)`, against which `LOCKED_COLOUR`
- * `#8f8776` measures **3.52:1** — below the 4.5:1 a 34 px row font needs at 11.8 CSS px, and a
- * regression from the **5.33:1** the UI/UX gate bought.
+ * `LOCKED_COLOUR` block was written to close. `PLATE_FILL 0x6b4b21` composited over the config's
+ * `#12100e` ground, against which `LOCKED_COLOUR` `#8f8776` is measured:
+ *
+ * | plate `fillAlpha` | composite | `#8f8776` against it |
+ * |---|---|---|
+ * | 0.55 (the alpha when this was first written) | `rgb(67,48,24)` | **3.52:1** |
+ * | **0.9 (`PLATE_ALPHA` today)** | `rgb(98,69,31)` | **2.47:1** |
+ * | **0 (what ships here)** | the config ground | **5.33:1** |
+ *
+ * A 34 px row font at 11.8 CSS px needs 4.5:1, and the UI/UX gate bought 5.33:1. Both filled rows
+ * are regressions and the current one is the worse of the two.
+ *
+ * 🔴 **The 3.52:1 row is HISTORY and was quoted as current.** It was computed at the resting alpha
+ * of the day; item 3 then took `PLATE_ALPHA` to 0.9 and nothing recomputed it. The number is not
+ * load-bearing — nothing here is filled — but a stale figure in the argument for a decision is how
+ * a later session re-derives the decision wrongly. **`tests/unit/level-buttons.test.ts` now
+ * DERIVES both rows from `PLATE_ALPHA` and `PLATE_FILL` rather than restating them**, so the table
+ * above cannot drift from the constant again. Codex implementation review, finding 6.
  *
  * The play controls are translucent because 19.9 % of standing positions have a hazard, an enemy or
  * the goal behind one. **The menu has no world behind it**, so that justification does not carry.
