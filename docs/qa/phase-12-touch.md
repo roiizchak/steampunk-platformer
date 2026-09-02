@@ -45,17 +45,22 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
 | 12.17 | Shipped bytes: six PNGs, alpha, six distinct **marks**, own key | **PASS — criterion amended 2026-08-31, owner decision** | Everything measurable passes on the shipped bytes (§ 12.17): six 160×160 PNGs, a two-sided alpha band, six pairwise-distinct engraved marks, each bound to its own key. The two amended words are **five → six** and **silhouettes → marks**: the six deliberately share one round brass disc, so the outline is the same by design and the distinctness that exists to be asserted is of the mark. **The distinctness gate was not loosened** — it already compared marks. § 12.17b. ⚠️ **Re-stated 2026-08-31 with the redesign:** the alpha claim is now **two** bands, a keyed field and an opaque button, because `bakePlateAlpha` is deleted and the bytes are no longer pre-faded — the old three-band assertion would have gone on passing on rim antialiasing alone, which is a gate passing for a reason unrelated to its claim. And the distinctness mask, which came from `keylineMarks`, is now a **fixed central square**: the six are the same button, so inside that square only the glyph can differ, which is a sounder oracle than the one it replaces rather than a weaker one. |
 | 12.18 | Every generation logged; the two ceilings agree | **PASS — after a correction, and it was falsely PASS before it** | `GENERATION-LOG.md`, **fourteen takes across five entries, $2.10 of $5**. ⚠️ This row read *"3 rows, $0.45 of $5"* while six more takes had been bought, and `GENERATION-LOG.md` separately said *"the last ceiling anyone named is $55"* against `PRD.md:91`'s `$60` owner raise of 2026-08-29 — **two disagreements at once, in the criterion whose whole content is that the figures agree**. Found by the Codex round-14 implementation review; both reconciled 2026-08-31. |
-| 12.19 | Every gate watched failing under its named mutation | **NOT MET — thirteen rows now red nothing** | § The mutation matrix. 92 rows; 22 of them went green before they reddened, over 27 green attempts, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one, M70–M71 the repair round 13 recorded but never landed plus the single-cell path it unlocked, M72 12.11's replacement GPU bound, M73 its main-thread bound, and M74 the live-size sweep that found a 2.740:1 stroke a pinned gate could not see. **M75, M76 and M77 close the round-15 gaps**: the CPU instrument floor shipped with no red proof of its own, `--adopt`'s override map had none either, the new family gate is watched failing on four built out-of-family faces, **M78** reds the GPU window boundary that round 16 found had no gate at all, **M79** reds the family gate's production SEAM — which M77 alone could not, because a gated decision function with an ungated caller is the same defect one layer up — and **M80-M82b** cover the row estimator, the joint grid and the partial-family hole. **M83-M85b close Codex round 20**: the three within-face statistics, the row estimator's speck and two-run holes, and the atomicity of a refusal. **M86 and M87 are the owner's two phone findings**, and both are *(C4)* in its purest form — 3042 unit cases, 218 e2e cases and five Codex rounds over the rotate prompt, and neither defect was visible from any of them. 🔴 **M82 is WITHDRAWN from the matrix.** It came back GREEN and stayed green, and this criterion requires every row to red — so a row reporting `GREEN 0/24` made 12.19 PASS over its own contradiction (Codex round 20, finding 1). M82 was a probe that found dead code, not a mutation of a live gate; the dead code is deleted and the hole is M82b's, which reds. 🔴 **And thirteen more rows are withdrawn for the same reason, which is why this criterion is NOT MET.** M46, M47, M55-M57, M60-M63, M65, M68, M69 and M74 each reddened a gate the owner's redesign deleted along with the ink pass. Three gates replaced them — the two-band alpha claim, byte-for-byte cut-face equality, and central-square distinctness — and **none of the three has a red proof yet.** Recording this rather than leaving the criterion PASS is the whole lesson of round 20, finding 1. |
+| 12.19 | Every gate watched failing under its named mutation | **PASS 2026-09-02 — the thirteen are triaged, and the three replacement gates now have red proofs** | § The mutation matrix. **109 rows** (this said *"92"*, which described neither the table it pointed at nor any subset of it — see § the row count); 22 of them went green before they reddened, over 27 green attempts, all closed. M22–M33 cover the four Codex rounds, M34–M40 the owner's three requests and the adopted art, M41–M45 the round-6 review, M46–M50 the round-7 one, M51–M54 the round-8 one, M55–M57 the round-9 one, M58–M59 the round-10 one, M60–M63 the round-11 one, M64–M65 the round-12 one, M66–M69 the round-13 one, M70–M71 the repair round 13 recorded but never landed plus the single-cell path it unlocked, M72 12.11's replacement GPU bound, M73 its main-thread bound, and M74 the live-size sweep that found a 2.740:1 stroke a pinned gate could not see. **M75, M76 and M77 close the round-15 gaps**: the CPU instrument floor shipped with no red proof of its own, `--adopt`'s override map had none either, the new family gate is watched failing on four built out-of-family faces, **M78** reds the GPU window boundary that round 16 found had no gate at all, **M79** reds the family gate's production SEAM — which M77 alone could not, because a gated decision function with an ungated caller is the same defect one layer up — and **M80-M82b** cover the row estimator, the joint grid and the partial-family hole. **M83-M85b close Codex round 20**: the three within-face statistics, the row estimator's speck and two-run holes, and the atomicity of a refusal. **M86 and M87 are the owner's two phone findings**, and both are *(C4)* in its purest form — 3042 unit cases, 218 e2e cases and five Codex rounds over the rotate prompt, and neither defect was visible from any of them. 🔴 **M82 is WITHDRAWN from the matrix.** It came back GREEN and stayed green, and this criterion requires every row to red — so a row reporting `GREEN 0/24` made 12.19 PASS over its own contradiction (Codex round 20, finding 1). M82 was a probe that found dead code, not a mutation of a live gate; the dead code is deleted and the hole is M82b's, which reds. 🔴 **Thirteen more rows were withdrawn for the same reason, and that is what held this criterion open. Closed 2026-09-02.** M46, M47, M55-M57, M60-M63, M65, M68, M69 and M74 each reddened a gate the owner's redesign deleted along with the ink pass. Each was triaged by one question — does the code it edits still exist, and does a live gate still claim its property? **Five were rebuilt and red** (M46 → **M99**, M61 → **M100**, M62 → **M101**, M60 → **M103**, M47 → **M104**); **eight are RETIRED** (M55, M56, M57, M63, M65, M68, M69, M74) because the code they edit is deleted, which makes them **unbuildable rather than green** — the distinction M82 established. The three replacement gates now carry the red proofs they lacked: two-band alpha ← M99 RED 2/15 and M100 RED 2/15; byte-for-byte cut-face equality ← M101 RED 1/15 and M103 RED 1/15; central-square distinctness ← **M45 re-run** against the fixed-square mask, RED 2/15 at 0.0 %. ⚠️ **M101 measured the thing the criterion is about**: it reds the equality gate while the two-band claim stays GREEN with all three of its counts byte-identical, so the two-band partition demonstrably cannot order M62's damage — a replaced statistic, proved replaced rather than assumed. 🔴 **And the cost is on the record**: the per-stroke contrast gate is not rebuilt (owner decision, 2026-09-02), so the 44–48 CSS px readability band has no automated cover and 12.14 rests on `ui-ux-tester` plus a hands-on pass. § The 12.19 repair. |
 | 12.20 | `dist/` carries no dev-only key, symbol or prose | **PASS** | § Regression evidence. |
 | 12.21 | No file over 400 lines without a `SIZE-EXEMPTION:` | **PASS** | **Six** splits taken rather than an exemption: `touchAtlasCli`, `perfRenderer`, `touch-atlas-argv`, `touch-family-builder`, `touchFamilyPolicy` and `touchPlateRows`. |
 | 12.22 | Codex PLAN review converged before any code | **PASS** | `VERDICT: APPROVED`, round 4 of 5. `docs/reviews/phase-12-touch-plan.md`. |
 | 12.23 | Codex IMPLEMENTATION review on the final diff | **NOT MET** | **Round 14 ran and returned `VERDICT: REVISE`** — 13 findings, nine applied and four recorded with reasons (§ Codex round 14). *Executed with an unresolved verdict is NOT MET, not UNRUN.* **Round 15 then ran on the repaired diff and returned `VERDICT: REVISE`** — 11 findings, seven applied, one recorded as a precondition on the redesign, three taken to the owner (§ Codex round 15). **Round 16 ran on the round-15 repairs and returned `VERDICT: REVISE`** — 8 findings, all applied (§ Codex round 16). **Round 17 returned `VERDICT: REVISE`** — 7 findings, all applied (§ Codex round 17). **Round 18 returned `VERDICT: REVISE`** — 7 findings, all applied (§ Codex round 18). **Round 19 returned `VERDICT: REVISE`** — 7 findings, all applied (§ Codex round 19). **Round 20 returned `VERDICT: REVISE`** — 9 findings, six applied as code and three as record (§ Codex round 20). ⚠️ **This row has now twice stopped one review short of the summary beside it** — round 16 against a summary naming 17 (round 18, finding 6), then round 18 against a summary naming 19 (round 20, finding 9). |
 | 12.24 | Owner played it by touch on a real device, no keyboard | **PASS 2026-09-02 — owner** | Hands-on *(C4)*. Closed across **three** preview rounds on the owner's own phone, in fullscreen, with no keyboard in reach: 2026-09-01 (the six-item report), 2026-09-02 (the touch-control inset and the gear counter), and 2026-09-02 again (the welcome screen's audio line). Each round produced specific, reproducible defects against screens reached BY TOUCH — the level menu, the play controls, the HUD, the welcome screen — which is evidence the touch route works, not merely that it was looked at; a route that did not work could not have produced them. The owner then ruled it shipped and it is live in production. ⚠️ **The *start to finish* clause rests on the owner's word, not on a captured artifact.** No screenshot or recording of a level completed by touch is filed. That is what a `play` criterion is — see [session-mobile-polish-02-device-report.md](session-mobile-polish-02-device-report.md) for the three rounds. |
 
-**Three criteria are NOT MET and two are UNRUN, so the phase is reported FAILING** *(status
-2026-08-31, after the close-out session)*. 🔴 This line said *"one NOT MET and three UNRUN"* against
-its own table, which already read 12.14 and 12.23 NOT MET — Codex round 16, finding 7. **A summary
-that disagrees with the table above it is the failure this log's own header records.**
+**STATUS 2026-09-02, the close-out session.** ⚠️ This line has now been wrong **twice**, both times
+by lagging the table above it. It read *"one NOT MET and three UNRUN"* while the table already said
+12.14 and 12.23 NOT MET (Codex round 16, finding 7), and was then left at *"Three criteria are NOT
+MET and two are UNRUN"* through 2026-09-02, by which time 12.24 had passed. **A summary that
+disagrees with the table above it is the failure this log's own header records**, so it is written
+against the table and dated every time it moves.
+
+**Derived from the table above, 2026-09-02 mid-session:** 12.19 PASS. **12.14 and 12.23 NOT MET;
+12.13 and 12.14b UNRUN — both need the owner's phone. The phase is reported FAILING** until they move.
 
 - **12.14 is NOT MET on its judgement half; its measurable half PASSES.** The wrench re-shoot did what it was bought to do — every
   stroke of all six faces clears 3:1 at every size in the live 44-48 band, with no exception table —
@@ -970,6 +975,81 @@ Every row applied, verified applied by *"content changed AND the original count 
 gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
+
+### The 12.19 repair, 2026-09-02
+
+**What was open.** Thirteen rows — M46, M47, M55-M57, M60-M63, M65, M68, M69, M74 — each reddened a
+gate that commit `949abb1` deleted with the ink pass (`tools/gen/touchInk.mjs`,
+`shipped-touch-contrast.test.ts`, `touch-atlas-ink.test.ts`, `touch-strokes.test.ts`, and the two
+ink-derived assertions in `shipped-touch.test.ts`). Three gates replaced them and **none of the
+three had ever been watched failing.**
+
+**The triage rule, decided before any mutation was built.** One question per row: *does the code the
+row edits still exist, and does a live gate still claim its property?* Not *which mutation is easy to
+build against something* — that is how the first 22 green rows happened, and the handoff says so in
+as many words. The answer sorts every row into rebuilt or retired, and nothing else.
+
+**Rebuilt — five, all red.**
+
+| new | from | what it does | measured |
+|---|---|---|---|
+| **M99** | M46 | all six faces flat at one alpha, keyed field included | RED 2/15; `clear` **5314 → 0** on every face |
+| **M100** | M61 | every non-mark pixel of `pause` to alpha 1 | RED 2/15; **19 191** pixels, `clear` **5281 → 0** |
+| **M101** | M62 | 2 014 pixels outside `left`'s mark, dark and opaque | RED 1/15 — equality only; **two-band GREEN, counts byte-identical** |
+| **M103** | M60 | `walk`'s mark erased to plate brass, two 4×4 ink cells kept | RED 1/15; **6 367** pixels |
+| **M104** | M47 | the face drawn at `PLATE_ALPHA * PLATE_ALPHA` | RED 1/40 |
+
+and **M45 re-run** against the fixed-central-square mask that replaced `keylineMarks`: `touch-walk`'s
+central square copied onto `touch-left`, **RED 2/15 at 0.0 %**. A row does not carry over a redesign
+of the gate it names; it is re-measured or it is decoration.
+
+**Retired — eight.** M55, M56, M57, M63, M65, M68, M69, M74. The code each one edits is deleted, so
+they are **unbuildable, not green**, and that distinction is the whole reason they can be retired
+where M82 had to be: a row reporting `GREEN 0/n` contradicts the criterion; a row naming an edit to a
+file that does not exist reports nothing at all. Each row states which deleted gate it reddened.
+
+🔴 **M101 is the measurement, not the mutation, that mattered.** It reds byte-for-byte cut-face
+equality and leaves the two-band alpha claim GREEN — with all three of its counts *byte-identical*
+(5314 clear / 19 873 solid / 413 partial). So the two-band partition **provably cannot order M62's
+damage**, which is the §5 rule's case exactly: a statistic that does not order its own mutation is
+replaced, never re-bounded. The replacement had already been made when the ink pass went; M101 is the
+evidence it was the right one rather than an assertion that it was.
+
+🔴 **M102 went GREEN and is recorded as a probe, not a hole.** Raising every non-transparent
+pixel to full alpha in the six shipped faces *and* the six committed cuts together — a pipeline
+change faithfully re-cut, which is M63's mutation as the current build can express it — passes all
+15. That is the designed split: `PLATE_ALPHA_BAKED` is deleted, the bytes ship unfaded, and the fade
+is a draw-time value whose gate is the one **M104** reds. The property moved; it did not vanish. What
+remains uncovered is M64's already-stated limit of a committed oracle — a builder change that is
+faithfully re-cut moves both files together — and the independent statement against it is the pinned
+key/row/col literal in `shipped-touch.test.ts`. Same call as M82: a probe that found the code it
+aimed at was gone.
+
+🔴 **What the retirement costs, said plainly.** The per-stroke contrast statistic is not being
+rebuilt — owner decision, 2026-09-02, because inventing a statistic after seeing the art it will
+judge is the post-data selection this phase kept catching. M74 is the row that used to sweep the live
+44–48 CSS px band. With it retired, **the readability of the six glyphs across that band has no
+automated cover at all.** 12.14 rests on `ui-ux-tester` and a hands-on pass, which is what that
+criterion always required and never had.
+
+**How the runs were driven.** From the shell, never from a Node parent. Each run reported
+`suites / tests / passed / failed` positively from the JSON reporter, with a zero-test run called out
+explicitly rather than read as a pass — the lowercase-drive-letter defect below is why. Byte
+mutations were verified applied by *"content changed"* (a SHA-256 over all twelve PNGs, plus
+`git status` naming the modified files) **and** by the named pixel statistic moving; reverted with
+`git checkout --`, and the revert confirmed by the tree hash returning to its original value with
+`git status` reporting the files clean. M104, a source edit, used the occurrence count directly:
+applied when `face.setAlpha(PLATE_ALPHA);` dropped **1 → 0** with the file changed, reverted when it
+returned to **1**.
+
+### The row count
+
+⚠️ **This log and `HANDOFF.md` both said the matrix carried 92 rows. It carried 103, and now carries
+109.** 93 of the original ids were plain numeric, which is the likely source of the off-by-one; the
+rest is simply a figure nobody re-derived. `M52`, `M82`, `M95` and `M96` are absent — **`M82` is
+retired and must not be reused** — and the tail is not id-sorted (`M79` before `M78`, `M94` after
+`M98`). A criterion whose content is *"every row reds at least one named gate"* cannot be checked
+against a count of the rows that is wrong, which is why this is recorded rather than quietly fixed.
 
 **Five rows reddened nothing.** *A row that reds nothing is a hole in the gate, not a mutation to
 drop* — so each produced a new gate rather than an edited matrix.
