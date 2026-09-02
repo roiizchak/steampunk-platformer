@@ -1,3 +1,86 @@
+# Session handoff — the six mobile polish items (2026-09-02)
+
+> Branch `phase-13-mobile-polish`, **not merged**, eight commits on top of `9eba673`.
+> Full record: [qa/session-mobile-polish.md](qa/session-mobile-polish.md).
+>
+> The owner played the shipped Phase 12 build on a real device and reported six things. All six are
+> implemented and gated. **What is NOT done is the hands-on pass**, and four of the six are "does it
+> look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is 240)*.
+
+## 🔴 Read this before touching the scale code
+
+**Item 6 shipped twice.** `Phaser.Scale.EXPAND` landed in `e542823` and was **replaced** in
+`1257de2`. Do not put it back without reading `src/game/viewSize.ts`'s header first.
+
+EXPAND's only clamp is `scale.min`/`scale.max`, and `ScaleManager` feeds those bounds to
+`displaySize` — which is **also the CSS style size** (`ScaleManager.js:1088-1140`; `Size.setSize`
+re-clamps into the same min/max). Game units and CSS pixels, clamped by one pair of numbers. A `min`
+of 1920x1080 therefore forces the canvas to be at least 1920 CSS px wide on a 900 px viewport, and
+it was **measured doing exactly that**: a 1920 CSS px canvas in a 1040 px viewport.
+
+What ships is `Phaser.Scale.FIT` — unchanged, five phases of specs still measure it — over a game
+size that is a function of the viewport: `liveViewWidth` gives the view the viewport's own aspect at
+a fixed `GAME_HEIGHT`, clamped into `[GAME_WIDTH, MAX_GAME_WIDTH]`, so FIT has nothing left to
+letterbox inside the ceiling.
+
+⚠️ **`installViewFill`'s equality guard is load-bearing.** `setGameSize` ends in `refresh()`, which
+emits `resize` straight back into the handler. Without the guard the first resize is an infinite
+loop, not a slow one.
+
+⚠️ **A synthetic `game.scale.resize(w, h)` is no longer reachable.** It emits `resize`, the fill
+loop hears it and snaps the view back to what the viewport says. Three specs used to drive it and
+now drive `page.setViewportSize` instead. If you write a new one, drive the viewport.
+
+## The traps, and they are not visible in the code
+
+- **The view is no longer 1920 wide.** It is 1920 at exactly 16:9, up to 2560 on a wide viewport,
+  and never narrower. **Height is pinned at 1080**, which is what keeps every `gameH / GAME_HEIGHT`
+  ratio at exactly 1 — the HUD, the touch layout and the parallax all depend on that. Anything you
+  size once in `create()` from a literal will be wrong on the second size.
+- **`1024x461` is not 20:9.** It is 2.2213 and rounds the view to **2399**, which reads as 2400 and
+  fails an equality. `1000x450` is exact. Three specs learned this the same way.
+- **`bootToTitle` lands on the LEVEL MENU on a touch device**, not on the title, and the tap zones
+  live there — five `Zone`s under `LevelSelect`, none anywhere else. Probed, not assumed.
+- **`bootToTitle`'s canvas tap goes FULLSCREEN on a touch device**, after which Chromium refuses
+  `setViewportSize` outright: *"To resize minimized/maximized/fullscreen window, restore it to
+  normal state first."* Exit fullscreen before resizing.
+- **Run `test:e2e` per PROJECT, not as one invocation.** A whole-suite run completed in 32 minutes
+  once and then hung past two hours, with the JSON reporter producing **no file at all** — a hang
+  costs the entire signal. Per-project runs with a `timeout` localise it and keep every earlier
+  project's result.
+- **A fake with MORE API than the real object re-routes the code under test**, and one with LESS
+  makes a gate unfalsifiable. Both happened here: `setFillStyle` on every face sent the art arm down
+  the fill branch, and a missing `setText` made "never calls `setText`" a sentence about itself.
+
+## What is still owed
+
+🔴 **The hands-on pass on the owner's device.** Deploy a Vercel preview and check in fullscreen:
+no bars left or right, no black band over the sky, no digits on the rotate prompt, buttons read
+solid, the gear count level with its icon, the volume banner gone, the level menu centred with lock
+icons.
+
+🔴 **The hazard-visibility pass item 3 owes.** `PLATE_ALPHA` 0.9 **abandons** the occlusion
+criterion rather than weakening it — 22 % residual against a 60 % rule, past the 0.86 measured to
+erase content — on the owner's authority. The replacement check: stand behind the pause plate on
+level-01 where a shooting `brass-sentry` sits for nine consecutive standing positions, and under the
+jump plate on level-04 where the goal sits for nine more. **If either is unplayable, 0.9 is wrong
+and the number comes back down.**
+
+⚠️ `max.height` clamping the CSS height on a display taller than 1080 CSS px is **derived from the
+code, not measured** — this box could not produce the case. One look on a 1440p display settles it.
+
+⚠️ The frame-budget figures in `docs/qa/` were all taken at the design size. They are now a floor
+for a widened view rather than the figure for every size. Nothing has re-measured them.
+
+## Verification at the tip
+
+- `npm test` — **3109 passed, 219 files**, 0 failed.
+- `npm run test:e2e` — **227 passed, 0 failed, 0 skipped**: `chromium` 106 · `chromium-gpu` 70 ·
+  `chromium-dpr2` 8 · `chromium-touch` 34 · `chromium-touch-gpu` 3 · `chromium-prod` 6.
+- `npx tsc --noEmit` clean; `npm run build` + `verify-dist` ok.
+
+---
+
 # Session handoff — Phase 12, touch and responsive support
 
 > ## 👉 Resuming Phase 12? Read [handoff/next-session-prompt-phase-12.md](handoff/next-session-prompt-phase-12.md) first.
