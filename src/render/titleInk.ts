@@ -126,7 +126,16 @@ export const TITLE_INKS: ReadonlyArray<{ role: string; fill: string; designPx: n
  * arguments and returned a fixed `100%` would have satisfied it. Codex implementation review round 3,
  * finding 4. `title-contrast.test.ts` now asserts the two arguments actually reach the string.
  */
-export function audioHint(muted: boolean, volume: number): string {
+export function audioHint(muted: boolean, volume: number, touch: boolean = false): string {
+  // ✅ **A phone gets NO audio line at all — owner decision, 2026-09-02.** The volume belongs to
+  // the device there, not to the game, and this line advertises two KEYBOARD keys a phone does not
+  // have. The reasoning above is about a player who tries the key this screen taught them; a player
+  // with no keys cannot be taught one. The owner reported it from the device with the line circled.
+  //
+  // ⚠️ Same shape as `helpLine`'s touch arm in `gameDev.ts`, and for the same reason — but note
+  // this one returns EMPTY rather than a shortened line. There is nothing left once the keys go.
+  if (touch) return '';
+
   // ⚠️ The two keys are separated. Written as `[ ] volume`, the pair rendered as two adjacent
   // brackets with nothing between them — an empty checkbox or a missing glyph, not "press `[` to
   // lower and `]` to raise". Criterion 11.12 brief A, finding 1, against the shipped screen.
@@ -158,6 +167,59 @@ export const TITLE_BACKDROP_KEY = 'title-backdrop';
  * suite green. Codex implementation review of the redesign, finding 3.
  */
 export const TITLE_ROWS: readonly number[] = [0.34, 0.455, 0.569, 0.683];
+
+/** The panel spans this fraction of the height, centred — so the band is [0.22, 0.78]. */
+const PANEL_FRACTION = 0.56;
+
+/** The tuned gap between rows, taken from {@link TITLE_ROWS}: `(0.683 - 0.34) / 3`. */
+const ROW_GAP = (0.683 - 0.34) / 3;
+
+/** The design height every `designPx` in {@link TITLE_INKS} is a fraction of. */
+const DESIGN_HEIGHT = 1080;
+
+/**
+ * The row fractions for a screen that draws `rowCount` of {@link TITLE_INKS}, in order.
+ *
+ * 🔴 **A phone draws THREE rows, not four** — the audio hint is gone there, and simply dropping
+ * it left the ink spanning 0.34 to 0.569 inside a 0.22–0.78 band: a top margin of 0.12 against a
+ * bottom margin of 0.211. That is the *"a row has gone missing"* reading `TITLE_ROWS` documents at
+ * length, and it is the exact defect BOTH criterion 11.12 briefs found independently in the original
+ * spacing. Removing a row without re-deriving the rest re-opens it.
+ *
+ * So the rows are derived rather than listed twice. The rule is the one `TITLE_ROWS` was solved
+ * from, with `n` rows instead of four: equal gaps of `ROW_GAP`, and equal **optical** margins —
+ * measured to the glyph box, `r ± designPx / 2`, not to the row centre — at the top and bottom of
+ * the panel band.
+ *
+ *     r₁ = (bandTop + bandBottom + h_first / 2 − h_last / 2 − (n−1) × gap) / 2
+ *
+ * ⚠️ **The four-row answer is still the literal above, and a gate proves this reproduces it.**
+ * If the two ever disagree, the literal is the one two adversarial briefs tuned — fix the formula.
+ */
+export function titleRows(rowCount: number): readonly number[] {
+  // The four-row case returns the tuned literal itself, so desktop cannot drift by a rounding
+  // error. 🔴 That early return is also why the derivation is a SEPARATE function: with the
+  // formula reachable only for n < 4, "the formula reproduces the literal" could never go red, and
+  // a gate that cannot go red is decoration *(C2)*. Found by running the mutation it names.
+  if (rowCount >= TITLE_ROWS.length) return TITLE_ROWS;
+  return titleRowSpread(rowCount);
+}
+
+/**
+ * The derivation behind {@link titleRows}, reachable for every `rowCount` including four.
+ *
+ * ⚠️ Callers want `titleRows`. This exists so the four-row answer can be checked against the
+ * literal two adversarial briefs tuned, rather than asserted about a branch that never runs.
+ */
+export function titleRowSpread(rowCount: number): readonly number[] {
+  if (rowCount < 1) return [];
+  const half = (index: number): number => TITLE_INKS[index].designPx / DESIGN_HEIGHT / 2;
+  const bandTop = (1 - PANEL_FRACTION) / 2;
+  const bandBottom = 1 - bandTop;
+  const first =
+    (bandTop + bandBottom + half(0) - half(rowCount - 1) - (rowCount - 1) * ROW_GAP) / 2;
+  return Array.from({ length: rowCount }, (_unused, i) => first + i * ROW_GAP);
+}
 
 /**
  * ⚠️ **These were `[0.34, 0.45, 0.61, 0.72]`, and BOTH criterion 11.12 briefs found the same

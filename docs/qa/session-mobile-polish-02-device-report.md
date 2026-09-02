@@ -174,3 +174,102 @@ check that item 3's abandoned occlusion bound left behind. This round adds two i
 
 - the four play controls are reachable under a thumb and no longer fight the back gesture;
 - the gear count reads level with its icon **on the phone**, not only in Chromium at the design size.
+
+---
+
+# Round 3 — no audio line on the welcome screen
+
+The second preview went to the phone and came back with one thing, circled in the screenshot:
+`M mute  ·  [ / ] volume  100%` on the title screen.
+
+> *"all fixed but, small on the welcome screen only on mobile no needs mute and volume texts."*
+
+Owner decision, 2026-09-02. **Touch only** — desktop keeps the line.
+
+## Why the line existed, and why the reason does not survive a phone
+
+`titleInk.ts:114-127` argues at length that *"a screen that advertises a control owes the player the
+control's value"*: at the shipped `volume: 1`, the first press of `]` clamps and does nothing, so a
+player who tries the key this screen just taught them cannot tell "already at maximum" from "still
+broken". That was found by the criterion 11.12 adversarial brief and it is correct.
+
+It is also entirely about a player who has keys. A phone has none, the device owns its own volume,
+and the line names two keyboard keys — so on touch it is not an under-informative readout, it is an
+instruction that cannot be followed. `audioHint` now returns `''` for touch, the same shape as
+`helpLine`'s touch arm in `gameDev.ts` and for the same reason.
+
+## 🔴 Removing a row is a LAYOUT change, and this is where it would have gone wrong
+
+`TITLE_ROWS` is `[0.34, 0.455, 0.569, 0.683]` and `applyLayout` positions `this.items` **by index**
+against it. Deleting the hint leaves three items on the first three fractions — ink spanning 0.34 to
+0.569 inside a 0.22–0.78 panel band:
+
+| | margin |
+|---|---|
+| top | 0.120 |
+| bottom | **0.211** |
+
+That is *"a row has gone missing"* — the exact reading `TITLE_ROWS`' own docstring records, and the
+defect **both** criterion 11.12 briefs found independently in the spacing before it. Shipping the
+removal alone would have re-opened it and the next screenshot would have said so.
+
+So the rows are re-derived rather than sliced. `titleRowSpread(n)` solves the same equation
+`TITLE_ROWS` was solved from, with `n` rows instead of four — equal gaps of the tuned
+`(0.683 − 0.34) / 3`, and equal **optical** margins measured to the glyph box, `r ± designPx / 2`:
+
+```
+r₁ = (bandTop + bandBottom + h_first/2 − h_last/2 − (n−1)·gap) / 2
+```
+
+For three rows that gives `[0.3945, 0.5088, 0.6231]`, margins **0.1411 top and bottom**.
+
+⚠️ **The four-row answer stays the tuned literal.** `titleRows(4)` returns `TITLE_ROWS` itself, so
+desktop cannot drift by a rounding error — the derivation agrees with it to within a thousandth
+(0.340074 → 0.34, 0.454407 → 0.455), which is the literal's own rounding and nothing more.
+
+🔴 **That early return made its own gate decoration, and running the mutation is what found it.**
+With the formula reachable only for `n < 4`, "the derivation reproduces the literal" could never go
+red — M133 left it green. The derivation is therefore a **separate exported function**, and the gate
+drives `titleRowSpread(4)`. *(C2: a gate that cannot go red is decoration.)*
+
+## Gates
+
+Two arms of one branch, and **neither is evidence alone** — an `audioHint` that returned `''`
+unconditionally satisfies the touch case while deleting the line from every device.
+
+| where | project | asserts |
+|---|---|---|
+| `phase-12-journey.spec.ts` | `chromium-touch` | the drawn Title display list has **3** Text objects and none matches `/volume\|mute/i` |
+| `phase-11-title-routes.spec.ts` | `chromium` | it has **4**, and one matches `/M mute.*volume/` |
+| `title-drawpath.test.ts` | unit | `audioHint(_, _, true) === ''`, the desktop arm unchanged, the source shape, and the four `titleRowSpread` / `titleRows` cases |
+
+⚠️ **The count is the assertion, not just the absence of the string.** A fourth object created
+*empty* would hold a row open — the screen spaced for four and drawing three, which is the
+bottom-heavy defect above. Only the count tells those two apart, and M131 proves it: the drawn list
+came back `STEAMPUNK PLATFORMER | a short climb through the works | TAP   choose a level | ` with a
+trailing empty string.
+
+| # | mutation | gate that went red |
+|---|---|---|
+| M130 | `if (touch) return ''` → `if (false)` | unit *audioHint returns NOTHING on a touch device*; e2e touch — `the audio hint is still drawn on a phone` |
+| M131 | the row is created even when the string is empty | unit *only when there IS one*; e2e touch — 4 drawn, the fourth empty |
+| M132 | `titleRows(this.items.length)` → `titleRows(4)` | unit *places the rows from the shared table* |
+| M133 | the derivation drops its equal-margin term | unit *reproduces the four-row literal* + *EQUAL optical margins* |
+| M133b | `titleRows` slices `TITLE_ROWS` instead of deriving | all three `titleRows` cases |
+| M134 | `if (touch)` → `if (true)` — the line goes on **every** device | e2e desktop — `drawn: … | ENTER   choose a level` |
+
+## Suite results
+
+| run | result |
+|---|---|
+| `npx tsc --noEmit` | clean |
+| `npm test` | **3126 passed, 0 failed** (220 files) |
+| `npm run test:sim-isolated` | 3113 passed, 13 skipped (3126) |
+| `npm run build` | `verify-dist ok` |
+| e2e, per project | `chromium` 107 · `chromium-gpu` 71 · `chromium-dpr2` 8 · `chromium-touch` 34 · `chromium-touch-gpu` 3 · `chromium-prod` 6 = **229 passed, 0 failed** |
+
+⚠️ **`chromium-gpu` failed twice across this session and neither was a regression** — 6.9 once and
+6.9 + 9.5 once, both after a long back-to-back run of other projects. Each passed in isolation
+(`2 passed` for the two perf specs, the full count `--list` reports) and the whole project then
+re-ran at 71/71. This is the §5 rule about one Playwright run at a time and nothing heavy beside it,
+observed rather than argued: **a warm box reads as a broken game to a wall-clock-bounded gate.**

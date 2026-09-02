@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TITLE_INKS, TITLE_ROWS, audioHint, panelSize } from '../../src/render/titleInk';
+import {
+  TITLE_INKS,
+  TITLE_ROWS,
+  audioHint,
+  panelSize,
+  titleRowSpread,
+  titleRows,
+} from '../../src/render/titleInk';
 import { GAME_HEIGHT, GAME_WIDTH } from '../../src/game/constants';
 
 /**
@@ -151,9 +158,33 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     expect(source, "the title still says 'ENTER or TAP'").not.toContain('ENTER or TAP');
   });
 
-  it('the audio hint is drawn from the live state, not a fixed string', () => {
-    // Half of the claim: the scene routes that line through `audioHint`.
-    expect(source).toMatch(/this[.]hint = make[(]audioHint[(][^;]*HINT_STYLE[)]/);
+  it('the audio hint is drawn from the live state, and only when there IS one', () => {
+    // Half of the claim: the scene routes that line through `audioHint`, and hands it the device.
+    expect(source, 'the hint is not built from audioHint').toMatch(
+      /const hint = audioHint\(\s*this\.audioState\.muted,\s*this\.audioState\.volume,\s*this\.game\.device\.input\.touch,?\s*\)/,
+    );
+    expect(source, 'the hint text never reaches a Text object').toMatch(
+      /this\.hint = make\(hint, HINT_STYLE\)/,
+    );
+
+    // 🔴 The row must not be CREATED when the string is empty. `applyLayout` places
+    // `this.items` by index against `titleRows(this.items.length)`, so an empty fourth object still
+    // holds a row open - the screen would then be spaced for four rows and draw three, which is the
+    // uneven-margin defect both criterion 11.12 briefs found.
+    expect(source, 'an empty hint is still added to the row list').toMatch(
+      /if \(hint !== ''\) \{\s*this\.hint = make\(hint, HINT_STYLE\);/,
+    );
+  });
+
+  it('audioHint returns NOTHING on a touch device', () => {
+    // ✅ Owner decision, 2026-09-02, reported from the phone with the line circled: the device
+    // owns the volume there, and the line advertises two keyboard keys a phone does not have.
+    expect(audioHint(false, 1, true)).toBe('');
+    expect(audioHint(true, 0.4, true)).toBe('');
+    // ⚠️ And the desktop arm is untouched - the parameter defaults to false, so every existing
+    // caller and every case below keeps its meaning.
+    expect(audioHint(false, 1, false)).toContain('M mute');
+    expect(audioHint(false, 1)).toBe(audioHint(false, 1, false));
   });
 
   it('and audioHint actually SPENDS both of its arguments', () => {
@@ -219,7 +250,7 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
    *
    * ⚠️ **This replaced a drift gate, it did not lose one.** Until 2026-08-29 the backdrop was three
    * parallax layers and this test pinned their drift to `frameClock.drainTicks` — the fix for a real
-   * defect, where a constant named `PER_TICK` was added once per rendered FRAME and the screen moved
+   * defect, where a constant named `PER_✅` was added once per rendered FRAME and the screen moved
    * four times faster on a 240 Hz box than on the owner's 60 Hz one. The owner then chose the
    * generated backdrop, a single plate cannot drift without exposing its own edge, and the drift,
    * its constant and that gate all went together. A gate is retired with the thing it guarded or it
@@ -264,7 +295,12 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
     );
     expect(source, 'and that result must reach the panel').toMatch(/\.setSize\(w, h\)/);
 
-    expect(source).toMatch(/const rows = TITLE_ROWS;/);
+    // 🔴 Derived from how many rows were actually created, not from the four-entry literal.
+    // A phone draws three; `TITLE_ROWS` would leave them in the top two thirds of the band.
+    expect(source).toMatch(/const rows = titleRows\(this\.items\.length\);/);
+    expect(source, 'a hardcoded count cannot follow the hint disappearing').not.toMatch(
+      /titleRows\(\s*[0-9]/,
+    );
     // Indexed PER ITEM. `rows[0]` stacks all four lines on top of one another while every assertion
     // that reads only the constants stays green.
     expect(source, 'each item must read its OWN row').toMatch(
@@ -284,5 +320,71 @@ describe('TitleScene spends the inks rather than merely importing them', () => {
   it('no raw hex colour was inlined back into the scene', () => {
     const inlined = source.match(/color: '#[0-9a-fA-F]{6}'/g) ?? [];
     expect(inlined, `inlined colours: ${inlined.join(', ')}`).toHaveLength(0);
+  });
+});
+
+
+/**
+ * 🔴 **The rows are DERIVED, and the derivation has to reproduce the tuned literal.**
+ *
+ * `TITLE_ROWS` was solved twice, and both criterion 11.12 briefs independently found the same defect
+ * in the version before it: unequal gaps reading as a row having gone missing, and asymmetric outer
+ * margins. Dropping the audio hint on a phone re-opens exactly that unless the remaining three rows
+ * are re-spread - so `titleRows` solves the same equation for n rows instead of listing a second
+ * table that can drift away from the first.
+ */
+describe('titleRows re-spreads the rows when one of them is gone', () => {
+  /** The panel band, from `panelSize`'s 0.56 centred. Restated here so the gate has its own copy. */
+  const BAND_TOP = 0.22;
+  const BAND_BOTTOM = 0.78;
+  const halfRow = (index: number): number => TITLE_INKS[index].designPx / 1080 / 2;
+
+  it('reproduces the four-row literal - the formula and the tuned table agree', () => {
+    // ⚠️ If these ever disagree, the LITERAL is the one two adversarial briefs tuned. Fix the
+    // formula, not the table.
+    // The DERIVATION, not `titleRows(4)` - that returns the literal unchanged and would agree with
+    // it no matter what the formula said.
+    const derived = titleRowSpread(4);
+    expect(derived).toHaveLength(TITLE_ROWS.length);
+    // Within a thousandth: the literal IS this derivation, written to three decimals
+    // (0.340074 -> 0.34, 0.454407 -> 0.455). The tolerance is that rounding and nothing more - the
+    // mutation this case names, dropping the equal-margin term, moves row 0 by 0.0115.
+    derived.forEach((r, i) =>
+      expect(Math.abs(r - TITLE_ROWS[i]), `row ${i}: derived ${r}, table ${TITLE_ROWS[i]}`)
+        .toBeLessThan(0.001),
+    );
+    // And it is the table itself for the four-row case, so desktop cannot drift by a rounding error.
+    expect(titleRows(4)).toBe(TITLE_ROWS);
+    expect(titleRows(9), 'more rows than inks must not invent fractions').toBe(TITLE_ROWS);
+  });
+
+  it('gives three rows EQUAL optical margins inside the panel band', () => {
+    // 🔴 The whole point. Slicing `TITLE_ROWS` to three would give 0.120 against 0.211 - the
+    // bottom-heavy screen the owner would see next. Measured to the GLYPH BOX, not the row centre.
+    const rows = titleRows(3);
+    expect(rows).toHaveLength(3);
+    const top = rows[0] - halfRow(0) - BAND_TOP;
+    const bottom = BAND_BOTTOM - (rows[2] + halfRow(2));
+    expect(top, 'the three rows are not centred in the band').toBeCloseTo(bottom, 6);
+    expect(top, 'the rows have drifted outside the panel the contrast premise depends on')
+      .toBeGreaterThan(0);
+  });
+
+  it('keeps the tuned gap, and every row inside the panel', () => {
+    const rows = titleRows(3);
+    const gap = (TITLE_ROWS[3] - TITLE_ROWS[0]) / 3;
+    expect(rows[1] - rows[0]).toBeCloseTo(gap, 9);
+    expect(rows[2] - rows[1]).toBeCloseTo(gap, 9);
+    // ⚠️ Every glyph box inside the band, or `title-contrast.test.ts`'s premise stops holding -
+    // its bound assumes every row is drawn over the panel, never over the raw backdrop.
+    rows.forEach((r, i) => {
+      expect(r - halfRow(i), `row ${i} above the panel`).toBeGreaterThanOrEqual(BAND_TOP);
+      expect(r + halfRow(i), `row ${i} below the panel`).toBeLessThanOrEqual(BAND_BOTTOM);
+    });
+  });
+
+  it('does not invent rows it has no ink for', () => {
+    expect(titleRows(0)).toEqual([]);
+    expect(titleRows(-1)).toEqual([]);
   });
 });

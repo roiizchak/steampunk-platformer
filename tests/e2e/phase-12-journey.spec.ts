@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { drawnTitleLines } from './titleHarness';
 
 import { TOUCH_IDS } from '../../src/render/touchLayout';
 import { drawnOverlay } from './completeHelpers';
@@ -86,6 +87,23 @@ test('12.1 the whole journey, driven only by touch', async ({ page }) => {
     undefined,
     { timeout: 20_000 },
   );
+
+  // 🔴 **No audio line on a phone** - owner decision, 2026-09-02, reported from the device
+  // with the line circled. The device owns the volume there, and `M mute  .  [ / ] volume 100%`
+  // advertises two KEYBOARD keys a phone does not have.
+  //
+  // ⚠️ Asserted against the drawn display list, not the source. `audioHint` is pure and unit-gated
+  // both ways, but "the scene did not create the object" is a property of the scene, and the only
+  // place the touch branch is actually taken is a touch device.
+  const titleLines = await drawnTitleLines(page);
+  expect(titleLines.join(' | '), 'the audio hint is still drawn on a phone').not.toMatch(
+    /volume|mute/i,
+  );
+  // Three rows, not four. `applyLayout` places items by INDEX against `titleRows(items.length)`,
+  // so a fourth object created empty would hold a row open and re-spread nothing - the screen would
+  // be spaced for four and draw three. The count is what tells those two apart.
+  expect(titleLines, `drawn: ${titleLines.join(' | ')}`).toHaveLength(3);
+  expect(titleLines.some((t) => t.includes('TAP')), 'the way in went missing too').toBe(true);
 
   const rect = await canvasRect(page);
   // Anywhere on the title: it has one action, so the whole view is the target.

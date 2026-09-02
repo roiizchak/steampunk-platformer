@@ -5,7 +5,12 @@
 > round, [qa/session-mobile-polish-02-device-report.md](qa/session-mobile-polish-02-device-report.md).
 >
 > The owner played the shipped Phase 12 build on a real device and reported six things. All six are
-> implemented and gated. A Vercel preview then went to the phone and **two more reports came back**
+> implemented and gated. A Vercel preview then went to the phone and **two more reports came back**,
+> then a third preview and **one more**: the welcome screen's `M mute  ·  [ / ] volume` line, which
+> is desktop-only now. 🔴 **Removing a row from the title screen is a LAYOUT change** — the four
+> row fractions were solved twice and two adversarial briefs tuned them, so `titleRowSpread` re-derives
+> the spacing for three rows rather than slicing the four-row table. Slicing leaves margins of 0.120
+> against 0.211.
 > — the touch controls sitting inside the phone's gesture zones, and the gear count still off its
 > icon. Both fixed and gated. **What is STILL not done is the hands-on pass**, and most of these
 > items are "does it look right", which no gate answers *(C4; the owner plays at 60 Hz, this box is

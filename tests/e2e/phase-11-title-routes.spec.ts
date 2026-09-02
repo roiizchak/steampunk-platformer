@@ -8,14 +8,7 @@
 
 import { expect, test } from '@playwright/test';
 import { storedSettings } from './audioHelpers';
-import {
-  RUNNING,
-  TITLE,
-  bootToTitle,
-  gameStatus,
-  restartGame,
-  sceneActive,
-} from './titleHarness';
+import { RUNNING, TITLE, bootToTitle, drawnTitleLines, gameStatus, restartGame, sceneActive } from './titleHarness';
 import type { SceneHandle } from './titleHarness';
 import { BOOT_TIMEOUT, dismissTitle } from './gameHarness';
 import { SELECTED_STROKE_PX } from '../../src/scenes/levelButtons';
@@ -288,4 +281,17 @@ test.describe('Phase 11 — the audio listener does not survive its own scene', 
 
     await expect.poll(async () => (await storedSettings(page))?.volume, { timeout: 5_000 }).toBe(0.35);
   });
+});
+
+test('a DESKTOP title still draws the audio hint, and all four rows', async ({ page }) => {
+  // 🔴 This is what makes the touch assertion in `phase-12-journey.spec.ts` able to go red.
+  // Without it, `audioHint` returning '' unconditionally - or the row never being created at all -
+  // would satisfy the touch case while removing the line from every device, and nothing would say
+  // so. The two cases are the two arms of one branch and neither is evidence alone.
+  await bootToTitle(page);
+  const lines = await drawnTitleLines(page);
+  expect(lines, `drawn: ${lines.join(' | ')}`).toHaveLength(4);
+  expect(lines.join(' | '), 'the audio hint stopped being drawn on desktop').toMatch(
+    /M mute.*volume/,
+  );
 });

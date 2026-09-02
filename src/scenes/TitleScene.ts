@@ -60,7 +60,7 @@ import type { AudioActionResult } from './audioKeyMap';
 import { bindTitleKeys } from './titleKeys';
 import { readAudioSettings, safeLocalStorage } from '../game/audioSettings';
 import { TITLE_BACKDROP_KEY } from '../render/titleInk';
-import { RULE_ALPHA, RULE_PX, TITLE_ROWS, panelSize } from '../render/titleInk';
+import { RULE_ALPHA, RULE_PX, panelSize, titleRows } from '../render/titleInk';
 import type { AudioManager } from '../game/audio';
 import {
   audioHint,
@@ -250,7 +250,15 @@ export class TitleScene extends Phaser.Scene {
       : 'ENTER   choose a level';
     make(choice, CHOICE_STYLE);
     // The audio keys are advertised here because this screen answers them — see `bindKeys`.
-    this.hint = make(audioHint(this.audioState.muted, this.audioState.volume), HINT_STYLE);
+    //
+    // ✅ **Not on a phone.** `audioHint` returns empty for touch, and the row is then not created at
+    // all rather than created empty: `applyLayout` positions `this.items` by INDEX against
+    // `titleRows(this.items.length)`, so an empty fourth object would hold a row open and re-open
+    // the uneven-margin defect that spacing was solved twice to remove.
+    const hint = audioHint(this.audioState.muted, this.audioState.volume, this.game.device.input.touch);
+    if (hint !== '') {
+      this.hint = make(hint, HINT_STYLE);
+    }
 
     // One zone over the whole view: this screen has a single action, so anywhere is the target.
     // No explicit teardown — `attachTapRoutes` and `keepTapRoutesSized` both register against this
@@ -318,7 +326,7 @@ export class TitleScene extends Phaser.Scene {
     // FOUR rows, and they live in `titleInk.ts` — both because a unit test can then prove they land
     // inside the panel the contrast premise depends on, and because the two re-spreads they have
     // been through are worth reading before touching them. See `TITLE_ROWS`.
-    const rows = TITLE_ROWS;
+    const rows = titleRows(this.items.length);
     this.items.forEach((item, index) => {
       item.setPosition(width / 2, height * (rows[index] ?? 0.5));
     });
