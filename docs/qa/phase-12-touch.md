@@ -39,7 +39,7 @@ says nothing, and a reader checks the summary first. Found by the Codex round-6 
 | 12.10 | The prompt appears iff any target that would have to be hittable on this screen falls under 44 CSS px | **PASS — criterion amended 2026-08-31, owner decision** | The prompt and every route share ONE predicate (M31 red 1/9), so they cannot disagree. That predicate weighs the screen's own route **and** the play controls, which is decision **D1** and is now what the criterion says: a portrait title screen shows the prompt because the controls behind it would be 32.5 CSS px, not because its own 390 × 219 zone is small. **No gate changed; the sentence did.** § 12.10. |
 | 12.11 | Frame budget unregressed with the controls drawn | **PASS** | § 12.11. The frames-served ratio was replaced, not re-bounded — it returns exactly 1.000 or 0.500 against a vsync-locked display. The statistic is now the paired per-frame GPU and main-thread delta against ±0.5 ms, with absolute per-arm ceilings at 8 ms. Red-proved both ways: **M72** 2.09 ms, **M73** 0.85 ms, each after a recorded GREEN that was a real hole. Confirmed on a held-out `test:e2e` sweep, **218 passed, 0 failed**. Both `performance-engineer` briefs run *(A7)*; brief 2's finding 1 — the touch role pinned to one browser context all run — is applied in `touchArms.ts` and was the cause of an offset this log had recorded as noise. |
 | 12.12 | Controls hidden AND disabled whenever they must not be live | **PASS** | 12.12 taps every `TOUCH_IDS` coordinate; M8 red. |
-| 12.13 | A drag is not stolen by browser pan / pinch / zoom | **NOT MET — two hands-on passes, and the rotate gate needed rewriting rather than repairing** | Preview deployed 2026-08-31 and 2026-09-01 and run on the owner's phone. **The same two findings were reported twice**, because the first repair to each was written from arithmetic and shipped without a reproduction. *(See § the rotate overlay for the full account.)* The overlay is DOM now, not Phaser objects, and both defects have e2e reproductions in `phase-12-viewport.spec.ts` that were watched red. ⚠️ **The gesture checks themselves — drag off the edge, pinch, double-tap — have still not been run**, so the criterion stays NOT MET. |
+| 12.13 | A drag is not stolen by browser pan / pinch / zoom | **UNRUN on the device, and now REPRODUCIBLE without one — the machine half is pinned and one real defect fell out of it** | Preview deployed 2026-08-31 and 2026-09-01 and run on the owner's phone. **The same two findings were reported twice**, because the first repair to each was written from arithmetic and shipped without a reproduction. *(See § the rotate overlay for the full account.)* The overlay is DOM now, not Phaser objects, and both defects have e2e reproductions in `phase-12-viewport.spec.ts` that were watched red. ⚠️ **The gesture checks themselves — drag off the edge, pinch, double-tap — had never been run.** 2026-09-02: the machine half is now pinned in three places — `tests/unit/gesture-prevention.test.ts` (the source CSS, M105/M106 red), `verify-dist.mjs` (the same rules in `dist/index.html`, M105/M106 red) and `tests/e2e/phase-12-gestures.spec.ts` (five cases: `defaultPrevented` on every `touchmove`, the contact surviving the canvas edge, a drag off the button and back, a two-finger pinch measured on `visualViewport.scale`, and a double tap). 🔴 **The edge-drag case found a real defect and it is fixed** — see § 12.13, the GAME_OUT contact drop. **The criterion still needs the device**, which is what `play` means. |
 | 12.14 | The button art is readable at true size at every integer CSS size in the 44-48 px live band *(amended 2026-08-31, owner decision)* | **NOT MET — and the measurable half can no longer be measured** | 🔴 **The whole plate was redesigned on 2026-08-31 by owner decision** — *"new designs for all the buttons, in the style of the gate asset"* — so all six faces are take 14's cells and the three single-cell re-shoots this row used to describe ship nothing. **The per-stroke contrast gate is DELETED, not failing.** It found the glyph with `luma < INK_DARK_MAX` inside the central half, which held while the button was a pale disc whose glyph was the only dark thing on it; the redesign puts verdigris in every recess and shadow along the lower-right, so the detector reads **12 to 37 "strokes" per face** where the six used to have 1 to 4. Its figures were not low, they were meaningless — the mask is no longer the mark. Owner decision, taken on the measurement: report the criterion NOT MET rather than rebuild the statistic after seeing the art it would judge, which is the post-data selection this phase kept catching. ⚠️ **So there is now NO automated evidence for 12.14 at all**, and the criterion rests entirely on the hands-on pass, which is what it always required and has never had. `ui-ux-tester` has not run against these bytes either. Screenshot at 540 x 365: `docs/evidence/phase-12-touch-art.png`. **Seven earlier versions of this row were wrong and every one was caught by review** — see § 12.14's history. |
 | 12.15 | `src/sim/` boundary intact, whole suite with Phaser uninstalled | **PASS** | § Regression evidence. **Re-run on the round-16 diff, 2026-08-31: 3016 passed, 13 skipped of 3029**, Phaser restored to 4.2.1 afterwards. Re-run because the close-out session added four modules under `tools/gen/` and three test files, any of which could have reached for Phaser. |
 | 12.16 | Draw-path: a blanked body or a deleted consumer reds a behavioural gate | **PASS — one orphan deleted** | § 12.16. `touchTargetsDisjoint` had zero consumers. M10 red 2/25. |
@@ -59,8 +59,9 @@ MET and two are UNRUN"* through 2026-09-02, by which time 12.24 had passed. **A 
 disagrees with the table above it is the failure this log's own header records**, so it is written
 against the table and dated every time it moves.
 
-**Derived from the table above, 2026-09-02 mid-session:** 12.19 PASS. **12.14 and 12.23 NOT MET;
-12.13 and 12.14b UNRUN — both need the owner's phone. The phase is reported FAILING** until they move.
+**Derived from the table above, 2026-09-02 mid-session:** 12.19 PASS; 12.13's machine half is built
+and red-proved and its device half is not run. **12.14 and 12.23 NOT MET; 12.13 and 12.14b UNRUN —
+both need the owner's phone. The phase is reported FAILING** until they move.
 
 - **12.14 is NOT MET on its judgement half; its measurable half PASSES.** The wrench re-shoot did what it was bought to do — every
   stroke of all six faces clears 3:1 at every size in the live 44-48 band, with no exception table —
@@ -975,6 +976,99 @@ Every row applied, verified applied by *"content changed AND the original count 
 gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
+
+### 12.13 — the gesture checks, and the defect the first one found
+
+**2026-09-02.** The criterion is owned by `play` and still is; what follows is the half a machine
+can hold, built so the device pass confirms behaviour rather than discovers it — which is the
+sequence the two rotate-gate defects were reported *twice* for lacking.
+
+#### Three gates, and what each one cannot see
+
+| gate | what it holds | what it is blind to |
+|---|---|---|
+| `tests/unit/gesture-prevention.test.ts` | the four CSS rules on `html, body, #game`, and that the viewport meta carries **no** `user-scalable` / `maximum-scale` | anything the BUILD does to them |
+| `tools/gen/verify-dist.mjs` | the same five things in `dist/index.html` | whether a browser honours them |
+| `tests/e2e/phase-12-gestures.spec.ts` | `defaultPrevented` on every `touchmove`; the contact surviving the canvas edge; a drag off the button and back; a pinch measured on `visualViewport.scale`; a double tap | how it FEELS, and what the OS claimed before the browser saw it |
+
+🔴 **None of this existed before.** A repo-wide search for `touch-action`, `overscroll-behavior`,
+`user-scalable` or `tap-highlight` outside `node_modules` and `dist` returned exactly **one** hit,
+and it was prose in a handoff document. Five lines were the whole of the page's gesture defence and
+any refactor could have deleted them with the suite green.
+
+⚠️ **Zoom is asserted on the VIEWPORT, never on a gesture event.** Chromium does not synthesise
+`gesturestart`/`gesturechange` from synthetic `TouchEvent`s, so a spec waiting for one would pass
+against a page that zooms freely.
+
+#### 🔴 The defect: GAME_OUT dropped every contact, and one thumb near the edge triggered it
+
+`InputManager.onTouchMove` runs `document.elementFromPoint` per finger per move and fires `GAME_OUT`
+when the topmost element is not the canvas (`InputManager.js:613-624`); after `setCanvasOut`, the
+`if (this.isOver)` guard at `:625` drops that finger's later moves as well. `touchControlsLayer`
+wired that to `onLoseEverything`, so **a thumb rolling a few millimetres past a pillarboxed canvas
+edge dropped every contact — including the jump the other hand was holding.**
+
+Measured before the fix, on the live page: `document.elementFromPoint` returns `CANVAS` at 24 px and
+8 px inside the edge and **null** at 12 px outside, and the scene's `gameout` counter goes
+**0 → 1** on exactly that move.
+
+The 12.5 adversarial brief argued for deleting the line; this log recorded it for the owner rather
+than deciding. **Deleted on owner authority, 2026-09-02**, reproduction first: 12.13b holds RIGHT
+and JUMP, walks one finger off the canvas, and reds. Criterion 12.5's own text named `GAME_OUT`
+among the loss paths and was amended in the same commit — *a criterion that names a defect as a
+requirement is the thing to change* — and the unit gate now asserts the **absence**, so a re-added
+one-line subscription reds (M107).
+
+🔴 **And 12.13b was a false green before it was a red.** Written with `waitTicks(page, 10)` it
+PASSED against the shipped defect, because at 10 ticks the player is still coasting on the velocity
+it had when the finger left and a dropped contact reads the same as a held one. 30 ticks — the
+figure criterion 12.5b already pays for exactly this — separates them. A test written to a number
+one order of magnitude too small is not a weaker test, it is a green one.
+
+#### The four checks the owner still has to run
+
+They are four, not the three the criterion line named — this log has always listed four:
+
+1. **Drag off a control's edge and back.** Hold `left`, slide the thumb onto bare canvas and back on
+   without lifting. The player walks throughout; the page does not pan.
+2. **A drag that ends past the canvas edge.** Hold `jump`; with the other thumb drag from `right`
+   off the physical edge and lift there. **The held jump must not drop.** This is the case above.
+3. **Two-finger pinch**, across the control cluster and over the play area. No zoom, no scroll, the
+   game keeps running.
+4. **Double-tap the jump plate.** Two fast taps, two jumps, no zoom.
+
+⚠️ `TOUCH_EDGE_PX` is 22.2 CSS px, inside the iOS home-indicator and Android gesture strips, and
+has never been tested on a device. Check 2 is where that would show.
+
+---
+
+### 🔴 The `chromium-touch` project is intermittently red on `main`, and it is NOT this session's doing
+
+Found while regressing the GAME_OUT repair, and recorded rather than absorbed: a criterion whose e2e
+evidence is intermittently red is not solidly PASS.
+
+**Measured 2026-09-02, one Playwright run at a time, ports 5173 and 4173 freed between each:**
+
+| tree | full-project runs | failures |
+|---|---|---|
+| `main` at `1aa64b5`, this session's work fully stashed (34 tests) | 3 | **3** — twice *12.12 nothing under the pause menu drives the sim*, once *the tap zones move with the view, not with where they were built* (`phase-13-viewfill-touch.spec.ts`) |
+| this branch (39 tests) | 9 | **2**, both *12.12* |
+
+The assertion that fails is 12.12's last one: **`a tap on a retired control moved the game somewhere`**
+— after ESC opens the level menu, a tap at a retired control's old coordinates sometimes leaves
+`sceneKey` somewhere other than `LevelSelect`. It is **not** a timeout: the wait on `LevelSelect` had
+already succeeded before that line.
+
+⚠️ **Two things are deliberately NOT claimed.** That the branch's lower rate means anything — 2 in
+9 against 3 in 3 is suggestive and nothing more, and post-hoc rate comparison on a flake is exactly
+the reading this phase kept catching. And a cause: the obvious candidate is that Phase 13's
+level-select **buttons** now sit under one of the six retired coordinates, but that was not measured
+and is written as the hypothesis it is.
+
+**Not fixed in this session.** It is a pre-existing defect on `main`, in a criterion this session
+does not own, and diagnosing it properly means measuring where the tap actually routes. It is
+carried forward as an open item, and it is why the e2e evidence behind 12.12 is described here as
+intermittent rather than green.
 
 ### The 12.19 repair, 2026-09-02
 

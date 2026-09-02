@@ -176,6 +176,67 @@ for (const [label, path] of scanned) {
   }
 }
 
+// 🔴 Criterion 12.13's shipped half: the gesture rules must survive the BUILD, not only exist
+// in the source. Four CSS rules and one absent viewport attribute are the whole of what stops a
+// mobile browser claiming a drag off a control, a two-finger pinch or a double-tap before the game
+// ever sees the pointer — and until 2026-09-02 nothing in the repository asserted any of them, in
+// source or in `dist/`.
+//
+// The unit half is `tests/unit/gesture-prevention.test.ts`, which reads the SOURCE `index.html`. It
+// cannot see a build that inlines, minifies or drops the `<style>` block, and a game-source gate
+// cannot see a shipped-bytes defect *(vault 3.1)* — which is the same split the `.tmj` and audio
+// rules below are built on. Neither half can see whether the BROWSER honours the rules; that is
+// `tests/e2e/phase-12-gestures.spec.ts`, and after it, the device.
+const shippedIndex = join(root, 'dist/index.html');
+if (existsSync(shippedIndex)) {
+  const html = readFileSync(shippedIndex, 'utf8');
+  // 🔴 **Strip CSS comments FIRST, and read the SELECTOR BLOCK, not the file.** The first
+  // version of this check asked only whether the file contained `touch-action:none` anywhere, with
+  // whitespace removed. It stayed GREEN under M105 — the rule deleted from `html, body, #game`,
+  // the page defenceless — because `index.html`'s own explanatory comments SHIP, and one of them
+  // says *"`touch-action: none` — without it the browser claims the gesture"*. The gate was
+  // reading the sentence about the rule as the rule. A gate that passes for a reason unrelated to
+  // its claim is the failure this file exists to prevent, and only building the mutation said so.
+  const css = html.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
+  const SELECTOR = 'html,body,#game{';
+  const at = css.indexOf(SELECTOR);
+  if (at === -1) {
+    problems.push(
+      'dist/index.html has no `html, body, #game` rule block — every touch-gesture rule went ' +
+        'with it (12.13)',
+    );
+  } else {
+    const block = css.slice(at, css.indexOf('}', at));
+    for (const rule of [
+      'touch-action:none',
+      'overscroll-behavior:none',
+      'user-select:none',
+      '-webkit-tap-highlight-color:transparent',
+    ]) {
+      // Vite's minifier strips the space after the colon; the source carries it. The comparison is
+      // whitespace-free so the gate is about the RULE and not about the minifier's spacing.
+      if (!block.includes(rule)) {
+        problems.push(
+          `dist/index.html has lost \`${rule}\` from html/body/#game — the browser will claim ` +
+            'the gesture (12.13)',
+        );
+      }
+    }
+  }
+  // An ABSENCE, and deliberately so: `user-scalable=no` is the accessibility anti-pattern
+  // `touch-action` was chosen to avoid. `maximum-scale` is the same attribute under another name on
+  // iOS. A build that adds either has taken zoom from the whole page.
+  const meta = /<meta[^>]+name="viewport"[^>]*>/.exec(html);
+  if (!meta) {
+    problems.push('dist/index.html has no viewport meta at all');
+  } else if (/user-scalable|maximum-scale/.test(meta[0])) {
+    problems.push(
+      'dist/index.html disables page zoom (user-scalable/maximum-scale) — the anti-pattern ' +
+        'touch-action replaced (12.13)',
+    );
+  }
+}
+
 // Every image the catalog names must also have shipped, not only the levels.
 const builtCatalog = join(root, 'dist/assets/index.json');
 if (existsSync(builtCatalog)) {

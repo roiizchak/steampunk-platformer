@@ -83,7 +83,6 @@ import {
   GAMEOBJECT_POINTER_DOWN,
   GAME_BLUR,
   GAME_HIDDEN,
-  INPUT_GAME_OUT,
   INPUT_POINTER_UP,
   INPUT_POINTER_UP_OUTSIDE,
   SCENE_DESTROY,
@@ -203,15 +202,14 @@ export class TouchControlsLayer {
     // Scene-level, so a release is caught wherever it lands — see the header.
     this.scene.input.on(INPUT_POINTER_UP, this.onRelease, this);
     this.scene.input.on(INPUT_POINTER_UP_OUTSIDE, this.onRelease, this);
-    // ⚠️ KEPT, and flagged rather than removed. `InputManager.onTouchMove` runs
-    // `document.elementFromPoint` per finger per move and fires GAME_OUT when the topmost
-    // element is not the canvas — so on a pillarboxed phone a thumb rolling a few millimetres
-    // past the canvas edge drops the jump the OTHER hand is holding. The QA gate's adversarial
-    // 12.5 brief argues for deleting this line, because a finger that leaves the canvas still
-    // delivers `touchend` and POINTER_UP clears it per pointer. That is persuasive — and
-    // GAME_OUT is named in criterion 12.5's own text, so dropping it narrows an approved
-    // criterion. Recorded for the owner in the QA log instead of decided here.
-    this.scene.input.on(INPUT_GAME_OUT, this.onLoseEverything, this);
+    // 🔴 **GAME_OUT is deliberately NOT subscribed — criterion 12.13's repair, 2026-09-02.**
+    // Phaser fires it whenever `document.elementFromPoint` leaves the canvas
+    // (`InputManager.js:613-624`), and `if (this.isOver)` at `:625` then drops that finger's later
+    // moves too. Wired to `onLoseEverything` it dropped EVERY contact when one thumb rolled a few
+    // millimetres past a pillarboxed edge — the other hand's held jump included. Reproduction
+    // watched red first (`phase-12-gestures.spec.ts` 12.13b); nothing is left stuck, because the
+    // scene POINTER_UP above still clears by pointer id wherever a release lands. Full account and
+    // the amendment to criterion 12.5's own text: `docs/qa/phase-12-touch.md` § 12.13.
     // On the GAME emitter. Phaser will not remove these; `destroy()` must.
     this.scene.game.events.on(GAME_BLUR, this.onLoseEverything, this);
     this.scene.game.events.on(GAME_HIDDEN, this.onLoseEverything, this);
@@ -300,7 +298,6 @@ export class TouchControlsLayer {
     this.binding = null;
     this.scene.input.off(INPUT_POINTER_UP, this.onRelease, this);
     this.scene.input.off(INPUT_POINTER_UP_OUTSIDE, this.onRelease, this);
-    this.scene.input.off(INPUT_GAME_OUT, this.onLoseEverything, this);
     this.scene.game.events.off(GAME_BLUR, this.onLoseEverything, this);
     this.scene.game.events.off(GAME_HIDDEN, this.onLoseEverything, this);
     for (const control of this.controls) {
