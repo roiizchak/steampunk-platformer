@@ -11,13 +11,19 @@ import { describe, expect, it } from 'vitest';
  * its own seams (`</style>`, `<script>`) rather than exempted: raising the size ratchet off zero
  * opens a hole `file-size.test.ts` documents at length, and an HTML document has real seams.
  *
- * ⚠️ **The split has to be invisible in the output, and “invisible” is a byte claim.** The three
- * parts are concatenated with NOTHING between them and must reproduce the original 17 839 bytes.
- * A stray trailing newline on any part would change the generated page by one byte and nothing else
- * would notice — the generated artifact is 20 MB of embedded audio and nobody diffs it.
+ * ⚠️ **The split had to be invisible in the output, and that was a ONE-TIME byte claim.** The three
+ * parts concatenate with NOTHING between them and reproduced the pre-split blob exactly —
+ * **17 843 UTF-8 bytes**, verified at the split and recorded in the commit. This file does **not**
+ * re-assert that number, and saying it “pins the original bytes” would be false: a hard byte count
+ * would red on every legitimate future edit to the template, which is not a property worth having.
+ * Codex round 22, finding 3, on both counts — and the figure it corrected was **17 839**, which is
+ * the JavaScript CHARACTER count. Two em dashes make the UTF-8 byte count four higher, and a
+ * “byte” claim measured in `String.length` is the quiet unit error this project keeps paying for.
  *
- * So this file pins the two properties the concatenation depends on, and neither is a line count:
- * the parts join in a fixed order, and each one's boundary is exactly where the seam is.
+ * What this file pins are the properties the concatenation actually depends on, none of which is a
+ * line count: the three parts exist and are the ones the builder names, they join in a fixed order
+ * into one well-formed document, each boundary is exactly at its seam, no part carries a stray
+ * trailing newline — and the builder really reads them.
  */
 const PARTS = import.meta.glob('../../tools/gen/audition-template.*.html', {
   query: '?raw',
@@ -122,5 +128,24 @@ describe('the builder actually concatenates them, in order, with nothing between
       /\.join\('\n'\)/.test(BUILDER),
       'build-audition.mjs joins the template parts with a newline',
     ).toBe(false);
+  });
+  it('actually READS each part, and the result becomes the page', () => {
+    // 🔴 **Every other case here passes with the callback returning `''`.** The array is still
+    // a literal list of three, `.join('')` is still there, the parts on disk are still correct — and
+    // the generated document is empty. Codex round 22, finding 3: a gate over the SHAPE of a
+    // pipeline that never checks the pipeline moves anything is the same defect as a decision
+    // function with no consumer, which is the thing this whole file exists to be an instance of.
+    const callback = /\.map\(\(part\) => (.*)\)/.exec(BUILDER)?.[1];
+    expect(callback, 'the builder no longer maps the parts through a callback').toBeDefined();
+    expect(
+      callback!,
+      'the map callback does not read the part file — the page would be built from nothing',
+    ).toContain('readFileSync');
+    expect(callback!, 'the map callback does not read the part by name').toContain(
+      'audition-template.',
+    );
+    // And the joined result has to be what is written, not a variable that goes nowhere.
+    expect(/const html = \[/.test(BUILDER), 'the concatenation no longer builds `html`').toBe(true);
+    expect(/writeFileSync\([\s\S]{0,80}html\)/.test(BUILDER), 'the built `html` is never written').toBe(true);
   });
 });

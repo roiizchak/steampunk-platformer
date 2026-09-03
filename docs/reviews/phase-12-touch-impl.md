@@ -423,3 +423,29 @@ disagreements the record now carries rather than resolves:
 6. The assertions that survived deleting their named behaviour are the four in findings 2, 5 and 4,
    all now closed or recorded.
 
+---
+
+### Round 22 — `VERDICT: REVISE`
+
+Same session `01a06578-867b-7371-a3c5-26dd05b064cb`, `gpt-5.6-sol`, `codex exec resume … -c
+sandbox_mode="read-only"`, file reads only. Run on the diff after every round-21 finding was applied,
+2026-09-03.
+
+**Its first job was to check round 21's repairs, and all seven were confirmed genuinely applied** —
+not merely claimed. Three new findings:
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 3 | **MEDIUM** | All six `audition-template.test.ts` cases pass while the builder stops reading the parts: changing the live callback to `.map((part) => '')` leaves the array and the `.join('')` intact, every case green, and the generated page empty. And the claim that the test *"pins the original bytes"* is false — it contains no length, hash or reference-byte assertion. Also, **17 839 is the JavaScript CHARACTER count**, not the UTF-8 byte count; two em dashes make the real figure **17 843** | **Applied, all three halves.** Verified locally: the pre-split git blob is **17 843 bytes** and `String.length` is **17 839**. A seventh case reads the map callback and the write of `html`; **M117** reds it 1/7 on exactly the mutation Codex named, and the six that existed were green under it. The docstring no longer claims to pin bytes — a hard byte count would red on every legitimate edit to the template — and says so instead of implying a check it does not make. 🔴 **The unit error is the finding's sharpest half**: a *byte* claim measured in `String.length` is the shape this project keeps paying for, and it was written the same session as the split. |
+| 4 | LOW | The 12.19 verdict row still says **109 rows**, contradicting the same document's correctly recomputed total of 119 | **Applied.** And it moved again in the same pass — M117 makes it **120**. The § the row count section already says a count in prose is a fact with an expiry date and no test; this is the third time in one session it expired. |
+| 5 | **HIGH** | 12.13e's no-double-tap-zoom assertion has the same limitation as the pinch case round 21 disclaimed — native double-tap zoom is not synthesised from `TouchEvent`s either — yet the QA evidence table still credits the E2E gate with *"a double tap"* while disclaiming only 12.13d | **Applied.** Correct, and the asymmetry was the damage: disclaiming one of two identical blind spots reads as though the other was checked. Both zoom halves are now recorded as tripwires and **not counted** *(C2)*; the section is retitled to cover both; 12.13e's own docstring states it; and the evidence sentence names what each case actually proves — that the sim received the gesture, that nothing routed away, that no contact was left down. **The zoom claim's evidence is the CSS gates (M105, M106, M111) and the device.** |
+
+**What Codex could not check**, unchanged and in its own words: no unit suite, no sim isolation, no
+build, no `verify-dist`, no Playwright, no profiling, no device or browser check — process spawning
+is unavailable on this machine. Every finding above was re-verified locally before it was acted on.
+
+⚠️ Its answers to this session's own claims are worth the same keeping as round 21's. Four of them
+were **blind spots it named and this session closed by measuring rather than arguing**, which is the
+pattern the two-brief protocol *(A7)* exists to produce. None of the three findings failed local
+re-verification.
+

@@ -261,9 +261,16 @@ test.describe('12.13 the browser does not claim the gesture', () => {
    * — the player is still in the air. Codex round 21, finding 4, caught the earlier version
    * claiming it. The QA log's device step said "two jumps" too, and is corrected to match.
    *
-   * What a double tap CAN be asked here: that the browser did not eat the pair as a zoom gesture,
-   * that the layout viewport did not move, that the sim received the gesture at all, that nothing
+   * What a double tap CAN be asked here: that the sim received the gesture at all, that nothing
    * routed away, and that no contact was left down.
+   *
+   * 🔴 **And the `visualViewport.scale` assertion below CANNOT go red on Chromium** — the same
+   * limitation 12.13d's docstring states, which round 21 disclaimed for the pinch and not here.
+   * Native double-tap zoom is not synthesised from `TouchEvent`s either, so the page would not zoom
+   * with every CSS rule deleted. Codex round 22, finding 5. It is kept as a tripwire for the day a
+   * Playwright or a Chromium does synthesise gestures, and is **not counted** as evidence for
+   * 12.13 — *a gate that cannot go red is decoration (C2)*. The zoom claim's evidence is the CSS
+   * gates, which DO red (M105, M106, M111), and the device.
    */
   test('12.13e a double-tap on a control does not zoom or navigate', async ({ page }) => {
     await bootToTouchPlay(page);
