@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { TEMPLATE_PARTS, buildBaseDocument } from '../../tools/gen/auditionDocument.mjs';
+
 /**
  * The audition template ships as three parts, and this is the only thing that keeps them one page.
  *
@@ -90,18 +92,19 @@ describe('the audition template is three files and one document', () => {
 });
 
 /**
- * 🔴 **And the BUILDER's half, because the four cases above could not see it.**
+ * 🔴 **And the BUILDER's half, because the four cases above could not see it — twice over.**
  *
- * M115 changed `build-audition.mjs`'s `.join('')` to `.join('\n')` — three newlines injected into
- * the generated page, one at each seam — and all four cases stayed green. They assert properties of
- * the parts on disk; nothing read the code that puts them together. That is the same defect as a
- * decision function with no consumer, one layer over: a split whose only gate describes the pieces
- * says nothing about the document.
+ * M115 changed `.join('')` to a newline separator and all four stayed green: they assert properties of
+ * the parts ON DISK, and nothing read the code that puts them together. A source-text gate was
+ * added. **M117 then blanked the map callback to `''` and six cases stayed green**, so a seventh
+ * required `readFileSync`, the part name and the write of `html` to appear in it (Codex round 22,
+ * finding 3). **Round 23, finding 2, defeated that one too**: appending `.slice(0, 0)` to the real
+ * read keeps every token the regex looks for and still builds an empty page.
  *
- * A source-text gate, deliberately, and the weaker of the two shapes this project uses. The
- * behavioural one would have to run `build-audition.mjs`, which reads every audio file in the
- * catalog and writes a 20 MB artifact — too heavy for the unit suite, and the reason is worth
- * stating rather than leaving the choice looking arbitrary.
+ * That is where a source-text gate runs out. A regex cannot tell a read from a discarded read, so
+ * the concatenation moved into `tools/gen/auditionDocument.mjs` and these cases RUN it. The reason
+ * the weaker shape was chosen first — `build-audition.mjs` reads every audio file in the catalog and
+ * writes a 20 MB artifact — does not apply to three small HTML files.
  */
 const BUILDER = Object.values(
   import.meta.glob('../../tools/gen/build-audition.mjs', {
@@ -112,40 +115,41 @@ const BUILDER = Object.values(
 )[0] as string;
 
 describe('the builder actually concatenates them, in order, with nothing between', () => {
-  it('reads the three parts by the names this file pins', () => {
-    const listed = /\[([^\]]*)\]\s*\n?\s*\.map\(\(part\)/.exec(BUILDER)?.[1];
-    expect(listed, 'build-audition.mjs no longer maps over a literal list of parts').toBeDefined();
-    const names = [...listed!.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
-    expect(names, 'the builder concatenates a different set or order of parts').toEqual([...ORDER]);
+  it('returns the three real parts, in document order, joined with nothing', () => {
+    expect(TEMPLATE_PARTS, 'the builder concatenates a different set or order of parts').toEqual([
+      ...ORDER,
+    ]);
+    // 🔴 The whole point of running it: this is the string the page is built from, not a claim
+    // about the code that produces it. a newline separator, a reorder, a dropped part and a discarded
+    // read all change it.
+    expect(buildBaseDocument(), 'the built document is not the three parts concatenated').toBe(
+      ORDER.map((n) => part(n)).join(''),
+    );
   });
 
-  it('joins with the EMPTY string, not a newline', () => {
+  it('returns every byte of every part — a discarded read is not a read', () => {
+    const doc = buildBaseDocument();
+    for (const name of ORDER) {
+      expect(doc.includes(part(name)), `the ${name} part is missing from the built document`).toBe(
+        true,
+      );
+    }
+    expect(doc.length, 'the built document is shorter than the sum of its parts').toBe(
+      ORDER.reduce((n, name) => n + part(name).length, 0),
+    );
+  });
+
+  it('is the document build-audition.mjs actually writes', () => {
+    // The one source-text assertion left, and it is the SEAM: a gated module with an ungated caller
+    // is the same defect one layer up. `auditionDocument.mjs` is only worth running if the builder
+    // still calls it and still writes what it returns.
     expect(
-      /\.join\(''\)/.test(BUILDER),
-      "build-audition.mjs no longer joins with '' — a separator changes the generated page silently",
+      /buildBaseDocument\(\)/.test(BUILDER),
+      'build-audition.mjs no longer builds the page from buildBaseDocument()',
     ).toBe(true);
     expect(
-      /\.join\('\n'\)/.test(BUILDER),
-      'build-audition.mjs joins the template parts with a newline',
-    ).toBe(false);
-  });
-  it('actually READS each part, and the result becomes the page', () => {
-    // 🔴 **Every other case here passes with the callback returning `''`.** The array is still
-    // a literal list of three, `.join('')` is still there, the parts on disk are still correct — and
-    // the generated document is empty. Codex round 22, finding 3: a gate over the SHAPE of a
-    // pipeline that never checks the pipeline moves anything is the same defect as a decision
-    // function with no consumer, which is the thing this whole file exists to be an instance of.
-    const callback = /\.map\(\(part\) => (.*)\)/.exec(BUILDER)?.[1];
-    expect(callback, 'the builder no longer maps the parts through a callback').toBeDefined();
-    expect(
-      callback!,
-      'the map callback does not read the part file — the page would be built from nothing',
-    ).toContain('readFileSync');
-    expect(callback!, 'the map callback does not read the part by name').toContain(
-      'audition-template.',
-    );
-    // And the joined result has to be what is written, not a variable that goes nowhere.
-    expect(/const html = \[/.test(BUILDER), 'the concatenation no longer builds `html`').toBe(true);
-    expect(/writeFileSync\([\s\S]{0,80}html\)/.test(BUILDER), 'the built `html` is never written').toBe(true);
+      /writeFileSync\([\s\S]{0,80}html\)/.test(BUILDER),
+      'the built `html` is never written',
+    ).toBe(true);
   });
 });

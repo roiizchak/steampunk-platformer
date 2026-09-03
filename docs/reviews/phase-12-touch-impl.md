@@ -449,3 +449,31 @@ were **blind spots it named and this session closed by measuring rather than arg
 pattern the two-brief protocol *(A7)* exists to produce. None of the three findings failed local
 re-verification.
 
+---
+
+### Round 23 — `VERDICT: REVISE`
+
+Same session `01a06578-867b-7371-a3c5-26dd05b064cb`, `gpt-5.6-sol`, `codex exec resume … -c
+sandbox_mode="read-only"`, file reads only. Run on `aed5a18`, 2026-09-03. **The owner capped this
+phase at three rounds (21–23), so this is the last, and it returned REVISE.**
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | **HIGH** | Case 7 of `audition-template.test.ts` still passes while the generated page becomes empty: appending `.slice(0, 0)` to the real read keeps `readFileSync`, the part name, `const html = [` and the `writeFileSync` of `html` — every token the regex requires | **Applied, and it is the finding that ends the argument.** Verified locally: **M118** is exactly Codex's edit and the six-assertion case was green under it. Three mutations in a row have now defeated a gate over the SHAPE of this pipeline (M115 the join, M117 the callback, M118 the discarded read), and the third one settles it — **a regex cannot tell a read from a discarded read**. The concatenation moved to `tools/gen/auditionDocument.mjs`, where a test can just run it; the three cases compare the returned string against the parts read independently and against the sum of their lengths. M115, M116 and M117 were **re-proved at the new site** (2/7, 1/7, 2/7), M118 reds 2/7, and **M119** reds the seam — a gated module with an ungated caller is the same defect one layer up. |
+| 2 | MEDIUM | Two round-22 repairs were applied only in the passage that was edited: the QA **evidence table** still credited the e2e file with *"a pinch measured on `visualViewport.scale`; a double tap"*, and `build-audition.mjs`'s own comment still claimed *"the original 17 839 bytes"* and that the test pins them | **Applied, both.** The table row now says what those two cases actually prove and points at the section; the builder comment carries the corrected 17 843 UTF-8 / 17 839 characters and says the byte check was one-time. 🔴 **The lesson is the shape, not the two sentences**: a correction applied where the reviewer pointed rather than everywhere the claim is written is half a correction, and this is the second time in three rounds — round 22's finding 4 was the same defect about a row count. |
+| 3 | — | *(answer, not a finding)* All 122 measured cells were read, M1 through M119; every row terminates in a red result and none reports GREEN as its outcome. | Confirms 12.19's literal claim against the table as it stands. |
+| 4 | — | *(answer)* None of the reported verdicts is overclaimed: 12.19 and 12.21 match the evidence, 12.13 / 12.14 / 12.14b are recorded as awaiting the owner's device rather than complete, and 12.23 is recorded NOT MET. | No action. |
+| 5 | — | *(answer)* The only remaining coverage overclaims were case 7's own name and the stale evidence row — findings 1 and 2. | Closed by them. |
+| 6 | — | *(answer)* **The likeliest way this phase still ships something subtly wrong is hazard occlusion under the 0.9 plates**: 175 of 878 standing positions put a hazard, an enemy or the goal behind a control, and 0.86 was already measured to erase what is underneath. | **No code answer exists**, and none is being invented. This is criterion 12.14b, it is the owner's device call by the owner's own decision, and it is the reason 0.9 can still come back down. |
+
+**What Codex could not check**, unchanged: no unit suite, no mutations, no typecheck, no build, no
+`verify-dist`, no Playwright, no profiling, no device check — process spawning is unavailable on this
+machine. It confirmed `HEAD` as `aed5a18d8b2ac333e297eef5619ec7a359236059` and said plainly that every
+execution count it repeated was a supplied record rather than a fresh verification. Both findings
+were re-verified locally before they were acted on, and both survived.
+
+🔴 **12.23 does not close.** The round's findings are applied, but the standard the row sets is
+`VERDICT: APPROVED`, and rounds 21, 22 and 23 returned REVISE. **Three REVISE rounds that each found
+a real defect is not a stalled review — it is a review still paying for itself**, and the honest
+report is that the criterion is open at the cap the owner set, not that it converged.
+

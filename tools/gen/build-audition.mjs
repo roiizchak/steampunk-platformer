@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { buildBaseDocument } from './auditionDocument.mjs';
 
 const root = join(fileURLToPath(new URL('../../', import.meta.url)), '/');
 const catalog = JSON.parse(readFileSync(join(root, 'public/assets/index.json'), 'utf8'));
@@ -70,13 +71,14 @@ const gainMap = Object.fromEntries(catalog.audio.map((r) => [r.key, r.gain]));
 // at its own seams — `</style>` and `<script>` — rather than exempted, because raising the size
 // ratchet off zero opens a documented hole and a template has real seams to split on.
 //
-// ⚠️ **Order and joining are load-bearing.** The three parts concatenate with NOTHING between
-// them and reproduce the original 17 839 bytes exactly; `tests/unit/audition-template.test.ts`
-// pins that, so a part that grows a stray trailing newline reds instead of silently changing the
-// generated page.
-const html = ['style', 'body', 'script']
-  .map((part) => readFileSync(join(root, `tools/gen/audition-template.${part}.html`), 'utf8'))
-  .join('')
+// ⚠️ **Order and joining are load-bearing**, and they live in `auditionDocument.mjs` so a test can
+// RUN them. Two source-text gates over this line were defeated in turn — a callback returning `''`
+// (round 22, finding 3), then a real read with `.slice(0, 0)` appended (round 23, finding 2) — and
+// a regex cannot tell a read from a discarded read. The split reproduced the pre-split file exactly
+// at the time it was made: **17 843 UTF-8 bytes**, which is 17 839 JavaScript characters, two em
+// dashes apart. That was a one-time check and nothing re-asserts it; what is gated is the join, the
+// order and the read.
+const html = buildBaseDocument()
   .replace('__CUE_ROWS__', cueRows)
   .replace('__BED_ROWS__', bedRows)
   .replace('__SRC_MAP__', JSON.stringify(srcMap))
