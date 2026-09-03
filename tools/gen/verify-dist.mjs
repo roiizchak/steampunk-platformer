@@ -188,7 +188,12 @@ for (const [label, path] of scanned) {
 // rules below are built on. Neither half can see whether the BROWSER honours the rules; that is
 // `tests/e2e/phase-12-gestures.spec.ts`, and after it, the device.
 const shippedIndex = join(root, 'dist/index.html');
-if (existsSync(shippedIndex)) {
+if (!existsSync(shippedIndex)) {
+  // \U0001f534 An absent artifact is the failure, not the empty case \u2014 the same defect the audio
+  // `?? []` had. Without this the whole gesture check vanishes silently the day `dist/index.html`
+  // stops being emitted, which is exactly when it matters. Codex round 21, finding 6.
+  problems.push('dist/index.html does not exist \u2014 the gesture rules cannot be checked (12.13)');
+} else {
   const html = readFileSync(shippedIndex, 'utf8');
   // 🔴 **Strip CSS comments FIRST, and read the SELECTOR BLOCK, not the file.** The first
   // version of this check asked only whether the file contained `touch-action:none` anywhere, with
@@ -215,7 +220,12 @@ if (existsSync(shippedIndex)) {
     ]) {
       // Vite's minifier strips the space after the colon; the source carries it. The comparison is
       // whitespace-free so the gate is about the RULE and not about the minifier's spacing.
-      if (!block.includes(rule)) {
+      //
+      // \U0001f534 Matched as a DECLARATION, not a substring: `user-select:none` occurs inside
+      // `-webkit-user-select:none`, so `includes` went on passing with the standard declaration
+      // deleted. Codex round 21, finding 2 \u2014 the same nearby-text shape as the CSS comment.
+      const declared = new RegExp(`(^|[{;])${rule.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&')}[;}]`);
+      if (!declared.test(block)) {
         problems.push(
           `dist/index.html has lost \`${rule}\` from html/body/#game — the browser will claim ` +
             'the gesture (12.13)',

@@ -381,3 +381,45 @@ which is what it was built for, and the residue below is recorded as a known lim
 - **Every bound is `2.5x` a within-family worst measured on the adopted six**, which is a provisional
   multiple the owner approved on 2026-08-31 with the whole-plate redesign as the held-out set. If the
   redesign reds one honestly, that is a finding to bring to the owner, not a licence to move it.
+
+---
+
+### Round 21 — `VERDICT: REVISE`
+
+Session `01a06578-867b-7371-a3c5-26dd05b064cb`, `gpt-5.6-sol`, `codex exec -s read-only`, file reads
+only (its shell cannot spawn processes on this machine — every finding below was re-verified locally
+before being acted on). Run on the close-out diff, after the gate owners, 2026-09-03.
+
+| # | sev | finding | verdict |
+|---|---|---|---|
+| 1 | **BLOCKER** | Phase 12 cannot be reported done: 12.13 lacks its device pass, 12.14 is only *"agent half MET"*, 12.14b is owed — and the QA verdict table has **no 12.14b row at all**, jumping from 12.14 to 12.15 | **Applied**, both halves. The missing row is written. The blocker itself is not a defect to fix but the session's own conclusion: three criteria need the owner's phone, and the phase is reported failing until they move. |
+| 2 | HIGH | Both new gesture gates falsely pass when the standard `user-select: none` is deleted, because that string occurs inside `-webkit-user-select: none` | **Applied.** Verified: `'-webkit-user-select: none'.includes('user-select: none')` is true. Both gates match a DECLARATION now — `(^\|[{;\n])\s*rule\s*[;}]`. **M111** reds both. Same nearby-text shape as the shipped CSS comment M105 found, one file over. |
+| 3 | HIGH | 12.19 is not MET: **M102 and M109 sit in the matrix reporting GREEN**, and the criterion requires every row to red at least one named gate | **Applied, and it is the round's best finding.** This is M82's defect reproduced twice within hours of writing M82's lesson down. Both rows are **withdrawn from the table** into prose as probes; no row in the matrix reports GREEN now. Codex's second half is applied too: M109's "unreachable" was a claim about ten e2e cases, and `touch-draw-path.test.ts`'s own non-running-game case was never run against it — the record says so instead of overclaiming. |
+| 4 | HIGH | 12.13e's double tap proves only ONE effective jump: both taps land in one JS task and `jumpPressed` is an idempotent within-frame edge, while the QA procedure demanded two jumps | **Applied.** Correct — and there is no double jump, so two jumps are not observable from a double tap at all. The taps are 120 ms apart inside the page now (inside the double-tap window, across frames), the case states plainly what it does *not* assert, and the device step is corrected from *"two jumps"* to what is actually checkable. |
+| 5 | MEDIUM | Two more new e2e assertions survive deletion of the behaviour they name: 12.13c's drag moves, and 12.13d's pinch invariants | **Applied for 12.13c, RECORDED for 12.13d.** 12.13c now reads Phaser's own pointer position and requires it outside the zone and back — **M113** reds it. 12.13d cannot be made to red on Chromium and it is recorded as decoration-with-a-reason rather than counted: see § the pinch case below. |
+| 6 | MEDIUM | The dist gesture check is wrapped in `if (existsSync(dist/index.html))` with no failing `else`, so it vanishes silently when its target does | **Applied.** An absent artifact is the failure, not the empty case — the same defect the audio `?? []` had. **M112** reds it. |
+| 7 | MEDIUM | 12.21 is falsely PASS: `tools/gen/audition-template.html` is a live 442-line tool input and `file-size.test.ts`'s glob covers no HTML | **Applied.** Verified: 442 lines, read by `build-audition.mjs:66`, no `SIZE-EXEMPTION` anywhere. The glob covers `tools/**` HTML now, and the file is **split at its own seams** rather than exempted — raising the ratchet off zero opens a hole `file-size.test.ts` documents at length. **M114** reds both halves; **M115** and **M116** red the builder, after M115 was GREEN on its first attempt. |
+
+**What Codex could not check**, in its own words: it could not run the unit suite, sim isolation, the
+build, `verify-dist`, Playwright, performance profiling, or any device or browser check, because
+process spawning was unavailable. Historical green/red counts were inspected as supplied evidence,
+not freshly verified. **Every finding above was re-verified locally before it was acted on**, and
+none failed that check this round.
+
+⚠️ **Its six answers to the session's own claims are worth keeping**, because two of them are
+disagreements the record now carries rather than resolves:
+
+1. The eight retirements are sound; the three replacement gates catch their stated mutations.
+2. **M102 is NOT fully covered by M104**, and this session's first write-up said it was. A runtime
+   `setAlpha` is one global multiplier and cannot reproduce per-pixel partial alpha removed from both
+   the shipped faces and the committed cuts. Corrected in place: what is left uncovered is a coherent
+   change to both compared artifacts, which is M64's stated limit of a committed oracle, and it is
+   recorded as an open blind spot rather than a closed one.
+3. No surviving contact-loss hole from removing `GAME_OUT`. Phaser routes both touch end and touch
+   cancel through up processing (`InputManager.js:655`, `InputPlugin.js:766, 2064`), which emits
+   pointer-up or pointer-up-outside. No ordering in those files leaves a control permanently held.
+4. The 12.12 repair is behaviourally sound and its non-empty guard prevents vacuity.
+5. The repository does not overclaim 12.14 coverage — it says plainly there is none.
+6. The assertions that survived deleting their named behaviour are the four in findings 2, 5 and 4,
+   all now closed or recorded.
+

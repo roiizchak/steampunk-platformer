@@ -63,7 +63,20 @@ const bedRows = beds
 const srcMap = Object.fromEntries(cues.map((r) => [r.key, dataUri(r.url)]));
 const gainMap = Object.fromEntries(catalog.audio.map((r) => [r.key, r.gain]));
 
-const html = readFileSync(join(root, 'tools/gen/audition-template.html'), 'utf8')
+// 🔴 **Three parts, concatenated, and the split is the 400-line rule.** The template was one
+// 442-line file and `tests/unit/file-size.test.ts` could not see it: its glob covered
+// `tools/**/*.mjs` and no HTML at all, so criterion 12.21 read PASS over a live 442-line tool
+// input. Codex round 21, finding 7. The glob covers `tools/**/*.html` now, and this file is split
+// at its own seams — `</style>` and `<script>` — rather than exempted, because raising the size
+// ratchet off zero opens a documented hole and a template has real seams to split on.
+//
+// ⚠️ **Order and joining are load-bearing.** The three parts concatenate with NOTHING between
+// them and reproduce the original 17 839 bytes exactly; `tests/unit/audition-template.test.ts`
+// pins that, so a part that grows a stray trailing newline reds instead of silently changing the
+// generated page.
+const html = ['style', 'body', 'script']
+  .map((part) => readFileSync(join(root, `tools/gen/audition-template.${part}.html`), 'utf8'))
+  .join('')
   .replace('__CUE_ROWS__', cueRows)
   .replace('__BED_ROWS__', bedRows)
   .replace('__SRC_MAP__', JSON.stringify(srcMap))

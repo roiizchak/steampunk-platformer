@@ -1,0 +1,96 @@
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Steampunk Platformer &middot; Phase 7 &middot; criterion 7.10</span>
+    <h1>Cue Audition Desk</h1>
+    <p class="lede">
+      Every measurable part of criterion 7.10 has been measured. <strong>The listening part cannot
+      be — not by me.</strong> These are the exact bytes the game ships, at the exact gains it plays
+      them, so the judgement that needs ears takes about two minutes.
+    </p>
+    <div class="engine">
+      <button id="enable" class="fire">Enable sound</button>
+      <span class="state" id="state" role="status">audio engine: <strong>not started</strong></span>
+      <label class="lvl">Audition level
+        <input type="range" id="boost" min="1" max="8" step="0.5" value="1" />
+        <span id="boostv">1.0&times;</span>
+      </label>
+    </div>
+    <p class="warnrow" id="fallbackNote" hidden>
+      WebAudio is not running in this frame. Every cue also has a plain player in the table below,
+      which does not depend on it.
+    </p>
+  </header>
+
+  <section>
+    <h2>The moment criterion 7.2 is about</h2>
+    <div class="stack">
+      <div class="copy">
+        <h3>Six cues on one frame</h3>
+        <p>
+          Land, footstep, hurt, hit, kill and pickup, fired together over both beds &mdash; a landing
+          onto a gear while a scavenger connects and the same swing finishes it. Measured at
+          &minus;4.46&nbsp;dBFS against a &minus;1.0 ceiling. The meter is the live peak; the
+          question is whether it sounds like a mess.
+        </p>
+      </div>
+      <button class="fire" id="fire">Fire the worst case</button>
+      <div class="readout">
+        <span class="big" id="peak">&mdash;</span>
+        <span class="cap">peak dBFS</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>One cue per event</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Game event</th>
+            <th>Cue</th>
+            <th class="num">Attack</th>
+            <th class="num">Gain</th>
+            <th>Level</th>
+            <th>Plain player</th>
+            <th>Measured note</th>
+          </tr>
+        </thead>
+        <tbody id="cues">
+__CUE_ROWS__
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>The two beds, at their loop point</h2>
+    <div class="beds">
+__BED_ROWS__
+    </div>
+  </section>
+
+  <section>
+    <div class="verdict">
+      <p><strong>What to listen for, in order of how likely it is to be wrong.</strong></p>
+      <ol>
+        <li><strong>The ambience seam.</strong> Starts 4&nbsp;s before the loop point. A click at the
+          wrap is the one defect the numbers say is plausible.</li>
+        <li><strong>Jump.</strong> Its first sample is 0.084 rather than near silence, so it may click
+          on trigger. Every other cue starts under 0.007.</li>
+        <li><strong>The worst case.</strong> Not whether it clips &mdash; that is measured &mdash; but
+          whether six cues at once reads as one event or as noise.</li>
+        <li><strong>Every cue against its event name.</strong> A measurement cannot hear a jump sound
+          on a landing.</li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    Bytes read from <code>public/assets/index.json</code>. Attack is silence&nbsp;&rarr;&nbsp;peak,
+    decoded in Chromium. Gains solved by <code>tools/gen/build-audio.mjs</code>. Regenerate with
+    <code>node tools/gen/build-audition.mjs</code>.
+  </footer>
+</div>
+

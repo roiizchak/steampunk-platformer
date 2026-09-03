@@ -32,13 +32,27 @@ const INDEX = Object.values(
   import.meta.glob('../../index.html', { query: '?raw', import: 'default', eager: true }),
 )[0] as string;
 
-/** The rules, and the gesture each one is the only thing standing between and the player. */
+/**
+ * The rules, and the gesture each one is the only thing standing between and the player.
+ *
+ * 🔴 **Each is matched as a DECLARATION, not as a substring.** `user-select: none` occurs inside
+ * `-webkit-user-select: none`, so a `toContain` for the bare string went on passing with the
+ * standard declaration deleted — the prefixed one underneath it satisfied the search. Codex round
+ * 21, finding 2, and it is the same nearby-text shape as the mutation that found `verify-dist`
+ * reading `index.html`'s shipped CSS *comment* about `touch-action` as if it were the rule. A
+ * declaration starts at `{`, `;` or a line break, which is what the `(^|[{;\n])\s*` prefix says.
+ */
 export const TOUCH_RULES = [
   ['touch-action: none', 'the browser claims the drag and pans or pinch-zooms the page'],
   ['overscroll-behavior: none', 'a downward flick pull-to-refreshes and reloads the game mid-level'],
   ['user-select: none', 'a long press raises the text-selection handles over the controls'],
   ['-webkit-tap-highlight-color: transparent', 'iOS strobes a grey flash on every jump'],
 ] as const;
+
+/** A regex that matches `prop: value` only where a DECLARATION starts, never mid-property. */
+export function declarationRe(rule: string): RegExp {
+  return new RegExp(`(^|[{;\n])\\s*${rule.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')}\\s*[;}]`);
+}
 
 /** The selector list the rules must sit on: the page, its body, and the wrapper the canvas is in. */
 const SELECTOR = 'html,\n      body,\n      #game {';
@@ -49,7 +63,10 @@ describe('the browser is stopped from claiming a touch gesture (12.13)', () => {
     expect(start, 'the html/body/#game rule block is gone or was reformatted').toBeGreaterThan(-1);
     const block = INDEX.slice(start, INDEX.indexOf('}', start));
     for (const [rule, cost] of TOUCH_RULES) {
-      expect(block, `\`${rule}\` is not on html/body/#game — without it, ${cost}`).toContain(rule);
+      expect(
+        declarationRe(rule).test(block),
+        `\`${rule}\` is not a DECLARATION on html/body/#game — without it, ${cost}`,
+      ).toBe(true);
     }
   });
 

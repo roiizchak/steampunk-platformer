@@ -30,7 +30,13 @@ import { describe, expect, it } from 'vitest';
 // is 199 lines and gained 34 in Phase 9 — the largest growth of any uncovered file — and neither it
 // nor `vite.config.ts` could ever red this gate. A latent hole rather than a present violation, and
 // the cheapest possible time to close it is while it is still latent.
-const SOURCES = import.meta.glob(['../../src/**/*.ts', '../../tools/**/*.mjs', '../../tests/**/*.ts', '../../*.config.ts', '../../*.config.mjs'], {
+// 🔴 The FIFTH entry is tool HTML, and it was the same hole one file type over.
+// `tools/gen/audition-template.html` was a live 442-line input that `build-audition.mjs` reads on
+// every run, and criterion 12.21 — *"no source, test, tool or config file over 400 lines"* — read
+// PASS over it for five phases because no glob here covered `.html`. Codex round 21, finding 7.
+// The file is split at its own seams now (`tests/unit/audition-template.test.ts` pins the join),
+// so the ratchet below stays at 0 rather than being raised to cover it.
+const SOURCES = import.meta.glob(['../../src/**/*.ts', '../../tools/**/*.mjs', '../../tools/**/*.html', '../../tests/**/*.ts', '../../*.config.ts', '../../*.config.mjs'], {
   query: '?raw',
   import: 'default',
   eager: true,

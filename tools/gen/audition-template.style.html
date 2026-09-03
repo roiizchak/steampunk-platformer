@@ -1,0 +1,177 @@
+<title>Cue Audition Desk</title>
+<style>
+  /* Light is the bare :root so the un-stamped "system light" viewer gets a complete palette. */
+  :root {
+    --ground: #EDE7DA;
+    --panel: #E2DACA;
+    --rail: #D2C8B4;
+    --ink: #241F19;
+    --ink-soft: #5C5346;
+    --brass: #8A6410;
+    --verdigris: #2F6656;
+    --oxide: #9A3A20;
+    --hair: #C3B79F;
+    --shadow: 0 1px 0 #F7F3EA inset, 0 1px 3px rgba(36, 31, 25, 0.12);
+  }
+  :root:not([data-theme='light']) {
+    @media (prefers-color-scheme: dark) {
+      --ground: #15120F;
+      --panel: #241F19;
+      --rail: #2F2921;
+      --ink: #EDE5D6;
+      --ink-soft: #A2957F;
+      --brass: #C4922B;
+      --verdigris: #4F8B78;
+      --oxide: #C4593A;
+      --hair: #3B342A;
+      --shadow: 0 1px 0 rgba(196, 146, 43, 0.08) inset, 0 2px 6px rgba(0, 0, 0, 0.4);
+    }
+  }
+  :root[data-theme='dark'] {
+    --ground: #15120F;
+    --panel: #241F19;
+    --rail: #2F2921;
+    --ink: #EDE5D6;
+    --ink-soft: #A2957F;
+    --brass: #C4922B;
+    --verdigris: #4F8B78;
+    --oxide: #C4593A;
+    --hair: #3B342A;
+    --shadow: 0 1px 0 rgba(196, 146, 43, 0.08) inset, 0 2px 6px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 15px/1.6 ui-monospace, 'Cascadia Mono', 'SF Mono', Menlo, Consolas, monospace;
+    padding: clamp(20px, 4vw, 56px) clamp(16px, 4vw, 40px) 80px;
+  }
+
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 40px; }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--brass);
+  }
+  h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.1; text-wrap: balance; letter-spacing: -0.01em; }
+  .lede {
+    margin: 0; max-width: 62ch; color: var(--ink-soft);
+    font-family: ui-serif, Georgia, 'Times New Roman', serif; font-size: 16px;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  section { display: flex; flex-direction: column; gap: 14px; }
+  h2 {
+    margin: 0; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-soft); padding-bottom: 8px; border-bottom: 1px solid var(--hair);
+  }
+  h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+
+  /* ---- the worst-case control, the page's one loud element ---- */
+  .engine {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 14px; background: var(--panel); border: 1px solid var(--hair); border-radius: 4px;
+  }
+  .state { font-size: 12px; color: var(--ink-soft); }
+  .state strong { color: var(--brass); }
+  .state.live strong { color: var(--verdigris); }
+  .state.dead strong { color: var(--oxide); }
+  .lvl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-soft); margin-left: auto; }
+  .lvl input { accent-color: var(--brass); }
+  #boostv { font-variant-numeric: tabular-nums; color: var(--ink); min-width: 40px; }
+  .warnrow { margin: 0; font-size: 13px; color: var(--oxide); }
+  td.plain audio { width: 190px; height: 30px; display: block; }
+
+  .stack {
+    background: var(--panel); border: 1px solid var(--hair); border-radius: 4px;
+    padding: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
+    box-shadow: var(--shadow);
+  }
+  .stack .copy { flex: 1 1 300px; display: flex; flex-direction: column; gap: 4px; }
+  .stack p { margin: 0; color: var(--ink-soft); font-size: 13px; }
+  .fire {
+    background: var(--oxide); color: #FFF3EC; border: none; border-radius: 3px;
+    padding: 14px 22px; font: inherit; font-size: 14px; letter-spacing: 0.06em;
+    text-transform: uppercase; cursor: pointer; white-space: nowrap;
+  }
+  .fire:hover { filter: brightness(1.12); }
+  .fire:focus-visible { outline: 2px solid var(--brass); outline-offset: 3px; }
+
+  .readout {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+    font-variant-numeric: tabular-nums; min-width: 118px;
+  }
+  .readout .big { font-size: 26px; color: var(--brass); line-height: 1; }
+  .readout .cap { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-soft); }
+
+  /* ---- channel strip ---- */
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 660px; }
+  thead th {
+    text-align: left; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 400; padding: 0 10px 8px 0; border-bottom: 1px solid var(--hair);
+  }
+  tbody td { padding: 7px 10px 7px 0; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+  .ev { color: var(--ink-soft); font-size: 13px; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; width: 84px; color: var(--ink); }
+  .num .u { color: var(--ink-soft); font-size: 11px; margin-left: 1px; }
+  .note { font-size: 12px; }
+  .flag { color: var(--oxide); }
+
+  .play {
+    display: inline-flex; align-items: center; gap: 9px; width: 100%;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--hair);
+    border-radius: 3px; padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer;
+    text-align: left;
+  }
+  .play:hover { border-color: var(--brass); }
+  .play:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  .tri {
+    width: 0; height: 0; flex: none;
+    border-left: 8px solid var(--brass); border-top: 5px solid transparent; border-bottom: 5px solid transparent;
+  }
+
+  .meter { width: 150px; }
+  .meter span {
+    display: block; height: 7px; background: var(--rail); border-radius: 2px; overflow: hidden;
+    position: relative;
+  }
+
+  /* ---- beds ---- */
+  .beds { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .bed {
+    background: var(--panel); border: 1px solid var(--hair); border-radius: 4px; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px; box-shadow: var(--shadow);
+  }
+  .bedhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .bedwhy { margin: 0; font-size: 13px; color: var(--ink-soft); }
+  .bedctl { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip {
+    font-size: 11px; letter-spacing: 0.06em; padding: 3px 8px; border-radius: 2px;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .chip.ok { background: color-mix(in srgb, var(--verdigris) 22%, transparent); color: var(--verdigris); }
+  .chip.warn { background: color-mix(in srgb, var(--oxide) 22%, transparent); color: var(--oxide); }
+  .seam, .ghost {
+    background: transparent; color: var(--ink); border: 1px solid var(--hair);
+    border-radius: 3px; padding: 8px 12px; font: inherit; font-size: 12px; cursor: pointer;
+  }
+  .seam { border-color: var(--brass); color: var(--brass); }
+  .seam:hover, .ghost:hover { background: var(--rail); }
+  .seam:focus-visible, .ghost:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  .verdict {
+    background: var(--panel); border: 1px solid var(--hair); border-left: 3px solid var(--brass);
+    border-radius: 3px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px;
+  }
+  .verdict p { margin: 0; font-family: ui-serif, Georgia, serif; font-size: 15px; color: var(--ink-soft); }
+  .verdict p strong { color: var(--ink); font-weight: 600; }
+  .verdict ol { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+
+  footer { color: var(--ink-soft); font-size: 12px; border-top: 1px solid var(--hair); padding-top: 14px; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>

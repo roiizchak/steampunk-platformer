@@ -64,6 +64,26 @@ async function viewportState(page: Page): Promise<{
   }));
 }
 
+/**
+ * Where Phaser thinks a given contact is, in GAME pixels.
+ *
+ * An independent reading of the drag: the driver's own bookkeeping cannot answer whether the engine
+ * saw the move, and neither can the player's velocity.
+ */
+async function pointerGamePos(page: Page, id: number): Promise<{ x: number; y: number }> {
+  return page.evaluate((wanted) => {
+    // `game.input` IS the InputManager in Phaser 4 — there is no `.manager` under it.
+    const mgr = (
+      window as unknown as {
+        __phaserGame: { input: { pointers: { identifier: number; x: number; y: number }[] } };
+      }
+    ).__phaserGame.input;
+    const p = mgr.pointers.find((q) => q.identifier === wanted);
+    if (!p) throw new Error(`no live pointer with identifier ${wanted}`);
+    return { x: p.x, y: p.y };
+  }, id);
+}
+
 test.beforeEach(async ({ page }) => {
   await installTouchDriver(page);
   // Every touch event the page sees, and whether its page default was prevented by the time every
@@ -170,9 +190,21 @@ test.describe('12.13 the browser does not claim the gesture', () => {
     await contactMove(page, 1, right.x + zone.w, right.y);
     await waitTicks(page, 6);
     const off = await readPlayer(page);
+    // 🔴 **Where the finger IS, not only what the player is doing.** Deleting both `contactMove`
+    // calls leaves RIGHT held and both velocity assertions passing, so the case proved nothing
+    // about a drag — Codex round 21, finding 5. Phaser's own pointer position is the independent
+    // reading: it has to be outside the zone for this to be the gesture the criterion names.
+    const away = await pointerGamePos(page, 1);
+    expect(
+      away.x,
+      'the contact never left the button — this case is not about a drag without that',
+    ).toBeGreaterThan(zone.x + zone.w);
+
     await contactMove(page, 1, right.x, right.y);
     await waitTicks(page, 6);
     const back = await readPlayer(page);
+    const home = await pointerGamePos(page, 1);
+    expect(home.x, 'the contact never came back onto the button').toBeLessThan(zone.x + zone.w);
 
     expect(off.vx, 'sliding off the button stopped the player mid-drag').toBeGreaterThan(0);
     expect(back.vx, 'sliding back onto the button stopped the player').toBeGreaterThan(0);
@@ -222,6 +254,17 @@ test.describe('12.13 the browser does not claim the gesture', () => {
     ).toBeGreaterThan(tickBefore);
   });
 
+  /**
+   * 🔴 **This case does NOT assert two jumps, and the reason is worth stating rather than working
+   * around.** `jumpPressed` is an idempotent edge within a frame (`src/sim/input.ts`), and there is
+   * no double jump, so a second tap 100 ms after the first cannot produce a second observable jump
+   * — the player is still in the air. Codex round 21, finding 4, caught the earlier version
+   * claiming it. The QA log's device step said "two jumps" too, and is corrected to match.
+   *
+   * What a double tap CAN be asked here: that the browser did not eat the pair as a zoom gesture,
+   * that the layout viewport did not move, that the sim received the gesture at all, that nothing
+   * routed away, and that no contact was left down.
+   */
   test('12.13e a double-tap on a control does not zoom or navigate', async ({ page }) => {
     await bootToTouchPlay(page);
     const rect = await canvasRect(page);
@@ -239,13 +282,22 @@ test.describe('12.13 the browser does not claim the gesture', () => {
           __touch: { down(i: number, x: number, y: number): void; up(i: number): void };
         };
         const fired: string[] = [];
-        w.__touch.down(1, x, y);
-        w.__touch.up(1);
+        const tap = (): void => {
+          w.__touch.down(1, x, y);
+          w.__touch.up(1);
+        };
+        tap();
         fired.push('first');
-        w.__touch.down(1, x, y);
-        w.__touch.up(1);
-        fired.push('second');
-        return fired;
+        // ⚠️ A real gap, INSIDE the page. Two taps in the same JS task are not a double tap to the
+        // browser at all; two Playwright round trips are ~200 ms apart, outside every double-tap
+        // window there is. 120 ms is inside the window and across several frames.
+        return new Promise<string[]>((resolve) => {
+          setTimeout(() => {
+            tap();
+            fired.push('second');
+            resolve(fired);
+          }, 120);
+        });
       },
       [jump.x, jump.y] as [number, number],
     );

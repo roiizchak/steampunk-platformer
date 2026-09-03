@@ -117,7 +117,7 @@ Modified: `GameScene.ts` · `gameHud.ts` · `gameInput.ts` · `UIScene.ts` · `T
 | 12.18 | Every generation logged with its `request_id`; the touch-UI figure agrees with its $5 ceiling; the art ceiling reads $60 against $55.50 | doc review | — |
 | 12.19 | Every new gate watched failing under the mutation it names, mutation confirmed reverted by "content changed AND the original count dropped by one" — and every row of the mutation matrix reds at least one named gate | watched failing | — |
 | 12.20 | `dist/` carries no dev-only scene key, debug symbol or user-facing dev prose | `npm run build` | — |
-| 12.21 | No source, test, tool or config file over 400 lines without a `SIZE-EXEMPTION:` line | `wc -l` sweep | — |
+| 12.21 | No source, test, tool or config file over 400 lines without a `SIZE-EXEMPTION:` line *(amended 2026-09-03: **and the sweep must actually cover them** — `file-size.test.ts`'s glob read `.ts`, `.mjs` and the root configs and NO HTML, so `tools/gen/audition-template.html` sat at 442 lines through five phases with this criterion reading PASS. Codex round 21, finding 7. The glob covers `tools/**` HTML now and the file is split at its own seams, M114 red 6/15)* | `wc -l` sweep | — |
 | 12.22 | Codex **plan** review ran and converged to `VERDICT: APPROVED` before any code | `codex` | codex |
 | 12.23 | Codex **implementation** review ran on the final diff, after the gate owners | `codex` | codex |
 | 12.24 | Owner played the game by touch on a real device, start to finish, with no keyboard touched | `playwright-cli` + hands-on *(C4)* | play |
@@ -197,7 +197,7 @@ papered over.
 | M60 | erase `walk`'s 4 112 mark pixels to baked brass, keeping two 4x4 ink cells | 12.14, 12.17 | **GREEN — the mask shrank with the damage** → RED 3/8 — ⛔ **WITHDRAWN 2026-08-31** (the gate this reddened was deleted with the ink pass) — **SUCCEEDED BY M103**, the same erasure against byte-for-byte cut-face equality |
 | M61 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone | 12.17 | **GREEN — the bound was one-sided** → RED 2/8 — ⛔ **WITHDRAWN 2026-08-31** (the gate this reddened was deleted with the ink pass) — **SUCCEEDED BY M100**, the same one-sided damage against the two-band alpha claim |
 | M62 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and opaque | 12.17 | **GREEN — classified as neither ink nor plate** → RED 2/8 — ⛔ **WITHDRAWN 2026-08-31** (the gate this reddened was deleted with the ink pass) — **SUCCEEDED BY M101**, which measures that the two-band claim still cannot order this damage and names the gate that can |
-| M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for — ⛔ **RETIRED 2026-09-02, on a measurement.** `PLATE_ALPHA_BAKED` is deleted; the bytes ship unfaded and the fade is a DRAW-TIME value now. **M102 probed it**: raising every non-transparent pixel to full alpha in the six shipped faces *and* the six committed cuts together — a pipeline change faithfully re-cut — is **GREEN 0/15**, and that is the designed split, not a hole. The property did not become ungated, it MOVED, and the gate that holds it at the new site is the one **M104** reds. The residual is M64’s stated limit of a committed oracle, answered by the pinned key/row/col literal |
+| M63 | set `PLATE_ALPHA_BAKED` to 1 and re-cut the six faces | 12.17 | RED 1/8, and the reproduction gate stays green — which is the split those two gates exist for — ⛔ **RETIRED 2026-09-02, on a measurement.** `PLATE_ALPHA_BAKED` is deleted; the bytes ship unfaded and the fade is a DRAW-TIME value now. **M102 probed it** and is recorded in the prose below rather than in this table, because a row whose outcome is green contradicts the criterion however good the note beside it is. What the probe found, and what it did NOT establish, is written out there |
 | M64 | swap the `left` and `right` COLUMNS in `TOUCH_PLATE_CELLS` and re-cut | 12.17 | **GREEN — both oracles moved together** → RED 1/8 |
 | M65 | skip the pale halo below the face midpoint, and re-cut | 12.14 | **GREEN at 3.318:1 — one best pixel for a whole glyph** → RED 1/8, `pause` stroke 3 at 1.21:1 — ⛔ **RETIRED 2026-09-02.** It skips a pale halo that `touchInk.mjs` no longer paints, and its red proof was a per-stroke contrast figure the owner has ruled must not be rebuilt (2026-09-02). Unbuildable, not green |
 | M66 | mirror the COLUMNS in the builder's grid selection, leaving the descriptors alone | 12.17 | **GREEN — the pinned table is only half the contract** → RED 1/2 |
@@ -235,19 +235,23 @@ papered over.
 | M99 | ship the six faces faded FLAT — one alpha everywhere, the keyed field included *(rebuilt from M46 against the gate that replaced it)* | 12.17, 12.19 | RED 2/15 — the two-band alpha claim and byte-for-byte cut-face equality. Every face's fully-transparent count went **5314 → 0**: there is no keyed field left, which is exactly what the two-band claim says there must be |
 | M100 | drop every non-mark pixel of `pause` to alpha 1 — the plate effectively gone *(rebuilt from M61)* | 12.17, 12.19 | RED 2/15 — **19 191** pixels moved, `clear` **5281 → 0**. The bound that let M61 through was one-sided; the two-band claim is not, and reds |
 | M101 | repaint 2 014 pixels OUTSIDE `left`'s mark dark and OPAQUE *(rebuilt from M62)* | 12.17, 12.19 | RED 1/15 — byte-for-byte cut-face equality **alone**. ⚠️ **The two-band claim stayed GREEN with all three of its counts byte-identical** (5314 clear / 19 873 solid / 413 partial), which is M62's original defect stated precisely: a partition into two alpha bands cannot order damage that changes neither band. The statistic that orders it is not a tuned bound, it is the equality gate that replaced it — *(the §5 rule: a statistic that does not order its own mutation is replaced, not re-bounded)* |
-| M102 | raise every non-transparent pixel to full alpha in the six shipped faces **and** the six committed cuts together — a pipeline change faithfully re-cut *(probe, from M63)* | — | **GREEN 0/15, and recorded as a probe rather than a hole.** `PLATE_ALPHA_BAKED` is deleted: the bytes ship unfaded by design and the fade is a draw-time value, so no live gate claims anything about byte alpha beyond the two bands. The property did not become ungated — it moved, and **M104** reds it at the new site. What stays uncovered is M64's already-stated limit of a committed oracle: a builder change that is faithfully re-cut moves both files together. Same shape as M82 — a probe that found the code it aimed at was gone |
 | M103 | erase `walk`'s mark to the surrounding plate, keeping two 4×4 ink cells *(rebuilt from M60)* | 12.17, 12.19 | RED 1/15 — **6 367** pixels, byte-for-byte cut-face equality. ⚠️ Distinctness stayed green **and should**: it measures how far two faces differ, so destroying one face's glyph makes it *more* different from the other five, not less. M60's defect — an oracle that shrank with the damage — cannot recur against a committed cut face, because the oracle is no longer read from the file under test |
 | M104 | draw the generated face at `PLATE_ALPHA * PLATE_ALPHA`, double-fading it *(rebuilt from M47)* | 12.14, 12.19 | RED 1/40 — `touch-plate-ink.test.ts`'s *"gives the art the SAME translucency the drawn plate was measured at"*. M47's hole was an algebraic identity that held for every value of either constant; the assertion is a comparison against the one constant production draws with now, so a face drawn at anything else reds. Reverted, and the revert confirmed by the original `face.setAlpha(PLATE_ALPHA);` count returning to **1** with the file changed back |
 | M105 | delete `touch-action: none` from `index.html`'s `html, body, #game` block | 12.13, 12.19 | RED 1/3 unit — and 🔴 **the `dist/` half was GREEN on its first run, which is why this row is worth its space.** `verify-dist`'s new check asked only whether the shipped file contained `touch-action:none` anywhere with whitespace stripped, and `index.html`'s own explanatory comments SHIP: one of them reads *"`touch-action: none` — without it the browser claims the gesture"*. **The gate was reading the sentence about the rule as the rule.** It now strips CSS comments and reads the `html,body,#game{...}` block, and reds |
 | M106 | put `user-scalable=no` back on the viewport meta | 12.13, 12.19 | RED 1/3 unit + `verify-dist` FAILED. An **absence** assertion on purpose: `touch-action` already stops pinch inside the game, and taking zoom from the whole page is the accessibility anti-pattern it was chosen over. A future session that "fixes pinch" this way now gets a red instead of a silent regression |
 | M107 | re-subscribe `INPUT_GAME_OUT` to `onLoseEverything` — the defect as shipped | 12.5, 12.13, 12.19 | RED 1/24 unit (*subscribes to EVERY loss path, and to exactly those*) + RED 1/5 e2e (**12.13b**). ⚠️ **12.13b was itself a false green at 10 ticks** and passed against the shipped defect: the player still coasts on the velocity it had when the finger left the canvas, so a dropped contact and a held one are the same number that early. At **30** ticks — the figure 12.5b already pays for the same reason — it separates them and reds. The mutation and the fix are the same line, watched red before it was removed |
 | M108 | make 12.12's level-menu coverage test swallow every coordinate (`rows.length > 0 ||`) | 12.12, 12.19 | RED 1/10 — the guard that keeps the repaired 12.12 from being vacuous. The loop now SKIPS a retired coordinate that a live level-menu row covers, so a partition that covered everything would assert nothing; the case asserts the uncovered set is non-empty and names it |
-| M109 | drop `this.binding.isGameRunning()` from `controlsLive` | 12.12 | **GREEN 0/10, and recorded as a probe rather than left as a claim.** 12.12 cannot see this term, because the pause route unbinds the layer first — `bind(null)` makes `controlsLive` false whatever the term says, so the mutation is unreachable from this criterion rather than uncaught by it. ⚠️ Whether the term is reachable from ANY path was not established, and that is the open question, not this row. Not chased: it is a pre-existing question in a criterion this session does not own |
 | M110 | dispatch NEITHER tap in 12.13e's double-tap, leaving only the driver's own bookkeeping | 12.13, 12.19 | RED 1/5. ⚠️ **Dropping ONE tap stays GREEN** — the other still fires the jump — and that is the row's content: the case asserts the SIM saw the gesture (the player left the ground), not that the driver's JS ran. The first version asserted only its own `['first', 'second']` bookkeeping, which a browser that swallowed the pair as a zoom gesture would satisfy exactly |
+| M111 | delete the STANDARD `user-select: none` from `index.html`, leaving `-webkit-user-select: none` above it | 12.13, 12.19 | RED 1/3 unit + `verify-dist` FAILED. 🔴 **Both gates were GREEN before this row.** They searched for the substring `user-select: none`, which occurs inside the prefixed declaration, so the standard one could be deleted and the search still matched. Codex round 21, finding 2 — the same nearby-text shape as the CSS comment M105 found. Both match a DECLARATION now (`(^|[{;\n])\s*rule\s*[;}]`) |
+| M112 | remove `dist/index.html` and re-run `verify-dist` | 12.13, 12.19 | RED — *dist/index.html does not exist*. The gesture block was wrapped in `if (existsSync(...))` with no failing `else`, so the whole check vanished silently the moment its target did, which is exactly when it matters. Codex round 21, finding 6; the same defect the audio `?? []` had |
+| M113 | delete BOTH `contactMove` calls from 12.13c's drag | 12.13, 12.19 | RED 1/5. 🔴 **The case was GREEN before this row**: with no moves, RIGHT stays held and both velocity assertions pass, so it proved nothing about a drag. Codex round 21, finding 5. It now reads Phaser's OWN pointer position and requires it outside the zone and back — an independent reading the driver's bookkeeping cannot fake |
+| M114 | re-join the three audition-template parts into one 442-line file | 12.21, 12.19 | RED 6/15 — four `audition-template.test.ts` cases and **both** `file-size.test.ts` cases. The second half is the point: `tools/gen/audition-template.html` was a live 442-line tool input and 12.21 read PASS over it for five phases, because no glob covered `.html`. Codex round 21, finding 7 |
+| M115 | join the audition parts with `'\n'` instead of `''` | 12.21, 12.19 | RED 1/6. ⚠️ **GREEN on the first attempt** — the four cases assert properties of the parts ON DISK and nothing read the code that puts them together, so three injected newlines were invisible. A split whose only gate describes the pieces says nothing about the document; the builder's own seam is gated now |
+| M116 | reorder the audition parts to `['style', 'script', 'body']` | 12.21, 12.19 | RED 1/6 — the order is pinned against the same literal the test names, so a script block hoisted above the markup it drives reds instead of shipping |
 
 **Twenty-two rows exposed twenty-seven green attempts, and every one was a hole rather than a mutation to drop.**
-**M102 is the twenty-third green row and the ONE exception**, recorded as a probe rather than a hole for the
-reason its own row gives — the same call M82 got, and stated here so the sentence above stays true.
+**No row in this table reports GREEN as its outcome**, which is what 12.19 requires and what M82, M102
+and M109 were withdrawn to keep true — their green results are recorded as probes in the prose below.
 
 🔴 **Thirteen rows were WITHDRAWN on 2026-08-31, and 12.19 was NOT MET because of it. Closed
 2026-09-02.** M46, M47, M55-M57, M60-M63, M65, M68, M69 and M74 each reddened a gate that no longer
@@ -289,6 +293,31 @@ that the two-band partition **cannot order M62's damage**. The §5 rule says a s
 not order its own mutation is replaced rather than re-bounded, and that replacement had already
 happened; M101 is the proof it was the right one.
 
+🔴 **M102 and M109 are WITHDRAWN from the matrix too, for M82's reason, and the first draft of
+this session got it wrong.** Both were written into the table carrying `GREEN`, with prose beside
+them explaining why the green was acceptable. **12.19 requires every row here to red at least one
+named gate**, so a green row makes the criterion PASS over its own contradiction no matter how good
+the explanation next to it is — which is *exactly* what round 20 caught with M82, and this session
+reproduced it twice within hours of writing that lesson down. Codex round 21, finding 3.
+
+They are probes, and probes belong in prose:
+
+- **M102** — raise every non-transparent pixel to full alpha in the six shipped faces **and** the six
+  committed cuts together, a pipeline change faithfully re-cut. **GREEN 0/15.** `PLATE_ALPHA_BAKED`
+  is deleted, the bytes ship unfaded and the fade is a draw-time value, so no live gate claims
+  anything about byte alpha beyond the two bands being non-empty. ⚠️ **The honest reading is
+  narrower than "the property moved"**: a runtime `setAlpha` is one global multiplier and cannot
+  reproduce per-pixel partial alpha, so **M104 does not fully cover what M102 removed**. What is
+  left uncovered is a coherent change to both compared artifacts — M64's already-stated limit of a
+  committed oracle — and the independent statement against it is the pinned key/row/col literal in
+  `shipped-touch.test.ts`. Recorded as an open blind spot, not as a closed one.
+- **M109** — drop `this.binding.isGameRunning()` from `controlsLive`. **GREEN 0/10 against 12.12's
+  e2e cases**, because the pause route unbinds the layer first and `bind(null)` makes the predicate
+  false whatever that term says. ⚠️ `touch-draw-path.test.ts` has a unit case that a non-running
+  game hides and disables the layer, and that case was **not** run against this mutation — so
+  "unreachable from this criterion" is a claim about ten e2e tests, not about the term's whole
+  gate. The open question is whether the term is reachable at all, and it is pre-existing.
+
 🔴 **M82 is WITHDRAWN from the matrix, and that is not a tidy-up.** 12.19 requires every row here to
 red at least one named gate, and M82 sat in the table reporting `GREEN 0/24` — so the criterion was
 PASS over a row that contradicted it. Codex round 20, finding 1. M82 replaced a "the merged key set
@@ -299,8 +328,7 @@ above are of the twenty-two rows that remain.
 
 ⚠️ This said *"twenty-seven rows"*: 27 is the number of green ATTEMPTS, and several rows went green
 more than once before they reddened — M72 twice, M73 twice. Twenty-two rows carry a GREEN marker that
-was later closed, and **M102** carries one that is not closed and is not meant to be. Codex round 18,
-finding 7.
+was later closed. Codex round 18, finding 7.
 
 🔴 **M75 is the mutation the floor was introduced without.** `MIN_TOUCH_ARM_CPU_MS` replaced a
 per-pair "collapse guard" that could not detect a collapse, and 12.19 was PASS with no red proof for
