@@ -1415,108 +1415,66 @@ bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
 
 ---
 
-# NEXT SESSION — the four open Phase 12 criteria
+# NEXT SESSION — Phase 12: two closed, three await your phone, one is at its cap
 
-Written 2026-09-02 at the tip (`8a560d4`). Everything through Phase 13 is merged and live;
-**Phase 12 is the only thing not done**, and its row in [PRD.md](PRD.md) names why.
+Written 2026-09-03 at `b83d0fd` on branch `phase-12-closeout`, at the end of the close-out session.
+The previous version of this section briefed that session; this one records what it did and what it
+could not do. **Phase 12 is still not done**, and the reason is no longer bookkeeping.
 
 ## The state
 
 | | |
 |---|---|
-| branch | `main`, clean, nothing unmerged |
-| live | [steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app) (`5447c8a`) |
-| suite | unit **3126/0** (220 files) · sim-isolated 3113 + 13 skipped · e2e **229/0** · build + verify-dist ok |
-| phases | 1–11 and 13 done · **12 merged with four criteria open** |
+| branch | `phase-12-closeout`, ahead of `main` (`0fc74aa`), **not merged** |
+| live | [steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app) — unchanged, this session shipped no game behaviour except one deletion (below) |
+| suite | unit **3146/3146** (873 suites) · sim-isolated 3133 + 13 skipped · e2e **236/236** across all seven projects · build + `verify-dist` ok |
+| phases | 1–11 and 13 done · **12 merged, 22 of 25 PASS, three criteria open** |
 
-## Owner decisions, taken 2026-09-02 before the session starts
+## What closed
 
-1. **Close all four.** The session's goal is Phase 12 done, not partially done. If one resists, the
-   record says which and why rather than the row saying done.
-2. **12.14 closes HANDS-ON, and no replacement statistic is built.** Owner decision. The criterion
-   always required a hands-on pass and never had one; the deleted contrast gate is explained in the
-   record rather than rebuilt. This is the right call precisely because inventing a statistic after
-   seeing the art it will judge is the post-data selection this phase kept catching.
-3. **No further game work.** Five levels, art, audio, HUD, touch and the responsive view are done and
-   live. Close the QA debt and stop. Do not propose new content, new levels, or new fal spend.
+- **12.19 PASS.** The thirteen dead mutation rows are triaged by one question — does the code the row
+  edits still exist, and does a live gate still claim its property. **Five rebuilt and red**
+  (M99–M104), **eight retired** as unbuildable rather than green. Then the three Codex rounds added
+  nine more proved rows, M111–M119. The matrix carries **122 rows**; that figure was wrong three
+  times in one session and § the row count says why a count in prose is not a fact.
+- **12.21 PASS**, after being found *falsely* PASS for five phases: `file-size.test.ts`'s glob covered
+  no HTML, and `tools/gen/audition-template.html` was a live **442-line** tool input read on every
+  run. Split at its own seams, glob widened.
 
-## The four, in the order they should be attacked
+## What does NOT close, and why
 
-**12.19 — thirteen mutation rows red nothing.** Agent-free, no device, no Codex. Every other
-criterion in this phase rests on gates, and thirteen of the 92 rows in the matrix are decoration
-*(C2)*. This is the one that can be finished start to finish in a session and the one that makes the
-other three worth having. Start at `docs/qa/phase-12-touch.md § The mutation matrix` and find the
-thirteen; for each, either build the mutation the row's bound actually names or replace the
-statistic. ⚠️ **Build the mutation the bound names, not the convenient one** — that is how the
-first 22 of these were found green.
+- **12.23 — NOT MET at the cap.** Rounds 21, 22 and 23 all returned `VERDICT: REVISE`; the owner
+  capped the phase at three. Every finding from all three is applied. 🔴 **None of the three was a
+  formality** — the standard is `APPROVED` and it was not reached, but each round found a real defect.
+- **12.13, 12.14, 12.14b — UNRUN, and only a phone can run them.** Their machine halves are built and
+  red-proved. **The exact steps are written out in `docs/qa/phase-12-touch.md` § the device pass** —
+  four gestures, six glyphs, two hazard plates, one trip.
 
-**12.13 — the gesture checks.** `play`-owned, needs the owner's phone. Three checks, never run:
-a drag that starts on a control and leaves the canvas edge; a two-finger pinch over the play area;
-a double-tap on a control. None must scroll, zoom, or drop the contact. The automated half is
-reachable first — `index.html`'s `touch-action` / `user-scalable` and Playwright's multi-touch
-dispatch can pin the prevention before the device confirms the feel.
+## The traps this session paid for
 
-**12.14 — the button art's readability. HANDS-ON, and NO new statistic — owner decision.**
-Run `voltagent-qa-sec:ui-ux-tester` against the shipped bytes (`docs/evidence/phase-12-touch-art.png`
-plus the six PNGs the catalog names), give it **two briefs** *(A7)* with brief 1's findings withheld
-from brief 2, then the owner confirms the six glyphs read at 44–48 CSS px on the phone. Record the
-criterion as what it always was — hands-on — with the deleted per-stroke gate explained.
+1. 🔴 **A regex cannot tell a read from a discarded read.** Three mutations in a row defeated a
+   source-text gate over the audition template's concatenation: `.join('
+')` (M115), a callback
+   returning `''` (M117), then a *real* read with `.slice(0, 0)` appended (M118), which keeps every
+   token the regex looks for. The concatenation now lives in `tools/gen/auditionDocument.mjs` where a
+   test runs it. **If you find yourself writing a third regex over the same code path, stop and make
+   it behavioural.**
+2. **`INPUT_GAME_OUT` was deleted from `touchControlsLayer.ts`** by owner decision — Phaser fires it
+   when `document.elementFromPoint` leaves the canvas, so a thumb rolling past the edge dropped the
+   jump the other hand was holding. Criterion 12.5's text was amended in the same commit. This is the
+   session's only production change.
+3. **A correction applied where the reviewer pointed is half a correction.** Rounds 22 and 23 both
+   found a claim fixed in one passage and left standing in another. Grep the claim, not the line.
+4. **`chromium-gpu` is intermittently red on `main`** — three failures in five runs, a different
+   `phase-05..09` perf spec each time, unreachable from anything either session changed. Not this
+   phase's, not fixed here, written down so it is not re-diagnosed.
+5. **`chromium-prod` failed once and passed twice** on identical bytes, on the dev-seam spec. Recorded
+   as an unexplained flake, not as a green.
 
-🔴 **Do NOT rebuild the contrast statistic.** The old one found a dark glyph on a pale disc; the
-2026-08-31 redesign puts verdigris in every recess, so it counts 12–37 "strokes" per face where six
-had 1–4. Its figures were not low, they were meaningless. Inventing a replacement after looking at
-the art it will judge is the post-data selection this phase caught repeatedly, and the owner ruled
-against it on 2026-09-02.
+## What to do next
 
-**12.23 — a Codex implementation review that resolves.** Seven rounds (14–20), all `REVISE`, every
-finding applied. ⚠️ **Codex's sandboxed shell cannot spawn processes on this machine**
-(`CreateProcessAsUserW failed: 5`) — the prompt must say to use `node_repl` + `fs.readFileSync`, and
-every finding is file-evidence that must be re-verified locally. ⚠️ This row has **twice** stopped
-one review short of the summary beside it; whatever round runs, the summary must name that round.
-
-## Also owed, smaller
-
-- 🔴 **The hazard-visibility pass.** `PLATE_ALPHA` 0.9 **abandons** the occlusion criterion rather
-  than weakening it — 22 % residual against a 60 % rule, past the 0.86 measured to erase content, on
-  owner authority. The replacement check is on the device: stand behind the pause plate on level-01
-  where a shooting `brass-sentry` sits for nine consecutive standing positions, and under the jump
-  plate on level-04 where the goal sits for nine more. **If either is unplayable, 0.9 is wrong and
-  the number comes back down.**
-- ⚠️ **The frame-budget figures in `docs/qa/` were all taken at the design size.** Since the view can
-  now be up to 2560 wide, they are a floor rather than the figure for every size. Nothing has
-  re-measured them. Recorded as the open question it is, not as a number.
-
-## \U0001f534 The suite runs on ONE ENGINE, and that shipped a defect
-
-Read [qa/session-webkit-audio.md](qa/session-webkit-audio.md) before adding an asset in any format.
-
-All six Playwright projects were Chromium. Chromium decodes Ogg; **Safari decodes no Ogg container**,
-and every browser on iOS is WebKit. Two `.ogg` music beds with a single url each put a
-`BOOT REFUSED` screen on every iPhone, live in production, while **229 e2e tests were green**. The
-owner's friends found it by opening the link.
-
-A **seventh `webkit` project** now exists — two tests, 14 seconds, against the production server. It
-is deliberately narrow: it asserts only what can differ by ENGINE. Extend it the next time an engine
-difference bites; do not turn it into a second copy of the suite.
-
-\u26a0\ufe0f **An audio url in a container Safari cannot play now needs `altUrls`**, and the alternate must
-itself be playable \u2014 `.ogg` + `.oga` satisfies *"has a fallback"* and gains no browser. Both the
-catalog validator and `verify-dist` refuse it.
-
-\U0001f534 **And the first version of that spec was decoration.** It read `document.body.innerText` for
-`BOOT REFUSED`, which `refuseToRoute` draws onto the **canvas** \u2014 invisible to any DOM query. The
-mutation came back *2 passed* against a build that refused on every load. If you assert about the
-refusal screen, assert on the `console.error` it emits or on the drawn frame, never on the DOM.
-
-## Traps that will cost a session if forgotten
-
-- **Run `test:e2e` per PROJECT, never as one invocation**, and **free ports 5173 AND 4173 between
-  projects, not only at the start of a sweep.** A leaked server made 6.9 read 1.2524 ms and 9.5 read
-  N^0.893 on 2026-09-02; both passed in isolation and the project re-ran 71/71. A warm box reads as a
-  broken game to a wall-clock-bounded gate.
-- **Detect greenness positively, including the COUNT.** A run that selected nothing exits 0.
-  `--list` gives the expected number.
-- **The view is not 1920 wide.** 1920 at exactly 16:9, up to 2560 wide, height pinned at 1080.
-  Anything sized once in `create()` from a literal is wrong on the second size.
-- **A game-pixel assertion cannot see a CSS-pixel defect**, and a source-text gate cannot see a font.
-  Both cost a device round in this session.
+1. **The device pass.** Until it happens, 12.13 / 12.14 / 12.14b cannot move, and **`PLATE_ALPHA` 0.9
+   can still come back down** — that is the agreement the number was accepted under.
+2. **Decide 12.23.** It is open at a cap you set. Either lift the cap for a round 24, or accept the
+   phase with the criterion recorded open. It should not be quietly marked done.
+3. Merge `phase-12-closeout` when the above are settled. Nothing in it is blocked on anything else.
