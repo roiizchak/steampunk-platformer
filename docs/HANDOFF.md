@@ -1415,75 +1415,63 @@ bounds and red runs in [qa/phase-06-hud.md §Session 2](qa/phase-06-hud.md).
 
 ---
 
-# NEXT SESSION — Phase 12: two closed, three await your phone, one is at its cap
+# NEXT SESSION — every phase is done, and one criterion is open on purpose
 
-Written 2026-09-03 at `b83d0fd` on branch `phase-12-closeout`, at the end of the close-out session.
-The previous version of this section briefed that session; this one records what it did and what it
-could not do. **Phase 12 is still not done**, and the reason is no longer bookkeeping.
+Written 2026-09-03 at the end of the Phase 12 close-out. **Phases 1–13 are all done and live.**
+There is no phase in flight and no blocked work.
 
 ## The state
 
 | | |
 |---|---|
-| branch | `phase-12-closeout`, ahead of `main` (`0fc74aa`), **not merged** |
-| live | [steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app) — unchanged, this session shipped no game behaviour except one deletion (below) |
+| branch | `main` |
+| live | [steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app) |
 | suite | unit **3146/3146** (873 suites) · sim-isolated 3133 + 13 skipped · e2e **236/236** across all seven projects · build + `verify-dist` ok |
-| phases | 1–11 and 13 done · **12 merged, 22 of 25 PASS, three criteria open** |
+| phases | **1–13 done.** Phase 12 done 2026-09-03 with **24 of 25 PASS** and 12.23 accepted open |
 
-## What closed
+## The one thing that is open, and why it is not a loose end
 
-- **12.19 PASS.** The thirteen dead mutation rows are triaged by one question — does the code the row
-  edits still exist, and does a live gate still claim its property. **Five rebuilt and red**
-  (M99–M104), **eight retired** as unbuildable rather than green. Then the three Codex rounds added
-  nine more proved rows, M111–M119. The matrix carries **122 rows**; that figure was wrong three
-  times in one session and § the row count says why a count in prose is not a fact.
-- **12.21 PASS**, after being found *falsely* PASS for five phases: `file-size.test.ts`'s glob covered
-  no HTML, and `tools/gen/audition-template.html` was a live **442-line** tool input read on every
-  run. Split at its own seams, glob widened.
+🔴 **12.23 — the Codex implementation review — is NOT MET, and the owner accepted the phase with it
+open.** Rounds 21, 22 and 23 all returned `VERDICT: REVISE` at the three-round cap the owner set;
+every finding from all three is applied. **CLAUDE.md §3 says a phase with a failing criterion is
+reported failing, and that rule was overridden explicitly.** It is written down in the QA verdict
+table, PRD.md's phase row and QA-LOG.md so that no later reader mistakes the acceptance for
+convergence. **Phase 12 shipped by decision, not by convergence.** If a future session wants it
+closed properly, the next round is 24 and `docs/reviews/phase-12-touch-impl.md` has all 23.
 
-## What does NOT close, and why
-
-- **12.23 — NOT MET at the cap.** Rounds 21, 22 and 23 all returned `VERDICT: REVISE`; the owner
-  capped the phase at three. Every finding from all three is applied. 🔴 **None of the three was a
-  formality** — the standard is `APPROVED` and it was not reached, but each round found a real defect.
-- **12.13, 12.14, 12.14b — UNRUN, and only a phone can run them.** Their machine halves are built and
-  red-proved. **The exact steps are written out in `docs/qa/phase-12-touch.md` § the device pass** —
-  four gestures, six glyphs, two hazard plates, one trip.
-
-## The traps this session paid for
+## The traps this close-out paid for
 
 1. 🔴 **A regex cannot tell a read from a discarded read.** Three mutations in a row defeated a
-   source-text gate over the audition template's concatenation: a newline separator (M115), a callback
-   returning `''` (M117), then a *real* read with `.slice(0, 0)` appended (M118), which keeps every
-   token the regex looks for. The concatenation now lives in `tools/gen/auditionDocument.mjs` where a
-   test runs it. **If you find yourself writing a third regex over the same code path, stop and make
-   it behavioural.**
-2. **`INPUT_GAME_OUT` was deleted from `touchControlsLayer.ts`** by owner decision — Phaser fires it
-   when `document.elementFromPoint` leaves the canvas, so a thumb rolling past the edge dropped the
-   jump the other hand was holding. Criterion 12.5's text was amended in the same commit. This is the
-   session's only production change.
-3. **A correction applied where the reviewer pointed is half a correction.** Rounds 22 and 23 both
+   source-text gate over the audition template's concatenation: a newline separator (M115), a
+   callback returning `''` (M117), then a *real* read with `.slice(0, 0)` appended (M118), which
+   keeps every token the regex looks for. The concatenation lives in `tools/gen/auditionDocument.mjs`
+   now, where a test runs it. **If you find yourself writing a third regex over the same code path,
+   stop and make it behavioural.**
+2. **A correction applied where the reviewer pointed is half a correction.** Rounds 22 and 23 both
    found a claim fixed in one passage and left standing in another. Grep the claim, not the line.
-4. **`chromium-gpu` is intermittently red on `main`** — three failures in five runs, a different
-   `phase-05..09` perf spec each time, unreachable from anything either session changed. Not this
-   phase's, not fixed here, written down so it is not re-diagnosed.
-5. **`chromium-prod` failed once and passed twice** on identical bytes, on the dev-seam spec. Recorded
-   as an unexplained flake, not as a green.
+3. **`INPUT_GAME_OUT` is gone from `touchControlsLayer.ts`** by owner decision — Phaser fires it when
+   `document.elementFromPoint` leaves the canvas, so a thumb rolling past the edge dropped the jump
+   the other hand was holding. Criterion 12.5's text was amended with it. Confirmed on the device.
+4. **`chromium-gpu` is intermittently red on `main`** — three failures in five runs during this
+   session, a different `phase-05..09` perf spec each time, unreachable from anything changed. Not
+   diagnosed, not this phase's. Green in the recorded run.
+5. **`chromium-prod` failed once and passed twice** on identical bytes, on the dev-seam spec.
+   Recorded as an unexplained flake, not as a green.
+6. **Deploying:** ⚠️ a bare `vercel deploy` targets **PRODUCTION** on this project, and the linked
+   `orgId` needs an explicit `--scope rois-projects-f9d9895d` or the deploy returns *Not authorized*.
+   Preview deployments sit behind Deployment Protection and redirect to a Vercel login page; the
+   phone has to be signed in once. Production is public.
 
-## What to do next
+## Debts carried forward, none blocking
 
-1. **The device pass.** Until it happens, 12.13 / 12.14 / 12.14b cannot move, and **`PLATE_ALPHA` 0.9
-   can still come back down** — that is the agreement the number was accepted under.
-2. ~~**Decide 12.23.**~~ **Decided 2026-09-03: accepted OPEN.** The owner accepted the phase with the
-   criterion open rather than lifting the cap for a round 24. It is recorded as a decision, not a
-   pass, in the QA verdict table and in PRD.md's phase row. **The phase is still not `done`** — three
-   criteria await the device pass in step 1.
-3. Merge `phase-12-closeout` **after the device pass**, not before — 12.14b can still send
-   `PLATE_ALPHA` back down from 0.9, and that would change `src/scenes/touchMarks.ts` on this branch.
-   A preview was deployed from the branch on 2026-09-03 for exactly that trip:
-   [steampunk-platformer-q68tkwhdn-rois-projects-f9d9895d.vercel.app](https://steampunk-platformer-q68tkwhdn-rois-projects-f9d9895d.vercel.app)
-   (`vercel deploy --target=preview --scope rois-projects-f9d9895d` — ⚠️ **a bare `vercel deploy`
-   targets PRODUCTION on this project**, and the linked `orgId` needs the explicit `--scope` or the
-   deploy returns *Not authorized*). 🔴 **Preview deployments are behind Vercel Deployment
-   Protection**: the URL redirects to a Vercel login page, so the phone must be signed in to the
-   Vercel account once, or the dashboard's Share link used. Production is public and unaffected.
+- **12.14 has no automated cover and is not getting any.** The per-stroke contrast gate was deleted
+  rather than failing, and rebuilding a statistic after seeing the art it would judge is the
+  post-data selection this phase kept catching. Owner decision. Its evidence is two `ui-ux-tester`
+  briefs and one hands-on pass.
+- **`PLATE_ALPHA` 0.9 stays**, and the measurement it overrode stays on the record with it: 22 %
+  residual where the rule said 60 %, past the 0.86 measured to erase what is underneath, with 175 of
+  878 standing positions carrying something behind a plate. A person looked and said it plays. That
+  is what the criterion asks for; it is not the bound being met.
+- **`brass-courier/fall` still judders** — a 74 px frame-to-frame height spread. Oldest open art debt.
+- **No committed script reproduces the 175/878 sampling.** It exists only as prose in
+  `touchMarks.ts:69-76`.
