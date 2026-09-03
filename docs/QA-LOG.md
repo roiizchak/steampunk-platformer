@@ -18,6 +18,12 @@ not `phase-05-combat/01-timings.md`. `tests/unit/file-size.test.ts` globs `docs/
 a subdirectory silently un-records everything in it. The phase's own file keeps its name and becomes
 the index — `docs-contract.test.ts` addresses it by that name.
 
+**500 lines is the ceiling, and it is mechanical from 2026-09-03** — `tests/unit/docs-size.test.ts`
+sweeps `docs/**/*.md` plus the root, and there is deliberately no `SIZE-EXEMPTION` path for prose:
+the citations live in this directory, so a document exempting itself would be citing its own text.
+Split instead. See § The 500-line documentation ceiling below for what the first pass found and the
+three ways a careless split goes red.
+
 | Phase | QA log | Phase doc | Codex reviews |
 |---|---|---|---|
 | 1 — Boot | [qa/phase-01-boot.md](qa/phase-01-boot.md) | [prd/phase-01-boot.md](prd/phase-01-boot.md) | [plan](reviews/phase-01-plan.md) · [impl](reviews/phase-01-impl.md) |
@@ -466,3 +472,16 @@ lands inside the slice the test takes. Inventing its position now would guess at
 **What this does not cover.** No test enforces a line ceiling on documents. Criterion 5.12's
 400-line rule covers source only. This split is the first time in eleven sessions that the document
 sizes mattered, so the ceiling stays a judgement call rather than a gate.
+
+---
+
+## Cross-phase — the 500-line documentation ceiling (2026-09-03)
+
+**Not a phase.** Ten documents were over 500 lines, the largest at 2126. All ten were split, and the
+ceiling is now a gate — `tests/unit/docs-size.test.ts` — which closes the open item the 2026-08-15
+entry above left behind. `docs/` grew by 220 lines, all of them new index tables and breadcrumbs;
+every other line is a verbatim move, proved per file by `comm -23` over the sorted before/after sets.
+
+**Full record, including the three ways a careless split goes red and both halves of the gate's red
+proof: [qa/session-docs-split.md](qa/session-docs-split.md).**
+
