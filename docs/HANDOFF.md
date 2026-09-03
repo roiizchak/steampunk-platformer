@@ -1480,4 +1480,10 @@ could not do. **Phase 12 is still not done**, and the reason is no longer bookke
    criteria await the device pass in step 1.
 3. Merge `phase-12-closeout` **after the device pass**, not before — 12.14b can still send
    `PLATE_ALPHA` back down from 0.9, and that would change `src/scenes/touchMarks.ts` on this branch.
-   A preview was deployed from the branch on 2026-09-03 for exactly that trip.
+   A preview was deployed from the branch on 2026-09-03 for exactly that trip:
+   [steampunk-platformer-q68tkwhdn-rois-projects-f9d9895d.vercel.app](https://steampunk-platformer-q68tkwhdn-rois-projects-f9d9895d.vercel.app)
+   (`vercel deploy --target=preview --scope rois-projects-f9d9895d` — ⚠️ **a bare `vercel deploy`
+   targets PRODUCTION on this project**, and the linked `orgId` needs the explicit `--scope` or the
+   deploy returns *Not authorized*). 🔴 **Preview deployments are behind Vercel Deployment
+   Protection**: the URL redirects to a Vercel login page, so the phone must be signed in to the
+   Vercel account once, or the dashboard's Share link used. Production is public and unaffected.
