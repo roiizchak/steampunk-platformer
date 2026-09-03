@@ -1474,6 +1474,10 @@ could not do. **Phase 12 is still not done**, and the reason is no longer bookke
 
 1. **The device pass.** Until it happens, 12.13 / 12.14 / 12.14b cannot move, and **`PLATE_ALPHA` 0.9
    can still come back down** — that is the agreement the number was accepted under.
-2. **Decide 12.23.** It is open at a cap you set. Either lift the cap for a round 24, or accept the
-   phase with the criterion recorded open. It should not be quietly marked done.
-3. Merge `phase-12-closeout` when the above are settled. Nothing in it is blocked on anything else.
+2. ~~**Decide 12.23.**~~ **Decided 2026-09-03: accepted OPEN.** The owner accepted the phase with the
+   criterion open rather than lifting the cap for a round 24. It is recorded as a decision, not a
+   pass, in the QA verdict table and in PRD.md's phase row. **The phase is still not `done`** — three
+   criteria await the device pass in step 1.
+3. Merge `phase-12-closeout` **after the device pass**, not before — 12.14b can still send
+   `PLATE_ALPHA` back down from 0.9, and that would change `src/scenes/touchMarks.ts` on this branch.
+   A preview was deployed from the branch on 2026-09-03 for exactly that trip.
