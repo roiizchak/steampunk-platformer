@@ -1017,6 +1017,36 @@ session changed. It is green in the run recorded above. That instability is not 
 not resolved by this phase; it is written down so the next session does not spend an hour on it.
 
 
+### Merged and deployed, 2026-09-03
+
+`phase-12-closeout` merged to `main` at **`e54680b`**, pushed, and deployed to production with
+`vercel deploy --prod --scope rois-projects-f9d9895d` — deployment
+`steampunk-platformer-648fttl40`, live at
+[steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app).
+
+Verified against the live edge rather than assumed:
+
+| checked | result |
+|---|---|
+| `/` | 200, 8 255 B, `<title>Steampunk Platformer</title>`, CSP header intact |
+| `touch-action: none` / `overscroll-behavior: none` | both present in the served HTML |
+| viewport meta | `width=device-width, initial-scale=1.0` — **no `user-scalable`, no `maximum-scale`**, which is the deliberate choice 12.13 asserts |
+| `bed-music.m4a` / `.ogg` | 200, 1 948 803 B `audio/mp4` and 2 084 163 B `audio/ogg` — both alternates served, which is what keeps iOS booting |
+| `level-01.tmj` / `level-04.tmj` | 200, 33 161 B and 55 914 B |
+| `touch-jump.png` | 200, 51 833 B |
+
+⚠️ **The one-time deploy trap, twice over.** A bare `vercel deploy` targets **PRODUCTION** on this
+project (`docs/qa/phase-10-ship.md` § the near-miss), and the linked `orgId` needs an explicit
+`--scope rois-projects-f9d9895d` or the deploy returns *Not authorized* — the second half is new and
+cost one failed attempt. **Preview deployments sit behind Deployment Protection** and redirect to a
+Vercel login page, which is why the device pass needed the phone signed in once; the production alias
+is public.
+
+🔴 **A `user-scalable` grep over the served HTML returns a hit and it is NOT a defect** — the
+rationale comment names the attribute in prose while the meta tag does not carry it. The same
+nearby-text shape M105 found in `verify-dist`, one artifact over: **read the meta tag, not the file.**
+
+
 ### The device pass the owner still owes — 12.13, 12.14 and 12.14b in one trip
 
 **Written 2026-09-02.** Three criteria need the same phone and the same session; run them together
