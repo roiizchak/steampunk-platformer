@@ -227,6 +227,8 @@ test.describe('12.13 the browser does not claim the gesture', () => {
     const rect = await canvasRect(page);
     const jump = centreOf(rect, await drawnZone(page, UI, 'jump'));
     const before = await viewportState(page);
+    // Standing, before anything is tapped. y decreases upward.
+    const groundY = (await readPlayer(page)).y;
 
     // Both taps in ONE round trip, so the gap between them is the page's own timing rather than two
     // CDP latencies — a 200 ms round trip is outside every double-tap window there is, and a test
@@ -249,7 +251,14 @@ test.describe('12.13 the browser does not claim the gesture', () => {
     );
     await waitTicks(page, 20);
 
+    // 🔴 `taps` proves only that the driver's own JS ran. What proves the GAME saw the gesture
+    // is the player leaving the ground — a browser that swallowed the pair as a zoom gesture would
+    // leave `taps` exactly as it is and the player exactly where it was.
     expect(taps, 'the double tap never reached the page').toEqual(['first', 'second']);
+    expect(
+      (await readPlayer(page)).y,
+      'neither tap reached the sim — the browser took the pair as a zoom gesture',
+    ).toBeLessThan(groundY);
     const after = await viewportState(page);
     expect(after.scale, 'the double tap zoomed the page').toBeCloseTo(before.scale, 5);
     expect(after.innerWidth, 'the double tap changed the layout viewport').toBe(before.innerWidth);
