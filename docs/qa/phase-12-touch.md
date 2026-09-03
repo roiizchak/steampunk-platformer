@@ -977,6 +977,59 @@ gated, reverted, and the revert verified. The per-row outcomes are tabulated in
 [`docs/prd/phase-12-touch.md` § 6](../prd/phase-12-touch.md#6-qa-gate); what follows is what the run
 cost and what it found.
 
+### The device pass the owner still owes — 12.13, 12.14 and 12.14b in one trip
+
+**Written 2026-09-02.** Three criteria need the same phone and the same session; run them together
+or the trip is made three times. Production is
+[steampunk-platformer-jet.vercel.app](https://steampunk-platformer-jet.vercel.app). **Landscape, in
+fullscreen** (tap the wrapper once to enter it).
+
+⚠️ **Say pass or fail in your own words for each.** *"Ran"* is not *"passed"* — reading one as the
+other is the failure this log's § 12.24 was written to prevent, and it is why 12.13 and 12.24 were
+not closed by the preview rounds that did find real defects.
+
+#### 12.13 — four gestures, on level-01
+
+| # | do this | it passes if |
+|---|---|---|
+| 1 | Hold **left**. Without lifting, slide the thumb off the button onto bare canvas, then back onto it | the player keeps walking the whole time, and the page never pans or bounces |
+| 2 | Hold **jump** with one thumb. With the other, press **right** and drag it off the **physical edge** of the screen, then lift it out there | **the held jump does not drop.** This is the one with a real defect behind it — it was fixed on 2026-09-02 and this is its confirmation |
+| 3 | Put two fingers on the play area and **pinch**, out and in, a few times. Repeat over the control cluster | nothing zooms, nothing scrolls, the game keeps running |
+| 4 | **Double-tap** the jump plate, fast | two jumps, no zoom, no grey flash |
+
+⚠️ Check 2 is also the only test of `TOUCH_EDGE_PX` = **22.2 CSS px**, which is inside the iOS
+home-indicator and Android gesture strips and has never been on a device. If the OS claims that drag
+before the page sees it, that is the finding.
+
+#### 12.14 — do the six glyphs say their actions
+
+Look at the six controls at their real size and say what each one is **without being told**:
+left arrow, right arrow, up arrow (jump), spanner (attack), boot (walk), four squares (pause — it
+opens the level menu). The two to look hardest at are **pause** and **walk**: an earlier review found
+neither said its action, the art was re-shot for exactly that, and this is the first time a person
+looks at the result on a phone.
+
+Both `ui-ux-tester` briefs already ran against these bytes at 44–48 CSS px on Chromium **and**
+WebKit, resting and pressed — see § 12.14. What they could not do is your hardware, your screen's
+DPR, and your light.
+
+#### 12.14b — the hazard-visibility pass `PLATE_ALPHA` 0.9 owes
+
+`PLATE_ALPHA` is 0.9. That **abandons** the occlusion bound rather than weakening it: 0.10 residual
+against the measured-readable 0.45 is **22 %** where the rule said 60 %, and 0.9 is past the **0.86
+measured to erase the content underneath**. You chose it; this is the check that replaces the bound.
+
+| # | do this | it passes if |
+|---|---|---|
+| 1 | **level-01.** Walk to the raised block on the right where the `brass-sentry` stands — the only one in the level — and stand where it is **behind the top-right pause plate**. It shoots from there across nine consecutive standing positions | you can see it wind up and fire **in time to react** |
+| 2 | **level-04.** Walk to the far right end. The goal sits **under the bottom-right jump plate** for nine standing positions | you can see the goal you are walking toward |
+
+🔴 **If either is unplayable, 0.9 is wrong and the number comes back down.** That is the whole
+agreement: the measurement is unchanged and stays in `touchMarks.ts:69-90`; what changed is that a
+person decides instead of a bound.
+
+---
+
 ### 12.14 — the two briefs, and the four findings that were closed by measuring
 
 **2026-09-02.** `voltagent-qa-sec:ui-ux-tester`, two briefs *(A7)*, brief 1's findings withheld from

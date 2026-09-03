@@ -139,21 +139,30 @@ entire point: it cannot inherit the assumption that made the mistake. This is th
 dedicated QA pass once returned 8/8 PASS on a diff an adversarial review then found three real
 defects in.
 
-### How to run it: `/codex:rescue`
+### How to run it: the `codex` CLI, driven by `claudex-loop:codex-review`
 
-**Both reviews are run through the `codex:rescue` skill, never by calling the `codex` binary
-directly.** The skill routes to the `codex:codex-rescue` subagent, which is the supported path and
-the one this project has actually exercised — the Gate 7 documentation review
-([reviews/gate-07-docs.md](reviews/gate-07-docs.md)) was produced this way.
+🔴 **This section said `/codex:rescue`, *"never by calling the `codex` binary directly"*, and that
+was wrong from 2026-08-27 onward — corrected 2026-09-02.** The `openai-codex` plugin is
+**orphaned** on this machine (`~/.claude/plugins/cache/openai-codex/codex/1.0.6/.orphaned_at`,
+2026-08-27T14:36:26Z); `/codex:rescue` is not in the available-skills list and cannot be invoked.
+Every Phase 12 review was in fact run through the CLI, and
+[reviews/phase-12-touch-plan.md](reviews/phase-12-touch-plan.md) records the exact invocation —
+so the document has been describing a path nobody could take while the real one went unwritten.
 
-**Flags that matter:**
+**The supported path is `claudex-loop:codex-review`**, which drives the installed `codex` CLI
+(`~/AppData/Local/Programs/OpenAI/Codex/bin/codex`, `codex-cli 0.150.1`). Owner instruction,
+2026-09-02.
 
-| Flag | Use |
+**What actually matters:**
+
+| | |
 |---|---|
-| `--wait` | run in the foreground. **Always use this for a review** — the gate blocks on the result |
-| `--fresh` | start a new Codex thread. **Use for review 1 of every phase**, so the reviewer carries no assumption from the last one |
-| `--resume` | continue the existing thread. Use for review 2, which benefits from having seen the plan |
-| `--model`, `--effort` | leave unset unless there is a reason |
+| round 1 | `codex exec -s read-only --json … < /dev/null` — creates the thread; capture its `thread_id` |
+| every later round | `codex exec resume "$THREAD_ID" -c sandbox_mode="read-only" --json …` |
+| 🔴 `< /dev/null` | **mandatory.** `codex exec` reads stdin in addition to the prompt argument, so under a non-interactive driver it blocks forever |
+| 🔴 `-c sandbox_mode=` on resume | **mandatory.** `resume` REJECTS `-s` (*"unexpected argument"*), and `~/.codex/config.toml` may default `sandbox_mode` to `danger-full-access` — which would let Codex WRITE files mid-review |
+| model | from `~/.codex/config.toml` (`gpt-5.6-sol`, `model_reasoning_effort = "high"`). **Do not pin `-m`**: pinning a `gpt-5.x-codex` variant fails on ChatGPT-account auth |
+| timeout | generous. Round 1 of the Phase 12 plan review was killed by a 15-minute ceiling with **zero output** and the ceiling was raised to 45. **A run that produces no verdict file and no `thread.started` line has FAILED, not converged.** |
 
 ⚠️ **Operational note — root-caused in Phase 1. Read this before running either review.**
 
@@ -185,7 +194,7 @@ silence as a pass.
 Runs after vault-in and skill invocation, **before the first line of implementation.**
 
 ```
-/codex:rescue --wait --fresh Review the plan in docs/prd/phase-NN-<name>.md against this
+Review the plan in docs/prd/phase-NN-<name>.md against this
 repository. Read first: docs/PRD.md (global constraints), docs/FAL-MODELS.md (if this phase
 generates), docs/lessons/phase-NN-<name>.md (this phase's vault items) together with
 docs/LESSONS-APPLIED.md (the root rule and §A/§B/§C, which bind every phase), docs/qa/ (one log
@@ -213,7 +222,7 @@ Runs on the phase's diff, after the phase's own tests are green and before it is
 a numbered criterion in every phase's QA gate and carries the same weight as a failing test.
 
 ```
-/codex:rescue --wait --resume Review the diff of this phase against docs/prd/phase-NN-<name>.md
+Review the diff of this phase against docs/prd/phase-NN-<name>.md
 and docs/PRD.md. Compare against main.
 
 Check specifically:
@@ -231,7 +240,7 @@ what you could not check.
 
 ### Recording the result
 
-`/codex:rescue` returns its report into the conversation; **it does not write the file.** Save the
+`codex exec` returns its report on stdout (and into `-o` if given); **nothing writes the file for you.** Save the
 report verbatim to `docs/reviews/phase-NN-plan.md` or `phase-NN-impl.md`, then append the triage —
 one line per finding, **applied** or **rejected with a reason**. The Gate 7 review file is the
 template.
@@ -274,7 +283,7 @@ agent type. This section makes the column executable.
 | `voltagent-qa-sec:ui-ux-tester` | spawn that agent — UI behaviour and layout. Phase 6 onward |
 | `voltagent-qa-sec:accessibility-tester` | spawn that agent — WCAG claims only. Phase 6's contrast criterion |
 | `voltagent-qa-sec:security-auditor` | spawn that agent, with the `security-review` skill — Phase 10's CSP and secret-scan criteria |
-| `codex` | `/codex:rescue`, per [§ The Codex review protocol](#the-codex-review-protocol) above |
+| `codex` | the `codex` CLI via `claudex-loop:codex-review`, per [§ The Codex review protocol](#the-codex-review-protocol) above. ⚠️ **Not `/codex:rescue`** — that plugin is orphaned on this machine |
 | `e2e` | **not an agent.** `npm run test:e2e`; specs authored with `e2e-playwright-testing` |
 | `play` | **not an agent.** Human hands-on, driven and screenshotted with `playwright-cli` |
 | `—` | **no owner.** Command output, a `wc -l` sweep, or a doc review |
