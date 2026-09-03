@@ -1453,8 +1453,7 @@ could not do. **Phase 12 is still not done**, and the reason is no longer bookke
 ## The traps this session paid for
 
 1. 🔴 **A regex cannot tell a read from a discarded read.** Three mutations in a row defeated a
-   source-text gate over the audition template's concatenation: `.join('
-')` (M115), a callback
+   source-text gate over the audition template's concatenation: a newline separator (M115), a callback
    returning `''` (M117), then a *real* read with `.slice(0, 0)` appended (M118), which keeps every
    token the regex looks for. The concatenation now lives in `tools/gen/auditionDocument.mjs` where a
    test runs it. **If you find yourself writing a third regex over the same code path, stop and make
