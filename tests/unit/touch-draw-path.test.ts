@@ -220,7 +220,15 @@ describe('TouchControlsLayer lifecycle', () => {
     );
     // On the GAME's emitter, which Phaser will not tear down for us.
     expect(scene.gameEvents).toEqual(expect.arrayContaining([GAME_BLUR, GAME_HIDDEN]));
-    expect(scene.sceneEvents).toContain(INPUT_GAME_OUT);
+    // 🔴 **And GAME_OUT must NOT be there.** It was, until 2026-09-02, and it was the defect
+    // criterion 12.13 names: Phaser fires it whenever `document.elementFromPoint` leaves the canvas,
+    // so a thumb a few millimetres past the edge of a pillarboxed canvas dropped every contact
+    // including the other hand's. An absence assertion, because a re-added subscription is a
+    // one-line regression that nothing else in this file could see. Reproduction watched red in
+    // `tests/e2e/phase-12-gestures.spec.ts` 12.13b before the line was removed.
+    expect(scene.sceneEvents, 'GAME_OUT is subscribed again — a finger past the canvas edge now drops every contact').not.toContain(
+      INPUT_GAME_OUT,
+    );
     expect(scene.zones[0].events).toContain(GAMEOBJECT_POINTER_DOWN);
   });
 
@@ -239,8 +247,12 @@ describe('TouchControlsLayer lifecycle', () => {
     ['the bound Game scene shutting down', SCENE_SHUTDOWN, 'gameScene'],
     ['the bound Game scene being destroyed', SCENE_DESTROY, 'gameScene'],
     ['the tab being hidden', GAME_HIDDEN, 'game'],
-    ['the pointer leaving the canvas', INPUT_GAME_OUT, 'sceneInput'],
   ] as const;
+
+  // ⚠️ **`['the pointer leaving the canvas', INPUT_GAME_OUT, 'sceneInput']` was the seventh row
+  // here, and it is gone with the subscription** — owner decision 2026-09-02, criterion 12.13.
+  // It is not replaced by a weaker case: a finger that leaves the canvas still delivers `touchend`,
+  // and the POINTER_UP / POINTER_UP_OUTSIDE cases below are what now prove the release is caught.
 
   for (const [what, event, emitter] of LOSS_PATHS) {
     it(`drops a held contact on ${what}`, () => {

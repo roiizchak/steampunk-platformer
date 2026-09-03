@@ -10,6 +10,7 @@ import {
   contactUp,
   drawnZone,
   drawnZones,
+  toClient,
   bootToTouchPlay,
   installTouchDriver,
   liftEveryContact,
@@ -243,15 +244,53 @@ test.describe('the controls stop being touchable when they must not be touched',
       expect(z.interactive, `${z.name} is still touchable over the level menu`).toBe(false);
     }
 
-    // And a tap at each control's old coordinates changes nothing about where we are.
+    // And a tap at each control's old coordinates changes nothing — EXCEPT where the level menu's
+    // own live route is underneath it, which is the menu working rather than a retired control.
+    //
+    // \U0001f534 **This block asserted `sceneKey === 'LevelSelect'` after tapping all six, and it was
+    // INTERMITTENTLY RED on `main` \u2014 measured 2026-09-02, three failures in three full-project
+    // runs of the baseline tree.** The cause is geometry, not flake: `walk` sits at game
+    // (1520, 208) and `LevelSelect`'s `row-0` spans x 364.8\u20131555.2, y 91\u2013251, so that one
+    // coordinate is **inside a live level button**. Tapping it starts level 1, correctly. Whether
+    // the run saw it depended on whether the row had become interactive by the time the tap
+    // landed, which is what made a deterministic overlap look like a flake.
+    //
+    // The criterion is *\"controls hidden and `disableInteractive()`d\"*, and the assertion above
+    // already proves that per control. What this loop must add is that the tap produced no
+    // **control** effect \u2014 so a route change is a defect only at a coordinate no live route
+    // covers. Asserting `sceneKey` globally conflated \"the control is dead\" with \"nothing else
+    // lives here\", and the second is not this criterion's claim.
+    const rows = await drawnZones(page, 'LevelSelect');
+    const covered = (spot: { at: { x: number; y: number } }): boolean =>
+      rows.some((r) => {
+        const tl = toClient(rect, r.x, r.y);
+        const br = toClient(rect, r.x + r.w, r.y + r.h);
+        return (
+          r.interactive &&
+          spot.at.x >= tl.x &&
+          spot.at.x <= br.x &&
+          spot.at.y >= tl.y &&
+          spot.at.y <= br.y
+        );
+      });
+
+    // \u26a0\ufe0f At least one coordinate must NOT be covered, or the loop below asserts nothing at
+    // all \u2014 a partition that excludes everything is the vacuous pass this file has paid for twice.
+    const bare = spots.filter((spot) => !covered(spot));
+    expect(
+      bare.map((s) => s.name),
+      'every retired control now sits under a live level-menu row \u2014 this case can no longer fail',
+    ).not.toEqual([]);
+
     for (const [i, spot] of spots.entries()) {
       await contactDown(page, 10 + i, spot.at.x, spot.at.y);
       await contactUp(page, 10 + i);
+      if (covered(spot)) continue;
+      expect(
+        await page.evaluate(() => window.__game?.sceneKey),
+        `a tap at the retired ${spot.name} control \u2014 which no live level-menu row covers \u2014 moved the game somewhere`,
+      ).toBe('LevelSelect');
     }
-    expect(
-      await page.evaluate(() => window.__game?.sceneKey),
-      'a tap on a retired control moved the game somewhere',
-    ).toBe('LevelSelect');
   });
 
 });

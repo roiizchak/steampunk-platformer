@@ -1,0 +1,169 @@
+<script>
+  const SRC = __SRC_MAP__;
+  const GAIN = __GAIN_MAP__;
+  const STACK = __STACK__;
+
+  let ctx = null;
+  let master = null;
+  const buffers = new Map();
+
+  /**
+   * Create the context and resume it, SYNCHRONOUSLY at the top of a gesture handler.
+   *
+   * This is the bug that made the first version silent. `new AudioContext()` was reached only after
+   * `await fetch(...)` and `await arrayBuffer()`, by which point the click's user-gesture window had
+   * expired - so the context was born `suspended` and nothing ever resumed it. No error, no console
+   * warning, just no sound: the same failure shape as the silent audio decode this phase's boot gate
+   * was added to catch.
+   */
+  function unlock() {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!master) {
+      master = ctx.createGain();
+      master.gain.value = Number(document.getElementById('boost').value);
+      master.connect(ctx.destination);
+    }
+    const done = ctx.state === 'running' ? Promise.resolve() : ctx.resume();
+    return done.then(report, report);
+  }
+
+  function report() {
+    const el = document.getElementById('state');
+    const state = ctx ? ctx.state : 'not started';
+    el.className = 'state ' + (state === 'running' ? 'live' : 'dead');
+    el.innerHTML = 'audio engine: <strong>' + state + '</strong>' + (ctx ? ' &middot; ' + ctx.sampleRate + ' Hz' : '');
+    document.getElementById('fallbackNote').hidden = state === 'running';
+  }
+
+  document.getElementById('enable').addEventListener('click', unlock);
+  document.getElementById('boost').addEventListener('input', function (e) {
+    const v = Number(e.target.value);
+    document.getElementById('boostv').textContent = v.toFixed(1) + '\u00d7';
+    if (master) master.gain.value = v;
+  });
+
+  /**
+   * Base64 -> ArrayBuffer, WITHOUT fetch().
+   *
+   * This is the second silent failure on this page. The cues were loaded with
+   * `fetch(dataUri).arrayBuffer()`, and a `data:` URL counts as `connect-src` under the artifact's
+   * content-security policy - which blocks it. The beds kept working because an `<audio src="data:">`
+   * is `media-src` instead. The fetch rejected, `playCue` died on an unhandled rejection, and the
+   * engine still reported `running`: audible nothing, visible nothing.
+   *
+   * `atob` needs no network permission at all, so there is nothing left to block.
+   */
+  function bytesOf(dataUri) {
+    const binary = atob(dataUri.slice(dataUri.indexOf(',') + 1));
+    const out = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+    return out.buffer;
+  }
+
+  async function load(key) {
+    if (buffers.has(key)) return buffers.get(key);
+    const buf = await ctx.decodeAudioData(bytesOf(SRC[key]));
+    buffers.set(key, buf);
+    return buf;
+  }
+
+  /** Surface a failure instead of swallowing it - the whole point of this phase. */
+  function fail(what, err) {
+    const el = document.getElementById('state');
+    el.className = 'state dead';
+    el.innerHTML = 'audio engine: <strong>' + what + ' failed</strong> &middot; ' + String(err && err.message ? err.message : err);
+    document.getElementById('fallbackNote').hidden = false;
+  }
+
+  /** Play one cue at its shipped gain, driving the row meter from a real analyser. */
+  async function playCue(key, meterEl) {
+    await unlock();
+    const buf = await load(key);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gain = ctx.createGain();
+    gain.gain.value = GAIN[key] || 1;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    src.connect(gain).connect(analyser).connect(master);
+    src.start();
+
+    if (meterEl) {
+      // The meter is the analyser's own reading, not an animation timed to the clip length - a bar
+      // that fills on a schedule would look identical for a cue that failed to decode.
+      const data = new Float32Array(analyser.fftSize);
+      let running = true;
+      const tick = function () {
+        analyser.getFloatTimeDomainData(data);
+        let peak = 0;
+        for (const v of data) peak = Math.max(peak, Math.abs(v));
+        meterEl.style.boxShadow = 'inset ' + (peak * 150).toFixed(1) + 'px 0 0 var(--verdigris)';
+        if (running) requestAnimationFrame(tick);
+      };
+      src.onended = function () {
+        running = false;
+        meterEl.style.boxShadow = 'none';
+      };
+      requestAnimationFrame(tick);
+    }
+    return src;
+  }
+
+  document.getElementById('cues').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-play]');
+    if (!btn) return;
+    const row = btn.closest('tr');
+    playCue(btn.dataset.play, row.querySelector('.meter span')).catch((err) => fail(btn.dataset.play, err));
+  });
+
+  document.getElementById('fire').addEventListener('click', async () => {
+    try {
+    await unlock();
+    const peakEl = document.getElementById('peak');
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.connect(master);
+
+    // Decode everything FIRST, then start them together - awaiting inside the loop would stagger the
+    // starts by one decode each and measure a mix the game never produces.
+    const bufs = await Promise.all(STACK.map(function (key) { return load(key); }));
+    STACK.forEach(function (key, i) {
+      const src = ctx.createBufferSource();
+      src.buffer = bufs[i];
+      const gain = ctx.createGain();
+      gain.gain.value = GAIN[key] || 1;
+      src.connect(gain).connect(analyser);
+      src.start();
+    });
+
+    const data = new Float32Array(analyser.fftSize);
+    let peak = 0;
+    const started = performance.now();
+    const tick = () => {
+      analyser.getFloatTimeDomainData(data);
+      for (const s of data) peak = Math.max(peak, Math.abs(s));
+      peakEl.textContent = peak > 0 ? (20 * Math.log10(peak)).toFixed(2) : '—';
+      if (performance.now() - started < 2500) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    } catch (err) {
+      fail('worst-case stack', err);
+    }
+  });
+
+  for (const btn of document.querySelectorAll('[data-seam]')) {
+    btn.addEventListener('click', () => {
+      const el = document.querySelector(`[data-bed="${btn.dataset.seam}"]`);
+      el.volume = Math.min(1, (GAIN[btn.dataset.seam] ?? 1) * 6 * Number(document.getElementById('boost').value));
+      el.currentTime = Math.max(0, (el.duration || 120) - 4);
+      el.play();
+    });
+  }
+  report();
+  for (const btn of document.querySelectorAll('[data-stop]')) {
+    btn.addEventListener('click', () => {
+      const el = document.querySelector(`[data-bed="${btn.dataset.stop}"]`);
+      el.pause();
+    });
+  }
+</script>

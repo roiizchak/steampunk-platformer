@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { buildBaseDocument } from './auditionDocument.mjs';
 
 const root = join(fileURLToPath(new URL('../../', import.meta.url)), '/');
 const catalog = JSON.parse(readFileSync(join(root, 'public/assets/index.json'), 'utf8'));
@@ -63,7 +64,21 @@ const bedRows = beds
 const srcMap = Object.fromEntries(cues.map((r) => [r.key, dataUri(r.url)]));
 const gainMap = Object.fromEntries(catalog.audio.map((r) => [r.key, r.gain]));
 
-const html = readFileSync(join(root, 'tools/gen/audition-template.html'), 'utf8')
+// 🔴 **Three parts, concatenated, and the split is the 400-line rule.** The template was one
+// 442-line file and `tests/unit/file-size.test.ts` could not see it: its glob covered
+// `tools/**/*.mjs` and no HTML at all, so criterion 12.21 read PASS over a live 442-line tool
+// input. Codex round 21, finding 7. The glob covers `tools/**/*.html` now, and this file is split
+// at its own seams — `</style>` and `<script>` — rather than exempted, because raising the size
+// ratchet off zero opens a documented hole and a template has real seams to split on.
+//
+// ⚠️ **Order and joining are load-bearing**, and they live in `auditionDocument.mjs` so a test can
+// RUN them. Two source-text gates over this line were defeated in turn — a callback returning `''`
+// (round 22, finding 3), then a real read with `.slice(0, 0)` appended (round 23, finding 2) — and
+// a regex cannot tell a read from a discarded read. The split reproduced the pre-split file exactly
+// at the time it was made: **17 843 UTF-8 bytes**, which is 17 839 JavaScript characters, two em
+// dashes apart. That was a one-time check and nothing re-asserts it; what is gated is the join, the
+// order and the read.
+const html = buildBaseDocument()
   .replace('__CUE_ROWS__', cueRows)
   .replace('__BED_ROWS__', bedRows)
   .replace('__SRC_MAP__', JSON.stringify(srcMap))
