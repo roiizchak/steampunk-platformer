@@ -4,6 +4,52 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Steampunk Platformer</title>
+
+    <!--
+      The tab icon and the link-preview card. Added 2026-09-03 at the owner's request; the page had
+      NEITHER for thirteen phases, so every tab showed the browser's default globe and every shared
+      link was a bare URL with no title, art or text.
+
+      The icon is the game's own collectible gear (`public/assets/objects/gear.png`, 72x72),
+      downscaled by `tools/gen/build-favicon.mjs` -- no new art was generated for it. The cover is a
+      real frame of level-01 captured from the PRODUCTION build, and that is not a detail: the same
+      frame off the dev build carries the two dev-only scene shortcuts in its controls banner, which
+      is precisely the prose `verify-dist` refuses to ship. A dev-build cover would have put them in
+      every link preview instead of the bundle -- and this comment named them on its first draft, so
+      the gate red on the build and is the reason the sentence reads the way it does.
+
+      `og:url` is absolute because it has to be -- a scraper resolves nothing relative to a page it
+      has not parsed. It names the production alias, so a preview deployment shares a card pointing
+      at production. That is deliberate: previews sit behind Vercel Deployment Protection and their
+      card would be a login page.
+    -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <meta
+      name="description"
+      content="A short Victorian steampunk platformer. Five levels of brass, steam and gears — playable in the browser, on desktop or phone."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Steampunk Platformer" />
+    <meta property="og:title" content="Steampunk Platformer" />
+    <meta
+      property="og:description"
+      content="A short Victorian steampunk platformer. Five levels of brass, steam and gears — playable in the browser, on desktop or phone."
+    />
+    <meta property="og:url" content="https://steampunk-platformer-jet.vercel.app/" />
+    <meta property="og:image" content="https://steampunk-platformer-jet.vercel.app/og-cover.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The brass courier standing on a girder before a soot-black Victorian factory skyline." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Steampunk Platformer" />
+    <meta
+      name="twitter:description"
+      content="A short Victorian steampunk platformer. Five levels of brass, steam and gears — playable in the browser, on desktop or phone."
+    />
+    <meta name="twitter:image" content="https://steampunk-platformer-jet.vercel.app/og-cover.png" />
     <style>
       html, body {
         margin: 0;

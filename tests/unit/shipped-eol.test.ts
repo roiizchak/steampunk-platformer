@@ -53,10 +53,12 @@ import { readBytes } from '../../tools/gen/png.mjs';
  * shrinks; a denylist over one fails loudly the day a new binary type arrives, which is the
  * direction an error should point.
  */
-// `.m4a` and friends joined on 2026-09-02 with the Safari audio alternates. A binary the walk
-// does not know about is reported as a text file with no CRLF, which is true and useless.
+// `.m4a` and friends joined on 2026-09-02 with the Safari audio alternates, `.ico` on 2026-09-03
+// with the tab icon. A binary the walk does not know about is reported as a text file with no CRLF,
+// which is true and useless — and `favicon.ico` is the case that proves the denylist was the right
+// shape: it arrived, the gate went red the same hour, and the failure named the file.
 const BINARY_EXTENSIONS = [
-  '.png', '.jpg', '.jpeg', '.gif', '.webp',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico',
   '.wav', '.ogg', '.oga', '.mp3', '.mp4', '.m4a', '.aac', '.caf', '.webm',
 ];
 
