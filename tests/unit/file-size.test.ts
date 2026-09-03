@@ -50,36 +50,12 @@ const QA_LOGS = import.meta.glob('../../docs/qa/*.md', {
 
 const LIMIT = 400;
 
-/**
- * A glob key -> the repo-relative path a QA log would cite.
- *
- * 🔴 **This used to be `globKey.replace(/^\.\.\/\.\.\//, '')`, and that was wrong for two of the
- * three globs.** Vite normalises a key against the importing file's own directory, which is
- * `tests/unit/`. `../../src/...` survives as `src/...` — but everything under `tests/` comes back as
- * `../e2e/phase-05-perf.spec.ts` or `./enemy-ai.test.ts`, neither of which starts with `../../`, so
- * `repoPath` returned a string no log could ever contain. **The path half of the acceptance check
- * was dead for every test file**, leaving only the basename fallback, which is why a 648-line file
- * was "recorded" by an unrelated citation. Found by the criterion 5.12 gate owner.
- *
- * Resolved properly against the base directory instead of string-stripped, so a fourth glob cannot
- * quietly fall into the same hole.
- */
-const BASE_DIR = 'tests/unit';
+import { lineCount, repoPath } from './fileLines';
 
-function repoPath(globKey: string): string {
-  const parts = BASE_DIR.split('/');
-  for (const segment of globKey.split('/')) {
-    if (segment === '.' || segment === '') continue;
-    if (segment === '..') parts.pop();
-    else parts.push(segment);
-  }
-  return parts.join('/');
-}
-
-function lineCount(text: string): number {
-  // Trailing newline does not make a final empty line, matching `wc -l`'s count of terminators.
-  return text.endsWith('\n') ? text.split('\n').length - 1 : text.split('\n').length;
-}
+// `repoPath` and `lineCount` moved to `fileLines.ts` on 2026-09-03 so `docs-size.test.ts` can
+// share them, and so this file — which was sitting at 399 of its own 400-line ceiling — had room
+// to be touched. The docstring recording why `repoPath` resolves rather than string-strips moved
+// with it, whole.
 
 /**
  * An ACTIVE citation is one QA-log line carrying all three of: the marker `SIZE-EXEMPTION:`, the

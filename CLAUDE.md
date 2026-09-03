@@ -188,6 +188,12 @@ Full rationale: [PRD.md § The `window.__game` surface](docs/PRD.md#the-windowga
   seconds, never a `deltaTime` multiply inside the sim.
 - **No source file over 400 lines** without a written justification in the phase's QA log under
   `docs/qa/`. Prefer splitting.
+- **No documentation file over 500 lines**, and here there is **no** justification escape hatch —
+  the exemption citations live in `docs/qa/*.md`, so a document exempting itself proves nothing.
+  Split it into **flat siblings** in the same directory (`<slug>-NN-<topic>.md`), leave an index
+  table in the parent and a breadcrumb in the child. Gated by `tests/unit/docs-size.test.ts`; the
+  three things a split must not break are in that file's header. Added 2026-09-03, when ten files
+  were over — the largest at 2126 lines.
 - **Grey-box before art.** No fal spend on a feature whose mechanics are not already playable.
 - **A phase with a failing or unrun criterion is reported failing.** Never as done.
 - **A QA gate's Owner column is an instruction, not a label.** A criterion owned by a
@@ -274,13 +280,13 @@ Each rule below cost a real false green or false red. **The evidence for every o
 
 | Document | What it is | When to read it |
 |---|---|---|
-| [docs/HANDOFF.md](docs/HANDOFF.md) · [docs/handoff/](docs/handoff/) | **Where the last session stopped**, what is blocked, and the traps not visible in the code. HANDOFF.md is the index and the live sessions; `docs/handoff/` holds the superseded ones. **The § numbers did not change when it was split** — a citation to "HANDOFF.md §9" still lands on the index. | **First, when resuming a phase mid-flight.** |
+| [docs/HANDOFF.md](docs/HANDOFF.md) · [docs/handoff/](docs/handoff/) | **Where the last session stopped**, what is blocked, and the traps not visible in the code. HANDOFF.md is the index and the live sessions; `docs/handoff/` holds the superseded ones. **The § numbers did not change when it was split** — a citation to "HANDOFF.md §9" still lands on the index, and the § table at the top of HANDOFF.md says which file each one moved to. Split twice: 2026-08-15 at 1604 lines, again 2026-09-03 at 1477. | **First, when resuming a phase mid-flight.** |
 | [docs/PRD.md](docs/PRD.md) | **The spine.** Phase table, Global Constraints, file structure, the QA agent and Codex review protocols. | Once per session, first. |
 | `docs/prd/phase-NN-*.md` | One document per phase: scope, required skills, QA gate. | **Only the phase being executed.** |
 | [docs/ENGINE-NOTES.md](docs/ENGINE-NOTES.md) | Phaser 4.2.1 behaviour already paid for in debugging time, by subsystem. | Before touching that subsystem. |
 | [docs/TESTING-RULES.md](docs/TESTING-RULES.md) | The evidence behind every §5 rule. | Before writing a gate — or before arguing with §5. |
 | [docs/LESSONS-APPLIED.md](docs/LESSONS-APPLIED.md) · [docs/lessons/](docs/lessons/) | 133 vault notes distilled into hard requirements, cited by ID (1.3, A7, C11…) throughout the code and docs. LESSONS-APPLIED.md is the root rule, §A/§B/§C and the index; `docs/lessons/phase-NN-*.md` is one vault-in checklist per phase. | **The phase file when executing that phase**; the hub when a citation is unfamiliar. |
-| [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) · [docs/evidence/](docs/evidence/) | Every decision, measurement and deliberate non-fix, plus the captured evidence. QA-LOG.md is the index and cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. A long log splits into **flat siblings** (`phase-05-combat-NN-*.md`), never a subdirectory — `tests/unit/file-size.test.ts` globs `docs/qa/*.md` non-recursively. | **Before re-measuring anything.** |
+| [docs/QA-LOG.md](docs/QA-LOG.md) · [docs/qa/](docs/qa/) · [docs/evidence/](docs/evidence/) | Every decision, measurement and deliberate non-fix, plus the captured evidence. QA-LOG.md is the index and cross-phase entries; `docs/qa/phase-NN-*.md` is one log per phase. A long log splits into **flat siblings** (`phase-05-combat-NN-*.md`), never a subdirectory — `tests/unit/file-size.test.ts` globs `docs/qa/*.md` non-recursively. **500 lines is the ceiling** (`tests/unit/docs-size.test.ts`), and a ✅ phase's log must keep its phase heading, its vault-out heading and the single `<!-- gate-verdicts -->` table between them. | **Before re-measuring anything.** |
 | [docs/reviews/](docs/reviews/) | Codex plan + implementation reviews, one pair per phase. | Before planning a phase — what the last one was warned about. |
 | [docs/STYLE.md](docs/STYLE.md) | Locked art direction. Changing §2–§5 needs approval, not a prompt tweak. | Any art work. |
 | [docs/FAL-MODELS.md](docs/FAL-MODELS.md) | Every fal endpoint: schema, price, gotchas. | Before any generating phase — **and re-run `genmedia schema`**; a documented schema is a snapshot. |
