@@ -11,6 +11,9 @@ Every generated image and sound in the repository:
 
 - `public/assets/` — the shipped sprite sheets, tile sets, parallax layers, HUD art and audio
 - `assets/` — the working sources those were cut from
+- `docs/media/` — the README's screenshot and gameplay clips. They are frames of the same art, so
+  they are covered by the same terms; captured from the live build by
+  `tools/dev/capture-readme-media.mts`, which is code and is therefore MIT like the rest of `tools/`
 
 ## What you may do
 
